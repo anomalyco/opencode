@@ -7,6 +7,7 @@ import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
+import type { LocalVoiceModel, LocalVoicePlatform } from "@opencode-ai/app/voice"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
@@ -52,12 +53,20 @@ type Deps = {
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
   setNativeTranslations: (bundle: DesktopNativeBundle) => void
+  localVoice: LocalVoicePlatform & { dispose(): void }
 }
 
 export function registerIpcHandlers(deps: Deps) {
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
+  const localVoiceSubscriptions = new Map<number, () => void>()
+  let localVoiceOwner: { senderID: number } | undefined
   app.once("will-quit", updaterSubscriptions.clear)
+  app.once("will-quit", () => {
+    localVoiceSubscriptions.forEach((dispose) => dispose())
+    localVoiceSubscriptions.clear()
+    deps.localVoice.dispose()
+  })
   app.on("before-quit", () => drafts.flush())
   app.once("will-quit", () => drafts.close())
   app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
@@ -94,6 +103,50 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("updater-unsubscribe", (event) => updaterSubscriptions.delete(event.sender.id))
   ipcMain.handle("updater-check", () => deps.updater.check())
   ipcMain.handle("updater-install", () => deps.updater.install())
+  ipcMain.handle("local-voice-state", () => deps.localVoice.state())
+  ipcMain.handle("local-voice-subscribe", (event) => {
+    const id = event.sender.id
+    localVoiceSubscriptions.get(id)?.()
+    localVoiceSubscriptions.set(
+      id,
+      deps.localVoice.subscribe((state) => {
+        if (event.sender.isDestroyed()) return localVoiceSubscriptions.delete(id)
+        event.sender.send("local-voice-state", state)
+      }),
+    )
+    event.sender.once("destroyed", () => {
+      localVoiceSubscriptions.get(id)?.()
+      localVoiceSubscriptions.delete(id)
+    })
+  })
+  ipcMain.handle("local-voice-unsubscribe", (event) => {
+    localVoiceSubscriptions.get(event.sender.id)?.()
+    localVoiceSubscriptions.delete(event.sender.id)
+  })
+  ipcMain.handle("local-voice-download", (_event, model: LocalVoiceModel) => deps.localVoice.download(model))
+  ipcMain.handle("local-voice-cancel-download", (_event, model: LocalVoiceModel) =>
+    deps.localVoice.cancelDownload(model),
+  )
+  ipcMain.handle("local-voice-remove", (_event, model: LocalVoiceModel) => deps.localVoice.remove(model))
+  ipcMain.handle("local-voice-transcribe", async (event, input: { model: LocalVoiceModel; audio: ArrayBuffer }) => {
+    if (localVoiceOwner) throw new Error("Another local transcription is already running")
+    const owner = { senderID: event.sender.id }
+    localVoiceOwner = owner
+    const cancel = () => {
+      if (localVoiceOwner === owner) void deps.localVoice.cancelTranscription()
+    }
+    event.sender.once("destroyed", cancel)
+    try {
+      return await deps.localVoice.transcribe(input)
+    } finally {
+      event.sender.off("destroyed", cancel)
+      if (localVoiceOwner === owner) localVoiceOwner = undefined
+    }
+  })
+  ipcMain.handle("local-voice-cancel-transcription", (event) => {
+    if (localVoiceOwner?.senderID !== event.sender.id) return
+    return deps.localVoice.cancelTranscription()
+  })
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
   ipcMain.handle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>

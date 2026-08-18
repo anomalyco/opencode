@@ -87,6 +87,27 @@ export const SessionListQuery = Schema.Struct({
   archived: Schema.optional(QueryBoolean),
 })
 
+export const MAX_VOICE_AUDIO_BYTES = 25 * 1024 * 1024
+const maxVoiceAudioBase64Length = Math.ceil(MAX_VOICE_AUDIO_BYTES / 3) * 4
+export const VoiceTranscriptionPayload = Schema.Struct({
+  providerID: ProviderV2.ID,
+  modelID: ModelV2.ID,
+  mime: Schema.Literal("audio/wav"),
+  audio: Schema.String.check(Schema.isBase64()).check(Schema.isMaxLength(maxVoiceAudioBase64Length)),
+}).annotate({ identifier: "VoiceTranscriptionPayload" })
+const VoiceTranscriptionResult = Schema.Struct({ text: Schema.String }).annotate({
+  identifier: "VoiceTranscriptionResult",
+})
+const VoiceInputErrorCode = Schema.Literals(["invalid_audio", "model_not_found", "audio_not_supported"])
+export class VoiceInputError extends Schema.ErrorClass<VoiceInputError>("VoiceInputError")(
+  { code: VoiceInputErrorCode, message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
+export class VoiceProviderError extends Schema.ErrorClass<VoiceProviderError>("VoiceProviderError")(
+  { message: Schema.String },
+  { httpApiStatus: 502 },
+) {}
+
 export const ExperimentalPaths = {
   capabilities: "/experimental/capabilities",
   console: "/experimental/console",
@@ -99,6 +120,7 @@ export const ExperimentalPaths = {
   session: "/experimental/session",
   sessionBackground: "/experimental/session/:sessionID/background",
   resource: "/experimental/resource",
+  voiceTranscribe: "/experimental/voice/transcribe",
 } as const
 
 export const ExperimentalApi = HttpApi.make("experimental")
@@ -171,6 +193,18 @@ export const ExperimentalApi = HttpApi.make("experimental")
             summary: "List tool IDs",
             description:
               "Get a list of all available tool IDs, including both built-in tools and dynamically registered tools.",
+          }),
+        ),
+        HttpApiEndpoint.post("voiceTranscribe", ExperimentalPaths.voiceTranscribe, {
+          query: WorkspaceRoutingQuery,
+          payload: VoiceTranscriptionPayload,
+          success: described(VoiceTranscriptionResult, "Voice transcript"),
+          error: [VoiceInputError, VoiceProviderError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.voice.transcribe",
+            summary: "Transcribe voice input",
+            description: "Transcribe WAV audio with a configured model that supports audio input.",
           }),
         ),
         HttpApiEndpoint.get("worktree", ExperimentalPaths.worktree, {

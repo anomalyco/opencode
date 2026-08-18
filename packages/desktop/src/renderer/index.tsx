@@ -240,6 +240,8 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       install: () => window.api.updater.install(),
     },
 
+    localVoice: window.api.localVoice,
+
     exportDebugLogs: () => window.api.exportDebugLogs(),
 
     setForceFocus: (enabled) => window.api.setForceFocus(enabled),

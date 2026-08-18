@@ -214,6 +214,28 @@ describe("experimental HttpApi", () => {
     }),
   )
 
+  it.instance("rejects invalid voice audio before resolving a provider", () =>
+    Effect.gen(function* () {
+      const tmp = yield* TestInstance
+      const response = yield* request(ExperimentalPaths.voiceTranscribe, tmp.directory, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          providerID: "test",
+          modelID: "test",
+          mime: "audio/wav",
+          audio: Buffer.alloc(44).toString("base64"),
+        }),
+      })
+
+      expect(response.status).toBe(400)
+      expect(yield* json(response)).toEqual({
+        code: "invalid_audio",
+        message: "The audio must be a valid WAV file",
+      })
+    }),
+  )
+
   it.instance(
     "serves Console org switch through the default server app",
     () =>

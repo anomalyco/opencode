@@ -3,6 +3,7 @@ import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { persisted } from "@/utils/persist"
 import { usePlatform } from "@/context/platform"
+import type { LocalVoiceModel } from "../voice"
 
 export interface NotificationSettings {
   agent: boolean
@@ -52,6 +53,15 @@ export interface Settings {
   }
   notifications: NotificationSettings
   sounds: SoundSettings
+  voice?: {
+    enabled: boolean
+    backend: "local" | "ai"
+    localModel: LocalVoiceModel
+    aiModel?: {
+      providerID: string
+      modelID: string
+    }
+  }
 }
 
 export const monoDefault = "System Mono"
@@ -121,6 +131,11 @@ export function layoutTransitionState(scheduled: boolean, eligible: boolean, ret
 }
 
 export const maximumSunsetTimeout = 2_147_483_647
+const defaultVoiceSettings = {
+  enabled: false,
+  backend: "local",
+  localModel: "base",
+} as const satisfies NonNullable<Settings["voice"]>
 
 export function nextSunsetCheckDelay(sunset: number, now: number) {
   return Math.min(Math.max(0, sunset - now), maximumSunsetTimeout)
@@ -219,6 +234,7 @@ const defaultSettings: Settings = {
     errorsEnabled: true,
     errors: "nope-03",
   },
+  voice: defaultVoiceSettings,
 }
 
 function withFallback<T>(read: () => T | undefined, fallback: T) {
@@ -540,6 +556,24 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         errors: withFallback(() => store.sounds?.errors, defaultSettings.sounds.errors),
         setErrors(value: string) {
           setStore("sounds", "errors", value)
+        },
+      },
+      voice: {
+        enabled: withFallback(() => store.voice?.enabled, defaultVoiceSettings.enabled),
+        setEnabled(value: boolean) {
+          setStore("voice", (current) => ({ ...defaultVoiceSettings, ...current, enabled: value }))
+        },
+        backend: withFallback(() => store.voice?.backend, defaultVoiceSettings.backend),
+        setBackend(value: "local" | "ai") {
+          setStore("voice", (current) => ({ ...defaultVoiceSettings, ...current, backend: value }))
+        },
+        localModel: withFallback(() => store.voice?.localModel, defaultVoiceSettings.localModel),
+        setLocalModel(value: LocalVoiceModel) {
+          setStore("voice", (current) => ({ ...defaultVoiceSettings, ...current, localModel: value }))
+        },
+        aiModel: () => store.voice?.aiModel,
+        setAIModel(value: { providerID: string; modelID: string } | undefined) {
+          setStore("voice", (current) => ({ ...defaultVoiceSettings, ...current, aiModel: value }))
         },
       },
     }

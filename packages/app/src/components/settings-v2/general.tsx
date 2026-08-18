@@ -26,6 +26,7 @@ import {
   type SoundSettingsController,
 } from "./general-controllers"
 import "./settings-v2.css"
+import { VoiceSettingsV2 } from "./voice"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
 const fontSettings = {
@@ -557,6 +558,10 @@ export const SettingsGeneralV2: Component<{
         <NotificationsSection />
 
         <SoundsSection controller={sounds} />
+
+        <Show when={desktop()}>
+          <VoiceSettingsV2 />
+        </Show>
 
         <Show when={desktop()}>
           <UpdatesSection />
