@@ -10,6 +10,7 @@ import { useServerProtocol, useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider, useProviderConnectController } from "./dialog-connect-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
+import { customProviderFormState } from "./dialog-custom-provider-form"
 import { SettingsList } from "./settings-list"
 import { SettingsServerPicker, SettingsServerScope } from "./settings-server-picker"
 
@@ -182,9 +183,31 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
                         </span>
                       }
                     >
-                      <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
-                        {language.t("common.disconnect")}
-                      </Button>
+                      <div class="flex items-center gap-2">
+                        <Button size="large" variant="secondary" icon="circle-x" onClick={() => void disconnect(item.id, item.name)}>
+                          {language.t("common.disconnect")}
+                        </Button>
+                        <Button
+                          size="large"
+                          variant="secondary"
+                          icon="pencil-line"
+                          onClick={() => {
+                            if (isConfigCustom(item.id)) {
+                              dialog.show(() => (
+                                <DialogCustomProvider
+                                  onBack={dialog.close}
+                                  initialConfig={customProviderFormState(item.id, serverSync().data.config.provider?.[item.id])}
+                                  originalProviderID={item.id}
+                                />
+                              ))
+                            } else {
+                              connect(item.id)
+                            }
+                          }}
+                        >
+                          {language.t("common.edit")}
+                        </Button>
+                      </div>
                     </Show>
                   </div>
                 )}
