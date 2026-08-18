@@ -28,7 +28,13 @@ export function sessionFamily<T extends SessionNode>(sessions: readonly T[], ses
     const group = children.get(parentID) ?? []
     return group.flatMap((session, index) => {
       const last = index === group.length - 1
-      const prefix = ancestors.map((ancestor) => (ancestor ? "   " : "│  ")).join("") + (last ? "└─ " : "├─ ")
+      const prefix =
+        ancestors.length === 0
+          ? ""
+          : ancestors
+              .slice(1)
+              .map((ancestor) => (ancestor ? "   " : "│  "))
+              .join("") + (last ? "└─ " : "├─ ")
       return [{ session, prefix }, ...walk(session.id, [...ancestors, last])]
     })
   }
