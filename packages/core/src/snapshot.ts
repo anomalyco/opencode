@@ -83,11 +83,9 @@ const layer = Layer.effect(
         const gitDirectory = AbsolutePath.make(
           path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)),
         )
-        const snapshotRepository = (yield* fs.existsSafe(path.join(gitDirectory, "HEAD")))
-          ? new Git.Repository({ worktree, gitDirectory, commonDirectory: gitDirectory })
-          : yield* git.repo
-              .create({ worktree, gitDirectory, seed: source })
-              .pipe(Effect.mapError((cause) => failure("capture", cause)))
+        const snapshotRepository = yield* git.repo
+          .create({ worktree, gitDirectory, seed: source })
+          .pipe(Effect.mapError((cause) => failure("capture", cause)))
         return { source, worktree, snapshotRepository }
       }).pipe(Effect.forkIn(lifetime)),
     )

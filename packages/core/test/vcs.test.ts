@@ -93,6 +93,42 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("respects repository line ending configuration", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await $`git config core.autocrlf true`.cwd(directory).quiet()
+          await fs.writeFile(path.join(directory, "line-endings.txt"), "before\n")
+          await commitAll(directory, "line endings")
+          await fs.rm(path.join(directory, "line-endings.txt"))
+          await $`git checkout -- line-endings.txt`.cwd(directory).quiet()
+        })
+
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.status()).toEqual([])
+        expect(yield* vcs.diff("working")).toEqual([])
+      }),
+    ),
+  )
+
+  it.live("respects repository symlink configuration", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          const blob = await $`printf target.txt | git hash-object -w --stdin`.cwd(directory).text()
+          await $`git update-index --add --cacheinfo 120000,${blob.trim()},link.txt`.cwd(directory).quiet()
+          await $`git commit -m symlink`.cwd(directory).quiet()
+          await $`git config core.symlinks false`.cwd(directory).quiet()
+          await $`git checkout-index -f link.txt`.cwd(directory).quiet()
+        })
+
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.status()).toEqual([])
+        expect(yield* vcs.diff("working")).toEqual([])
+      }),
+    ),
+  )
+
   it.live("caches branch info and publishes HEAD changes", () =>
     withGit((directory) =>
       Effect.gen(function* () {

@@ -22,10 +22,10 @@ const snapshotConfigFile = "opencode.gitconfig"
 const snapshotConfigInclude = `[include]
 	path = ${snapshotConfigFile}
 `
-const snapshotConfig = `[core]
-	autocrlf = false
+const snapshotConfig = (input: { autocrlf: string; symlinks: string }) => `[core]
+	autocrlf = ${input.autocrlf}
 	longpaths = true
-	symlinks = true
+	symlinks = ${input.symlinks}
 	fsmonitor = false
 	untrackedCache = true
 [feature]
@@ -341,6 +341,46 @@ const layer = Layer.effect(
       })
     })
 
+    const sourceConfig = Effect.fnUntraced(function* (
+      repository: Repository | undefined,
+      key: string,
+      fallback: string,
+      allowInput: boolean,
+    ) {
+      if (!repository) return fallback
+      const result = yield* execute(
+        repository.worktree,
+        proc,
+      )(["config", "--get", key]).pipe(
+        Effect.mapError(
+          (cause) =>
+            new OperationError({
+              operation: "create",
+              directory: repository.worktree,
+              message: `Failed to resolve ${key}`,
+              cause,
+            }),
+        ),
+      )
+      if (result.exitCode === 0) {
+        const value = result.text.trim().toLowerCase()
+        if (allowInput && value === "input") return value
+        if (["true", "yes", "on", "1"].includes(value)) return "true"
+        if (["false", "no", "off", "0"].includes(value)) return "false"
+        return yield* new OperationError({
+          operation: "create",
+          directory: repository.worktree,
+          message: `Invalid ${key} value: ${value}`,
+        })
+      }
+      if (result.exitCode === 1) return fallback
+      return yield* new OperationError({
+        operation: "create",
+        directory: repository.worktree,
+        message: result.stderr.trim() || `Failed to resolve ${key}`,
+      })
+    })
+
     const create = Effect.fn("Git.repo.create")(function* (input: {
       worktree: AbsolutePath
       gitDirectory: AbsolutePath
@@ -363,14 +403,20 @@ const layer = Layer.effect(
         commonDirectory: input.gitDirectory,
       })
       yield* repositoryOperation("create", repository, ["init"])
-      yield* Effect.gen(function* () {
-        yield* fs.writeFileString(path.join(input.gitDirectory, snapshotConfigFile), snapshotConfig)
+      const semantics = {
+        autocrlf: yield* sourceConfig(input.seed, "core.autocrlf", "false", true),
+        symlinks: yield* sourceConfig(input.seed, "core.symlinks", "true", false),
+      }
+      const reseed = yield* Effect.gen(function* () {
+        const owned = path.join(input.gitDirectory, snapshotConfigFile)
+        const desired = snapshotConfig(semantics)
+        const previous = yield* fs.readFileString(owned).pipe(Effect.catch(() => Effect.succeed("")))
+        yield* fs.writeFileString(owned, desired)
         const config = path.join(input.gitDirectory, "config")
         const current = yield* fs.readFileString(config)
-        if (current.includes(snapshotConfigInclude)) return
-        yield* fs.writeFileString(config, `${current.endsWith("\n") ? "\n" : "\n\n"}${snapshotConfigInclude}`, {
-          flag: "a",
-        })
+        const base = current.replace(/^\s*path\s*=\s*opencode\.gitconfig\s*\r?\n?/gm, "").trimEnd()
+        yield* fs.writeFileString(config, `${base}\n\n${snapshotConfigInclude}`)
+        return previous !== desired
       }).pipe(
         Effect.mapError(
           (cause) =>
@@ -410,6 +456,7 @@ const layer = Layer.effect(
               }),
           ),
         )
+      if (!reseed) return repository
       yield* fs
         .copyFile(path.join(input.seed.gitDirectory, "index"), path.join(input.gitDirectory, "index"))
         .pipe(Effect.catch(() => Effect.void))

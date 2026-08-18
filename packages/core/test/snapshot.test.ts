@@ -127,6 +127,51 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("repairs existing storage with source repository semantics", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          const file = path.join(project, "line-endings.txt")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(file, "before\n")
+            await initGit(project, true)
+            await $`git config core.autocrlf false`.cwd(project).quiet()
+          })
+
+          const git = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
+          const source = yield* git.repo.discover(AbsolutePath.make(project))
+          if (!source) throw new Error("Repository not found")
+          const location = yield* Location.Service.pipe(
+            Effect.provide(
+              AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
+            ),
+          )
+          yield* git.repo.create({
+            worktree: source.worktree,
+            gitDirectory: AbsolutePath.make(path.join(tmp.path, "snapshot", location.project.id, Hash.fast(project))),
+            seed: source,
+          })
+          yield* Effect.promise(async () => {
+            await $`git config core.autocrlf true`.cwd(project).quiet()
+            await fs.rm(file)
+            await $`git checkout -- line-endings.txt`.cwd(project).quiet()
+          })
+
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const before = yield* snapshot.capture()
+            expect(before).toBeDefined()
+            yield* Effect.promise(() => fs.writeFile(file, "before\n"))
+            expect(yield* snapshot.capture()).toBe(before)
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   testEffect(Layer.empty).live("treats capture outside Git as unavailable", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

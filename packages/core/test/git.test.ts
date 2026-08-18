@@ -148,21 +148,34 @@ describe("Git trees", () => {
       const git = yield* Git.Service
       const source = yield* git.repo.discover(AbsolutePath.make(root.path))
       if (!source) throw new Error("Repository not found")
+      yield* Effect.promise(() => $`git config core.autocrlf true`.cwd(root.path).quiet())
+      yield* Effect.promise(() => $`git config core.symlinks false`.cwd(root.path).quiet())
       const storage = AbsolutePath.make(path.join(root.path, ".snapshot storage"))
       const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
       yield* Effect.promise(() => $`git --git-dir ${storage} config --add include.path first.gitconfig`.quiet())
       yield* Effect.promise(() => $`git --git-dir ${storage} config --add include.path second.gitconfig`.quiet())
-      yield* Effect.promise(() => $`git --git-dir ${storage} config core.autocrlf true`.quiet())
+      yield* Effect.promise(() => $`git --git-dir ${storage} config core.autocrlf false`.quiet())
+      yield* Effect.promise(() => $`git --git-dir ${storage} config core.symlinks true`.quiet())
       yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
       expect(
         yield* Effect.promise(() => $`git --git-dir ${storage} config --local --includes core.autocrlf`.text()),
+      ).toBe("true\n")
+      expect(
+        yield* Effect.promise(() => $`git --git-dir ${storage} config --local --includes core.symlinks`.text()),
       ).toBe("false\n")
+      yield* Effect.promise(() => $`git config core.autocrlf input`.cwd(root.path).quiet())
+      yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+      expect(
+        yield* Effect.promise(() => $`git --git-dir ${storage} config --local --includes core.autocrlf`.text()),
+      ).toBe("input\n")
+      yield* Effect.promise(() => $`git config core.autocrlf true`.cwd(root.path).quiet())
+      yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
       expect(
         (yield* Effect.promise(() => fs.readFile(path.join(storage, "config"), "utf8"))).match(/opencode\.gitconfig/g),
       ).toHaveLength(1)
       expect(
         yield* Effect.promise(() => $`git --git-dir ${storage} config --local --get-all include.path`.text()),
-      ).toBe("opencode.gitconfig\nfirst.gitconfig\nsecond.gitconfig\n")
+      ).toBe("first.gitconfig\nsecond.gitconfig\nopencode.gitconfig\n")
       yield* git.index.refresh({ repository, scope: RelativePath.make("scope") })
       const before = yield* git.tree.write(repository)
 
