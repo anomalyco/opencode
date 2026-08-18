@@ -2554,6 +2554,21 @@ Here's an example setting the `apiKey`, `headers`, and model `limit` options.
 Configuration details:
 
 - **apiKey**: Set using `env` variable syntax, [learn more](/docs/config#env-vars).
+- **apiKey pool**: Pass an array to spread requests across multiple keys with round-robin rotation. Useful for staying under per-key rate limits. Each request picks the next key in order. This is config-only — keys added with `/connect` remain a single key per provider.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "options": {
+        "apiKey": ["sk-key-1", "sk-key-2"]
+      }
+    }
+  }
+}
+```
+
 - **headers**: Custom headers sent with each request.
 - **limit.context**: Maximum input tokens the model accepts.
 - **limit.output**: Maximum tokens the model can generate.

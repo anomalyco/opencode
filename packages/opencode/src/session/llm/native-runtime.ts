@@ -61,7 +61,13 @@ function statusWithFetch(
     return { type: "unsupported", reason: "OAuth auth requires a provider fetch override" }
   }
 
-  const apiKey = typeof input.provider.options.apiKey === "string" ? input.provider.options.apiKey : input.provider.key
+  // Key pools configured as arrays are round-robined per request by the ai-sdk
+  // fetch path; the experimental native runtime pins the first valid key.
+  const apiKey = Array.isArray(input.provider.options.apiKey)
+    ? input.provider.options.apiKey.find((item) => typeof item === "string" && item !== "")
+    : typeof input.provider.options.apiKey === "string"
+      ? input.provider.options.apiKey
+      : input.provider.key
   if (!apiKey) return { type: "unsupported", reason: "API key is not configured" }
 
   return {

@@ -1771,9 +1771,22 @@ const layer = Layer.effect(
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
+        const apiKeys = Array.isArray(options["apiKey"])
+          ? options["apiKey"].filter((item): item is string => typeof item === "string" && item !== "")
+          : undefined
+        if (apiKeys) options["apiKey"] = apiKeys[0]
+        let rotation = 0
+
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
+          if (apiKeys && apiKeys.length > 1) {
+            const apiKey = apiKeys[rotation++ % apiKeys.length]
+            const headers = new Headers(opts.headers)
+            if (headers.has("Authorization")) headers.set("Authorization", `Bearer ${apiKey}`)
+            if (headers.has("x-api-key")) headers.set("x-api-key", apiKey)
+            opts.headers = headers
+          }
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined

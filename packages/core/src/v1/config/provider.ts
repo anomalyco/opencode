@@ -90,7 +90,11 @@ export const Info = Schema.Struct({
   options: Schema.optional(
     Schema.StructWithRest(
       Schema.Struct({
-        apiKey: Schema.optional(Schema.String),
+        apiKey: Schema.optional(
+          Schema.Union([Schema.String, Schema.mutable(Schema.Array(Schema.String))]).annotate({
+            description: "API key. Pass an array to round-robin requests across multiple keys.",
+          }),
+        ),
         baseURL: Schema.optional(Schema.String),
         enterpriseUrl: Schema.optional(Schema.String).annotate({
           description: "GitHub Enterprise URL for copilot authentication",
