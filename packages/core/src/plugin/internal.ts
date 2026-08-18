@@ -65,6 +65,7 @@ import { AgentPlugin } from "./agent.js"
 import { CommandPlugin } from "./command.js"
 import { PlanPlugin } from "./plan.js"
 import { ModelsDevPlugin } from "./models-dev.js"
+import { MCPCodeModeExclusionPlugin } from "./mcp-codemode-exclusion.js"
 import { ProviderPlugins } from "./provider.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { PluginRuntime } from "./runtime.js"
@@ -201,6 +202,7 @@ export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
 const pre = [
   ConfigMCPPlugin.Plugin,
+  MCPCodeModeExclusionPlugin.Plugin,
   WellKnownPlugin.Plugin,
   AgentPlugin.Plugin,
   PlanPlugin.Plugin,
