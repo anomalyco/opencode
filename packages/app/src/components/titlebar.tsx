@@ -408,6 +408,10 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                     const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
                     if (index !== -1) tabsStoreActions.closeTab(index)
                   }}
+                  onCloseAll={() => tabsStoreActions.closeAllTabs()}
+                  onCloseBefore={(index) => tabsStoreActions.closeTabsBefore(index)}
+                  onCloseAfter={(index) => tabsStoreActions.closeTabsAfter(index)}
+                  onCloseOthers={(index) => tabsStoreActions.closeOtherTabs(index)}
                   onReorder={(keys) => tabsStoreActions.reorder(keys)}
                 />
                 <TooltipV2
