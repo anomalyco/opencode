@@ -27,6 +27,7 @@ export const RETRY_INITIAL_DELAY = 2000
 export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_JITTER_FACTOR = 0.25
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
+export const RETRY_MAX_DELAY_FREE_USAGE = 5 * 60 * 60 * 1000 // 5 hours
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 export const RETRY_MAX_RETRIES = 5
 
@@ -39,19 +40,20 @@ const RETRYABLE_MESSAGE_PATTERNS = [
   /try your request again|retry your request|resource exhausted|resource_exhausted/i,
 ]
 
-function cap(ms: number) {
-  return Math.min(ms, RETRY_MAX_DELAY)
+function cap(ms: number, max = RETRY_MAX_DELAY) {
+  return Math.min(ms, max)
 }
 
 export function delay(attempt: number, error?: SessionV1.APIError, random = Math.random()) {
   if (error) {
     const headers = error.data.responseHeaders
     if (headers) {
+      const max = error.data.responseBody?.includes("FreeUsageLimitError") ? RETRY_MAX_DELAY_FREE_USAGE : RETRY_MAX_DELAY
       const retryAfterMs = headers["retry-after-ms"]
       if (retryAfterMs) {
         const parsedMs = Number.parseFloat(retryAfterMs)
         if (!Number.isNaN(parsedMs)) {
-          return cap(parsedMs)
+          return cap(parsedMs, max)
         }
       }
 
@@ -60,12 +62,12 @@ export function delay(attempt: number, error?: SessionV1.APIError, random = Math
         const parsedSeconds = Number.parseFloat(retryAfter)
         if (!Number.isNaN(parsedSeconds)) {
           // convert seconds to milliseconds
-          return cap(Math.ceil(parsedSeconds * 1000))
+          return cap(Math.ceil(parsedSeconds * 1000), max)
         }
         // Try parsing as HTTP date format
         const parsed = Date.parse(retryAfter) - Date.now()
         if (!Number.isNaN(parsed) && parsed > 0) {
-          return cap(Math.ceil(parsed))
+          return cap(Math.ceil(parsed), max)
         }
       }
 

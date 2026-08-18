@@ -89,6 +89,23 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(1, longError)).toBe(700000)
   })
 
+  test("caps free usage retry-after values at five hours", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "Free usage exceeded",
+        isRetryable: true,
+        statusCode: 429,
+        responseHeaders: { "retry-after": "61722" },
+        responseBody: JSON.stringify({
+          type: "error",
+          error: { type: "FreeUsageLimitError", message: "Free usage exceeded" },
+        }),
+      }).toObject(),
+    )
+
+    expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY_FREE_USAGE)
+  })
+
   test("caps oversized header delays to the runtime timer limit", () => {
     const error = apiError({ "retry-after-ms": "999999999999" })
     expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY)
