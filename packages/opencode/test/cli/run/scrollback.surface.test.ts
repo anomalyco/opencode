@@ -569,6 +569,63 @@ test.skipIf(process.platform === "win32")(
   },
 )
 
+test("keeps streaming after a narrowing resize without replaying committed rows", async () => {
+  const out = await setup({ width: 80 })
+
+  try {
+    const early = Array.from({ length: 6 }, (_, index) => `alpha-${index}`).join("\n")
+    await out.scrollback.append(toolCommit({ tool: "bash", phase: "progress", text: early }))
+
+    const committed = claim(out.renderer)
+    const first = render(committed)
+    destroy(committed)
+    expect(first).toContain("alpha-0")
+
+    out.renderer.resize(40, out.renderer.height)
+    await out.scrollback.append(toolCommit({ tool: "bash", phase: "progress", text: "\nbeta-0\nbeta-1" }))
+    await out.scrollback.append(toolCommit({ tool: "bash", phase: "final", toolState: "completed", text: "" }))
+
+    const commits = claim(out.renderer)
+    try {
+      const rest = render(commits)
+      expect(rest).not.toContain("alpha-0")
+      for (const line of ["alpha-5", "beta-0", "beta-1"]) {
+        expect(rest).toContain(line)
+      }
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})
+
+test("restarts the active entry when the terminal widens so no content is skipped", async () => {
+  const out = await setup({ width: 40 })
+
+  try {
+    const early = Array.from({ length: 4 }, (_, index) => `alpha-${index}-${"x".repeat(50)}`).join("\n")
+    await out.scrollback.append(toolCommit({ tool: "bash", phase: "progress", text: early }))
+    destroy(claim(out.renderer))
+
+    out.renderer.resize(80, out.renderer.height)
+    await out.scrollback.append(toolCommit({ tool: "bash", phase: "progress", text: "\nbeta-0\nbeta-1" }))
+    await out.scrollback.append(toolCommit({ tool: "bash", phase: "final", toolState: "completed", text: "" }))
+
+    const commits = claim(out.renderer)
+    try {
+      const rest = render(commits)
+      for (const line of ["alpha-3", "beta-0", "beta-1"]) {
+        expect(rest).toContain(line)
+      }
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})
+
 test("coalesces same-line tool progress into one snapshot", async () => {
   const out = await setup()
 

@@ -50,21 +50,23 @@ Positionals:
   url  http://localhost:4096                                                     [string] [required]
 
 Options:
-  -h, --help          show help                                                            [boolean]
-  -v, --version       show version number                                                  [boolean]
-      --print-logs    print logs to stderr                                                 [boolean]
-      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure          run without external plugins                                         [boolean]
-      --dir           directory to run in                                                   [string]
-  -c, --continue      continue the last session                                            [boolean]
-  -s, --session       session id to continue                                                [string]
-      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
-  -p, --password      basic auth password (defaults to OPENCODE_SERVER_PASSWORD)            [string]
-  -u, --username      basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')
+  -h, --help           show help                                                           [boolean]
+  -v, --version        show version number                                                 [boolean]
+      --print-logs     print logs to stderr                                                [boolean]
+      --log-level      log level                [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure           run without external plugins                                        [boolean]
+      --dir            directory to run in                                                  [string]
+  -c, --continue       continue the last session                                           [boolean]
+  -s, --session        session id to continue                                               [string]
+      --fork           fork the session when continuing (use with --continue or --session) [boolean]
+  -p, --password       basic auth password (defaults to OPENCODE_SERVER_PASSWORD)           [string]
+  -u, --username       basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')
                                                                                             [string]
-      --mini          start the minimal interactive interface             [boolean] [default: false]
-      --no-replay     disable mini session history replay on resume and after resize       [boolean]
-      --replay-limit  cap visible mini replay to the newest N messages                      [number]"
+      --mini           start the minimal interactive interface            [boolean] [default: false]
+      --no-replay      disable mini session history replay on resume                       [boolean]
+      --resize-replay  also replay mini session history after terminal resize (for terminals that do
+                       not reflow scrollback)                                              [boolean]
+      --replay-limit   cap visible mini replay to the newest N messages                     [number]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode run --help 1`] = `

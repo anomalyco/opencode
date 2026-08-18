@@ -61,6 +61,7 @@ export type RunInput = {
   sessionTitle?: string
   resume?: boolean
   replay?: boolean
+  resizeReplay?: boolean
   replayLimit?: number
   agent: string | undefined
   model: PromptModel | undefined
