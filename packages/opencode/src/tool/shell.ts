@@ -446,6 +446,7 @@ export const ShellTool = Tool.define(
       let cut = false
       let expired = false
       let aborted = false
+      let aborting = false
 
       const closeSink = Effect.fnUntraced(function* () {
         const stream = sink
@@ -522,11 +523,15 @@ export const ShellTool = Tool.define(
                 }
               }
 
-              return ctx.metadata({
+              const update = ctx.metadata({
                 metadata: {
                   output: last,
                 },
               })
+              if (!ctx.abort.aborted || aborting) return update
+              aborting = true
+              aborted = true
+              return update.pipe(Effect.andThen(handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.ignore)))
             }),
           )
 
