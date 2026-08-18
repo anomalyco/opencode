@@ -19,19 +19,31 @@ const backgroundStarted = (sessionID: SessionSchema.ID) =>
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
   ].join("\n")
 
-export const Input = Schema.Struct({
-  agent: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
-  description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
-  prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
-  sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
-    description:
-      "Continue a specific previous subagent conversation by passing its sessionID. Calls without a sessionID start a new conversation.",
-  }),
-  background: Schema.optionalKey(Schema.Boolean).annotate({
-    description:
-      "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
-  }),
-})
+const makeInput = (agentDescription: string) =>
+  Schema.Struct({
+    agent: Schema.String.annotate({ description: agentDescription }),
+    description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
+    prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
+    sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
+      description:
+        "Continue a specific previous subagent conversation by passing its sessionID. Calls without a sessionID start a new conversation.",
+    }),
+    background: Schema.optionalKey(Schema.Boolean).annotate({
+      description:
+        "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
+    }),
+  })
+
+export const Input = makeInput("The type of specialized agent to use for this task")
+
+export const describeAgents = (agents: readonly Agent.Info[]) => {
+  const ids = agents
+    .filter((agent) => agent.mode !== "primary" && !agent.hidden)
+    .map((agent) => agent.id)
+  return ids.length > 0
+    ? `The type of specialized agent to use for this task. Available agent IDs: ${ids.join(", ")}`
+    : "The type of specialized agent to use for this task"
+}
 
 export const Output = Schema.Struct({
   sessionID: SessionSchema.ID,
@@ -55,6 +67,10 @@ export const Plugin = {
     const config = yield* Config.Service
     const permission = yield* Permission.Service
     const scope = yield* Scope.Scope
+    // Surface the exact, currently valid subagent IDs so the model can discover them instead
+    // of guessing (e.g. "explorer" vs the actual "explore"). The catalog is Location-specific
+    // and mode-aware; per-caller permission filtering still happens at execution time below.
+    const agentDescription = describeAgents(yield* agents.list())
     // One completion observer per job generation. Keyed by child plus start time so a fresh
     // continuation job is observable even while a settled generation's observer is finalizing.
     const notifications = new Set<string>()
@@ -129,7 +145,7 @@ export const Plugin = {
           name,
           options: { codemode: false },
           description,
-          input: Input,
+          input: makeInput(agentDescription),
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {

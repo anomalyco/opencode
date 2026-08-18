@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Money } from "@opencode-ai/schema/money"
@@ -609,4 +609,26 @@ describe("SubagentTool", () => {
       ),
     ),
   )
+
+  test("describes subagent-capable agent IDs in the agent input", () => {
+    const agent = (id: string, mode: Agent.Info["mode"], hidden = false): Agent.Info => ({
+      ...Agent.Info.default(Agent.ID.make(id)),
+      id: Agent.ID.make(id),
+      mode,
+      hidden,
+    })
+    const described = SubagentTool.describeAgents([
+      agent("reviewer", "subagent"),
+      agent("fallback", "subagent"),
+      agent("primary", "primary"),
+      agent("stealth", "all", true),
+      agent("helper", "all"),
+    ])
+    expect(described).toContain("reviewer")
+    expect(described).toContain("fallback")
+    expect(described).toContain("helper")
+    expect(described).not.toContain("primary")
+    expect(described).not.toContain("stealth")
+    expect(SubagentTool.describeAgents([])).toBe("The type of specialized agent to use for this task")
+  })
 })
