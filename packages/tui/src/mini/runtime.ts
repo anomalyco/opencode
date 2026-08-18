@@ -58,6 +58,7 @@ type RunRuntimeInput = {
   initialInput?: string
   thinking?: boolean
   replay?: boolean
+  resizeReplay?: boolean
   replayLimit?: number
   demo?: RunInput["demo"]
   tuiConfig?: RunTuiConfig | Promise<RunTuiConfig>
@@ -78,6 +79,7 @@ export type RunDeferredInput = {
   initialInput?: string
   thinking?: boolean
   replay?: boolean
+  resizeReplay?: boolean
   replayLimit?: number
   demo?: RunInput["demo"]
   tuiConfig?: RunTuiConfig | Promise<RunTuiConfig>
@@ -845,7 +847,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       shell.refreshTheme()
-      if (!input.replay || !state.stream) {
+      // Resize replay is opt-in: it wipes and reprints scrollback, which only
+      // helps terminals that do not reflow history themselves.
+      if (!input.replay || !input.resizeReplay || !state.stream) {
         return
       }
 
@@ -1110,6 +1114,7 @@ export async function runInteractiveDeferredMode(input: RunDeferredInput, deps?:
       initialInput: input.initialInput,
       thinking: input.thinking,
       replay: input.replay,
+      resizeReplay: input.resizeReplay,
       replayLimit: input.replayLimit,
       demo: input.demo,
       tuiConfig: input.tuiConfig,

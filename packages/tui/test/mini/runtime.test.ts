@@ -257,6 +257,77 @@ describe("run interactive runtime", () => {
     await task
   })
 
+  test("replays on resize only when resize replay is opted in", async () => {
+    for (const resizeReplay of [undefined, true]) {
+      const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+      const api = footer()
+      const streamStarted = defer<void>()
+      stubCatalogLists(sdk)
+      let resize: (() => void) | undefined
+      let replays = 0
+
+      const task = runInteractiveDeferredMode(
+        {
+          host: host(),
+          sdk,
+          directory: "/tmp",
+          target: async () => ({
+            sessionID: "ses_root",
+            location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp" } },
+            agent: "build",
+            model: { providerID: "test", modelID: "model" },
+            variant: undefined,
+            resume: false,
+          }),
+          agent: "build",
+          model: { providerID: "test", modelID: "model" },
+          variant: undefined,
+          files: [],
+          thinking: false,
+          replay: true,
+          resizeReplay,
+        },
+        {
+          createRuntimeLifecycle: async () => ({
+            footer: api,
+            onResize: (fn) => {
+              resize = fn
+              return () => {}
+            },
+            refreshTheme: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }),
+          streamTransport: Promise.resolve({
+            createSessionTransport: async () => {
+              streamStarted.resolve()
+              return {
+                runPromptTurn: async () => {},
+                interruptActiveTurn: async () => {},
+                selectSubagent: () => {},
+                settleForm: () => {},
+                replayOnResize: async () => {
+                  replays += 1
+                  return true
+                },
+                close: async () => {},
+              }
+            },
+            formatUnknownError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+          }),
+        },
+      )
+      await streamStarted.promise
+      while (!resize) await Bun.sleep(0)
+      resize()
+      await Bun.sleep(400)
+
+      expect(replays).toBe(resizeReplay ? 1 : 0)
+      api.close()
+      await task
+    }
+  })
+
   test("resolves the deferred session only after first paint", async () => {
     const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
     const lifecycleStarted = defer<void>()
