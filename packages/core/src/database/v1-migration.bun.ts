@@ -114,6 +114,17 @@ type NextProject = {
   readonly commands: string | null
 }
 
+const NEXT_PROJECT_REQUIRED = ["id", "worktree", "time_created", "time_updated", "sandboxes"] as const
+const NEXT_PROJECT_OPTIONAL = [
+  "vcs",
+  "name",
+  "icon_url",
+  "icon_url_override",
+  "icon_color",
+  "time_initialized",
+  "commands",
+] as const
+
 type NextSession = {
   readonly id: string
   readonly project_id: string
@@ -148,6 +159,43 @@ type NextSession = {
   readonly time_archived: number | null
   readonly time_suspended: number | null
 }
+
+const NEXT_SESSION_REQUIRED = [
+  "id",
+  "project_id",
+  "slug",
+  "directory",
+  "version",
+  "cost",
+  "tokens_input",
+  "tokens_output",
+  "tokens_reasoning",
+  "tokens_cache_read",
+  "tokens_cache_write",
+  "time_created",
+  "time_updated",
+] as const
+const NEXT_SESSION_OPTIONAL = [
+  "workspace_id",
+  "parent_id",
+  "fork_session_id",
+  "fork_boundary",
+  "path",
+  "title",
+  "share_url",
+  "summary_additions",
+  "summary_deletions",
+  "summary_files",
+  "summary_diffs",
+  "metadata",
+  "revert",
+  "permission",
+  "agent",
+  "model",
+  "time_compacting",
+  "time_archived",
+  "time_suspended",
+] as const
 
 type NextMessage = {
   readonly id: string
@@ -686,12 +734,12 @@ function importNextDatabase(
         }),
       )
       const projects = new Map(
-        source
-          .query<NextProject, []>("SELECT * FROM project")
-          .all()
-          .map((project) => [project.id, project]),
+        selectNextRows<NextProject>(source, "project", NEXT_PROJECT_REQUIRED, NEXT_PROJECT_OPTIONAL).map((project) => [
+          project.id,
+          project,
+        ]),
       )
-      const sessions = source.query<NextSession, []>("SELECT * FROM session ORDER BY id DESC").all()
+      const sessions = selectNextRows<NextSession>(source, "session", NEXT_SESSION_REQUIRED, NEXT_SESSION_OPTIONAL)
       for (const [index, session] of sessions.entries()) {
         const project = projects.get(session.project_id)
         const projectID = project ? session.project_id : Project.ID.global
@@ -787,6 +835,30 @@ function isNextDatabase(source: SQLiteDatabase) {
       .map((table) => table.name),
   )
   return tables.has("project") && tables.has("session") && tables.has("session_message")
+}
+
+function selectNextRows<A>(
+  source: SQLiteDatabase,
+  table: "project" | "session",
+  required: ReadonlyArray<keyof A & string>,
+  optional: ReadonlyArray<keyof A & string>,
+) {
+  const columns = new Set(
+    source
+      .query<{ name: string }, [string]>("SELECT name FROM pragma_table_info(?)")
+      .all(table)
+      .map((column) => column.name),
+  )
+  const missing = required.filter((column) => !columns.has(column))
+  if (missing.length)
+    throw new Error(`Incompatible opencode-next.db: ${table} is missing required columns: ${missing.join(", ")}`)
+  const projection = [
+    ...required.map((column) => `"${column}"`),
+    ...optional.map((column) => (columns.has(column) ? `"${column}"` : `NULL AS "${column}"`)),
+  ]
+  return source
+    .query<A, []>(`SELECT ${projection.join(", ")} FROM "${table}"${table === "session" ? ' ORDER BY "id" DESC' : ""}`)
+    .all()
 }
 
 function row(
