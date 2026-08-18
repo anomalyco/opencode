@@ -42,6 +42,39 @@ export namespace Billing {
     )
   }
 
+  export const ensureCustomer = async (email?: string) => {
+    const billing = await get()
+    if (billing?.customerID) return billing.customerID
+
+    const workspaceID = Actor.workspace()
+    const stripe = Billing.stripe()
+    const created = await stripe.customers.create(
+      {
+        metadata: {
+          workspaceID,
+        },
+      },
+      {
+        idempotencyKey: `opencode-workspace-customer:${workspaceID}`,
+      },
+    )
+    await Database.use((tx) =>
+      tx
+        .update(BillingTable)
+        .set({
+          customerID: created.id,
+        })
+        .where(and(eq(BillingTable.workspaceID, workspaceID), isNull(BillingTable.customerID))),
+    )
+
+    const customerID = (await get())?.customerID
+    if (!customerID) throw new Error(`Workspace with ID ${workspaceID} not found`)
+    if (customerID === created.id && email) {
+      await stripe.customers.update(customerID, { email })
+    }
+    return customerID
+  }
+
   export const payments = async () => {
     return await Database.use((tx) =>
       tx
@@ -231,8 +264,9 @@ export namespace Billing {
       }
 
       const email = await User.getAuthEmail(user.properties.userID)
-      const customer = await Billing.get()
-      const amountInCents = (amount ?? customer.reloadAmount ?? Billing.RELOAD_AMOUNT) * 100
+      const billing = await Billing.get()
+      const customerID = await Billing.ensureCustomer(email ?? undefined)
+      const amountInCents = (amount ?? billing.reloadAmount ?? Billing.RELOAD_AMOUNT) * 100
       const session = await Billing.stripe().checkout.sessions.create({
         mode: "payment",
         billing_address_collection: "required",
@@ -254,18 +288,11 @@ export namespace Billing {
             quantity: 1,
           },
         ],
-        ...(customer.customerID
-          ? {
-              customer: customer.customerID,
-              customer_update: {
-                name: "auto",
-                address: "auto",
-              },
-            }
-          : {
-              customer_email: email!,
-              customer_creation: "always",
-            }),
+        customer: customerID,
+        customer_update: {
+          name: "auto",
+          address: "auto",
+        },
         currency: "usd",
         invoice_creation: {
           enabled: true,
@@ -311,6 +338,7 @@ export namespace Billing {
 
       if (billing.subscriptionID) throw new Error("Already subscribed to Black")
       if (billing.liteSubscriptionID) throw new Error("Already subscribed to Lite")
+      const customerID = await Billing.ensureCustomer(email)
 
       const coupons = await Database.use((tx) =>
         tx
@@ -335,17 +363,11 @@ export namespace Billing {
         Billing.stripe().checkout.sessions.create({
           mode: "subscription",
           discounts: coupon ? [{ coupon }] : undefined,
-          ...(billing.customerID
-            ? {
-                customer: billing.customerID,
-                customer_update: {
-                  name: "auto",
-                  address: "auto",
-                },
-              }
-            : {
-                customer_email: email,
-              }),
+          customer: customerID,
+          customer_update: {
+            name: "auto",
+            address: "auto",
+          },
           ...(() => {
             if (method === "alipay") {
               return {
@@ -411,14 +433,14 @@ export namespace Billing {
 
         // get pending payment intent
         const intents = await Billing.stripe().paymentIntents.search({
-          query: `-status:'canceled' AND -status:'processing' AND -status:'succeeded' AND customer:'${billing.customerID}'`,
+          query: `-status:'canceled' AND -status:'processing' AND -status:'succeeded' AND customer:'${customerID}'`,
         })
         if (intents.data.length === 0) throw e
 
         for (const intent of intents.data) {
           // get checkout session
           const sessions = await Billing.stripe().checkout.sessions.list({
-            customer: billing.customerID!,
+            customer: customerID,
             payment_intent: intent.id,
           })
 
