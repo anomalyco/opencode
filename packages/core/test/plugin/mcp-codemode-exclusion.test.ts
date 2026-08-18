@@ -7,16 +7,43 @@ import { host } from "./host"
 
 it.effect("defaults only known Code Mode MCP servers to direct tools", () =>
   Effect.gen(function* () {
-    const servers: Record<string, Types.DeepMutable<Mcp.ServerConfig>> = {
-      executor: { type: "remote", url: "https://executor.sh/example/mcp?source=opencode" },
-      "executor-local": { type: "local", command: ["executor", "mcp"] },
-      cloudflare: { type: "remote", url: "https://mcp.cloudflare.com/mcp/" },
-      "cloudflare-docs": { type: "remote", url: "https://docs.mcp.cloudflare.com/mcp" },
-      explicit: { type: "remote", url: "https://mcp.cloudflare.com/mcp", codemode: true },
-      "explicit-false": { type: "remote", url: "https://executor.sh/example/mcp", codemode: false },
-      exa: { type: "remote", url: "https://mcp.exa.ai/mcp" },
-      unrelated: { type: "remote", url: "https://example.com/mcp" },
-    }
+    const cases: Array<{
+      name: string
+      server: Types.DeepMutable<Mcp.ServerConfig>
+      codemode: boolean | undefined
+    }> = [
+      {
+        name: "executor remote",
+        server: { type: "remote", url: "https://executor.sh/example/mcp?source=opencode" },
+        codemode: false,
+      },
+      { name: "executor local", server: { type: "local", command: ["executor", "mcp"] }, codemode: false },
+      {
+        name: "cloudflare code mode",
+        server: { type: "remote", url: "https://mcp.cloudflare.com/mcp/" },
+        codemode: false,
+      },
+      {
+        name: "cloudflare docs",
+        server: { type: "remote", url: "https://docs.mcp.cloudflare.com/mcp" },
+        codemode: undefined,
+      },
+      {
+        name: "explicit true",
+        server: { type: "remote", url: "https://mcp.cloudflare.com/mcp", codemode: true },
+        codemode: true,
+      },
+      {
+        name: "explicit false",
+        server: { type: "remote", url: "https://executor.sh/example/mcp", codemode: false },
+        codemode: false,
+      },
+      { name: "exa", server: { type: "remote", url: "https://mcp.exa.ai/mcp" }, codemode: undefined },
+      { name: "unrelated", server: { type: "remote", url: "https://example.com/mcp" }, codemode: undefined },
+    ]
+    const servers: Record<string, Types.DeepMutable<Mcp.ServerConfig>> = Object.fromEntries(
+      cases.map((test) => [test.name, test.server]),
+    )
     const base = host()
 
     yield* MCPCodeModeExclusionPlugin.Plugin.effect(
@@ -45,13 +72,6 @@ it.effect("defaults only known Code Mode MCP servers to direct tools", () =>
       }),
     )
 
-    expect(servers.executor?.codemode).toBe(false)
-    expect(servers["executor-local"]?.codemode).toBe(false)
-    expect(servers.cloudflare?.codemode).toBe(false)
-    expect(servers["cloudflare-docs"]?.codemode).toBeUndefined()
-    expect(servers.explicit?.codemode).toBe(true)
-    expect(servers["explicit-false"]?.codemode).toBe(false)
-    expect(servers.exa?.codemode).toBeUndefined()
-    expect(servers.unrelated?.codemode).toBeUndefined()
+    cases.forEach((test) => expect(servers[test.name]?.codemode).toBe(test.codemode))
   }),
 )
