@@ -3782,7 +3782,7 @@ describe("ProviderTransform.variants", () => {
   })
 
   test("recognizes GLM-5.2 provider model IDs", () => {
-    for (const id of ["accounts/fireworks/models/glm-5p2", "zai-org-glm-5-2", "umans-glm-5.2"]) {
+    for (const id of ["accounts/fireworks/models/glm-5p2", "zai-org-glm-5-2", "umans-glm-5.2", "glm5.2-fast"]) {
       const model = createMockModel({
         id: `test/${id}`,
         api: {

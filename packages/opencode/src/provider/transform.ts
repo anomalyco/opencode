@@ -730,7 +730,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()
-  const glm52 = ["glm-5.2", "glm-5-2", "glm-5p2"].some(
+  const glm52 = ["glm-5.2", "glm-5-2", "glm-5p2", "glm5.2", "glm5p2"].some(
     (name) => id.includes(name) || model.api.id.toLowerCase().includes(name),
   )
   if (
