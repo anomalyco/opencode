@@ -1901,6 +1901,59 @@ unixNoLLMServer(
 )
 
 unix(
+  "tool metadata updates preserve the execution start time",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const { dir, llm } = yield* useServerConfig(providerCfg)
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({
+          title: "Tool timing",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "run bash" }],
+        })
+        yield* llm.tool("bash", {
+          command: "printf first; sleep 0.2; printf second",
+          timeout: 30_000,
+          workdir: path.resolve(dir),
+        })
+        yield* llm.text("done")
+
+        const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+        const started = yield* pollWithTimeout(
+          Effect.gen(function* () {
+            const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+            const tool = msgs
+              .flatMap((item) => item.parts)
+              .find((part): part is SessionV1.ToolPart => part.type === "tool")
+            if (tool?.state.status !== "running" || !tool.state.metadata?.output.includes("first")) return
+            return tool.state.time.start
+          }),
+          "timed out waiting for the first shell metadata update",
+        )
+
+        const exit = yield* Fiber.await(run)
+        expect(Exit.isSuccess(exit)).toBe(true)
+        const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+        const tool = msgs.flatMap((item) => item.parts).find((part): part is SessionV1.ToolPart => part.type === "tool")
+        expect(tool?.state.status).toBe("completed")
+        if (tool?.state.status !== "completed") return
+        expect(tool.state.time.start).toBe(started)
+        expect(tool.state.time.end).toBeGreaterThan(started)
+      }),
+    ),
+  { config: cfg },
+  30_000,
+)
+
+unix(
   "cancel finalizes interrupted bash tool output through normal truncation",
   () =>
     Effect.gen(function* () {
