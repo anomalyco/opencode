@@ -1,6 +1,7 @@
 import { app, dialog } from "electron"
 import type { WebContents } from "electron"
-import { Ipc, sendIpcEvent } from "../../shared/ipc-contract"
+import { UpdaterStateChanged } from "../../shared/ipc-rpc/events"
+import { emitIpcEvent } from "../ipc-events"
 import { UPDATER_ENABLED } from "../constants"
 import { getLogger } from "../native/logging"
 import { nativeT } from "../native/translations"
@@ -53,7 +54,7 @@ export function createUpdaterIpc(controller: UpdaterController) {
         id,
         controller.subscribe((state) => {
           if (sender.isDestroyed()) return unsubscribe(id)
-          sendIpcEvent(sender, Ipc.updater.state, state)
+          emitIpcEvent(sender, new UpdaterStateChanged({ state }))
         }),
       )
       sender.once("destroyed", () => unsubscribe(id))

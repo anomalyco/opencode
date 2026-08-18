@@ -1,8 +1,9 @@
 import { createSignal } from "solid-js"
+import { api } from "../api"
 
 const [windowFullscreen, setWindowFullscreen] = createSignal(false)
 
-window.api.onWindowFullscreenChanged(setWindowFullscreen)
-void window.api.getWindowFullscreen().then(setWindowFullscreen)
+api.onWindowFullscreenChanged(setWindowFullscreen)
+void api.getWindowFullscreen().then(setWindowFullscreen)
 
 export { windowFullscreen }

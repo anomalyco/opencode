@@ -6,7 +6,8 @@ import {
   type DesktopMenuEntry,
   type DesktopMenuRole,
 } from "@opencode-ai/app/desktop-menu"
-import { Ipc, sendIpcEvent } from "../../shared/ipc-contract"
+import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
+import { emitIpcEvent } from "../ipc-events"
 
 import { UPDATER_ENABLED } from "../constants"
 import { openExternalURL } from "../files"
@@ -36,7 +37,7 @@ export function createMenu(deps: Deps) {
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {
-  sendIpcEvent(win.webContents, Ipc.menu.command, id)
+  emitIpcEvent(win.webContents, new MenuCommandTriggered({ id }))
 }
 
 function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOptions {

@@ -1,5 +1,5 @@
 import { ACCEPTED_FILE_EXTENSIONS, ServerConnection, type Platform, type UpdaterPlatform } from "@opencode-ai/app"
-import type { ElectronAPI } from "../../preload/types"
+import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
 import { createDesktopFiles } from "./files"
