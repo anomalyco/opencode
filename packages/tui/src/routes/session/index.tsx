@@ -2604,7 +2604,7 @@ function GenericTool(props: ToolProps) {
   return (
     <>
       <InlineTool
-        icon={props.part.state.status === "error" ? "✗" : props.part.state.status === "completed" ? "✓" : "│"}
+        icon={props.part.state.status === "error" ? "✗" : "✓"}
         complete={props.part.state.status === "completed"}
         pending={props.tool}
         spinner={loading()}
