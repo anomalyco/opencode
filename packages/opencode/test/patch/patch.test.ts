@@ -139,6 +139,55 @@ PATCH`
     })
   })
 
+  describe("canonical Unicode matching", () => {
+    test("matches Cyrillic text when the file is NFD and the patch is NFC", () => {
+      const original = "Район: Астана\n".normalize("NFD")
+      const result = Patch.deriveNewContentsFromChunks(
+        "summary.md",
+        [
+          {
+            old_lines: ["Район: Астана".normalize("NFC")],
+            new_lines: ["Район: Алматы"],
+          },
+        ],
+        original,
+      )
+
+      expect(result.content).toBe("Район: Алматы\n")
+    })
+
+    test("matches Latin text when the file is NFC and the patch is NFD", () => {
+      const replacement = "touché".normalize("NFD")
+      const result = Patch.deriveNewContentsFromChunks(
+        "notes.md",
+        [
+          {
+            old_lines: ["café".normalize("NFD")],
+            new_lines: [replacement],
+          },
+        ],
+        "café\n".normalize("NFC"),
+      )
+
+      expect(result.content).toBe(replacement + "\n")
+    })
+
+    test("does not match genuinely different Unicode text", () => {
+      expect(() =>
+        Patch.deriveNewContentsFromChunks(
+          "notes.md",
+          [
+            {
+              old_lines: ["cafe"],
+              new_lines: ["updated"],
+            },
+          ],
+          "café\n",
+        ),
+      ).toThrow("Failed to find expected lines")
+    })
+  })
+
   describe("applyPatch", () => {
     it.live("should add a new file", () =>
       Effect.gen(function* () {
