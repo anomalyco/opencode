@@ -18,7 +18,7 @@ interface SubagentEntry {
   title: string
   status: string
   current: boolean
-  depth: number
+  prefix: string
 }
 
 export function SubagentsTab(props: { sessionID: string }) {
@@ -38,7 +38,7 @@ export function SubagentsTab(props: { sessionID: string }) {
     if (!current) return []
 
     const result = sessionFamily<SessionInfo>(data.session.list(), current.id).map(
-      ({ session, depth }): SubagentEntry => {
+      ({ session, prefix }): SubagentEntry => {
         const title = withTimestampedFallback(session)
         const agentMatch = title.match(/@(\w+) subagent/)
         return {
@@ -51,7 +51,7 @@ export function SubagentsTab(props: { sessionID: string }) {
           title: agentMatch ? title.replace(agentMatch[0], "").trim() || title : title,
           status: data.session.status(session.id),
           current: session.id === route.sessionID,
-          depth,
+          prefix,
         }
       },
     )
@@ -244,7 +244,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                     >
-                      {"  ".repeat(entry.depth)}
+                      {entry.prefix}
                       {entry.agent}: {entry.title}
                     </text>
                   </box>

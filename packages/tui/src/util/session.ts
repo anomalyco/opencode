@@ -24,11 +24,16 @@ export function sessionFamily<T extends SessionNode>(sessions: readonly T[], ses
     return parent ? root(parent) : session
   }
 
-  function walk(parentID: string, depth: number): Array<{ session: T; depth: number }> {
-    return (children.get(parentID) ?? []).flatMap((session) => [{ session, depth }, ...walk(session.id, depth + 1)])
+  function walk(parentID: string, ancestors: boolean[]): Array<{ session: T; prefix: string }> {
+    const group = children.get(parentID) ?? []
+    return group.flatMap((session, index) => {
+      const last = index === group.length - 1
+      const prefix = ancestors.map((ancestor) => (ancestor ? "   " : "│  ")).join("") + (last ? "└─ " : "├─ ")
+      return [{ session, prefix }, ...walk(session.id, [...ancestors, last])]
+    })
   }
 
-  return walk(root(current).id, 0)
+  return walk(root(current).id, [])
 }
 
 export function lastAssistantWithUsage(messages: ReadonlyArray<SessionMessageInfo>, boundary?: string) {

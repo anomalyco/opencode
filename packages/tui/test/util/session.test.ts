@@ -23,10 +23,10 @@ describe("util.session", () => {
     ]
 
     expect(sessionFamily(sessions, "grandchild-a")).toEqual([
-      { session: sessions[1], depth: 0 },
-      { session: sessions[2], depth: 1 },
-      { session: sessions[3], depth: 0 },
-      { session: sessions[4], depth: 1 },
+      { session: sessions[1], prefix: "├─ " },
+      { session: sessions[2], prefix: "│  └─ " },
+      { session: sessions[3], prefix: "└─ " },
+      { session: sessions[4], prefix: "   └─ " },
     ])
   })
 
