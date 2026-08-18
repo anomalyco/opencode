@@ -1,4 +1,5 @@
 import { Cause, Effect, Layer } from "effect"
+import { KeyedMutex } from "../../effect/keyed-mutex"
 import { LocationServiceMap } from "../../location-service-map"
 import { makeGlobalNode } from "../../effect/app-node"
 import { SessionRunCoordinator } from "../run-coordinator"
@@ -13,6 +14,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
+    const locks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError>({
       drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, force) {
         const session = yield* store.get(sessionID)
@@ -33,6 +35,13 @@ const layer = Layer.effect(
       interrupt: coordinator.interrupt,
       resume: coordinator.run,
       wake: coordinator.wake,
+      withLock: locks.withLock,
+      exclusive: (sessionID, effect) =>
+        Effect.acquireUseRelease(
+          coordinator.pause(sessionID),
+          () => locks.withLock(sessionID)(effect),
+          (release) => release,
+        ),
     })
   }),
 )

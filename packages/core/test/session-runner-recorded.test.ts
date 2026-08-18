@@ -96,6 +96,8 @@ const execution = Layer.effect(
       resume: coordinator.run,
       wake: coordinator.wake,
       interrupt: coordinator.interrupt,
+      withLock: () => (effect) => effect,
+      exclusive: (_sessionID, effect) => effect,
     })
   }),
 ).pipe(Layer.provide(runnerLayer))

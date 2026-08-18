@@ -12,6 +12,8 @@ export interface Coordinator<Key, E> {
   readonly wake: (key: Key) => Effect.Effect<void>
   /** Stops active execution and waits for its cleanup. */
   readonly interrupt: (key: Key) => Effect.Effect<void>
+  /** Stops active execution and prevents new drains until the returned release effect runs. */
+  readonly pause: (key: Key) => Effect.Effect<Effect.Effect<void>>
 }
 
 type Entry<E> = {
@@ -21,11 +23,18 @@ type Entry<E> = {
   stopping: boolean
 }
 
+type Pause = {
+  readonly done: Deferred.Deferred<void>
+  pendingWake: boolean
+  users: number
+}
+
 export const make = <Key, E>(options: {
   readonly drain: (key: Key, force: boolean) => Effect.Effect<void, E>
 }): Effect.Effect<Coordinator<Key, E>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const active = new Map<Key, Entry<E>>()
+    const pauses = new Map<Key, Pause>()
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
     const makeEntry = (): Entry<E> => ({
@@ -66,6 +75,9 @@ export const make = <Key, E>(options: {
 
     const run = (key: Key): Effect.Effect<void, E> =>
       Effect.uninterruptibleMask((restore) => {
+        const pause = pauses.get(key)
+        if (pause !== undefined) return restore(Deferred.await(pause.done).pipe(Effect.andThen(run(key))))
+
         const entry = active.get(key)
         if (entry !== undefined) {
           if (entry.stopping) return restore(Deferred.await(entry.done).pipe(Effect.andThen(run(key))))
@@ -80,6 +92,12 @@ export const make = <Key, E>(options: {
 
     const wake = (key: Key) =>
       Effect.sync(() => {
+        const pause = pauses.get(key)
+        if (pause !== undefined) {
+          pause.pendingWake = true
+          return
+        }
+
         const entry = active.get(key)
         if (entry !== undefined) {
           entry.pendingWake = true
@@ -100,5 +118,30 @@ export const make = <Key, E>(options: {
         return Fiber.interrupt(entry.owner)
       })
 
-    return { active: Effect.sync(() => new Set(active.keys())), run, wake, interrupt }
+    const pause = (key: Key): Effect.Effect<Effect.Effect<void>> =>
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          const current = pauses.get(key)
+          const entry =
+            current ??
+            ({
+              done: Deferred.makeUnsafe<void>(),
+              pendingWake: false,
+              users: 0,
+            } satisfies Pause)
+          if (!current) pauses.set(key, entry)
+          entry.users++
+          yield* interrupt(key)
+          return Effect.suspend(() => {
+            entry.users--
+            if (entry.users > 0) return Effect.void
+            pauses.delete(key)
+            Deferred.doneUnsafe(entry.done, Effect.void)
+            if (!entry.pendingWake) return Effect.void
+            return wake(key)
+          })
+        }),
+      )
+
+    return { active: Effect.sync(() => new Set(active.keys())), run, wake, interrupt, pause }
   })

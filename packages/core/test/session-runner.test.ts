@@ -248,6 +248,8 @@ const execution = Layer.effect(
       resume: coordinator.run,
       wake: coordinator.wake,
       interrupt: coordinator.interrupt,
+      withLock: () => (effect) => effect,
+      exclusive: (_sessionID, effect) => effect,
     })
   }),
 ).pipe(Layer.provide(runnerLayer))
@@ -555,6 +557,24 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  it.effect("does not request the model while a revert is staged", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ revert: { messageID: SessionMessage.ID.create() } })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      requests.length = 0
+
+      yield* (yield* SessionRunner.Service).run({ sessionID, force: true })
+
+      expect(requests).toHaveLength(0)
+    }),
+  )
+
   it.effect("advertises and executes a globally attached application tool", () =>
     Effect.gen(function* () {
       yield* setup
