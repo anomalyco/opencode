@@ -19,6 +19,8 @@ export class CronService extends Context.Service<CronService, Interface>()("@ope
 
 const sortByNextRun = (jobs: Array<CronJob>) => [...jobs].sort((a, b) => a.nextRunAt - b.nextRunAt)
 
+const BUSY_RETRY_MS = 10_000
+
 const make = Effect.gen(function* () {
   const port = yield* CronDeliveryPort
   const heap = yield* Ref.make<Array<CronJob>>([])
@@ -74,7 +76,8 @@ const make = Effect.gen(function* () {
 
       const busy = yield* port.isBusy(job.sessionID, { context: job.context })
       if (busy) {
-        yield* insertJob({ ...job, nextRunAt: job.nextRunAt + job.intervalMs })
+        const retryMs = job.runCount === 0 ? BUSY_RETRY_MS : job.intervalMs
+        yield* insertJob({ ...job, nextRunAt: current + retryMs })
         continue
       }
 
@@ -96,7 +99,7 @@ const make = Effect.gen(function* () {
         ...job,
         lastRunAt: current,
         runCount: job.runCount + 1,
-        nextRunAt: job.nextRunAt + job.intervalMs,
+        nextRunAt: current + job.intervalMs,
       }
       yield* insertJob(updated)
     }
@@ -130,7 +133,7 @@ const make = Effect.gen(function* () {
         model: input.model,
         createdAt: now,
         expiresAt: now + 7 * 24 * 60 * 60 * 1000,
-        nextRunAt: now + input.intervalMs,
+        nextRunAt: now,
         runCount: 0,
         context: input.context,
       }
