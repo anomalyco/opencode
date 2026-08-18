@@ -14,7 +14,7 @@ export const name = "subagent"
 const NO_TEXT = "Subagent completed without a text response."
 const backgroundStarted = (sessionID: SessionSchema.ID) =>
   [
-    `The subagent is working in the background (id: ${sessionID}). You will be notified automatically when it finishes.`,
+    `The subagent is working in the background (sessionID: ${sessionID}). You will be notified automatically when it finishes.`,
     "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
   ].join("\n")
