@@ -441,7 +441,7 @@ const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart
 // 5 of the other supported Claude families. Treat later family versions as
 // compatible without assuming that every Anthropic Messages model is Claude.
 const supportsNativeSystemUpdates = (request: LLMRequest) => {
-  const match = /(?:^|[./])claude-(fable|mythos|opus|sonnet)-(\d+)(?:[.-](\d+))?/.exec(
+  const match = /(?:^|[./])claude-(fable|haiku|mythos|opus|sonnet)-(\d+)(?:[.-](\d+))?/.exec(
     String(request.model.id).toLowerCase(),
   )
   if (!match) return false

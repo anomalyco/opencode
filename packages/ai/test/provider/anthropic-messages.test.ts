@@ -142,6 +142,7 @@ describe("Anthropic Messages route", () => {
         "claude-opus-4-8",
         "claude-opus-5-1",
         "claude-sonnet-5",
+        "claude-haiku-5-1",
         "claude-fable-6",
         "anthropic/claude-mythos-7.2",
       ]
@@ -195,7 +196,7 @@ describe("Anthropic Messages route", () => {
         "claude-opus-4-7",
         "claude-opus-4-20250514",
         "claude-sonnet-4-9",
-        "claude-haiku-6",
+        "claude-haiku-4-9",
         "custom-model-7",
       ]
 
