@@ -314,22 +314,31 @@ export function Prompt(props: PromptProps) {
     const sessionID = props.sessionID
     const msg = lastUserMessage()
 
-    if (sessionID !== syncedSessionID) {
-      if (!sessionID || !msg) return
+    if (sessionID === syncedSessionID) return
+    if (!sessionID || !msg) return
 
-      syncedSessionID = sessionID
+    // Keep the effect live while bootstrap data is still incomplete. Both
+    // reads are intentional: they make the effect retry when the catalogs
+    // arrive instead of latching the session on an empty snapshot.
+    const agents = local.agent.list()
+    if (sync.status === "loading" && agents.length === 0) return
 
-      // Only set agent if it's a primary agent (not a subagent)
-      const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
-      if (msg.agent && isPrimaryAgent) {
-        // Keep command line --agent if specified.
-        if (!args.agent) local.agent.set(msg.agent)
-        if (msg.model) {
+    // Only set agent if it's a primary agent (not a subagent)
+    const isPrimaryAgent = agents.some((x) => x.name === msg.agent)
+    if (msg.agent && isPrimaryAgent) {
+      // Keep command line --agent if specified.
+      if (!args.agent) local.agent.set(msg.agent)
+      if (msg.model) {
+        const provider = sync.data.provider.find((item) => item.id === msg.model?.providerID)
+        if (sync.status === "loading" && !provider?.models[msg.model.modelID]) return
+        if (provider?.models[msg.model.modelID]) {
           local.model.set(msg.model)
           local.model.variant.set(msg.model.variant)
         }
       }
     }
+
+    syncedSessionID = sessionID
   })
 
   const promptCommands = createMemo(() =>
