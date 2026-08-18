@@ -6,6 +6,8 @@ import { Question } from "@opencode-ai/schema/question"
 import { EventV2 } from "./event"
 import { SessionSchema } from "./session/schema"
 
+const EMPTY_QUESTIONS_ERROR = "QuestionV2.ask requires at least one question"
+
 export const ID = Question.ID
 export type ID = typeof ID.Type
 
@@ -91,22 +93,26 @@ const layer = Layer.effect(
     )
 
     const ask = Effect.fn("QuestionV2.ask")((input: AskInput) =>
-      Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const id = ID.ascending()
-          const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
-          const request: Request = { id, ...input }
-          pending.set(id, { request, deferred })
-          return yield* events.publish(Event.Asked, request).pipe(
-            Effect.andThen(restore(Deferred.await(deferred))),
-            Effect.ensuring(
-              Effect.sync(() => {
-                pending.delete(id)
-              }),
-            ),
-          )
-        }),
-      ),
+      // An empty questions array has nothing to render or answer; registering a
+      // pending request for it would wait forever. Reject it up front instead.
+      input.questions.length === 0
+        ? Effect.die(new Error(EMPTY_QUESTIONS_ERROR))
+        : Effect.uninterruptibleMask((restore) =>
+            Effect.gen(function* () {
+              const id = ID.ascending()
+              const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
+              const request: Request = { id, ...input }
+              pending.set(id, { request, deferred })
+              return yield* events.publish(Event.Asked, request).pipe(
+                Effect.andThen(restore(Deferred.await(deferred))),
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    pending.delete(id)
+                  }),
+                ),
+              )
+            }),
+          ),
     )
 
     const reply = Effect.fn("QuestionV2.reply")((input: ReplyInput) =>
