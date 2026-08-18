@@ -45,6 +45,21 @@ describe("LocationMutation", () => {
     ),
   )
 
+  it.live("trims surrounding whitespace from path arguments", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, "hello.txt")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "hello"))
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: " hello.txt\n" })
+
+        expect(target).toMatchObject({
+          canonical: yield* Effect.promise(() => fs.realpath(targetPath)),
+          resource: "hello.txt",
+        })
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("resolves an active relative prospective file target", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

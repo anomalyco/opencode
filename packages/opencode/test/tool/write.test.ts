@@ -94,6 +94,18 @@ describe("tool.write", () => {
         expect(content).toBe("relative content")
       }),
     )
+
+    it.instance("trims whitespace from filePath before writing", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "trimmed.txt")
+        yield* run({ filePath: `${filepath}\n`, content: "trimmed path" })
+
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("trimmed path")
+        expect(yield* Effect.promise(() => fs.readdir(test.directory))).toContain("trimmed.txt")
+      }),
+    )
   })
 
   describe("existing file overwrite", () => {
