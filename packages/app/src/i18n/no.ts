@@ -183,6 +183,8 @@ export const dict = {
   "command.session.redo": "Gjør om",
   "command.session.redo.description": "Gjør om siste angrede melding",
   "command.session.compact": "Komprimer sesjon",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Oppsummer sesjonen for å redusere kontekststørrelsen",
   "command.session.fork": "Forgren fra melding",
   "command.session.fork.description": "Opprett en ny sesjon fra en tidligere melding",

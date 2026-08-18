@@ -179,6 +179,8 @@ export const dict = {
   "command.session.redo": "Refazer",
   "command.session.redo.description": "Refazer a última mensagem desfeita",
   "command.session.compact": "Compactar sessão",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Resumir a sessão para reduzir o tamanho do contexto",
   "command.session.fork": "Bifurcar da mensagem",
   "command.session.fork.description": "Criar uma nova sessão a partir de uma mensagem anterior",

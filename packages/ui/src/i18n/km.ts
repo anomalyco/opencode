@@ -179,6 +179,7 @@ export const dict = {
   "ui.message.forkMessage": "បំបែកទៅសម័យថ្មី។",
   "ui.message.revertMessage": "ត្រឡប់សារ",
   "ui.message.copyResponse": "ចម្លងការឆ្លើយតប",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "ចម្លង",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

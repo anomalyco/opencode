@@ -160,6 +160,7 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Haarauta uuteen istuntoon",
   "ui.message.revertMessage": "Palauta viesti",
   "ui.message.copyResponse": "Kopioi vastaus",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Kopioitu",
   "ui.message.duration.seconds": "{{count}} s",
   "ui.message.duration.minutesSeconds": "{{minutes}} min {{seconds}} s",

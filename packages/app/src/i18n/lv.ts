@@ -171,6 +171,8 @@ export const dict = {
   "command.session.redo": "Atatsaukt",
   "command.session.redo.description": "Atatsaukt pēdējo atsaukto ziņojumu",
   "command.session.compact": "Saspiest sesiju",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Kopsavilkt sesiju, lai samazinātu konteksta apjomu",
   "command.session.fork": "Atzarot no ziņojuma",
   "command.session.fork.description": "Izveidot jaunu sesiju no iepriekšēja ziņojuma",
