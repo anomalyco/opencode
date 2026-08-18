@@ -15,6 +15,7 @@
     "../src/pages/session/timeline/observe-element-offset.ts",
     "./regression/new-session-panel-corner.spec.ts",
     "./regression/session-timeline-context-resize.spec.ts",
+    "./regression/add-server-dialog-input.spec.ts",
     "./utils/**/*.ts"
   ]
 }
