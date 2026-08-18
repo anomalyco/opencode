@@ -1558,6 +1558,29 @@ unixNoLLMServer(
 )
 
 unixNoLLMServer(
+  "shell preserves the current model variant",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, sessions, chat } = yield* boot()
+      const seeded = yield* seed(chat.id)
+      yield* sessions.updateMessage({
+        ...seeded.user,
+        model: { ...seeded.user.model, variant: "xhigh" },
+      })
+
+      yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        command: "printf ok",
+      })
+
+      const latest = MessageV2.latest(yield* sessions.messages({ sessionID: chat.id }))
+      expect(latest.user?.model).toEqual({ ...ref, variant: "xhigh" })
+    }),
+  { config: cfg },
+)
+
+unixNoLLMServer(
   "shell completes a fast command on the preferred shell",
   () =>
     Effect.gen(function* () {
