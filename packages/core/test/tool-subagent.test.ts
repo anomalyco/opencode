@@ -462,7 +462,7 @@ describe("SubagentTool", () => {
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-          const call = (sessionID: Session.ID, id: string) =>
+          const call = (sessionID: Session.ID, id: string, agent = "reviewer") =>
             executeTool(registry, {
               sessionID: parent.id,
               ...toolIdentity,
@@ -470,10 +470,18 @@ describe("SubagentTool", () => {
                 type: "tool-call" as const,
                 id,
                 name: SubagentTool.name,
-                input: { agent: "reviewer", description: "follow up", prompt: "continue", sessionID },
+                input: { agent, description: "follow up", prompt: "continue", sessionID },
               },
             })
 
+          const missing = Session.ID.create()
+          expect(yield* call(missing, "call-missing-child")).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: `Subagent session not found: ${missing}`,
+            },
+          })
           expect(yield* call(unrelated.id, "call-unrelated-child")).toEqual({
             status: "error",
             error: {
@@ -487,6 +495,15 @@ describe("SubagentTool", () => {
           })
           expect(yield* sessions.get(switched.id)).toMatchObject({
             agent: "reviewer",
+            model: childModel,
+          })
+          // Switching to an agent without a configured model keeps the child's current model.
+          expect(yield* call(switched.id, "call-modelless-switch", "fallback")).toMatchObject({
+            status: "completed",
+            metadata: { sessionID: switched.id, status: "completed" },
+          })
+          expect(yield* sessions.get(switched.id)).toMatchObject({
+            agent: "fallback",
             model: childModel,
           })
         }),

@@ -55,7 +55,9 @@ export const Plugin = {
     const config = yield* Config.Service
     const permission = yield* Permission.Service
     const scope = yield* Scope.Scope
-    const notifications = new Set<SessionSchema.ID>()
+    // One completion observer per job generation. Keyed by child plus start time so a fresh
+    // continuation job is observable even while a settled generation's observer is finalizing.
+    const notifications = new Set<string>()
 
     // Concatenate the child's final completed assistant text. Distinguishes "completed with no
     // text" (generic string) from "failed" (the run effect fails, surfaced as a job error).
@@ -94,9 +96,11 @@ export const Plugin = {
       childID: SessionSchema.ID,
       agent: string,
       description: string,
+      startedAt: number,
     ) {
-      if (notifications.has(childID)) return
-      notifications.add(childID)
+      const key = `${childID}:${startedAt}`
+      if (notifications.has(key)) return
+      notifications.add(key)
       yield* runtime.job.wait({ id: childID }).pipe(
         Effect.flatMap((result) => {
           if (result.info?.status === "completed")
@@ -114,7 +118,7 @@ export const Plugin = {
             return injectCompletion(parentID, childID, agent, description, "cancelled", "Subagent cancelled")
           return Effect.void
         }),
-        Effect.ensuring(Effect.sync(() => notifications.delete(childID))),
+        Effect.ensuring(Effect.sync(() => notifications.delete(key))),
         Effect.forkIn(scope, { startImmediately: true }),
       )
     })
@@ -197,7 +201,8 @@ export const Plugin = {
                       : runtime.session.switchModel({ sessionID: existing.id, model: agent.model }),
                   ),
                   Effect.mapError(
-                    (error) => new ToolFailure({ message: `Subagent session not found: ${existing.id}`, error }),
+                    (error) =>
+                      new ToolFailure({ message: `Failed to switch subagent session agent: ${existing.id}`, error }),
                   ),
                 )
               }
@@ -255,7 +260,7 @@ export const Plugin = {
 
               if (background) {
                 yield* runtime.job.background(info.id)
-                yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description)
+                yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description, info.started_at)
                 return {
                   sessionID: child.id,
                   status: "running" as const,
@@ -271,16 +276,26 @@ export const Plugin = {
                 ),
               )
               if (result?.type === "backgrounded") {
-                yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description)
+                yield* notifyWhenDone(
+                  context.sessionID,
+                  child.id,
+                  agent.name,
+                  input.description,
+                  result.info.started_at,
+                )
                 return {
                   sessionID: child.id,
                   status: "running" as const,
                   output: backgroundStarted(child.id),
                 }
               }
+              // Failure surfaces keep the sessionID visible so the model can continue the child.
               if (result?.info.status === "error")
-                return yield* new ToolFailure({ message: result.info.error ?? "Subagent failed" })
-              if (result?.info.status === "cancelled") return yield* new ToolFailure({ message: "Subagent cancelled" })
+                return yield* new ToolFailure({
+                  message: `Subagent failed (sessionID: ${child.id}): ${result.info.error ?? "unknown error"}`,
+                })
+              if (result?.info.status === "cancelled")
+                return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
               return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
             }).pipe(
               Effect.map((output) => ({
