@@ -1010,6 +1010,34 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("ignores tool input deltas without a matching tool start", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+              { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hello" } },
+              {
+                type: "content_block_delta",
+                index: 1,
+                delta: { type: "input_json_delta", partial_json: '{"query":"orphaned"}' },
+              },
+              { type: "content_block_stop", index: 0 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.toolCalls).toEqual([])
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
   it.effect("settles pending tool calls at message_stop", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
