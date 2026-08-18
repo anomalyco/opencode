@@ -1012,6 +1012,70 @@ test("announces initially disabled MCP servers", async () => {
   )
 })
 
+test("restores runtime MCP config when a transform is disposed", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = yield* MCP.Service
+        const config = new ConfigMCP.Remote({
+          type: "remote",
+          url: "https://example.com/mcp",
+          headers: { Authorization: "original" },
+          oauth: false,
+          disabled: true,
+        })
+        yield* service.add("dynamic", config)
+        const transformed = yield* service.transform((draft) =>
+          draft.update("dynamic", (server) => {
+            if (server.type === "remote") server.headers = { Authorization: "transformed" }
+          }),
+        )
+        let observed: string | undefined
+        yield* service.transform((draft) => {
+          const server = draft.get("dynamic")
+          observed = server?.type === "remote" ? server.headers?.Authorization : undefined
+        })
+
+        expect(observed).toBe("transformed")
+        expect(config.headers?.Authorization).toBe("original")
+        yield* transformed.dispose
+        expect(observed).toBe("original")
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })),
+        ),
+      ),
+    ),
+  )
+})
+
+test("isolates nested configured MCP mutations and reconciles them", async () => {
+  const published: string[] = []
+  const config = new ConfigMCP.Remote({
+    type: "remote",
+    url: "https://example.com/mcp",
+    headers: { Authorization: "original" },
+    oauth: false,
+    disabled: true,
+  })
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = yield* MCP.Service
+        expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(1)
+        yield* service.transform((draft) =>
+          draft.update("resources", (server) => {
+            if (server.type === "remote") server.headers = { Authorization: "transformed" }
+          }),
+        )
+
+        expect(config.headers?.Authorization).toBe("original")
+        expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(2)
+      }).pipe(Effect.provide(resourceMcpLayer(config, undefined, undefined, { published }))),
+    ),
+  )
+})
+
 test("reconciles only changed MCP server config", async () => {
   await Effect.runPromise(
     Effect.scoped(

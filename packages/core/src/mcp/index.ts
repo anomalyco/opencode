@@ -139,6 +139,9 @@ export type Draft = {
   remove: (server: ServerName | string) => void
 }
 
+const cloneConfig = (config: Mcp.ServerConfig) =>
+  structuredClone(config) as Types.DeepMutable<Mcp.ServerConfig>
+
 export interface Interface extends State.Transformable<Draft> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
   readonly add: (server: ServerName | string, config: Mcp.ServerConfig) => Effect.Effect<void>
@@ -655,7 +658,7 @@ export const layer = (options?: Options) =>
         initial: () => ({
           servers: new Map(
             Array.from(overrides).flatMap(([name, config]) =>
-              config === false ? [] : [[name, config as Types.DeepMutable<Mcp.ServerConfig>] as const],
+              config === false ? [] : [[name, cloneConfig(config)] as const],
             ),
           ),
           removed: new Set(
@@ -668,7 +671,7 @@ export const layer = (options?: Options) =>
           set: (server, serverConfig) => {
             const name = ServerName.make(server)
             if (draft.removed.has(name)) return
-            draft.servers.set(name, serverConfig as Types.DeepMutable<Mcp.ServerConfig>)
+            draft.servers.set(name, cloneConfig(serverConfig))
           },
           update: (server, update) => {
             const current = draft.servers.get(ServerName.make(server))
