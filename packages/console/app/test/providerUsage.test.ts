@@ -5,6 +5,7 @@ import { anthropicHelper } from "../src/routes/zen/util/provider/anthropic"
 import { googleHelper } from "../src/routes/zen/util/provider/google"
 import { oaCompatHelper } from "../src/routes/zen/util/provider/openai-compatible"
 import { openaiHelper } from "../src/routes/zen/util/provider/openai"
+import { buildCostChunk } from "../src/routes/zen/util/provider/provider"
 
 const providers = {
   anthropic: anthropicHelper({ reqModel: "claude-haiku-4-5", providerModel: "claude-haiku-4-5" }),
@@ -14,6 +15,14 @@ const providers = {
 } satisfies Record<ZenData.Format, ReturnType<ProviderHelper>>
 
 describe("provider usage extraction", () => {
+  test("terminates OpenAI-compatible cost tails with DONE", () => {
+    expect(buildCostChunk("oa-compat", "0").split("\n\n")).toEqual([
+      'data: {"choices":[],"cost":"0"}',
+      "data: [DONE]",
+      "",
+    ])
+  })
+
   test("extracts Google non-stream usage metadata", () => {
     const usage = providers.google.extractUsage({
       usageMetadata: {
