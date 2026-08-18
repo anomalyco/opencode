@@ -152,6 +152,7 @@ test("signals an unresponsive registered service process", async () => {
   await run(Service.stop({ file: registration }))
   await process.exited
   expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+  expect(await Bun.file(registration).exists()).toBe(false)
 })
 
 test("signals an incompatible service before starting its replacement", async () => {

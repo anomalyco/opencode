@@ -268,12 +268,16 @@ const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly f
   if (current === undefined || !same(current, info)) return
   yield* signal(info.pid, "SIGTERM")
   const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
-  if (Option.isSome(done)) return
-
+  if (Option.isNone(done)) {
+    const latest = yield* read(options.file)
+    if (latest === undefined || !same(latest, info)) return
+    yield* signal(info.pid, "SIGKILL")
+    yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
+  }
   const latest = yield* read(options.file)
   if (latest === undefined || !same(latest, info)) return
-  yield* signal(info.pid, "SIGKILL")
-  yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
+  const fs = yield* FileSystem.FileSystem
+  yield* fs.remove(options.file ?? fallback()).pipe(Effect.ignore)
 })
 
 /** Effect-based local service lifecycle operations. */

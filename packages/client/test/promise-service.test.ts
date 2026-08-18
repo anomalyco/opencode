@@ -132,6 +132,7 @@ test("signals the registered service process", async () => {
   await Service.stop({ file: registration })
 
   expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+  expect(await Bun.file(registration).exists()).toBe(false)
 })
 
 async function setup(mode: string) {

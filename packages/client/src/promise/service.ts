@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { readFile, rm } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
@@ -230,12 +230,15 @@ async function terminate(info: Info, options: { readonly file?: string }, timing
   const current = await read(options.file)
   if (current === undefined || !same(current, info)) return
   signal(info.pid, "SIGTERM")
-  if (await waitUntilStopped(info.pid, timing)) return
-
+  if (!(await waitUntilStopped(info.pid, timing))) {
+    const latest = await read(options.file)
+    if (latest === undefined || !same(latest, info)) return
+    signal(info.pid, "SIGKILL")
+    if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
+  }
   const latest = await read(options.file)
   if (latest === undefined || !same(latest, info)) return
-  signal(info.pid, "SIGKILL")
-  if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
+  await rm(options.file ?? fallback(), { force: true })
 }
 
 function delay(milliseconds: number) {
