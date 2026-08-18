@@ -611,6 +611,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
     })
 
+    // Terminal opened state is global (not per-session). Both layout.terminal
+    // and view().terminal expose the same underlying state.
+    const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
+
+    function setTerminalOpened(next: boolean) {
+      const current = store.terminal
+      if (!current) {
+        setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: next })
+        return
+      }
+
+      const value = current.opened ?? false
+      if (value === next) return
+      setStore("terminal", "opened", next)
+    }
+
     return {
       route,
       ready,
@@ -687,8 +703,23 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       terminal: {
         height: createMemo(() => store.terminal.height),
+        opened: terminalOpened,
         resize(height: number) {
           setStore("terminal", "height", height)
+        },
+        open() {
+          setTerminalOpened(true)
+        },
+        close() {
+          setTerminalOpened(false)
+        },
+        toggle() {
+          const current = store.terminal
+          if (!current) {
+            setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: true })
+            return
+          }
+          setStore("terminal", "opened", (prev) => !(prev ?? false))
         },
       },
       review: {
@@ -817,21 +848,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const file = s().reviewFile
           if (typeof file === "string") return file
         })
-        const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
         const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
-
-        function setTerminalOpened(next: boolean) {
-          const current = store.terminal
-          if (!current) {
-            setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: next })
-            return
-          }
-
-          const value = current.opened ?? false
-          if (value === next) return
-          setStore("terminal", "opened", next)
-        }
 
         function setReviewPanelOpened(next: boolean, source: ReviewPanelSource) {
           const nextSource = next ? source : "other"
