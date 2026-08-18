@@ -67,6 +67,7 @@ function compileEndpoint(endpoint: HttpApiEndpoint.Top) {
 export function fromPromise(plugin: Plugin) {
   return define({
     id: plugin.id,
+    tui: plugin.tui,
     effect: (host) =>
       Effect.gen(function* () {
         const [{ ClientApi }, { OpenCodeEvent }] = yield* Effect.promise(() =>

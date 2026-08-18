@@ -89,13 +89,7 @@ describe("Plugin", () => {
       yield* host.mcp.connect({ location, server: "routed" }).pipe(Effect.orDie)
       yield* host.mcp.disconnect({ location, server: "routed" }).pipe(Effect.orDie)
       expect((yield* host.mcp.list({ location }).pipe(Effect.orDie)).location.directory).toBe(target)
-      expect(routed).toEqual([
-        "add:/target",
-        "remove:/target",
-        "connect:/target",
-        "disconnect:/target",
-        "list:/target",
-      ])
+      expect(routed).toEqual(["add:/target", "remove:/target", "connect:/target", "disconnect:/target", "list:/target"])
     }),
   )
 
@@ -138,9 +132,22 @@ describe("Plugin", () => {
       expect(updates).toBe(2)
       expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("second")
 
+      yield* plugins.activate(
+        [versioned(managed(), "2")],
+        [
+          {
+            source: { type: "package", package: "broken" },
+            status: "failed",
+            error: "failed to resolve",
+            tui: false,
+          },
+        ],
+      )
+      expect(updates).toBe(3)
+
       yield* plugins.activate([])
       expect(yield* agents.get(Agent.ID.make("configured"))).toBeUndefined()
-      expect(updates).toBe(3)
+      expect(updates).toBe(4)
       yield* unsubscribe
     }),
   )
@@ -160,7 +167,7 @@ describe("Plugin", () => {
         .pipe(Effect.exit)
 
       expect(Exit.isFailure(result)).toBe(true)
-      expect(yield* plugins.list()).toEqual([{ id: active }])
+      expect(yield* plugins.list()).toEqual([{ id: active, source: { type: "builtin" }, status: "active", tui: false }])
     }),
   )
 
@@ -189,12 +196,24 @@ describe("Plugin", () => {
       })
 
       yield* plugins.activate([versioned(good), versioned(bad)])
-      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("good") }])
+      expect(yield* plugins.list()).toEqual([
+        { id: Plugin.ID.make("good"), source: { type: "builtin" }, status: "active", tui: false },
+        {
+          id: Plugin.ID.make("bad"),
+          source: { type: "builtin" },
+          status: "failed",
+          error: expect.stringContaining("materialization failed"),
+          tui: false,
+        },
+      ])
       expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("loaded")
 
       fail = false
       yield* plugins.activate([versioned(good), versioned(bad, "2")])
-      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("good") }, { id: Plugin.ID.make("bad") }])
+      expect(yield* plugins.list()).toEqual([
+        { id: Plugin.ID.make("good"), source: { type: "builtin" }, status: "active", tui: false },
+        { id: Plugin.ID.make("bad"), source: { type: "builtin" }, status: "active", tui: false },
+      ])
     }),
   )
 
@@ -229,7 +248,15 @@ describe("Plugin", () => {
       yield* plugins.activate([versioned(previous)])
       yield* plugins.activate([versioned(replacement, "2")])
 
-      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("managed") }])
+      expect(yield* plugins.list()).toEqual([
+        {
+          id: Plugin.ID.make("managed"),
+          source: { type: "builtin" },
+          status: "failed",
+          error: expect.stringContaining("replacement failed"),
+          tui: false,
+        },
+      ])
       expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("previous")
     }),
   )
@@ -261,7 +288,15 @@ describe("Plugin", () => {
       yield* plugins.activate([versioned(previous)])
       yield* plugins.activate([versioned(replacement, "2")])
 
-      expect(yield* plugins.list()).toEqual([])
+      expect(yield* plugins.list()).toEqual([
+        {
+          id: Plugin.ID.make("managed"),
+          source: { type: "builtin" },
+          status: "failed",
+          error: expect.stringContaining("replacement failed"),
+          tui: false,
+        },
+      ])
       expect(yield* agents.get(Agent.ID.make("configured"))).toBeUndefined()
     }),
   )

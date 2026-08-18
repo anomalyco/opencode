@@ -6,6 +6,7 @@ import { useLanguage } from "@/context/language"
 import { useData } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useMcpToggle } from "@/context/mcp"
+import { pluginLabel } from "@/utils/plugin"
 import { ExternalLink } from "../external-link"
 import { InlineServerSelect } from "./parts/server-select"
 import "./settings-v2.css"
@@ -44,7 +45,9 @@ export const SettingsExtensionsV2: Component = () => {
     () => serverSdk.connection.status() === "connected",
     () => serverSdk.api.plugin.list().then((result) => result.data),
   )
-  const plugins = createMemo<PluginRowItem[]>(() => (pluginList.latest ?? []).map((item) => ({ name: item.id })))
+  const plugins = createMemo<PluginRowItem[]>(() =>
+    (pluginList.latest ?? []).map((item) => ({ name: pluginLabel(item) })),
+  )
 
   createEffect(() => {
     if (serverSdk.connection.status() !== "connected") return

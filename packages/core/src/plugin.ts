@@ -1,10 +1,10 @@
 export * as Plugin from "./plugin.js"
-export { Event, ID, Info } from "@opencode-ai/schema/plugin"
+export { Event, ID, Info, Source } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "./app.js"
-import { Context, Effect, Exit, Layer, Logger, References, Scope, Semaphore } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Logger, References, Scope, Semaphore } from "effect"
 import { Agent } from "./agent.js"
 import { AISDK } from "./aisdk.js"
 import { Catalog } from "./catalog.js"
@@ -23,11 +23,17 @@ import { Tool } from "./tool.js"
 import { PluginHooks } from "./plugin/hooks.js"
 
 export interface Interface {
-  readonly activate: (plugins: readonly Versioned[]) => Effect.Effect<void>
+  readonly activate: (
+    plugins: readonly Versioned[],
+    failures?: readonly Extract<Plugin.Info, { readonly status: "failed" }>[],
+  ) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Plugin.Info[]>
 }
 
-export type Versioned = import("@opencode-ai/plugin/effect/plugin").Plugin & { readonly version: string }
+export type Versioned = import("@opencode-ai/plugin/effect/plugin").Plugin & {
+  readonly version: string
+  readonly source?: Plugin.Source
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
 
@@ -38,6 +44,7 @@ const layer = Layer.effect(
     const scope = yield* Scope.make()
     const active = new Map<Plugin.ID, { readonly plugin: Versioned; readonly scope: Scope.Closeable }>()
     const lock = Semaphore.makeUnsafe(1)
+    let inventory: Plugin.Info[] = []
     let host: Parameters<import("@opencode-ai/plugin/effect/plugin").Plugin["effect"]>[0]
 
     const load = Effect.fnUntraced(function* (plugin: Versioned) {
@@ -56,15 +63,18 @@ const layer = Layer.effect(
         Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
         Effect.exit,
       )
-      if (Exit.isSuccess(loaded)) return child
+      if (Exit.isSuccess(loaded)) return { scope: child } as const
       yield* Effect.logWarning("failed to load plugin", {
         "plugin.id": plugin.id,
         cause: loaded.cause,
       })
-      return undefined
+      return { error: Cause.pretty(loaded.cause) } as const
     })
 
-    const activate = Effect.fn("Plugin.activate")(function* (plugins: readonly Versioned[]) {
+    const activate = Effect.fn("Plugin.activate")(function* (
+      plugins: readonly Versioned[],
+      failures: readonly Extract<Plugin.Info, { readonly status: "failed" }>[] = [],
+    ) {
       const definitions = plugins.map((plugin) => ({ ...plugin, id: Plugin.ID.make(plugin.id) }))
       const ids = new Set<Plugin.ID>()
       for (const definition of definitions) {
@@ -85,26 +95,40 @@ const layer = Layer.effect(
               const candidate = next[index]
               return definition.id === candidate?.id && definition.version === candidate.version
             })
-          )
+          ) {
+            const nextInventory = [...Array.from(active.values(), (entry) => activeInfo(entry.plugin)), ...failures]
+            if (JSON.stringify(inventory) === JSON.stringify(nextInventory)) return
+            inventory = nextInventory
+            yield* bus.publish(Plugin.Event.Updated, {})
             return
+          }
 
           yield* State.batch(
             Effect.gen(function* () {
+              const nextInventory: Plugin.Info[] = []
               for (const definition of definitions) {
                 const previous = active.get(definition.id)
                 active.delete(definition.id)
                 if (previous) yield* Scope.close(previous.scope, Exit.void).pipe(Effect.ignore)
 
                 const loaded = yield* load(definition)
-                if (loaded) {
-                  active.set(definition.id, { plugin: definition, scope: loaded })
+                if (loaded.scope !== undefined) {
+                  active.set(definition.id, { plugin: definition, scope: loaded.scope })
+                  nextInventory.push(activeInfo(definition))
                   continue
                 }
+                nextInventory.push({
+                  id: definition.id,
+                  source: definition.source ?? { type: "builtin" },
+                  status: "failed",
+                  error: loaded.error,
+                  tui: definition.tui ?? false,
+                })
 
                 if (!previous) continue
                 const restored = yield* load(previous.plugin)
-                if (restored) {
-                  active.set(definition.id, { plugin: previous.plugin, scope: restored })
+                if (restored.scope !== undefined) {
+                  active.set(definition.id, { plugin: previous.plugin, scope: restored.scope })
                   continue
                 }
                 yield* Effect.logError("failed to restore plugin; deactivating", {
@@ -119,6 +143,7 @@ const layer = Layer.effect(
               yield* Effect.forEach(removed, ([, entry]) => Scope.close(entry.scope, Exit.void).pipe(Effect.ignore), {
                 discard: true,
               })
+              inventory = [...nextInventory, ...failures]
             }),
           )
           yield* bus.publish(Plugin.Event.Updated, {})
@@ -136,13 +161,22 @@ const layer = Layer.effect(
     const service = Service.of({
       activate,
       list: Effect.fn("Plugin.list")(function* () {
-        return Array.from(active.keys()).map((id) => ({ id }))
+        return inventory
       }),
     })
     host = yield* PluginHost.make(service)
     return service
   }),
 )
+
+function activeInfo(plugin: Versioned): Plugin.Info {
+  return {
+    id: Plugin.ID.make(plugin.id),
+    source: plugin.source ?? { type: "builtin" },
+    status: "active",
+    tui: plugin.tui ?? false,
+  }
+}
 
 export const node = makeLocationNode({
   service: Service,

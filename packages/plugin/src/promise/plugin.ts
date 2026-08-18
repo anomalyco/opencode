@@ -38,6 +38,7 @@ export type Cleanup = () => Promise<void> | void
 
 export interface Plugin {
   readonly id: string
+  readonly tui?: boolean
   readonly setup: (context: Context) => Promise<Cleanup | void> | Cleanup | void
 }
 
