@@ -91,23 +91,38 @@ export function createServerProjects<T extends ServerProjectState>(input: {
       current().filter((project) => project.worktree !== directory),
     )
   }
+  const open = (directory: string) => {
+    const scope = input.scope()
+    const key = pathKey(directory)
+    const closed = currentClosed()
+    if (closed.some((worktree) => pathKey(worktree) === key)) {
+      setStore(
+        "recentlyClosed",
+        scope,
+        closed.filter((worktree) => pathKey(worktree) !== key),
+      )
+    }
+    if (current().some((project) => project.worktree === directory)) return
+    setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
+  }
+  const touch = (directory: string) => {
+    setStore("lastProject", input.scope(), directory)
+  }
   return {
     list: current,
     recentlyClosed: currentClosed,
     remove,
-    open(directory: string) {
-      const scope = input.scope()
+    open,
+    touch,
+    // Opens a directory only when this server has no projects at all, so a client
+    // that has never opened one still lands somewhere. Directories the user closed
+    // stay closed.
+    adopt(directory: string) {
+      if (current().length > 0) return
       const key = pathKey(directory)
-      const closed = currentClosed()
-      if (closed.some((worktree) => pathKey(worktree) === key)) {
-        setStore(
-          "recentlyClosed",
-          scope,
-          closed.filter((worktree) => pathKey(worktree) !== key),
-        )
-      }
-      if (current().some((project) => project.worktree === directory)) return
-      setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
+      if (currentClosed().some((worktree) => pathKey(worktree) === key)) return
+      open(directory)
+      touch(directory)
     },
     // User-initiated close: removes the project and records it in recently closed.
     // Internal, non-user removals (e.g. sandbox/worktree normalization) should use remove().
@@ -138,9 +153,6 @@ export function createServerProjects<T extends ServerProjectState>(input: {
     },
     last() {
       return input.store.lastProject[input.scope()]
-    },
-    touch(directory: string) {
-      setStore("lastProject", input.scope(), directory)
     },
   }
 }

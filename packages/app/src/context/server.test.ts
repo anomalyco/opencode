@@ -185,6 +185,63 @@ describe("createServerProjects", () => {
     })
   })
 
+  test("adopts a directory for a server with no projects", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.adopt("/srv/repo")
+      expect(projects.list()).toEqual([{ worktree: "/srv/repo", expanded: true }])
+      expect(projects.last()).toBe("/srv/repo")
+      dispose()
+    })
+  })
+
+  test("leaves an existing project list untouched when adopting", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/repo")
+      projects.adopt("/srv/repo")
+      expect(projects.list()).toEqual([{ worktree: "/repo", expanded: true }])
+      expect(projects.last()).toBeUndefined()
+      dispose()
+    })
+  })
+
+  test("does not adopt a directory the user closed", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/srv/repo")
+      projects.close("/srv/repo")
+      projects.adopt("/srv/repo")
+      expect(projects.list()).toEqual([])
+      expect(projects.recentlyClosed()).toEqual(["/srv/repo"])
+      dispose()
+    })
+  })
+
+  test("adopts per server scope", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const local = createServerProjects({ scope, store, setStore })
+      const remote = createServerProjects({ scope: () => "https://debian.example" as ServerScope, store, setStore })
+
+      local.open("/repo")
+      remote.adopt("/srv/repo")
+      expect(remote.list()).toEqual([{ worktree: "/srv/repo", expanded: true }])
+      expect(local.list()).toEqual([{ worktree: "/repo", expanded: true }])
+      dispose()
+    })
+  })
+
   test("dedupes recently closed entries by normalized path", () => {
     createRoot((dispose) => {
       const [scope] = createSignal(ServerScope.local)
