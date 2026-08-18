@@ -5,7 +5,8 @@ import { Money } from "@opencode-ai/schema/money"
 import type { TokenUsage } from "@opencode-ai/schema/token-usage"
 import type { Model } from "../model.js"
 
-const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
+const finite = (value: number) => (Number.isFinite(value) ? value : 0)
+const safe = (value: number | undefined) => Math.max(0, finite(value ?? 0))
 
 export const tokens = (usage: Usage | undefined): TokenUsage.Info => ({
   input: safe(usage?.nonCachedInputTokens),
@@ -26,10 +27,10 @@ export function calculateCost(costs: Model.Info["cost"], usage: TokenUsage.Info)
   const cost = tier ?? costs.find((cost) => cost.tier === undefined)
   if (!cost) return Money.USD.zero
   return Money.USD.make(
-    (usage.input * cost.input +
-      (usage.output + usage.reasoning) * cost.output +
-      usage.cache.read * cost.cache.read +
-      usage.cache.write * cost.cache.write) /
+    (usage.input * finite(cost.input) +
+      (usage.output + usage.reasoning) * finite(cost.output) +
+      usage.cache.read * finite(cost.cache.read) +
+      usage.cache.write * finite(cost.cache.write)) /
       1_000_000,
   )
 }
