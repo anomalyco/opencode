@@ -277,10 +277,10 @@ export const importSessionTransfer = Effect.fn("Cli.import.transfer")(function* 
 
                 const parts = record.data.messages.flatMap((message) =>
                   message.parts.map((part) => {
-                    const { id, sessionID: _, messageID: _messageID, ...data } = part
+                    const { id, sessionID: _, messageID, ...data } = part
                     return {
                       id,
-                      message_id: message.info.id,
+                      message_id: messageID,
                       session_id: record.row.id,
                       data,
                     }
