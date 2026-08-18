@@ -10,7 +10,12 @@ type Driver = {
   getBlob(id: string): Promise<Blob | null>
 }
 
-export type DraftStore = AsyncStorage & { putBlob(blob: Blob): Promise<BlobReference> }
+export type DraftStore = AsyncStorage & { putBlob(blob: Blob): Promise<BlobReference>; flush(): Promise<void> }
+
+// Every keystroke changes the draft, and encoding one means parsing, walking and
+// re-serialising the whole prompt before it crosses to storage (an IPC hop on desktop).
+// Coalescing collapses a burst of edits, or one large paste, into a single write.
+const WRITE_DELAY = 150
 const urls = new Map<string, string>()
 
 function blobUrl(id: string, blob: Blob) {
@@ -75,22 +80,63 @@ export function createDraftStore(driver: Driver): DraftStore {
       await Promise.all(Object.entries(item).map(async ([key, entry]) => [key, await decode(entry)])),
     )
   }
+  const pending = new Map<string, string>()
+  const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  const write = async (key: string) => {
+    const value = pending.get(key)
+    if (value === undefined) return
+    pending.delete(key)
+    const version = (versions.get(key) ?? 0) + 1
+    versions.set(key, version)
+    const encoded = JSON.stringify(await encode(JSON.parse(value)))
+    // A slower encode started earlier must never land on top of a newer draft.
+    if (versions.get(key) === version) await driver.set(key, encoded)
+  }
+  const cancel = (key: string) => {
+    const timer = timers.get(key)
+    if (timer === undefined) return
+    clearTimeout(timer)
+    timers.delete(key)
+  }
+  const flush = async () => {
+    Array.from(timers.keys()).forEach(cancel)
+    await Promise.all(Array.from(pending.keys()).map(write))
+  }
+  if (typeof window !== "undefined") {
+    // Losing the tail of a draft on close would defeat the point of persisting it.
+    window.addEventListener("pagehide", () => void flush())
+    window.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") void flush()
+    })
+  }
   return {
     getItem: async (key) => {
+      // A queued write is newer than anything the driver can return, and it is already in
+      // the shape the app wrote, so hydration after a session switch stays correct.
+      const queued = pending.get(key)
+      if (queued !== undefined) return queued
       const value = await driver.get(key)
       return value === null ? null : JSON.stringify(await decode(JSON.parse(value)))
     },
     setItem: async (key, value) => {
-      const version = (versions.get(key) ?? 0) + 1
-      versions.set(key, version)
-      const encoded = JSON.stringify(await encode(JSON.parse(value)))
-      if (versions.get(key) === version) await driver.set(key, encoded)
+      pending.set(key, value)
+      if (timers.has(key)) return
+      timers.set(
+        key,
+        setTimeout(() => {
+          timers.delete(key)
+          void write(key)
+        }, WRITE_DELAY),
+      )
     },
     removeItem: async (key) => {
+      cancel(key)
+      pending.delete(key)
       versions.set(key, (versions.get(key) ?? 0) + 1)
       await driver.remove(key)
     },
     putBlob,
+    flush,
   }
 }
 

@@ -8,7 +8,7 @@ import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 import { createBlobReference, type DraftStore } from "@/utils/draft-store"
 import { attachmentMime } from "./files"
-import { normalizePaste, pasteMode } from "./paste"
+import { normalizePaste, pasteMode } from "@opencode-ai/session-ui/v2/prompt-input/paste"
 
 type PromptTarget = Pick<ReturnType<ReturnType<typeof usePrompt>["capture"]>, "current" | "cursor" | "set">
 type AttachmentTarget = { prompt: PromptTarget; cursor: number | undefined }
