@@ -92,7 +92,7 @@ test("export is raw by default and supports explicit sanitization", async () => 
   }
 }, 15_000)
 
-test("export reports an empty session list without a stack trace", async () => {
+test("export requires a session outside an interactive terminal", async () => {
   const server = Bun.serve({
     port: 0,
     fetch(request) {
@@ -112,9 +112,8 @@ test("export reports an empty session list without a stack trace", async () => {
   try {
     const [stdout, stderr, exitCode] = await run(["export", "--server", server.url.toString()])
 
-    expect(exitCode).toBe(0)
-    expect(stdout).toBe("")
-    expect(stderr).toContain("No sessions found")
+    expect(exitCode).toBe(1)
+    expect(stdout + stderr).toContain("Pass a session ID when running without an interactive terminal")
   } finally {
     await server.stop(true)
   }

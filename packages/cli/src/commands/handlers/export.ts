@@ -10,6 +10,10 @@ import { ServerConnection } from "../../services/server-connection"
 export default Runtime.handler(
   Commands.commands.export,
   Effect.fn("cli.export")(function* (input) {
+    const requested = Option.getOrUndefined(input.session)
+    if (!requested && !process.stdin.isTTY) {
+      yield* Effect.fail(new Error("Pass a session ID when running without an interactive terminal"))
+    }
     const server = yield* ServerConnection.resolve({
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
@@ -18,7 +22,6 @@ export default Runtime.handler(
       baseUrl: server.endpoint.url,
       headers: Service.headers(server.endpoint),
     })
-    const requested = Option.getOrUndefined(input.session)
     const sessionID = requested
       ? requested
       : yield* Effect.gen(function* () {
