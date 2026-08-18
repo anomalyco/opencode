@@ -226,9 +226,15 @@ export function createMainWindow(id: string = randomUUID()) {
   loadWindow(win, "index.html")
   wireZoom(win)
 
-  win.once("ready-to-show", () => {
+  let revealed = false
+  const reveal = () => {
+    if (revealed || win.isDestroyed()) return
+    revealed = true
     win.show()
-  })
+  }
+
+  win.once("ready-to-show", reveal)
+  if (process.platform === "linux") win.webContents.once("did-finish-load", reveal)
 
   return win
 }
