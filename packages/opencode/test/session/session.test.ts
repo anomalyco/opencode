@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -235,6 +236,38 @@ describe("Session", () => {
       expect(saved.metadata).toEqual(meta)
       expect(fork.metadata).toEqual(meta)
       expect(fork.metadata).not.toBe(meta)
+    }),
+  )
+
+  it.instance("attaches the instance location to forked batch events", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const events = yield* EventV2Bridge.Service
+      const created = yield* Effect.acquireRelease(session.create({}), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: created.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "user",
+        model: { providerID: "test", modelID: "test" },
+      } as SessionV1.User)
+      const received = yield* Deferred.make<EventV2.Payload>()
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === MessageV2.Event.Updated.type
+          ? Deferred.succeed(received, event).pipe(Effect.asVoid)
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      const fork = yield* Effect.acquireRelease(session.fork({ sessionID: created.id }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const event = yield* awaitDeferred(received, "timed out waiting for forked message.updated")
+
+      expect(event.location?.directory).toBe(AbsolutePath.make(fork.directory))
     }),
   )
 

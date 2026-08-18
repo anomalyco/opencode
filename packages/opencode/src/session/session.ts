@@ -9,6 +9,7 @@ import { Decimal } from "decimal.js"
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
+import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionV2 } from "@opencode-ai/core/session"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
@@ -702,18 +703,29 @@ const layer: Layer.Layer<
       const msgs = yield* messages({ sessionID: input.sessionID })
       const idMap = new Map<string, MessageID>()
       const target = input.messageID ? msgs.findIndex((msg) => msg.info.id === input.messageID) : msgs.length
+      const batch = new Array<
+        EventV2.PublishInput<typeof SessionV1.Event.MessageUpdated | typeof SessionV1.Event.PartUpdated>
+      >()
 
       for (const msg of msgs.slice(0, target < 0 ? msgs.length : target)) {
         const newID = MessageID.ascending()
         idMap.set(msg.info.id, newID)
 
         const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
-        const cloned = yield* updateMessage({
+        const cloned: SessionV1.Info = {
           ...msg.info,
           sessionID: session.id,
           id: newID,
           ...(parentID && { parentID }),
+        }
+        batch.push({
+          definition: SessionV1.Event.MessageUpdated,
+          data: { sessionID: cloned.sessionID, info: cloned },
         })
+        if (batch.length === 3_000) {
+          yield* events.publishBatch(batch)
+          batch.length = 0
+        }
 
         for (const part of msg.parts) {
           const p: SessionV1.Part = {
@@ -725,9 +737,17 @@ const layer: Layer.Layer<
           if (p.type === "compaction" && p.tail_start_id) {
             p.tail_start_id = idMap.get(p.tail_start_id)
           }
-          yield* updatePart(p)
+          batch.push({
+            definition: SessionV1.Event.PartUpdated,
+            data: { sessionID: p.sessionID, part: structuredClone(p), time: Date.now() },
+          })
+          if (batch.length === 3_000) {
+            yield* events.publishBatch(batch)
+            batch.length = 0
+          }
         }
       }
+      if (batch.length > 0) yield* events.publishBatch(batch)
       return session
     })
 
@@ -832,7 +852,7 @@ const layer: Layer.Layer<
         )).items
       }
 
-      const size = 50
+      const size = 1_000
       const result = [] as SessionV1.WithParts[]
       let before: string | undefined
       while (true) {
