@@ -276,7 +276,7 @@ describe("GoogleVertexPlugin", () => {
     ),
   )
 
-  it.effect("keeps OpenAI-compatible Vertex endpoint templates regional for eu", () =>
+  it.effect("uses the REP endpoint for OpenAI-compatible Vertex multi-regions", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) =>
@@ -294,8 +294,62 @@ describe("GoogleVertexPlugin", () => {
       const provider = required(yield* catalog.provider.get(Provider.ID.make("google-vertex")))
       expect(provider).toMatchObject({
         package: "aisdk:@ai-sdk/openai-compatible",
-        settings: { baseURL: "https://eu-aiplatform.googleapis.com/v1/projects/config-project/locations/eu" },
+        settings: {
+          baseURL: "https://aiplatform.eu.rep.googleapis.com/v1/projects/config-project/locations/eu",
+        },
       })
+    }),
+  )
+
+  it.effect("uses the REP endpoint for the native Vertex SDK in multi-regions", () =>
+    withEnv(
+      {
+        GOOGLE_CLOUD_PROJECT: "env-project",
+        GOOGLE_VERTEX_LOCATION: "us",
+      },
+      () =>
+        Effect.gen(function* () {
+          vertexOptions.length = 0
+          const aisdk = yield* AISDK.Service
+          yield* addPlugin()
+          yield* aisdk.runSDK({
+            model: Model.Info.make({
+              ...Model.Info.default(Provider.ID.make("google-vertex"), Model.ID.make("gemini")),
+              modelID: Model.ID.make("gemini"),
+              package: "aisdk:@ai-sdk/google-vertex",
+            }),
+            package: "@ai-sdk/google-vertex",
+            options: { name: "google-vertex" },
+          })
+          expect(vertexOptions).toHaveLength(1)
+          expect(vertexOptions[0].baseURL).toBe(
+            "https://aiplatform.us.rep.googleapis.com/v1beta1/projects/env-project/locations/us/publishers/google",
+          )
+        }),
+    ),
+  )
+
+  it.effect("preserves custom native Vertex base URLs in multi-regions", () =>
+    Effect.gen(function* () {
+      vertexOptions.length = 0
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      yield* aisdk.runSDK({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("google-vertex"), Model.ID.make("gemini")),
+          modelID: Model.ID.make("gemini"),
+          package: "aisdk:@ai-sdk/google-vertex",
+        }),
+        package: "@ai-sdk/google-vertex",
+        options: {
+          name: "google-vertex",
+          project: "project",
+          location: "eu",
+          baseURL: "https://vertex.example/v1",
+        },
+      })
+      expect(vertexOptions).toHaveLength(1)
+      expect(vertexOptions[0].baseURL).toBe("https://vertex.example/v1")
     }),
   )
 

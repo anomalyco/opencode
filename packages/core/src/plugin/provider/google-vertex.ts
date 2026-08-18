@@ -26,6 +26,7 @@ function resolveLocation(options: Record<string, any>) {
 
 function vertexEndpoint(location: string) {
   if (location === "global") return "aiplatform.googleapis.com"
+  if (location === "eu" || location === "us") return `aiplatform.${location}.rep.googleapis.com`
   return `${location}-aiplatform.googleapis.com`
 }
 
@@ -114,13 +115,18 @@ export const GoogleVertexPlugin = define({
         if (evt.package !== "@ai-sdk/google-vertex") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex"))
         const project = resolveProject(evt.options)
-        const location = resolveLocation(evt.options)
+        const location = String(resolveLocation(evt.options))
         const options = { ...evt.options }
         delete options.fetch
         evt.sdk = mod.createVertex({
           ...options,
           project,
           location,
+          ...((location === "eu" || location === "us") && project && !options.apiKey && !options.baseURL
+            ? {
+                baseURL: `https://${vertexEndpoint(location)}/v1beta1/projects/${project}/locations/${location}/publishers/google`,
+              }
+            : {}),
         })
       }),
     )
