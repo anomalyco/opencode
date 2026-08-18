@@ -1,5 +1,5 @@
 ---
-"@opencode-ai/plugin": minor
+"@opencode-ai/plugin": patch
 "@opencode-ai/core": patch
 ---
 
