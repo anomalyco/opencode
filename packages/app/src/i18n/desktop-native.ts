@@ -317,6 +317,19 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.wsl.error.commandTimeout": "{{command}} {{args}} timed out after {{timeout}}ms",
   "desktop.wsl.error.failedPort": "Failed to get port",
 
+  "desktop.ssh.error.invalidHost": "Invalid SSH host: {{host}}",
+  "desktop.ssh.error.alreadyAdded": "{{host}} is already added",
+  "desktop.ssh.error.opencodeNotInstalled": "opencode is not installed on {{host}}",
+  "desktop.ssh.error.installOpencode": "opencode installation failed",
+  "desktop.ssh.error.connectFailed": "Could not connect to {{host}}",
+  "desktop.ssh.error.serverExited": "SSH server exited after startup (code={{code}} signal={{signal}})",
+  "desktop.ssh.error.serverExitedBeforeHealthy":
+    "SSH server for {{host}} exited before becoming healthy (code={{code}} signal={{signal}}){{output}}",
+  "desktop.ssh.error.healthTimeout": "Server on {{host}} health check timed out after {{timeout}}ms",
+  "desktop.ssh.error.commandTimeout": "ssh command to {{host}} timed out after {{timeout}}ms",
+  "desktop.ssh.error.failedPort": "Failed to get port",
+  "desktop.ssh.error.terminalFailed": "Failed to open a terminal",
+
   "desktop.picker.error.notSelected": "File was not selected by the picker",
   "desktop.picker.error.sizeLimit": "Selected attachments exceed the {{limit}} MB limit",
 } as const

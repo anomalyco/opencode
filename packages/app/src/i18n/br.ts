@@ -96,6 +96,21 @@ export const dict = {
   "desktop.wsl.error.commandTimeout": "O tempo limite de {{command}} {{args}} foi excedido após {{timeout}}ms",
   "desktop.wsl.error.failedPort": "Falha ao obter a porta",
 
+  "desktop.ssh.error.invalidHost": "Host SSH inválido: {{host}}",
+  "desktop.ssh.error.alreadyAdded": "{{host}} já foi adicionado",
+  "desktop.ssh.error.opencodeNotInstalled": "O opencode não está instalado em {{host}}",
+  "desktop.ssh.error.installOpencode": "Falha na instalação do opencode",
+  "desktop.ssh.error.connectFailed": "Não foi possível conectar a {{host}}",
+  "desktop.ssh.error.serverExited":
+    "O servidor SSH foi encerrado após a inicialização (código={{code}} sinal={{signal}})",
+  "desktop.ssh.error.serverExitedBeforeHealthy":
+    "O servidor SSH de {{host}} foi encerrado antes de ficar íntegro (código={{code}} sinal={{signal}}){{output}}",
+  "desktop.ssh.error.healthTimeout":
+    "O tempo limite da verificação de integridade do servidor em {{host}} foi excedido após {{timeout}}ms",
+  "desktop.ssh.error.commandTimeout": "O tempo limite do comando ssh para {{host}} foi excedido após {{timeout}}ms",
+  "desktop.ssh.error.failedPort": "Falha ao obter a porta",
+  "desktop.ssh.error.terminalFailed": "Falha ao abrir um terminal",
+
   "desktop.picker.error.notSelected": "O arquivo não foi selecionado pelo seletor",
   "desktop.picker.error.sizeLimit": "Os anexos selecionados excedem o limite de {{limit}} MB",
 
@@ -448,6 +463,34 @@ export const dict = {
   "wsl.server.menu.label": "Servidor WSL",
   "wsl.server.retryStart": "Tentar iniciar novamente",
   "wsl.server.updating": "Atualizando...",
+  "ssh.server.add": "Adicionar servidor SSH",
+  "ssh.server.label": "SSH",
+  "ssh.server.menu.label": "Servidor SSH",
+  "ssh.server.retryStart": "Reconectar",
+  "ssh.server.disconnect": "Desconectar",
+  "ssh.server.openTerminal": "Abrir terminal",
+  "ssh.server.updating": "Atualizando...",
+  "ssh.server.status.connecting": "Conectando...",
+  "ssh.server.status.disconnected": "Desconectado",
+  "ssh.add.hostLabel": "Host SSH",
+  "ssh.add.hostPlaceholder": "user@example.com",
+  "ssh.add.hint":
+    "Conecta por meio do cliente ssh do sistema, então os hosts, as chaves e os agentes da sua configuração SSH funcionam normalmente.",
+  "ssh.add.configHosts": "Da sua configuração SSH",
+  "ssh.add.connect": "Conectar",
+  "ssh.add.checking": "Conectando...",
+  "ssh.add.addServer": "Adicionar servidor",
+  "ssh.add.adding": "Adicionando...",
+  "ssh.add.installOpencode": "Instalar o opencode",
+  "ssh.add.updateOpencode": "Atualizar o opencode",
+  "ssh.add.installing": "Instalando...",
+  "ssh.add.status.unreachable": "Não foi possível conectar",
+  "ssh.add.status.opencodeMissing": "O opencode não está instalado neste host",
+  "ssh.add.status.opencodeMismatch":
+    "opencode v{{version}} instalado, o aplicativo para desktop espera a v{{expected}}",
+  "ssh.add.status.opencodeFound": "opencode v{{version}} encontrado",
+  "ssh.add.authHint":
+    "Verifique se a autenticação SSH por chave funciona neste host — execute `ssh {{host}}` em um terminal para conferir.",
   "wsl.onboarding.step.distro": "Escolher distribuição",
   "wsl.onboarding.step.opencode": "OpenCode",
   "wsl.onboarding.checkingRuntime": "Verificando o WSL...",

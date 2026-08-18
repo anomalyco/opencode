@@ -13,7 +13,9 @@ import { ServerConnection, serverName } from "@/context/server"
 import { useServerManagementController } from "../dialog-select-server"
 import { DialogServerV2 } from "./dialog-server-v2"
 import { SettingsListV2 } from "./parts/list"
-import { AddServerMenu, isWslServer, useFilteredWslServers, WslServerSettings } from "@/wsl/settings"
+import { isSshServer, SshServerSettings, useFilteredSshServers } from "@/ssh/settings"
+import { isWslServer, useFilteredWslServers, WslServerSettings } from "@/wsl/settings"
+import { AddServerMenu } from "./add-server-menu"
 import "./settings-v2.css"
 
 export const SettingsServersV2: Component = () => {
@@ -22,13 +24,18 @@ export const SettingsServersV2: Component = () => {
   const controller = useServerManagementController()
   const [store, setStore] = createStore({ filter: "" })
   const wslServers = useFilteredWslServers(() => store.filter)
+  const sshServers = useFilteredSshServers(() => store.filter)
 
   const showSearch = createMemo(
-    () => controller.sortedItems().filter((item) => !isWslServer(item)).length + wslServers().length > 1,
+    () =>
+      controller.sortedItems().filter((item) => !isWslServer(item) && !isSshServer(item)).length +
+        wslServers().length +
+        sshServers().length >
+      1,
   )
 
   const filtered = createMemo(() => {
-    const items = controller.sortedItems().filter((item) => !isWslServer(item))
+    const items = controller.sortedItems().filter((item) => !isWslServer(item) && !isSshServer(item))
     const query = store.filter.trim()
     if (!query) return items
     return fuzzysort
@@ -86,7 +93,7 @@ export const SettingsServersV2: Component = () => {
 
       <div class="settings-v2-tab-body settings-v2-servers">
         <Show
-          when={filtered().length > 0 || wslServers().length > 0}
+          when={filtered().length > 0 || wslServers().length > 0 || sshServers().length > 0}
           fallback={
             <div class="settings-v2-servers-status">
               <span>{store.filter ? language.t("palette.empty") : language.t("dialog.server.empty")}</span>
@@ -98,6 +105,7 @@ export const SettingsServersV2: Component = () => {
         >
           <SettingsListV2>
             <WslServerSettings controller={controller} servers={wslServers} />
+            <SshServerSettings controller={controller} servers={sshServers} />
             <For each={filtered()}>
               {(item) => {
                 const key = ServerConnection.key(item)

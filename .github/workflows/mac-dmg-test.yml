@@ -1,0 +1,56 @@
+name: mac-dmg-test
+
+on:
+  push:
+    branches:
+      - ci/mac-dmg
+
+concurrency:
+  group: mac-dmg-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-26
+            arch: arm64
+            platform_flag: --mac --arm64
+            bun_install_flags: --os=darwin --cpu=arm64
+          - host: macos-26-intel
+            arch: x64
+            platform_flag: --mac --x64
+            bun_install_flags: --os=darwin --cpu=x64
+    runs-on: ${{ matrix.settings.host }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          install-flags: ${{ matrix.settings.bun_install_flags }}
+
+      - name: Prebuild
+        run: bun run prebuild
+        working-directory: packages/desktop
+
+      - name: Build
+        run: bun run build
+        working-directory: packages/desktop
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Package unsigned dmg
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
+        working-directory: packages/desktop
+        timeout-minutes: 60
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-desktop-mac-${{ matrix.settings.arch }}-dmg
+          path: packages/desktop/dist/*.dmg
+          if-no-files-found: error
