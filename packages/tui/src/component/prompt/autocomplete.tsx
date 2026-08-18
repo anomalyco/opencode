@@ -32,6 +32,7 @@ import {
   directoryAutocompleteSearch,
   slashArgumentAutocomplete,
 } from "../../prompt/directory-completion"
+import { slashCommandMatches } from "../../prompt/slash-command-match"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
@@ -624,7 +625,17 @@ export function Autocomplete(props: {
       })
       .map((arr) => arr.obj)
 
-    return [...fuzziedNonFiles, ...fileOptions].slice(0, 10)
+    const matchedNonFiles =
+      store.visible === "command"
+        ? slashCommandMatches({
+            query: searchValue,
+            options: nonFileOptions,
+            matches: fuzziedNonFiles,
+            names: (item) => [item.display.trimEnd(), ...(item.aliases ?? [])],
+          })
+        : fuzziedNonFiles
+
+    return [...matchedNonFiles, ...fileOptions].slice(0, 10)
   })
 
   createEffect(() => {
