@@ -195,9 +195,10 @@ export function PromptInputV2(props: PromptInputV2Props) {
           </Show>
         </div>
 
-        <div class="flex h-11 items-center px-2">
+        <div class="flex h-11 min-w-0 items-center px-2">
           <div
-            class="flex min-w-0 flex-1 items-center gap-1"
+            data-slot="prompt-controls"
+            class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar"
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
             style={buttons()}
@@ -573,7 +574,7 @@ export function PromptInputV2Select(props: {
           as={ButtonV2}
           variant="ghost-muted"
           size="normal"
-          class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          class={`max-w-[220px] shrink-0 justify-start ![font-weight:440] ${props.class ?? ""}`}
           aria-label={props.title}
         >
           {props.currentIcon}
@@ -691,7 +692,7 @@ export function PromptInputV2SubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
         variant="primary"
-        class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
+        class="relative z-10 size-7 shrink-0 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50 max-sm:size-10 max-sm:p-[12px]"
         style={{
           "background-image":
             "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
