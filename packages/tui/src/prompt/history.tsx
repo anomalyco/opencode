@@ -18,6 +18,7 @@ export type PromptInfo = {
             start: number
             end: number
             value: string
+            placeholder?: string
           }
         }
       })

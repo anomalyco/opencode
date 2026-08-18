@@ -3,6 +3,7 @@ import {
   RGBA,
   TextareaRenderable,
   MouseEvent,
+  MouseButton,
   PasteEvent,
   decodePasteBytes,
   type KeyEvent,
@@ -232,6 +233,9 @@ export function Prompt(props: PromptProps) {
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
+  let suppressSync = false
+  let mouseDownX = -1
+  let mouseDownY = -1
   const event = useEvent()
 
   event.on("tui.prompt.append", (evt, { workspace }) => {
@@ -733,6 +737,54 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  function togglePastedPart(mark: { id: number; start: number; end: number }, partIndex: number) {
+    const part = store.prompt.parts[partIndex]
+    if (part?.type !== "text" || !part.source?.text) return
+
+    const placeholder = part.source.text.placeholder
+    const expanded = part.source.text.value === part.text
+    // Old history entries have no placeholder; cannot collapse them.
+    if (expanded && placeholder === undefined) return
+
+    const newText = expanded ? placeholder! : part.text
+
+    suppressSync = true
+    try {
+      input.extmarks.delete(mark.id)
+      input.setSelection(mark.start, mark.end)
+      input.insertText(newText)
+    } finally {
+      suppressSync = false
+    }
+
+    const newEnd = mark.start + promptOffsetWidth(newText)
+    // Keep virtual:true in both states so the chip stays a single cursor unit.
+    const newId = input.extmarks.create({
+      start: mark.start,
+      end: newEnd,
+      virtual: true,
+      styleId: pasteStyleId,
+      typeId: promptPartTypeId,
+    })
+
+    setStore(
+      produce((draft) => {
+        draft.extmarkToPartIndex.delete(mark.id)
+        draft.extmarkToPartIndex.set(newId, partIndex)
+        const p = draft.prompt.parts[partIndex]
+        if (p?.type === "text" && p.source?.text) {
+          p.source.text.start = mark.start
+          p.source.text.end = newEnd
+          p.source.text.value = newText
+        }
+      }),
+    )
+
+    // Width delta shifts other chips' ranges; refresh them now that the new
+    // extmark id is mapped (unguarded, so this part is not dropped).
+    syncExtmarksWithPromptParts()
+  }
+
   const stashCommands = createMemo(() =>
     [
       {
@@ -1172,6 +1224,7 @@ export function Prompt(props: PromptProps) {
               start: extmarkStart,
               end: extmarkEnd,
               value: virtualText,
+              placeholder: virtualText,
             },
           },
         })
@@ -1378,7 +1431,9 @@ export function Prompt(props: PromptProps) {
                 const value = input.plainText
                 setStore("prompt", "input", value)
                 auto()?.onInput(value)
-                syncExtmarksWithPromptParts()
+                // Skipped mid-toggle: insertText fires this synchronously while the
+                // part's extmark is already deleted, and the sync would drop the part.
+                if (!suppressSync) syncExtmarksWithPromptParts()
                 setCursorVersion((value) => value + 1)
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
@@ -1435,7 +1490,34 @@ export function Prompt(props: PromptProps) {
                   if (tuiConfig.cursor) input.cursorStyle = tuiConfig.cursor
                 }, 0)
               }}
-              onMouseDown={(r: MouseEvent) => r.target?.focus()}
+              onMouseDown={(r: MouseEvent) => {
+                r.target?.focus()
+                mouseDownX = r.x
+                mouseDownY = r.y
+              }}
+              onMouseUp={(r: MouseEvent) => {
+                if (props.disabled) return
+                // Drag, not a click.
+                if (Math.abs(r.x - mouseDownX) >= 2 || Math.abs(r.y - mouseDownY) >= 2) {
+                  mouseDownX = -1
+                  mouseDownY = -1
+                  return
+                }
+                mouseDownX = -1
+                mouseDownY = -1
+                if (r.button !== MouseButton.LEFT) return
+
+                const offset = input.cursorOffset
+                for (const mark of input.extmarks.getAtOffset(offset)) {
+                  if (mark.typeId !== promptPartTypeId) continue
+                  const partIndex = store.extmarkToPartIndex.get(mark.id)
+                  if (partIndex === undefined) continue
+                  const part = store.prompt.parts[partIndex]
+                  if (part?.type !== "text" || !part.source?.text) continue
+                  togglePastedPart(mark, partIndex)
+                  return
+                }
+              }}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={props.disabled ? theme.backgroundElement : theme.text}
               cursorStyle={tuiConfig.cursor}
