@@ -1,7 +1,7 @@
 export * as Shell from "./shell"
 
 import path from "path"
-import { spawn, type ChildProcess } from "child_process"
+import { spawn, spawnSync, type ChildProcess } from "child_process"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -92,7 +92,18 @@ function resolve(file: string) {
     if (stat(shell)?.isFile()) return shell
     return
   }
-  return which(shell) ?? undefined
+  const found = which(shell)
+  if (found) return found
+  // Store/MSIX installs expose their executable as a Windows app-execution alias, an
+  // AppExecLink reparse point that stat and which cannot see even though CreateProcess
+  // resolves it by name. where.exe does see it, so it separates "installed as an alias"
+  // from "not installed" and keeps a configured shell like pwsh from silently falling back.
+  if (process.platform === "win32" && meta(shell) && aliased(shell)) return shell
+  return undefined
+}
+
+function aliased(file: string) {
+  return spawnSync("where.exe", [file], { stdio: "ignore", windowsHide: true }).status === 0
 }
 
 function win() {
