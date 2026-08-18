@@ -80,6 +80,12 @@ function getSyncKind(capabilities?: ServerCapabilities) {
   return sync?.change
 }
 
+function hasWorkspaceDiagnostics(value: unknown) {
+  if (typeof value !== "object" || value === null) return false
+  if (!Object.hasOwn(value, "workspaceDiagnostics")) return false
+  return Object.getOwnPropertyDescriptor(value, "workspaceDiagnostics")?.value === true
+}
+
 function endPosition(text: string) {
   const lines = text.split(/\r\n|\r|\n/)
   return {
@@ -256,6 +262,7 @@ export async function create(input: {
 
   const syncKind = getSyncKind(initialized.capabilities)
   const hasStaticPullDiagnostics = Boolean(initialized.capabilities?.diagnosticProvider)
+  const hasStaticWorkspaceDiagnostics = hasWorkspaceDiagnostics(initialized.capabilities?.diagnosticProvider)
 
   await connection.sendNotification("initialized", {})
 
@@ -372,7 +379,7 @@ export async function create(input: {
       workspaceIdentifiers: [
         ...new Set(workspaceRegistrations.flatMap((registration) => registration.registerOptions?.identifier ?? [])),
       ],
-      supported: workspaceRegistrations.length > 0,
+      supported: hasStaticWorkspaceDiagnostics || workspaceRegistrations.length > 0,
     }
   }
 
