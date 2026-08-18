@@ -40,6 +40,7 @@ import { SessionRevert } from "./session/revert.js"
 import { Session } from "@opencode-ai/schema/session"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Image } from "./image.js"
+import { PluginSupervisor } from "./plugin/supervisor-service.js"
 import { Mime } from "./mime.js"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { Event } from "@opencode-ai/schema/event"
@@ -568,7 +569,6 @@ const layer = Layer.effect(
             // Resolved lazily so prompt admission only boots location services when an
             // image attachment actually needs the resizer.
             const image = Effect.gen(function* () {
-              const { PluginSupervisor } = yield* Effect.promise(() => import("./plugin/supervisor.js"))
               const plugins = yield* PluginSupervisor.Service
               yield* plugins.flush
               return yield* Image.Service
