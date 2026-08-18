@@ -29,7 +29,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const location = yield* Location.Service
     const processes = yield* AppProcess.Service
-    const commands = new Map<string, string[] | false>()
+    const commands = new WeakMap<Info, string[] | false>()
     const state = State.create<Data, Draft>({
       name: "formatter",
       initial: () => ({ formatters: [] }),
@@ -43,14 +43,13 @@ const layer = Layer.effect(
           draft.formatters = draft.formatters.filter((formatter) => formatter.name !== name)
         },
       }),
-      finalize: () => Effect.sync(() => commands.clear()),
     })
 
     const command = Effect.fnUntraced(function* (formatter: Info) {
-      const cached = commands.get(formatter.name)
+      const cached = commands.get(formatter)
       if (cached !== undefined) return cached
       const result = yield* formatter.enabled
-      if (result !== false) commands.set(formatter.name, result)
+      if (result !== false) commands.set(formatter, result)
       return result
     })
 

@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Deferred, Effect, Fiber } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
@@ -189,6 +189,48 @@ describe("Formatter", () => {
 
         command.suffix = "B"
         yield* formatter.reload()
+
+        expect(yield* formatter.file(file)).toBe(true)
+        expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("xAB")
+      }),
+    ),
+  )
+
+  it.live("does not cache a command resolved before reload", () =>
+    withFormatter(false, (formatter, directory) =>
+      Effect.gen(function* () {
+        const resolving = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const command = { suffix: "A" }
+        yield* formatter.transform((draft) => {
+          const suffix = command.suffix
+          const resolved = [
+            process.execPath,
+            "-e",
+            `const fs = require('fs'); const file = process.argv.at(-1); fs.appendFileSync(file, '${suffix}')`,
+            "$FILE",
+          ]
+          draft.set({
+            name: "reload-race",
+            extensions: [".race"],
+            enabled:
+              suffix === "A"
+                ? Deferred.succeed(resolving, undefined).pipe(
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.as(resolved),
+                  )
+                : Effect.succeed(resolved),
+          })
+        })
+        const file = path.join(directory, "test.race")
+        yield* Effect.promise(() => fs.writeFile(file, "x"))
+        const first = yield* formatter.file(file).pipe(Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(resolving)
+
+        command.suffix = "B"
+        yield* formatter.reload()
+        yield* Deferred.succeed(release, undefined)
+        expect(yield* Fiber.join(first)).toBe(true)
 
         expect(yield* formatter.file(file)).toBe(true)
         expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("xAB")

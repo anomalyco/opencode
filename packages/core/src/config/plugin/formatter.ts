@@ -22,6 +22,19 @@ export const Plugin = define({
     const npm = yield* Npm.Service
     const processes = yield* AppProcess.Service
     const loaded = { entries: yield* config.entries() }
+    const reload = config.entries().pipe(
+      Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
+      Effect.andThen(formatter.reload()),
+    )
+
+    yield* ctx.event.subscribe().pipe(
+      Stream.filter((event) => event.type === "config.updated"),
+      Stream.runForEach(() => reload),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    // Refetch after subscribing so a config update between the first read and
+    // the live subscription cannot leave the transform on a stale snapshot.
+    loaded.entries = yield* config.entries()
 
     yield* formatter.transform((draft) => {
       const configured = Config.latest(loaded.entries, "formatter")
@@ -53,16 +66,5 @@ export const Plugin = define({
         draft.set(current)
       }
     })
-
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
-      Stream.runForEach(() =>
-        config.entries().pipe(
-          Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-          Effect.andThen(formatter.reload()),
-        ),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
   }),
 })
