@@ -979,6 +979,8 @@
     text-align: left;
     width: 100%;
     cursor: pointer;
+    -webkit-user-select: text;
+    user-select: text;
     transition:
       background-color 0.15s ease,
       border-color 0.15s ease,
