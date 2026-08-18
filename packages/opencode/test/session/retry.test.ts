@@ -329,6 +329,52 @@ describe("session.retry.retryable", () => {
     expect(retryable).toEqual({ message: "Response decompression failed" })
   })
 
+  test("does not retry fixed-window usage quota errors", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message:
+          "You have exceeded the 5-hour usage quota. It will reset at 2026-07-30 16:11:46 +0800 CST. We recommend upgrading your plan for more quota, or waiting for the reset.",
+        isRetryable: true,
+        statusCode: 429,
+        responseHeaders: { "content-type": "application/json" },
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  test("does not retry fixed-window usage quota errors from the response body", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "Too many requests",
+        isRetryable: true,
+        statusCode: 429,
+        responseBody: JSON.stringify({
+          error: {
+            message: "You have exceeded the weekly usage quota. It will reset in 6 days.",
+          },
+        }),
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  test("retries short-window usage quota errors", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "You have exceeded the per-minute usage quota. It will reset in 20 seconds.",
+        isRetryable: true,
+        statusCode: 429,
+        responseHeaders: { "retry-after": "20" },
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "You have exceeded the per-minute usage quota. It will reset in 20 seconds.",
+    })
+  })
+
   test("maps free limits to Go upsell action", () => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
       new SessionV1.APIError({

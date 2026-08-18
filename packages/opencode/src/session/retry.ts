@@ -141,6 +141,13 @@ export function retryable(error: Err, provider: string) {
         },
       }
     }
+    const quota = `${error.data.message}\n${error.data.responseBody ?? ""}`.toLowerCase()
+    if (
+      status === 429 &&
+      /(?:5[- ]hour|weekly|monthly) usage quota/.test(quota) &&
+      (quota.includes("will reset at") || quota.includes("will reset in"))
+    )
+      return undefined
     return { message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message }
   }
 
