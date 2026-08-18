@@ -104,6 +104,8 @@ Options:
       --thinking     show thinking blocks                                                  [boolean]
   -i, --interactive  run in direct interactive split-footer mode          [boolean] [default: false]
       --auto         auto-approve permissions that are not explicitly denied (dangerous!)
+                                                                          [boolean] [default: false]
+      --bare         run without automatic user or project configuration and external extensions
                                                                           [boolean] [default: false]"
 `;
 

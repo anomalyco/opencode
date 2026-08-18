@@ -132,6 +132,14 @@ export const RunCommand = effectCmd({
   // For --dir without --attach, load instance for the resolved target dir.
   // The handler also chdirs (preserving the legacy order: chdir → file resolution).
   directory: (args) => (args.dir && !args.attach ? path.resolve(process.cwd(), args.dir) : process.cwd()),
+  instanceInput: (args) => ({ profile: args.bare ? "bare" : "default" }),
+  validate: (args) => {
+    if (!args.bare) return
+    const conflict = ["attach", "continue", "session", "fork", "interactive"].find(
+      (key) => args[key as keyof typeof args],
+    )
+    if (conflict) return `--bare cannot be used with --${conflict}`
+  },
   builder: (yargs: Argv) =>
     yargs
       .positional("message", {
@@ -259,6 +267,11 @@ export const RunCommand = effectCmd({
         default: false,
         hidden: true,
         describe: "enable direct interactive demo slash commands; pass one as the message to run it immediately",
+      })
+      .option("bare", {
+        type: "boolean",
+        default: false,
+        describe: "run without automatic user or project configuration and external extensions",
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
     const { Agent } = yield* Effect.promise(() => import("@/agent/agent"))
@@ -1007,5 +1020,6 @@ export async function runMini(input: MiniCommandInput) {
     "dangerously-skip-permissions": false,
     dangerouslySkipPermissions: false,
     demo: input.demo ?? false,
+    bare: false,
   })
 }

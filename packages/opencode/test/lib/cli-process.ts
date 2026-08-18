@@ -94,6 +94,7 @@ export type SpawnOpts = { readonly timeoutMs?: number; readonly env?: Record<str
 // Typed equivalent of constructing argv for `opencode run`. New flags should
 // land here so tests stay grep-able and refactor-safe.
 export type RunOpts = SpawnOpts & {
+  readonly bare?: boolean
   readonly model?: string
   readonly agent?: string
   readonly format?: "default" | "json"
@@ -251,6 +252,7 @@ export function withCliFixture<A, E>(
     const runArgs = (message: string, opts?: RunOpts) => {
       const argv: string[] = ["run"]
       if (opts?.printLogs) argv.push("--print-logs")
+      if (opts?.bare) argv.push("--bare")
       argv.push("--model", opts?.model ?? testModelID)
       if (opts?.agent) argv.push("--agent", opts.agent)
       if (opts?.format) argv.push("--format", opts.format)
