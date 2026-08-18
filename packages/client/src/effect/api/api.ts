@@ -41,13 +41,8 @@ import type { Config } from "@opencode-ai/schema/config"
 export type Endpoint0_0Output = { readonly healthy: true; readonly version: string; readonly pid: number }
 export type HealthGetOperation<E = never> = () => Effect.Effect<Endpoint0_0Output, E>
 
-export type Endpoint0_1Input = { readonly instanceID: string }
-export type Endpoint0_1Output = { readonly accepted: boolean }
-export type HealthStopOperation<E = never> = (input: Endpoint0_1Input) => Effect.Effect<Endpoint0_1Output, E>
-
 export interface HealthApi<E = never> {
   readonly get: HealthGetOperation<E>
-  readonly stop: HealthStopOperation<E>
 }
 
 export type Endpoint1_0Output = { readonly urls: ReadonlyArray<string> }

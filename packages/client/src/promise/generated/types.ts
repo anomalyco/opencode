@@ -2,8 +2,6 @@ export type JsonValue = null | boolean | number | string | Array<JsonValue> | { 
 
 export type ServiceHealth = { healthy: true; version: string; pid: number }
 
-export type ServiceStopResponse = { accepted: boolean }
-
 export type ModelRef = { id: string; providerID: string; variant?: string }
 
 export type ProviderSettings = { [x: string]: any }
@@ -2272,10 +2270,6 @@ export const isWorktreeError = (value: unknown): value is WorktreeError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "WorktreeError"
 
 export type HealthGetOutput = ServiceHealth
-
-export type HealthStopInput = { readonly instanceID: { readonly instanceID: string }["instanceID"] }
-
-export type HealthStopOutput = ServiceStopResponse
 
 export type ServerGetOutput = { urls: Array<string> }
 

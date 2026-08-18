@@ -109,7 +109,7 @@ for (const item of targets) {
     external: ["node-gyp"],
     format: "esm",
     minify: true,
-    sourcemap: "inline",
+    sourcemap: Script.channel === "dev" || Script.channel === "local" ? "inline" : "none",
     splitting: true,
     compile: {
       autoloadBunfig: false,

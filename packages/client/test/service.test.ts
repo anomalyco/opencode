@@ -143,40 +143,36 @@ test("evicts an unresponsive registered service before starting its replacement"
   await waitForExit(replacement.pid)
 })
 
-test("requests graceful stop of the exact service instance", async () => {
+test("signals an unresponsive registered service process", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
-  const process = spawn(registration, "graceful")
+  const process = spawn(registration, "hanging")
   await waitForFile(registration)
-  const info = await Bun.file(registration).json()
 
   await run(Service.stop({ file: registration }))
   await process.exited
-  expect(await Bun.file(registration + ".stop").json()).toEqual({ instanceID: info.id })
+  expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+  expect(await Bun.file(registration).exists()).toBe(false)
 })
 
-test("does not spawn contenders while an incompatible service rejects replacement", async () => {
+test("signals an incompatible service before starting its replacement", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
-  const contender = join(directory, "contender.json")
-  const existing = spawn(registration, "reject-stop")
+  const existing = spawn(registration, "old")
   await waitForFile(registration)
-  const controller = new AbortController()
-  const starting = Effect.runPromise(
+  const endpoint = await run(
     ensure({
       file: registration,
       version: "test",
-      command: [process.execPath, fixture, contender, "record-start"],
-    }).pipe(Effect.provide(NodeFileSystem.layer)),
-    { signal: controller.signal },
+      command: [process.execPath, fixture, registration, "delayed", "10"],
+    }),
   )
+  const replacement = await Bun.file(registration).json()
 
-  await waitForLines(registration + ".stop-attempts", 2)
-  controller.abort()
-  await starting.catch(() => undefined)
-
-  expect(await Bun.file(contender + ".started").exists()).toBe(false)
-  expect(existing.exitCode).toBe(null)
+  expect(await existing.exited).toBe(0)
+  expect(endpoint.url).toBe(replacement.url)
+  process.kill(replacement.pid, "SIGTERM")
+  await waitForExit(replacement.pid)
 })
 
 test("a legacy health response is still replaced", async () => {
@@ -342,17 +338,6 @@ async function waitForFile(file: string) {
     await Bun.sleep(5)
   }
   throw new Error(`Timed out waiting for ${file}`)
-}
-
-async function waitForLines(file: string, count: number) {
-  for (let attempt = 0; attempt < 600; attempt++) {
-    const text = await Bun.file(file)
-      .text()
-      .catch(() => "")
-    if (text.trim().split("\n").length >= count) return
-    await Bun.sleep(5)
-  }
-  throw new Error(`Timed out waiting for ${count} lines in ${file}`)
 }
 
 async function health(url: string) {

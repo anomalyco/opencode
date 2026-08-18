@@ -197,6 +197,29 @@ test("calculates step cost using the matching context tier", () => {
   ).toBeCloseTo(0.0002926)
 })
 
+test("ignores malformed model cost fields", () => {
+  const costs = [
+    {
+      input: Money.USDPerMillionTokens.make(3),
+      output: Money.USDPerMillionTokens.make(15),
+      cache: {
+        read: Money.USDPerMillionTokens.make(0.3),
+        write: Money.USDPerMillionTokens.make(3.75),
+      },
+    },
+  ]
+  Object.assign(costs[0], { input: {} })
+
+  expect(
+    SessionUsage.calculateCost(costs, {
+      input: 1_000_000,
+      output: 100_000,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    }),
+  ).toBe(Money.USD.make(1.5))
+})
+
 test("does not apply an ineligible tier without base pricing", () => {
   expect(
     SessionUsage.calculateCost(

@@ -6,7 +6,7 @@ import { Provider } from "../../provider.js"
 import { importModule } from "@opencode-ai/util/runtime-import"
 
 export const SapAICorePlugin = define({
-  id: "opencode.provider.sap-ai-core",
+  id: "opencode.provider.sap.ai.core",
   effect: Effect.fn(function* (ctx) {
     const npm = yield* Npm.Service
     yield* ctx.aisdk.hook(

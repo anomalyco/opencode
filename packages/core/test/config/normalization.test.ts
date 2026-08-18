@@ -150,6 +150,16 @@ describe("ConfigNormalize", () => {
   })
 
   test("migrates the legacy small model to the title agent", () => {
+    const result = normalized({ small_model: "anthropic/claude-haiku-4-5" })
+    expect(result.encoded.agents).toEqual({
+      title: {
+        model: { providerID: "anthropic", model: "claude-haiku-4-5" },
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
+  test("merges the legacy small model with the title agent", () => {
     const result = normalized({
       small_model: "anthropic/claude-haiku-4-5",
       agent: { title: { prompt: "Custom title prompt" } },
