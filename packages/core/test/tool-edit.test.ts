@@ -8,7 +8,7 @@ import { Environment } from "@opencode-ai/core/environment/index"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Formatter } from "@opencode-ai/core/formatter"
 import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { LocationPath } from "@opencode-ai/core/location-path"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -27,7 +27,7 @@ const editToolNode = makeLocationNode({
   layer: Layer.effectDiscard(registerToolPlugin(EditTool.Plugin)),
   deps: [
     Tool.node,
-    LocationMutation.node,
+    LocationPath.node,
     FileMutation.node,
     Environment.node,
     Formatter.node,
@@ -84,7 +84,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) =
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(
-        LayerNode.group([Tool.node, Tool.node, LocationMutation.node, FileMutation.node, editToolNode]),
+        LayerNode.group([Tool.node, Tool.node, LocationPath.node, FileMutation.node, editToolNode]),
         [
           [
             Environment.node,

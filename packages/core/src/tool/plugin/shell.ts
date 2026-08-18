@@ -7,7 +7,7 @@ import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { LocationPath } from "../../location-path.js"
 import { Permission } from "../../permission.js"
 import { PluginRuntime } from "../../plugin/runtime.js"
 import { NonNegativeInt } from "../../schema.js"
@@ -84,7 +84,7 @@ export const Plugin = {
     const runtime = yield* PluginRuntime.Service
     const scope = yield* Scope.Scope
     const environment = yield* Environment.Service
-    const mutation = yield* LocationMutation.Service
+    const mutation = yield* LocationPath.Service
     const shell = yield* Shell.Service
     const permission = yield* Permission.Service
     const config = yield* Config.Service

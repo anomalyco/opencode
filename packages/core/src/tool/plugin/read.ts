@@ -6,7 +6,7 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../../location.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { LocationPath } from "../../location-path.js"
 import { Permission } from "../../permission.js"
 import { SessionInstructions } from "../../session/instructions.js"
 import { AbsolutePath } from "../../schema.js"
@@ -32,7 +32,7 @@ export const Plugin = {
   id: "opencode.tool.read",
   effect: Effect.fn("ReadTool.Plugin")(function* (ctx: PluginContext) {
     const reader = yield* ReadToolFileSystem.Service
-    const mutation = yield* LocationMutation.Service
+    const mutation = yield* LocationPath.Service
     const permission = yield* Permission.Service
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
@@ -58,7 +58,7 @@ export const Plugin = {
               const external = target.externalDirectory
               if (external)
                 yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(external),
+                  ...LocationPath.externalDirectoryPermission(external),
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source,

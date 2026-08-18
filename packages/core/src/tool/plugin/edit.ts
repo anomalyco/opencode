@@ -16,7 +16,7 @@ import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
 import { Location } from "../../location.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { LocationPath } from "../../location-path.js"
 import { Permission } from "../../permission.js"
 import { fileDiff } from "./file-diff.js"
 
@@ -110,7 +110,7 @@ const findLineOccurrences = (content: string, search: string) => {
 export const Plugin = {
   id: "opencode.tool.edit",
   effect: Effect.fn("EditTool.Plugin")(function* (ctx: PluginContext) {
-    const mutation = yield* LocationMutation.Service
+    const mutation = yield* LocationPath.Service
     const fileMutation = yield* FileMutation.Service
     const environment = yield* Environment.Service
     const formatter = yield* Formatter.Service
@@ -148,7 +148,7 @@ export const Plugin = {
               const external = target.externalDirectory
               if (external) {
                 yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(external),
+                  ...LocationPath.externalDirectoryPermission(external),
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source: permissionSource,

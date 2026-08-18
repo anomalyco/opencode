@@ -10,7 +10,7 @@ import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Location } from "../../location.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { LocationPath } from "../../location-path.js"
 import { Patch } from "@opencode-ai/util/patch"
 import { Permission } from "../../permission.js"
 import DESCRIPTION from "../patch.txt"
@@ -46,29 +46,29 @@ export const toModelOutput = (output: Output) =>
 
 type Prepared =
   | (Extract<Patch.Hunk, { readonly type: "add" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: LocationPath.Target
       readonly content: string
       readonly before: string
       readonly after: string
     })
   | (Extract<Patch.Hunk, { readonly type: "delete" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: LocationPath.Target
       readonly before: string
       readonly after: string
     })
   | (Extract<Patch.Hunk, { readonly type: "update" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: LocationPath.Target
       readonly content: string
       readonly before: string
       readonly after: string
-      readonly moveTarget?: LocationMutation.Target
+      readonly moveTarget?: LocationPath.Target
     })
 
 export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
     const environment = yield* Environment.Service
-    const mutation = yield* LocationMutation.Service
+    const mutation = yield* LocationPath.Service
     const fileMutation = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
     const location = yield* Location.Service
@@ -116,7 +116,7 @@ export const Plugin = {
                 const target = yield* mutation.resolve({ path: value, kind: "file" })
                 if (!target.externalDirectory) return target
                 yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
+                  ...LocationPath.externalDirectoryPermission(target.externalDirectory),
                   metadata: {
                     filepath: target.absolute,
                     parentDir: target.externalDirectory.directory,

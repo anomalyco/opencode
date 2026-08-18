@@ -1,4 +1,4 @@
-export * as LocationMutation from "./location-mutation.js"
+export * as LocationPath from "./location-path.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
@@ -12,8 +12,8 @@ export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type
 
 /**
- * Mutation paths do not accept project references. Relative paths resolve
- * from the active Location. Paths outside it require separate
+ * Tool paths do not accept project references. Relative paths resolve from
+ * the active Location. Paths outside its project require separate
  * `external_directory` approval.
  */
 export const ResolveInput = Schema.Struct({
@@ -49,13 +49,13 @@ export interface Target {
 export interface Interface {
   /**
    * Resolve a path and derive its permission resources. Relative paths resolve
-   * from the Location. Paths outside it require separate `external_directory`
-   * approval. This does not approve the mutation.
+   * from the Location. Paths outside its project require separate
+   * `external_directory` approval. This does not approve access.
    */
   readonly resolve: (input: ResolveInput) => Effect.Effect<Target, FSUtil.Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LocationMutation") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/LocationPath") {}
 
 const slash = (value: string) => value.replaceAll("\\", "/")
 
@@ -65,9 +65,13 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
 
-    const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
+    const resolve = Effect.fn("LocationPath.resolve")(function* (input: ResolveInput) {
       const absolute = path.resolve(location.directory, input.path)
-      if (FSUtil.contains(location.directory, absolute)) {
+      const projectRoot = path.parse(location.project.directory).root
+      if (
+        FSUtil.contains(location.directory, absolute) ||
+        (location.project.directory !== projectRoot && FSUtil.contains(location.project.directory, absolute))
+      ) {
         return {
           absolute,
           resource: slash(path.relative(location.directory, absolute) || "."),

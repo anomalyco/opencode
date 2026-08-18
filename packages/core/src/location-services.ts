@@ -19,7 +19,7 @@ import { Image } from "./image.js"
 import { LocationWatcher } from "./filesystem/location-watcher.js"
 import { Integration } from "./integration.js"
 import { Location } from "./location.js"
-import { LocationMutation } from "./location-mutation.js"
+import { LocationPath } from "./location-path.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { ModelResolver } from "./model-resolver.js"
 import { MCP } from "./mcp/index.js"
@@ -76,7 +76,7 @@ const locationServiceNodes = [
   Skill.node,
   InstructionBuiltIns.node,
   InstructionDiscovery.node,
-  LocationMutation.node,
+  LocationPath.node,
   FileMutation.node,
   Formatter.node,
   MCP.node,

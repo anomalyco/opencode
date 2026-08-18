@@ -14,7 +14,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { Session } from "@opencode-ai/core/session"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/util/global"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { LocationPath } from "@opencode-ai/core/location-path"
 import { location } from "./fixture/location"
 import { Tool } from "@opencode-ai/core/tool"
 import { ReadTool } from "@opencode-ai/core/tool/plugin/read"
@@ -32,7 +32,7 @@ const readToolNode = makeLocationNode({
   deps: [
     Tool.node,
     ReadToolFileSystem.node,
-    LocationMutation.node,
+    LocationPath.node,
     Image.node,
     Permission.node,
     SessionInstructions.node,
@@ -107,8 +107,8 @@ const locationLayer = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
 )
 const mutation = Layer.succeed(
-  LocationMutation.Service,
-  LocationMutation.Service.of({
+  LocationPath.Service,
+  LocationPath.Service.of({
     resolve: (input) => {
       const absolute = path.resolve(process.cwd(), input.path)
       const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), absolute)
@@ -141,7 +141,7 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
       [Permission.node, permission],
       [Config.node, config],
       [Image.node, imageLayer],
-      [LocationMutation.node, mutation],
+      [LocationPath.node, mutation],
       [FSUtil.node, testFileSystem],
       [Location.node, locationLayer],
       [Global.node, Global.layerWith({ data: Global.Path.data })],

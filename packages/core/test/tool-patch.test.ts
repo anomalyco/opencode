@@ -8,7 +8,7 @@ import { Environment } from "@opencode-ai/core/environment/index"
 import { Formatter } from "@opencode-ai/core/formatter"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { LocationPath } from "@opencode-ai/core/location-path"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -27,7 +27,7 @@ const patchToolNode = makeLocationNode({
   layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
   deps: [
     Tool.node,
-    LocationMutation.node,
+    LocationPath.node,
     FileMutation.node,
     Environment.node,
     Formatter.node,
@@ -99,7 +99,7 @@ const withTool = <A, E, R>(
     return yield* body(yield* Tool.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, patchToolNode]), [
+      AppNodeBuilder.build(LayerNode.group([Tool.node, LocationPath.node, FileMutation.node, patchToolNode]), [
         [
           Environment.node,
           transformEnvironmentFiles(activeLocation, (files) => ({
@@ -920,7 +920,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("treats a sibling path inside the project worktree as external to the Location", () =>
+  it.live("treats a sibling path inside the project worktree as internal", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -939,9 +939,8 @@ describe("PatchTool", () => {
                       call("*** Begin Patch\n*** Update File: ../sibling.txt\n@@\n-before\n+after\n*** End Patch"),
                     ),
                   ).toMatchObject({ status: "completed" })
-                  expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
-                  expect(assertions[0]?.resources).toEqual([path.join(tmp.path, "*").replaceAll("\\", "/")])
-                  expect(assertions[1]?.resources).toEqual([target.replaceAll("\\", "/")])
+                  expect(assertions.map((input) => input.action)).toEqual(["edit"])
+                  expect(assertions[0]?.resources).toEqual(["../sibling.txt"])
                   expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
                 }),
               tmp.path,

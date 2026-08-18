@@ -13,7 +13,7 @@ import { ConfigAgentV1 } from "../../v1/config/agent.js"
 import { ConfigMigrateV1 } from "../../v1/config/migrate.js"
 import { Global } from "@opencode-ai/util/global"
 import { Permission } from "../../permission.js"
-import type { LocationMutation } from "../../location-mutation.js"
+import type { LocationPath } from "../../location-path.js"
 import type { ReadTool } from "../../tool/plugin/read.js"
 import type { EditTool } from "../../tool/plugin/edit.js"
 import { AbsolutePath } from "../../schema.js"
@@ -28,7 +28,7 @@ const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
 const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
 const decodeConfig = Schema.decodeUnknownOption(Info)
 type PathAction =
-  | LocationMutation.ExternalDirectoryAuthorization["action"]
+  | LocationPath.ExternalDirectoryAuthorization["action"]
   | typeof ReadTool.name
   | typeof EditTool.name
 const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]

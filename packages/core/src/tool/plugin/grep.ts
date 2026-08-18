@@ -7,7 +7,7 @@ import path from "path"
 import { Environment } from "../../environment/index.js"
 import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { LocationPath } from "../../location-path.js"
 import { Permission } from "../../permission.js"
 import { Ripgrep } from "../../ripgrep.js"
 import { RelativePath } from "../../schema.js"
@@ -61,7 +61,7 @@ export const Plugin = {
     const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
-    const mutation = yield* LocationMutation.Service
+    const mutation = yield* LocationPath.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
@@ -79,7 +79,7 @@ export const Plugin = {
               const target = yield* mutation.resolve({ path: input.path ?? "." })
               if (target.externalDirectory)
                 yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
+                  ...LocationPath.externalDirectoryPermission(target.externalDirectory),
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source,

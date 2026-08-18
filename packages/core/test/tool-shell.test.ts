@@ -16,7 +16,7 @@ import { Environment } from "@opencode-ai/core/environment/index"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { LocationPath } from "@opencode-ai/core/location-path"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
@@ -133,7 +133,7 @@ const shellPluginSupervisor = makeLocationNode({
   deps: [
     Config.node,
     Environment.node,
-    LocationMutation.node,
+    LocationPath.node,
     Permission.node,
     PluginRuntime.node,
     Shell.node,

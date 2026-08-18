@@ -7,7 +7,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Environment } from "@opencode-ai/core/environment/index"
 import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { LocationPath } from "@opencode-ai/core/location-path"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { type EnvironmentFilesTransform, transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
@@ -20,7 +20,7 @@ function provide(directory: string, transformFiles: EnvironmentFilesTransform = 
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
   return Effect.provide(
-    AppNodeBuilder.build(LayerNode.group([LocationMutation.node, FileMutation.node]), [
+    AppNodeBuilder.build(LayerNode.group([LocationPath.node, FileMutation.node]), [
       [Location.node, activeLocation],
       [Environment.node, transformEnvironmentFiles(activeLocation, transformFiles)],
     ]),
@@ -40,7 +40,7 @@ describe("FileMutation", () => {
       Effect.gen(function* () {
         const targetPath = path.join(directory, "hello.txt")
         yield* Effect.promise(() => fs.writeFile(targetPath, "before"))
-        const target = yield* (yield* LocationMutation.Service).resolve({ path: "hello.txt" })
+        const target = yield* (yield* LocationPath.Service).resolve({ path: "hello.txt" })
 
         expect(yield* (yield* FileMutation.Service).write({ target, content: "after" })).toEqual({
           operation: "write",
@@ -56,7 +56,7 @@ describe("FileMutation", () => {
   it.live("writes a prospective internal file and creates parent directories", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        const target = yield* (yield* LocationMutation.Service).resolve({
+        const target = yield* (yield* LocationPath.Service).resolve({
           path: path.join("src", "nested", "hello.txt"),
         })
         const result = yield* (yield* FileMutation.Service).write({ target, content: "hello" })
@@ -77,8 +77,8 @@ describe("FileMutation", () => {
       Effect.gen(function* () {
         const preservedPath = path.join(directory, "preserved.txt")
         yield* Effect.promise(() => fs.writeFile(preservedPath, "\uFEFFbefore"))
-        const preserved = yield* (yield* LocationMutation.Service).resolve({ path: "preserved.txt" })
-        const created = yield* (yield* LocationMutation.Service).resolve({ path: "created.txt" })
+        const preserved = yield* (yield* LocationPath.Service).resolve({ path: "preserved.txt" })
+        const created = yield* (yield* LocationPath.Service).resolve({ path: "created.txt" })
         const files = yield* FileMutation.Service
 
         yield* files.writeTextPreservingBom({ target: preserved, content: "\uFEFFafter" })
@@ -95,7 +95,7 @@ describe("FileMutation", () => {
       withTmp((outside) =>
         Effect.gen(function* () {
           const targetPath = path.join(outside, "external.txt")
-          const target = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
+          const target = yield* (yield* LocationPath.Service).resolve({ path: targetPath })
           const result = yield* (yield* FileMutation.Service).write({ target, content: "external" })
 
           expect(result).toEqual({
@@ -133,7 +133,7 @@ describe("FileMutation", () => {
         )
 
         yield* Effect.gen(function* () {
-          const mutation = yield* LocationMutation.Service
+          const mutation = yield* LocationPath.Service
           const files = yield* FileMutation.Service
           const firstPlan = yield* mutation.resolve({ path: "shared.txt" })
           const secondPlan = yield* mutation.resolve({ path: "shared.txt" })
@@ -222,7 +222,7 @@ describe("FileMutation", () => {
         )
 
         yield* Effect.gen(function* () {
-          const mutation = yield* LocationMutation.Service
+          const mutation = yield* LocationPath.Service
           const files = yield* FileMutation.Service
           const firstPlan = yield* mutation.resolve({ path: "first.txt" })
           const secondPlan = yield* mutation.resolve({ path: "second.txt" })

@@ -8,7 +8,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Environment } from "@opencode-ai/core/environment/index"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { LocationPath } from "@opencode-ai/core/location-path"
 import { Permission } from "@opencode-ai/core/permission"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -25,12 +25,12 @@ import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 const globToolNode = makeLocationNode({
   name: "test/glob-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(GlobTool.Plugin)),
-  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, LocationMutation.node, Permission.node],
+  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, LocationPath.node, Permission.node],
 })
 const grepToolNode = makeLocationNode({
   name: "test/grep-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(GrepTool.Plugin)),
-  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, LocationMutation.node, Permission.node],
+  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, LocationPath.node, Permission.node],
 })
 const sessionID = Session.ID.make("ses_search_tool_test")
 
