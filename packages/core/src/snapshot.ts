@@ -24,6 +24,8 @@ export class Error extends Schema.TaggedErrorClass<Error>()("Snapshot.Error", {
 export interface CompareInput {
   readonly from: ID
   readonly to: ID
+  /** Optional absolute or Location-relative paths to restrict the comparison to. */
+  readonly paths?: readonly string[]
 }
 
 export interface DiffInput extends CompareInput {
@@ -151,6 +153,15 @@ const layer = Layer.effect(
     const files = Effect.fn("Snapshot.files")(function* (input: CompareInput) {
       const comparison = yield* compare("files", input)
       const files = yield* git.tree.files(comparison).pipe(Effect.mapError((cause) => failure("files", cause)))
+      if (input.paths?.length) {
+        const allowed = new Set(
+          input.paths.map((item) => {
+            const absolute = path.isAbsolute(item) ? item : path.resolve(location.directory, item)
+            return path.relative(worktree, absolute).replaceAll("\\", "/")
+          }),
+        )
+        return files.filter((file) => allowed.has(String(file)))
+      }
       if (!source) return files
       const ignored = yield* git.index
         .ignored({ repository: source, paths: files })

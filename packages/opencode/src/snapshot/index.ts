@@ -41,7 +41,7 @@ export interface Interface {
   readonly restore: (snapshot: string) => Effect.Effect<void>
   readonly revert: (patches: Patch[]) => Effect.Effect<void>
   readonly diff: (hash: string) => Effect.Effect<string>
-  readonly diffFull: (from: string, to: string) => Effect.Effect<FileDiff[]>
+  readonly diffFull: (from: string, to: string, paths?: string[]) => Effect.Effect<FileDiff[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
@@ -543,7 +543,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           )
         })
 
-        const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
+        const diffFull = Effect.fnUntraced(function* (from: string, to: string, paths?: string[]) {
           return yield* locked(
             Effect.gen(function* () {
               type Row = {
@@ -732,6 +732,18 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 rows.push(...filtered)
               }
 
+              if (paths?.length) {
+                const allowed = new Set(
+                  paths.map((item) => {
+                    const absolute = path.isAbsolute(item) ? item : path.resolve(state.worktree, item)
+                    return path.relative(state.worktree, absolute).replaceAll("\\", "/")
+                  }),
+                )
+                const filtered = rows.filter((r) => allowed.has(r.file))
+                rows.length = 0
+                rows.push(...filtered)
+              }
+
               const step = 100
               const patch = (file: string, before: string, after: string) =>
                 formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
@@ -791,8 +803,8 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
       diff: Effect.fn("Snapshot.diff")(function* (hash: string) {
         return yield* InstanceState.useEffect(state, (s) => s.diff(hash))
       }),
-      diffFull: Effect.fn("Snapshot.diffFull")(function* (from: string, to: string) {
-        return yield* InstanceState.useEffect(state, (s) => s.diffFull(from, to))
+      diffFull: Effect.fn("Snapshot.diffFull")(function* (from: string, to: string, paths?: string[]) {
+        return yield* InstanceState.useEffect(state, (s) => s.diffFull(from, to, paths))
       }),
     })
   }),

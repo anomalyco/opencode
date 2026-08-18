@@ -902,6 +902,21 @@ it.instance(
 )
 
 it.instance(
+  "diffFull restricts to requested paths",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      yield* write(`${tmp.path}/keep.txt`, "keep")
+      yield* write(`${tmp.path}/other.txt`, "other")
+      const after = yield* snapshot.track()
+      expect(after).toBeTruthy()
+      const diffs = yield* snapshot.diffFull(before, after!, [fwd(tmp.path, "keep.txt")])
+      expect(diffs.map((item) => item.file)).toEqual(["keep.txt"])
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
   "diffFull with a large interleaved mixed diff",
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
