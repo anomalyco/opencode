@@ -65,7 +65,7 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
 
-    const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
+    const resolve = Effect.fnUntraced(function* (input: ResolveInput) {
       const absolute = path.resolve(location.directory, input.path)
       if (FSUtil.contains(location.directory, absolute)) {
         return {

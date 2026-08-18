@@ -109,7 +109,7 @@ const layer = Layer.effect(
       get: Effect.fn("Agent.get")(function* (id) {
         return state.get().agents.get(id)
       }),
-      resolve: Effect.fn("Agent.resolve")(function* (id) {
+      resolve: Effect.fnUntraced(function* (id) {
         if (id !== undefined) return state.get().agents.get(ID.make(id))
         return selectedDefault()
       }),

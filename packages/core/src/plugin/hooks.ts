@@ -68,7 +68,7 @@ const layer = Layer.effect(
       return { dispose }
     })
 
-    const trigger: Interface["trigger"] = Effect.fn("PluginHooks.trigger")(function* (domain, name, event) {
+    const trigger: Interface["trigger"] = Effect.fnUntraced(function* (domain, name, event) {
       for (const callback of callbacks.get(key(domain, name)) ?? []) {
         const result: Effect.Effect<void, Failures[typeof domain][typeof name]> = Reflect.apply(callback, undefined, [
           event,

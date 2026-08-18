@@ -39,7 +39,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* Database.Service
 
-    const list = Effect.fn("PermissionSaved.list")(function* (input?: ListInput) {
+    const list = Effect.fnUntraced(function* (input?: ListInput) {
       const rows = yield* db
         .select()
         .from(PermissionTable)

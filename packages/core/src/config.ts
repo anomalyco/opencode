@@ -426,7 +426,7 @@ export const layer = (options?: Options) =>
       )
 
       return Service.of({
-        entries: Effect.fn("Config.entries")(function* () {
+        entries: Effect.fnUntraced(function* () {
           return configs
         }),
         update,
