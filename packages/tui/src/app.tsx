@@ -392,6 +392,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       dialog,
       keymap,
       kv,
+      promptRef,
       route,
       routes: pluginRuntime.routes,
       event,

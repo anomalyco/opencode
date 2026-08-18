@@ -13,6 +13,7 @@ import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dialog-select"
 import { Prompt } from "../component/prompt"
+import type { usePromptRef } from "../context/prompt"
 import type { useToast } from "../ui/toast"
 import * as Keymap from "../keymap"
 import { createCommandShim } from "./command-shim"
@@ -26,6 +27,7 @@ type Input = {
   dialog: ReturnType<typeof useDialog>
   keymap: ReturnType<typeof useOpencodeKeymap>
   kv: ReturnType<typeof useKV>
+  promptRef: ReturnType<typeof usePromptRef>
   route: ReturnType<typeof useRoute>
   routes: PluginRoutes
   event: ReturnType<typeof useEvent>
@@ -193,6 +195,11 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
         return Keymap.getOpencodeModeStack(input.keymap).push(mode)
       },
     },
+    prompt: {
+      ref: () => input.promptRef.current,
+      onChange: (callback) => input.promptRef.onChange(callback),
+      onCursorChange: (callback) => input.promptRef.onCursorChange(callback),
+    },
     route: {
       register(list) {
         return input.routes.register(list)
@@ -349,6 +356,17 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
       },
       get ready() {
         return input.theme.ready
+      },
+      syntax() {
+        const style = input.theme.syntax()
+        return {
+          registerStyle(name, definition) {
+            return style.registerStyle(name, definition)
+          },
+          getStyleId(name) {
+            return style.getStyleId(name)
+          },
+        }
       },
     },
   }
