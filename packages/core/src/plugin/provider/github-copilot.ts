@@ -241,19 +241,22 @@ export const GithubCopilotPlugin = define({
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
     )
-    yield* ctx.session.hook("http.request", (evt) =>
-      Effect.gen(function* () {
-        if (evt.model.providerID !== Provider.ID.githubCopilot) return
-        if (evt.agent === Agent.ID.make("title"))
-          evt.request.headers.set("X-Interaction-Type", "conversation-background")
-        if (evt.agent === Agent.ID.make("compaction"))
-          evt.request.headers.set("X-Interaction-Type", "conversation-compaction")
-        const token = evt.request.headers.get("x-api-key")
-        if (!token) return
-        const text = yield* Effect.promise(() => evt.request.clone().text())
-        const body = Option.getOrUndefined(decodeBody(text))
-        applyHeaders(evt.request.headers, token, ctx.app, requestMetadata(evt.request.url, body), true)
-      }),
+    yield* ctx.session.hook(
+      "http.request",
+      (evt) =>
+        Effect.gen(function* () {
+          if (evt.model.providerID !== Provider.ID.githubCopilot) return
+          if (evt.agent === Agent.ID.make("title"))
+            evt.request.headers.set("X-Interaction-Type", "conversation-background")
+          if (evt.agent === Agent.ID.make("compaction"))
+            evt.request.headers.set("X-Interaction-Type", "conversation-compaction")
+          const token = evt.request.headers.get("x-api-key")
+          if (!token) return
+          const text = yield* Effect.promise(() => evt.request.clone().text())
+          const body = Option.getOrUndefined(decodeBody(text))
+          applyHeaders(evt.request.headers, token, ctx.app, requestMetadata(evt.request.url, body), true)
+        }),
+      { providerID: Provider.ID.githubCopilot },
     )
     yield* ctx.aisdk.hook(
       "language",

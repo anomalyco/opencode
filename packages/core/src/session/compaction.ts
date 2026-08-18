@@ -12,6 +12,7 @@ import { llmClient } from "../effect/app-node-platform.js"
 import { SessionEvent } from "./event.js"
 import type { SessionMessage } from "./message.js"
 import { SessionModelHeaders } from "./model-headers.js"
+import { SessionModelHook } from "./model-hook.js"
 import { SessionModelHttp } from "./model-http.js"
 import { SessionPromptCacheKey } from "./prompt-cache-key.js"
 import { App } from "../app.js"
@@ -270,23 +271,25 @@ const make = (dependencies: Dependencies) => {
           })
         : Effect.void,
     )
+    const request = yield* SessionModelHook.apply(
+      dependencies.hooks,
+      { sessionID: plan.session.id, agent: Agent.ID.make("compaction"), model: plan.ref },
+      LLM.request({
+        model: plan.model,
+        promptCacheKey: SessionPromptCacheKey.make(plan.session.id),
+        http: { headers: SessionModelHeaders.make(plan.session, dependencies.app) },
+        messages: [Message.user(plan.prompt)],
+        tools: [],
+      }),
+    )
     yield* dependencies.llm
-      .stream(
-        LLM.request({
-          model: plan.model,
-          promptCacheKey: SessionPromptCacheKey.make(plan.session.id),
-          http: { headers: SessionModelHeaders.make(plan.session, dependencies.app) },
-          messages: [Message.user(plan.prompt)],
-          tools: [],
+      .stream(request, {
+        http: SessionModelHttp.middleware(dependencies.hooks, {
+          sessionID: plan.session.id,
+          agent: Agent.ID.make("compaction"),
+          model: plan.ref,
         }),
-        {
-          http: SessionModelHttp.middleware(dependencies.hooks, {
-            sessionID: plan.session.id,
-            agent: Agent.ID.make("compaction"),
-            model: plan.ref,
-          }),
-        },
-      )
+      })
       .pipe(
         Stream.runForEach((event) => {
           if (LLMEvent.is.providerError(event))
