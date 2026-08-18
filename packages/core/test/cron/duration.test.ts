@@ -43,4 +43,30 @@ describe("parseDuration", () => {
     const result = run("5x")
     expect(Exit.isFailure(result)).toBe(true)
   })
+
+  it("60s → 60000 (floor boundary accepted)", () => {
+    expect(run("60s")).toEqual(Exit.succeed(60_000))
+  })
+
+  it("1m → 60000", () => {
+    expect(run("1m")).toEqual(Exit.succeed(60_000))
+  })
+
+  it("1h0m0s → 3600000 (trailing zeros accepted)", () => {
+    expect(run("1h0m0s")).toEqual(Exit.succeed(3_600_000))
+  })
+
+  it("0h0m60s → 60000 (zero-prefixed forms accepted)", () => {
+    expect(run("0h0m60s")).toEqual(Exit.succeed(60_000))
+  })
+
+  it("0h0m0s → reject (all zero)", () => {
+    const result = run("0h0m0s")
+    expect(Exit.isFailure(result)).toBe(true)
+  })
+
+  it("0h0m59s → reject (below floor)", () => {
+    const result = run("0h0m59s")
+    expect(Exit.isFailure(result)).toBe(true)
+  })
 })
