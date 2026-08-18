@@ -21,8 +21,6 @@ export interface Interface {
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
-  /** Wakes only an active execution, preserving its current input eligibility. */
-  readonly wakeActive: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /** Interrupt active work owned by this process. Idle interruption is a no-op. */
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<void>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
@@ -137,16 +135,15 @@ export const layer = Layer.effect(
     return Service.of({
       active: coordinator.active,
       interrupt: (sessionID, options) =>
-        coordinator.interrupt(
-          sessionID,
-          "user",
-          options?.continue
-            ? { continue: { request: "steer", when: SessionInbox.has(db, sessionID, "steer") } }
-            : undefined,
-        ),
+        Effect.gen(function* () {
+          yield* coordinator.interrupt(sessionID, "user")
+          if (!options?.continue) return
+          // Resume only steering input from the interrupted intent. Queued next-turn work
+          // stays parked: a steer-scoped drain never promotes queue-delivery rows.
+          if (yield* SessionInbox.has(db, sessionID, "steer")) yield* coordinator.wake(sessionID, "steer")
+        }),
       resume: coordinator.run,
       wake: coordinator.wake,
-      wakeActive: coordinator.wakeActive,
       awaitIdle: coordinator.awaitIdle,
     })
   }),
@@ -165,7 +162,6 @@ export const noopLayer = Layer.succeed(
     active: Effect.succeed(new Set()),
     resume: () => Effect.void,
     wake: () => Effect.void,
-    wakeActive: () => Effect.void,
     interrupt: () => Effect.void,
     awaitIdle: () => Effect.void,
   }),

@@ -785,7 +785,7 @@ const layer = Layer.effect(
           payload,
           delivery: input.delivery ?? "steer",
         })
-        const recovered = yield* SessionInbox.serialized(
+        yield* SessionInbox.serialized(
           input.sessionID,
           Effect.gen(function* () {
             const latest = yield* result.get(input.sessionID)
@@ -796,25 +796,16 @@ const layer = Layer.effect(
               )
               const moved = [SessionEvent.Moved, { sessionID: input.sessionID, ...payload }] as const
               const first = cancellations[0]
-              if (!first) {
-                yield* bus.publish(...moved)
-                return true
-              }
-              yield* bus.publishAll([first, ...cancellations.slice(1), moved])
-              return true
+              if (!first) return yield* bus.publish(...moved).pipe(Effect.asVoid)
+              return yield* bus.publishAll([first, ...cancellations.slice(1), moved])
             }
             yield* SessionInbox.admit(db, bus, {
               id: SessionMessage.ID.create(),
               sessionID: input.sessionID,
               item,
             })
-            return false
           }),
         )
-        if (recovered) {
-          yield* execution.wakeActive(input.sessionID)
-          return
-        }
         yield* execution.wake(input.sessionID)
       }),
       compact: Effect.fn("Session.compact")(function* (input) {

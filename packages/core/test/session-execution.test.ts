@@ -14,8 +14,10 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { UserInterruptedError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionInbox } from "@opencode-ai/core/session/inbox"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInboxTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
@@ -289,6 +291,113 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 })
+
+describe("SessionExecution interrupt continuation", () => {
+  it.effect("resumes only steering input after an interrupt with continue", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_continue_steer")
+      yield* seedSessions(database, [sessionID])
+      yield* seedInbox(database, sessionID, ["steer", "queue"])
+
+      const draining = yield* Deferred.make<void>()
+      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.suspend(() => {
+          drains.push({ force: input.force, promotable: input.promotable })
+          if (drains.length > 1) return Effect.void
+          return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      yield* Deferred.await(draining)
+
+      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.awaitIdle(sessionID)
+
+      // The successor drain is steer-scoped: queued next-turn work stays parked.
+      expect(drains).toEqual([
+        { force: true, promotable: "input" },
+        { force: false, promotable: "steer" },
+      ])
+    }),
+  )
+
+  it.effect("stays parked after an interrupt with continue when only queued work remains", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_continue_parked")
+      yield* seedSessions(database, [sessionID])
+      yield* seedInbox(database, sessionID, ["queue"])
+
+      const draining = yield* Deferred.make<void>()
+      const drains: Array<SessionInbox.Promotable | undefined> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.suspend(() => {
+          drains.push(input.promotable)
+          return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      yield* Deferred.await(draining)
+
+      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.awaitIdle(sessionID)
+
+      expect(drains).toEqual(["input"])
+      expect(yield* execution.active).toEqual(new Set())
+    }),
+  )
+
+  it.effect("an idle interrupt with continue resumes pending steers", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_continue_idle")
+      yield* seedSessions(database, [sessionID])
+      yield* seedInbox(database, sessionID, ["steer"])
+
+      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.sync(() => void drains.push({ force: input.force, promotable: input.promotable })),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.awaitIdle(sessionID)
+
+      expect(drains).toEqual([{ force: false, promotable: "steer" }])
+    }),
+  )
+})
+
+function seedInbox(
+  database: Database.Service["Service"],
+  sessionID: Session.ID,
+  deliveries: ReadonlyArray<SessionInbox.Delivery>,
+) {
+  return database.db
+    .insert(SessionInboxTable)
+    .values(
+      deliveries.map((delivery, index) => ({
+        id: SessionMessage.ID.create(),
+        session_id: sessionID,
+        type: "compaction" as const,
+        payload: {},
+        delivery,
+        enqueued_seq: index + 1,
+      })),
+    )
+    .run()
+    .pipe(Effect.orDie)
+}
 
 function seedSessions(
   database: Database.Service["Service"],
