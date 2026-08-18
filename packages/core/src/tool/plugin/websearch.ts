@@ -4,7 +4,6 @@ import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema, Semaphore } from "effect"
 import { HttpClientError } from "effect/unstable/http"
-import { Config } from "../../config.js"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
 import { WebSearch } from "../../websearch.js"
@@ -30,7 +29,6 @@ export const Plugin = {
   effect: Effect.fn("WebSearchTool.Plugin")(function* (ctx: PluginContext) {
     const permission = yield* Permission.Service
     const forms = yield* Form.Service
-    const config = yield* Config.Service
     const websearch = yield* WebSearch.Service
 
     yield* ctx.tool
@@ -97,9 +95,7 @@ export const Plugin = {
                           if (response.status === "cancelled")
                             return yield* Effect.fail(new Error("Web search cancelled"))
                           if (response.answer.choice === "disable") {
-                            yield* config.update((draft) => {
-                              draft.websearch = false
-                            })
+                            yield* websearch.select(false)
                             return yield* new WebSearch.DisabledError()
                           }
                           const selection =
@@ -131,11 +127,7 @@ export const Plugin = {
                             (providerID !== "random" && !providers.some((provider) => provider.id === providerID))
                           )
                             return yield* new WebSearch.ProviderRequiredError()
-                          yield* config.update((draft) => {
-                            draft.websearch = {
-                              provider: providerID === "random" ? "random" : WebSearch.ID.make(providerID),
-                            }
-                          })
+                          yield* websearch.select(providerID === "random" ? "random" : WebSearch.ID.make(providerID))
                           if (providerID !== "random") return WebSearch.ID.make(providerID)
                           return providers[Math.floor(Math.random() * providers.length)]?.id
                         }),
@@ -206,7 +198,10 @@ export const Plugin = {
 
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
-        const disabled = Config.latest(yield* config.entries(), "websearch") === false
+        const disabled = yield* websearch.default().pipe(
+          Effect.as(false),
+          Effect.catchTag("WebSearch.Disabled", () => Effect.succeed(true)),
+        )
         if (disabled) delete event.tools[name]
       }),
     )
