@@ -64,6 +64,20 @@ const directoryAttachment = (file: FileAttachment): ContentPart => ({
   },
 })
 
+const unsupportedImageAttachment = (file: FileAttachment): ContentPart => ({
+  type: "text",
+  text: `\n\nAttached image with unsupported format (${file.mime}): ${
+    attachmentLocation(file) ?? file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")
+  } — content not included because model providers do not support this format`,
+  metadata: {
+    attachment: {
+      source: file.source,
+      name: file.name,
+      description: file.description,
+    },
+  },
+})
+
 const attachmentContent = (file: FileAttachment): ContentPart[] => {
   if (file.mime === "text/plain") return [textAttachment(file)]
   if (file.mime === "application/x-directory") return [directoryAttachment(file)]
@@ -71,6 +85,7 @@ const attachmentContent = (file: FileAttachment): ContentPart[] => {
     const location = attachmentLocation(file)
     return [...(location === undefined ? [] : [Message.text(`Attached file: ${location}`)]), media(file)]
   }
+  if (file.mime.startsWith("image/")) return [unsupportedImageAttachment(file)]
   return []
 }
 
