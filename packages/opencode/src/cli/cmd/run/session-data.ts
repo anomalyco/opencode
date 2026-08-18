@@ -44,10 +44,27 @@ type Tokens = {
   }
 }
 
+type LiveUsageSample = {
+  time: number
+  output: number
+}
+
+type LiveUsage = {
+  enabled: boolean
+  started: number
+  responseLength: number
+  smoothedResponseLength: number
+  samples: LiveUsageSample[]
+}
+
 type PartKind = "assistant" | "reasoning" | "user"
 type MessageRole = "assistant" | "user"
 type Dict = Record<string, unknown>
 type SessionCommit = StreamCommit
+
+const LIVE_USAGE_WINDOW = 10_000
+const LIVE_USAGE_CHARS_PER_TOKEN = 4
+const LIVE_USAGE_SMOOTHING = 0.35
 
 // Mutable accumulator for the reducer. Each field tracks a different aspect
 // of the stream so we can produce correct incremental output:
@@ -64,6 +81,7 @@ type SessionCommit = StreamCommit
 // - end:    part IDs whose time.end has arrived (part is finished)
 // - shell:  shell call ID → chosen transcript source for direct shell calls
 // - echo:   message ID → bash outputs to strip from the next assistant chunk
+// - liveUsage: lightweight footer-only estimates while a turn is streaming
 type ShellCall = {
   source: "shell" | "tool"
   command?: string
@@ -86,6 +104,7 @@ export type SessionData = {
   visible: Map<string, string>
   end: Set<string>
   echo: Map<string, Set<string>>
+  liveUsage: LiveUsage
 }
 
 export type SessionDataInput = {
@@ -124,11 +143,104 @@ export function createSessionData(
     visible: new Map(),
     end: new Set(),
     echo: new Map(),
+    liveUsage: createLiveUsage(),
   }
 }
 
 function modelKey(provider: string, model: string): string {
   return `${provider}/${model}`
+}
+
+function createLiveUsage(enabled = true): LiveUsage {
+  return {
+    enabled,
+    started: Date.now(),
+    responseLength: 0,
+    smoothedResponseLength: 0,
+    samples: [],
+  }
+}
+
+export function resetSessionUsage(data: SessionData) {
+  data.liveUsage = createLiveUsage(data.liveUsage.enabled)
+}
+
+export function setSessionUsageTracking(data: SessionData, enabled: boolean) {
+  data.liveUsage.enabled = enabled
+}
+
+function outputEstimate(live: LiveUsage): number {
+  if (live.smoothedResponseLength <= 0) {
+    return 0
+  }
+
+  return Math.max(1, Math.round(live.smoothedResponseLength / LIVE_USAGE_CHARS_PER_TOKEN))
+}
+
+function recordLiveUsage(live: LiveUsage, text: string) {
+  if (!live.enabled || !text) {
+    return false
+  }
+
+  live.responseLength += text.length
+  live.smoothedResponseLength =
+    live.smoothedResponseLength <= 0
+      ? live.responseLength
+      : live.smoothedResponseLength + (live.responseLength - live.smoothedResponseLength) * LIVE_USAGE_SMOOTHING
+
+  const now = Date.now()
+  const output = outputEstimate(live)
+  live.samples.push({ time: now, output })
+
+  const cutoff = now - LIVE_USAGE_WINDOW
+  while (live.samples.length > 1 && live.samples[0].time < cutoff) {
+    live.samples.shift()
+  }
+
+  return true
+}
+
+function liveTps(live: LiveUsage): number {
+  const output = outputEstimate(live)
+  if (output <= 0) {
+    return 0
+  }
+
+  const latest = live.samples[live.samples.length - 1]
+  if (!latest) {
+    return 0
+  }
+
+  const first = live.samples[0] ?? { time: live.started, output: 0 }
+  const base = latest.time - first.time >= 250 ? first : { time: live.started, output: 0 }
+  const elapsed = Math.max(0.25, (latest.time - base.time) / 1000)
+  return Math.max(0, (output - base.output) / elapsed)
+}
+
+function formatTps(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0"
+  }
+
+  if (value >= 10) {
+    return Math.round(value).toString()
+  }
+
+  return value.toFixed(1)
+}
+
+function formatTokenCount(value: number): string {
+  const unit = value === 1 ? "token" : "tokens"
+  return `${Locale.number(value).toLowerCase()} ${unit}`
+}
+
+function formatLiveUsage(live: LiveUsage): string | undefined {
+  const output = outputEstimate(live)
+  if (output <= 0) {
+    return undefined
+  }
+
+  return `↑ ~${formatTokenCount(output)} · ${formatTps(liveTps(live))} tok/s`
 }
 
 function formatUsage(
@@ -201,8 +313,38 @@ function patch(patch?: FooterPatch, view?: FooterView): FooterOutput | undefined
   }
 }
 
+function liveUsageFooter(data: SessionData, commits: SessionCommit[], footer?: FooterOutput): FooterOutput | undefined {
+  let changed = false
+  for (const commit of commits) {
+    if (
+      commit.phase !== "progress" ||
+      (commit.kind !== "assistant" && commit.kind !== "reasoning") ||
+      !commit.text
+    ) {
+      continue
+    }
+
+    changed = recordLiveUsage(data.liveUsage, commit.text) || changed
+  }
+
+  const usage = changed ? formatLiveUsage(data.liveUsage) : undefined
+  if (!usage || typeof footer?.patch?.usage === "string") {
+    return footer
+  }
+
+  return {
+    ...footer,
+    patch: {
+      ...footer?.patch,
+      usage,
+    },
+  }
+}
+
 function out(data: SessionData, commits: SessionCommit[], footer?: FooterOutput): SessionDataOutput {
-  if (!footer) {
+  const nextFooter = liveUsageFooter(data, commits, footer)
+
+  if (!nextFooter) {
     return {
       data,
       commits,
@@ -212,7 +354,7 @@ function out(data: SessionData, commits: SessionCommit[], footer?: FooterOutput)
   return {
     data,
     commits,
-    footer,
+    footer: nextFooter,
   }
 }
 

@@ -1147,6 +1147,24 @@ test("direct footer shows full usage metadata when room is available", async () 
   }
 })
 
+test("direct footer groups live duration and usage while prompt is running", async () => {
+  const app = await renderFooter({
+    state: {
+      phase: "running",
+      duration: "9m 9s",
+      usage: "↑ ~23.6k tokens · 84 tok/s",
+    },
+    width: 100,
+  })
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("(9m 9s · ↑ ~23.6k tokens · 84 tok/s)")
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("direct footer mode label keeps left padding without a status pill", async () => {
   const app = await renderFooter()
 
