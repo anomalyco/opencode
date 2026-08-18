@@ -60,11 +60,19 @@ describe("LocationMutation", () => {
     ),
   )
 
-  it.live("rejects a relative lexical escape instead of promoting it to external authority", () =>
+  it.live("requires external-directory authorization for a relative lexical escape", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        const error = yield* Effect.flip((yield* LocationMutation.Service).resolve({ path: "../outside.txt" }))
-        expect(error).toMatchObject({ _tag: "LocationMutation.PathError", reason: "relative_escape" })
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "../outside.txt" })
+        const root = yield* Effect.promise(() => fs.realpath(path.dirname(directory)))
+        expect(target).toMatchObject({
+          canonical: path.join(root, "outside.txt"),
+          resource: path.join(root, "outside.txt").replaceAll("\\", "/"),
+        })
+        expect(target.externalDirectory).toMatchObject({
+          directory: root,
+          resource: path.join(root, "*").replaceAll("\\", "/"),
+        })
       }).pipe(provide(directory)),
     ),
   )
