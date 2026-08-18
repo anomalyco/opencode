@@ -67,6 +67,19 @@ function llamaClient(baseURL: string) {
   })
 }
 
+// fork: llama-skein's PatchModelConfig error bodies are typed `unknown` —
+// best-effort stringify so a rejected ctx-size patch logs something readable
+// instead of "[object Object]".
+function describeBackendError(error: unknown): string {
+  if (typeof error === "string") return error.slice(0, 500)
+  if (error instanceof Error) return error.message
+  try {
+    return JSON.stringify(error).slice(0, 500)
+  } catch {
+    return String(error).slice(0, 500)
+  }
+}
+
 export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (handlers) =>
   Effect.gen(function* () {
     const configSvc = yield* Config.Service
@@ -295,19 +308,29 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       )
       const maxFit = fit?.data?.max_fit_ctx ?? 0
       if (maxFit > 0 && ctx_size > maxFit) return false
+      // fork: a `false` here used to mean both "we didn't even try" (no
+      // baseURL / above ceiling) AND "we tried and the backend refused it" —
+      // the TUI toast then blamed baseURL/ceiling even when neither was the
+      // cause. Only the two checks above are allowed to return false
+      // silently now; an actual backend failure dies with the real reason
+      // attached, so the generic error boundary (middleware/error.ts) logs it
+      // with a `ref` and the client sees "check server logs" instead of a
+      // wrong explanation.
       const res = yield* Effect.tryPromise(() =>
         client.patchModelConfig({ path: { id: modelID }, body: { ctx_size } }),
-      ).pipe(Effect.orElseSucceed(() => null))
-      const ok = res !== null && !res.error
+      ).pipe(Effect.orDie)
+      if (res.error) {
+        return yield* Effect.die(
+          new Error(`llama-skein rejected ctx_size=${ctx_size} for ${modelID}: ${describeBackendError(res.error)}`),
+        )
+      }
       // fork: llama-skein reloads the model on a ctx change; sync our cached
       // context limit immediately so the sidebar reflects the new window
       // without waiting for a full re-discovery.
-      if (ok) {
-        yield* providerSvc
-          .setModelContextLimit(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID), ctx_size)
-          .pipe(Effect.orElseSucceed(() => false))
-      }
-      return ok
+      yield* providerSvc
+        .setModelContextLimit(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID), ctx_size)
+        .pipe(Effect.orElseSucceed(() => false))
+      return true
     })
 
     const setModelOffload = Effect.fn("LocalHttpApi.setModelOffload")(function* (ctx) {

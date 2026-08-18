@@ -169,6 +169,23 @@ export function DialogModel(props: { providerID?: string }) {
       : []
 
     if (needle) {
+      // fork: an exact/prefix hit on a provider's own id or name means "show
+      // me everything on this provider" (e.g. a local llama-skein host like
+      // "m3"). Running that same short needle through fuzzysort's subsequence
+      // matching against every model *title* too let a two-letter provider id
+      // fuzzy-match hundreds of unrelated model names (OpenRouter's catalog
+      // especially), burying the provider's own models in noise. Only applies
+      // to the all-providers dialog — a provider-scoped one already lists
+      // nothing else.
+      if (!props.providerID) {
+        const providerMatch = matchProviderByNeedle(sync.data.provider, needle)
+        if (providerMatch) {
+          return sortModelOptions(
+            providerOptions.filter((option) => option.value.providerID === providerMatch.id),
+            false,
+          )
+        }
+      }
       return [
         ...sortModelOptions(
           fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
@@ -270,6 +287,22 @@ export function DialogModel(props: { providerID?: string }) {
       title={title()}
       current={local.model.current()}
     />
+  )
+}
+
+// fork: exact id match wins over a startsWith hit so a needle that happens to
+// equal one provider's id outright is never shadowed by another provider
+// whose (longer) id or name merely starts with it.
+export function matchProviderByNeedle<T extends { id: string; name: string }>(
+  providers: readonly T[],
+  needle: string,
+): T | undefined {
+  const needleLower = needle.toLowerCase()
+  return (
+    providers.find((provider) => provider.id.toLowerCase() === needleLower) ??
+    providers.find(
+      (provider) => provider.id.toLowerCase().startsWith(needleLower) || provider.name.toLowerCase().startsWith(needleLower),
+    )
   )
 }
 

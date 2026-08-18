@@ -17,7 +17,7 @@ function app() {
 }
 
 /** Minimal llama-skein stand-in: reports a fit ceiling and records ctx patches. */
-function fakeBackend(options: { maxFitCtx?: number; fitStatus?: number } = {}) {
+function fakeBackend(options: { maxFitCtx?: number; fitStatus?: number; patchStatus?: number } = {}) {
   const patched: number[] = []
   const server = Bun.serve({
     port: 0,
@@ -38,6 +38,9 @@ function fakeBackend(options: { maxFitCtx?: number; fitStatus?: number } = {}) {
       }
       if (pathname.startsWith("/api/models/config/") && req.method === "PATCH") {
         return req.json().then((body: { ctx_size?: number }) => {
+          if (options.patchStatus && options.patchStatus !== 202) {
+            return Response.json({ error: "model busy loading another config" }, { status: options.patchStatus })
+          }
           patched.push(body.ctx_size ?? 0)
           return new Response(null, { status: 202 })
         })
@@ -131,6 +134,23 @@ describe("local.model.setCtxSize ceiling guard", () => {
       expect(response.status).toBe(200)
       expect(yield* Effect.promise(() => response.json())).toBe(true)
       expect(backend.patched).toEqual([98304])
+    }),
+  )
+
+  it.live(
+    // fork: a backend-side rejection (busy, malformed request, etc.) used to
+    // collapse to the same `false` as "no baseURL" / "above ceiling", which
+    // told the user something untrue about why it failed. It must now come
+    // back as a server error instead of a silent false.
+    "reports a server error, not false, when the backend rejects the patch",
+    Effect.gen(function* () {
+      const backend = yield* backendEffect({ patchStatus: 500 })
+      const tmp = yield* tmpdirEffect({ config: providerConfig(backend.baseURL) })
+
+      const response = yield* setCtxSize(tmp.path, MAX_FIT)
+
+      expect(response.status).toBe(500)
+      expect(backend.patched).toEqual([])
     }),
   )
 })

@@ -384,7 +384,14 @@ const live: Layer.Layer<
             // any event resets it — so slow-but-live streams are unaffected.
             // 0 disables. Applied at this seam so both runtimes are covered.
             const cfg = yield* config.get()
-            const configured = cfg.experimental?.stream_inactivity_seconds ?? 600
+            // fork: was 600s, matching SUBAGENT_TASK_TIMEOUT_MS (task.ts) — but
+            // tied at 600s each, a subagent running long and a compaction pass
+            // doing one big single-shot summarization call (no tool ticks to
+            // stay alive, and it fires exactly when the prompt is largest and
+            // slowest to prefill) both raced this deadline and lost, killing
+            // legitimate work. Raised to match the host-paced floor below so a
+            // flat deadline stops being the common case for "doing harm."
+            const configured = cfg.experimental?.stream_inactivity_seconds ?? 1800
             // A model placed hybrid GPU + system-RAM is legitimately silent
             // for far longer than a flat deadline allows: measured on z4, 254s
             // passed before the FIRST token of any kind (faulting ~50 GB of

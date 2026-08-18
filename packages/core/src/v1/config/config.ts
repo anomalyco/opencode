@@ -238,7 +238,7 @@ export const Info = Schema.Struct({
       }),
       stream_inactivity_seconds: Schema.optional(PositiveInt).annotate({
         description:
-          "Fail a provider stream that delivers no events for this many seconds (default: 300, 0 disables). Guards against half-open connections that would otherwise park a turn forever.",
+          "Fail a provider stream that delivers no events for this many seconds (default: 1800, 0 disables). Guards against half-open connections that would otherwise park a turn forever.",
       }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",

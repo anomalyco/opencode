@@ -172,7 +172,15 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
       })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e)
-        toast.show({ variant: "error", message: `Failed to set context size: ${msg}` })
+        // fork: the server attaches a `ref` to genuine backend failures
+        // (middleware/error.ts) so the real reason — logged server-side, not
+        // sent to the client — can be found with `grep <ref>` in server logs.
+        const cause = e instanceof Error ? (e.cause as { body?: { data?: { ref?: unknown } } } | undefined) : undefined
+        const ref = typeof cause?.body?.data?.ref === "string" ? cause.body.data.ref : undefined
+        toast.show({
+          variant: "error",
+          message: `Failed to set context size: ${msg}${ref ? ` (ref: ${ref})` : ""}`,
+        })
       })
       .finally(() => {
         setBusy(false)
