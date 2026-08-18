@@ -6,6 +6,7 @@ import { InstanceState } from "@/effect/instance-state"
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_DEFAULT from "./prompt/default.txt"
 import PROMPT_BEAST from "./prompt/beast.txt"
+import PROMPT_DEEPSEEK from "./prompt/deepseek.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_GPT from "./prompt/gpt.txt"
 import PROMPT_KIMI from "./prompt/kimi.txt"
@@ -29,6 +30,7 @@ export function provider(model: Provider.Model) {
     const name = model.api.id.includes("muse-glimmer") ? "Muse Glimmer" : "Muse Spark"
     return [PROMPT_META.replaceAll("{{MODEL_NAME}}", name)]
   }
+  if (model.api.id.toLowerCase().includes("deepseek")) return [PROMPT_DEEPSEEK]
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
     return [PROMPT_BEAST]
   if (model.api.id.includes("gpt")) {
