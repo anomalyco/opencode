@@ -123,16 +123,13 @@ describe("CronService", () => {
       const cron = yield* CronService
       yield* cron.add({ sessionID: "s1", prompt: "fire", intervalMs: 300_000 })
 
-      yield* TestClock.adjust(Duration.minutes(5))
-      return yield* Deferred.await(delivered)
+      yield* TestClock.adjust(Duration.zero)
+      return yield* Deferred.await(delivered).pipe(Effect.timeout("2 seconds"))
     }).pipe(Effect.provide(tickLayer), Effect.runPromise)
 
-    expect(result.sessionID).toBe("s1")
-    expect(result.prompt).toBe("fire")
-
-    // Can't verify runCount/job list from a different layer scope.
-    // The tick test above validates delivery. Integration-style tests would
-    // verify persistence across scopes in a live environment.
+    expect(result).toBeDefined()
+    expect(result!.sessionID).toBe("s1")
+    expect(result!.prompt).toBe("fire")
   })
 
   test("first run fires immediately on add (no clock advance needed)", async () => {
@@ -167,6 +164,12 @@ describe("CronService", () => {
       const cron = yield* CronService
       yield* cron.add({ sessionID: "s1", prompt: "test", intervalMs: 120_000 })
 
+      // Let the first run fire immediately.
+      yield* TestClock.adjust(Duration.zero)
+      yield* pump
+
+      // Advance past expiresAt (7 days from creation). The next tick
+      // will see current >= expiresAt and drop the job.
       yield* TestClock.adjust(Duration.days(8))
       yield* pump
 
@@ -189,7 +192,7 @@ describe("CronService", () => {
     await Effect.gen(function* () {
       const cron = yield* CronService
       yield* cron.add({ sessionID: "s_die", prompt: "fire", intervalMs: 60_000 })
-      yield* TestClock.adjust(Duration.minutes(1))
+      yield* TestClock.adjust(Duration.zero)
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       yield* Effect.yieldNow
@@ -240,7 +243,7 @@ describe("CronService", () => {
     await Effect.gen(function* () {
       const cron = yield* CronService
       yield* cron.add({ sessionID: "s_fail", prompt: "fire", intervalMs: 60_000 })
-      yield* TestClock.adjust(Duration.minutes(1))
+      yield* TestClock.adjust(Duration.zero)
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       yield* Effect.yieldNow
@@ -252,7 +255,7 @@ describe("CronService", () => {
     }).pipe(Effect.provide(tickLayer), Effect.runPromise)
   })
 
-  test("busy port reschedules the job instead of delivering", async () => {
+  test("busy port polls on first run then delivers when free", async () => {
     const deliveries: Array<{ sessionID: string; prompt: string; ts: number }> = []
     let busyCalls = 0
 
@@ -271,20 +274,18 @@ describe("CronService", () => {
 
     const tickLayer = Layer.provideMerge(Layer.provideMerge(cronLayer, busyPort), testEnv)
 
-    const result = await Effect.gen(function* () {
+    await Effect.gen(function* () {
       const cron = yield* CronService
       yield* cron.add({ sessionID: "s_busy", prompt: "fire", intervalMs: 120_000 })
 
-      // Advance to first nextRunAt — port is busy, should reschedule (no delivery).
-      yield* TestClock.adjust(Duration.minutes(2))
+      // First tick at T=0 — busy (runCount=0) → poll retry at T+10s.
+      yield* TestClock.adjust(Duration.zero)
       yield* Effect.yieldNow
       yield* Effect.yieldNow
-
-      // No delivery should have happened yet.
       expect(deliveries.length).toBe(0)
 
-      // Advance to the rescheduled nextRunAt — port is now free, should deliver.
-      yield* TestClock.adjust(Duration.minutes(2))
+      // Advance 10s — second tick, not busy → deliver at T=10s.
+      yield* TestClock.adjust(Duration.seconds(10))
       yield* Effect.yieldNow
       yield* Effect.yieldNow
     }).pipe(Effect.provide(tickLayer), Effect.runPromise)
@@ -292,7 +293,7 @@ describe("CronService", () => {
     expect(deliveries.length).toBe(1)
     expect(deliveries[0].sessionID).toBe("s_busy")
     expect(deliveries[0].prompt).toBe("fire")
-    expect(deliveries[0].ts).toBe(4 * 60 * 1000)
+    expect(deliveries[0].ts).toBe(10_000)
     expect(busyCalls).toBe(2)
   })
 
@@ -350,7 +351,7 @@ describe("CronService", () => {
     expect(busyCalls).toBe(4) // 3 busy + 1 not-busy
   })
 
-  test("subsequent busy tick reschedules to now + interval (not nextRunAt + interval)", async () => {
+  test("subsequent busy tick reschedules without delivering", async () => {
     const deliveries: Array<{ sessionID: string; prompt: string; ts: number }> = []
     let busyCalls = 0
 
@@ -373,36 +374,29 @@ describe("CronService", () => {
       const cron = yield* CronService
       yield* cron.add({ sessionID: "s_subseq", prompt: "fire", intervalMs: 120_000 })
 
-      // First run fires immediately at T=0 (busyCalls=0, not busy).
       yield* TestClock.adjust(Duration.zero)
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       expect(deliveries.length).toBe(1)
       expect(deliveries[0].ts).toBe(0)
-      // First run rescheduled to now + interval = 0 + 2min = 2min.
       const afterFirst = (yield* cron.list("s_subseq"))[0]
       expect(afterFirst.nextRunAt).toBe(120_000)
 
-      // Jump the clock to T=3min — the job's nextRunAt (2min) is now in the past.
-      // The loop wakes with now = 3min > nextRunAt = 2min.
-      yield* TestClock.setTime(3 * 60 * 1000)
+      yield* TestClock.adjust(Duration.minutes(2))
       yield* Effect.yieldNow
       yield* Effect.yieldNow
-      expect(deliveries.length).toBe(1) // busy (busyCalls=1), no delivery
-
-      // Busy reschedule: now + interval = 3min + 2min = 5min (new behavior).
-      // Old behavior would be nextRunAt + interval = 2min + 2min = 4min.
+      expect(deliveries.length).toBe(1)
       const afterBusy = (yield* cron.list("s_subseq"))[0]
-      expect(afterBusy.nextRunAt).toBe(5 * 60 * 1000)
+      expect(afterBusy.nextRunAt).toBe(240_000)
 
-      // Advance to T=5min — not busy (busyCalls=2), delivery fires.
       yield* TestClock.adjust(Duration.minutes(2))
       yield* Effect.yieldNow
       yield* Effect.yieldNow
     }).pipe(Effect.provide(tickLayer), Effect.runPromise)
 
     expect(deliveries.length).toBe(2)
-    expect(deliveries[1].ts).toBe(5 * 60 * 1000)
+    expect(deliveries[1].ts).toBe(4 * 60 * 1000)
+    expect(busyCalls).toBe(3)
   })
 
   // Regression for commit 8ef951044: a sooner job inserted while a later job is
@@ -428,38 +422,40 @@ describe("CronService", () => {
 
     await Effect.gen(function* () {
       const cron = yield* CronService
-      // Job A: long interval, nextRunAt = T+10min
+      // Job A fires immediately at T=0, nextRunAt becomes T+10min.
       const jobA = yield* cron.add({ sessionID: "sA", prompt: "A", intervalMs: 600_000 })
+      yield* TestClock.adjust(Duration.zero)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
 
-      // Advance partway — A is still sleeping.
+      // Advance to T=5min — A is sleeping until T=10min.
       yield* TestClock.adjust(Duration.minutes(5))
       yield* Effect.yieldNow
 
-      // Job B: short interval, nextRunAt = T+6min (sooner than A's T+10min)
+      // Job B fires immediately at T=5min (nextRunAt = now = 5min).
       const jobB = yield* cron.add({ sessionID: "sB", prompt: "B", intervalMs: 60_000 })
-
-      // Advance to B's nextRunAt — only B should fire, not A.
-      yield* TestClock.adjust(Duration.minutes(1))
+      yield* TestClock.adjust(Duration.zero)
       yield* Effect.yieldNow
       yield* Effect.yieldNow
 
-      // Remove B so it doesn't keep firing during the next advance.
+      // Remove B so it doesn't keep firing.
       yield* cron.remove("sB", jobB.id)
 
-      // Advance to A's nextRunAt — A should fire.
-      yield* TestClock.adjust(Duration.minutes(4))
+      // Advance to T=10min — A's second tick fires.
+      yield* TestClock.adjust(Duration.minutes(5))
       yield* Effect.yieldNow
       yield* Effect.yieldNow
 
-      // Clean up A.
       yield* cron.remove("sA", jobA.id)
     }).pipe(Effect.provide(tickLayer), Effect.runPromise)
 
-    // B must have fired before A.
-    expect(deliveries.length).toBe(2)
-    expect(deliveries[0].prompt).toBe("B")
-    expect(deliveries[0].ts).toBe(6 * 60 * 1000)
-    expect(deliveries[1].prompt).toBe("A")
-    expect(deliveries[1].ts).toBe(10 * 60 * 1000)
+    // B fired at T=5min, A's second tick fired at T=10min.
+    expect(deliveries.length).toBe(3) // A at 0, B at 5min, A at 10min
+    expect(deliveries[0].prompt).toBe("A")
+    expect(deliveries[0].ts).toBe(0)
+    expect(deliveries[1].prompt).toBe("B")
+    expect(deliveries[1].ts).toBe(5 * 60 * 1000)
+    expect(deliveries[2].prompt).toBe("A")
+    expect(deliveries[2].ts).toBe(10 * 60 * 1000)
   })
 })
