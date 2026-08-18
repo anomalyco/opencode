@@ -41,7 +41,7 @@ export const WebCommand = effectCmd({
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
     const opts = yield* resolveNetworkOptions(args)
-    const server = yield* Effect.promise(() => Server.listen(opts))
+    const server = yield* Server.listenEffect(opts).pipe(Effect.orDie)
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()

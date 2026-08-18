@@ -22,7 +22,9 @@ export const AcpCommand = effectCmd({
     ACPProfile.mark("cli.acp.handler")
     process.env.OPENCODE_CLIENT = "acp"
     const opts = yield* resolveNetworkOptions(args)
-    const server = yield* Effect.promise(() => ACPProfile.measure("cli.acp.server.listen", () => Server.listen(opts)))
+    const listenStart = performance.now()
+    const server = yield* Server.listenEffect(opts).pipe(Effect.orDie)
+    ACPProfile.duration("cli.acp.server.listen", listenStart)
 
     const sdk = createOpencodeClient({
       baseUrl: `http://${server.hostname}:${server.port}`,

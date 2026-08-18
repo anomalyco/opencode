@@ -12,7 +12,10 @@ import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
 import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
 import { PublicApi } from "./routes/instance/httpapi/public"
 import type { CorsOptions } from "@opencode-ai/server/cors"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { lazy } from "@/util/lazy"
+
+declare const Bun: typeof import("bun")
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -37,9 +40,10 @@ type ListenOptions = CorsOptions & {
 }
 type ListenerState = {
   scope: Scope.Scope
-  server: Context.Service.Shape<typeof HttpServer.HttpServer>
+  port: number
   http: ListenerServer
   websockets: WebSocketTracker.Interface
+  shutdown?: () => void
 }
 type EffectListener = Omit<Listener, "stop"> & {
   stop: (close?: boolean) => Effect.Effect<void>
@@ -80,8 +84,7 @@ export async function listen(opts: ListenOptions): Promise<Listener> {
   }
 }
 
-const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unknown> = Effect.fn("Server.listen")(
-  function* (opts: ListenOptions) {
+export const listenEffect = Effect.fn("Server.listen")(function* (opts: ListenOptions) {
     const state = yield* startWithPortFallback(opts)
     const address = yield* tcpAddress(state)
     const listenerUrl = makeURL(opts.hostname, address.port)
@@ -94,8 +97,19 @@ const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unkno
       url: listenerUrl,
       stop: yield* makeStop(state, unpublishMdns, listenerUrl),
     }
-  },
-)
+  })
+
+function useBunServe() {
+  return process.platform === "win32" && typeof Bun !== "undefined"
+}
+
+function webHandlerFor(opts: ListenOptions) {
+  return HttpRouter.toWebHandler(HttpApiApp.createRoutes(opts), {
+    disableLogger: true,
+    middleware: disposeMiddleware,
+    memoMap,
+  })
+}
 
 function listenerLayer(opts: ListenOptions, port: number) {
   return HttpRouter.serve(HttpApiApp.createRoutes(opts), {
@@ -115,10 +129,54 @@ function listenerLayer(opts: ListenOptions, port: number) {
 }
 
 function startWithPortFallback(opts: ListenOptions) {
-  if (opts.port !== 0) return startListener(opts, opts.port)
+  const start: (opts: ListenOptions, port: number) => Effect.Effect<ListenerState, unknown> = useBunServe()
+    ? startBunListener
+    : startListener
+  if (opts.port !== 0) return start(opts, opts.port)
   // Match the legacy listener port-resolution behavior: explicit `0` prefers
   // 4096 first, then any free port.
-  return startListener(opts, 4096).pipe(Effect.catch(() => startListener(opts, 0)))
+  return start(opts, 4096).pipe(Effect.catch(() => start(opts, 0)))
+}
+
+function startBunListener(opts: ListenOptions, port: number) {
+  const scope = Scope.makeUnsafe()
+  const web = webHandlerFor(opts)
+  const serverRef = { closeStarted: false, forceStop: false }
+
+  return Effect.gen(function* () {
+    const bunServer = yield* Effect.try({
+      try: () =>
+        Bun.serve({
+          hostname: opts.hostname,
+          port,
+          idleTimeout: 255,
+          fetch: (request) => web.handler(request, HttpApiApp.context),
+        }),
+      catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+    })
+
+    yield* Scope.addFinalizer(scope, Effect.promise(() => web.dispose()))
+
+    return {
+      scope,
+      port: bunServer.port ?? port,
+      http: ListenerServerService.of({
+        closeAll: Effect.sync(() => {
+          serverRef.forceStop = true
+          if (serverRef.closeStarted) bunServer.stop(true)
+        }),
+      }),
+      websockets: WebSocketTracker.Service.of({
+        add: () => Effect.succeed(false),
+        remove: () => Effect.void,
+        closeAll: Effect.void,
+      }),
+      shutdown: () => {
+        serverRef.closeStarted = true
+        bunServer.stop(serverRef.forceStop)
+      },
+    } satisfies ListenerState
+  }).pipe(Effect.onError(() => Scope.close(scope, Exit.void).pipe(Effect.ignore)))
 }
 
 function startListener(opts: ListenOptions, port: number) {
@@ -126,23 +184,21 @@ function startListener(opts: ListenOptions, port: number) {
   return Layer.buildWithMemoMap(listenerLayer(opts, port), Layer.makeMemoMapUnsafe(), scope).pipe(
     Effect.provide(HttpApiApp.context),
     Effect.onError(() => Scope.close(scope, Exit.void).pipe(Effect.ignore)),
-    Effect.map(
-      (ctx): ListenerState => ({
+    Effect.map((ctx): ListenerState => {
+      const server = Context.get(ctx, HttpServer.HttpServer)
+      const address = server.address._tag === "TcpAddress" ? server.address.port : port
+      return {
         scope,
-        server: Context.get(ctx, HttpServer.HttpServer),
+        port: address,
         http: Context.get(ctx, ListenerServerService),
         websockets: Context.get(ctx, WebSocketTracker.Service),
-      }),
-    ),
+      }
+    }),
   )
 }
 
 function tcpAddress(state: ListenerState) {
-  return Effect.gen(function* () {
-    if (state.server.address._tag === "TcpAddress") return state.server.address
-    yield* Scope.close(state.scope, Exit.void).pipe(Effect.ignore)
-    return yield* Effect.die(new Error(`Unexpected HttpServer address tag: ${state.server.address._tag}`))
-  })
+  return Effect.succeed({ _tag: "TcpAddress" as const, port: state.port, hostname: "127.0.0.1" as const })
 }
 
 function makeURL(hostname: string, port: number) {
@@ -187,6 +243,7 @@ function makeStop(state: ListenerState, unpublishMdns: Effect.Effect<void>, list
       Effect.gen(function* () {
         yield* unpublishMdns
         if (close) yield* forceCloseOnce
+        yield* Effect.sync(() => state.shutdown?.())
         yield* closeScopeOnce
       })
   })
