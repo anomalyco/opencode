@@ -75,6 +75,7 @@ type LocationData = {
     resource?: McpResource[]
   }
   model?: ModelInfo[]
+  modelDefault?: ModelInfo | null
   provider?: ProviderInfo[]
   reference?: ReferenceInfo[]
   websearch?: WebSearchProvider[]
@@ -1431,13 +1432,28 @@ export function createData(config: CreateDataInput) {
         list(location?: LocationRef) {
           return store.location[locationKey(location ?? defaultLocation())]?.model
         },
+        default(location?: LocationRef) {
+          return store.location[locationKey(location ?? defaultLocation())]?.modelDefault ?? undefined
+        },
         sync(ref?: LocationRef) {
           const id = locationKey(ref ?? defaultLocation())
           return sync.run(`location.model:${id}`, async () => {
-            const response = await api().model.list({ location: locationQuery(ref ?? defaultLocation()) })
+            const [response, defaultModel] = await Promise.all([
+              api().model.list({ location: locationQuery(ref ?? defaultLocation()) }),
+              api().model.default({ location: locationQuery(ref ?? defaultLocation()) }),
+            ])
             const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], model: response.data })
-            if (key !== id) setStore("location", id, { ...store.location[id], model: response.data })
+            setStore("location", key, {
+              ...store.location[key],
+              model: response.data,
+              modelDefault: defaultModel.data,
+            })
+            if (key !== id)
+              setStore("location", id, {
+                ...store.location[id],
+                model: response.data,
+                modelDefault: defaultModel.data,
+              })
           })
         },
         invalidate(ref?: LocationRef) {

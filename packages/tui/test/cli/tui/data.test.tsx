@@ -150,6 +150,60 @@ test("syncs VCS info and applies branch updates", async () => {
   }
 })
 
+test("syncs the server-resolved default model", async () => {
+  const events = createEventStream()
+  const model = (id: string) => ({
+    id,
+    providerID: "provider",
+    name: id,
+    api: { type: "native" },
+    capabilities: { tools: false, input: [], output: [] },
+    cost: [],
+    limit: { context: 1, output: 1 },
+    request: { headers: {}, body: {} },
+    status: "active",
+    time: { released: 0 },
+    variants: [],
+  })
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/model")
+      return json({
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+        data: [model("first"), model("configured")],
+      })
+    if (url.pathname === "/api/model/default")
+      return json({
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+        data: model("configured"),
+      })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => data.location.model.default()?.id === "configured")
+    expect(data.location.model.list()?.[0]?.id).toBe("first")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("proactively syncs project metadata newest first", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {

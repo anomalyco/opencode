@@ -194,6 +194,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
+        const configured = data.location.model.default(location.ref)
+        if (configured && isModelValid({ providerID: configured.providerID, modelID: configured.id })) {
+          return {
+            providerID: configured.providerID,
+            modelID: configured.id,
+          }
+        }
+
         for (const item of preferences.recent) {
           if (isModelValid(item)) {
             return item
