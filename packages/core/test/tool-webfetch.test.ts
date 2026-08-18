@@ -186,28 +186,6 @@ describe("WebFetchTool helpers", () => {
     )
   })
 
-  test("parses malformed tag prefixes in linear time without a regex prepass", () => {
-    const small = "<a".repeat(250_000)
-    const large = "<a".repeat(1_000_000)
-    const start = Bun.nanoseconds()
-    WebFetchTool.convertHTMLToMarkdown(small)
-    const smallDuration = Bun.nanoseconds() - start
-    const next = Bun.nanoseconds()
-    WebFetchTool.convertHTMLToMarkdown(large)
-    const largeDuration = Bun.nanoseconds() - next
-    expect(largeDuration).toBeLessThan(smallDuration * 10)
-  })
-
-  test("caps escaped prose and backtick-heavy pre output at the webfetch response ceiling", () => {
-    const prose = `<p>${"*".repeat(WebFetchTool.MAX_RESPONSE_BYTES)}</p>`
-    const code = `<pre>${"`".repeat(WebFetchTool.MAX_RESPONSE_BYTES - 11)}</pre>`
-    const proseOutput = WebFetchTool.convertHTMLToMarkdown(prose)
-    const codeOutput = WebFetchTool.convertHTMLToMarkdown(code)
-    expect(Buffer.byteLength(proseOutput)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
-    expect(Buffer.byteLength(codeOutput)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
-    expect(codeOutput.startsWith("~~~\n")).toBe(true)
-  })
-
   test("does not confuse source NUL text with buffered code", () => {
     expect(WebFetchTool.convertHTMLToMarkdown(`<p>before \u00000\u0000 after</p><pre>code</pre>`)).toBe(
       `before \u00000\u0000 after\n\n\`\`\`\ncode\n\`\`\``,

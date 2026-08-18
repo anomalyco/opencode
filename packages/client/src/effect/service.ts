@@ -71,7 +71,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     if (command === undefined) return yield* Effect.fail(new Error("Missing service command"))
     return yield* Effect.try({
       try: () => {
-        return spawnServiceContender(command, args)
+        return spawnServiceContender(command, args, options.env)
       },
       catch: (cause) => new Error("Failed to start server", { cause }),
     })

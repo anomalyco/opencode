@@ -82,7 +82,7 @@ const layer = Layer.effect(
       },
     )
 
-    const trigger: Interface["trigger"] = Effect.fn("PluginHooks.trigger")(function* (domain, name, event) {
+    const trigger: Interface["trigger"] = Effect.fnUntraced(function* (domain, name, event) {
       for (const entry of callbacks.get(key(domain, name)) ?? []) {
         if (entry.options?.providerID !== undefined && entry.options.providerID !== eventProviderID(event)) continue
         const result: Effect.Effect<void, Failures[typeof domain][typeof name]> = Reflect.apply(

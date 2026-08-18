@@ -10,7 +10,11 @@ export type AgentColor = string
 
 export type PermissionEffect = "allow" | "deny" | "ask"
 
-export type PluginInfo = { id: string }
+export type PluginSource =
+  | { type: "builtin" }
+  | { type: "package"; package: string }
+  | { type: "local"; path: string }
+  | { type: "sdk" }
 
 export type SessionForkBoundary = { type: "before"; messageID: string } | { type: "through"; messageID: string }
 
@@ -195,6 +199,10 @@ export type ProviderRequest = {
 }
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
+
+export type PluginInfo =
+  | { id: string; source: PluginSource; status: "active"; tui: boolean }
+  | { id?: string; source: PluginSource; status: "failed"; error: string; tui: boolean }
 
 export type TokenUsageInfo = {
   input: number

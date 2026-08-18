@@ -35,7 +35,7 @@ export const layer = Layer.effect(
     return Service.of({
       register: (plugin) =>
         Effect.sync(() => {
-          plugins.set(plugin.id, { ...plugin, version: String(++revision) })
+          plugins.set(plugin.id, { ...plugin, version: String(++revision), source: { type: "sdk" } })
         }).pipe(Effect.andThen(bus.publish(Updated, {})), Effect.asVoid),
       all: () => [...plugins.values()],
     })

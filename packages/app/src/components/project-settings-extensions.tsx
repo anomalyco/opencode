@@ -7,6 +7,7 @@ import { useMcpToggle } from "@/context/mcp"
 import { useWorkspaceLocation } from "@/context/location"
 import { useServerSDK } from "@/context/server-sdk"
 import { useData } from "@/context/server"
+import { pluginLabel } from "@/utils/plugin"
 import { ExternalLink } from "./external-link"
 
 type SkillItem = {
@@ -101,10 +102,10 @@ export const ProjectSettingsExtensions: Component = () => {
     () => (serverSDK.connection.status() === "connected" ? directorySDK().directory : undefined),
     (directory) => serverSDK.api.plugin.list({ location: { directory } }).then((result) => result.data),
   )
-  const globalPlugins = createMemo(() => (globalPluginList.latest ?? []).map((item) => item.id))
+  const globalPlugins = createMemo(() => (globalPluginList.latest ?? []).map(pluginLabel))
   const projectPlugins = createMemo(() => {
     const shared = new Set(globalPlugins())
-    return (projectPluginList.latest ?? []).map((item) => item.id).filter((name) => !shared.has(name))
+    return (projectPluginList.latest ?? []).map(pluginLabel).filter((name) => !shared.has(name))
   })
 
   const serverSkills = createMemo(() => data.location.skill.list() ?? [])

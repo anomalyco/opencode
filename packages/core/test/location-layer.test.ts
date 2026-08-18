@@ -428,10 +428,18 @@ describe("LocationServiceMap", () => {
               ),
             )
             for (let attempt = 0; attempt < 100; attempt++) {
-              if ((yield* registry.list()).length === 0) break
+              if ((yield* registry.list()).some((plugin) => plugin.status === "failed")) break
               yield* Effect.sleep("20 millis")
             }
-            expect(yield* registry.list()).toEqual([])
+            expect(yield* registry.list()).toEqual([
+              {
+                id: Plugin.ID.make("failing-plugin"),
+                source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts") },
+                status: "failed",
+                error: expect.stringContaining("plugin failed"),
+                tui: false,
+              },
+            ])
 
             yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.agent"] })))
             for (let attempt = 0; attempt < 100; attempt++) {

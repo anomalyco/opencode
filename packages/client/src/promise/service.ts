@@ -51,7 +51,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
     if (command === undefined) throw new Error("Missing service command")
     try {
-      return spawnServiceContender(command, args)
+      return spawnServiceContender(command, args, options.env)
     } catch (cause) {
       throw new Error("Failed to start server", { cause })
     }

@@ -11,7 +11,7 @@ import type {
   FormValue,
 } from "@opencode-ai/client"
 import open from "open"
-import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
@@ -70,18 +70,33 @@ export function connectionSummary(integration: IntegrationInfo) {
 }
 
 export function DialogIntegration(
-  props: { onConnected?: OnIntegrationConnected; integrationID?: string; connectionOnly?: boolean } = {},
+  props: { onConnected?: OnIntegrationConnected; integrationID?: string; autoConnect?: boolean } = {},
 ) {
   const data = useData()
   const dialog = useDialog()
   const theme = useTheme("elevated")
+  const integrations = createMemo(() =>
+    integrationOptions(data.location.integration.list() ?? []).filter(
+      (integration) => props.integrationID === undefined || integration.id === props.integrationID,
+    ),
+  )
+
+  createEffect(() => {
+    if (!props.autoConnect) return
+    const integration = integrations()[0]
+    if (!integration) return
+    const methods = connectMethods(integration)
+    if (credentialConnections(integration).length) {
+      manageConnections(integration, methods, dialog, props.onConnected)
+      return
+    }
+    selectMethod(integration, methods, dialog, props.onConnected)
+  })
+
   const options = createMemo(() => {
     const providers = data.location.websearch.list() ?? []
     const providersByID = new Map(providers.map((provider) => [provider.id, provider]))
-    const integrations = integrationOptions(data.location.integration.list() ?? []).filter(
-      (integration) => props.integrationID === undefined || integration.id === props.integrationID,
-    )
-    return integrations.map((integration) => {
+    return integrations().map((integration) => {
       const methods = connectMethods(integration)
       const provider = providersByID.get(integration.id)
       const credentials = credentialConnections(integration)

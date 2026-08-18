@@ -275,15 +275,36 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("stop", { description: "Stop the background server" }),
         Spec.make("get", {
           description: "Get service configuration",
-          params: { key: Argument.string("key").pipe(Argument.optional) },
+          params: {
+            key: Argument.string("key").pipe(Argument.withDescription("Service setting or env"), Argument.optional),
+            name: Argument.string("name").pipe(
+              Argument.withDescription("Environment variable name"),
+              Argument.optional,
+            ),
+          },
         }),
         Spec.make("set", {
           description: "Set service configuration",
-          params: { key: Argument.string("key"), value: Argument.string("value") },
+          params: {
+            key: Argument.string("key").pipe(Argument.withDescription("Service setting or env")),
+            value: Argument.string("value").pipe(
+              Argument.withDescription("Setting value or environment variable name"),
+            ),
+            nestedValue: Argument.string("env-value").pipe(
+              Argument.withDescription("Environment variable value"),
+              Argument.optional,
+            ),
+          },
         }),
         Spec.make("unset", {
           description: "Unset service configuration",
-          params: { key: Argument.string("key") },
+          params: {
+            key: Argument.string("key").pipe(Argument.withDescription("Service setting or env")),
+            name: Argument.string("name").pipe(
+              Argument.withDescription("Environment variable name"),
+              Argument.optional,
+            ),
+          },
         }),
       ],
     }),

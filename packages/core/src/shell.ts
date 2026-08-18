@@ -101,7 +101,7 @@ export const layer = (options?: ShellSelect.Options) =>
         }),
       )
 
-      const require = Effect.fn("Shell.require")(function* (id: Shell.ID) {
+      const require = Effect.fnUntraced(function* (id: Shell.ID) {
         const session = sessions.get(id)
         if (!session) return yield* new NotFoundError({ id })
         return session
@@ -153,7 +153,7 @@ export const layer = (options?: ShellSelect.Options) =>
 
       const name = () => resolve().pipe(Effect.map(ShellSelect.name))
 
-      const output = Effect.fn("Shell.output")(function* (id: Shell.ID, input?: Shell.OutputInput) {
+      const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
         const session = yield* require(id)
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536

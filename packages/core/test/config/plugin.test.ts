@@ -44,7 +44,9 @@ describe("PluginSupervisor config", () => {
         const plugins = yield* Plugin.Service
         yield* ready()
         expect(
-          (yield* plugins.list()).map((plugin) => plugin.id).filter((id) => id.startsWith("opencode.provider.")),
+          (yield* plugins.list())
+            .flatMap((plugin) => (plugin.id ? [plugin.id] : []))
+            .filter((id) => id.startsWith("opencode.provider.")),
         ).toEqual([Plugin.ID.make("opencode.provider.openai")])
       }),
     ),
@@ -64,9 +66,19 @@ describe("PluginSupervisor config", () => {
       Effect.gen(function* () {
         yield* ready()
         const agents = yield* Agent.Service
+        const plugins = yield* Plugin.Service
         expect(yield* agents.get(Agent.ID.make("configured"))).toMatchObject({
           description: "Loaded from config",
           mode: "subagent",
+        })
+        expect((yield* plugins.list()).find((plugin) => plugin.id === "config-promise-plugin")).toEqual({
+          id: Plugin.ID.make("config-promise-plugin"),
+          source: {
+            type: "local",
+            path: path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts"),
+          },
+          status: "active",
+          tui: true,
         })
       }),
     ),
@@ -143,12 +155,19 @@ describe("PluginSupervisor config", () => {
       Effect.gen(function* () {
         yield* ready()
         const agents = yield* Agent.Service
+        const plugins = yield* Plugin.Service
         expect(yield* agents.get(Agent.ID.make("configured"))).toMatchObject({
           description: "Loaded after invalid plugins",
         })
         expect(output).toEqual([
           path.join(import.meta.dir, "../plugin/fixtures/missing-plugin.ts"),
           path.join(import.meta.dir, "../plugin/fixtures/invalid-plugin.ts"),
+        ])
+        expect(
+          (yield* plugins.list()).filter((plugin) => plugin.status === "failed").map((plugin) => plugin.source),
+        ).toEqual([
+          { type: "local", path: path.join(import.meta.dir, "../plugin/fixtures/missing-plugin.ts") },
+          { type: "local", path: path.join(import.meta.dir, "../plugin/fixtures/invalid-plugin.ts") },
         ])
       }),
     ).pipe(Effect.provide(Logger.layer([logger])))
@@ -246,10 +265,12 @@ describe("PluginSupervisor config", () => {
         Effect.gen(function* () {
           yield* ready()
           const plugins = yield* Plugin.Service
-          const ids = (yield* plugins.list()).map((plugin) => String(plugin.id))
+          const inventory = yield* plugins.list()
+          const ids = inventory.map((plugin) => String(plugin.id))
           expect(ids).toContain("opencode.agent")
           expect(ids).toContain("static-sdk")
           expect(ids).not.toContain("config-promise-plugin")
+          expect(inventory.find((plugin) => plugin.id === "static-sdk")?.source).toEqual({ type: "sdk" })
 
           const agents = yield* Agent.Service
           expect(yield* agents.get(Agent.ID.make("directory"))).toBeUndefined()
