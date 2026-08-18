@@ -136,6 +136,32 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("supports native chronological system updates on documented and later Claude family versions", () =>
+    Effect.gen(function* () {
+      const ids = [
+        "claude-opus-4-8",
+        "claude-opus-5-1",
+        "claude-sonnet-5",
+        "claude-fable-6",
+        "anthropic/claude-mythos-7.2",
+      ]
+
+      const prepared = yield* Effect.forEach(ids, (id) =>
+        compileRequest(
+          LLM.request({
+            model: AnthropicMessages.route
+              .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+              .model({ id }),
+            messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
+            cache: "none",
+          }),
+        ),
+      )
+
+      expect(prepared.map((item) => item.body.messages[1]?.role)).toEqual(ids.map(() => "system"))
+    }),
+  )
+
   it.effect("lowers chronological system updates to wrapped user text for unsupported Anthropic models", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -160,6 +186,34 @@ describe("Anthropic Messages route", () => {
         },
         { role: "assistant", content: [{ type: "text", text: "After." }] },
       ])
+    }),
+  )
+
+  it.effect("does not infer native system update support for older or undocumented Claude families", () =>
+    Effect.gen(function* () {
+      const ids = [
+        "claude-opus-4-7",
+        "claude-opus-4-20250514",
+        "claude-sonnet-4-9",
+        "claude-haiku-6",
+        "custom-model-7",
+      ]
+
+      const prepared = yield* Effect.forEach(ids, (id) =>
+        compileRequest(
+          LLM.request({
+            model: AnthropicMessages.route
+              .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+              .model({ id }),
+            messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
+            cache: "none",
+          }),
+        ),
+      )
+
+      expect(prepared.map((item) => item.body.messages.some((message) => message.role === "system"))).toEqual(
+        ids.map(() => false),
+      )
     }),
   )
 

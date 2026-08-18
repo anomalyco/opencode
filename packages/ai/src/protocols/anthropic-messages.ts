@@ -437,10 +437,19 @@ const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
-// Mid-conversation system messages are a native Claude API feature only for
-// Opus 4.8. Other Anthropic models intentionally use the same visible wrapped-
-// user fallback as non-Anthropic routes rather than sending a role they reject.
-const supportsNativeSystemUpdates = (request: LLMRequest) => String(request.model.id) === "claude-opus-4-8"
+// Mid-conversation system messages became available with Opus 4.8 and version
+// 5 of the other supported Claude families. Treat later family versions as
+// compatible without assuming that every Anthropic Messages model is Claude.
+const supportsNativeSystemUpdates = (request: LLMRequest) => {
+  const match = /(?:^|[./])claude-(fable|mythos|opus|sonnet)-(\d+)(?:[.-](\d+))?/.exec(
+    String(request.model.id).toLowerCase(),
+  )
+  if (!match) return false
+  const major = Number(match[2])
+  if (match[1] !== "opus") return major >= 5
+  if (major !== 4) return major >= 5
+  return match[3] !== undefined && match[3].length <= 2 && Number(match[3]) >= 8
+}
 
 const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
   const last = message.content.at(-1)
