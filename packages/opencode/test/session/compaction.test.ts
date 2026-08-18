@@ -222,6 +222,15 @@ function cfg(compaction?: ConfigV1.Info["compaction"]) {
   return Layer.succeed(Config.Service, TestConfig.make({ get: () => Effect.succeed({ ...base, compaction }) }))
 }
 
+function cfgAgent(agent?: ConfigV1.Info["agent"]) {
+  const base = Schema.decodeUnknownSync(ConfigV1.Info)({}) as ConfigV1.Info
+  return Layer.succeed(Config.Service, TestConfig.make({ get: () => Effect.succeed({ ...base, agent }) }))
+}
+
+function modelWithVariant(name: string): Provider.Model {
+  return { ...createModel({ context: 100_000, output: 32_000 }), variants: { [name]: {} } }
+}
+
 const defaultProvider = wide()
 const compactionTestNode = LayerNode.group([
   SessionCompaction.node,
@@ -1659,6 +1668,40 @@ describe("session.compaction.process", () => {
       expect(part?.type).toBe("compaction")
       expect(part?.tail_start_id).toBe(keep.id)
     }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 500 }) })),
+  )
+
+  itCompaction.instance(
+    "uses the compaction agent's configured variant for the summary message",
+    () => {
+      const variant = "no-thinking"
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const msg = yield* createUserMessage(session.id, "hello")
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+
+        yield* SessionCompaction.use.process({
+          parentID: msg.id,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+          (item) => item.info.role === "assistant" && item.info.summary,
+        )
+        expect(summary?.info.role).toBe("assistant")
+        if (summary?.info.role === "assistant") {
+          expect(summary.info.variant).toBe(variant)
+        }
+      }).pipe(
+        withCompaction({
+          provider: ProviderTest.fake({ model: modelWithVariant(variant) }),
+          config: cfgAgent({ compaction: { variant } }),
+        }),
+      )
+    },
+    { git: true },
   )
 })
 
