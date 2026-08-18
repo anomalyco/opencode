@@ -44,10 +44,39 @@ type CachedApp = BackendApp & { readonly dispose: () => Promise<void> }
 
 const appCache: Partial<Record<string, CachedApp>> = {}
 
-export async function disposeApps() {
-  const apps = Object.values(appCache)
-  for (const key of Object.keys(appCache)) delete appCache[key]
-  await Promise.all(apps.flatMap((app) => (app === undefined ? [] : [app.dispose()])))
+// Pass a timeout ONLY for the run's final teardown. A handler that never settles its
+// dispose() would strand the finalizer, leaving the process alive forever after printing a
+// clean summary. Between scenarios the wait must stay unbounded: abandoning a live handler
+// there would let the instance and database reset run underneath it and leak state into the
+// next scenario.
+export async function disposeApps(options: { timeout?: number } = {}) {
+  const entries = Object.entries(appCache)
+  for (const [key] of entries) delete appCache[key]
+  const pending = entries.flatMap(([key, app]) =>
+    app === undefined ? [] : [[key || "<anonymous>", Promise.resolve(app.dispose())] as const],
+  )
+  const timeout = options.timeout
+  if (timeout === undefined) {
+    await Promise.all(pending.map(([, disposed]) => disposed))
+    return
+  }
+  const stalled = (
+    await Promise.all(
+      pending.map(([key, disposed]) =>
+        Promise.race([
+          disposed.then(
+            () => undefined,
+            (error: unknown) => `${key} (${error})`,
+          ),
+          new Promise<string>((resolve) => {
+            setTimeout(() => resolve(key), timeout).unref()
+          }),
+        ]),
+      ),
+    )
+  ).filter((entry): entry is string => entry !== undefined)
+  if (stalled.length > 0)
+    console.error(`warning: ${stalled.length} backend app(s) failed to dispose within ${timeout}ms: ${stalled.join(", ")}`)
 }
 
 function app(modules: Runtime, options: CallOptions) {

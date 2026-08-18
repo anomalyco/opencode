@@ -127,8 +127,8 @@ export const Definitions = {
   provider_connect: keybind("none", "Connect provider"),
   console_org_switch: keybind("none", "Switch console organization"),
   agent_list: keybind("<leader>a", "List agents"),
-  agent_cycle: keybind("tab", "Next agent"),
-  agent_cycle_reverse: keybind("shift+tab", "Previous agent"),
+  agent_cycle: keybind("tab", "Next mode or agent"),
+  agent_cycle_reverse: keybind("shift+tab", "Previous mode or agent"),
   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
   variant_list: keybind("none", "List model variants"),
 

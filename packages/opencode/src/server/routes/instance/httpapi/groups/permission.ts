@@ -1,5 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "@/permission"
+import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { PermissionNotFoundError } from "../errors"
@@ -13,6 +14,7 @@ const ReplyPayload = Schema.Struct({
   reply: PermissionV1.Reply,
   message: Schema.optional(Schema.String),
 })
+const OverlayPayload = Schema.Struct({ enabled: Schema.Boolean })
 
 export const PermissionApi = HttpApi.make("permission")
   .add(
@@ -39,6 +41,32 @@ export const PermissionApi = HttpApi.make("permission")
             identifier: "permission.reply",
             summary: "Respond to permission request",
             description: "Approve or deny a permission request from the AI assistant.",
+          }),
+        ),
+        HttpApiEndpoint.post("classify", `${root}/:requestID/classify`, {
+          params: { requestID: PermissionV1.ID },
+          query: WorkspaceRoutingQuery,
+          success: described(PermissionV1.ClassificationResult, "Permission classification result"),
+          error: [HttpApiError.BadRequest, PermissionNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "permission.classify",
+            summary: "Classify a permission request",
+            description: "Use the configured fast model to decide whether a pending permission can be auto-approved.",
+          }),
+        ),
+        HttpApiEndpoint.post("overlay", `${root}/session/:sessionID/overlay`, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: OverlayPayload,
+          success: described(Schema.Boolean, "Whether the review overlay is now active for the session"),
+          error: [HttpApiError.BadRequest],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "permission.overlay",
+            summary: "Set the review permission overlay",
+            description:
+              "Enable or disable the in-memory review overlay for a session. While active, consequential permissions that would otherwise be allowed are turned into prompts instead. Denials are never affected, reads are never affected, and the overlay is never persisted.",
           }),
         ),
       )

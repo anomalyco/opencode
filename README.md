@@ -112,6 +112,25 @@ This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
 
+### Auto-approve (beta)
+
+Auto-approve is an opt-in TUI mode that has a fast model review each consequential action before it runs. Safe, clearly authorized actions run without interrupting you, while anything unsafe, ambiguous, or unauthorized falls back to the normal approval prompt.
+
+It is disabled by default. Enable it with the beta flag, then press `Tab` to cycle to **Auto-approve**:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "auto_approve": true
+  }
+}
+```
+
+`deny` rules are always enforced, read-only actions are never sent to a model, actions inside subagents are never auto-approved, and any error or timeout falls back to asking you.
+
+Learn more about [auto-approve](https://opencode.ai/docs/permissions#auto-approve-mode).
+
 ### Documentation
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).

@@ -295,6 +295,7 @@ describe("tool.task", () => {
         always: ["*"],
         metadata: {
           description: "inspect bug",
+          prompt: "look into the cache key path",
           subagent_type: "general",
         },
       })

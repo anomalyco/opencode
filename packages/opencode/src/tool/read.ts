@@ -256,14 +256,17 @@ export const ReadTool = Tool.define<
         permission: "read",
         patterns: [path.relative(instance.worktree, filepath)],
         always: ["*"],
-        metadata: {},
+        metadata: {
+          offset: params.offset || 1,
+          limit: params.limit || DEFAULT_READ_LIMIT,
+        },
       })
 
       if (!stat) return yield* miss(filepath)
 
       if (stat.type === "Directory") {
         const items = yield* list(filepath)
-        const limit = params.limit ?? DEFAULT_READ_LIMIT
+        const limit = params.limit || DEFAULT_READ_LIMIT
         const offset = params.offset || 1
         const start = offset - 1
         const sliced = items.slice(start, start + limit)
@@ -328,7 +331,7 @@ export const ReadTool = Tool.define<
         return yield* Effect.fail(new Error(`Cannot read binary file: ${filepath}`))
       }
 
-      const file = yield* lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset || 1 })
+      const file = yield* lines(filepath, { limit: params.limit || DEFAULT_READ_LIMIT, offset: params.offset || 1 })
       if (file.count < file.offset && !(file.count === 0 && file.offset === 1)) {
         return yield* Effect.fail(
           new Error(`Offset ${file.offset} is out of range for this file (${file.count} lines)`),
