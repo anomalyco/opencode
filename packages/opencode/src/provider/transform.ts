@@ -1,4 +1,4 @@
-import type { ModelMessage, ToolResultPart } from "ai"
+import type { AssistantModelMessage, ModelMessage, ToolResultPart } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
@@ -252,6 +252,7 @@ function normalizeMessages(
   }
 
   const modelID = model.api.id.toLowerCase()
+  const isDeepSeek = modelID.includes("deepseek")
   if (
     model.providerID === "mistral" ||
     ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
@@ -302,7 +303,7 @@ function normalizeMessages(
   }
 
   // Deepseek requires all assistant messages to have reasoning on them
-  if (model.api.id.toLowerCase().includes("deepseek")) {
+  if (isDeepSeek) {
     msgs = msgs.map((msg) => {
       if (msg.role !== "assistant") return msg
       if (Array.isArray(msg.content)) {
@@ -319,26 +320,27 @@ function normalizeMessages(
     })
   }
 
-  if (
-    typeof model.capabilities.interleaved === "object" &&
-    model.capabilities.interleaved.field &&
-    model.api.npm !== "@openrouter/ai-sdk-provider"
-  ) {
+  const interleaved = iife(() => {
+    if (
+      typeof model.capabilities.interleaved !== "object" ||
+      !model.capabilities.interleaved.field ||
+      model.api.npm === "@openrouter/ai-sdk-provider"
+    )
+      return msgs
     const field = model.capabilities.interleaved.field
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
-        const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-        const reasoningText = reasoningParts.map((part: any) => part.text).join("")
-
-        // Filter out reasoning parts from content
-        const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+        const reasoningText = msg.content
+          .filter((part) => part.type === "reasoning")
+          .map((part) => part.text)
+          .join("")
 
         // Include reasoning_content | reasoning_details directly on the message for all assistant messages.
         // Always set the field even when empty — some providers (e.g. DeepSeek) may return empty
         // reasoning_content which still needs to be sent back in subsequent requests.
         return {
           ...msg,
-          content: filteredContent,
+          content: msg.content.filter((part) => part.type !== "reasoning"),
           providerOptions: {
             ...msg.providerOptions,
             openaiCompatible: {
@@ -351,9 +353,24 @@ function normalizeMessages(
 
       return msg
     })
-  }
+  })
 
-  return msgs
+  if (!isDeepSeek) return interleaved
+  return interleaved.map((msg) =>
+    msg.role === "assistant" ? { ...msg, content: ensureDeepSeekAssistantContent(msg.content) } : msg,
+  )
+}
+
+// Moving reasoning out of `content` can leave an assistant message with nothing
+// left, which DeepSeek rejects with "all messages must have non-empty content".
+// Tool calls already count as content, and on the Anthropic wire format a
+// `tool_use` block must be the last one in the message — appending a text part
+// after it is rejected — so only backfill when there is nothing else to send.
+function ensureDeepSeekAssistantContent(content: AssistantModelMessage["content"]) {
+  if (typeof content === "string") return content || " "
+  if (content.some((part) => (part.type === "text" && part.text.length > 0) || part.type === "tool-call"))
+    return content
+  return [...content, { type: "text" as const, text: " " }]
 }
 
 function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {

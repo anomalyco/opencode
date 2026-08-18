@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
+import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { LLMRequestPrep } from "@/session/llm/request"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { jsonSchema } from "ai"
+import { jsonSchema, type ModelMessage } from "ai"
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -1963,6 +1964,154 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       { type: "text", text: "Answer" },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+
+  const deepseekModel = {
+    id: ModelV2.ID.make("deepseek/deepseek-v4-pro"),
+    providerID: ProviderV2.ID.make("deepseek"),
+    api: {
+      id: "deepseek-v4-pro",
+      url: "https://api.deepseek.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "DeepSeek V4 Pro",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: {
+        field: "reasoning_content",
+      },
+    },
+    cost: {
+      input: 0.435,
+      output: 0.87,
+      cache: { read: 0.001, write: 0.002 },
+    },
+    limit: {
+      context: 1_000_000,
+      output: 384_000,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2025-06-01",
+  } satisfies Provider.Model
+
+  test("preserves reasoning-only assistant messages with non-empty content", () => {
+    expect(
+      ProviderTransform.message(
+        [
+          { role: "user", content: "Hello" },
+          {
+            role: "assistant",
+            content: [{ type: "reasoning", text: "Let me think..." }],
+          },
+          { role: "user", content: "World" },
+        ] satisfies ModelMessage[],
+        deepseekModel,
+        {},
+      ),
+    ).toEqual([
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: " " }],
+        providerOptions: {
+          openaiCompatible: {
+            reasoning_content: "Let me think...",
+          },
+        },
+      },
+      { role: "user", content: "World" },
+    ])
+  })
+
+  test("preserves empty assistant messages with non-empty content", () => {
+    expect(
+      ProviderTransform.message(
+        [
+          { role: "user", content: "Hello" },
+          { role: "assistant", content: "" },
+          { role: "user", content: "World" },
+        ] satisfies ModelMessage[],
+        deepseekModel,
+        {},
+      ),
+    ).toEqual([
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: " " }],
+        providerOptions: {
+          openaiCompatible: {
+            reasoning_content: "",
+          },
+        },
+      },
+      { role: "user", content: "World" },
+    ])
+  })
+
+  // A `tool_use` block must be the last block on the Anthropic wire format, so
+  // no filler text may be appended after a tool call.
+  test("leaves tool-call assistant messages alone", () => {
+    expect(
+      ProviderTransform.message(
+        [
+          {
+            role: "assistant",
+            content: [
+              { type: "reasoning", text: "Let me think about this..." },
+              { type: "tool-call", toolCallId: "call_1", toolName: "bash", input: { command: "ls" } },
+            ],
+          },
+        ] satisfies ModelMessage[],
+        deepseekModel,
+        {},
+      ),
+    ).toEqual([
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "call_1", toolName: "bash", input: { command: "ls" } }],
+        providerOptions: {
+          openaiCompatible: {
+            reasoning_content: "Let me think about this...",
+          },
+        },
+      },
+    ])
+  })
+
+  test("preserves assistant message with text content for DeepSeek after reasoning extraction", () => {
+    expect(
+      ProviderTransform.message(
+        [
+          {
+            role: "assistant",
+            content: [
+              { type: "reasoning", text: "Let me think..." },
+              { type: "text", text: "Here is the answer" },
+            ],
+          },
+        ] satisfies ModelMessage[],
+        deepseekModel,
+        {},
+      ),
+    ).toEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Here is the answer" }],
+        providerOptions: {
+          openaiCompatible: {
+            reasoning_content: "Let me think...",
+          },
+        },
+      },
+    ])
   })
 })
 
