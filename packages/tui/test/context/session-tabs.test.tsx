@@ -141,7 +141,15 @@ async function renderSessionTabs(
     locations,
     vcsLocations,
     state,
-    emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
+    emit: (event: OpenCodeEvent) =>
+      new Promise<void>((resolve) => {
+        const off = client.event.listen((delivered) => {
+          if (delivered.details.id !== event.id) return
+          off()
+          resolve()
+        })
+        events.emit({ ...event, location: { directory } })
+      }),
     focus: () => app.renderer.emit("focus"),
     blur: () => app.renderer.emit("blur"),
     flush: () => storage.flush(),
@@ -258,43 +266,31 @@ test("keeps scroll anchors for open session tabs", async () => {
 })
 
 test("only the foreground TUI mutates unread state", async () => {
-  await using temporary = await tmpdir()
   let foreground: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
   let background: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
 
   try {
-    foreground = await renderSessionTabs("first", { state: temporary.path, persisted: ["first", "second"] })
-    background = await renderSessionTabs("second", { state: temporary.path })
+    foreground = await renderSessionTabs("first", { persisted: ["first", "second"] })
+    background = await renderSessionTabs("first", { persisted: ["first", "second"] })
     foreground.focus()
     background.blur()
-    await wait(() => foreground?.tabs.tabs().length === 2 && background?.tabs.tabs().length === 2, 2_000, "shared tabs")
 
     const firstDone = executionSucceeded("first")
-    foreground.emit(firstDone)
-    background.emit(firstDone)
+    await Promise.all([foreground.emit(firstDone), background.emit(firstDone)])
     await Promise.all([foreground.flush(), background.flush()])
     expect(foreground.tabs.status("first").unread).toBeUndefined()
     expect(background.tabs.status("first").unread).toBeUndefined()
 
     const secondDone = executionSucceeded("second")
-    foreground.emit(secondDone)
-    background.emit(secondDone)
-    await wait(
-      () =>
-        foreground?.tabs.status("second").unread === "activity" &&
-        background?.tabs.status("second").unread === "activity",
-      10_000,
-      "shared unread activity",
-    )
+    await Promise.all([foreground.emit(secondDone), background.emit(secondDone)])
+    await Promise.all([foreground.flush(), background.flush()])
+    expect(foreground.tabs.status("second").unread).toBe("activity")
+    expect(background.tabs.status("second").unread).toBeUndefined()
 
     foreground.tabs.select("second")
-    await wait(
-      () =>
-        foreground?.tabs.status("second").unread === undefined &&
-        background?.tabs.status("second").unread === undefined,
-      10_000,
-      "shared unread clearing",
-    )
+    await foreground.flush()
+    expect(foreground.tabs.status("second").unread).toBeUndefined()
+    expect(background.tabs.status("second").unread).toBeUndefined()
   } finally {
     if (foreground) await foreground.destroy()
     if (background) await background.destroy()
