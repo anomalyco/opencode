@@ -971,7 +971,9 @@ describe("V1Migration database workflow", () => {
         id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL,
         time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL
       );
-      INSERT INTO project VALUES ('next-project', '/tmp/next', 'git', 'Source project', NULL, 1, 2, NULL, '[]');
+      INSERT INTO project VALUES (
+        'next-project', '/tmp/next', 'git', 'Source project', 'https://example.com/icon.png', 1, 2, NULL, '[]'
+      );
       INSERT INTO session (
         id, project_id, slug, directory, title, version, time_created, time_updated
       ) VALUES ('ses_next', 'next-project', 'next', '/tmp/next', 'Imported', '2', 10, 20);
@@ -987,9 +989,14 @@ describe("V1Migration database workflow", () => {
         ).toEqual({ fork_boundary: null, time_suspended: null })
         expect(
           yield* database.db.get(
-            sql`SELECT icon_url_override, icon_color, commands FROM project WHERE id = 'next-project'`,
+            sql`SELECT icon_url, icon_url_override, icon_color, commands FROM project WHERE id = 'next-project'`,
           ),
-        ).toEqual({ icon_url_override: null, icon_color: null, commands: null })
+        ).toEqual({
+          icon_url: "https://example.com/icon.png",
+          icon_url_override: "https://example.com/icon.png",
+          icon_color: null,
+          commands: null,
+        })
       }),
     )
   })
