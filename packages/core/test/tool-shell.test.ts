@@ -29,10 +29,12 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Permission } from "@opencode-ai/core/permission"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Shell } from "@opencode-ai/core/shell"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
+import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
 import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { Tool } from "@opencode-ai/core/tool"
@@ -195,7 +197,10 @@ const progressOverflowCommand = (bytes: number, release: string) =>
     ? `[Console]::Out.Write(('x' * ${bytes})); while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }`
     : `head -c ${bytes} /dev/zero | tr '\\0' 'x'; while [ ! -e '${release}' ]; do sleep 0.05; done`
 
-const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface) => Effect.Effect<A, E, R>) =>
+const withSession = <A, E, R>(
+  directory: string,
+  body: (registry: Tool.Interface, shell: Shell.Interface, plugins: Plugin.Interface) => Effect.Effect<A, E, R>,
+) =>
   Effect.gen(function* () {
     const sessions = yield* Session.Service
     const location = Location.Ref.make({ directory: AbsolutePath.make(directory) })
@@ -210,11 +215,72 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
     return yield* Effect.gen(function* () {
       yield* (yield* PluginSupervisor.Service).flush
       const registry = yield* Tool.Service
-      return yield* body(registry)
+      const shell = yield* Shell.Service
+      const plugins = yield* Plugin.Service
+      return yield* body(registry, shell, plugins)
     }).pipe(Effect.provide(locationLayer), Effect.ensuring(locations.invalidate(location)))
   })
 
 describe("ShellTool", () => {
+  it.live("attributes agent shell invocation with its session ID", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry, _shell, plugins) =>
+          Effect.gen(function* () {
+            const observed = yield* Deferred.make<ShellCreateBefore>()
+            const tools = yield* registry.snapshot()
+            yield* plugins.activate([
+              {
+                id: "shell-attribution-test",
+                version: "1",
+                effect: (host) =>
+                  host.shell.hook("create.before", (event) => Deferred.succeed(observed, event)).pipe(Effect.asVoid),
+              },
+            ])
+
+            const execution = yield* tools
+              .execute(call({ command: idleCommand }, "call-attribution"))
+              .pipe(Effect.forkScoped({ startImmediately: true }))
+
+            expect(yield* Deferred.await(observed)).toMatchObject({ sessionID })
+            yield* Fiber.interrupt(execution)
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  it.live("omits attribution for direct shell creation", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (_registry, shell, plugins) =>
+          Effect.gen(function* () {
+            const observed = yield* Deferred.make<ShellCreateBefore>()
+            yield* plugins.activate([
+              {
+                id: "direct-shell-attribution-test",
+                version: "1",
+                effect: (host) =>
+                  host.shell.hook("create.before", (event) => Deferred.succeed(observed, event)).pipe(Effect.asVoid),
+              },
+            ])
+
+            const info = yield* shell.create({ command: helloCommand, timeout: 5_000 })
+            yield* shell.wait(info.id)
+
+            expect(yield* Deferred.await(observed)).toMatchObject({ sessionID: undefined })
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   productionIt.live(
     "registers and returns real successful output from the active Location",
     () =>

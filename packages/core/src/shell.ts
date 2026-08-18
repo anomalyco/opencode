@@ -1,10 +1,11 @@
 export * as Shell from "./shell.js"
 
 import path from "path"
-import { Context, Deferred, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Context, Deferred, Duration, Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
+import { Session } from "@opencode-ai/schema/session"
 import { AppProcess } from "@opencode-ai/util/process"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Config } from "./config.js"
@@ -202,6 +203,7 @@ export const layer = (options?: ShellSelect.Options) =>
             TERM: "xterm-256color",
             OPENCODE_TERMINAL: "1",
           },
+          sessionID: Option.getOrUndefined(Schema.decodeUnknownOption(Session.ID)(input.metadata?.sessionID)),
         }
         yield* hooks.trigger("shell", "create.before", invocation)
         if (before) yield* before(invocation)
