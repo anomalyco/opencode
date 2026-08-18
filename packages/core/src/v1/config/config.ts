@@ -125,6 +125,17 @@ export const Info = Schema.Struct({
     description: "Additional instruction files or patterns to include",
   }),
   layout: Schema.optional(ConfigLayoutV1.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
+  clipboard: Schema.optional(
+    Schema.Struct({
+      linux: Schema.optional(
+        Schema.Struct({
+          enablePrimaryCopy: Schema.optional(Schema.Boolean).annotate({
+            description: "Copy to primary clipboard in addition to regular clipboard on Linux (Wayland/X11)",
+          }),
+        }),
+      ),
+    }),
+  ).annotate({ description: "Clipboard configuration" }),
   permission: Schema.optional(ConfigPermissionV1.Info),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   attachment: Schema.optional(ConfigAttachmentV1.Info).annotate({
