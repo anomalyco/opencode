@@ -20,6 +20,43 @@ export const DEFAULT_USABLE_CONTEXT = 32_000
 const learnedLimits = new Map<string, number>()
 const warnedSessions = new Set<string>()
 
+// W6-4: the most recent request's budget arithmetic, per session.
+//
+// Proactive compaction is incremental: it triggers once accumulated history
+// crosses `usable`. That leaves one gap it cannot close — a single tool result
+// large enough to take a request from comfortably under budget to over the
+// window in one step never crosses the trigger on the way up, and the provider
+// rejects the whole request. Observed on a 96 KB file read: 57,632 tokens
+// against a 56,320 window, from a turn that was well inside budget the step
+// before.
+//
+// Closing it needs the headroom figure at the moment a tool runs, but the
+// arithmetic only exists where the fully composed request does — in request
+// preparation, which has already happened by then. So preparation publishes
+// what it computed and tools read the freshest snapshot.
+export type Headroom = {
+  usable: number
+  estimated: number
+  // Tokens a tool result may add before the next request exceeds the window.
+  // Never negative: a turn already over budget reports zero, not a deficit.
+  headroom: number
+}
+
+const headrooms = new Map<string, Headroom>()
+
+export function recordHeadroom(sessionID: string, input: { usable: number; estimated: number }) {
+  if (input.usable <= 0) return
+  headrooms.set(sessionID, {
+    usable: input.usable,
+    estimated: input.estimated,
+    headroom: Math.max(0, input.usable - input.estimated),
+  })
+}
+
+export function headroom(sessionID: string): Headroom | undefined {
+  return headrooms.get(sessionID)
+}
+
 // Records the estimated input size of a request the provider rejected for
 // context overflow. Used as an upper bound on the real window for models that
 // report no context limit; only the smallest observation is kept.

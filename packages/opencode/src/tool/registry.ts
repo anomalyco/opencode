@@ -54,13 +54,76 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
+import { ToolJsonSchema } from "./json-schema"
 import type { SessionTier } from "@/session/tier"
 
-// Core roster for minimal-tier models: everything else (task, websearch,
-// webfetch, skill, question, apply_patch, lsp, plan_exit, custom tools) is
+// Core roster for minimal-tier models: the heavyweight built-ins (task,
+// websearch, webfetch, skill, question, apply_patch, lsp, plan_exit) are
 // dropped by default. `invalid` stays because the LLM layer routes malformed
 // tool calls to it and it is never advertised to the model.
+//
+// The narrow default is deliberate rather than incidental. Benchmarking a 4B
+// local model over 116 agent tasks showed it is protective: adding `task` back
+// wholesale cost a research-task category 0.868 -> 0.396, because the model
+// delegated work it should have done directly and burned its step budget. A
+// prompt-level fix was tried and did worse (0.354) — a 4B model will not
+// reliably honour a negative rule that contradicts a positive one elsewhere in
+// the same prompt. So the roster is enforced structurally and widened only by
+// explicit configuration.
 const MINIMAL_TIER_TOOLS = new Set(["bash", "read", "write", "edit", "glob", "grep", "todowrite", "invalid"])
+
+// `invalid` is never advertised to the model but is the LLM layer's landing
+// slot for malformed tool calls, so `exclude` must not be able to remove it.
+const MINIMAL_TIER_REQUIRED = new Set(["invalid"])
+
+export type TierTools = {
+  include?: readonly string[]
+  exclude?: readonly string[]
+}
+
+// Builds the minimal-tier membership test.
+//
+// Custom tools — those contributed by plugins or a `tool/` directory — are
+// exempt by default. The tier cut exists to trim opencode's own built-in
+// surface for a small context window; an integrator who registered a tool has
+// already made a deliberate decision about it, and silently dropping it turns
+// a capability the host advertises into a no-op. `exclude` still wins, so an
+// over-large custom roster remains trimmable.
+export function minimalRosterFilter(input?: {
+  tierTools?: TierTools
+  customIDs?: ReadonlySet<string>
+}): (id: string) => boolean {
+  const include = input?.tierTools?.include
+  const exclude = input?.tierTools?.exclude
+  const custom = input?.customIDs
+  if (!include?.length && !exclude?.length && !custom?.size) return (id) => MINIMAL_TIER_TOOLS.has(id)
+  const includeSet = include?.length ? new Set(include) : undefined
+  const excludeSet = exclude?.length ? new Set(exclude) : undefined
+  return (id) => {
+    if (excludeSet?.has(id) && !MINIMAL_TIER_REQUIRED.has(id)) return false
+    return MINIMAL_TIER_TOOLS.has(id) || (includeSet?.has(id) ?? false) || (custom?.has(id) ?? false)
+  }
+}
+
+// W6-2: republish the permitted-subagent list as an enum on `subagent_type`.
+// Returns the schema untouched when there is nothing to constrain — an empty
+// enum is invalid JSON Schema and would reject every call, so an agent with no
+// permitted subagents keeps the free-form field and fails at permission time
+// with a message that explains itself.
+export function withSubagentEnum(schema: JSONSchema7, names: readonly string[]): JSONSchema7 {
+  if (names.length === 0) return schema
+  const properties = schema.properties
+  if (!properties || typeof properties !== "object") return schema
+  const field = properties["subagent_type"]
+  if (!field || typeof field !== "object") return schema
+  return {
+    ...schema,
+    properties: {
+      ...properties,
+      subagent_type: { ...field, enum: [...names] },
+    },
+  }
+}
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return (
@@ -91,6 +154,7 @@ export interface Interface {
     agent: Agent.Info
     permission?: PermissionV1.Ruleset
     tier?: SessionTier.ModelTier
+    tierTools?: TierTools
   }) => Effect.Effect<Tool.Def[]>
 }
 
@@ -270,12 +334,19 @@ const layer = Layer.effect(
       return (yield* all()).map((tool) => tool.id)
     })
 
-    const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (agent: Agent.Info) {
+    // The subagents this agent is actually permitted to delegate to. Single
+    // source of truth for both the task tool's description and its schema
+    // (W6-2) so the two can never disagree.
+    const permittedSubagents = Effect.fn("ToolRegistry.permittedSubagents")(function* (agent: Agent.Info) {
       const items = (yield* agents.list()).filter((item) => item.mode !== "primary")
       const filtered = items.filter(
         (item) => Permission.evaluate("task", item.name, agent.permission).action !== "deny",
       )
-      const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
+      return filtered.toSorted((a, b) => a.name.localeCompare(b.name))
+    })
+
+    const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (agent: Agent.Info) {
+      const list = yield* permittedSubagents(agent)
       const description = list
         .map(
           (item) =>
@@ -297,8 +368,15 @@ const layer = Layer.effect(
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+      const inRoster =
+        input.tier === "minimal"
+          ? minimalRosterFilter({
+              tierTools: input.tierTools,
+              customIDs: new Set((yield* InstanceState.get(state)).custom.map((tool) => tool.id)),
+            })
+          : undefined
       const filtered = (yield* all()).filter((tool) => {
-        if (input.tier === "minimal") return MINIMAL_TIER_TOOLS.has(tool.id)
+        if (inRoster) return inRoster(tool.id)
 
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
@@ -331,10 +409,24 @@ const layer = Layer.effect(
             jsonSchema: tool.jsonSchema,
           }
           yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
-          const jsonSchema =
+          const baseJsonSchema =
             output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
               ? output.jsonSchema
               : undefined
+          // W6-2: enforce, don't instruct. Listing the permitted subagents only
+          // in the description leaves `subagent_type` a free-form string, and a
+          // small model will happily invent one or reach for an agent it is not
+          // permitted to use — a class of failure no prose can close. Publishing
+          // the same list as a schema enum makes it unrepresentable: constrained
+          // decoders reject it at generation time, and everything else fails
+          // argument validation with a message naming the valid values.
+          const jsonSchema =
+            tool.id === TaskTool.id
+              ? withSubagentEnum(
+                  baseJsonSchema ?? ToolJsonSchema.fromTool({ ...tool, ...output } as Tool.Def),
+                  (yield* permittedSubagents(input.agent)).map((item) => item.name),
+                )
+              : baseJsonSchema
           return {
             id: tool.id,
             description: [

@@ -3,7 +3,7 @@ import type { Auth } from "@/auth"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { DoomLoop } from "../doom-loop"
-import { usable } from "../overflow"
+import { recordHeadroom, usable } from "../overflow"
 import { Token } from "@/util/token"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceState } from "@/effect/instance-state"
@@ -222,6 +222,9 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   )
   const baselineTokens = Token.estimate(JSON.stringify(system)) + toolsTokens
   const estimated = historyTokens + baselineTokens
+  // W6-4: publish this request's arithmetic so tools running after it can size
+  // their output against real remaining headroom instead of the whole window.
+  if (input.sessionID) recordHeadroom(input.sessionID, { usable: usableWindow, estimated })
   const outputClamp = (() => {
     if (usableWindow <= 0 || params.maxOutputTokens === undefined) return undefined
     const granted = Math.min(params.maxOutputTokens, Math.max(256, usableWindow - estimated))

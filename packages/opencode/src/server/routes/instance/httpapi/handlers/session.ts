@@ -167,6 +167,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         agent,
         permission: info.permission,
         tier,
+        tierTools: model.tier_tools,
       })
       const disabled = Permission.disabled(
         toolDefs.map((item) => item.id),

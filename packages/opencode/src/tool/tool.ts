@@ -5,6 +5,7 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { MessageV2 } from "../session/message-v2"
 import type { Permission } from "../permission"
 import type { SessionID, MessageID } from "../session/schema"
+import type * as SessionOverflow from "../session/overflow"
 import * as Truncate from "./truncate"
 import { Agent } from "@/agent/agent"
 
@@ -41,6 +42,12 @@ export type Context<M extends Metadata = Metadata> = {
   callID?: string
   extra?: { [key: string]: unknown }
   messages: SessionV1.WithParts[]
+  // W6-4: remaining context headroom for this session, as of the most recently
+  // prepared request. A function rather than a value because a tool may run
+  // well after its context was built, and undefined when no request has been
+  // prepared yet (the model reports no usable window, or this is the first
+  // turn) — callers must treat "unknown" as "do not guess", not as "zero".
+  budget?(): SessionOverflow.Headroom | undefined
   metadata(input: { title?: string; metadata?: M }): Effect.Effect<void>
   ask(input: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
 }

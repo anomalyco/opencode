@@ -113,7 +113,22 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
+// Distribution name for a target, e.g. "opencode-linux-x64-baseline". Also the
+// dist/ directory name and (with `bun` swapped for the package name) the Bun
+// compile target, so `--target` accepts exactly what the build prints.
+const targetName = (item: (typeof allTargets)[number]) =>
+  [
+    pkg.name,
+    // changing to win32 flags npm for some reason
+    item.os === "win32" ? "windows" : item.os,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+
+const selectedTargets = singleFlag
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) {
         return false
@@ -134,6 +149,23 @@ const targets = singleFlag
     })
   : allTargets
 
+// `--target <name>` builds exactly one target regardless of host platform, so a
+// Linux container binary can be produced from a Windows box without a full
+// 12-target run (`--single` is host-only and cannot express that).
+const targetFlag = process.argv.indexOf("--target")
+const onlyTarget = targetFlag === -1 ? undefined : process.argv[targetFlag + 1]
+if (targetFlag !== -1 && !onlyTarget) {
+  console.error("--target requires a target name, e.g. --target opencode-linux-x64-baseline")
+  process.exit(1)
+}
+
+const targets = onlyTarget ? allTargets.filter((item) => targetName(item) === onlyTarget) : selectedTargets
+if (onlyTarget && targets.length === 0) {
+  console.error(`--target ${onlyTarget} matched no target. Available targets:`)
+  for (const item of allTargets) console.error(`  ${targetName(item)}`)
+  process.exit(1)
+}
+
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
@@ -143,16 +175,7 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
 }
 for (const item of targets) {
-  const name = [
-    pkg.name,
-    // changing to win32 flags npm for some reason
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi === undefined ? undefined : item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
+  const name = targetName(item)
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 

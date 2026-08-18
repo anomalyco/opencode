@@ -1041,6 +1041,15 @@ export const Model = Schema.Struct({
   name: Schema.String,
   family: optional(Schema.String),
   tier: optional(Schema.Literals(["minimal", "default"])),
+  // Per-model adjustment of the minimal tier's tool roster. Lets an embedding
+  // product declare which of its own registered tools must survive the cut
+  // instead of the engine guessing; see MINIMAL_TIER_TOOLS in tool/registry.ts.
+  tier_tools: optional(
+    Schema.Struct({
+      include: optional(Schema.mutable(Schema.Array(Schema.String))),
+      exclude: optional(Schema.mutable(Schema.Array(Schema.String))),
+    }),
+  ),
   prompt: optional(Schema.String),
   sampling: optional(
     Schema.Struct({
@@ -1517,6 +1526,7 @@ const layer = Layer.effect(
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
               tier: model.tier ?? existingModel?.tier,
+              tier_tools: model.tier_tools ?? existingModel?.tier_tools,
               prompt: model.prompt ?? existingModel?.prompt,
               sampling: model.sampling ?? existingModel?.sampling,
               release_date: model.release_date ?? existingModel?.release_date ?? "",

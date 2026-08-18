@@ -52,6 +52,11 @@ export const Info = Schema.Struct({
   prompt: Schema.optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Unknown),
   steps: Schema.optional(Schema.Finite),
+  // W6-3: token/wall-clock companions to `steps`. A turn can respect the step
+  // limit while still running away — a single step that reads a large file can
+  // cost more than twenty small ones — so the loop bounds all three.
+  turnTokens: Schema.optional(Schema.Finite),
+  turnSeconds: Schema.optional(Schema.Finite),
 }).annotate({ identifier: "Agent" })
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
 
@@ -289,6 +294,8 @@ const layer = Layer.effect(
           item.hidden = value.hidden ?? item.hidden
           item.name = value.name ?? item.name
           item.steps = value.steps ?? item.steps
+          item.turnTokens = value.turn_tokens ?? item.turnTokens
+          item.turnSeconds = value.turn_seconds ?? item.turnSeconds
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }

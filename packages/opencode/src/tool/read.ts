@@ -9,6 +9,23 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { Token } from "@/util/token"
+
+// W6-4: never let one read be the step that overflows the window.
+//
+// A read is the tool most able to add more context than a turn can afford, and
+// the byte cap alone does not prevent it: 50 KB of dense text is a large share
+// of a small model's usable window, and whether that fits depends on how much
+// history is already there. Proactive compaction cannot help, because the jump
+// from under-budget to over-window happens inside a single step and never
+// crosses the trigger on the way up.
+//
+// So the read is sized against live remaining headroom rather than the whole
+// window. Refusing with the arithmetic and a concrete narrower call is better
+// than a provider-level overflow that kills the turn: the model can act on it,
+// and the guidance is a fact about this file, not a rule it has to remember.
+const HEADROOM_SAFETY = 0.8
+const MIN_GUIDED_LINES = 50
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -333,6 +350,29 @@ export const ReadTool = Tool.define<
         return yield* Effect.fail(
           new Error(`Offset ${file.offset} is out of range for this file (${file.count} lines)`),
         )
+      }
+
+      const budget = ctx.budget?.()
+      if (budget && file.raw.length > 0) {
+        const affordable = Math.floor(budget.headroom * HEADROOM_SAFETY)
+        const cost = Token.estimate(file.raw.join("\n"))
+        if (cost > affordable) {
+          // Scale the suggestion by measured cost-per-line for this file rather
+          // than a global guess, so the retry actually fits.
+          const perLine = Math.max(1, Math.ceil(cost / file.raw.length))
+          const fits = Math.max(MIN_GUIDED_LINES, Math.floor(affordable / perLine))
+          return yield* Effect.fail(
+            new Error(
+              [
+                `Reading lines ${file.offset}-${file.offset + file.raw.length - 1} of ${filepath} would add about ${cost} tokens,`,
+                `but only about ${affordable} tokens of context remain in this session (${budget.headroom} headroom of ${budget.usable} usable).`,
+                `Reading it would exceed the model's context window and end the turn.`,
+                ``,
+                `Read a smaller slice instead, for example offset=${file.offset} limit=${fits}, or use grep to find the lines you need first.`,
+              ].join("\n"),
+            ),
+          )
+        }
       }
 
       let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")

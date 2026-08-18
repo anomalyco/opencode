@@ -67,6 +67,15 @@ export const Model = Schema.Struct({
         "Capability tier for this model. Overrides the built-in size heuristic; frontier family models resolve their vendor behavior when unset.",
     }),
   ),
+  tier_tools: Schema.optional(
+    Schema.Struct({
+      include: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+      exclude: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+    }).annotate({
+      description:
+        "Adjust the minimal tier's tool roster for this model. `include` keeps additional tool ids through the tier cut (use it for host-integration tools registered by an embedding product); `exclude` drops ids from the built-in roster. Ignored on every other tier.",
+    }),
+  ),
   prompt: Schema.optional(
     Schema.String.annotate({
       description:

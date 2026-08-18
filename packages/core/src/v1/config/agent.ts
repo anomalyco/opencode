@@ -34,6 +34,14 @@ const AgentSchema = Schema.StructWithRest(
     steps: Schema.optional(PositiveInt).annotate({
       description: "Maximum number of agentic iterations before forcing text-only response",
     }),
+    turn_tokens: Schema.optional(PositiveInt).annotate({
+      description:
+        "Maximum tokens this agent may consume in a single turn before being forced to a text-only response. Complements 'steps': a turn can stay under the step limit while burning an unbounded number of tokens on large tool output.",
+    }),
+    turn_seconds: Schema.optional(PositiveInt).annotate({
+      description:
+        "Maximum wall-clock seconds this agent may spend in a single turn before being forced to a text-only response.",
+    }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
     permission: Schema.optional(ConfigPermissionV1.Info),
   }),
