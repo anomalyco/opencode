@@ -505,6 +505,31 @@ it.instance("handles environment variable substitution", () =>
   ),
 )
 
+it.instance("escapes environment variables before parsing config", () =>
+  withProcessEnv(
+    "JSON_ENV_VAR",
+    'C:\\Users\\me\\AppData\\Local\\Tool\t"quoted"\nnext',
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* FSUtil.use.writeWithDirs(
+        path.join(test.directory, "opencode.jsonc"),
+        `{
+          "username": "prefix-{env:JSON_ENV_VAR}-suffix",
+          "permission": {
+            "external_directory": {
+              "{env:JSON_ENV_VAR}/**": "allow"
+            }
+          }
+        }`,
+      )
+      const config = yield* Config.use.get()
+      const value = process.env.JSON_ENV_VAR!
+      expect(config.username).toBe(`prefix-${value}-suffix`)
+      expect(config.permission?.external_directory).toEqual({ [`${value}/**`]: "allow" })
+    }),
+  ),
+)
+
 it.instance("preserves env variables when adding $schema to config", () =>
   withProcessEnv(
     "PRESERVE_VAR",
@@ -1599,6 +1624,48 @@ remotePrecedenceWellKnown.it.instance(
     }),
 )
 
+const specialTokenWellKnown = wellKnown({
+  remoteConfig: {
+    url: "https://config.example.com/opencode.json",
+    headers: { Authorization: "Bearer {env:SPECIAL_TOKEN}" },
+  },
+  remote: {},
+})
+
+specialTokenWellKnown.it.instance("wellknown tokens are not JSON-escaped after parsing", () =>
+  withProcessEnv(
+    "SPECIAL_TOKEN",
+    'folder\\name"quoted"',
+    Effect.gen(function* () {
+      yield* Config.use.get()
+      const value = process.env.SPECIAL_TOKEN!
+      expect(specialTokenWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
+      expect(specialTokenWellKnown.seen.authorization).toBe(`Bearer ${value}`)
+    }),
+  ),
+)
+
+const wellKnownFile = path.join(os.tmpdir(), `opencode-wellknown-token-${process.pid}.txt`)
+const specialFileWellKnown = wellKnown({
+  remoteConfig: {
+    url: "https://config.example.com/opencode.json",
+    headers: { Authorization: `Bearer {file:${wellKnownFile}}` },
+  },
+  remote: {},
+})
+
+specialFileWellKnown.it.instance("wellknown file tokens are not JSON-escaped after parsing", () =>
+  Effect.acquireUseRelease(
+    FSUtil.use.writeWithDirs(wellKnownFile, 'folder\\name"quoted"'),
+    () =>
+      Effect.gen(function* () {
+        yield* Config.use.get()
+        expect(specialFileWellKnown.seen.authorization).toBe('Bearer folder\\name"quoted"')
+      }),
+    () => FSUtil.use.remove(wellKnownFile),
+  ),
+)
+
 const envIsolationWellKnown = wellKnown({
   remoteConfig: {
     url: "https://config.example.com/opencode.json",
@@ -1913,6 +1980,21 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
         Effect.gen(function* () {
           const config = yield* Config.use.get()
           expect(config.username).toBe("test_api_key_12345")
+        }),
+      ),
+    ),
+  )
+
+  it.instance("escapes {env:} tokens in OPENCODE_CONFIG_CONTENT", () =>
+    withProcessEnv(
+      "TEST_CONFIG_VAR",
+      'C:\\Users\\me\t"quoted"\nnext',
+      withProcessEnv(
+        "OPENCODE_CONFIG_CONTENT",
+        `{"username":"{env:TEST_CONFIG_VAR}"}`,
+        Effect.gen(function* () {
+          const config = yield* Config.use.get()
+          expect(config.username).toBe(process.env.TEST_CONFIG_VAR)
         }),
       ),
     ),

@@ -75,6 +75,7 @@ async function substituteWellKnownRemoteConfig(input: {
     dir: input.dir,
     source: input.source,
     env: input.env,
+    escape: false,
   })
   const headers = isRecord(input.value.headers)
     ? Object.fromEntries(
@@ -89,6 +90,7 @@ async function substituteWellKnownRemoteConfig(input: {
                 dir: input.dir,
                 source: input.source,
                 env: input.env,
+                escape: false,
               }),
             ]),
         ),
@@ -219,8 +221,8 @@ const layer = Layer.effect(
       const expanded = yield* Effect.promise(() =>
         ConfigVariable.substitute(
           "path" in options
-            ? { text, type: "path", path: options.path, env }
-            : { text, type: "virtual", ...options, env },
+            ? { text, type: "path", path: options.path, env, escape: true }
+            : { text, type: "virtual", ...options, env, escape: true },
         ),
       )
       const parsed = ConfigParse.jsonc(expanded, source)
