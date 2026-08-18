@@ -135,6 +135,33 @@ describe("CronService", () => {
     // verify persistence across scopes in a live environment.
   })
 
+  test("first run fires immediately on add (no clock advance needed)", async () => {
+    const delivered = Deferred.makeUnsafe<{ sessionID: string; prompt: string }>()
+
+    const observingPort = Layer.succeed(
+      CronDeliveryPort,
+      CronDeliveryPort.of({
+        isBusy: () => Effect.succeed(false),
+        exists: () => Effect.succeed(true),
+        deliver: (sessionID, prompt) => Deferred.succeed(delivered, { sessionID, prompt }),
+      }),
+    )
+
+    const tickLayer = Layer.provideMerge(Layer.provideMerge(cronLayer, observingPort), testEnv)
+
+    const result = await Effect.gen(function* () {
+      const cron = yield* CronService
+      yield* cron.add({ sessionID: "s_immediate", prompt: "fire-now", intervalMs: 300_000 })
+      // No TestClock.adjust — the job should fire at nextRunAt = now.
+      yield* TestClock.adjust(Duration.zero)
+      return yield* Deferred.await(delivered).pipe(Effect.timeout("2 seconds"))
+    }).pipe(Effect.provide(tickLayer), Effect.runPromise)
+
+    expect(result).toBeDefined()
+    expect(result!.sessionID).toBe("s_immediate")
+    expect(result!.prompt).toBe("fire-now")
+  })
+
   it("expired job is dropped from the heap", () =>
     Effect.gen(function* () {
       const cron = yield* CronService
@@ -267,6 +294,115 @@ describe("CronService", () => {
     expect(deliveries[0].prompt).toBe("fire")
     expect(deliveries[0].ts).toBe(4 * 60 * 1000)
     expect(busyCalls).toBe(2)
+  })
+
+  test("first-run busy polls with short retry until session is free", async () => {
+    const deliveries: Array<{ sessionID: string; prompt: string; ts: number }> = []
+    let busyCalls = 0
+
+    const pollPort = Layer.succeed(
+      CronDeliveryPort,
+      CronDeliveryPort.of({
+        isBusy: () => Effect.succeed(busyCalls++ < 3),
+        exists: () => Effect.succeed(true),
+        deliver: (sessionID, prompt) =>
+          Effect.gen(function* () {
+            const ts = yield* Clock.currentTimeMillis
+            deliveries.push({ sessionID, prompt, ts })
+          }),
+      }),
+    )
+
+    const tickLayer = Layer.provideMerge(Layer.provideMerge(cronLayer, pollPort), testEnv)
+
+    await Effect.gen(function* () {
+      const cron = yield* CronService
+      yield* cron.add({ sessionID: "s_poll", prompt: "poll-fire", intervalMs: 300_000 })
+
+      // First busy check at T=0 (nextRunAt = now, sleep(0) completes instantly).
+      yield* TestClock.adjust(Duration.zero)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(deliveries.length).toBe(0)
+
+      // Poll at T=10s — still busy (busyCalls=1).
+      yield* TestClock.adjust(Duration.seconds(10))
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(deliveries.length).toBe(0)
+
+      // Poll at T=20s — still busy (busyCalls=2).
+      yield* TestClock.adjust(Duration.seconds(10))
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(deliveries.length).toBe(0)
+
+      // Poll at T=30s — busyCalls=3, isBusy returns false, first run fires.
+      yield* TestClock.adjust(Duration.seconds(10))
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+    }).pipe(Effect.provide(tickLayer), Effect.runPromise)
+
+    expect(deliveries.length).toBe(1)
+    expect(deliveries[0].sessionID).toBe("s_poll")
+    expect(deliveries[0].prompt).toBe("poll-fire")
+    expect(deliveries[0].ts).toBe(30_000) // 3 × 10s poll intervals, first check at T=0
+    expect(busyCalls).toBe(4) // 3 busy + 1 not-busy
+  })
+
+  test("subsequent busy tick reschedules to now + interval (not nextRunAt + interval)", async () => {
+    const deliveries: Array<{ sessionID: string; prompt: string; ts: number }> = []
+    let busyCalls = 0
+
+    const busyPort = Layer.succeed(
+      CronDeliveryPort,
+      CronDeliveryPort.of({
+        isBusy: () => Effect.succeed(busyCalls++ === 1),
+        exists: () => Effect.succeed(true),
+        deliver: (sessionID, prompt) =>
+          Effect.gen(function* () {
+            const ts = yield* Clock.currentTimeMillis
+            deliveries.push({ sessionID, prompt, ts })
+          }),
+      }),
+    )
+
+    const tickLayer = Layer.provideMerge(Layer.provideMerge(cronLayer, busyPort), testEnv)
+
+    await Effect.gen(function* () {
+      const cron = yield* CronService
+      yield* cron.add({ sessionID: "s_subseq", prompt: "fire", intervalMs: 120_000 })
+
+      // First run fires immediately at T=0 (busyCalls=0, not busy).
+      yield* TestClock.adjust(Duration.zero)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(deliveries.length).toBe(1)
+      expect(deliveries[0].ts).toBe(0)
+      // First run rescheduled to now + interval = 0 + 2min = 2min.
+      const afterFirst = (yield* cron.list("s_subseq"))[0]
+      expect(afterFirst.nextRunAt).toBe(120_000)
+
+      // Jump the clock to T=3min — the job's nextRunAt (2min) is now in the past.
+      // The loop wakes with now = 3min > nextRunAt = 2min.
+      yield* TestClock.setTime(3 * 60 * 1000)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(deliveries.length).toBe(1) // busy (busyCalls=1), no delivery
+
+      // Busy reschedule: now + interval = 3min + 2min = 5min (new behavior).
+      // Old behavior would be nextRunAt + interval = 2min + 2min = 4min.
+      const afterBusy = (yield* cron.list("s_subseq"))[0]
+      expect(afterBusy.nextRunAt).toBe(5 * 60 * 1000)
+
+      // Advance to T=5min — not busy (busyCalls=2), delivery fires.
+      yield* TestClock.adjust(Duration.minutes(2))
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+    }).pipe(Effect.provide(tickLayer), Effect.runPromise)
+
+    expect(deliveries.length).toBe(2)
+    expect(deliveries[1].ts).toBe(5 * 60 * 1000)
   })
 
   // Regression for commit 8ef951044: a sooner job inserted while a later job is
