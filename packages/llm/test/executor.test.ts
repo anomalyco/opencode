@@ -491,7 +491,7 @@ describe("RequestExecutor", () => {
       expectLLMError(error)
       expect(error.reason).toMatchObject({
         _tag: "Transport",
-        kind: "DecodeError:Error:ECONNRESET",
+        kind: "DecodeError:ECONNRESET",
         http: {
           requestId: "req_mid",
           response: { status: 200 },

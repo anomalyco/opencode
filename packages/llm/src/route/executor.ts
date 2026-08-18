@@ -358,7 +358,9 @@ const errorKind = (error: unknown) => {
   const cause = HttpClientError.isHttpClientError(error) && "cause" in error.reason ? error.reason.cause : error
   const tags = [
     HttpClientError.isHttpClientError(error) ? error.reason._tag : undefined,
-    cause instanceof Error ? cause.name : undefined,
+    // A plain `Error` contributes nothing but noise here ("DecodeError:Error:ECONNRESET"),
+    // so only keep a subclass name that actually identifies the failure.
+    cause instanceof Error && cause.name !== "Error" ? cause.name : undefined,
     errorCode(cause),
   ].filter((tag): tag is string => tag !== undefined)
   return tags.length ? tags.join(":") : "Unknown"
