@@ -11,6 +11,7 @@ import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { DynamicProviderPlugin } from "@opencode-ai/core/plugin/provider/dynamic"
+import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -46,6 +47,15 @@ function tempEntrypoint(source: string) {
 }
 
 describe("DynamicProviderPlugin", () => {
+  it.effect("is not registered in ProviderPlugins", () =>
+    Effect.sync(() => {
+      // ProviderPlugins is registered in the internal `pre` list, ahead of plugins
+      // loaded from config. This fallback belongs in `post` so plugin-supplied
+      // `sdk` hooks can claim a package before it is fetched from npm.
+      expect(ProviderPlugins.map((item) => item.id)).not.toContain("opencode.provider.dynamic")
+    }),
+  )
+
   it.effect("creates an SDK from a provider factory export", () =>
     Effect.gen(function* () {
       const aisdk = yield* AISDK.Service
@@ -79,6 +89,40 @@ describe("DynamicProviderPlugin", () => {
         options: { name: "custom", marker: "dynamic" },
         sdk,
       })
+      expect(result.sdk).toBe(sdk)
+    }),
+  )
+
+  it.effect("does not prevent a later hook from claiming a package it cannot resolve", () =>
+    Effect.gen(function* () {
+      const aisdk = yield* AISDK.Service
+      const sdk = { marker: "from-later-plugin" }
+      let laterHookRan = false
+
+      // A package that is not on npm is legitimate here: plugins may use the name
+      // purely as a routing key for their own hook.
+      yield* addPlugin(
+        Npm.Service.of({
+          add: () => Effect.fail(new Npm.InstallFailedError({ add: ["@example/missing"], dir: "", cause: "E404" })),
+          which: () => Effect.succeed(undefined),
+        }),
+      )
+      yield* aisdk.hook.sdk((event) => {
+        laterHookRan = true
+        event.sdk = sdk
+      })
+
+      const result = yield* aisdk.runSDK({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("custom"), Model.ID.make("test-model")),
+          modelID: Model.ID.make("test-model"),
+          package: Provider.aisdk("@example/missing"),
+        }),
+        package: "@example/missing",
+        options: { name: "custom" },
+      })
+
+      expect(laterHookRan).toBe(true)
       expect(result.sdk).toBe(sdk)
     }),
   )

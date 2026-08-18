@@ -13,9 +13,23 @@ export const DynamicProviderPlugin = define({
       Effect.fn(function* (evt) {
         if (evt.sdk) return
 
-        const installedPath = evt.package.startsWith("file://")
-          ? evt.package
-          : (yield* npm.add(evt.package).pipe(Effect.orDie)).entrypoint
+        // A package that cannot be installed is not necessarily a mistake: plugins
+        // may use the name purely as a routing key for their own hook. Decline
+        // rather than dying so an unclaimed package reports that no plugin
+        // supplied an SDK instead of an unrelated npm failure.
+        const installed = evt.package.startsWith("file://")
+          ? { entrypoint: evt.package }
+          : yield* npm.add(evt.package).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logDebug("dynamic provider package could not be installed", {
+                  package: evt.package,
+                  cause,
+                }).pipe(Effect.as(undefined)),
+              ),
+            )
+        if (!installed) return
+
+        const installedPath = installed.entrypoint
         if (!installedPath) throw new Error(`Package ${evt.package} has no import entrypoint`)
 
         const mod = (yield* Effect.promise(() =>

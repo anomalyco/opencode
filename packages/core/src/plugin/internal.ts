@@ -63,6 +63,7 @@ import { AgentPlugin } from "./agent.js"
 import { CommandPlugin } from "./command.js"
 import { PlanPlugin } from "./plan.js"
 import { ModelsDevPlugin } from "./models-dev.js"
+import { DynamicProviderPlugin } from "./provider/dynamic.js"
 import { ProviderPlugins } from "./provider.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { PluginRuntime } from "./runtime.js"
@@ -229,6 +230,9 @@ const post = [
   ConfigWebSearchPlugin.Plugin,
   VariantPlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
+  // Registered last so plugin-supplied `sdk` hooks can claim a package before
+  // this falls back to installing it from npm.
+  DynamicProviderPlugin,
 ] as const satisfies readonly InternalPlugin[]
 
 export const list = Effect.fn("PluginInternal.list")(function* () {

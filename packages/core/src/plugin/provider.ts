@@ -7,7 +7,6 @@ import { CloudflareAIGatewayPlugin } from "./provider/cloudflare-ai-gateway.js"
 import { CloudflareWorkersAIPlugin } from "./provider/cloudflare-workers-ai.js"
 import { CoherePlugin } from "./provider/cohere.js"
 import { DeepInfraPlugin } from "./provider/deepinfra.js"
-import { DynamicProviderPlugin } from "./provider/dynamic.js"
 import { GatewayPlugin } from "./provider/gateway.js"
 import { GithubCopilotPlugin } from "./provider/github-copilot.js"
 import { GitLabPlugin } from "./provider/gitlab.js"
@@ -68,5 +67,4 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   VLLMPlugin,
   XAIPlugin,
   ZenmuxPlugin,
-  DynamicProviderPlugin,
 ]
