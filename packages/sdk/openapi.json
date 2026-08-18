@@ -21543,6 +21543,9 @@
                 "type": "integer",
                 "exclusiveMinimum": 0
               },
+              "sampling_defaults": {
+                "type": "boolean"
+              },
               "policies": {
                 "type": "array",
                 "items": {

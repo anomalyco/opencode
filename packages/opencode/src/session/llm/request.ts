@@ -32,6 +32,7 @@ type PrepareInput = {
   readonly auth: Auth.Info | undefined
   readonly plugin: Plugin.Interface
   readonly flags: RuntimeFlags.Info
+  readonly samplingDefaults?: boolean
   readonly isWorkflow: boolean
 }
 
@@ -111,6 +112,18 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
           ...input.messages,
         ]
 
+  const auto = (input.samplingDefaults ?? true)
+    ? {
+        temperature: ProviderTransform.temperature(input.model),
+        topP: ProviderTransform.topP(input.model),
+        topK: ProviderTransform.topK(input.model),
+      }
+    : {
+        temperature: undefined,
+        topP: undefined,
+        topK: undefined,
+      }
+
   const params = yield* input.plugin.trigger(
     "chat.params",
     {
@@ -121,11 +134,9 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
       message: input.user,
     },
     {
-      temperature: input.model.capabilities.temperature
-        ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
-        : undefined,
-      topP: input.agent.topP ?? ProviderTransform.topP(input.model),
-      topK: ProviderTransform.topK(input.model),
+      temperature: input.model.capabilities.temperature ? (input.agent.temperature ?? auto.temperature) : undefined,
+      topP: input.agent.topP ?? auto.topP,
+      topK: auto.topK,
       maxOutputTokens: ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax),
       options,
     },
