@@ -204,7 +204,10 @@ const layer = Layer.effect(
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
-        providerOptions: { openai: { promptCacheKey } },
+        providerOptions: {
+          openai: { promptCacheKey },
+          openrouter: { promptCacheKey },
+        },
         system: [agent.info?.system, system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),

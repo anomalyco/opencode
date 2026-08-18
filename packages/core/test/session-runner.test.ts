@@ -2500,6 +2500,10 @@ describe("SessionRunnerLLM", () => {
         sessionID,
         otherSessionID,
       ])
+      expect(requests.map((request) => request.providerOptions?.openrouter?.promptCacheKey)).toEqual([
+        sessionID,
+        otherSessionID,
+      ])
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(first)
       yield* Fiber.join(second)

@@ -50,6 +50,18 @@ const providerFamilies = [
 ] as const
 
 describe("OpenAI-compatible Chat route", () => {
+  it.effect("does not send native OpenAI cache options", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.updateRequest(request, {
+          providerOptions: { openai: { promptCacheKey: "session_123" } },
+        }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("prompt_cache_key")
+    }),
+  )
+
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(

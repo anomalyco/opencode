@@ -29,6 +29,20 @@ const request = LLM.request({
 })
 
 describe("OpenAI Chat route", () => {
+  it.effect("maps the prompt cache key for native OpenAI models", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
+          prompt: "hello",
+          providerOptions: { openai: { promptCacheKey: "session_123" } },
+        }),
+      )
+
+      expect(prepared.body.prompt_cache_key).toBe("session_123")
+    }),
+  )
+
   it.effect("prepares OpenAI Chat payload", () =>
     Effect.gen(function* () {
       // Pass the OpenAIChat payload type so `prepared.body` is statically
