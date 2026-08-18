@@ -27,6 +27,7 @@
     /* ── Icon ── */
     --v2-icon-icon-base: var(--v2-grey-800);
     --v2-icon-icon-muted: var(--v2-grey-600);
+    --v2-icon-icon-faint: var(--v2-grey-500);
     --v2-icon-icon-inverse: var(--v2-grey-50);
     --v2-icon-icon-contrast: var(--v2-grey-100);
     --v2-icon-icon-accent: var(--v2-blue-600);
@@ -158,6 +159,7 @@
 
       --v2-icon-icon-base: var(--v2-grey-400);
       --v2-icon-icon-muted: var(--v2-grey-600);
+      --v2-icon-icon-faint: var(--v2-grey-700);
       --v2-icon-icon-inverse: var(--v2-grey-1000);
       --v2-icon-icon-contrast: var(--v2-grey-200);
       --v2-icon-icon-accent: var(--v2-blue-400);
@@ -271,6 +273,7 @@
 
     --v2-icon-icon-base: var(--v2-grey-800);
     --v2-icon-icon-muted: var(--v2-grey-600);
+    --v2-icon-icon-faint: var(--v2-grey-500);
     --v2-icon-icon-inverse: var(--v2-grey-50);
     --v2-icon-icon-contrast: var(--v2-grey-100);
     --v2-icon-icon-accent: var(--v2-blue-600);
@@ -393,6 +396,7 @@
 
     --v2-icon-icon-base: var(--v2-grey-400);
     --v2-icon-icon-muted: var(--v2-grey-600);
+    --v2-icon-icon-faint: var(--v2-grey-700);
     --v2-icon-icon-inverse: var(--v2-grey-1100);
     --v2-icon-icon-contrast: var(--v2-grey-100);
     --v2-icon-icon-accent: var(--v2-blue-400);

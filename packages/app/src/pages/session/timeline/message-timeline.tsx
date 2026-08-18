@@ -13,9 +13,10 @@ import {
 import { createStore } from "solid-js/store"
 import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
 import { Card } from "@opencode-ai/ui/card"
-import { MessageDivider, SessionShellMessage, type UserActions } from "@opencode-ai/session-ui/message-part"
+import { SessionShellMessage, type UserActions } from "@opencode-ai/session-ui/message-part"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
@@ -99,6 +100,23 @@ function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSu
       <Show when={!props.showReasoningSummaries}>
         <TextReveal text={props.reasoningHeading} class="session-turn-thinking-heading" travel={25} duration={700} />
       </Show>
+    </div>
+  )
+}
+
+function TimelineSeparator(props: { label: string; providerID?: string }) {
+  return (
+    <div class="flex h-8 w-full items-center gap-3 text-v2-text-text-faint">
+      <span class="h-px min-w-0 flex-1 bg-v2-border-border-base" />
+      <span class="flex min-w-0 items-center gap-1 text-[13px] font-[440] leading-4 tracking-[-0.04px]">
+        <Show when={props.providerID}>
+          {(providerID) => <ProviderIcon id={providerID()} class="text-v2-icon-icon-faint" aria-hidden="true" />}
+        </Show>
+        <span class="truncate" title={props.label}>
+          {props.label}
+        </span>
+      </span>
+      <span class="h-px min-w-0 flex-1 bg-v2-border-border-base" />
     </div>
   )
 }
@@ -369,11 +387,7 @@ function MessageTimelineView(
         label: language.t("ui.tool.agent.default"),
         data: message.previous ? `${message.previous} → ${message.agent}` : message.agent,
       }
-    if (message.type === "model-switched")
-      return {
-        label: language.t("command.category.model"),
-        data: `${message.model.providerID}/${message.model.id}`,
-      }
+    if (message.type === "model-switched") return undefined
     if (message.type === "location-switched")
       return { label: language.t("ui.patch.action.moved"), data: message.location.directory }
     if (message.type === "skill") return { label: language.t("ui.tool.skill"), data: message.name }
@@ -952,20 +966,45 @@ function MessageTimelineView(
       }
       case "Notice": {
         const noticeRow = row as Accessor<TimelineRowByTag<"Notice">>
+        const model = createMemo(() => {
+          const message = sessionMessageByID().get(noticeRow().messageID)
+          if (message?.type !== "model-switched") return undefined
+          const info = data.location.model
+            .list({ directory: sessionDirectory() })
+            ?.find((item) => item.providerID === message.model.providerID && item.id === message.model.id)
+          return {
+            providerID: message.model.providerID,
+            label: language.t("session.timeline.notice.modelSwitched", { model: info?.name ?? message.model.id }),
+          }
+        })
         const content = createMemo(() => {
           const message = sessionMessageByID().get(noticeRow().messageID)
           return message ? noticeContent(message) : undefined
         })
         return (
           <TimelineRowFrame row={noticeRow()}>
-            <Show when={content()}>
-              {(content) => (
+            <Show
+              when={model()}
+              fallback={
+                <Show when={content()}>
+                  {(content) => (
+                    <div
+                      data-slot="session-timeline-notice"
+                      class={`w-full pt-3 pb-1 text-13-regular text-text-weak ${turnPadding()}`}
+                    >
+                      <span class="text-13-medium">{content().label}</span>
+                      <Show when={content().data}>{(data) => <span> · {data()}</span>}</Show>
+                    </div>
+                  )}
+                </Show>
+              }
+            >
+              {(model) => (
                 <div
                   data-slot="session-timeline-notice"
-                  class={`w-full pt-3 pb-1 text-13-regular text-text-weak ${turnPadding()}`}
+                  class={`w-full py-2 ${turnPadding()}`}
                 >
-                  <span class="text-13-medium">{content().label}</span>
-                  <Show when={content().data}>{(data) => <span> · {data()}</span>}</Show>
+                  <TimelineSeparator label={model().label} providerID={model().providerID} />
                 </div>
               )}
             </Show>
@@ -978,7 +1017,9 @@ function MessageTimelineView(
           <TimelineRowFrame row={turnDividerRow()}>
             <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <div data-slot="session-turn-compaction">
-                <MessageDivider label={language.t("ui.message.interrupted")} />
+                <div class="py-2">
+                  <TimelineSeparator label={language.t("ui.message.interrupted")} />
+                </div>
               </div>
             </div>
           </TimelineRowFrame>
