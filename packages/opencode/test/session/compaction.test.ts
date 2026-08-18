@@ -1956,6 +1956,50 @@ describe("SessionNs.getUsage", () => {
     },
   )
 
+  test("ignores malformed cost tiers instead of throwing", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0, write: 0 },
+        tiers: [
+          // a null entry
+          null,
+          // no `tier` key at all
+          { input: 5, output: 20, cache: { read: 0, write: 0 } },
+          // `tier.size` is not a number
+          { input: 7, output: 30, cache: { read: 0, write: 0 }, tier: { type: "context", size: {} } },
+        ],
+      } as unknown as Provider.Model["cost"],
+    })
+    const input = {
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    }
+
+    expect(() => SessionNs.getUsage(input)).not.toThrow()
+
+    // every tier discarded, so the base pricing applies
+    expect(SessionNs.getUsage(input).cost).toBe(3 + 1.5)
+  })
+
+  test("ignores a cost.tiers that is not an array", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: { input: 3, output: 15, cache: { read: 0, write: 0 }, tiers: {} } as unknown as Provider.Model["cost"],
+    })
+    const input = {
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    }
+
+    expect(() => SessionNs.getUsage(input)).not.toThrow()
+    expect(SessionNs.getUsage(input).cost).toBe(3 + 1.5)
+  })
+
   test("extracts cache write tokens from vertex metadata key", () => {
     const model = createModel({ context: 100_000, output: 32_000, npm: "@ai-sdk/google-vertex/anthropic" })
     const result = SessionNs.getUsage({

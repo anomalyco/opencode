@@ -377,9 +377,15 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   }
 
   const contextTokens = inputTokens
+  // a malformed tier is dropped rather than trusted: `tiers` that is not an array, a null entry or
+  // a missing `tier` each used to throw here. A non-numeric `size` must not be coerced to 0 either,
+  // or the tier would match every context instead of none.
+  const tiers = input.model.cost?.tiers
   const costInfo =
-    input.model.cost?.tiers
-      ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
+    (Array.isArray(tiers) ? tiers : [])
+      .filter(
+        (item) => item?.tier?.type === "context" && Number.isFinite(item.tier.size) && contextTokens > item.tier.size,
+      )
       .sort((a, b) => b.tier.size - a.tier.size)[0] ??
     (input.model.cost?.experimentalOver200K && contextTokens > 200_000
       ? input.model.cost.experimentalOver200K
