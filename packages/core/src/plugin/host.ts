@@ -273,11 +273,31 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
         }),
     },
     mcp: {
-      list: () => response(mcp.servers()),
-      add: (input) => mcp.add(input.server, input.config),
-      remove: (input) => mcp.remove(input.server),
-      connect: (input) => mcp.connect(input.server),
-      disconnect: (input) => mcp.disconnect(input.server),
+      list: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.list(ref)
+        return response(mcp.servers())
+      },
+      add: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.add(ref, input.server, input.config)
+        return mcp.add(input.server, input.config)
+      },
+      remove: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.remove(ref, input.server)
+        return mcp.remove(input.server)
+      },
+      connect: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.connect(ref, input.server)
+        return mcp.connect(input.server)
+      },
+      disconnect: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.disconnect(ref, input.server)
+        return mcp.disconnect(input.server)
+      },
       reload: mcp.reload,
       transform: (callback) =>
         mcp.transform((draft) => {
