@@ -1,6 +1,6 @@
 import { EOL } from "node:os"
 import { Effect } from "effect"
-import { OpenCode } from "@opencode-ai/client"
+import { OpenCode, type PluginInfo } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/effect/service"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
@@ -14,11 +14,18 @@ export default Runtime.handler(
     const endpoint = found ?? (yield* Service.ensure(options))
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const response = yield* Effect.promise(() => client.plugin.list({ location: { directory: process.cwd() } }))
-    const plugins = response.data.toSorted((a, b) => a.id.localeCompare(b.id))
+    const plugins = response.data.toSorted((a, b) => name(a).localeCompare(name(b)))
     if (plugins.length === 0) {
       process.stdout.write("No plugins loaded" + EOL)
       return
     }
-    process.stdout.write(plugins.map((plugin) => plugin.id).join(EOL) + EOL)
+    process.stdout.write(plugins.map(name).join(EOL) + EOL)
   }),
 )
+
+function name(plugin: PluginInfo) {
+  if (plugin.id) return plugin.id
+  if (plugin.source.type === "package") return plugin.source.package
+  if (plugin.source.type === "local") return plugin.source.path
+  return plugin.source.type
+}
