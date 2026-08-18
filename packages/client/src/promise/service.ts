@@ -10,7 +10,7 @@ import {
 } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
-import type { ServiceHealth, ServiceStopResponse } from "./generated/types.js"
+import type { ServiceStopResponse } from "./generated/types.js"
 
 export * from "../service.js"
 
@@ -130,7 +130,15 @@ async function read(file?: string) {
   const text = await readFile(file ?? fallback(), "utf8").catch(() => undefined)
   if (text === undefined) return undefined
   try {
-    return JSON.parse(text) as Info
+    const value: unknown = JSON.parse(text)
+    if (typeof value !== "object" || value === null) return undefined
+    if (!("url" in value) || typeof value.url !== "string") return undefined
+    if (!("pid" in value) || !Number.isInteger(value.pid) || typeof value.pid !== "number" || value.pid <= 0)
+      return undefined
+    if ("id" in value && value.id !== undefined && typeof value.id !== "string") return undefined
+    if ("version" in value && value.version !== undefined && typeof value.version !== "string") return undefined
+    if ("password" in value && value.password !== undefined && typeof value.password !== "string") return undefined
+    return value as Info
   } catch {
     return undefined
   }
@@ -163,7 +171,7 @@ async function probeResult(info: Info, allowLegacy = false, timeout = defaultEns
   })
     .then(async (response) => ({
       response,
-      body: (await response.json()) as ServiceHealth | { readonly healthy: true },
+      body: (await response.json()) as unknown,
     }))
     .then(
       (value) => ({ value }),
@@ -172,7 +180,18 @@ async function probeResult(info: Info, allowLegacy = false, timeout = defaultEns
   if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
   const response = result.value.response
   const body = result.value.body
-  if (body !== undefined && "version" in body && "pid" in body) {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "healthy" in body &&
+    body.healthy === true &&
+    "version" in body &&
+    typeof body.version === "string" &&
+    "pid" in body &&
+    typeof body.pid === "number" &&
+    Number.isInteger(body.pid) &&
+    body.pid > 0
+  ) {
     if (body.pid !== info.pid) return { service: undefined, timedOut: false }
     if (info.version !== undefined && body.version !== info.version) return { service: undefined, timedOut: false }
     return {
@@ -186,7 +205,16 @@ async function probeResult(info: Info, allowLegacy = false, timeout = defaultEns
       timedOut: false,
     }
   }
-  if (!allowLegacy || body?.healthy !== true) return { service: undefined, timedOut: false }
+  if (
+    !allowLegacy ||
+    typeof body !== "object" ||
+    body === null ||
+    !("healthy" in body) ||
+    body.healthy !== true ||
+    "version" in body ||
+    "pid" in body
+  )
+    return { service: undefined, timedOut: false }
   return {
     service: { info, endpoint, state: "ready", legacy: true } satisfies LocalService,
     timedOut: false,

@@ -38,6 +38,50 @@ test("discovers a compatible registered service", async () => {
   expect(await Service.discover({ file: registration, version: (version) => version.startsWith("3.") })).toBeUndefined()
 })
 
+test("rejects malformed registrations without probing or signaling", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const malformed = [
+    null,
+    [],
+    {},
+    { url: "http://127.0.0.1:1" },
+    { url: "http://127.0.0.1:1", pid: 0 },
+    { url: "http://127.0.0.1:1", pid: -1 },
+    { url: "http://127.0.0.1:1", pid: 1.5 },
+    { url: "http://127.0.0.1:1", pid: "1" },
+    { url: "http://127.0.0.1:1", pid: 1, id: 1 },
+  ]
+
+  for (const value of malformed) {
+    await Bun.write(registration, JSON.stringify(value))
+    expect(await Service.discover({ file: registration })).toBeUndefined()
+  }
+})
+
+test("rejects primitive and partial modern health responses", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const bodies = [
+    null,
+    1,
+    "healthy",
+    [],
+    {},
+    { healthy: false, version: "test", pid: process.pid },
+    { healthy: true, version: null, pid: process.pid },
+    { healthy: true, version: "test", pid: "1" },
+    { healthy: true, version: "test" },
+    { healthy: true, pid: process.pid },
+  ]
+
+  for (const body of bodies) {
+    using server = Bun.serve({ port: 0, fetch: () => Response.json(body) })
+    await Bun.write(registration, JSON.stringify({ url: server.url.toString(), pid: process.pid }))
+    expect(await Service.discover({ file: registration })).toBeUndefined()
+  }
+})
+
 test("ensures a missing service with native promises", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
