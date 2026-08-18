@@ -94,6 +94,11 @@ type ScanState = {
   dirs: Set<string>
 }
 
+function isRootSkillFile(root: string, match: string) {
+  const parts = path.relative(root, match).split(path.sep)
+  return parts.length === 2 && (parts[0] === "skill" || parts[0] === "skills") && parts[1] === "SKILL.md"
+}
+
 export interface Interface {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly require: (name: string) => Effect.Effect<Info, NotFoundError>
@@ -143,7 +148,7 @@ const scan = Effect.fnUntraced(function* (
   state: ScanState,
   root: string,
   pattern: string,
-  opts?: { dot?: boolean; scope?: string },
+  opts?: { dot?: boolean; scope?: string; skipRootSkillFiles?: boolean },
 ) {
   const matches = yield* Effect.tryPromise({
     try: () =>
@@ -165,6 +170,7 @@ const scan = Effect.fnUntraced(function* (
   )
 
   for (const match of matches) {
+    if (opts?.skipRootSkillFiles && isRootSkillFile(root, match)) continue
     state.matches.add(match)
     state.dirs.add(path.dirname(match))
   }
@@ -190,7 +196,7 @@ const discoverSkills = Effect.fnUntraced(function* (
     for (const dir of externalDirs) {
       const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global", skipRootSkillFiles: true })
     }
 
     const upDirs = yield* fsys
@@ -198,13 +204,13 @@ const discoverSkills = Effect.fnUntraced(function* (
       .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
     for (const root of upDirs) {
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project", skipRootSkillFiles: true })
     }
   }
 
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
-    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    yield* scan(state, dir, OPENCODE_SKILL_PATTERN, { skipRootSkillFiles: true })
   }
 
   const cfg = yield* config.get()
