@@ -8,6 +8,8 @@ import { HttpTransport } from "./transport"
 import type { Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
+import { logEvents as logResponseEvents, logRequest as logOutgoingRequest } from "./message-logger"
+import type { LogLevel } from "./message-logger"
 import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
 import type { LLMError, LLMEvent, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
@@ -350,11 +352,17 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
     .pipe(Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.body.schema))))
   const prepared = yield* route.prepareTransport(body, resolved)
 
+  const logMessages = request.metadata?.logMessages
+  if (logMessages) {
+    yield* logOutgoingRequest(request, logMessages as LogLevel, body)
+  }
+
   return {
     request: resolved,
     route,
     body,
     prepared,
+    logMessages,
   }
 })
 
@@ -375,19 +383,30 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request)
-      return compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime)
+      const events = compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime)
+      const logMessages = request.metadata?.logMessages as LogLevel | undefined
+      if (!logMessages) return events
+      return events.pipe(
+        Stream.tap((event) => logResponseEvents(request, [event], logMessages)),
+      )
     }),
   )
 
 const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest) {
+    const logMessages = request.metadata?.logMessages as LogLevel | undefined
     const state = yield* stream(request).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
     const response = LLMResponse.complete(state)
-    if (response) return response
-    return yield* ProviderShared.eventError(
-      `${request.model.provider}/${request.model.route.id}`,
-      "Provider stream ended without a terminal finish event",
-    )
+    if (!response) {
+      return yield* ProviderShared.eventError(
+        `${request.model.provider}/${request.model.route.id}`,
+        "Provider stream ended without a terminal finish event",
+      )
+    }
+    if (logMessages) {
+      yield* logResponseEvents(request, response.events, logMessages)
+    }
+    return response
   })
 
 export const prepare = <Body = unknown>(request: LLMRequest) =>
