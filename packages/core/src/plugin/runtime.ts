@@ -9,6 +9,7 @@ import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { MCP } from "../mcp/index.js"
 import { Session } from "../session.js"
+import { SessionExecution } from "../session/execution.js"
 
 export interface Interface {
   readonly session: Pick<
@@ -24,7 +25,7 @@ export interface Interface {
     | "interrupt"
     | "synthetic"
     | "wait"
-  >
+  > & { readonly wakeActive: SessionExecution.Interface["wakeActive"] }
   readonly job: Pick<Job.Interface, "start" | "wait" | "block" | "background" | "cancel">
   readonly location: {
     readonly agent: {
@@ -75,6 +76,7 @@ export const layerWithCell = (cell: Cell) =>
         command: (input) => require(cell, (runtime) => runtime.session.command(input)),
         rename: (input) => require(cell, (runtime) => runtime.session.rename(input)),
         resume: (sessionID) => require(cell, (runtime) => runtime.session.resume(sessionID)),
+        wakeActive: (sessionID) => require(cell, (runtime) => runtime.session.wakeActive(sessionID)),
         interrupt: (sessionID) => require(cell, (runtime) => runtime.session.interrupt(sessionID)),
         synthetic: (input) => require(cell, (runtime) => runtime.session.synthetic(input)),
         wait: (sessionID) => require(cell, (runtime) => runtime.session.wait(sessionID)),
@@ -105,10 +107,11 @@ export const providerLayerWithCell = (cell: Cell) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
       const sessions = yield* Session.Service
+      const execution = yield* SessionExecution.Service
       const jobs = yield* Job.Service
       const locations = yield* LocationServiceMap.Service
       const runtime: Interface = {
-        session: sessions,
+        session: { ...sessions, wakeActive: execution.wakeActive },
         job: jobs,
         location: {
           agent: {
@@ -170,7 +173,7 @@ export const providerNodeWithCell = (cell: Cell) =>
   makeGlobalNode({
     name: "plugin-runtime-provider",
     layer: providerLayerWithCell(cell),
-    deps: [node, Session.node, Job.node, LocationServiceMap.node],
+    deps: [node, Session.node, SessionExecution.node, Job.node, LocationServiceMap.node],
   })
 
 export const providerNode = providerNodeWithCell(defaultCell)
