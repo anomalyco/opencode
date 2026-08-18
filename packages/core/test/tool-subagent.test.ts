@@ -437,7 +437,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("rejects unrelated and mismatched child sessions", () =>
+  it.live("rejects unrelated children and switches agents on continuation", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -453,10 +453,11 @@ describe("SubagentTool", () => {
             title: "other review",
             agent: Agent.ID.make("reviewer"),
           })
-          const mismatched = yield* sessions.create({
+          const switched = yield* sessions.create({
             parentID: parent.id,
             title: "fallback review",
             agent: Agent.ID.make("fallback"),
+            model: parentModel,
           })
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
@@ -480,12 +481,13 @@ describe("SubagentTool", () => {
               message: `Session ${unrelated.id} is not a child of the current session`,
             },
           })
-          expect(yield* call(mismatched.id, "call-mismatched-child")).toEqual({
-            status: "error",
-            error: {
-              type: "tool.execution",
-              message: `Session ${mismatched.id} belongs to agent fallback, not reviewer`,
-            },
+          expect(yield* call(switched.id, "call-switched-child")).toMatchObject({
+            status: "completed",
+            metadata: { sessionID: switched.id, status: "completed" },
+          })
+          expect(yield* sessions.get(switched.id)).toMatchObject({
+            agent: "reviewer",
+            model: childModel,
           })
         }),
       ),

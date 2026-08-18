@@ -187,10 +187,20 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Session ${existing.id} is not a child of the current session`,
                 })
-              if (existing !== undefined && existing.agent !== agent.id)
-                return yield* new ToolFailure({
-                  message: `Session ${existing.id} belongs to agent ${existing.agent ?? "unknown"}, not ${agent.id}`,
-                })
+              // Continuing with a different agent switches the child, mirroring create semantics
+              // where the agent's configured model wins over the inherited one.
+              if (existing !== undefined && existing.agent !== agent.id) {
+                yield* runtime.session.switchAgent({ sessionID: existing.id, agent: agent.id }).pipe(
+                  Effect.andThen(
+                    agent.model === undefined
+                      ? Effect.void
+                      : runtime.session.switchModel({ sessionID: existing.id, model: agent.model }),
+                  ),
+                  Effect.mapError(
+                    (error) => new ToolFailure({ message: `Subagent session not found: ${existing.id}`, error }),
+                  ),
+                )
+              }
 
               // Model selection is policy/config/session state, not an LLM-facing tool argument.
               const model = agent.model ?? parent.model
@@ -214,7 +224,8 @@ export const Plugin = {
               const background = input.background === true
               yield* context.progress({ sessionID: child.id, status: "running" })
 
-              // Admit every follow-up even when Job.start joins an existing child job.
+              // Standard prompt admission outside the job: Job.start joining a running child skips
+              // its run effect, and the default wake starts an idle child or steers a running one.
               yield* runtime.session
                 .prompt({
                   sessionID: child.id,
@@ -222,14 +233,12 @@ export const Plugin = {
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
                       : input.prompt,
-                  resume: false,
                 })
                 .pipe(
                   Effect.mapError(
                     (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
                   ),
                 )
-              yield* runtime.session.wakeActive(child.id)
 
               const run = Effect.gen(function* () {
                 yield* runtime.session.resume(child.id)
@@ -254,21 +263,13 @@ export const Plugin = {
                 }
               }
 
-              const result = notifications.has(child.id)
-                ? yield* runtime.job
-                    .wait({ id: child.id })
-                    .pipe(
-                      Effect.map((result) =>
-                        result.info === undefined ? undefined : { type: "finished" as const, info: result.info },
-                      ),
-                    )
-                : yield* runtime.job.block({ id: child.id, sessionID: context.sessionID }).pipe(
-                    Effect.onInterrupt(() =>
-                      Effect.all([runtime.session.interrupt(child.id), runtime.job.cancel(child.id)], {
-                        discard: true,
-                      }),
-                    ),
-                  )
+              const result = yield* runtime.job.block({ id: child.id, sessionID: context.sessionID }).pipe(
+                Effect.onInterrupt(() =>
+                  Effect.all([runtime.session.interrupt(child.id), runtime.job.cancel(child.id)], {
+                    discard: true,
+                  }),
+                ),
+              )
               if (result?.type === "backgrounded") {
                 yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description)
                 return {
