@@ -19,7 +19,9 @@ const Handlers = Runtime.handlers(Commands, {
   acp: () => import("./commands/handlers/acp"),
   api: () => import("./commands/handlers/api"),
   auth: {
+    list: () => import("./commands/handlers/auth/list"),
     login: () => import("./commands/handlers/auth/login"),
+    logout: () => import("./commands/handlers/auth/logout"),
   },
   debug: {
     agents: () => import("./commands/handlers/debug/agents"),

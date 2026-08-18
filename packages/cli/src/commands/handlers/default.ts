@@ -4,7 +4,7 @@ import { run } from "@opencode-ai/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
-import { Context, Effect, FileSystem, Option } from "effect"
+import { Context, Effect, FileSystem, Option, Queue } from "effect"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
@@ -19,11 +19,21 @@ export default Runtime.handler(Commands, (input) =>
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
+    const serviceStarts = yield* Queue.unbounded<{
+      readonly reason: "missing" | "version-mismatch"
+      readonly previousVersion?: string
+    }>()
+    yield* Queue.take(serviceStarts).pipe(
+      Effect.flatMap((event) => Effect.logInfo("background service starting", event)),
+      Effect.forever,
+      Effect.forkScoped,
+    )
     const server = yield* ServerConnection.resolve({
       server: requestedServer,
       standalone: input.standalone,
       mismatch: "replace",
       onStart: (reason, previousVersion) => {
+        Queue.offerUnsafe(serviceStarts, { reason, previousVersion })
         if (reason === "version-mismatch" && preflight.begin(previousVersion)) return
         process.stderr.write(
           reason === "version-mismatch"

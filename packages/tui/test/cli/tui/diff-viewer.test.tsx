@@ -29,7 +29,7 @@ test("closing the diff viewer returns to the route it opened from", async () => 
   try {
     expect(viewer.current()).toEqual({
       type: "plugin",
-      id: "diff-viewer",
+      id: "opencode.diffs",
       name: "diff",
       data: { mode: "working", sessionID: "session-1", returnRoute: startRoute },
     })
@@ -207,7 +207,7 @@ async function renderDiffViewer(
             navigate(destination: Destination) {
               setCurrent(
                 destination.type === "plugin" && !("id" in destination)
-                  ? { ...destination, id: "diff-viewer" }
+                  ? { ...destination, id: "opencode.diffs" }
                   : destination,
               )
             },
@@ -334,7 +334,7 @@ test("branch diff source requests branch VCS diff", async () => {
   const viewer = await renderDiffViewer([], {
     initialRoute: {
       type: "plugin",
-      id: "diff-viewer",
+      id: "opencode.diffs",
       name: "diff",
       data: { mode: "branch", sessionID: "session-1", returnRoute: startRoute },
     },
@@ -342,7 +342,7 @@ test("branch diff source requests branch VCS diff", async () => {
   try {
     expect(viewer.current()).toEqual({
       type: "plugin",
-      id: "diff-viewer",
+      id: "opencode.diffs",
       name: "diff",
       data: { mode: "branch", sessionID: "session-1", returnRoute: startRoute },
     })

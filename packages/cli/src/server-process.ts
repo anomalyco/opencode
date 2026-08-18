@@ -194,6 +194,13 @@ const register = Effect.fnUntraced(function* (
   yield* current.pipe(
     Effect.filterOrFail(owns),
     Effect.repeat(Schedule.spaced("5 seconds")),
+    Effect.tapError(() =>
+      Effect.logWarning("managed service registration lost; shutting down", {
+        serviceID: id,
+        servicePID: process.pid,
+        registration: file,
+      }),
+    ),
     Effect.ignore,
     Effect.andThen(shutdown),
     Effect.forkScoped,
