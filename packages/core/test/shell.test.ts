@@ -49,6 +49,15 @@ describe("shell", () => {
     })
   })
 
+  test("falls back for known shell families that are not installed", async () => {
+    if (process.platform !== "win32") return
+    await withShell(undefined, () => {
+      // ksh is in the shell metadata table but is not present on Windows. Resolution must not
+      // trust a bare name just because the family is known, only when the OS can actually find it.
+      expect(Shell.acceptable("ksh")).toBe(Shell.acceptable())
+    })
+  })
+
   test("falls back for terminal-only acceptable shells", () => {
     expect(Shell.name(Shell.acceptable("fish"))).not.toBe("fish")
     expect(Shell.name(Shell.acceptable("nu"))).not.toBe("nu")
