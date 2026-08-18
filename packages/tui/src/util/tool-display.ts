@@ -20,11 +20,8 @@ export function primitiveInputSummary(input: Record<string, unknown>, omit: read
 }
 
 export function webSearchProviderLabel(provider: unknown) {
-  if (provider === "parallel") return "Web Search via Parallel"
-  if (provider === "exa") return "Web Search via Exa"
-  if (provider === "firecrawl") return "Web Search via Firecrawl"
-  if (provider === "tavily") return "Web Search via Tavily"
-  return "Web Search"
+  if (typeof provider !== "string" || !provider) return "Web Search"
+  return `Web Search via ${provider[0].toUpperCase()}${provider.slice(1)}`
 }
 
 export function toolDisplayMetadata(state: unknown): Record<string, unknown> {
