@@ -19,7 +19,6 @@ import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 import { webSearchHost } from "./plugin/host"
-import { produce } from "immer"
 
 const webSearchToolNode = makeLocationNode({
   name: "test/websearch-tool-plugin",
@@ -37,6 +36,7 @@ const assertions: Permission.AssertInput[] = []
 const queries: WebSearch.Input[] = []
 const formRequests: Form.CreateInput[] = []
 let selection: WebSearch.ID | "random" | false | undefined
+let configuredSelection: WebSearch.ID | "random" | false | undefined
 const providers = [
   { id: WebSearch.ID.make("exa"), name: "Exa" },
   { id: WebSearch.ID.make("parallel"), name: "Parallel" },
@@ -57,6 +57,7 @@ beforeEach(() => {
   queries.length = 0
   formRequests.length = 0
   selection = undefined
+  configuredSelection = undefined
   providerRequired = false
   formResponse = { status: "cancelled" }
   formResponses.length = 0
@@ -93,6 +94,7 @@ const websearch = Layer.succeed(
         if (selection === false) return yield* new WebSearch.DisabledError()
         return selection ? providers.find((provider) => provider.id === selection) : undefined
       }),
+    setDefault: (value) => Effect.sync(() => (selection = value)),
     query: (input) =>
       Effect.gen(function* () {
         queries.push(input)
@@ -102,6 +104,8 @@ const websearch = Layer.succeed(
           yield* Deferred.await(queryBarrier)
         }
         if (queryError) return yield* queryError
+        if (input.providerID && configuredSelection === input.providerID)
+          return new WebSearch.Response({ providerID: input.providerID, results: result.results })
         if (providerRequired && !selection) return yield* new WebSearch.ProviderRequiredError()
         if (selection)
           return new WebSearch.Response({
@@ -136,21 +140,16 @@ const config = Layer.succeed(
         new Document({
           type: "document",
           info: new Info({
-            websearch: selection === undefined ? undefined : selection === false ? false : { provider: selection },
+            websearch:
+              configuredSelection === undefined
+                ? undefined
+                : configuredSelection === false
+                  ? false
+                  : { provider: configuredSelection },
           }),
         }),
       ]),
-    update: (update) =>
-      Effect.sync(() => {
-        const info = produce(
-          new Info({
-            websearch: selection === undefined ? undefined : selection === false ? false : { provider: selection },
-          }),
-          update,
-        )
-        selection = info.websearch === false ? false : info.websearch?.provider
-        return info
-      }),
+    update: () => Effect.die("runtime web search consent must not update config"),
     changes: () => Stream.never,
   }),
 )
@@ -356,6 +355,25 @@ describe("WebSearchTool registration", () => {
           },
         ],
       })
+    }),
+  )
+
+  it.effect("keeps explicit provider config authoritative when resolving consent", () =>
+    Effect.gen(function* () {
+      configuredSelection = WebSearch.ID.make("exa")
+      providerRequired = true
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-configured", name: "websearch", input: { query: "effect" } },
+        }),
+      ).toMatchObject({ status: "completed", metadata: { provider: "exa" } })
+      expect(selection).toBeUndefined()
+      expect(formRequests).toHaveLength(0)
+      expect(queries).toEqual([{ query: "effect" }, { query: "effect", providerID: WebSearch.ID.make("exa") }])
     }),
   )
 

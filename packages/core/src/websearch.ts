@@ -1,13 +1,15 @@
 export * as WebSearch from "./websearch.js"
 
 import { WebSearch } from "@opencode-ai/schema/websearch"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Ref, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "./bus.js"
+import { KV } from "./kv.js"
 import { State } from "./state.js"
 
 export const ID = WebSearch.ID
 export type ID = WebSearch.ID
+export type Selection = ID | "random" | false
 
 export const Provider = WebSearch.Provider
 export type Provider = WebSearch.Provider
@@ -49,6 +51,7 @@ export type Error = ProviderRequiredError | ProviderNotFoundError | DisabledErro
 export interface Interface extends State.Transformable<Draft> {
   readonly providers: () => Effect.Effect<readonly Provider[]>
   readonly default: () => Effect.Effect<Provider | undefined, DisabledError>
+  readonly setDefault: (selection: Selection) => Effect.Effect<void>
   readonly query: (input: Input) => Effect.Effect<Response, Error>
 }
 
@@ -56,29 +59,39 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/We
 
 type Data = {
   readonly providers: Map<ID, ProviderImplementation>
-  selection?: ID | "random" | false
+  selection?: Selection
+  selectionOverridden: boolean
 }
 
 export type Draft = {
   add: (provider: ProviderImplementation) => void
   default: {
-    get: () => ID | "random" | false | undefined
-    set: (selection: ID | "random" | false) => void
+    get: () => Selection | undefined
+    set: (selection: Selection) => void
   }
 }
+
+const selectionKey = "websearch:selection"
+const StoredSelection = Schema.Union([ID, Schema.Literal("random"), Schema.Literal(false)])
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const kv = yield* KV.Service
     const decodeResults = Schema.decodeUnknownEffect(Schema.Array(Result))
+    const stored = yield* kv.get(selectionKey)
+    const selection = yield* Ref.make<Selection | undefined>(Schema.is(StoredSelection)(stored) ? stored : undefined)
     const state = State.create<Data, Draft>({
-      initial: () => ({ providers: new Map() }),
+      initial: () => ({ providers: new Map(), selection: Ref.getUnsafe(selection), selectionOverridden: false }),
       draft: (draft) => ({
         add: (provider) => draft.providers.set(provider.id, provider),
         default: {
           get: () => draft.selection,
-          set: (selection) => (draft.selection = selection),
+          set: (selection) => {
+            draft.selection = selection
+            draft.selectionOverridden = true
+          },
         },
       }),
       finalize: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
@@ -120,6 +133,14 @@ const layer = Layer.effect(
         const provider = yield* defaultProvider()
         return provider && { id: provider.id, name: provider.name }
       }),
+      setDefault: Effect.fn("WebSearch.setDefault")(function* (value) {
+        yield* kv.set(selectionKey, value)
+        yield* Ref.set(selection, value)
+        const data = state.get()
+        if (data.selectionOverridden) return
+        data.selection = value
+        yield* bus.publish(WebSearch.Event.Updated, {})
+      }),
       query: Effect.fn("WebSearch.query")(function* (input) {
         const provider = yield* resolve(input)
         const results = yield* provider.execute({ query: input.query }).pipe(
@@ -135,5 +156,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node],
+  deps: [Bus.node, KV.node],
 })

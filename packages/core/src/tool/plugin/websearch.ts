@@ -32,6 +32,15 @@ export const Plugin = {
     const forms = yield* Form.Service
     const config = yield* Config.Service
     const websearch = yield* WebSearch.Service
+    const configuredProvider = Effect.fn("WebSearchTool.configuredProvider")(function* (
+      providers: readonly WebSearch.Provider[],
+    ) {
+      const configured = Config.latest(yield* config.entries(), "websearch")
+      if (configured === false) return yield* new WebSearch.DisabledError()
+      if (!configured) return
+      if (configured.provider !== "random") return configured.provider
+      return providers[Math.floor(Math.random() * providers.length)]?.id
+    })
 
     yield* ctx.tool
       .transform((draft) =>
@@ -69,6 +78,8 @@ export const Plugin = {
                           const providers = (yield* ctx.websearch.providers()).data
                           const defaultProvider = providers[0]
                           if (!defaultProvider) return yield* new WebSearch.ProviderRequiredError()
+                          const configured = yield* configuredProvider(providers)
+                          if (configured) return configured
                           const response = yield* forms.ask({
                             sessionID: context.sessionID,
                             title: "Web Search",
@@ -96,10 +107,10 @@ export const Plugin = {
                           })
                           if (response.status === "cancelled")
                             return yield* Effect.fail(new Error("Web search cancelled"))
+                          const answeredConfig = yield* configuredProvider(providers)
+                          if (answeredConfig) return answeredConfig
                           if (response.answer.choice === "disable") {
-                            yield* config.update((draft) => {
-                              draft.websearch = false
-                            })
+                            yield* websearch.setDefault(false)
                             return yield* new WebSearch.DisabledError()
                           }
                           const selection =
@@ -125,17 +136,17 @@ export const Plugin = {
                               : undefined
                           if (selection?.status === "cancelled")
                             return yield* Effect.fail(new Error("Web search cancelled"))
+                          const latest = yield* configuredProvider(providers)
+                          if (latest) return latest
                           const providerID = selection?.answer.provider ?? "random"
                           if (
                             typeof providerID !== "string" ||
                             (providerID !== "random" && !providers.some((provider) => provider.id === providerID))
                           )
                             return yield* new WebSearch.ProviderRequiredError()
-                          yield* config.update((draft) => {
-                            draft.websearch = {
-                              provider: providerID === "random" ? "random" : WebSearch.ID.make(providerID),
-                            }
-                          })
+                          yield* websearch.setDefault(
+                            providerID === "random" ? "random" : WebSearch.ID.make(providerID),
+                          )
                           if (providerID !== "random") return WebSearch.ID.make(providerID)
                           return providers[Math.floor(Math.random() * providers.length)]?.id
                         }),
@@ -206,7 +217,14 @@ export const Plugin = {
 
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
-        const disabled = Config.latest(yield* config.entries(), "websearch") === false
+        const configured = Config.latest(yield* config.entries(), "websearch")
+        const disabled =
+          configured === false ||
+          (configured === undefined &&
+            (yield* websearch.default().pipe(
+              Effect.as(false),
+              Effect.catch(() => Effect.succeed(true)),
+            )))
         if (disabled) delete event.tools[name]
       }),
     )

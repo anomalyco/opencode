@@ -3,10 +3,11 @@ import { Effect, Exit, Scope } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
+import { KV } from "@opencode-ai/core/kv"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([WebSearch.node, Bus.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([WebSearch.node, Bus.node, KV.node])))
 
 const register = (id: string) =>
   Effect.gen(function* () {
@@ -77,6 +78,29 @@ describe("WebSearch", () => {
       yield* websearch.transform((draft) => draft.default.set(parallel.providerID))
 
       expect((yield* websearch.query({ query: "configured" })).providerID).toBe(parallel.providerID)
+    }),
+  )
+
+  it.effect("persists a runtime default in KV", () =>
+    Effect.gen(function* () {
+      const parallel = yield* register("parallel")
+      const websearch = yield* WebSearch.Service
+      const kv = yield* KV.Service
+      yield* websearch.setDefault(parallel.providerID)
+
+      expect(yield* kv.get("websearch:selection")).toBe(parallel.providerID)
+      expect((yield* websearch.query({ query: "persisted" })).providerID).toBe(parallel.providerID)
+    }),
+  )
+
+  it.effect("gives scoped configuration precedence over stored consent", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.setDefault(false)
+      yield* websearch.transform((draft) => draft.default.set(exa.providerID))
+
+      expect((yield* websearch.query({ query: "configured" })).providerID).toBe(exa.providerID)
     }),
   )
 
