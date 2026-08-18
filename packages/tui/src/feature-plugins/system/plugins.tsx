@@ -4,6 +4,7 @@ import { usePlugin } from "../../plugin/context"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
 import { DialogErrorDetails } from "../../component/dialog-error-details"
+import { ConfigPlugin, useConfig } from "../../config"
 
 const id = "opencode.plugins"
 
@@ -12,6 +13,7 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
   const [focused, setFocused] = createSignal<string>()
   const [detail, setDetail] = createSignal<{ title: string; error: string }>()
   const dialog = useDialog()
+  const config = useConfig()
   const options = createMemo(() => {
     const builtins = props.plugins
       .registered()
@@ -65,10 +67,9 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
     const current = props.plugins.registered().find((item) => item.id === plugin.value)
     if (!current) return
     setLocked(true)
-    void (current.active ? props.plugins.deactivate(current.id) : props.plugins.activate(current.id))
-      .then((ok) => {
-        if (ok) return
-        props.context.ui.toast.show({ variant: "error", message: `Failed to update plugin ${current.id}` })
+    void config
+      .update((draft) => {
+        ConfigPlugin.setEnabled(draft, current.id, !current.active)
       })
       .catch((error) => {
         props.context.ui.toast.show({

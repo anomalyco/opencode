@@ -30,7 +30,7 @@ async function until(read: () => Promise<string>, expected: (value: string | und
   return value
 }
 
-async function bootApp(directory: string) {
+async function bootApp(directory: string, config: Record<string, unknown> = {}) {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
@@ -53,7 +53,13 @@ async function bootApp(directory: string) {
     run({
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
-      config: { get: async () => ({}), update: async () => ({}) },
+      config: {
+        get: async () => config,
+        update: async (update) => {
+          update(config)
+          return config
+        },
+      },
       packages: { resolve: async () => undefined },
       args: {},
       log: () => {},
@@ -212,6 +218,29 @@ test("editing one plugin leaves others untouched and a broken save keeps the las
     "b1:setup\nb1:cleanup\nb2:setup\nb2:cleanup\nb3:setup\n",
   )
   expect(await readA()).toBe("a1:setup\na1:cleanup\na2:setup\n")
+
+  process.emit("SIGHUP")
+  await app.task
+})
+
+test("editing one plugin does not reactivate a plugin disabled by configuration", async () => {
+  await using tmp = await tmpdir()
+  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
+  await mkdir(directory, { recursive: true })
+  const markerA = path.join(tmp.path, "a.txt")
+  const markerB = path.join(tmp.path, "b.txt")
+  await writeFile(path.join(directory, "a.ts"), lifecycleSource(markerA, "test.a", "a1"))
+  const sourceB = path.join(directory, "b.ts")
+  await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b1"))
+
+  await using app = await bootApp(tmp.path, { plugins: ["-test.a"] })
+  const readB = () => readFile(markerB, "utf8")
+  expect(await until(readB, (value) => value === "b1:setup\n")).toBe("b1:setup\n")
+  expect(await readFile(markerA, "utf8").catch(() => undefined)).toBeUndefined()
+
+  await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b2"))
+  expect(await until(readB, (value) => value?.includes("b2:setup") ?? false)).toBe("b1:setup\nb1:cleanup\nb2:setup\n")
+  expect(await readFile(markerA, "utf8").catch(() => undefined)).toBeUndefined()
 
   process.emit("SIGHUP")
   await app.task

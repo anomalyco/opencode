@@ -1,4 +1,5 @@
 export * as Config from "."
+export * as ConfigPlugin from "./plugin"
 
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { Schema } from "effect"
