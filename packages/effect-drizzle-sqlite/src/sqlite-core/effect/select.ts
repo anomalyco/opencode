@@ -46,9 +46,9 @@ export type SQLiteEffectSelectPrepare<
 
 export class SQLiteEffectSelectBuilder<
   TSelection extends SelectedFields | undefined,
-  TRunResult,
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
-  TBuilderMode extends "db" | "qb" = "db",
+  out TRunResult,
+  in out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  in out TBuilderMode extends "db" | "qb" = "db",
 > {
   static readonly [entityKind]: string = "SQLiteEffectSelectBuilder"
 
