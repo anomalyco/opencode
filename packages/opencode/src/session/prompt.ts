@@ -1015,6 +1015,18 @@ const layer = Layer.effect(
                 (error) => error instanceof Image.ResizerUnavailableError,
                 () => Effect.succeed(part),
               ),
+              Effect.matchEffect({
+                onFailure: (error) =>
+                  Effect.succeed({
+                    id: part.id,
+                    messageID: part.messageID,
+                    sessionID: part.sessionID,
+                    type: "text" as const,
+                    synthetic: true,
+                    text: `[Image "${part.filename ?? part.mime}" could not be processed and was not sent: ${error.message}. Convert it to PNG, JPEG, GIF, or WebP and try again.]`,
+                  }),
+                onSuccess: (value) => Effect.succeed(value),
+              }),
             )
           : Effect.succeed(part),
       )
