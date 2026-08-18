@@ -1,8 +1,9 @@
 export * as PluginSupervisor from "./supervisor.js"
+export { Service, type Interface } from "./supervisor-service.js"
 
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
-import { Cause, Context, Deferred, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { ConfigPluginSource } from "../config/plugin/source.js"
@@ -14,6 +15,7 @@ import { PluginPromise } from "../plugin/promise.js"
 import { PluginInternal } from "./internal.js"
 import { SdkPlugins } from "./sdk.js"
 import { importModule } from "@opencode-ai/util/runtime-import"
+import { Service } from "./supervisor-service.js"
 
 const PluginModule = Schema.Struct({
   default: Schema.Union([
@@ -127,13 +129,6 @@ const load = Effect.fn("PluginSupervisor.load")(function* (
     effect: (host) => plugin.effect({ ...host, options: operation.options }),
   } satisfies Plugin.Versioned
 })
-
-export interface Interface {
-  /** Wait for the initial plugin generation and startup updates to settle. */
-  readonly flush: Effect.Effect<void>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/PluginSupervisor") {}
 
 export const layer = Layer.effect(
   Service,

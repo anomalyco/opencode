@@ -1020,6 +1020,36 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("keeps WebSocket eligibility after model request hooks", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "model.request", (event) =>
+        Effect.sync(() => {
+          event.headers["x-model-request-hook"] = "active"
+        }),
+      )
+      yield* hooks.register("session", "http.request", () => Effect.die("Other-provider HTTP hook should not apply"), {
+        providerID: Provider.ID.githubCopilot,
+      })
+      const context = yield* SessionContext.Service
+      const modelRequests = yield* SessionModelRequest.Service
+      const selected = yield* context.select(sessionID)
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      yield* InstructionState.prepare(database.db, bus, selected.instructions, sessionID)
+
+      const prepared = yield* modelRequests.prepare({
+        context: yield* context.load(selected),
+        step: 1,
+      })
+
+      expect(prepared.request.http?.headers?.["x-model-request-hook"]).toBe("active")
+      expect(prepared.webSocketEligible).toBe(true)
+      expect(prepared.options.http).toBeUndefined()
+    }),
+  )
+
   it.effect("forces HTTP and triggers active request and response hooks once", () =>
     Effect.gen(function* () {
       yield* setup

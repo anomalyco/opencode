@@ -27,6 +27,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Image } from "@opencode-ai/core/image"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { testEffect } from "./lib/effect"
 
 const executionCalls: Session.ID[] = []
@@ -59,12 +60,25 @@ const locations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
     () =>
-      // Attachment admission only needs the location-scoped Image service.
+      // Attachment admission only needs image normalization and plugin readiness.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      Layer.mock(Image.Service, {
-        normalize: (_resource, content) =>
-          Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
-      }) as unknown as Layer.Layer<LocationServices>,
+      Layer.unwrap(
+        Effect.sync(() => {
+          let ready = false
+          return Layer.mergeAll(
+            Layer.mock(Image.Service, {
+              normalize: (_resource, content) =>
+                ready
+                  ? Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content)
+                  : Effect.die(new Error("Image service used before plugins were ready")),
+            }),
+            Layer.succeed(
+              PluginSupervisor.Service,
+              PluginSupervisor.Service.of({ flush: Effect.sync(() => (ready = true)) }),
+            ),
+          )
+        }),
+      ) as unknown as Layer.Layer<LocationServices>,
   ),
 )
 const it = testEffect(

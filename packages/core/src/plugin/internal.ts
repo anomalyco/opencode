@@ -3,6 +3,7 @@ export * as PluginInternal from "./internal.js"
 import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
+import { AppProcess } from "@opencode-ai/util/process"
 import { Context, Effect, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { Agent } from "../agent.js"
@@ -12,6 +13,8 @@ import { Config } from "../config.js"
 import { Credential } from "../credential.js"
 import { ConfigAgentPlugin } from "../config/plugin/agent.js"
 import { ConfigCommandPlugin } from "../config/plugin/command.js"
+import { ConfigFormatterPlugin } from "../config/plugin/formatter.js"
+import { ConfigImagePlugin } from "../config/plugin/image.js"
 import { ConfigInstructionPlugin } from "../config/plugin/instruction.js"
 import { ConfigMCPPlugin } from "../config/plugin/mcp.js"
 import { ConfigProviderPlugin } from "../config/plugin/provider.js"
@@ -77,6 +80,7 @@ import { WellKnownPlugin } from "../wellknown/plugin.js"
 
 const services = Effect.fn("PluginInternal.services")(function* () {
   const agent = yield* Agent.Service
+  const processes = yield* AppProcess.Service
   const catalog = yield* Catalog.Service
   const command = yield* Command.Service
   const config = yield* Config.Service
@@ -115,6 +119,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const wellknown = yield* WellKnown.Service
   return Context.mergeAll(
     Context.make(Agent.Service, agent),
+    Context.make(AppProcess.Service, processes),
     Context.make(Catalog.Service, catalog),
     Context.make(Command.Service, command),
     Context.make(Config.Service, config),
@@ -160,6 +165,7 @@ export type Requirements = ContextServices<Effect.Success<ReturnType<typeof serv
 
 export const requirements = LayerNode.group([
   Agent.node,
+  AppProcess.node,
   Catalog.node,
   Command.node,
   Config.node,
@@ -232,6 +238,8 @@ const post = [
   ConfigReferencePlugin.Plugin,
   ConfigAgentPlugin.Plugin,
   ConfigCommandPlugin.Plugin,
+  ConfigFormatterPlugin.Plugin,
+  ConfigImagePlugin.Plugin,
   ConfigSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   ConfigWebSearchPlugin.Plugin,

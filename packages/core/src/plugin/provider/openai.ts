@@ -5,7 +5,6 @@ import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Bus } from "../../bus.js"
 import { Integration } from "../../integration.js"
-import { Model } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
@@ -230,15 +229,17 @@ export const OpenAIPlugin = define({
         })
       }
     })
-    yield* ctx.session.hook("http.request", (evt) =>
-      Effect.sync(() => {
-        if (!chatgpt || evt.model.providerID !== Provider.ID.openai) return
-        const url = new URL(evt.request.url)
-        evt.request.headers.set("originator", "opencode")
-        evt.request.headers.set("session-id", evt.sessionID)
-        if (url.origin !== "https://api.openai.com") return
-        evt.request = new Request(`${codexBaseURL}${url.pathname.replace(/^\/v1/, "")}${url.search}`, evt.request)
-      }),
+    yield* ctx.session.hook(
+      "model.request",
+      (evt) =>
+        Effect.sync(() => {
+          if (!chatgpt) return
+          if (evt.baseURL && URL.canParse(evt.baseURL) && new URL(evt.baseURL).origin === "https://api.openai.com")
+            evt.baseURL = codexBaseURL
+          evt.headers.originator = "opencode"
+          evt.headers["session-id"] = evt.sessionID
+        }),
+      { providerID: Provider.ID.openai },
     )
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
     yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(

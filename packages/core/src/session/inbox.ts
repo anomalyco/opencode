@@ -180,13 +180,27 @@ export const admitCompaction = Effect.fn("SessionInbox.admitCompaction")(functio
   bus: Bus.Interface,
   input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID; readonly delivery: Delivery },
 ) {
-  const admitted = yield* admit(db, bus, {
-    id: input.id,
-    sessionID: input.sessionID,
-    item: Item.make({ type: "compaction", payload: {}, delivery: input.delivery }),
-  })
-  if (admitted.type === "compaction") return admitted
-  return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  return yield* serialized(
+    input.sessionID,
+    Effect.gen(function* () {
+      const exact = yield* find(db, input.id)
+      if (exact) {
+        if (exact.type === "compaction" && exact.sessionID === input.sessionID) return exact
+        return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+      }
+      if (yield* promotedFromMessage(db, input.sessionID, input.id, input.delivery))
+        return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+      const pending = (yield* list(db, input.sessionID)).find((item) => item.type === "compaction")
+      if (pending) return pending
+      const admitted = yield* admit(db, bus, {
+        id: input.id,
+        sessionID: input.sessionID,
+        item: Item.make({ type: "compaction", payload: {}, delivery: input.delivery }),
+      })
+      if (admitted.type === "compaction") return admitted
+      return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+    }),
+  )
 })
 
 export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(function* (

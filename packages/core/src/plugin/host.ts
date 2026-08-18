@@ -104,9 +104,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
         }),
     },
     aisdk: {
-      hook: (name, callback) => {
+      hook: (name, callback, options) => {
         if (name === "sdk") {
           return aisdk.hook.sdk((event) => {
+            if (options?.providerID !== undefined && options.providerID !== event.model.providerID) return Effect.void
             const output = {
               model: mutable(event.model),
               package: event.package,
@@ -119,6 +120,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
           })
         }
         return aisdk.hook.language((event) => {
+          if (options?.providerID !== undefined && options.providerID !== event.model.providerID) return Effect.void
           const output = {
             model: mutable(event.model),
             options: event.options,
@@ -382,7 +384,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
         }),
     },
     session: {
-      hook: (name, callback) => hooks.register("session", name, callback),
+      hook: (name, callback, options) => hooks.register("session", name, callback, options),
       create: (input) =>
         runtime.session.create({
           id: input?.id,

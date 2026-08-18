@@ -2,8 +2,8 @@ export * as Image from "./image.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Config } from "./config.js"
 import { FileSystem } from "./filesystem.js"
+import { State } from "./state.js"
 
 export class ResizerUnavailableError extends Schema.TaggedError<ResizerUnavailableError>()(
   "Image.ResizerUnavailableError",
@@ -32,7 +32,18 @@ export class SizeError extends Schema.TaggedError<SizeError>()("Image.SizeError"
   }
 }
 
-export interface Interface {
+export type Limits = {
+  autoResize: boolean
+  maxWidth: number
+  maxHeight: number
+  maxBase64Bytes: number
+}
+
+export type Draft = {
+  configure: (limits: Partial<Limits>) => void
+}
+
+export interface Interface extends State.Transformable<Draft> {
   readonly normalize: (
     resource: string,
     content: FileSystem.Content & { readonly encoding: "base64" },
@@ -47,7 +58,23 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Im
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const config = yield* Config.Service
+    const state = State.create<Limits, Draft>({
+      name: "image",
+      initial: () => ({
+        autoResize: true,
+        maxWidth: 2_000,
+        maxHeight: 2_000,
+        maxBase64Bytes: 5 * 1024 * 1024,
+      }),
+      draft: (draft) => ({
+        configure: (limits) => {
+          if (limits.autoResize !== undefined) draft.autoResize = limits.autoResize
+          if (limits.maxWidth !== undefined) draft.maxWidth = limits.maxWidth
+          if (limits.maxHeight !== undefined) draft.maxHeight = limits.maxHeight
+          if (limits.maxBase64Bytes !== undefined) draft.maxBase64Bytes = limits.maxBase64Bytes
+        },
+      }),
+    })
     const loadAdapter = yield* Effect.cached(
       Effect.tryPromise({
         try: () => import("./image/photon.js"),
@@ -58,22 +85,11 @@ const layer = Layer.effect(
       resource: string,
       content: FileSystem.Content & { readonly encoding: "base64" },
     ) {
-      const image = Object.assign(
-        {},
-        ...(yield* config.entries()).flatMap((entry) =>
-          entry.type === "document" && entry.info.media?.image ? [entry.info.media.image] : [],
-        ),
-      )
       const normalize = yield* loadAdapter
-      return yield* normalize(resource, content, {
-        autoResize: image.auto_resize ?? true,
-        maxWidth: image.max_width ?? 2_000,
-        maxHeight: image.max_height ?? 2_000,
-        maxBase64Bytes: image.max_base64_bytes ?? 5 * 1024 * 1024,
-      })
+      return yield* normalize(resource, content, state.get())
     })
-    return Service.of({ normalize })
+    return Service.of({ transform: state.transform, reload: state.reload, normalize })
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Config.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [] })

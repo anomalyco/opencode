@@ -73,7 +73,7 @@ const it = testEffect(
 )
 
 describe("Session.compact", () => {
-  it.effect("durably stacks manual compaction", () =>
+  it.effect("durably coalesces manual compaction", () =>
     Effect.gen(function* () {
       requests = []
       const session = yield* Session.Service
@@ -102,17 +102,32 @@ describe("Session.compact", () => {
       const first = yield* session.compact({ sessionID: created.id })
       const second = yield* session.compact({ sessionID: created.id })
 
-      expect(second.id).not.toBe(first.id)
+      expect(second.id).toBe(first.id)
       expect(requests).toHaveLength(0)
       expect(yield* session.inbox(created.id)).toEqual([
         expect.objectContaining({ id: first.id, type: "compaction", delivery: "queue" }),
-        expect.objectContaining({ id: second.id, type: "compaction", delivery: "queue" }),
       ])
       expect((yield* session.context(created.id)).find((message) => message.id === first.id)).toBeUndefined()
 
       const steered = yield* session.create({ location })
       const steer = yield* session.compact({ sessionID: steered.id, delivery: "steer" })
       expect(steer).toMatchObject({ type: "compaction", delivery: "steer" })
+    }),
+  )
+
+  it.effect("coalesces concurrent manual compaction", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const created = yield* session.create({ location })
+      const admitted = yield* Effect.all(
+        [SessionMessage.ID.create(), SessionMessage.ID.create()].map((id) =>
+          session.compact({ id, sessionID: created.id }),
+        ),
+        { concurrency: "unbounded" },
+      )
+
+      expect(admitted[1]?.id).toBe(admitted[0]?.id)
+      expect(yield* session.inbox(created.id)).toHaveLength(1)
     }),
   )
 })

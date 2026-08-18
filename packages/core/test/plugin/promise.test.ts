@@ -320,10 +320,14 @@ describe("fromPromise", () => {
         define({
           id: "promise-session-http",
           setup: async (ctx) => {
-            await ctx.session.hook("http.request", (event) => {
-              event.request = new Request("https://provider.test/changed", event.request)
-              event.request.headers.set("x-hook", "promise")
-            })
+            await ctx.session.hook(
+              "http.request",
+              (event) => {
+                event.request = new Request("https://provider.test/changed", event.request)
+                event.request.headers.set("x-hook", "promise")
+              },
+              { providerID: "test" },
+            )
             await ctx.session.hook("http.response", async (event) => {
               event.response = new Response(`${await event.response.text()}-response`, {
                 status: event.response.status,
@@ -342,6 +346,11 @@ describe("fromPromise", () => {
         ...context,
         request: new Request("https://provider.test", { method: "POST", body: "payload" }),
       })
+      const ignored = yield* hooks.trigger("session", "http.request", {
+        ...context,
+        model: Model.Ref.make({ providerID: Provider.ID.make("other"), id: Model.ID.make("model") }),
+        request: new Request("https://other.test"),
+      })
       const response = yield* hooks.trigger("session", "http.response", {
         ...context,
         request: request.request,
@@ -349,6 +358,9 @@ describe("fromPromise", () => {
       })
 
       expect(request.request.url).toBe("https://provider.test/changed")
+      expect(ignored.request.url).toBe("https://other.test/")
+      expect(yield* hooks.has("session", "http.request", Provider.ID.make("test"))).toBe(true)
+      expect(yield* hooks.has("session", "http.request", Provider.ID.make("other"))).toBe(false)
       expect(yield* Effect.promise(() => response.response.text())).toBe("promise-response")
     }),
   )

@@ -291,10 +291,16 @@ it.effect(
       instruction = "Changed context"
       const before = yield* durableState(db, sessionID)
       const hooks = yield* PluginHooks.Service
+      let modelRequestHook = false
       yield* hooks.register("session", "context", (event) =>
         Effect.sync(() => {
           event.system = [SystemPart.make("Hooked system"), ...event.system]
           if (event.tools.lookup) event.tools.lookup.description = "Hooked lookup"
+        }),
+      )
+      yield* hooks.register("session", "model.request", () =>
+        Effect.sync(() => {
+          modelRequestHook = true
         }),
       )
 
@@ -303,6 +309,7 @@ it.effect(
 
       expect(result).toBe("Transient answer")
       expect(requests).toHaveLength(1)
+      expect(modelRequestHook).toBe(true)
       expect(hasHttpMiddleware).toBe(true)
       expect(requests[0]?.model).toBe(model)
       expect(requests[0]?.system[0]?.text).toBe("Hooked system")
