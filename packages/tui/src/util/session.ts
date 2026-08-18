@@ -1,6 +1,36 @@
 import type { ModelInfo, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { Locale } from "./locale"
 
+type SessionNode = {
+  id: string
+  parentID?: string | null
+}
+
+export function sessionFamily<T extends SessionNode>(sessions: readonly T[], sessionID: string) {
+  const byID = new Map(sessions.map((session) => [session.id, session]))
+  const current = byID.get(sessionID)
+  if (!current) return []
+
+  const children = new Map<string, T[]>()
+  sessions.forEach((session) => {
+    if (!session.parentID) return
+    const group = children.get(session.parentID)
+    if (group) group.push(session)
+    else children.set(session.parentID, [session])
+  })
+
+  function root(session: T): T {
+    const parent = session.parentID ? byID.get(session.parentID) : undefined
+    return parent ? root(parent) : session
+  }
+
+  function walk(parentID: string, depth: number): Array<{ session: T; depth: number }> {
+    return (children.get(parentID) ?? []).flatMap((session) => [{ session, depth }, ...walk(session.id, depth + 1)])
+  }
+
+  return walk(root(current).id, 0)
+}
+
 export function lastAssistantWithUsage(messages: ReadonlyArray<SessionMessageInfo>, boundary?: string) {
   const boundaryIndex = boundary ? messages.findIndex((message) => message.id === boundary) : -1
   if (boundary && boundaryIndex === -1) return undefined

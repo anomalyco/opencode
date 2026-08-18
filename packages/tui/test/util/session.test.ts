@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode-ai/client"
-import { lastAssistantWithUsage } from "../../src/util/session"
+import { lastAssistantWithUsage, sessionFamily } from "../../src/util/session"
 
 const assistant = (id: string, input: number): SessionMessageInfo => ({
   id,
@@ -13,6 +13,23 @@ const assistant = (id: string, input: number): SessionMessageInfo => ({
 })
 
 describe("util.session", () => {
+  test("flattens nested subagents from any session in the family", () => {
+    const sessions = [
+      { id: "root" },
+      { id: "child-a", parentID: "root" },
+      { id: "grandchild-a", parentID: "child-a" },
+      { id: "child-b", parentID: "root" },
+      { id: "grandchild-b", parentID: "child-b" },
+    ]
+
+    expect(sessionFamily(sessions, "grandchild-a")).toEqual([
+      { session: sessions[1], depth: 0 },
+      { session: sessions[2], depth: 1 },
+      { session: sessions[3], depth: 0 },
+      { session: sessions[4], depth: 1 },
+    ])
+  })
+
   test("tracks usage across undo and redo boundaries", () => {
     const messages = [assistant("msg_z", 10), assistant("msg_a", 30)]
 
