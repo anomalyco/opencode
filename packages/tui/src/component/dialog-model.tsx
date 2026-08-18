@@ -141,13 +141,11 @@ export function DialogModel(props: { providerID?: string }) {
 
   function onSelect(providerID: string, modelID: string) {
     local.model.set({ providerID, modelID }, { recent: true })
-    const list = local.model.variant.list()
-    const cur = local.model.variant.selected()
-    if (cur === "default" || (cur && list.includes(cur))) {
-      dialog.clear()
-      return
-    }
-    if (list.length > 0) {
+    if (local.model.variant.list().length > 0) {
+      // Always offer the variant choice: DialogVariant pre-selects the saved variant, so keeping it is a
+      // single Enter. The previous early-return made any model with a saved entry (including "default",
+      // which session sync auto-seeds — see #38363) permanently one-click, hiding variants the user was
+      // never shown existed (#30445, #27893).
       dialog.replace(() => <DialogVariant />)
       return
     }
