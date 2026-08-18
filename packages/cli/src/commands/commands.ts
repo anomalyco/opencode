@@ -170,11 +170,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       description: "Export session data as JSON",
       params: {
         ...ServerParams,
-        session: Flag.string("session").pipe(
-          Flag.withAlias("s"),
-          Flag.withDescription("Session ID to export to stdout"),
-          Flag.optional,
-        ),
+        session: Argument.string("session").pipe(Argument.withDescription("Session ID to export"), Argument.optional),
         sanitize: Flag.boolean("sanitize").pipe(
           Flag.withDescription("Redact sensitive transcript and file data"),
           Flag.withDefault(false),
