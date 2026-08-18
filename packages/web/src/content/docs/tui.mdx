@@ -422,6 +422,16 @@ The TUI can request attention for questions, permissions, session errors, and co
 
 You can customize various aspects of the TUI view using the command palette (`ctrl+p`). These settings persist across restarts.
 
+#### Session scrollbar
+
+The full TUI manages its own scroll area, so your terminal's native scrollbar may not reflect the session history. To show OpenCode's session scrollbar, open the command palette, search for "Toggle session scrollbar", and select it. The setting persists across TUI sessions.
+
+To use your terminal's native scrollback instead, start the minimal interactive interface.
+
+```bash
+opencode --mini
+```
+
 ---
 
 #### Username display
