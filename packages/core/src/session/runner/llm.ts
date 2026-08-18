@@ -321,7 +321,14 @@ const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
           }
           const stepSettlement = publisher.stepSettlement()
-          if (stepSettlement && !publisher.hasProviderError()) {
+          const emptyOutput =
+            stream._tag === "Success" &&
+            !publisher.hasProviderError() &&
+            stepSettlement !== undefined &&
+            !publisher.hasUsableOutput()
+          if (emptyOutput)
+            yield* withPublication(publisher.failAssistant("Provider returned no usable assistant output"))
+          if (stepSettlement && !publisher.hasProviderError() && !emptyOutput) {
             const endSnapshot = yield* snapshots.capture()
             const files =
               startSnapshot && endSnapshot

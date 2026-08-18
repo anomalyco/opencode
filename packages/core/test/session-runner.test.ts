@@ -437,16 +437,20 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
         ...chunks.map((text) => LLMEvent.reasoningDelta({ id, text })),
       ]
       const expectedContent = { type: "reasoning", id, text }
+      const visibleContent = { type: "text", text: "Done" }
       return {
         delta: SessionEvent.Reasoning.Delta,
         partialEvents,
         completeEvents: [
           ...partialEvents,
           LLMEvent.reasoningEnd({ id }),
+          LLMEvent.textStart({ id: `${id}-text` }),
+          LLMEvent.textDelta({ id: `${id}-text`, text: visibleContent.text }),
+          LLMEvent.textEnd({ id: `${id}-text` }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
-        expectedAssistant: { type: "assistant", finish: "stop", content: [expectedContent] },
+        expectedAssistant: { type: "assistant", finish: "stop", content: [expectedContent, visibleContent] },
         expectedContent,
       }
     }
@@ -1593,6 +1597,9 @@ describe("SessionRunnerLLM", () => {
           id: "reasoning-openai",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         }),
+        LLMEvent.textStart({ id: "reasoning-final" }),
+        LLMEvent.textDelta({ id: "reasoning-final", text: "Done" }),
+        LLMEvent.textEnd({ id: "reasoning-final" }),
         LLMEvent.stepFinish({ index: 0, reason: "stop" }),
         LLMEvent.finish({ reason: "stop" }),
       ]
@@ -1610,6 +1617,7 @@ describe("SessionRunnerLLM", () => {
               text: "Encrypted thought",
               providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
             },
+            { type: "text", text: "Done" },
           ],
         },
       ])
@@ -1625,6 +1633,7 @@ describe("SessionRunnerLLM", () => {
           text: "Encrypted thought",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
+        { type: "text", text: "Done" },
       ])
     }),
   )
@@ -2738,6 +2747,9 @@ describe("SessionRunnerLLM", () => {
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-blocked" }),
+          LLMEvent.textDelta({ id: "text-blocked", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-blocked" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -2754,7 +2766,7 @@ describe("SessionRunnerLLM", () => {
             { type: "tool", id: "call-blocked", state: { status: "error", error: { message: "Permission blocked" } } },
           ],
         },
-        { type: "assistant", finish: "stop" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Done" }] },
       ])
     }),
   )
@@ -2831,6 +2843,9 @@ describe("SessionRunnerLLM", () => {
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-corrected" }),
+          LLMEvent.textDelta({ id: "text-corrected", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-corrected" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -2847,7 +2862,7 @@ describe("SessionRunnerLLM", () => {
             { type: "tool", id: "call-corrected", state: { status: "error", error: { message: "Use another tool" } } },
           ],
         },
-        { type: "assistant", finish: "stop" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Done" }] },
       ])
     }),
   )
@@ -3235,6 +3250,78 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail raw stream durably" },
         { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider unavailable" } },
+      ])
+    }),
+  )
+
+  it.effect("fails a successful provider step that produces no usable assistant output", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Answer visibly" }), resume: false })
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+      yield* session.resume(sessionID)
+
+      const { db } = yield* Database.Service
+      const types = (
+        yield* db
+          .select({ type: EventTable.type })
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, sessionID))
+          .orderBy(asc(EventTable.seq))
+          .all()
+          .pipe(Effect.orDie)
+      ).map((row) => row.type)
+      expect(types.some((type) => type.startsWith("session.next.step.failed"))).toBe(true)
+      expect(types.some((type) => type.startsWith("session.next.step.ended"))).toBe(false)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Answer visibly" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "unknown", message: "Provider returned no usable assistant output" },
+        },
+      ])
+    }),
+  )
+
+  it.effect("fails reasoning-only output even with whitespace text and nonzero tokens", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Answer visibly" }), resume: false })
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.reasoningStart({ id: "reasoning-only" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-only", text: "Still thinking" }),
+        LLMEvent.reasoningEnd({ id: "reasoning-only" }),
+        LLMEvent.textStart({ id: "text-whitespace" }),
+        LLMEvent.textDelta({ id: "text-whitespace", text: " \n\t" }),
+        LLMEvent.textEnd({ id: "text-whitespace" }),
+        LLMEvent.stepFinish({
+          index: 0,
+          reason: "stop",
+          usage: { outputTokens: 6, reasoningTokens: 62 },
+        }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+      yield* session.resume(sessionID)
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Answer visibly" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "unknown", message: "Provider returned no usable assistant output" },
+          content: [
+            { type: "reasoning", text: "Still thinking" },
+            { type: "text", text: " \n\t" },
+          ],
+        },
       ])
     }),
   )
