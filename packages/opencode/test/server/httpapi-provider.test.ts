@@ -311,6 +311,32 @@ describe("provider HttpApi", () => {
   )
 
   it.instance(
+    "reports a missing auth method instead of crashing",
+    Effect.gen(function* () {
+      const directory = (yield* TestInstance).directory
+      const headers = { "x-opencode-directory": directory, "content-type": "application/json" }
+
+      // The parity plugin registers two methods, so index 2 is past the end.
+      const outOfRange = yield* requestAuthorize({ providerID, method: 2, headers })
+      expect(outOfRange.status).toBe(400)
+      expect(JSON.parse(outOfRange.body)).toEqual({
+        name: "ProviderAuthOauthMissing",
+        data: { providerID },
+      })
+
+      // A provider with no registered auth hook at all.
+      const unknown = yield* requestAuthorize({ providerID: "test-oauth-absent", method: 0, headers })
+      expect(unknown.status).toBe(400)
+      expect(JSON.parse(unknown.body)).toEqual({
+        name: "ProviderAuthOauthMissing",
+        data: { providerID: "test-oauth-absent" },
+      })
+    }),
+    { ...projectOptions, init: writeProviderAuthPlugin },
+    30000,
+  )
+
+  it.instance(
     "returns declared provider auth validation errors",
     Effect.gen(function* () {
       const directory = (yield* TestInstance).directory
