@@ -176,6 +176,51 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       if (draftID) removeDraftPersisted(draftID)
     }
 
+    const closeTabs = (indexes: number[], nextTab?: Tab, selectNext = false) => {
+      if (!indexes.length) return
+      const removedIndexes = new Set(indexes)
+      const removed = store.flatMap((tab, index) =>
+        removedIndexes.has(index)
+          ? [
+              {
+                tab,
+                index,
+                key: tabKey(tab),
+                draftID: tab.type === "draft" ? tab.draftID : undefined,
+              },
+            ]
+          : [],
+      )
+      if (!removed.length) return
+
+      const currentRecentKey = recentKey()
+      const recentRemoved = currentRecentKey ? removed.some((entry) => entry.key === currentRecentKey) : false
+      updateClosed((stack) => removed.reduce((next, entry) => pushClosedTab(next, entry.tab, entry.index), stack))
+
+      for (const entry of removed) closing.add(entry.key)
+      void startTransition(() => {
+        setStore((tabs) => tabs.filter((_, index) => !removedIndexes.has(index)))
+        if (!nextTab) {
+          setRecentKey(undefined)
+          navigate("/")
+          return
+        }
+        if (selectNext || (recentRemoved && location.pathname !== "/")) {
+          navigateTab(nextTab)
+          return
+        }
+        if (recentRemoved) setRecentKey(tabKey(nextTab))
+      }).finally(() => {
+        for (const entry of removed) closing.delete(entry.key)
+      })
+
+      for (const entry of removed) {
+        memory.remove(entry.key)
+        removeInfo(entry.key)
+        if (entry.draftID) removeDraftPersisted(entry.draftID)
+      }
+    }
+
     const actions = {
       addSessionTab: (tab: Omit<SessionTab, "type">) => {
         const next = { type: "session" as const, ...tab }
@@ -255,6 +300,34 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         if (!tab) return
         if (tab.type === "session") updateClosed((stack) => pushClosedTab(stack, tab, index))
         removeTab(index)
+      },
+      closeAllTabs() {
+        closeTabs(store.map((_, index) => index))
+      },
+      closeTabsBefore(index: number) {
+        const nextTab = store[index]
+        if (!nextTab) return
+        closeTabs(
+          store.flatMap((_, current) => (current < index ? [current] : [])),
+          nextTab,
+        )
+      },
+      closeTabsAfter(index: number) {
+        const nextTab = store[index]
+        if (!nextTab) return
+        closeTabs(
+          store.flatMap((_, current) => (current > index ? [current] : [])),
+          nextTab,
+        )
+      },
+      closeOtherTabs(index: number) {
+        const nextTab = store[index]
+        if (!nextTab) return
+        closeTabs(
+          store.flatMap((_, current) => (current !== index ? [current] : [])),
+          nextTab,
+          true,
+        )
       },
       reopenClosedTab() {
         if (!closedReady()) {

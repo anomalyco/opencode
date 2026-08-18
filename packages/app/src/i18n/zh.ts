@@ -158,6 +158,9 @@ export const dict = {
   "command.file.open": "打开文件",
 
   "command.tab.close": "关闭标签页",
+  "command.tab.closeAll": "关闭所有标签页",
+  "command.tab.closeRight": "关闭右侧的所有标签页",
+  "command.tab.closeOthers": "关闭除此之外的所有标签页",
   "command.tab.reopenClosed": "重新打开已关闭的标签页",
 
   "command.context.addSelection": "将所选内容添加到上下文",
