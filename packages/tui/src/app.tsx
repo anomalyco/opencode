@@ -283,16 +283,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                             <ArgsProvider {...input.args}>
                               <KVProvider>
                                 <ToastProvider>
-                                  <RouteProvider
-                                    initialRoute={
-                                      input.args.continue
-                                        ? {
-                                            type: "session",
-                                            sessionID: "dummy",
-                                          }
-                                        : undefined
-                                    }
-                                  >
+                                  <RouteProvider initialRoute={undefined}>
                                     <TuiConfigProvider config={input.config}>
                                       <PluginRuntimeProvider value={pluginRuntime}>
                                         <SDKProvider
