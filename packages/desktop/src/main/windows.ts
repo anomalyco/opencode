@@ -15,6 +15,7 @@ import { createUnresponsiveSampler } from "./unresponsive"
 import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
+import { resolveRendererDevUrl } from "./renderer-url"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
 
 const root = dirname(fileURLToPath(import.meta.url))
@@ -332,7 +333,7 @@ export function registerRendererProtocol() {
 }
 
 function loadWindow(win: BrowserWindow, html: string) {
-  const devUrl = process.env.ELECTRON_RENDERER_URL
+  const devUrl = resolveRendererDevUrl(app.isPackaged, process.env.ELECTRON_RENDERER_URL)
   if (devUrl) {
     const url = new URL(html, devUrl)
     void win.loadURL(url.toString())
@@ -510,9 +511,8 @@ function isRendererUrl(value?: string, html = false) {
   const url = new URL(value)
   if (html && !url.pathname.endsWith(".html")) return false
   if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost) return true
-  const devUrl = process.env.ELECTRON_RENDERER_URL
-  if (!devUrl || !URL.canParse(devUrl)) return false
-  return url.origin === new URL(devUrl).origin
+  const devUrl = resolveRendererDevUrl(app.isPackaged, process.env.ELECTRON_RENDERER_URL)
+  return devUrl ? url.origin === devUrl.origin : false
 }
 
 function wireZoom(win: BrowserWindow) {
