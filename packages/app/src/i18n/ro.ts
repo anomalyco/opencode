@@ -508,21 +508,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "desktop {{version}}",
   "wsl.onboarding.versionMismatch": "Versiunea instalată nu corespunde cu versiunea aplicației desktop.",
   "wsl.onboarding.adding": "Se adaugă...",
-  "help.tabs.toast.ariaLabel": "Descoperă filele. Organizează-ți munca și sesiunile active cu file",
-  "help.tabs.toast.dismiss": "Închide informațiile despre file",
-  "help.tabs.title": "Descoperă filele",
-  "help.tabs.description": "Organizează-ți munca și sesiunile active cu file",
-  "help.tabs.date": "14 iulie",
-  "help.tabs.introduction": "OpenCode Desktop este acum construit în jurul filelor.",
-  "help.tabs.sessions":
-    "Pornește o sesiune nouă într-o filă sau deschide o sesiune existentă din oricare dintre proiectele tale. Deschide o filă nouă când începi ceva nou și închide-o când ai terminat.",
-  "help.tabs.organize":
-    "Păstrând câteva file deschise, îți organizezi mai ușor sesiunile active. Redenumește filele cu ceva memorabil dacă vrei să le păstrezi.",
-  "help.tabs.home":
-    "Toate sesiunile și proiectele tale sunt pe noul ecran Acasă. Selectarea unei sesiuni o deschide într-o filă.",
-  "help.tabs.persistence": "Când redeschizi aplicația, filele tale rămân deschise.",
-  "help.tabs.worktrees":
-    "Noul design nu suportă încă Git Worktrees, dar va fi disponibil în curând. Dacă preferi să folosești aspectul anterior, poți comuta între layout-uri din Setări. Ține cont că noul layout va deveni permanent în câteva săptămâni.",
   "server.row.noUsername": "fără nume de utilizator",
   "dialog.project.edit.title": "Editează proiectul",
   "dialog.project.edit.name": "Nume",
@@ -974,13 +959,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Extinde părțile de editare",
   "settings.general.row.editToolPartsExpanded.description":
     "Afișează implicit părțile de editare, scriere și patch extinse în cronologie",
-  "settings.general.row.newInterface.title": "Aspect nou",
-  "settings.general.row.newInterface.badge": "Nou",
-  "settings.general.row.newInterface.description":
-    "Folosește noul aspect cu file și pagină principală. Poți comuta între aspecte pentru o perioadă limitată.",
-  "settings.general.row.newInterfaceNotice.title": "Folosești noul aspect",
-  "settings.general.row.newInterfaceNotice.description": "Aspectul anterior nu mai este disponibil",
-  "settings.general.row.newInterfaceNotice.dismiss": "Închide",
   "settings.general.row.pinchZoom.title": "Zoom prin ciupire",
   "settings.general.row.pinchZoom.description": "Permite zoom cu gesturi de ciupire pe trackpad și Ctrl-scroll",
   "settings.general.row.wayland.title": "Folosește Wayland nativ",

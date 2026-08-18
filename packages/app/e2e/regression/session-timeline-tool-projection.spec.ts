@@ -83,6 +83,26 @@ test("labels all web search provider variants", async ({ page }) => {
   await expect(page.getByRole("button", { name: /^Web Search/ })).toBeVisible()
 })
 
+test("labels completed searches with result counts", async ({ page }) => {
+  const glob = "prt_glob_count"
+  const grep = "prt_grep_count"
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        toolPart(glob, "glob", "completed", { path: ".", pattern: "**/*.ts" }, { metadata: { count: 1 } }),
+        toolPart(grep, "grep", "completed", { path: ".", pattern: "value" }, { metadata: { matches: 12 } }),
+      ]),
+    ],
+  })
+
+  const group = page.locator(`[data-timeline-part-ids="${glob},${grep}"]`)
+  await group.locator('[data-slot="collapsible-trigger"]').click()
+  const rows = group.locator('[data-component="tool-trigger"]')
+  await expect(rows.nth(0)).toContainText("(1 match)")
+  await expect(rows.nth(1)).toContainText("(12 matches)")
+})
+
 test("labels V2 read tools from their path input", async ({ page }) => {
   const id = "prt_read_path"
   await setupTimeline(page, {

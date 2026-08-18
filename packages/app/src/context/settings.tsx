@@ -254,7 +254,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setMobileTitlebarPosition(value: "top" | "bottom") {
           setStore("general", "mobileTitlebarPosition", value)
         },
-        newLayoutDesigns: () => true,
       },
       visibility: {
         fileTree: showFileTree,

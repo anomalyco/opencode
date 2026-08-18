@@ -25,7 +25,7 @@ type Json = Schema.Schema.Type<typeof Schema.Json>
 const JsonRecord = Schema.Record(Schema.String, Schema.Json)
 const decodeJsonRecord = Schema.decodeUnknownSync(JsonRecord)
 
-export class LoadError extends Schema.TaggedErrorClass<LoadError>()("Provider.LoadError", {
+export class LoadError extends Schema.TaggedError<LoadError>()("Provider.LoadError", {
   package: Schema.String,
   cause: Schema.Defect(),
 }) {}

@@ -328,7 +328,7 @@
     }
   }
 
-  body[data-new-layout] [data-slot="session-turn-diffs-header"] {
+  :root body [data-slot="session-turn-diffs-header"] {
     height: 24px;
     padding-block: 0;
   }

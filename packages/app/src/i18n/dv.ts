@@ -515,22 +515,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "ޑެސްކްޓޮޕް {{version}} އެވެ",
   "wsl.onboarding.versionMismatch": "އިންސްޓޯލް ކޮށްފައިވާ ވަރޝަން ޑެސްކްޓޮޕް އެޕް ވަރޝަން އާއި އެއްގޮތެއް ނުވެއެވެ.",
   "wsl.onboarding.adding": "އިތުރުކުރަނީ...",
-  "help.tabs.toast.ariaLabel":
-    "Tabs ތަޢާރަފްކުރުން. ޓެބްތަކާއެކު ތިމާގެ މަސައްކަތާއި އެކްޓިވް ސެޝަންތައް އިންތިޒާމުކުރުން",
-  "help.tabs.toast.dismiss": "Tabs ގެ މައުލޫމާތު ބާތިލްކުރުން",
-  "help.tabs.title": "Tabs ތަޢާރަފްކުރުން",
-  "help.tabs.description": "ޓެބްތަކާއެކު ތިމާގެ މަސައްކަތާއި އެކްޓިވް ސެޝަންތައް އިންތިޒާމުކުރުން",
-  "help.tabs.date": "ޖުލައި 14",
-  "help.tabs.introduction": "OpenCode Desktop މިހާރު ބިނާކޮށްފައިވަނީ ޓެބްތަކުގެ ވަށައިގެންނެވެ.",
-  "help.tabs.sessions":
-    "ޓެބެއްގައި އާ ސެޝަނެއް ފަށާ، ނުވަތަ ތިމާގެ އެއްވެސް ޕްރޮޖެކްޓަކުން މިހާރު ހުރި ސެޝަނެއް ހުޅުވާށެވެ. އާ ކަމެއް ފެށުމުން އާ ޓެބެއް ހުޅުވާ، އަދި ނިމުމުން ބަންދު ކުރާށެވެ.",
-  "help.tabs.organize":
-    "މަދު ޓެބްތަކެއް ހުޅުވާފައި ބެހެއްޓުމުން އެކްޓިވް ސެޝަންތައް އިންތިޒާމު ކުރުމަށް ފަސޭހަވެގެންދެއެވެ. ޓެބްތައް ވަށައިގެން ބެހެއްޓުމަށް ރާވާނަމަ ހަނދާން އާވާ އެއްޗަކަށް ބަދަލުކޮށްލާށެވެ.",
-  "help.tabs.home":
-    "ތިބާގެ ހުރިހާ ސެޝަންތަކާއި ޕްރޮޖެކްޓްތައް އާ Home ސްކްރީނުން ފެންނާނެއެވެ. ސެޝަނެއް ހޮވުމުން ޓެބެއްގައި ހުޅުވޭނެއެވެ.",
-  "help.tabs.persistence": "އެޕް އަލުން ހުޅުވާލުމުން އަދިވެސް ޓެބްތައް ހުޅުވާފައި ހުރެއެވެ.",
-  "help.tabs.worktrees":
-    "އާ ޑިޒައިން އިން އަދި Git ވޯކްޓްރީސް އަށް ސަޕޯޓް ނުކުރާއިރު، ވަރަށް އަވަހަށް އަންނާނެ އެވެ. އެހެންކަމުން ކުރީގެ ލޭއައުޓް ބޭނުންކުރުން ކުރިއަށް ގެންދަން ބޭނުންނަމަ ސެޓިންގްސްގައިވާ ލޭއައުޓްތަކުގެ މެދުގައި ބަދަލުވެވޭނެއެވެ. ހަމައެކަނި ހަނދާނުގައި ބަހައްޓަންވީ އާ ލޭއައުޓް ދެތިން ހަފްތާއެއްހާ ދުވަހުގެ ތެރޭގައި ދާއިމީ ވެގެންދާނެ ކަމެވެ.",
   "server.row.noUsername": "ޔޫޒަރނޭމް އެއް ނެތެވެ",
   "dialog.project.edit.title": "އެޑިޓް ޕްރޮޖެކްޓް",
   "dialog.project.edit.name": "ނަން",
@@ -985,13 +969,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "އެޑިޓް ޓޫލްގެ ބައިތައް ފުޅާކުރުން",
   "settings.general.row.editToolPartsExpanded.description":
     "ޓައިމްލައިންގައި ޑިފޯލްޓްކޮށް ފުޅާކޮށްފައިވާ އެޑިޓް، ރައިޓް، އަދި ޕެޗް ޓޫލް ބައިތައް ދައްކާށެވެ",
-  "settings.general.row.newInterface.title": "އާ ލޭއައުޓެއް",
-  "settings.general.row.newInterface.badge": "އާ",
-  "settings.general.row.newInterface.description":
-    "އާ ޓެބްތަކާއި ހޯމް ލޭއައުޓް ބޭނުން ކުރާށެވެ. ލޭއައުޓްތަކުގެ މެދުގައި ވަކި މުއްދަތަކަށް ބަދަލުވުން.",
-  "settings.general.row.newInterfaceNotice.title": "މިހާރު ތިޔަ ބޭނުން ކުރަނީ އާ ލޭއައުޓެކެވެ",
-  "settings.general.row.newInterfaceNotice.description": "ކުރީގެ ލޭއައުޓް މިހާރު ނުލިބެއެވެ",
-  "settings.general.row.newInterfaceNotice.dismiss": "ދުރުކޮށްލުން",
   "settings.general.row.pinchZoom.title": "ޒޫމް ކުރަން ޕިންޗް ކޮށްލާށެވެ",
   "settings.general.row.pinchZoom.description":
     "ޓްރެކްޕެޑް ޕިންޗް އަދި Ctrl-ސްކްރޯލް ޖެޝަރސް ޒޫމް ކުރުމަށް ހުއްދަ ދިނުން",

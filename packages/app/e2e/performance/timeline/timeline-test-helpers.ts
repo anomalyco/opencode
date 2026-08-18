@@ -9,7 +9,6 @@ export async function installTimelineSettings(page: Page) {
       "settings.v3",
       JSON.stringify({
         general: {
-          newLayoutDesigns: true,
           editToolPartsExpanded: true,
           shellToolPartsExpanded: true,
           showReasoningSummaries: true,

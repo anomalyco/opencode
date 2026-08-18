@@ -11,6 +11,7 @@ import { Catalog } from "./catalog.js"
 import { Command } from "./command.js"
 import { Bus } from "./bus.js"
 import { Integration } from "./integration.js"
+import { MCP } from "./mcp/index.js"
 import { Location } from "./location.js"
 import { PluginHost } from "./plugin/host.js"
 import { PluginRuntime } from "./plugin/runtime.js"
@@ -154,6 +155,7 @@ export const node = makeLocationNode({
     Catalog.node,
     Command.node,
     Integration.node,
+    MCP.node,
     Location.node,
     Reference.node,
     Skill.node,

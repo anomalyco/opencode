@@ -1,7 +1,6 @@
 import { For, Show, type JSX } from "solid-js"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 
@@ -13,7 +12,6 @@ import { useLanguage } from "@/context/language"
 export function WindowsAppMenu(props: {
   command: ReturnType<typeof useCommand>
   platform: ReturnType<typeof usePlatform>
-  variant?: "legacy" | "v2"
 }) {
   let lastFocused: HTMLElement | undefined
   const language = useLanguage()
@@ -50,35 +48,20 @@ export function WindowsAppMenu(props: {
 
   return (
     <DropdownMenu gutter={4} modal={false} placement="bottom-start">
-      <Show
-        when={props.variant === "v2"}
-        fallback={
-          <DropdownMenu.Trigger
-            as={IconButton}
-            icon="menu"
-            variant="ghost"
-            class="titlebar-icon rounded-md shrink-0"
-            aria-label={language.t("desktop.menu.ariaLabel")}
-            onPointerDown={rememberFocus}
-            onKeyDown={rememberFocus}
-          />
-        }
+      <div
+        data-component="desktop-icon-button"
+        class="flex h-7 w-9 shrink-0 items-center justify-center rounded-[6px] px-1"
       >
-        <div
-          data-component="desktop-icon-button"
-          class="flex h-7 w-9 shrink-0 items-center justify-center rounded-[6px] px-1"
-        >
-          <DropdownMenu.Trigger
-            as={IconButtonV2}
-            variant="ghost-muted"
-            size="large"
-            icon={<IconV2 name="menu" />}
-            aria-label={language.t("desktop.menu.ariaLabel")}
-            onPointerDown={rememberFocus}
-            onKeyDown={rememberFocus}
-          />
-        </div>
-      </Show>
+        <DropdownMenu.Trigger
+          as={IconButtonV2}
+          variant="ghost-muted"
+          size="large"
+          icon={<IconV2 name="menu" />}
+          aria-label={language.t("desktop.menu.ariaLabel")}
+          onPointerDown={rememberFocus}
+          onKeyDown={rememberFocus}
+        />
+      </div>
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="desktop-app-menu">
           <DropdownMenu.Group>

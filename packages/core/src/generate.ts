@@ -12,12 +12,11 @@ export interface TextInput {
   readonly model?: Model.Ref
 }
 
-export class ModelSelectionError extends Schema.TaggedErrorClass<ModelSelectionError>()(
-  "Generate.ModelSelectionError",
-  { message: Schema.String },
-) {}
+export class ModelSelectionError extends Schema.TaggedError<ModelSelectionError>()("Generate.ModelSelectionError", {
+  message: Schema.String,
+}) {}
 
-export class UnavailableError extends Schema.TaggedErrorClass<UnavailableError>()("Generate.UnavailableError", {
+export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Generate.UnavailableError", {
   message: Schema.String,
   service: Schema.optional(Schema.String),
 }) {}

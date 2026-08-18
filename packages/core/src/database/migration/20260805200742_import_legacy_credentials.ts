@@ -27,7 +27,7 @@ const LegacyWellKnown = Schema.Struct({
   token: Schema.String,
 })
 const LegacyValue = Schema.Union([LegacyOAuth, LegacyKey, LegacyWellKnown])
-const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const decodeValue = Schema.decodeUnknownOption(LegacyValue)
 const wellKnownSourcesKey = "wellknown:sources"
 

@@ -1,16 +1,5 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
-import { normalizeSessionMessages } from "@/utils/session-message"
-
-mock.module("@opencode-ai/session-ui/message-part", () => ({
-  renderable: () => true,
-  groupParts: (refs: Array<{ messageID: string; part: { id: string } }>) =>
-    refs.map((ref) => ({
-      type: "part" as const,
-      key: ref.part.id,
-      ref: { messageID: ref.messageID, partID: ref.part.id },
-    })),
-}))
 
 const { Timeline, TimelineRow } = await import("./rows")
 
@@ -36,26 +25,15 @@ describe("current session timeline rows", () => {
         time: { created: 5 },
       },
     ] satisfies SessionMessageInfo[]
-    const normalized = normalizeSessionMessages("ses_1", source)
-    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
-
-    const result = Timeline.constructSessionMessageRows(
-      source,
-      (messageID) => messages.get(messageID),
-      (messageID) => normalized.parts.get(messageID) ?? [],
-      true,
-      "busy",
-      true,
-      normalized.messages.filter((message) => message.role === "user"),
-    )
+    const result = Timeline.constructSessionMessageRows(source, true, "busy")
 
     expect(result.activeMessageID).toBe("msg_3")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_1",
-      "assistant-part:msg_1:msg_2:text:0",
+      "assistant-part:msg_1:part:msg_2:msg_2:text:0",
       "turn-gap:msg_3",
       "user-message:msg_3",
-      "assistant-part:msg_3:msg_4:reasoning:0",
+      "assistant-part:msg_3:part:msg_4:msg_4:reasoning:0",
     ])
   })
 
@@ -72,23 +50,37 @@ describe("current session timeline rows", () => {
         time: { created: 1, completed: 2 },
       },
     ] satisfies SessionMessageInfo[]
-    const normalized = normalizeSessionMessages("ses_1", source)
-    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
-
-    const result = Timeline.constructSessionMessageRows(
-      source,
-      (messageID) => messages.get(messageID),
-      (messageID) => normalized.parts.get(messageID) ?? [],
-      true,
-      "idle",
-      true,
-      normalized.messages.filter((message) => message.role === "user"),
-    )
+    const result = Timeline.constructSessionMessageRows(source, true, "idle")
 
     expect(result.activeMessageID).toBe("msg_shell")
+    expect(result.rows.map(TimelineRow.key)).toEqual(["shell:msg_shell"])
+  })
+
+  test("keeps assistant content when no user root is available", () => {
+    const source = [
+      {
+        id: "msg_notice",
+        type: "synthetic",
+        text: "done",
+        description: "Background work completed",
+        time: { created: 1 },
+      },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "result" }],
+        time: { created: 2, completed: 3 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = Timeline.constructSessionMessageRows(source, true, "idle")
+
+    expect(result.activeMessageID).toBe("msg_assistant")
     expect(result.rows.map(TimelineRow.key)).toEqual([
-      "user-message:msg_shell",
-      "assistant-part:msg_shell:msg_shell:tool",
+      "notice:msg_notice",
+      "assistant-part:msg_assistant:part:msg_assistant:msg_assistant:text:0",
     ])
   })
 
@@ -144,106 +136,54 @@ describe("current session timeline rows", () => {
         time: { created: 11 },
       },
     ] satisfies SessionMessageInfo[]
-    const normalized = normalizeSessionMessages("ses_1", source)
-    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
-
-    const result = Timeline.constructSessionMessageRows(
-      source,
-      (messageID) => messages.get(messageID),
-      (messageID) => normalized.parts.get(messageID) ?? [],
-      true,
-      "idle",
-      true,
-      normalized.messages.filter((message) => message.role === "user"),
-    )
+    const result = Timeline.constructSessionMessageRows(source, true, "idle")
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_user",
       "notice:msg_agent",
-      "assistant-part:msg_user:msg_assistant_1:text:0",
+      "assistant-part:msg_user:part:msg_assistant_1:msg_assistant_1:text:0",
       "notice:msg_background",
       "notice:msg_model",
-      "assistant-part:msg_user:msg_assistant_2:text:0",
+      "assistant-part:msg_user:part:msg_assistant_2:msg_assistant_2:text:0",
       "notice:msg_restart",
       "notice:msg_skill",
       "notice:msg_compaction",
     ])
   })
 
-  test("keeps a projected parent missing from the source page before newer turns", () => {
-    const source = [
-      { id: "msg_user_1", type: "user", text: "first question", time: { created: 1 } },
-      {
-        id: "msg_assistant_1",
-        type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
-        content: [{ type: "text", text: "first answer" }],
-        time: { created: 2, completed: 3 },
-      },
-      { id: "msg_user_2", type: "user", text: "second question", time: { created: 4 } },
-      {
-        id: "msg_assistant_2",
-        type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
-        content: [{ type: "text", text: "second answer" }],
-        time: { created: 5, completed: 6 },
-      },
-    ] satisfies SessionMessageInfo[]
-    const normalized = normalizeSessionMessages("ses_1", source)
-    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
-
-    const result = Timeline.constructSessionMessageRows(
-      source.slice(1),
-      (messageID) => messages.get(messageID),
-      (messageID) => normalized.parts.get(messageID) ?? [],
-      true,
-      "idle",
-      true,
-      normalized.messages.filter((message) => message.role === "user"),
-    )
-
-    expect(result.rows.map(TimelineRow.key)).toEqual([
-      "user-message:msg_user_1",
-      "assistant-part:msg_user_1:msg_assistant_1:text:0",
-      "turn-gap:msg_user_2",
-      "user-message:msg_user_2",
-      "assistant-part:msg_user_2:msg_assistant_2:text:0",
-    ])
-  })
-
   test("renders an optimistic user turn and thinking before the protocol message arrives", () => {
     const source = [
       { id: "msg_z", type: "user", text: "existing", time: { created: 1 } },
+      { id: "msg_a", type: "user", text: "pending", time: { created: 2 } },
     ] satisfies SessionMessageInfo[]
-    const normalized = normalizeSessionMessages("ses_1", source)
-    const optimistic = {
-      id: "msg_a",
-      sessionID: "ses_1",
-      role: "user" as const,
-      time: { created: 2 },
-      agent: "build",
-      model: { modelID: "model", providerID: "provider" },
-    }
-    const result = Timeline.constructSessionMessageRows(
-      source,
-      (messageID) =>
-        messageID === optimistic.id ? optimistic : normalized.messages.find((message) => message.id === messageID),
-      () => [],
-      true,
-      "busy",
-      true,
-      [...normalized.messages.filter((message) => message.role === "user"), optimistic],
-    )
+    const result = Timeline.constructSessionMessageRows(source, true, "busy")
 
-    expect(result.activeMessageID).toBe(optimistic.id)
+    expect(result.activeMessageID).toBe("msg_a")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_z",
       "turn-gap:msg_a",
       "user-message:msg_a",
       "thinking:msg_a",
     ])
+  })
+
+  test("renders retry state from the current assistant message", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [],
+        retry: { attempt: 2, at: 10, error: { type: "ProviderError", message: "rate limited" } },
+        time: { created: 2 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = Timeline.constructSessionMessageRows(source, true, "busy")
+
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
   })
 
   test("removes a failed assistant error when the turn continues streaming", () => {
@@ -267,18 +207,7 @@ describe("current session timeline rows", () => {
         time: { created: 4 },
       },
     ] satisfies SessionMessageInfo[]
-    const normalized = normalizeSessionMessages("ses_1", source)
-    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
-
-    const result = Timeline.constructSessionMessageRows(
-      source,
-      (messageID) => messages.get(messageID),
-      (messageID) => normalized.parts.get(messageID) ?? [],
-      true,
-      "busy",
-      true,
-      normalized.messages.filter((message) => message.role === "user"),
-    )
+    const result = Timeline.constructSessionMessageRows(source, true, "busy")
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
   })

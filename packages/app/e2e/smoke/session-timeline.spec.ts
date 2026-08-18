@@ -33,7 +33,6 @@ test.describe("smoke: session timeline", () => {
   test("keeps the visible message fixed while prepending history", async ({ page }) => {
     const requests: { before?: string; phase: "start" | "end"; at: number }[] = []
     await mockOpenCodeServer(page, {
-      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -44,7 +43,7 @@ test.describe("smoke: session timeline", () => {
     })
     await configureSmokePage(page, fixture.directory)
 
-    await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
+    await navigateToSession(page, fixture.targetID, fixture.expected.targetTitle)
     await waitForTimelineStable(page)
     const scroller = timelineScroller(page)
     await pointAtTimeline(page)
@@ -92,7 +91,6 @@ test.describe("smoke: session timeline", () => {
 
   test("preserves the timeline gap above the composer", async ({ page }) => {
     await mockOpenCodeServer(page, {
-      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -101,7 +99,7 @@ test.describe("smoke: session timeline", () => {
     })
     await configureSmokePage(page, fixture.directory)
 
-    await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
+    await navigateToSession(page, fixture.targetID, fixture.expected.targetTitle)
     await waitForTimelineStable(page)
     const scroller = timelineScroller(page)
     await scroller.evaluate((element) => {
@@ -119,7 +117,6 @@ test.describe("smoke: session timeline", () => {
 
   test("paints cached session tabs at the latest message", async ({ page }) => {
     await mockOpenCodeServer(page, {
-      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -143,11 +140,11 @@ test.describe("smoke: session timeline", () => {
       { server: fixture.serverKey, sourceID: fixture.sourceID, targetID: fixture.targetID },
     )
 
-    await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.targetID}`)
+    await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${fixture.targetID}`)
     await expectSessionTitle(page, fixture.expected.targetTitle)
     await switchTitlebarSession(page, fixture.sourceID, fixture.expected.sourceTitle)
 
-    const destination = fixture.messages[fixture.targetID].map((message) => message.info.id)
+    const destination = fixture.messages[fixture.targetID].map((message) => message.id)
     const last = fixture.expected.targetMessageIDs.at(-1)!
     await page.evaluate(
       ({ destination, last }) => {
@@ -262,7 +259,6 @@ test.describe("smoke: session timeline", () => {
 
   test("paints a cold session tab at the latest message", async ({ page }) => {
     await mockOpenCodeServer(page, {
-      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -285,10 +281,10 @@ test.describe("smoke: session timeline", () => {
       },
       { server: fixture.serverKey, sourceID: fixture.sourceID, targetID: fixture.targetID },
     )
-    await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.sourceID}`)
+    await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${fixture.sourceID}`)
     await expectSessionTitle(page, fixture.expected.sourceTitle)
     const last = fixture.expected.targetMessageIDs.at(-1)!
-    const destination = fixture.messages[fixture.targetID].map((message) => message.info.id)
+    const destination = fixture.messages[fixture.targetID].map((message) => message.id)
     await page.evaluate(
       ({ destination, last }) => {
         const ids = new Set(destination)
@@ -341,7 +337,6 @@ test.describe("smoke: session timeline", () => {
   test("renders seeded timeline in order while paging through history", async ({ page }) => {
     const errors = trackPageErrors(page)
     await mockOpenCodeServer(page, {
-      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -351,9 +346,9 @@ test.describe("smoke: session timeline", () => {
     await configureSmokePage(page, fixture.directory)
 
     await selectHomeProject(page, fixture.project.name)
-    await navigateToSession(page, fixture.directory, fixture.sourceID, fixture.expected.sourceTitle)
+    await navigateToSession(page, fixture.sourceID, fixture.expected.sourceTitle)
     await expectSessionReady(page)
-    await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
+    await navigateToSession(page, fixture.targetID, fixture.expected.targetTitle)
     const expectedPartIDs = fixture.expected.targetPartIDs
     const expectedMessageIDs = fixture.expected.targetMessageIDs
     await expectSessionTimelineReady(page, expectedPartIDs, expectedMessageIDs, errors)
@@ -742,8 +737,8 @@ async function selectHomeProject(page: Page, projectName: string) {
   await expect(page).toHaveURL(/\/$/)
 }
 
-async function navigateToSession(page: Page, directory: string, sessionId: string, expectedTitle: string) {
-  await page.goto(`/${base64Encode(directory)}/session/${sessionId}`)
+async function navigateToSession(page: Page, sessionId: string, expectedTitle: string) {
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionId}`)
   await expectSessionTitle(page, expectedTitle)
 }
 

@@ -693,6 +693,20 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         }),
       ),
     )
+    .add(
+      HttpApiEndpoint.put("session.environment", "/api/session/:sessionID/environment", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({ variables: Schema.Record(Schema.String, Schema.String) }),
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.environment",
+          summary: "Set session environment",
+          description: "Replace the process environment used by local shell commands for this session.",
+        }),
+      ),
+    )
     .annotateMerge(
       OpenApi.annotations({
         title: "session",

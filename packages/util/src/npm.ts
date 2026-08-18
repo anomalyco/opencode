@@ -13,7 +13,7 @@ import { makeRuntime } from "./effect/runtime.js"
 import { NpmConfig } from "./npm-config.js"
 import { resolveModule } from "#runtime-import"
 
-export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
+export class InstallFailedError extends Schema.TaggedError<InstallFailedError>()("NpmInstallFailedError", {
   add: Schema.Array(Schema.String).pipe(Schema.optional),
   dir: Schema.String,
   cause: Schema.optional(Schema.Defect()),

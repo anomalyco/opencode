@@ -43,10 +43,10 @@ function Digit(props: { value: number; direction: 1 | -1 }) {
   )
 
   return (
-    <span data-slot="animated-number-digit">
+    <span data-slot="animated-number-digit" data-animating={animating() ? "true" : "false"}>
+      <span data-slot="animated-number-static">{props.value}</span>
       <span
         data-slot="animated-number-strip"
-        data-animating={animating() ? "true" : "false"}
         onTransitionEnd={() => {
           setState("animating", false)
           setState("step", (value) => normalize(value) + 10)

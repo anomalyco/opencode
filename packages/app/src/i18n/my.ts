@@ -513,22 +513,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "ဒက်စ်တော့ {{version}}",
   "wsl.onboarding.versionMismatch": "ထည့်သွင်းထားသောဗားရှင်းသည် ဒက်စ်တော့အက်ပ်ဗားရှင်းနှင့် မကိုက်ညီပါ။",
   "wsl.onboarding.adding": "ထည့်နေသည်...",
-  "help.tabs.toast.ariaLabel":
-    "တဘ်များကို မိတ်ဆက်ခြင်း။ တက်ဘ်များဖြင့် သင်၏အလုပ်နှင့် တက်ကြွသော ဆက်ရှင်များကို စုစည်းပါ။",
-  "help.tabs.toast.dismiss": "Tabs အချက်အလက်ကို ဖယ်ပါ။",
-  "help.tabs.title": "တဘ်များကို မိတ်ဆက်ခြင်း။",
-  "help.tabs.description": "တက်ဘ်များဖြင့် သင်၏အလုပ်နှင့် တက်ကြွသော ဆက်ရှင်များကို စုစည်းပါ။",
-  "help.tabs.date": "ဇူလိုင် ၁၄",
-  "help.tabs.introduction": "OpenCode Desktop သည် ယခုအခါ တက်ဘ်များအနီးတွင် တည်ဆောက်ထားသည်။",
-  "help.tabs.sessions":
-    "တက်ဘ်တစ်ခုတွင် စက်ရှင်အသစ်တစ်ခု စတင်ပါ သို့မဟုတ် သင့်ပရောဂျက်တစ်ခုခုမှ လက်ရှိစက်ရှင်တစ်ခုကို ဖွင့်ပါ။ အသစ်တစ်ခုခုကို စတင်သည့်အခါ တက်ဘ်အသစ်တစ်ခုဖွင့်ပြီး ပြီးသွားသောအခါတွင် ၎င်းကိုပိတ်ပါ။",
-  "help.tabs.organize":
-    "တက်ဘ်အနည်းငယ်ကို ဖွင့်ထားခြင်းဖြင့် သင်၏တက်ကြွသော ဆက်ရှင်များကို စုစည်းရန် ပိုမိုလွယ်ကူစေသည်။ ၎င်းတို့ကို ဝိုင်းထားရန် စီစဉ်ပါက တဘ်များကို အမှတ်ရဖွယ်အဖြစ်သို့ အမည်ပြောင်းပါ။",
-  "help.tabs.home":
-    "ပင်မစခရင်အသစ်တွင် သင့်စက်ရှင်များနှင့် ပရောဂျက်များအားလုံးကို သင်တွေ့ရပါမည်။ စက်ရှင်တစ်ခုကို ရွေးချယ်ခြင်းဖြင့် ၎င်းကို တက်ဘ်တစ်ခုတွင် ဖွင့်သည်။",
-  "help.tabs.persistence": "အက်ပ်ကို ပြန်ဖွင့်သောအခါ၊ သင့်တက်ဘ်များကို ဖွင့်ထားဆဲဖြစ်သည်။",
-  "help.tabs.worktrees":
-    "ဒီဇိုင်းအသစ်သည် Git Worktrees ကို မပံ့ပိုးရသေးပါ၊ ၎င်းသည် မကြာမီ ရောက်ရှိလာတော့မည်ဖြစ်သည်။ ထို့ကြောင့် သင်သည် ယခင်အပြင်အဆင်ကို ဆက်လက်အသုံးပြုလိုပါက၊ ဆက်တင်များတွင် အပြင်အဆင်များအကြား ပြောင်းနိုင်သည်။ အပြင်အဆင်အသစ်သည် ရက်သတ္တပတ်အနည်းငယ်အတွင်း အမြဲတမ်းဖြစ်လာမည်ကို သတိပြုပါ။",
   "server.row.noUsername": "အသုံးပြုသူအမည်မရှိပါ။",
   "dialog.project.edit.title": "ပရောဂျက်ကို တည်းဖြတ်ပါ။",
   "dialog.project.edit.name": "အမည်",
@@ -985,13 +969,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "တည်းဖြတ်ကိရိယာအစိတ်အပိုင်းများကို ချဲ့ထွင်ပါ။",
   "settings.general.row.editToolPartsExpanded.description":
     "အချိန်ဇယားတွင် ပုံသေဖြင့် ချဲ့ထွင်ထားသော တည်းဖြတ်ခြင်း၊ ရေးသားခြင်းနှင့် ဖာထေးခြင်း ကိရိယာအစိတ်အပိုင်းများကို ပြသပါ။",
-  "settings.general.row.newInterface.title": "အပြင်အဆင်အသစ်",
-  "settings.general.row.newInterface.badge": "အသစ်",
-  "settings.general.row.newInterface.description":
-    "တက်ဘ်အသစ်များနှင့် အိမ်အပြင်အဆင်ကို အသုံးပြုပါ။ အပြင်အဆင်များကြားတွင် အချိန်အကန့်အသတ်ဖြင့် ပြောင်းပါ။",
-  "settings.general.row.newInterfaceNotice.title": "သင်သည် ယခုအခါ အပြင်အဆင်အသစ်ကို အသုံးပြုနေပါသည်။",
-  "settings.general.row.newInterfaceNotice.description": "ယခင်အပြင်အဆင်ကို မရနိုင်တော့ပါ။",
-  "settings.general.row.newInterfaceNotice.dismiss": "ပယ်ရန်",
   "settings.general.row.pinchZoom.title": "ဇူးမ်ချဲ့ရန် ဖိပါ။",
   "settings.general.row.pinchZoom.description":
     "ဇူးမ်လုပ်ရန် trackpad pinch နှင့် Ctrl-scroll gestures ကို ခွင့်ပြုပါ။",

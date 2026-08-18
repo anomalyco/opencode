@@ -22,3 +22,8 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
   },
 })
+
+export const useData = () => {
+  const server = useServer()
+  return server.ctx.data
+}

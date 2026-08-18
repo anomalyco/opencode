@@ -914,6 +914,10 @@ export type Endpoint5_34Input = { readonly sessionID: Session.ID; readonly messa
 export type Endpoint5_34Output = SessionMessage.Info
 export type SessionMessageOperation<E = never> = (input: Endpoint5_34Input) => Effect.Effect<Endpoint5_34Output, E>
 
+export type Endpoint5_35Input = { readonly sessionID: Session.ID; readonly variables: { readonly [x: string]: string } }
+export type Endpoint5_35Output = void
+export type SessionEnvironmentOperation<E = never> = (input: Endpoint5_35Input) => Effect.Effect<Endpoint5_35Output, E>
+
 export interface SessionApi<E = never> {
   readonly list: SessionListOperation<E>
   readonly create: SessionCreateOperation<E>
@@ -958,6 +962,7 @@ export interface SessionApi<E = never> {
   readonly interrupt: SessionInterruptOperation<E>
   readonly background: SessionBackgroundOperation<E>
   readonly message: SessionMessageOperation<E>
+  readonly environment: SessionEnvironmentOperation<E>
 }
 
 export type Endpoint6_0Input = {

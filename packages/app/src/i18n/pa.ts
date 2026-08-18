@@ -516,21 +516,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "ڈیسک ٹاپ {{version}}",
   "wsl.onboarding.versionMismatch": "انسٹال کیتا گیا ورژن ڈیسک ٹاپ ایپ ورژن نال میل نئیں کھاندا۔",
   "wsl.onboarding.adding": "شامل کر رہیا واں...",
-  "help.tabs.toast.ariaLabel": "ٹیباں دی جان پچھان۔ اپنے کم تے چالو سیشناں نوں ٹیباں نال ترتیب دیو",
-  "help.tabs.toast.dismiss": "ٹیباں دی جانکاری ہٹاؤ",
-  "help.tabs.title": "ٹیباں دی جان پچھان",
-  "help.tabs.description": "اپنے کم تے چالو سیشناں نوں ٹیباں نال ترتیب دیو",
-  "help.tabs.date": "14 جولائی",
-  "help.tabs.introduction": "OpenCode Desktop ہن ٹیباں دے گرد بنایا گیا اے۔",
-  "help.tabs.sessions":
-    "اک ٹیب وچ نواں سیشن شروع کرو یا اپنے کسے وی پروجیکٹ توں موجودہ سیشن کھولو۔ جدوں کجھ نواں شروع کرو تے نواں ٹیب کھولو تے کم پورا ہون تے اینوں بند کر دیو۔",
-  "help.tabs.organize":
-    "کجھ ٹیب کھلے رکھن نال چالو سیشناں نوں ترتیب نال رکھنا سوکھا ہوندا اے۔ جے تسی ٹیب سنبھال کے رکھنا اے تے اینوں کوئی چیتے رہن آلا ناں دیو۔",
-  "help.tabs.home":
-    "نویں ہوم سکرین تے تہانوں اپنے سارے سیشن تے پروجیکٹ لبھن گے۔ سیشن چنن نال اوہ اک ٹیب وچ کھل جاندا اے۔",
-  "help.tabs.persistence": "ایپ دوبارہ کھولن تے تہاڈے ٹیب کھلے رہندے نیں۔",
-  "help.tabs.worktrees":
-    "نواں ڈیزائن ہلے Git Worktrees نوں سہارا نئیں دیندا، ایہ سہولت چھیتی آ رہی اے۔ جے تسی پچھلا لے آؤٹ ورتدے رہنا چاہندے او تے ترتیبات وچ لے آؤٹ بدل سکدے او۔ بس چیتے رکھو کہ کجھ ہفتیاں پچھوں نواں لے آؤٹ پکا ہو جائے گا۔",
   "server.row.noUsername": "کوئی ورتن آلا ناں نئیں",
   "dialog.project.edit.title": "پروجیکٹ وچ ترمیم کرو",
   "dialog.project.edit.name": "ناں",
@@ -974,13 +959,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "ترمیم دے آلے دے حصیاں نو ودھاؤ",
   "settings.general.row.editToolPartsExpanded.description":
     "ٹائم لائن وچ ڈیفالٹ دے طور تے ودھائے گئے ترمیم، لکھن تے پیچ ٹول دے حصے وکھاؤ",
-  "settings.general.row.newInterface.title": "نواں لے آؤٹ",
-  "settings.general.row.newInterface.badge": "نواں",
-  "settings.general.row.newInterface.description":
-    "نویں ٹیبز تے ہوم لے آؤٹ ورتو۔ اک محدود ویلے لئی ترتیب دے وچکار سوئچ کرو۔",
-  "settings.general.row.newInterfaceNotice.title": "تسی ہن نواں لے آؤٹ ورت رہے او",
-  "settings.general.row.newInterfaceNotice.description": "پچھلا لے آؤٹ ہن دستیاب نئیں",
-  "settings.general.row.newInterfaceNotice.dismiss": "برخاست کرو",
   "settings.general.row.pinchZoom.title": "زوم کرن لئی چٹکی مارو",
   "settings.general.row.pinchZoom.description": "ٹریک پیڈ پنچ تے کنٹرول سکرول اشارے نو زوم کرن دی اجازت دیو",
   "settings.general.row.wayland.title": "مقامی Wayland ورتو",

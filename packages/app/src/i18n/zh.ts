@@ -553,21 +553,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "已安装版本与桌面应用版本不一致。",
   "wsl.onboarding.adding": "正在添加...",
 
-  "help.tabs.toast.ariaLabel": "标签页功能介绍。使用标签页整理工作和进行中的会话",
-  "help.tabs.toast.dismiss": "关闭标签页功能介绍",
-  "help.tabs.title": "标签页功能介绍",
-  "help.tabs.description": "使用标签页整理工作和进行中的会话",
-  "help.tabs.date": "7 月 14 日",
-  "help.tabs.introduction": "OpenCode Desktop 现已采用以标签页为核心的设计。",
-  "help.tabs.sessions":
-    "在标签页中开始新会话，或从任意项目打开现有会话。开始处理新任务时打开新标签页，完成后将其关闭。",
-  "help.tabs.organize":
-    "保持打开几个标签页，可更轻松地整理进行中的会话。如果打算保留某个标签页，请为其指定一个便于记忆的名称。",
-  "help.tabs.home": "你可以在新的主页中找到所有会话和项目。选择会话即可在标签页中将其打开。",
-  "help.tabs.persistence": "重新打开应用时，标签页仍会保持打开。",
-  "help.tabs.worktrees":
-    "新设计暂不支持 Git Worktrees，此功能即将推出。如果希望继续使用之前的布局，可在“设置”中切换布局。请注意，新布局将在几周后永久启用。",
-
   "dialog.project.edit.title": "编辑项目",
   "dialog.project.edit.name": "名称",
   "dialog.project.edit.icon": "图标",
@@ -936,12 +921,6 @@ export const dict = {
   "settings.general.row.shellToolPartsExpanded.description": "默认在时间线中展开 Shell 工具调用详情",
   "settings.general.row.editToolPartsExpanded.title": "展开编辑工具调用",
   "settings.general.row.editToolPartsExpanded.description": "默认在时间线中展开 edit、write 和 patch 工具调用详情",
-  "settings.general.row.newInterface.title": "新布局",
-  "settings.general.row.newInterface.badge": "新",
-  "settings.general.row.newInterface.description": "使用新的标签页和主页布局。在有限时间内可在不同布局之间切换。",
-  "settings.general.row.newInterfaceNotice.title": "你现在使用的是新布局",
-  "settings.general.row.newInterfaceNotice.description": "之前的布局不再可用",
-  "settings.general.row.newInterfaceNotice.dismiss": "忽略",
   "settings.general.row.pinchZoom.title": "双指缩放",
   "settings.general.row.pinchZoom.description": "允许使用触控板双指捏合和 Ctrl+滚轮手势缩放",
   "settings.general.row.wayland.title": "使用原生 Wayland",

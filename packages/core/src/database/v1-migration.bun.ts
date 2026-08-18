@@ -114,6 +114,23 @@ type NextProject = {
   readonly commands: string | null
 }
 
+type NextColumns<A> = Record<keyof A, "required" | "nullable" | { readonly fallback: keyof A & string }>
+
+const NEXT_PROJECT_COLUMNS = {
+  id: "required",
+  worktree: "required",
+  vcs: "nullable",
+  name: "nullable",
+  icon_url: "nullable",
+  icon_url_override: { fallback: "icon_url" },
+  icon_color: "nullable",
+  time_created: "required",
+  time_updated: "required",
+  time_initialized: "nullable",
+  sandboxes: "required",
+  commands: "nullable",
+} satisfies NextColumns<NextProject>
+
 type NextSession = {
   readonly id: string
   readonly project_id: string
@@ -149,6 +166,41 @@ type NextSession = {
   readonly time_suspended: number | null
 }
 
+const NEXT_SESSION_COLUMNS = {
+  id: "required",
+  project_id: "required",
+  workspace_id: "nullable",
+  parent_id: "nullable",
+  fork_session_id: "nullable",
+  fork_boundary: "nullable",
+  slug: "required",
+  directory: "required",
+  path: "nullable",
+  title: "nullable",
+  version: "required",
+  share_url: "nullable",
+  summary_additions: "nullable",
+  summary_deletions: "nullable",
+  summary_files: "nullable",
+  summary_diffs: "nullable",
+  metadata: "nullable",
+  cost: "required",
+  tokens_input: "required",
+  tokens_output: "required",
+  tokens_reasoning: "required",
+  tokens_cache_read: "required",
+  tokens_cache_write: "required",
+  revert: "nullable",
+  permission: "nullable",
+  agent: "nullable",
+  model: "nullable",
+  time_created: "required",
+  time_updated: "required",
+  time_compacting: "nullable",
+  time_archived: "nullable",
+  time_suspended: "nullable",
+} satisfies NextColumns<NextSession>
+
 type NextMessage = {
   readonly id: string
   readonly session_id: string
@@ -162,7 +214,7 @@ type NextMessage = {
 const lock = Semaphore.makeUnsafe(1)
 const MIGRATION_STATE_KEY = "migration.v1-v2"
 const EVENT_DELETE_BATCH_SIZE = 1_000
-const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const decodeMessage = Schema.decodeUnknownOption(SessionV1.Info)
 const decodePart = Schema.decodeUnknownOption(SessionV1.Part)
 let runtimeState: RuntimeState = { status: "idle" }
@@ -686,12 +738,9 @@ function importNextDatabase(
         }),
       )
       const projects = new Map(
-        source
-          .query<NextProject, []>("SELECT * FROM project")
-          .all()
-          .map((project) => [project.id, project]),
+        selectNextRows<NextProject>(source, "project", NEXT_PROJECT_COLUMNS).map((project) => [project.id, project]),
       )
-      const sessions = source.query<NextSession, []>("SELECT * FROM session ORDER BY id DESC").all()
+      const sessions = selectNextRows<NextSession>(source, "session", NEXT_SESSION_COLUMNS)
       for (const [index, session] of sessions.entries()) {
         const project = projects.get(session.project_id)
         const projectID = project ? session.project_id : Project.ID.global
@@ -787,6 +836,35 @@ function isNextDatabase(source: SQLiteDatabase) {
       .map((table) => table.name),
   )
   return tables.has("project") && tables.has("session") && tables.has("session_message")
+}
+
+function selectNextRows<A>(source: SQLiteDatabase, table: "project" | "session", definition: NextColumns<A>) {
+  const columns = new Set(
+    source
+      .query<{ name: string }, [string]>("SELECT name FROM pragma_table_info(?)")
+      .all(table)
+      .map((column) => column.name),
+  )
+  const missing = Object.entries(definition)
+    .filter(([column, strategy]) => strategy === "required" && !columns.has(column))
+    .map(([column]) => column)
+  if (missing.length)
+    throw new Error(`Incompatible opencode-next.db: ${table} is missing required columns: ${missing.join(", ")}`)
+  const projection = Object.entries(definition).map(([column, strategy]) => {
+    if (columns.has(column)) return `"${column}"`
+    if (
+      typeof strategy === "object" &&
+      strategy !== null &&
+      "fallback" in strategy &&
+      typeof strategy.fallback === "string" &&
+      columns.has(strategy.fallback)
+    )
+      return `"${strategy.fallback}" AS "${column}"`
+    return `NULL AS "${column}"`
+  })
+  return source
+    .query<A, []>(`SELECT ${projection.join(", ")} FROM "${table}"${table === "session" ? ' ORDER BY "id" DESC' : ""}`)
+    .all()
 }
 
 function row(

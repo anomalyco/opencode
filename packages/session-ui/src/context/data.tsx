@@ -29,10 +29,8 @@ type Data = {
   session_diff_preload?: {
     [sessionID: string]: PreloadMultiFileDiffResult<any>[]
   }
-  message: {
-    [sessionID: string]: Message[]
-  }
-  part: {
+  message?: Record<string, Message[]>
+  part?: {
     [messageID: string]: Part[]
   }
   part_text_accum_delta?: {

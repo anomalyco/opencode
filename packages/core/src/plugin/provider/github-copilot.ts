@@ -37,7 +37,7 @@ const User = Schema.Struct({
   ),
 })
 const decodeUser = Schema.decodeUnknownOption(User)
-const JsonBody = Schema.UnknownFromJsonString
+const JsonBody = Schema.fromJsonString(Schema.Unknown)
 const decodeBody = Schema.decodeUnknownOption(JsonBody)
 
 const oauth = (app: App.Info) =>

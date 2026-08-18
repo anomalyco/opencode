@@ -36,6 +36,7 @@ export async function resolveSessionTarget(input: {
   fork?: boolean
   model?: ModelRef
   agent?: string
+  environment?: Readonly<Record<string, string>>
   prepare: SessionTargetPreparation
   signal?: AbortSignal
 }): Promise<SessionTarget> {
@@ -70,6 +71,12 @@ export async function resolveSessionTarget(input: {
       .catch((error) => {
         throw new SessionTargetMutationError(error)
       }))
+  if (input.environment !== undefined && location.workspaceID === undefined)
+    await input.client.session
+      .environment({ sessionID: session.id, variables: input.environment }, ...requestOptions(input.signal))
+      .catch((error) => {
+        throw new SessionTargetMutationError(error)
+      })
   return {
     session,
     location,

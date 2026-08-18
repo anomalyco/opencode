@@ -9,7 +9,7 @@ import type { ServerScope } from "@/utils/server-scope"
 import { createScopedCache } from "@/utils/scoped-cache"
 import { uuid } from "@/utils/uuid"
 import type { SelectedLineRange } from "@/context/file"
-import { useSDK } from "./sdk"
+import { useWorkspaceLocation } from "./location"
 
 export type LineComment = {
   id: string
@@ -179,10 +179,8 @@ export function createCommentSessionForTest(comments: Record<string, LineComment
 }
 
 function createCommentSession(scope: ServerScope, dir: string, id: string | undefined) {
-  const legacy = `${dir}/comments${id ? "/" + id : ""}.v1`
-
   const [store, setStore, _, ready] = persisted(
-    Persist.serverScoped(scope, dir, id, "comments", [legacy]),
+    Persist.serverScoped(scope, dir, id, "comments"),
     createStore<CommentStore>({
       comments: {},
     }),
@@ -212,7 +210,7 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const params = useParams()
-    const sdk = useSDK()
+    const sdk = useWorkspaceLocation()
     const serverSDK = useServerSDK()
     const cache = createScopedCache(
       (key) => {

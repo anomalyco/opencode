@@ -3,13 +3,11 @@ import { useModels } from "@/context/models"
 import type { ModelKey, ModelSelection } from "@/context/local"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/context/model-variant"
 import { usePrompt } from "@/context/prompt"
-import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
+import { useWorkspaceLocation } from "@/context/location"
 import { useProviders } from "@/hooks/use-providers"
 
 export function createPromptModelSelection(input: { agent: () => { model?: ModelKey; variant?: string } | undefined }) {
-  const sdk = useSDK()
-  const sync = useSync()
+  const sdk = useWorkspaceLocation()
   const models = useModels()
   const prompt = usePrompt()
   const providers = useProviders(() => sdk().directory)
@@ -21,18 +19,14 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
   }
 
   const configured = () => {
-    const value = sync().data.config.model
-    if (!value) return
-    const [providerID, modelID] = value.split("/")
-    const model = { providerID, modelID }
-    if (valid(model)) return model
+    // TODO: Restore the configured model fallback when current location data exposes config.
+    return undefined
   }
 
   const recent = () => models.recent.list().find(valid)
   const fallback = () => {
-    const defaults = providers.default()
     return providers.connected().flatMap((provider) => {
-      const modelID = defaults[provider.id] ?? Object.values(provider.models)[0]?.id
+      const modelID = Object.values(provider.models)[0]?.id
       return modelID ? [{ providerID: provider.id, modelID }] : []
     })[0]
   }

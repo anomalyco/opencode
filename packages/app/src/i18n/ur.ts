@@ -518,21 +518,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "ڈیسک ٹاپ {{version}}",
   "wsl.onboarding.versionMismatch": "انسٹال کردہ ورژن ڈیسک ٹاپ ایپ ورژن سے مماثل نہیں ہے۔",
   "wsl.onboarding.adding": "شامل کیا جا رہا ہے...",
-  "help.tabs.toast.ariaLabel": "ٹیبز کا تعارف۔ اپنے کام اور فعال سیشنز کو ٹیبز کے ذریعے منظم کریں",
-  "help.tabs.toast.dismiss": "ٹیبز کی معلومات بند کریں",
-  "help.tabs.title": "ٹیبز کا تعارف",
-  "help.tabs.description": "اپنے کام اور فعال سیشنز کو ٹیبز کے ذریعے منظم کریں",
-  "help.tabs.date": "14 جولائی",
-  "help.tabs.introduction": "OpenCode Desktop اب ٹیبز پر مبنی ہے۔",
-  "help.tabs.sessions":
-    "ٹیب میں نیا سیشن شروع کریں یا اپنے کسی بھی پروجیکٹ سے موجودہ سیشن کھولیں۔ کوئی نیا کام شروع کرتے وقت نیا ٹیب کھولیں اور کام مکمل ہونے پر اسے بند کر دیں۔",
-  "help.tabs.organize":
-    "چند ٹیبز کھلے رکھنے سے فعال سیشنز کو منظم کرنا آسان ہو جاتا ہے۔ اگر آپ کسی ٹیب کو برقرار رکھنا چاہتے ہیں تو اسے کوئی یاد رہنے والا نام دے دیں۔",
-  "help.tabs.home":
-    "نئی ہوم اسکرین پر آپ کو اپنے تمام سیشنز اور پروجیکٹس ملیں گے۔ کسی سیشن کو منتخب کرنے سے وہ ٹیب میں کھل جائے گا۔",
-  "help.tabs.persistence": "ایپ دوبارہ کھولنے پر آپ کے ٹیبز کھلے رہیں گے۔",
-  "help.tabs.worktrees":
-    "نیا ڈیزائن ابھی Git Worktrees کو سپورٹ نہیں کرتا، یہ سہولت جلد آ رہی ہے۔ اگر آپ پچھلا لے آؤٹ استعمال کرنا جاری رکھنا چاہتے ہیں تو ترتیبات میں لے آؤٹس کے درمیان سوئچ کر سکتے ہیں۔ یاد رہے کہ چند ہفتوں میں نیا لے آؤٹ مستقل ہو جائے گا۔",
   "server.row.noUsername": "کوئی صارف نام نہیں",
   "dialog.project.edit.title": "پروجیکٹ میں ترمیم کریں۔",
   "dialog.project.edit.name": "نام",
@@ -979,13 +964,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "ترمیمی ٹول کے حصے پھیلائیں",
   "settings.general.row.editToolPartsExpanded.description":
     "ٹائم لائن میں ترمیم، تحریر اور پیچ ٹول کے حصے بطور طے شدہ پھیلے ہوئے دکھائیں۔",
-  "settings.general.row.newInterface.title": "نیا لے آؤٹ",
-  "settings.general.row.newInterface.badge": "نیا",
-  "settings.general.row.newInterface.description":
-    "نئے ٹیبز اور ہوم لے آؤٹ استعمال کریں۔ ایک محدود وقت کے لیے لے آؤٹ کے درمیان سوئچ کریں۔",
-  "settings.general.row.newInterfaceNotice.title": "اب آپ نیا لے آؤٹ استعمال کر رہے ہیں۔",
-  "settings.general.row.newInterfaceNotice.description": "پچھلا لے آؤٹ اب دستیاب نہیں ہے۔",
-  "settings.general.row.newInterfaceNotice.dismiss": "نظر انداز کریں",
   "settings.general.row.pinchZoom.title": "زوم کرنے کے لیے چوٹکی لگائیں۔",
   "settings.general.row.pinchZoom.description": "ٹریک پیڈ پنچ اور Ctrl-اسکرول اشاروں کو زوم کرنے دیں۔",
   "settings.general.row.wayland.title": "مقامی Wayland استعمال کریں۔",

@@ -24,7 +24,7 @@ import { SessionMessageTable, SessionTable } from "./sql.js"
 export const Data = SessionTransfer.Data
 export type Data = SessionTransfer.Data
 
-export class ImportConflictError extends Schema.TaggedErrorClass<ImportConflictError>()(
+export class ImportConflictError extends Schema.TaggedError<ImportConflictError>()(
   "SessionTransfer.ImportConflictError",
   { sessionID: Session.ID },
 ) {}

@@ -508,21 +508,6 @@ export const dict: Record<string, string> = {
   "wsl.onboarding.desktopVersion": "ඩෙස්ක්ටොප් {{version}}",
   "wsl.onboarding.versionMismatch": "ස්ථාපිත අනුවාදය ඩෙස්ක්ටොප් යෙදුම් අනුවාදයට නොගැලපේ.",
   "wsl.onboarding.adding": "එකතු කරමින්...",
-  "help.tabs.toast.ariaLabel": "ටැබ් හඳුන්වා දීම. ටැබ් සමඟ ඔබේ වැඩ සහ සක්‍රිය සැසි සංවිධානය කරන්න",
-  "help.tabs.toast.dismiss": "ටැබ් තොරතුරු ඉවතලන්න",
-  "help.tabs.title": "ටැබ් හඳුන්වා දීම",
-  "help.tabs.description": "ටැබ් සමඟ ඔබේ වැඩ සහ සක්‍රිය සැසි සංවිධානය කරන්න",
-  "help.tabs.date": "ජූලි 14",
-  "help.tabs.introduction": "OpenCode ඩෙස්ක්ටොප් එක දැන් ටැබ් වටා ගොඩනගා ඇත.",
-  "help.tabs.sessions":
-    "ටැබ් එකක නව සැසියක් ආරම්භ කරන්න, නැතහොත් ඔබේ ඕනෑම ව්‍යාපෘතියකින් පවතින සැසියක් විවෘත කරන්න. ඔබ අලුත් දෙයක් ආරම්භ කරන විට නව ටැබ් එකක් විවෘත කරන්න, ඔබ අවසන් වූ පසු එය වසා දමන්න.",
-  "help.tabs.organize":
-    "ටැබ් කිහිපයක් විවෘතව තබා ගැනීම ඔබගේ සක්‍රිය සැසි සංවිධානය කිරීම පහසු කරයි. ඔබ ඒවා අවට තබා ගැනීමට අදහස් කරන්නේ නම් අමතක නොවන දෙයකට ටැබ් නැවත නම් කරන්න.",
-  "help.tabs.home":
-    "ඔබ ඔබගේ සියලුම සැසි සහ ව්‍යාපෘති නව මුල් තිරය මත සොයා ගනු ඇත. සැසියක් තේරීමෙන් එය ටැබ් එකකින් විවෘත වේ.",
-  "help.tabs.persistence": "ඔබ යෙදුම නැවත විවෘත කරන විට, ඔබේ ටැබ් තවමත් විවෘතයි.",
-  "help.tabs.worktrees":
-    "නව සැලසුම තවමත් Git Worktrees සඳහා සහය නොදක්වයි, එය ඉක්මනින් පැමිණේ. එබැවින් ඔබ පෙර පිරිසැලසුම දිගටම භාවිතා කිරීමට කැමති නම්, ඔබට සැකසීම් තුළ පිරිසැලසුම් අතර මාරු විය හැක. නව පිරිසැලසුම සති කිහිපයකින් ස්ථිර වනු ඇති බව මතක තබා ගන්න.",
   "server.row.noUsername": "පරිශීලක නාමයක් නැත",
   "dialog.project.edit.title": "ව්‍යාපෘතිය සංස්කරණය කරන්න",
   "dialog.project.edit.name": "නම",
@@ -965,13 +950,6 @@ export const dict: Record<string, string> = {
   "settings.general.row.editToolPartsExpanded.title": "සංස්කරණ මෙවලම් කොටස් පුළුල් කරන්න",
   "settings.general.row.editToolPartsExpanded.description":
     "කාලරේඛාව තුළ පෙරනිමියෙන් පුළුල් කරන ලද සංස්කරණය, ලිවීම සහ පැච් මෙවලම් කොටස් පෙන්වන්න",
-  "settings.general.row.newInterface.title": "නව පිරිසැලසුම",
-  "settings.general.row.newInterface.badge": "අලුත්",
-  "settings.general.row.newInterface.description":
-    "නව ටැබ් සහ නිවසේ පිරිසැලසුම භාවිතා කරන්න. සීමිත කාලයක් සඳහා පිරිසැලසුම් අතර මාරු වන්න.",
-  "settings.general.row.newInterfaceNotice.title": "ඔබ දැන් නව පිරිසැලසුමක් භාවිතා කරයි",
-  "settings.general.row.newInterfaceNotice.description": "පෙර පිරිසැලසුම තවදුරටත් නොමැත",
-  "settings.general.row.newInterfaceNotice.dismiss": "අස් කරන්න",
   "settings.general.row.pinchZoom.title": "විශාලනය කිරීමට පින්ච් කරන්න",
   "settings.general.row.pinchZoom.description":
     "විශාලනය කිරීමට ට්‍රැක්පෑඩ් පින්ච් කිරීමට සහ Ctrl-අනුචලන අභිනයන්ට ඉඩ දෙන්න",

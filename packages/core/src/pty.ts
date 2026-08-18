@@ -70,11 +70,11 @@ export type Attachment = {
   readonly detach: () => void
 }
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Pty.NotFoundError", {
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Pty.NotFoundError", {
   ptyID: PtyID,
 }) {}
 
-export class ExitedError extends Schema.TaggedErrorClass<ExitedError>()("Pty.ExitedError", {
+export class ExitedError extends Schema.TaggedError<ExitedError>()("Pty.ExitedError", {
   ptyID: PtyID,
 }) {}
 

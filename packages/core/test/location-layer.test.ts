@@ -16,6 +16,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
+import { MCP } from "@opencode-ai/core/mcp/index"
 import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -806,6 +807,63 @@ describe("LocationServiceMap", () => {
           Effect.scoped,
           Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
         ),
+      ),
+    ),
+  )
+
+  itWithSdk.live("lets public plugins mutate configured and runtime MCP servers", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const url = "https://example.com/mcp"
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ mcp: { servers: { example: { type: "remote", url, disabled: true } } } }),
+            ),
+          )
+          const observed: Record<string, boolean | undefined> = {}
+          const sdk = yield* SdkPlugins.Service
+          yield* sdk.register(
+            EffectPlugin.define({
+              id: "mcp-codemode-policy",
+              effect: (ctx) =>
+                ctx.mcp
+                  .transform((mcp) => {
+                    for (const [name, server] of mcp.list()) {
+                      if (server.type !== "remote" || new URL(server.url).hostname !== "example.com") continue
+                      mcp.update(name, (current) => {
+                        current.codemode = false
+                        observed[name] = current.codemode
+                      })
+                    }
+                  })
+                  .pipe(Effect.asVoid),
+            }),
+          )
+
+          yield* Effect.gen(function* () {
+            const supervisor = yield* PluginSupervisor.Service
+            const mcp = yield* MCP.Service
+            yield* supervisor.flush
+            expect(observed.example).toBe(false)
+            yield* mcp.add("dynamic", {
+              type: "remote",
+              url: "https://example.com/dynamic",
+              disabled: true,
+            })
+            expect(observed.dynamic).toBe(false)
+            expect((yield* mcp.servers()).map((server) => String(server.name))).toEqual(["dynamic", "example"])
+          }).pipe(
+            Effect.scoped,
+            Effect.provide(
+              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
+            ),
+          )
+        }),
       ),
     ),
   )

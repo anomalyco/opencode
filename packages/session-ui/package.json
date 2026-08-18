@@ -54,6 +54,7 @@
     "fuzzysort": "catalog:",
     "luxon": "catalog:",
     "marked": "catalog:",
+    "mermaid": "11.16.1",
     "morphdom": "2.7.8",
     "motion": "12.34.5",
     "remeda": "catalog:",

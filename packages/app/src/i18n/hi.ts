@@ -516,20 +516,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "डेस्कटॉप {{version}}",
   "wsl.onboarding.versionMismatch": "इंस्टॉल किया गया संस्करण डेस्कटॉप ऐप संस्करण से मेल नहीं खाता।",
   "wsl.onboarding.adding": "जोड़ा जा रहा है...",
-  "help.tabs.toast.ariaLabel": "टैब प्रस्तुत हैं। टैब की सहायता से अपना काम और सक्रिय सेशन व्यवस्थित करें",
-  "help.tabs.toast.dismiss": "टैब की जानकारी हटाएँ",
-  "help.tabs.title": "टैब प्रस्तुत हैं",
-  "help.tabs.description": "टैब की सहायता से अपना काम और सक्रिय सेशन व्यवस्थित करें",
-  "help.tabs.date": "14 जुलाई",
-  "help.tabs.introduction": "OpenCode Desktop अब टैब पर आधारित है।",
-  "help.tabs.sessions":
-    "किसी टैब में नया सेशन शुरू करें या अपने किसी भी प्रोजेक्ट से मौजूदा सेशन खोलें। कुछ नया शुरू करते समय नया टैब खोलें और काम पूरा होने पर उसे बंद कर दें।",
-  "help.tabs.organize":
-    "कुछ टैब खुले रखने से सक्रिय सेशन व्यवस्थित करना आसान होता है। यदि आप टैब खुले रखना चाहते हैं, तो उन्हें कोई याद रहने वाला नाम दें।",
-  "help.tabs.home": "आपके सभी सेशन और प्रोजेक्ट नई होम स्क्रीन पर मिलेंगे। किसी सेशन को चुनने पर वह टैब में खुलता है।",
-  "help.tabs.persistence": "ऐप दोबारा खोलने पर भी आपके टैब खुले रहते हैं।",
-  "help.tabs.worktrees":
-    "नया डिज़ाइन अभी Git Worktrees का समर्थन नहीं करता है, यह सुविधा जल्द आ रही है। इसलिए यदि आप पिछले लेआउट का उपयोग जारी रखना चाहते हैं, तो सेटिंग्स में लेआउट के बीच स्विच कर सकते हैं। ध्यान रखें कि नया लेआउट कुछ सप्ताह में स्थायी हो जाएगा।",
   "server.row.noUsername": "कोई उपयोगकर्ता नाम नहीं",
   "dialog.project.edit.title": "प्रोजेक्ट संपादित करें",
   "dialog.project.edit.name": "नाम",
@@ -977,13 +963,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "संपादन टूल भागों का विस्तार करें",
   "settings.general.row.editToolPartsExpanded.description":
     "टाइमलाइन में डिफ़ॉल्ट रूप से विस्तारित संपादित करें, लिखें और पैच टूल पार्ट्स दिखाएं",
-  "settings.general.row.newInterface.title": "नया लेआउट",
-  "settings.general.row.newInterface.badge": "नया",
-  "settings.general.row.newInterface.description":
-    "नए टैब और होम लेआउट का उपयोग करें. सीमित समय के लिए लेआउट के बीच स्विच करें।",
-  "settings.general.row.newInterfaceNotice.title": "अब आप नए लेआउट का उपयोग कर रहे हैं",
-  "settings.general.row.newInterfaceNotice.description": "पिछला लेआउट अब उपलब्ध नहीं है",
-  "settings.general.row.newInterfaceNotice.dismiss": "हटाएँ",
   "settings.general.row.pinchZoom.title": "ज़ूम करने के लिए पिंच करें",
   "settings.general.row.pinchZoom.description": "ट्रैकपैड पिंच और Ctrl-स्क्रॉल जेस्चर को ज़ूम करने की अनुमति दें",
   "settings.general.row.wayland.title": "नेटिव Wayland का उपयोग करें",

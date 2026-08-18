@@ -13,7 +13,7 @@ let customThemes: Record<string, ThemeDocumentSource> = {}
 let systemTheme: ThemeDocumentSource | undefined
 const listeners = new Set<(themes: Record<string, ThemeDocumentSource>) => void>()
 const parsed = new WeakMap<object, ThemeDocument>()
-const decodeThemeDocument = Schema.decodeUnknownSync(ThemeDocument)
+const decodeThemeDocument = Schema.decodeUnknownSync(ThemeDocument, { reportInput: true })
 
 function listThemes() {
   // Priority: defaults < plugin installs < custom files < generated system.

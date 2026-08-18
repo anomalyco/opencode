@@ -7,10 +7,8 @@ export type SessionTabUnread = "activity" | "error"
 
 export const NEW_SESSION_TAB_TITLE = "New session"
 
-export function sessionTabShortcutLabel(index: number) {
-  if (index >= 0 && index < 9) return String(index + 1)
-  if (index === 9) return "0"
-  return "·"
+export function sessionTabNumberLabel(index: number) {
+  return String(index + 1)
 }
 
 export function sessionTabDetail(

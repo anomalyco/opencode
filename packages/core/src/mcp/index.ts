@@ -3,13 +3,10 @@ export * as MCP from "./index.js"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Command } from "@opencode-ai/schema/command"
-import { Document, Event, type Entry } from "@opencode-ai/schema/config"
-import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Semaphore, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Config } from "../config.js"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
@@ -97,7 +94,7 @@ export type ResourceContentPart = Mcp.ResourceContentPart
 export const ResourceContent = Mcp.ResourceContent
 export type ResourceContent = Mcp.ResourceContent
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP.NotFoundError", {
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("MCP.NotFoundError", {
   server: ServerName,
 }) {
   override get message() {
@@ -105,14 +102,14 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP
   }
 }
 
-export class ToolCallError extends Schema.TaggedErrorClass<ToolCallError>()("MCP.ToolCallError", {
+export class ToolCallError extends Schema.TaggedError<ToolCallError>()("MCP.ToolCallError", {
   server: ServerName,
   tool: Schema.String,
   message: Schema.String,
 }) {}
 
 type ServerEntry = {
-  readonly config: typeof ConfigMCP.Server.Type
+  readonly config: Mcp.ServerConfig
   status: Status
   readonly startup: Deferred.Deferred<void>
   scope?: Scope.Closeable
@@ -129,9 +126,25 @@ type ServerEntry = {
 const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
 
-export interface Interface {
+type Data = {
+  servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
+  removed: Set<ServerName>
+}
+
+export type Draft = {
+  list: () => readonly [ServerName, Types.DeepMutable<Mcp.ServerConfig>][]
+  get: (server: ServerName | string) => Types.DeepMutable<Mcp.ServerConfig> | undefined
+  set: (server: ServerName | string, config: Mcp.ServerConfig) => void
+  update: (server: ServerName | string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void) => void
+  remove: (server: ServerName | string) => void
+}
+
+const cloneConfig = (config: Mcp.ServerConfig) =>
+  structuredClone(config) as Types.DeepMutable<Mcp.ServerConfig>
+
+export interface Interface extends State.Transformable<Draft> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
-  readonly add: (server: ServerName | string, config: typeof ConfigMCP.Server.Type) => Effect.Effect<void>
+  readonly add: (server: ServerName | string, config: Mcp.ServerConfig) => Effect.Effect<void>
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly remove: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
@@ -171,7 +184,6 @@ export const layer = (options?: Options) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
-      const config = yield* Config.Service
       const location = yield* Location.Service
       const environment = yield* Environment.Service
       const bus = yield* Bus.Service
@@ -181,37 +193,13 @@ export const layer = (options?: Options) =>
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
-      const loadConfig = (entries: readonly Entry[]) => {
-        const documents = entries.filter((entry): entry is Document => entry.type === "document")
-        // Global MCP timeout defaults, later config files overriding earlier ones.
-        const timeout = Object.assign(
-          {},
-          ...documents.flatMap((entry) => (entry.info.mcp?.timeout ? [entry.info.mcp.timeout] : [])),
-        )
-        const servers = new Map<ServerName, typeof ConfigMCP.Server.Type>()
-        for (const entry of documents) {
-          for (const [name, server] of Object.entries(entry.info.mcp?.servers ?? {})) {
-            servers.set(ServerName.make(name), { ...server, timeout: { ...timeout, ...server.timeout } })
-          }
-        }
-        return { timeout, servers }
-      }
-      const initial = loadConfig(yield* config.entries())
-      const configState = { servers: initial.servers, timeout: initial.timeout }
-      // Later config files win for duplicate server names; per-server timeout overrides globals.
-      const runtime = new Map<ServerName, ServerEntry>()
+      // Materialized definitions and live connections are kept separate so operational additions
+      // survive unrelated definition reloads.
+      const entries = new Map<ServerName, ServerEntry>()
       // Serializes lifecycle operations per server. Anything taking this lock from a connection
       // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
       const locks = KeyedMutex.makeUnsafe<ServerName>()
-      const reloadLock = Semaphore.makeUnsafe(1)
       const urlElicitations = new Map<string, Form.ID>()
-      for (const [name, server] of initial.servers) {
-        runtime.set(name, {
-          config: server,
-          status: { status: "pending" },
-          startup: Deferred.makeUnsafe<void>(),
-        })
-      }
 
       // Register every remote server as an OAuth integration so credentials live in the global store
       // rather than in committed config. Servers that connect anonymously simply never use the method.
@@ -253,11 +241,9 @@ export const layer = (options?: Options) =>
           })
           .pipe(Scope.provide(scope))
       })
-      yield* Effect.forEach(runtime, ([name, entry]) => register(name, entry), { discard: true })
-
       const requireServer = Effect.fnUntraced(function* (server: ServerName | string) {
         const name = ServerName.make(server)
-        const entry = runtime.get(name)
+        const entry = entries.get(name)
         if (!entry) return yield* new NotFoundError({ server: name })
         return { name, entry }
       })
@@ -438,13 +424,11 @@ export const layer = (options?: Options) =>
 
       const refreshPrompts = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
         connection.prompts().pipe(
+          Effect.catch(() => Effect.succeed([])),
           Effect.map((defs) => {
             entry.prompts = defs.map((def) => toPrompt(name, def))
           }),
           Effect.andThen(bus.publish(Command.Event.Updated, {})),
-          Effect.catch(() =>
-            Effect.sync(() => (entry.prompts = [])).pipe(Effect.andThen(bus.publish(Command.Event.Updated, {}))),
-          ),
         )
 
       // Runs a connection callback under the server lock, dropping it if the connection is no longer
@@ -572,15 +556,15 @@ export const layer = (options?: Options) =>
         if (entry.registration) yield* entry.registration.dispose
       })
 
-      const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: typeof ConfigMCP.Server.Type) {
-        const previous = runtime.get(name)
+      const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
+        const previous = entries.get(name)
         if (previous) yield* disposeServer(name, previous)
         const entry: ServerEntry = {
           config: serverConfig,
           status: { status: "pending" },
           startup: Deferred.makeUnsafe<void>(),
         }
-        runtime.set(name, entry)
+        entries.set(name, entry)
         yield* Effect.gen(function* () {
           yield* register(name, entry)
           if (serverConfig.disabled) {
@@ -596,55 +580,66 @@ export const layer = (options?: Options) =>
       })
 
       const removeServer = Effect.fnUntraced(function* (name: ServerName) {
-        const entry = runtime.get(name)
+        const entry = entries.get(name)
         if (!entry) return
         yield* disposeServer(name, entry)
         // Credentials are keyed by name + URL and intentionally survive removal for a later re-add.
-        runtime.delete(name)
+        entries.delete(name)
         yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
       })
 
-      const reloadConfig = Effect.fnUntraced(function* () {
-        yield* reloadLock.withPermit(
-          Effect.gen(function* () {
-            const next = loadConfig(yield* config.entries())
-            const names = new Set([...configState.servers.keys(), ...next.servers.keys()])
-            for (const name of names) {
-              const previous = configState.servers.get(name)
-              const updated = next.servers.get(name)
-              if (isDeepStrictEqual(previous, updated)) continue
-              if (!updated) {
-                yield* removeServer(name).pipe(locks.withLock(name))
-                continue
-              }
-              yield* replaceServer(name, updated).pipe(locks.withLock(name))
-            }
-            configState.servers = next.servers
-            configState.timeout = next.timeout
-          }),
-        )
-      })
+      let applied: Map<ServerName, Mcp.ServerConfig> | undefined
+      const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
+      const reconcile = Effect.fnUntraced(function* (next: Draft) {
+        const servers = new Map(next.list())
+        if (!applied && entries.size === 0) {
+          for (const [name, server] of servers) {
+            entries.set(name, {
+              config: server,
+              status: { status: "pending" },
+              startup: Deferred.makeUnsafe<void>(),
+            })
+          }
+          yield* Effect.forEach(entries, ([name, entry]) => register(name, entry), { discard: true })
+          applied = servers
 
-      // Disabled servers settle their startup immediately so queries never block on them.
-      for (const [name, entry] of runtime) {
-        if (entry.config.disabled) {
-          entry.status = { status: "disabled" }
-          Deferred.doneUnsafe(entry.startup, Exit.void)
-          continue
+          // Initial connections stay asynchronous so one slow server does not block Location startup.
+          for (const [name, entry] of entries) {
+            if (entry.config.disabled) {
+              entry.status = { status: "disabled" }
+              Deferred.doneUnsafe(entry.startup, Exit.void)
+              yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+              continue
+            }
+            fork(startServer(name, entry).pipe(locks.withLock(name)))
+          }
+          return
         }
-        fork(startServer(name, entry).pipe(locks.withLock(name)))
-      }
+
+        const names = new Set([...(applied?.keys() ?? []), ...servers.keys()])
+        for (const name of names) {
+          const previous = applied?.get(name)
+          const updated = servers.get(name)
+          if (isDeepStrictEqual(previous, updated)) continue
+          if (!updated) {
+            yield* removeServer(name).pipe(locks.withLock(name))
+            continue
+          }
+          yield* replaceServer(name, updated).pipe(locks.withLock(name))
+        }
+        applied = servers
+      })
 
       // Bring a server online (or back to needs_auth) when its integration's credential changes, so an
       // OAuth login takes effect without a restart. Only fires for the integrations we registered.
       const reconnect = (integrationID: Integration.ID) =>
         Effect.gen(function* () {
-          const match = Array.from(runtime).find(([, entry]) => entry.integrationID === integrationID)
+          const match = Array.from(entries).find(([, entry]) => entry.integrationID === integrationID)
           if (!match) return
           const name = match[0]
           yield* Effect.gen(function* () {
             // add() or remove() may have replaced or deleted the entry while we waited for the lock.
-            const entry = runtime.get(name)
+            const entry = entries.get(name)
             if (!entry || entry.integrationID !== integrationID) return
             if (entry.status.status === "disabled") return
             yield* stopServer(name, entry)
@@ -658,33 +653,55 @@ export const layer = (options?: Options) =>
           Effect.ignore,
         ),
       )
-      yield* bus.subscribe(Event.Updated).pipe(
-        Stream.runForEach(() =>
-          reloadConfig().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload MCP config", { cause }))),
-        ),
-        Effect.forkScoped({ startImmediately: true }),
-      )
-      // Close the gap between the initial snapshot and the live subscription becoming active.
-      yield* reloadConfig()
+      const state = State.create<Data, Draft>({
+        name: "mcp",
+        initial: () => ({
+          servers: new Map(
+            Array.from(overrides).flatMap(([name, config]) =>
+              config === false ? [] : [[name, cloneConfig(config)] as const],
+            ),
+          ),
+          removed: new Set(
+            Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : [])),
+          ),
+        }),
+        draft: (draft) => ({
+          list: () => Array.from(draft.servers),
+          get: (server) => draft.servers.get(ServerName.make(server)),
+          set: (server, serverConfig) => {
+            const name = ServerName.make(server)
+            if (draft.removed.has(name)) return
+            draft.servers.set(name, cloneConfig(serverConfig))
+          },
+          update: (server, update) => {
+            const current = draft.servers.get(ServerName.make(server))
+            if (!current) return
+            update(current)
+          },
+          remove: (server) => draft.servers.delete(ServerName.make(server)),
+        }),
+        finalize: reconcile,
+      })
 
       // Suspend so each await sees current entries; a bare Map iterator is exhausted after one run.
       const whenAllReady = Effect.suspend(() =>
-        Effect.forEach(Array.from(runtime.values()), (entry) => Deferred.await(entry.startup), {
+        Effect.forEach(Array.from(entries.values()), (entry) => Deferred.await(entry.startup), {
           concurrency: "unbounded",
           discard: true,
         }),
       )
       return Service.of({
+        transform: state.transform,
+        reload: state.reload,
         servers: Effect.fn("MCP.servers")(function* () {
-          return Array.from(runtime)
+          return Array.from(entries)
             .toSorted(([a], [b]) => a.localeCompare(b))
             .map(([name, entry]) => new ServerInfo({ name, status: entry.status, integrationID: entry.integrationID }))
         }),
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)
-          yield* replaceServer(name, { ...config, timeout: { ...configState.timeout, ...config.timeout } }).pipe(
-            locks.withLock(name),
-          )
+          overrides.set(name, config)
+          yield* state.reload()
         }),
         connect: Effect.fn("MCP.connect")(function* (server) {
           const name = ServerName.make(server)
@@ -705,14 +722,13 @@ export const layer = (options?: Options) =>
         }),
         remove: Effect.fn("MCP.remove")(function* (server) {
           const name = ServerName.make(server)
-          yield* Effect.gen(function* () {
-            yield* requireServer(name)
-            yield* removeServer(name)
-          }).pipe(locks.withLock(name))
+          yield* requireServer(name)
+          overrides.set(name, false)
+          yield* state.reload()
         }),
         tools: Effect.fn("MCP.tools")(function* () {
           yield* whenAllReady
-          return Array.from(runtime.values())
+          return Array.from(entries.values())
             .flatMap((entry) => entry.tools ?? [])
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
@@ -742,7 +758,7 @@ export const layer = (options?: Options) =>
         }),
         instructions: Effect.fn("MCP.instructions")(function* () {
           yield* whenAllReady
-          return Array.from(runtime)
+          return Array.from(entries)
             .flatMap(([server, entry]) => {
               const instructions = entry.client?.instructions
               if (!instructions) return []
@@ -751,7 +767,7 @@ export const layer = (options?: Options) =>
             .toSorted((a, b) => a.server.localeCompare(b.server))
         }),
         prompts: Effect.fn("MCP.prompts")(function* () {
-          return Array.from(runtime.values())
+          return Array.from(entries.values())
             .flatMap((entry) => entry.prompts ?? [])
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
@@ -774,7 +790,7 @@ export const layer = (options?: Options) =>
         resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
           yield* whenAllReady
           const catalogs = yield* Effect.forEach(
-            Array.from(runtime),
+            Array.from(entries),
             ([name, entry]) => {
               if (!entry.client) return Effect.succeed({ resources: [], templates: [] })
               return Effect.all(
@@ -831,7 +847,7 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Config.node, Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node],
+    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node],
   })
 }
 

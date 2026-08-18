@@ -178,7 +178,7 @@ export const Definitions = {
   "session.toggle.thinking": keybind("none", "Toggle thinking blocks visibility"),
 
   "prompt.submit": keybind("none", "Submit prompt"),
-  "prompt.queue": keybind("alt+return", "Queue prompt"),
+  "prompt.queue": keybind("<leader>return", "Queue prompt"),
   "prompt.editor_context.clear": keybind("none", "Clear editor context"),
   "prompt.images.view": keybind("<leader>i", "View image attachments"),
   "prompt.skills": keybind("none", "Open skill selector"),

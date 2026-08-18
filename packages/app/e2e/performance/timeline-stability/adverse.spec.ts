@@ -9,6 +9,7 @@ import {
 import {
   assistantMessage,
   partUpdated,
+  renderedPartID,
   setupTimeline,
   shell,
   textPart,
@@ -97,13 +98,15 @@ test.describe("timeline adverse visual stability", () => {
       element.scrollTop = 0
     })
     await page.waitForTimeout(300)
-    const trigger = page.locator(`[data-timeline-part-id="${targetID}"] [data-slot="collapsible-trigger"]`)
+    const trigger = page.locator(
+      `[data-timeline-part-id="${renderedPartID(targetID)}"] [data-slot="collapsible-trigger"]`,
+    )
     await expect(trigger).toBeVisible()
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", "true")
 
     await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
-    await expect(page.locator(`[data-timeline-part-id="${targetID}"]`)).toHaveCount(0)
+    await expect(page.locator(`[data-timeline-part-id="${renderedPartID(targetID)}"]`)).toHaveCount(0)
     await scroller.evaluate((element) => (element.scrollTop = 0))
     await expect(trigger).toBeVisible()
     await expect(trigger).toHaveAttribute("aria-expanded", "true")
@@ -127,13 +130,16 @@ test.describe("timeline adverse visual stability", () => {
       cpuRate: 4,
     })
     await waitForVisualSettle(page, [
-      `[data-timeline-part-id="${shellID}"]`,
-      `[data-timeline-part-id="${followingID}"]`,
+      `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+      `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
     ])
     const regions = defineVisualRegions({
-      shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+      shell: {
+        selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+        closest: '[data-timeline-row="AssistantPart"]',
+      },
       following: {
-        selector: `[data-timeline-part-id="${followingID}"]`,
+        selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
@@ -184,10 +190,13 @@ test.describe("timeline adverse visual stability", () => {
     })
     const group = `[data-timeline-part-ids="${contextIDs.join(",")}"]`
     const regions = defineVisualRegions({
-      shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+      shell: {
+        selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+        closest: '[data-timeline-row="AssistantPart"]',
+      },
       context: { selector: group, closest: '[data-timeline-row="AssistantPart"]' },
       following: {
-        selector: `[data-timeline-part-id="${followingID}"]`,
+        selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })

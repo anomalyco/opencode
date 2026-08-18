@@ -152,6 +152,112 @@ provider and model configuration. An unknown variant fails model resolution inst
 
 ### Local models
 
+#### Ollama
+
+OpenCode automatically discovers language models from an Ollama server listening on its default address,
+`http://127.0.0.1:11434`. Discovered models use the `ollama` provider ID and Ollama's model name:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/gemma3:4b",
+}
+```
+
+OpenCode refreshes the inventory in the background and reads context, vision, and tool-use capabilities from Ollama.
+Embedding-only models are excluded because they cannot drive a session. Disable discovery with
+`"plugins": ["-opencode.provider.ollama"]`.
+
+For a different host or port, configure Ollama's OpenAI-compatible base URL. Models are still discovered through the
+native Ollama API at the same path prefix:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+Omit `apiKey` when the Ollama endpoint does not require bearer authentication.
+
+#### LM Studio
+
+OpenCode automatically discovers language models from an unauthenticated LM Studio server listening on its default
+address, `http://127.0.0.1:1234`. Discovered models use the `lmstudio` provider ID and LM Studio's model key:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-4-26b-a4b",
+}
+```
+
+OpenCode refreshes the inventory in the background and reads context, vision, and tool-use capabilities from LM
+Studio. Embedding models are excluded because they cannot drive a session. Disable discovery with
+`"plugins": ["-opencode.provider.lmstudio"]`.
+
+For a different host or port, configure the OpenAI-compatible base URL. Models are still discovered automatically:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "lmstudio": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:LMSTUDIO_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+Omit `apiKey` when LM Studio authentication is disabled.
+
+#### vLLM
+
+OpenCode automatically discovers models from a vLLM server listening on its default address, `http://127.0.0.1:8000`.
+Discovered models use the `vllm` provider ID and the model ID reported by vLLM:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+}
+```
+
+OpenCode checks vLLM's `/health` endpoint and refreshes `/v1/models` in the background. It uses the reported
+`max_model_len` as the context limit and only includes model cards owned by `vllm`. Discovered vLLM models advertise
+text input and output, but not vision or tools. Tool calling is conservative because vLLM enables it with server-level
+flags such as `--enable-auto-tool-choice` and `--tool-call-parser`, which model discovery does not report. Disable
+discovery with `"plugins": ["-opencode.provider.vllm"]`.
+
+For a different endpoint or an authenticated server, configure its OpenAI-compatible base URL:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "vllm": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:9000/v1",
+        "apiKey": "{env:VLLM_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+Omit `apiKey` when authentication is disabled. Path-prefixed proxy URLs are supported; for example,
+`https://example.com/vllm/v1` checks `/vllm/health` and discovers `/vllm/v1/models`.
+
 For an OpenAI-compatible server, define a provider package, endpoint, and at least one model:
 
 ```jsonc title="opencode.jsonc"
@@ -161,7 +267,7 @@ For an OpenAI-compatible server, define a provider package, endpoint, and at lea
   "providers": {
     "local": {
       "name": "Local server",
-      "package": "aisdk:@ai-sdk/openai-compatible",
+      "package": "@opencode-ai/ai/providers/openai-compatible",
       "settings": {
         "baseURL": "http://127.0.0.1:1234/v1",
       },

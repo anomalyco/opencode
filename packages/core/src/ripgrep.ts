@@ -35,16 +35,16 @@ const RawMatch = Schema.Struct({
     ),
   }),
 })
-const decodeJsonRecord = Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)
+const decodeJsonRecord = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
 
 type RawMatchData = (typeof RawMatch.Type)["data"]
 
-export class Error extends Schema.TaggedErrorClass<Error>()("Ripgrep.Error", {
+export class Error extends Schema.TaggedError<Error>()("Ripgrep.Error", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-export class InvalidPatternError extends Schema.TaggedErrorClass<InvalidPatternError>()("Ripgrep.InvalidPatternError", {
+export class InvalidPatternError extends Schema.TaggedError<InvalidPatternError>()("Ripgrep.InvalidPatternError", {
   pattern: Schema.String,
   message: Schema.String,
 }) {}

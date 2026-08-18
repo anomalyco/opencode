@@ -196,7 +196,7 @@ jobs:
 
   build-node-cli:
     needs: version
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'anomalyco/opencode' && false # Temporarily disabled
     strategy:
       fail-fast: false
       matrix:
@@ -594,6 +594,7 @@ jobs:
           path: packages/cli/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.build-node-cli.result == 'success'
         with:
           pattern: opencode-node-cli-*
           path: packages/cli/dist/node

@@ -12,6 +12,7 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { SessionEnvironment } from "@opencode-ai/core/session/environment"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { testEffect } from "./lib/effect"
 import { globalProjectLayer } from "./lib/project"
@@ -32,6 +33,7 @@ const it = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
+      SessionEnvironment.node,
       Session.node,
       LocationServiceMap.node,
     ]),
@@ -50,6 +52,8 @@ describe("Session.remove", () => {
       const session = yield* Session.Service
       const parent = yield* session.create({ location })
       const child = yield* session.create({ parentID: parent.id })
+      yield* session.environment({ sessionID: parent.id, variables: { SESSION_ENV: "parent" } })
+      yield* session.environment({ sessionID: child.id, variables: { SESSION_ENV: "child" } })
       yield* (yield* LocationServiceMap.Service).contextEffect(location)
       closed.length = 0
 
@@ -57,6 +61,9 @@ describe("Session.remove", () => {
 
       expect((yield* session.list()).data).toEqual([])
       expect(closed).toEqual([parent.id, child.id])
+      const environments = yield* SessionEnvironment.Service
+      expect(yield* environments.get(parent.id)).toBeUndefined()
+      expect(yield* environments.get(child.id)).toBeUndefined()
       expect(yield* Effect.result(session.get(parent.id))).toMatchObject({ _tag: "Failure" })
       expect(yield* Effect.result(session.get(child.id))).toMatchObject({ _tag: "Failure" })
     }),

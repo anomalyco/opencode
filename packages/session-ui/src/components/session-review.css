@@ -237,13 +237,3 @@
     margin-top: 10px;
   }
 }
-
-body:not([data-new-layout]) [data-component="session-review"] {
-  [data-slot="session-review-header"] {
-    background-color: var(--background-stronger);
-  }
-
-  [data-slot="session-review-large-diff"] {
-    background: var(--background-stronger);
-  }
-}

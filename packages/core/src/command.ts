@@ -25,12 +25,12 @@ export type Data = {
   commands: Map<string, Types.DeepMutable<Info>>
 }
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Command.NotFoundError", {
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Command.NotFoundError", {
   command: Schema.String,
   message: Schema.String,
 }) {}
 
-export class EvaluationError extends Schema.TaggedErrorClass<EvaluationError>()("Command.EvaluationError", {
+export class EvaluationError extends Schema.TaggedError<EvaluationError>()("Command.EvaluationError", {
   command: Schema.String,
   message: Schema.String,
 }) {}

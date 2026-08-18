@@ -5,6 +5,7 @@ import { setTimeout } from "node:timers/promises"
 import { readStdin } from "./util/io"
 import { createMiniHost, INTERACTIVE_INPUT_ERROR, usingInteractiveStdin } from "./mini-host"
 import { parseSessionTargetModel, resolveSessionTarget, type SessionTargetPreparation } from "./session-target"
+import { Env } from "./env"
 
 export type MiniCommandInput = {
   server: {
@@ -38,6 +39,7 @@ export async function runMini(input: MiniCommandInput) {
       const directory = localDirectory()
       const connection = createMiniConnection(input.server)
       const sdk = connection.sdk
+      const environment = input.server.reconnect ? Env.session() : undefined
       const requested = parseModel(input.model)
       const model = requested ? { providerID: requested.providerID, modelID: requested.id } : undefined
       const prepare = prepareTarget(input.agent)
@@ -55,6 +57,7 @@ export async function runMini(input: MiniCommandInput) {
               fork: input.fork,
               model: requested,
               agent: input.agent,
+              environment,
               prepare,
               signal,
             }).catch((error) => {
@@ -89,6 +92,7 @@ export async function runMini(input: MiniCommandInput) {
           client,
           location: { directory: next.location.directory, workspace: next.location.workspaceID },
           agent: next.agent,
+          environment,
           model: next.model
             ? { providerID: next.model.providerID, id: next.model.modelID, variant: next.variant }
             : undefined,

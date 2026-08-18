@@ -3,7 +3,7 @@ import { useLanguage } from "@opencode-ai/app"
 import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { showToastV2, toasterV2, ToastV2 } from "@opencode-ai/ui/v2/toast-v2"
 import { createRoot, createSignal, onCleanup, onMount } from "solid-js"
-import type { ServerReadyData } from "../preload/types"
+import type { ServerReadyData } from "../shared/ipc-contract"
 
 type Progress = Extract<MigrationV1StatusOutput, { status: "running" }>["progress"]
 

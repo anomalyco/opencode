@@ -10,7 +10,6 @@ import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 
@@ -19,9 +18,8 @@ import { Terminal } from "@/components/terminal"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { useSettings } from "@/context/settings"
 import { useTerminal } from "@/context/terminal"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
@@ -30,14 +28,12 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
   const layout = useLayout()
   const terminal = useTerminal()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const language = useLanguage()
   const command = useCommand()
-  const settings = useSettings()
   const { workspaceKey, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const newLayout = createMemo(() => settings.general.newLayoutDesigns())
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
   const height = createMemo(() => layout.terminal.height())
@@ -177,7 +173,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
         "w-full": !isDesktop() || stacked(),
         "min-w-0 h-full flex-1": isDesktop() && opened() && !stacked(),
         "w-0 h-full pointer-events-none": isDesktop() && !opened(),
-        "rounded-[10px] shadow-[var(--v2-elevation-raised)]": isDesktop() && newLayout(),
+        "rounded-[10px] shadow-[var(--v2-elevation-raised)]": isDesktop(),
         "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
           !isDesktop() && !size.active(),
       }}
@@ -185,9 +181,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
     >
       <div classList={{ "md:hidden": !stacked(), hidden: stacked() }} onPointerDown={() => size.start()}>
         <ResizeHandle
-          classList={{
-            "-top-1": newLayout(),
-          }}
+          class="-top-1"
           direction="vertical"
           size={pane()}
           min={100}
@@ -204,8 +198,6 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
         class="absolute inset-0 flex flex-col overflow-hidden"
         classList={{
           "border-t border-border-weak-base": opened() && !isDesktop(),
-          "border-t border-border-weaker-base": opened() && stacked() && !newLayout(),
-          "border-l border-border-weaker-base": opened() && isDesktop() && !newLayout(),
           "pointer-events-none": !opened(),
         }}
         style={{ height: contentHeight() }}
@@ -257,14 +249,13 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
           >
             <div class="flex flex-col h-full">
               <Tabs
-                variant={newLayout() ? "normal" : "alt"}
+                variant="normal"
                 value={terminal.active()}
                 onChange={(id) => terminal.open(id)}
-                class={newLayout() ? "!h-[52px] !flex-none" : "!h-auto !flex-none"}
+                class="!h-[52px] !flex-none"
               >
                 <Tabs.List
                   ref={tabList}
-                  class={newLayout() ? undefined : "h-10 border-b border-border-weaker-base"}
                   onPointerDown={(event: PointerEvent & { currentTarget: HTMLDivElement }) => {
                     const active = document.activeElement
                     if (event.target === active) return
@@ -272,50 +263,29 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                   }}
                 >
                   <For each={all()}>
-                    {(pty, index) => (
-                      <SortableTerminalTabV2 terminal={pty} index={index()} newLayout={newLayout()} onClose={close} />
-                    )}
+                    {(pty, index) => <SortableTerminalTabV2 terminal={pty} index={index()} onClose={close} />}
                   </For>
                   <div class="h-full flex items-center justify-center">
-                    <Show
-                      when={newLayout()}
-                      fallback={
-                        <TooltipKeybind
-                          title={language.t("command.terminal.new")}
-                          keybind={command.keybind("terminal.new")}
-                          class="flex items-center"
-                        >
-                          <IconButton
-                            icon="plus-small"
-                            variant="ghost"
-                            iconSize="large"
-                            onClick={() => terminal.new({ focus: true })}
-                            aria-label={language.t("command.terminal.new")}
-                          />
-                        </TooltipKeybind>
+                    <TooltipV2
+                      value={
+                        <>
+                          {language.t("command.terminal.new")}
+                          <Show when={newTerminalKeybind().length > 0}>
+                            <KeybindV2 keys={newTerminalKeybind()} variant="neutral" />
+                          </Show>
+                        </>
                       }
+                      placement="bottom"
+                      class="flex items-center"
                     >
-                      <TooltipV2
-                        value={
-                          <>
-                            {language.t("command.terminal.new")}
-                            <Show when={newTerminalKeybind().length > 0}>
-                              <KeybindV2 keys={newTerminalKeybind()} variant="neutral" />
-                            </Show>
-                          </>
-                        }
-                        placement="bottom"
-                        class="flex items-center"
-                      >
-                        <IconButton
-                          icon="plus-small"
-                          variant="ghost"
-                          iconSize="large"
-                          onClick={() => terminal.new({ focus: true })}
-                          aria-label={language.t("command.terminal.new")}
-                        />
-                      </TooltipV2>
-                    </Show>
+                      <IconButton
+                        icon="plus-small"
+                        variant="ghost"
+                        iconSize="large"
+                        onClick={() => terminal.new({ focus: true })}
+                        aria-label={language.t("command.terminal.new")}
+                      />
+                    </TooltipV2>
                   </div>
                 </Tabs.List>
               </Tabs>

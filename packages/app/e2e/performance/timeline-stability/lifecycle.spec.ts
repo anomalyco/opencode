@@ -14,6 +14,7 @@ import {
   partDelta,
   partUpdated,
   reasoningPart,
+  renderedPartID,
   setupTimeline,
   shell,
   status,
@@ -50,7 +51,7 @@ test.describe("timeline visual lifecycle stability", () => {
       prt_shell_long: shellRegion(ids[2]),
       following: shellRegion(followingID),
     })
-    await waitForVisualSettle(page, [`[data-timeline-part-id="${followingID}"]`])
+    await waitForVisualSettle(page, [`[data-timeline-part-id="${renderedPartID(followingID)}"]`])
     await startVisualProbe(page, regions)
     await timeline.sendAll([
       { event: partUpdated(shell(ids[0]!, "completed", "")), delay: 180 },
@@ -60,7 +61,7 @@ test.describe("timeline visual lifecycle stability", () => {
       { event: partUpdated(shell(ids[1]!, "completed", lines(2))), delay: 260 },
       { event: partUpdated(shell(ids[2]!, "running", lines(50))), delay: 100 },
       { event: partUpdated(shell(ids[2]!, "completed", lines(50))), delay: 450 },
-      { event: messageUpdated(completedAssistantInfo(assistant.info)), delay: 100 },
+      { event: messageUpdated(completedAssistantInfo(assistant)), delay: 100 },
       { event: status("idle"), delay: 700 },
     ])
     const trace = await stopVisualProbe<keyof typeof regions>(page)
@@ -84,9 +85,11 @@ test.describe("timeline visual lifecycle stability", () => {
         { perMarker: true },
       ),
     )
-    await expect(page.locator(`[data-timeline-part-id="${ids[2]}"] [data-slot="bash-pre"]`)).toContainText("line 50")
+    await expect(
+      page.locator(`[data-timeline-part-id="${renderedPartID(ids[2])}"] [data-slot="bash-pre"]`),
+    ).toContainText("line 50")
 
-    const short = page.locator(`[data-timeline-part-id="${ids[1]}"]`)
+    const short = page.locator(`[data-timeline-part-id="${renderedPartID(ids[1])}"]`)
     await short.locator('[data-slot="collapsible-trigger"]').click()
     await expect(short.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "false")
     await timeline.send(partUpdated(textPart("prt_late_sibling", "A later sibling rerender.")), 250)
@@ -106,26 +109,31 @@ test.describe("timeline visual lifecycle stability", () => {
     })
     await timeline.send(status("busy"), 120)
     await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
+    const initialReasoning = reasoningPart(reasoningID, "")
+    const initialText = textPart(textID, "Starting")
 
     const regions = defineVisualRegions({
       thinking: { selector: '[data-timeline-row="Thinking"]' },
       reasoning: {
-        selector: `[data-timeline-part-id="${reasoningID}"]`,
+        selector: `[data-timeline-part-id="${renderedPartID(reasoningID)}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
-      text: { selector: `[data-timeline-part-id="${textID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+      text: {
+        selector: `[data-timeline-part-id="${renderedPartID(textID)}"]`,
+        closest: '[data-timeline-row="AssistantPart"]',
+      },
     })
     await startVisualProbe(page, regions)
-    await timeline.send(partUpdated(reasoningPart(reasoningID, "")), 100)
-    await expect(page.locator(`[data-timeline-part-id="${reasoningID}"]`)).toHaveCount(0)
+    await timeline.send(partUpdated(initialReasoning), 100)
+    await expect(page.locator(`[data-timeline-part-id="${renderedPartID(reasoningID)}"]`)).toHaveCount(0)
     await timeline.send(partUpdated(reasoningPart(reasoningID, "## Planning\n\nChecking the visible timeline.")), 160)
     await timeline.waitForPart(reasoningID)
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-    await timeline.send(partUpdated(textPart(textID, "Starting")), 100)
+    await timeline.send(partUpdated(initialText), 100)
     await timeline.send(partDelta(textID, " **stable"), 90)
     await timeline.send(partDelta(textID, " output** with `code` and [a link"), 130)
     await timeline.send(partDelta(textID, "](https://example.com)."), 220)
-    await timeline.send(messageUpdated(completedAssistantInfo(assistant.info)), 120)
+    await timeline.send(messageUpdated(completedAssistantInfo(assistant)), 120)
     await timeline.send(status("idle"), 500)
     const trace = await stopVisualProbe<keyof typeof regions>(page)
     await reportVisualStability(
@@ -144,7 +152,7 @@ test.describe("timeline visual lifecycle stability", () => {
         { type: "flow", regions: ["reasoning", "text"] },
       ]),
     )
-    await expect(page.locator(`[data-timeline-part-id="${textID}"]`)).toContainText("stable output")
+    await expect(page.locator(`[data-timeline-part-id="${renderedPartID(textID)}"]`)).toContainText("stable output")
   })
 })
 
@@ -153,5 +161,5 @@ function lines(count: number) {
 }
 
 function shellRegion(id: string) {
-  return { selector: `[data-timeline-part-id="${id}"]`, closest: '[data-timeline-row="AssistantPart"]' }
+  return { selector: `[data-timeline-part-id="${renderedPartID(id)}"]`, closest: '[data-timeline-row="AssistantPart"]' }
 }

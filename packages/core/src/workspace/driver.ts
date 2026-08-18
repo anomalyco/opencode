@@ -14,12 +14,12 @@ import type { Driver as EnvironmentDriver } from "../environment/driver.js"
 export const Binding = Schema.Record(Schema.String, Schema.Json)
 export type Binding = typeof Binding.Type
 
-export class Error extends Schema.TaggedErrorClass<Error>()("WorkspaceDriver.Error", {
+export class Error extends Schema.TaggedError<Error>()("WorkspaceDriver.Error", {
   message: Schema.optional(Schema.String),
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-export class ProviderNotFound extends Schema.TaggedErrorClass<ProviderNotFound>()("WorkspaceDriver.ProviderNotFound", {
+export class ProviderNotFound extends Schema.TaggedError<ProviderNotFound>()("WorkspaceDriver.ProviderNotFound", {
   provider: Schema.String,
 }) {}
 

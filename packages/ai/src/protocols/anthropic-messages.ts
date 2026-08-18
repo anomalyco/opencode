@@ -437,10 +437,19 @@ const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
-// Mid-conversation system messages are a native Claude API feature only for
-// Opus 4.8. Other Anthropic models intentionally use the same visible wrapped-
-// user fallback as non-Anthropic routes rather than sending a role they reject.
-const supportsNativeSystemUpdates = (request: LLMRequest) => String(request.model.id) === "claude-opus-4-8"
+// Mid-conversation system messages became available with Opus 4.8 and version
+// 5 of the other supported Claude families. Treat later family versions as
+// compatible without assuming that every Anthropic Messages model is Claude.
+const supportsNativeSystemUpdates = (request: LLMRequest) => {
+  const match = /(?:^|[./])claude-(fable|haiku|mythos|opus|sonnet)-(\d+)(?:[.-](\d+))?/.exec(
+    String(request.model.id).toLowerCase(),
+  )
+  if (!match) return false
+  const major = Number(match[2])
+  if (match[1] !== "opus") return major >= 5
+  if (major !== 4) return major >= 5
+  return match[3] !== undefined && match[3].length <= 2 && Number(match[3]) >= 8
+}
 
 const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
   const last = message.content.at(-1)
@@ -957,9 +966,12 @@ const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult =
   ]
 }
 
-const onMessageStop = (state: ParserState): StepResult => {
+const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (state: ParserState) {
+  const result = yield* ToolStream.finishAll(ADAPTER, state.tools)
   const events: LLMEvent[] = []
-  const lifecycle = Lifecycle.finish(state.lifecycle, events, {
+  const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+  events.push(...result.events)
+  const finished = Lifecycle.finish(lifecycle, events, {
     reason: state.pendingFinish?.reason ?? {
       normalized: "unknown",
       raw: undefined,
@@ -967,8 +979,8 @@ const onMessageStop = (state: ParserState): StepResult => {
     usage: state.usage,
     providerMetadata: state.pendingFinish?.providerMetadata,
   })
-  return [{ ...state, lifecycle }, events]
-}
+  return [{ ...state, lifecycle: finished, tools: result.tools }, events] satisfies StepResult
+})
 
 // Prefix `error.type` so overloads, rate limits, and quota errors are visible
 // even when the provider message is generic or empty.
@@ -992,7 +1004,7 @@ const step = (state: ParserState, event: AnthropicEvent) => {
   if (event.type === "content_block_delta") return onContentBlockDelta(state, event)
   if (event.type === "content_block_stop") return onContentBlockStop(state, event)
   if (event.type === "message_delta") return Effect.succeed(onMessageDelta(state, event))
-  if (event.type === "message_stop") return Effect.succeed(onMessageStop(state))
+  if (event.type === "message_stop") return onMessageStop(state)
   if (event.type === "error") return onError(event)
   return Effect.succeed<StepResult>([state, NO_EVENTS])
 }

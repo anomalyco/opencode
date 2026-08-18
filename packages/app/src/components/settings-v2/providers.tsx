@@ -8,7 +8,6 @@ import { useIntegrations } from "@/hooks/use-integrations"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider, useProviderConnectController } from "../dialog-connect-provider"
 import { DialogCustomProvider } from "../dialog-custom-provider"
 import { SettingsServerScope } from "../settings-server-picker"
@@ -39,7 +38,6 @@ export const SettingsProvidersV2: Component<{
   const dialog = useDialog()
   const language = useLanguage()
   const serverSdk = useServerSDK()
-  const serverSync = useServerSync()
   const providers = useProviders(() => props.directory)
   const integrations = useIntegrations(() => props.directory)
   const providerConnect = useProviderConnectController({ onBack: props.onBack })
@@ -55,15 +53,12 @@ export const SettingsProvidersV2: Component<{
   }
 
   const connected = createMemo(() => {
-    return providers.connected().filter(
-      (provider) =>
-        provider.id !== "opencode" ||
-        Object.values(provider.models).some((model) => {
-          if (typeof model !== "object" || model === null || !("cost" in model)) return false
-          const cost = model.cost
-          return typeof cost === "object" && cost !== null && "input" in cost
-        }),
-    )
+    return providers
+      .connected()
+      .filter(
+        (provider) =>
+          provider.id !== "opencode" || Object.values(provider.models).some((model) => model.cost.input > 0),
+      )
   })
 
   const popular = createMemo(() => {
@@ -94,10 +89,7 @@ export const SettingsProvidersV2: Component<{
     const current = source(item)
     if (current === "env") return language.t("settings.providers.tag.environment")
     if (current === "api") return language.t("provider.connect.method.apiKey")
-    if (current === "config") {
-      if (isConfigCustom(item.id)) return language.t("settings.providers.tag.custom")
-      return language.t("settings.providers.tag.config")
-    }
+    if (current === "config") return language.t("settings.providers.tag.config")
     if (current === "custom") return language.t("settings.providers.tag.custom")
     return language.t("settings.providers.tag.other")
   }
@@ -105,18 +97,11 @@ export const SettingsProvidersV2: Component<{
   const canDisconnect = (item: ProviderItem) => {
     const current = integration(item.id)
     if (current) return current.connections.some((connection) => connection.type === "credential")
-    return source(item) !== "env" && !isConfigCustom(item.id)
+    const currentSource = source(item)
+    return currentSource !== "env" && currentSource !== "config"
   }
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
-
-  const isConfigCustom = (providerID: string) => {
-    const provider = serverSync.data.config.provider?.[providerID]
-    if (!provider) return false
-    if (provider.npm !== "@ai-sdk/openai-compatible") return false
-    if (!provider.models || Object.keys(provider.models).length === 0) return false
-    return true
-  }
 
   const disconnect = async (providerID: string, name: string) => {
     const location = props.directory ? { directory: props.directory } : undefined

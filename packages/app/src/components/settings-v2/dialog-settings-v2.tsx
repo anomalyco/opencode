@@ -63,7 +63,7 @@ export const DialogSettings: Component<{
       const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
       return draft?.type === "draft" ? draft.directory : undefined
     }
-    if (route.type === "session") return serverCtx()?.sync.session.get(route.sessionId)?.location.directory
+    if (route.type === "session") return serverCtx()?.data.session.get(route.sessionId)?.location.directory
     return undefined
   })
 

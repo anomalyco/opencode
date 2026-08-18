@@ -4,6 +4,7 @@ import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import type { CredentialOAuth } from "@opencode-ai/sdk/v2/types"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import { Mcp } from "@opencode-ai/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
@@ -15,6 +16,7 @@ import { Bus } from "../bus.js"
 import { Integration } from "../integration.js"
 import { Location } from "../location.js"
 import { Model } from "../model.js"
+import { MCP } from "../mcp/index.js"
 import { PluginRuntime } from "./runtime.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
@@ -34,6 +36,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
   const commands = yield* Command.Service
   const bus = yield* Bus.Service
   const integration = yield* Integration.Service
+  const mcp = yield* MCP.Service
   const location = yield* Location.Service
   const reference = yield* Reference.Service
   const skill = yield* Skill.Service
@@ -266,6 +269,44 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
               remove: (id, method) =>
                 draft.method.remove(Integration.ID.make(id), Schema.decodeUnknownSync(Integration.Method)(method)),
             },
+          })
+        }),
+    },
+    mcp: {
+      list: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.list(ref)
+        return response(mcp.servers())
+      },
+      add: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.add(ref, input.server, input.config)
+        return mcp.add(input.server, input.config)
+      },
+      remove: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.remove(ref, input.server)
+        return mcp.remove(input.server)
+      },
+      connect: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.connect(ref, input.server)
+        return mcp.connect(input.server)
+      },
+      disconnect: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.disconnect(ref, input.server)
+        return mcp.disconnect(input.server)
+      },
+      reload: mcp.reload,
+      transform: (callback) =>
+        mcp.transform((draft) => {
+          callback({
+            list: () => draft.list().map(([name, config]) => [name, mutable(config)]),
+            get: (name) => mutable(draft.get(name)),
+            set: (name, config) => draft.set(name, Schema.decodeUnknownSync(Mcp.ServerConfig)(config)),
+            update: draft.update,
+            remove: draft.remove,
           })
         }),
     },

@@ -8,6 +8,8 @@ import { location } from "./location"
 export const emptyMcpLayer = Layer.succeed(
   MCP.Service,
   MCP.Service.of({
+    transform: () => Effect.die("unused mcp.transform"),
+    reload: () => Effect.die("unused mcp.reload"),
     servers: () => Effect.succeed([]),
     add: () => Effect.die("unused mcp.add"),
     connect: () => Effect.die("unused mcp.connect"),

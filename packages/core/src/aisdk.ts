@@ -43,6 +43,8 @@ type UserContent = Extract<LanguageModelV3Message, { role: "user" }>["content"]
 type AssistantContent = Extract<LanguageModelV3Message, { role: "assistant" }>["content"]
 type ToolResultContent = Extract<AssistantContent[number], { type: "tool-result" }>
 
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+
 export interface SDKEvent {
   readonly model: Info
   readonly package: string
@@ -146,7 +148,7 @@ function prepareOptions(model: Info, pkg: string) {
     }
 
     if (typeof opts.body === "string" && model.body !== undefined) {
-      const decoded = Option.getOrUndefined(Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(opts.body))
+      const decoded = Option.getOrUndefined(decodeJson(opts.body))
       if (Schema.is(Schema.Record(Schema.String, Schema.Json))(decoded)) {
         opts.body = JSON.stringify(Provider.mergeOverlay(decoded, model.body))
       }
@@ -163,7 +165,7 @@ function prepareOptions(model: Info, pkg: string) {
   return options
 }
 
-export class InitError extends Schema.TaggedErrorClass<InitError>()("AISDK.InitError", {
+export class InitError extends Schema.TaggedError<InitError>()("AISDK.InitError", {
   providerID: Provider.ID,
   cause: Schema.Defect(),
 }) {}

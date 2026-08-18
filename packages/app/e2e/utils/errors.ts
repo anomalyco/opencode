@@ -6,6 +6,9 @@ export function trackPageErrors(page: Page) {
     if (message.type() === "error") errors.push(message.text())
   })
   page.on("pageerror", (error) => errors.push(error.stack ?? error.message))
+  page.on("response", (response) => {
+    if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`)
+  })
   return errors
 }
 

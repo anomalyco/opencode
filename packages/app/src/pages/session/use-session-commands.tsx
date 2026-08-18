@@ -1,4 +1,3 @@
-import { useNavigate } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
@@ -7,14 +6,15 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
+import { useData } from "@/context/server"
+import { useServerSDK } from "@/context/server-sdk"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
-import { extractPromptFromParts } from "@/utils/prompt"
-import type { UserMessage } from "@/types"
+import { extractPromptComments, extractPromptFromMessage } from "@/utils/prompt"
+import type { SessionMessageUser } from "@opencode-ai/client/promise"
 import type { SessionController } from "./session-controller"
 
 type SessionCommandSource = {
@@ -33,7 +33,7 @@ export type SessionCommandContext = {
     move: () => Promise<void>
   }
   navigateMessageByOffset: (offset: number) => void
-  setActiveMessage: (message: UserMessage | undefined) => void
+  setActiveMessage: (message: SessionMessageUser | undefined) => void
   focusInput: () => void
 }
 
@@ -51,12 +51,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const language = useLanguage()
   const permission = usePermission()
   const prompt = usePrompt()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
+  const data = useData()
   const settings = useSettings()
-  const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
-  const navigate = useNavigate()
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = actions.session.ownership.capture()
     const value = await load()
@@ -73,7 +73,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     input.updatePrompt(input.prompt)
     input.owner.run(input.updateViewport)
   }
-
   const shown = settings.visibility.fileTree
 
   const showAllFiles = () => {
@@ -199,7 +198,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     try {
       const data = await fetchSessionExport({
         sessionID,
-        api: sdk().api,
+        api: serverSDK.api,
       })
       const filename = sessionExportFilename(data.info)
       downloadSessionExport(filename, data)
@@ -293,8 +292,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
     const owner = actions.session.ownership.capture()
-    const session = sdk().api.session
-    const directory = sdk().directory
+    const session = serverSDK.api.session
     const promptSession = prompt.capture()
     const revert = actions.session.data.revertMessageID()
     const messages = actions.session.history.userMessages()
@@ -302,18 +300,25 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (boundary < 0) return
     const message = messages[boundary - 1]
     if (!message) return
-    const parts = sync().data.part[message.id]
 
-    if (sync().data.session_working(sessionID)) {
-      await session.interrupt({ sessionID }).catch(() => {})
-    }
+    if (data.session.status(sessionID) === "running") await session.interrupt({ sessionID }).catch(() => {})
 
     await runCommand({
       owner,
       prompt: promptSession,
       request: () => session.revert.stage({ sessionID, messageID: message.id }),
-      updatePrompt: (promptSession) => {
-        if (parts) promptSession.set(extractPromptFromParts(parts, { directory }))
+      updatePrompt: (target) => {
+        target.set(extractPromptFromMessage(message, { directory: sdk().directory }))
+        target.context.replaceComments(
+          extractPromptComments(message).map((comment) => ({
+            type: "file",
+            path: comment.path,
+            selection: comment.selection,
+            comment: comment.comment,
+            preview: comment.preview,
+            commentOrigin: comment.origin,
+          })),
+        )
       },
       updateViewport: () => setActiveMessage(messages[boundary - 2]),
     })
@@ -323,10 +328,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
     const owner = actions.session.ownership.capture()
-    const session = sdk().api.session
+    const session = serverSDK.api.session
     const messages = actions.session.history.userMessages()
     const promptSession = prompt.capture()
-
     const revertMessageID = actions.session.data.revertMessageID()
     if (!revertMessageID) return
 
@@ -338,7 +342,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         owner,
         prompt: promptSession,
         request: () => session.revert.clear({ sessionID }),
-        updatePrompt: (promptSession) => promptSession.reset(),
+        updatePrompt: (target) => target.reset(),
         updateViewport: () => setActiveMessage(messages.at(-1)),
       })
       return
@@ -357,7 +361,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
 
-    await sdk().api.session.compact({ sessionID })
+    await serverSDK.api.session.compact({ sessionID })
   }
 
   const fork = () => {
@@ -371,7 +375,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const shareCmds = () => {
     // TODO: Restore these commands when the V2 client exposes session sharing.
-    // if (sync().data.config.share === "disabled") return []
+    // Sharing remains disabled until the current API exposes it.
     return []
     /*
     return [
@@ -405,13 +409,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.new"),
       keybind: "mod+shift+s",
       slash: "new",
-      onSelect: (source) => {
-        if (settings.general.newLayoutDesigns()) {
-          command.trigger("tab.new", source)
-          return
-        }
-        navigate(`/${actions.session.identity.params.dir}/session`)
-      },
+      onSelect: (source) => command.trigger("tab.new", source),
     }),
     sessionCommand({
       id: "session.undo",
@@ -426,7 +424,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.redo"),
       description: language.t("command.session.redo.description"),
       slash: "redo",
-      disabled: !actions.session.identity.params.id || !actions.session.data.info()?.revert?.messageID,
+      disabled: !actions.session.identity.params.id || !actions.session.data.revertMessageID(),
       onSelect: redo,
     }),
     sessionCommand({

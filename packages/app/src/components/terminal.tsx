@@ -10,7 +10,8 @@ import { SerializeAddon } from "@/addons/serialize"
 import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
+import { useServerSDK } from "@/context/server-sdk"
 import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
@@ -171,13 +172,14 @@ const persistTerminal = (input: {
 
 export const Terminal = (props: TerminalProps) => {
   const platform = usePlatform()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
   // Intentional mount-time capture: the imperative xterm/WebSocket lifecycle needs stable values, and Terminal remounts when the SDK scope changes.
   const directory = sdk().directory
-  const url = sdk().url
+  const url = serverSDK.url
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, [
     "pty",
@@ -235,8 +237,8 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   const pushSize = async (cols: number, rows: number) => {
-    return sdk()
-      .api.pty.update({
+    return serverSDK.api.pty
+      .update({
         ptyID: id,
         location: { directory },
         size: { cols, rows },
@@ -255,10 +257,8 @@ export const Terminal = (props: TerminalProps) => {
     if (!variant?.seeds && !variant?.palette) return fallback
     const resolved = resolveThemeVariant(variant, mode === "dark")
     const text = resolved["text-stronger"] ?? fallback.foreground
-    const background = settings.general.newLayoutDesigns()
-      ? (resolveV2Token(resolveThemeVariantV2(variant, mode === "dark"), "v2-background-bg-base") ??
-        fallback.background)
-      : (resolved["background-stronger"] ?? fallback.background)
+    const background =
+      resolveV2Token(resolveThemeVariantV2(variant, mode === "dark"), "v2-background-bg-base") ?? fallback.background
     const alpha = mode === "dark" ? 0.25 : 0.2
     const base = text.startsWith("#") ? (text as HexColor) : (fallback.foreground as HexColor)
     const selectionBackground = withAlpha(base, alpha)
@@ -521,8 +521,8 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const gone = async () => {
-        return sdk()
-          .api.pty.get({ ptyID: id, location: { directory } })
+        return serverSDK.api.pty
+          .get({ ptyID: id, location: { directory } })
           .then((result) => result.data.status === "exited")
           .catch((err) => {
             if (err && typeof err === "object" && "_tag" in err && err._tag === "PtyNotFoundError") return true

@@ -54,6 +54,27 @@ describe("Google Vertex providers", () => {
     }),
   )
 
+  it.effect("adds billing labels to Vertex Gemini requests", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: GoogleVertex.configure({
+            accessToken: "vertex-token",
+            project: "vertex-project",
+            providerOptions: {
+              gemini: { labels: { component: "opencode", environment: "test" } },
+            },
+          }).model("gemini-3.5-flash"),
+          prompt: "Say hello.",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        labels: { component: "opencode", environment: "test" },
+      })
+    }),
+  )
+
   it.effect("projects Anthropic Messages onto the Vertex raw-predict API", () =>
     Effect.gen(function* () {
       const model = GoogleVertexMessages.configure({

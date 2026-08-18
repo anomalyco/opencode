@@ -1,8 +1,8 @@
 import { Show, createMemo } from "solid-js"
 import { DateTime } from "luxon"
-import { useSync } from "@/context/sync"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useLanguage } from "@/context/language"
+import { useData } from "@/context/server"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Mark } from "@opencode-ai/ui/logo"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
@@ -16,28 +16,32 @@ interface NewSessionViewProps {
 }
 
 export function NewSessionView(props: NewSessionViewProps) {
-  const sync = useSync()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const language = useLanguage()
+  const data = useData()
 
-  const sandboxes = createMemo(() => sync().project?.sandboxes ?? [])
+  const project = createMemo(() => {
+    const projectID = data.location.info({ directory: sdk().directory })?.project.id
+    return projectID ? data.project.get(projectID) : undefined
+  })
+  const sandboxes = createMemo(() => project()?.sandboxes ?? [])
   const options = createMemo(() => [MAIN_WORKTREE, ...sandboxes(), CREATE_WORKTREE])
   const current = createMemo(() => {
     const selection = props.worktree
     if (options().includes(selection)) return selection
     return MAIN_WORKTREE
   })
-  const projectRoot = createMemo(() => sync().project?.worktree ?? sdk().directory)
+  const projectRoot = createMemo(() => project()?.canonical ?? sdk().directory)
   const isWorktree = createMemo(() => {
-    const project = sync().project
-    if (!project) return false
-    return sdk().directory !== project.worktree
+    const current = project()
+    if (!current) return false
+    return sdk().directory !== current.canonical
   })
 
   const label = (value: string) => {
     if (value === MAIN_WORKTREE) {
       if (isWorktree()) return language.t("session.new.worktree.main")
-      const branch = sync().data.vcs?.branch
+      const branch = data.location.vcs.info({ directory: sdk().directory })?.branch.current
       if (branch) return language.t("session.new.worktree.mainWithBranch", { branch })
       return language.t("session.new.worktree.main")
     }
@@ -69,7 +73,7 @@ export function NewSessionView(props: NewSessionViewProps) {
                 {label(current())}
               </div>
             </div>
-            <Show when={sync().project}>
+            <Show when={project()}>
               {(project) => (
                 <div class="flex items-start justify-center gap-3 min-h-5">
                   <div class="text-12-medium text-text-weak leading-5 min-w-0 max-w-160 break-words text-center">

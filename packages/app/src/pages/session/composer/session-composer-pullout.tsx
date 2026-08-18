@@ -1,15 +1,12 @@
-import { DockTray } from "@opencode-ai/ui/dock-surface"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
-import { useSettings } from "@/context/settings"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createEffect, createMemo, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Dynamic } from "solid-js/web"
 
 export function SessionComposerPullout(props: {
-  name: "todo" | "background"
+  name: "background"
   label: JSX.Element
   ariaLabel: string
   preview?: string
@@ -22,7 +19,6 @@ export function SessionComposerPullout(props: {
   dockProgress?: number
   children: JSX.Element
 }) {
-  const settings = useSettings()
   const [store, setStore] = createStore({ height: 78, header: 42 })
   const collapse = useSpring(() => (props.collapsed ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
   const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress ?? 1)))
@@ -48,13 +44,9 @@ export function SessionComposerPullout(props: {
   })
 
   return (
-    <Dynamic
-      component={settings.general.newLayoutDesigns() ? "div" : DockTray}
+    <div
       data-component={`session-${props.name}-dock`}
-      classList={{
-        "w-full overflow-hidden rounded-xl border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01":
-          settings.general.newLayoutDesigns(),
-      }}
+      class="w-full overflow-hidden rounded-xl border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01"
       style={{
         "overflow-x": "visible",
         "overflow-y": "hidden",
@@ -65,12 +57,10 @@ export function SessionComposerPullout(props: {
         <div
           ref={headerRef}
           data-action={`session-${props.name}-toggle`}
+          class="flex items-center gap-2 overflow-visible pl-4 pr-2"
           classList={{
-            "flex items-center gap-2 overflow-visible": true,
-            "pl-4 pr-2": settings.general.newLayoutDesigns(),
-            "h-[42px]": settings.general.newLayoutDesigns() && !props.multiline,
-            "min-h-[42px] py-2": settings.general.newLayoutDesigns() && props.multiline,
-            "pl-3 pr-2 py-2": !settings.general.newLayoutDesigns(),
+            "h-[42px]": !props.multiline,
+            "min-h-[42px] py-2": props.multiline,
           }}
           role="button"
           tabIndex={0}
@@ -82,12 +72,7 @@ export function SessionComposerPullout(props: {
           }}
         >
           <span
-            classList={{
-              "cursor-default inline-flex items-baseline shrink-0 overflow-visible": true,
-              "font-[440] text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted":
-                settings.general.newLayoutDesigns(),
-              "text-14-regular text-text-strong": !settings.general.newLayoutDesigns(),
-            }}
+            class="cursor-default inline-flex items-baseline shrink-0 overflow-visible font-[440] text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
             aria-label={props.ariaLabel}
             style={{
               "--tool-motion-odometer-ms": "600ms",
@@ -106,11 +91,7 @@ export function SessionComposerPullout(props: {
             style={{ flex: "1 1 auto", "max-width": "100%", transform: "translateY(1px)" }}
           >
             <TextReveal
-              class={
-                settings.general.newLayoutDesigns()
-                  ? "cursor-default text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint"
-                  : "text-14-regular text-text-base cursor-default"
-              }
+              class="cursor-default text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint"
               text={props.preview}
               duration={600}
               travel={25}
@@ -152,6 +133,6 @@ export function SessionComposerPullout(props: {
           {props.children}
         </div>
       </div>
-    </Dynamic>
+    </div>
   )
 }

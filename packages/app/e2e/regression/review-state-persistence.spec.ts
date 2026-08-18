@@ -54,7 +54,6 @@ async function switchSession(page: Page, title: string) {
 
 async function setup(page: Page) {
   await mockOpenCodeServer(page, {
-    protocol: "v2",
     directory,
     project: {
       id: projectID,
@@ -103,7 +102,6 @@ async function setup(page: Page) {
   )
   await page.addInitScript(
     ({ directory, server, sessions }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({

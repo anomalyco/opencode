@@ -1,25 +1,21 @@
-import { Match, Show, Switch, createMemo, type ComponentProps, type JSX } from "solid-js"
+import { Show, createMemo, type ComponentProps, type JSX } from "solid-js"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { ProgressCircleV2 } from "@opencode-ai/ui/v2/progress-circle-v2"
-import { Button } from "@opencode-ai/ui/button"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { createMediaQuery } from "@solid-primitives/media"
 
 import { useFile } from "@/context/file"
 import { useLayout } from "@/context/layout"
-import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
-import { useSDK } from "@/context/sdk"
-import { getSessionContext } from "@/components/session/session-context-metrics"
+import { useWorkspaceLocation } from "@/context/location"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
-import { useSettings } from "@/context/settings"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
-  buttonAppearance?: "default" | "v2"
   placement?: ComponentProps<typeof TooltipV2>["placement"]
 }
 
@@ -43,26 +39,24 @@ function openSessionContext(args: {
 }
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
-  const sync = useSync()
+  const data = useData()
   const file = useFile()
   const layout = useLayout()
   const language = useLanguage()
-  const sdk = useSDK()
-  const settings = useSettings()
+  const sdk = useWorkspaceLocation()
   const providers = useProviders(() => sdk().directory)
   const { params, tabs, view } = useSessionLayout()
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
   const variant = createMemo(() => props.variant ?? "button")
-  const buttonAppearance = createMemo(() => props.buttonAppearance ?? "default")
   const tabState = createSessionTabs({
     tabs,
     pathFromTab: file.pathFromTab,
     normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
-    fileBrowser: () => settings.general.newLayoutDesigns() && isDesktop() && !!params.id,
+    fileBrowser: () => isDesktop() && !!params.id,
   })
-  const messages = createMemo(() => (params.id ? (sync().data.message[params.id] ?? []) : []))
-  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
+  const messages = createMemo(() => (params.id ? data.session.message.list(params.id) : []))
+  const info = createMemo(() => (params.id ? data.session.get(params.id) : undefined))
 
   const usd = createMemo(
     () =>
@@ -72,7 +66,21 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       }),
   )
 
-  const context = createMemo(() => getSessionContext(messages(), [...providers.all().values()]))
+  const context = createMemo(() => {
+    const message = messages().findLast((item) => item.type === "assistant" && !!item.tokens)
+    if (message?.type !== "assistant" || !message.tokens) return
+    const model = providers.all().get(message.model.providerID)?.models[message.model.id]
+    const total =
+      message.tokens.input +
+      message.tokens.output +
+      message.tokens.reasoning +
+      message.tokens.cache.read +
+      message.tokens.cache.write
+    return {
+      total,
+      usage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+    }
+  })
   const cost = createMemo(() => {
     return usd().format(info()?.cost ?? 0)
   })
@@ -138,9 +146,9 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   return (
     <Show when={params.id}>
       <TooltipV2 value={tooltipValue()} placement={props.placement ?? "top"} shift={-8}>
-        <Switch>
-          <Match when={variant() === "indicator"}>{circle()}</Match>
-          <Match when={buttonAppearance() === "v2"}>
+        <Show
+          when={variant() === "indicator"}
+          fallback={
             <IconButtonV2
               type="button"
               variant="ghost-muted"
@@ -149,19 +157,10 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
               onClick={openContext}
               aria-label={language.t("context.usage.view")}
             />
-          </Match>
-          <Match when={true}>
-            <Button
-              type="button"
-              variant="ghost"
-              class="size-6"
-              onClick={openContext}
-              aria-label={language.t("context.usage.view")}
-            >
-              {circle()}
-            </Button>
-          </Match>
-        </Switch>
+          }
+        >
+          {circle()}
+        </Show>
       </TooltipV2>
     </Show>
   )

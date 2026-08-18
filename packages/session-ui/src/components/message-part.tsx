@@ -55,7 +55,6 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
@@ -65,6 +64,7 @@ import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
+import type { SessionMessageShell } from "@opencode-ai/client/promise"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -453,10 +453,6 @@ function taskAgent(
 function agentColor(value: string | undefined, themeColors: Record<string, string>) {
   if (!value) return
   return themeColors[value] ?? value
-}
-
-function newLayout() {
-  return typeof document !== "undefined" && document.body.hasAttribute("data-new-layout")
 }
 
 function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI18n>) {
@@ -871,6 +867,12 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   const include = typeof input.include === "string" ? input.include : undefined
   const offset = typeof input.offset === "number" ? input.offset : undefined
   const limit = typeof input.limit === "number" ? input.limit : undefined
+  const metadata = "metadata" in part.state ? part.state.metadata : undefined
+  const count = part.tool === "glob" ? metadata?.count : part.tool === "grep" ? metadata?.matches : undefined
+  const matches =
+    typeof count === "number" && Number.isFinite(count) && count !== 0
+      ? i18n.plural("ui.messagePart.context.match", count)
+      : undefined
 
   switch (part.tool) {
     case "read": {
@@ -892,12 +894,13 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       return {
         title: i18n.t("ui.tool.glob"),
         subtitle: getDirectory(path),
-        args: pattern ? ["pattern=" + pattern] : [],
+        args: [...(pattern ? ["pattern=" + pattern] : []), ...(matches ? [matches] : [])],
       }
     case "grep": {
       const args: string[] = []
       if (pattern) args.push("pattern=" + pattern)
       if (include) args.push("include=" + include)
+      if (matches) args.push(matches)
       return {
         title: i18n.t("ui.tool.grep"),
         subtitle: getDirectory(path),
@@ -1223,7 +1226,7 @@ export function UserMessageDisplay(props: {
 
   const attachments = createMemo(() => files().filter(attached))
 
-  const messageComments = createMemo(() => (newLayout() ? (props.comments ?? []) : []))
+  const messageComments = createMemo(() => props.comments ?? [])
 
   const inlineFiles = createMemo(() => files().filter(inline))
 
@@ -1289,7 +1292,7 @@ export function UserMessageDisplay(props: {
 
             return (
               <Show
-                when={newLayout() && type === "file"}
+                when={type === "file"}
                 fallback={
                   <div
                     data-slot="user-message-attachment"
@@ -2083,19 +2086,15 @@ ToolRegistry.register({
               <Show
                 when={running()}
                 fallback={
-                  <Show when={newLayout()}>
-                    <span data-component="task-tool-icon">
-                      <Icon name="subagent" size="small" />
-                    </span>
-                  </Show>
+                  <span data-component="task-tool-icon">
+                    <Icon name="subagent" size="small" />
+                  </span>
                 }
               >
                 <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
-                  <Show when={newLayout()} fallback={<Spinner />}>
-                    <SessionProgressIndicatorV2
-                      style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
-                    />
-                  </Show>
+                  <SessionProgressIndicatorV2
+                    style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
+                  />
                 </span>
               </Show>
               <span data-component="task-tool-title">{title()}</span>
@@ -2249,6 +2248,34 @@ ToolRegistry.register({
     )
   },
 })
+
+export function SessionShellMessage(props: {
+  message: SessionMessageShell
+  defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}) {
+  const render = ToolRegistry.render("shell") ?? GenericTool
+  return (
+    <div data-component="session-shell-message" data-timeline-part-id={props.message.id}>
+      <Dynamic
+        component={render}
+        tool="shell"
+        input={{ command: props.message.command }}
+        metadata={{
+          status: props.message.status,
+          exit: props.message.exit,
+          truncated: props.message.output?.truncated,
+        }}
+        output={props.message.output?.output}
+        status={props.message.status === "running" ? "running" : "completed"}
+        defaultOpen={props.defaultOpen}
+        open={props.open}
+        onOpenChange={props.onOpenChange}
+      />
+    </div>
+  )
+}
 
 ToolRegistry.register({
   name: "edit",

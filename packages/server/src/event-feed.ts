@@ -7,12 +7,12 @@ import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "eff
 
 export const SubscriberCapacity = 4_096
 
-export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberOverflowError>()(
+export class SubscriberOverflowError extends Schema.TaggedError<SubscriberOverflowError>()(
   "EventFeed.SubscriberOverflow",
   { capacity: Schema.Int },
 ) {}
 
-export class EncodingError extends Schema.TaggedErrorClass<EncodingError>()("EventFeed.EncodingError", {
+export class EncodingError extends Schema.TaggedError<EncodingError>()("EventFeed.EncodingError", {
   eventID: Event.ID,
   eventType: Schema.String,
   cause: Schema.Defect(),

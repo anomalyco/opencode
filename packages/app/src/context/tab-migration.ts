@@ -1,12 +1,12 @@
 import type { ServerConnection } from "./servers"
 import type { Tab } from "./tabs"
 
-export function migrateTabs(value: unknown, fallback: ServerConnection.Key): Tab[] {
+export function migrateTabs(value: unknown): Tab[] {
   if (!Array.isArray(value)) return []
   return value.flatMap<Tab>((tab) => {
     if (!tab || typeof tab !== "object") return []
-    if ("server" in tab && typeof tab.server !== "string") return []
-    const server = ("server" in tab ? tab.server : fallback) as ServerConnection.Key
+    if (!("server" in tab) || typeof tab.server !== "string") return []
+    const server = tab.server as ServerConnection.Key
     if (tab.type === "session" && typeof tab.sessionId === "string") {
       return [{ type: tab.type, server, sessionId: tab.sessionId }]
     }

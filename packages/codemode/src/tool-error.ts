@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 
 /** Safe operational refusal from a standard tool pack, reported as `ToolFailure`. */
-export class ToolError extends Schema.TaggedErrorClass<ToolError>()("ToolError", {
+export class ToolError extends Schema.TaggedError<ToolError>()("ToolError", {
   message: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}

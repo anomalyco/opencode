@@ -1,25 +1,10 @@
-import type {
-  EventSubscribeOutput,
-  FileDiffInfo,
-  ProjectListOutput,
-  WorktreeDirectory,
-} from "@opencode-ai/client/promise"
+import type { FileDiffInfo, ProjectListOutput, WorktreeDirectory } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & {
   worktree: string
   worktrees: WorktreeDirectory[]
 }
-
-type CurrentEvent = EventSubscribeOutput extends infer Item
-  ? Item extends { type: infer Type extends string; data: infer Data }
-    ? { type: Type; properties: Data }
-    : never
-  : never
-
-export type Event = CurrentEvent
-
-export type EventSessionError = Extract<Event, { type: "session.execution.failed" }>
 
 type MessageError =
   | { name: "ProviderAuthError"; data: { providerID: string; message: string } }

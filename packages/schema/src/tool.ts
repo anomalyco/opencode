@@ -56,7 +56,7 @@ type OutputValue<S> = S extends undefined
       ? A
       : any
 
-export class Error extends Schema.TaggedErrorClass<Error>()("Tool.Error", {
+export class Error extends Schema.TaggedError<Error>()("Tool.Error", {
   message: Schema.String,
   error: Schema.optional(Schema.Defect()),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),

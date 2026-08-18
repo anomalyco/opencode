@@ -13,7 +13,7 @@ for (const deviceScaleFactor of [1.25, 1.5]) {
     const shellID = "prt_shell_outline"
     const timeline = await setupTimeline(page, {
       messages: [userMessage(), assistantMessage([shell(shellID, "completed", "shell output")])],
-      settings: { newLayoutDesigns: true, shellToolPartsExpanded: true },
+      settings: { shellToolPartsExpanded: true },
       reducedMotion: true,
       deviceScaleFactor,
     })
@@ -82,7 +82,7 @@ test("keeps the patch card inside a fractionally short virtual row", async ({ pa
         toolPart(patchID, "apply_patch", "completed", { files: [file.filePath] }, { metadata: { files: [file] } }),
       ]),
     ],
-    settings: { editToolPartsExpanded: true, newLayoutDesigns: true },
+    settings: { editToolPartsExpanded: true },
     reducedMotion: true,
   })
   const part = page.locator(`[data-timeline-part-id="${patchID}"]`)
