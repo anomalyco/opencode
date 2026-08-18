@@ -1,5 +1,6 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
+import { Button } from "@opencode-ai/ui/button"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import type { ListRef } from "@opencode-ai/ui/list"
@@ -8,8 +9,14 @@ import { createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useGlobal } from "@/context/global"
-import { cleanPickerInput, createDirectorySearch, displayPickerPath } from "./directory-picker-domain"
 import type { Path } from "@opencode-ai/sdk/v2/client"
+import {
+  cleanPickerInput,
+  createDirectorySearch,
+  displayPickerPath,
+  pickerAbsoluteInput,
+  pickerRoot,
+} from "./directory-picker-domain"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -128,6 +135,25 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     dialog.close()
   }
 
+  // Navigate into the highlighted item (append "/" and refetch suggestions)
+  function navigateInto(item: Row) {
+    const value = displayPickerPath(item.absolute, filter(), home())
+    list?.setFilter(value.endsWith("/") ? value : value + "/")
+  }
+
+  // Resolve the current filter path as the selection
+  const resolvedPath = createMemo(() => {
+    const base = start() ?? home()
+    const absolute = filter() ? pickerAbsoluteInput(filter(), home(), base) : base
+    return absolute && pickerRoot(absolute) ? absolute : undefined
+  })
+
+  function confirmFilter() {
+    const absolute = resolvedPath()
+    if (!absolute) return
+    resolve(absolute)
+  }
+
   return (
     <Dialog title={props.title ?? language.t("command.project.open")}>
       <List
@@ -149,19 +175,27 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         ref={(r) => (list = r)}
         onFilter={(value) => setFilter(cleanPickerInput(value))}
         onKeyEvent={(e, item) => {
-          if (e.key !== "Tab") return
-          if (e.shiftKey) return
-          if (!item) return
-
-          e.preventDefault()
-          e.stopPropagation()
-
-          const value = displayPickerPath(item.absolute, filter(), home())
-          list?.setFilter(value.endsWith("/") ? value : value + "/")
+          // Ctrl+Enter or Meta+Enter: confirm the current filter path
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault()
+            e.stopPropagation()
+            confirmFilter()
+            return
+          }
+          // Tab or Enter: navigate into highlighted directory, or confirm filter if nothing highlighted
+          if (e.key === "Tab" || e.key === "Enter") {
+            if (e.shiftKey) return
+            e.preventDefault()
+            e.stopPropagation()
+            if (item) navigateInto(item)
+            else confirmFilter()
+            return
+          }
         }}
         onSelect={(path) => {
+          // Clicking an item navigates into it; use the Open button to confirm
           if (!path) return
-          resolve(path.absolute)
+          navigateInto(path)
         }}
       >
         {(item) => {
@@ -195,6 +229,14 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           )
         }}
       </List>
+      <div class="px-3 pb-3 pt-2 flex justify-end gap-2">
+        <Button variant="ghost" onClick={() => dialog.close()}>
+          {language.t("common.cancel")}
+        </Button>
+        <Button variant="primary" disabled={!resolvedPath()} onClick={confirmFilter}>
+          {language.t("dialog.directory.action.selectFolder")}
+        </Button>
+      </div>
     </Dialog>
   )
 }
