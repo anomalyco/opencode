@@ -112,7 +112,7 @@ describe("prompt-input history", () => {
         end: 12,
         selection: { startLine: 1, startChar: 1, endLine: 2, endChar: 1 },
       },
-      { type: "image", id: "1", filename: "img.png", mime: "image/png", dataUrl: "data:image/png;base64,abc" },
+      { type: "image", id: "1", filename: "img.png", mime: "image/png", blob: { id: "blob", url: "blob:test" } },
     ]
     const copy = clonePromptParts(original)
     expect(copy).not.toBe(original)

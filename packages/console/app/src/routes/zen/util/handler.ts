@@ -136,16 +136,17 @@ export async function handler(
             Workspace.setDefaultRegion({ country: countryFromRequest(input.request) }),
           )
         })()
-    /*
-    if (true) {
-      if (!allowedRegions?.includes("unavailable"))
-        throw new RegionError(
-          t("zen.api.error.regionNotAllowed", {
-            consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
-          }),
-        )
-    }
-    */
+    if (
+      authInfo &&
+      opts.modelList === "lite" &&
+      ["deepseek-v4-flash", "deepseek-v4-pro"].includes(modelInfo.id) &&
+      !allowedRegions?.includes("cn")
+    )
+      throw new RegionError(
+        t("zen.api.error.regionNotAllowed", {
+          consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
+        }),
+      )
     const stickyId = sessionId ? sessionId : (authInfo?.workspaceID ?? ip)
     const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, stickyId)
     const stickyProvider = await stickyTracker?.get()
@@ -196,7 +197,9 @@ export async function handler(
                   if (Array.isArray(v)) return [[k, v]]
                   if (typeof v === "object") return [[k, replacer(v)]]
                   if (typeof v === "string") {
-                    if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
+                    if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo.workspaceID]] : []
+                    if (v === "$org")
+                      return authInfo?.workspaceID ? [[k, authInfo.workspaceID.replace("wrk_", "org_")]] : []
                     if (v === "$user") return stickyId ? [[k, stickyId]] : []
                     if (v.startsWith("$header.")) {
                       const headerValue = input.request.headers.get(v.slice(8))
@@ -212,7 +215,11 @@ export async function handler(
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
-      const isNewInference = providerInfo.id.startsWith("console.") || providerInfo.id.startsWith("console-go.")
+      const isNewInference =
+        providerInfo.id.startsWith("console.") ||
+        providerInfo.id.startsWith("console-go.") ||
+        providerInfo.id.startsWith("inf.") ||
+        providerInfo.id.startsWith("inf-go.")
       const res = await fetchWithRetryableStatus(
         reqUrl,
         {
@@ -231,12 +238,16 @@ export async function handler(
                 if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
                 return
               }
+              if (v === "$org") {
+                if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID.replace("wrk_", "org_"))
+                return
+              }
               headers.set(k, v)
             })
             headers.delete("host")
             headers.delete("content-length")
             headers.delete("x-opencode-request")
-            headers.delete("x-opencode-session")
+            if (!isNewInference) headers.delete("x-opencode-session")
             headers.delete("x-opencode-project")
             headers.delete("x-opencode-client")
             return headers
@@ -1021,11 +1032,14 @@ export async function handler(
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
       usageInfo
 
+    const hour = new Date().getUTCHours()
     const modelCost =
-      modelInfo.cost200K &&
-      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
-        ? modelInfo.cost200K
-        : modelInfo.cost
+      modelInfo.costPeak && ((hour >= 1 && hour < 4) || (hour >= 6 && hour < 10))
+        ? modelInfo.costPeak
+        : modelInfo.cost200K &&
+            inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
+          ? modelInfo.cost200K
+          : modelInfo.cost
 
     const inputCost = modelCost.input * inputTokens * 100
     const outputCost = modelCost.output * outputTokens * 100
