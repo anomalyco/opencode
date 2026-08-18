@@ -3379,6 +3379,20 @@ describe("ProviderTransform.reasoningVariants", () => {
     )
   })
 
+  test("adds a none variant to disable thinking for DeepSeek V4", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "toggle" }, { type: "effort", values: ["low", "high", "max"] }]),
+        target("@ai-sdk/openai-compatible", "deepseek-v4-flash"),
+      ),
+    ).toEqual({
+      none: { reasoningEffort: "none" },
+      low: { reasoningEffort: "low" },
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
   test("combines effort with extended thinking for Claude Opus 4.5", () => {
     expect(
       ProviderTransform.reasoningVariants(
