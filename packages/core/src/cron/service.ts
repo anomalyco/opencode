@@ -81,13 +81,13 @@ const make = Effect.gen(function* () {
       yield* port
         .deliver(job.sessionID, job.prompt, { agent: job.agent, model: job.model, context: job.context })
         .pipe(
+          Effect.catch((e) =>
+            Effect.logError("cron delivery failed", { sessionID: job.sessionID, error: String(e) }),
+          ),
           Effect.catchCause((cause) =>
             Cause.hasInterrupts(cause)
               ? Effect.failCause(cause)
               : Effect.logError("cron delivery defect", { sessionID: job.sessionID, cause: Cause.pretty(cause) }),
-          ),
-          Effect.catch((e) =>
-            Effect.logError("cron delivery failed", { sessionID: job.sessionID, error: String(e) }),
           ),
           Effect.forkScoped,
         )
