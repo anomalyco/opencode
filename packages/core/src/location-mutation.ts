@@ -118,14 +118,16 @@ const layer = Layer.effect(
     })
 
     const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
-      const relative = !path.isAbsolute(input.path)
-      const absolute = path.resolve(location.directory, input.path)
+      // Local models sometimes emit trailing whitespace/newlines in path args.
+      const inputPath = input.path.trim()
+      const relative = !path.isAbsolute(inputPath)
+      const absolute = path.resolve(location.directory, inputPath)
       const lexicallyInternal = FSUtil.contains(location.directory, absolute)
-      if (relative && !lexicallyInternal) return yield* new PathError({ path: input.path, reason: "relative_escape" })
+      if (relative && !lexicallyInternal) return yield* new PathError({ path: inputPath, reason: "relative_escape" })
 
       const resolved = yield* resolvePath(absolute)
       if (lexicallyInternal && !FSUtil.contains(locationRoot, resolved.canonical)) {
-        return yield* new PathError({ path: input.path, reason: "location_escape" })
+        return yield* new PathError({ path: inputPath, reason: "location_escape" })
       }
 
       const external = !lexicallyInternal

@@ -102,6 +102,16 @@ describe("tool.edit", () => {
       }),
     )
 
+    it.instance("trims whitespace from filePath before creating a file", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "trimmed-edit.txt")
+        yield* run({ filePath: ` ${filepath}\n`, oldString: "", newString: "trimmed edit" })
+
+        expect(yield* load(filepath)).toBe("trimmed edit")
+      }),
+    )
+
     it.instance("rejects empty oldString on existing files and leaves content unchanged", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
