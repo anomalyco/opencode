@@ -2,6 +2,7 @@ import { createEffect, on, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { createPromptInputV2Attachments, type PromptInputV2AttachmentConfig } from "./attachments"
+import { isPromptAttachmentDrag } from "./drag"
 import { createPromptInputV2Store, type PromptInputV2StoreInput } from "./store"
 import type {
   PromptInputV2Attachment,
@@ -400,16 +401,19 @@ export function createPromptInputV2Controller(input: {
       target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: text }))
     },
     onDragEnter(event: DragEvent) {
+      if (attachments && !isPromptAttachmentDrag(event)) return
       event.preventDefault()
       dispatch({ type: "drag.enter" })
     },
     onDragOver(event: DragEvent) {
+      if (attachments && !isPromptAttachmentDrag(event)) return
       event.preventDefault()
     },
     onDragLeave() {
       dispatch({ type: "drag.leave" })
     },
     onDrop(event: DragEvent) {
+      if (attachments && !isPromptAttachmentDrag(event)) return
       event.preventDefault()
       dispatch({ type: "drag.leave" })
       if (attachments) {

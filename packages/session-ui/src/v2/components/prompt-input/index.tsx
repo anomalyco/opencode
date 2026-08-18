@@ -114,7 +114,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
         class="group/prompt-input relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-base"
         classList={{
           "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
-          "border border-v2-icon-icon-info border-dashed": state.drag === "active",
+          "outline outline-1 outline-v2-icon-icon-info outline-dashed": state.drag === "active",
         }}
         onSubmit={(event) => {
           event.preventDefault()

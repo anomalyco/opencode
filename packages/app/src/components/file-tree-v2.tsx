@@ -1,5 +1,6 @@
 import { useFile } from "@/context/file"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { PROMPT_FILE_DRAG_TYPE } from "@opencode-ai/session-ui/v2/prompt-input/drag"
 import "@opencode-ai/ui/v2/file-tree-v2.css"
 import {
   createEffect,
@@ -92,6 +93,7 @@ const FileTreeNodeV2 = (
       onDragStart={(event: DragEvent) => {
         if (!local.draggable) return
         event.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
+        event.dataTransfer?.setData(PROMPT_FILE_DRAG_TYPE, local.node.path)
         event.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
         if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
         withFileDragImage(event)

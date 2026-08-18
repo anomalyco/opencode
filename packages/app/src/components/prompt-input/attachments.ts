@@ -1,5 +1,6 @@
 import { onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { isPromptAttachmentDrag } from "@opencode-ai/session-ui/v2/prompt-input/drag"
 import { showToast } from "@/utils/toast"
 import { type ContentPart, type ImageAttachmentPart, type usePrompt } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
@@ -164,13 +165,13 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
   const handleGlobalDragOver = (event: DragEvent) => {
     if (input.isDialogActive()) return
+    if (!isPromptAttachmentDrag(event)) return
 
     event.preventDefault()
     const hasFiles = event.dataTransfer?.types.includes("Files")
-    const hasText = event.dataTransfer?.types.includes("text/plain")
     if (hasFiles) {
       input.setDraggingType("image")
-    } else if (hasText) {
+    } else {
       input.setDraggingType("@mention")
     }
   }
@@ -184,6 +185,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
   const handleGlobalDrop = async (event: DragEvent) => {
     if (input.isDialogActive()) return
+    if (!isPromptAttachmentDrag(event)) return
 
     event.preventDefault()
     input.setDraggingType(null)
