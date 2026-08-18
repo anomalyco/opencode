@@ -19,6 +19,10 @@ export function parameterSchema() {
     workdir: Schema.optional(Schema.String).annotate({
       description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
     }),
+    interactive: Schema.optional(Schema.Boolean).annotate({
+      description:
+        "Set to true for commands that require interactive password/sudo input (sudo, ssh -t, ansible -K). When enabled, the user will be prompted securely for passwords. Auto-detected for common patterns.",
+    }),
   })
 }
 
