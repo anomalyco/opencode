@@ -11,6 +11,8 @@ if (mode === "record-start") {
   await writeFile(registration + ".started", "")
   process.exit(1)
 }
+if (mode === "environment")
+  await writeFile(registration + ".environment", process.env.OPENCODE_SERVICE_ENV_TEST ?? "")
 if (mode === "signal") process.kill(process.pid, process.platform === "win32" ? "SIGTERM" : "SIGKILL")
 
 if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" || mode === "coordinated-failed-loser") {

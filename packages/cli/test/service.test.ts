@@ -60,6 +60,44 @@ test("local channel stores service config with the local service filename", asyn
   }
 })
 
+test("service config manages environment variables", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-env-"))
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  try {
+    await Effect.runPromise(
+      ServiceConfig.set("env", "OPENCODE_SERVICE_ENV_TEST", "configured").pipe(
+        Effect.provide(layer),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+    expect(
+      await Effect.runPromise(
+        ServiceConfig.get("env", "OPENCODE_SERVICE_ENV_TEST").pipe(
+          Effect.provide(layer),
+          Effect.provide(NodeFileSystem.layer),
+        ),
+      ),
+    ).toBe("configured")
+    expect(
+      (
+        await Effect.runPromise(
+          ServiceConfig.options().pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)),
+        )
+      ).env,
+    ).toEqual({ OPENCODE_SERVICE_ENV_TEST: "configured" })
+
+    await Effect.runPromise(
+      ServiceConfig.unset("env", "OPENCODE_SERVICE_ENV_TEST").pipe(
+        Effect.provide(layer),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+    expect(await Bun.file(path.join(root, "config", "service-local.json")).json()).toEqual({})
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("service filenames share release channels and identify preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
   expect(ServiceConfig.filename("dev")).toBe("service.json")

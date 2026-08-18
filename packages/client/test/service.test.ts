@@ -68,6 +68,28 @@ test("reuses a compatible registered service", async () => {
   expect(existing.exitCode).toBe(null)
 })
 
+test("adds configured environment variables when starting a service", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const endpoint = await run(
+    ensure({
+      file: registration,
+      version: "test",
+      command: [process.execPath, fixture, registration, "environment"],
+      env: { OPENCODE_SERVICE_ENV_TEST: "configured" },
+    }),
+  )
+  const info = await Bun.file(registration).json()
+
+  try {
+    expect(endpoint.url).toBe(info.url)
+    expect(await Bun.file(registration + ".environment").text()).toBe("configured")
+  } finally {
+    process.kill(info.pid, "SIGTERM")
+    await waitForExit(info.pid)
+  }
+})
+
 test("replaces an incompatible registered service", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
