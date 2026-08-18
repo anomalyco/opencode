@@ -3,9 +3,18 @@ import { Effect, Option } from "effect"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { createClient, loadIntegrations } from "./shared"
-import { handleCommandErrors } from "../../../ui/prompt"
+import { errorMessage } from "../../../ui/prompt"
 
-export default Runtime.handler(Commands.commands.auth.commands.list, (input) => list(input).pipe(handleCommandErrors))
+export default Runtime.handler(Commands.commands.auth.commands.list, (input) =>
+  list(input).pipe(
+    Effect.catch((error) =>
+      Effect.sync(() => {
+        process.stderr.write(errorMessage(error) + EOL)
+        process.exitCode = 1
+      }),
+    ),
+  ),
+)
 
 const list = Effect.fn("cli.auth.list")(function* (input) {
   const client = yield* createClient({ server: Option.getOrUndefined(input.server), standalone: input.standalone })

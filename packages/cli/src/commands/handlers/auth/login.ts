@@ -10,8 +10,6 @@ import {
   connectMethods,
   loadIntegrations,
   location,
-  methodID,
-  methodLabel,
   request,
   resolveIntegration,
   resolveMethod,
@@ -61,13 +59,16 @@ const login = Effect.fn("cli.auth.login.run")(function* (input: {
 })
 
 const findIntegration = Effect.fn("cli.auth.login.integration")(function* (client: OpenCodeClient, target?: string) {
-  if (target && isURL(target)) {
-    const progress = spinner()
-    progress.start("Discovering authentication provider...")
-    yield* request((signal) => client.integration.wellknown.add({ url: target, location }, { signal })).pipe(
-      Effect.tap(() => Effect.sync(() => progress.stop("Authentication provider discovered"))),
-      Effect.tapCause(() => Effect.sync(() => progress.stop("Discovery failed", 1))),
-    )
+  if (target && URL.canParse(target)) {
+    const protocol = new URL(target).protocol
+    if (protocol === "http:" || protocol === "https:") {
+      const progress = spinner()
+      progress.start("Discovering authentication provider...")
+      yield* request((signal) => client.integration.wellknown.add({ url: target, location }, { signal })).pipe(
+        Effect.tap(() => Effect.sync(() => progress.stop("Authentication provider discovered"))),
+        Effect.tapCause(() => Effect.sync(() => progress.stop("Discovery failed", 1))),
+      )
+    }
   }
   const integrations = yield* loadIntegrations(client)
   if (target) return yield* resolveIntegration(integrations, target)
@@ -103,7 +104,10 @@ const chooseMethod = Effect.fn("cli.auth.login.method")(function* (methods: Conn
   const id = yield* prompt<string>(() =>
     select({
       message: "Select login method",
-      options: methods.map((method) => ({ value: methodID(method), label: methodLabel(method) })),
+      options: methods.map((method) => {
+        if (method.type === "key") return { value: "key", label: method.label ?? "API key" }
+        return { value: method.id, label: method.label }
+      }),
     }),
   )
   return yield* resolveMethod(methods, id)
@@ -261,9 +265,3 @@ const waitForCommand = Effect.fn("cli.auth.login.command.wait")(function* (
     yield* Effect.sleep(500)
   }
 })
-
-function isURL(value: string) {
-  if (!URL.canParse(value)) return false
-  const protocol = new URL(value).protocol
-  return protocol === "http:" || protocol === "https:"
-}

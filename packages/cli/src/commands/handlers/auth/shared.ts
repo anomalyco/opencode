@@ -57,17 +57,8 @@ export const resolveMethod = Effect.fn("cli.auth.resolve-method")(function* (met
   })
   if (matches.length === 1) return matches[0]
   if (matches.length > 1) return yield* Effect.fail(new Error(`Authentication method "${target}" is ambiguous`))
-  const available = methods.map(methodID).join(", ")
+  const available = methods.map((method) => (method.type === "key" ? "key" : method.id)).join(", ")
   return yield* Effect.fail(
     new Error(`Authentication method not found: ${target}${available ? `. Available: ${available}` : ""}`),
   )
 })
-
-export function methodID(method: ConnectMethod) {
-  return method.type === "key" ? "key" : method.id
-}
-
-export function methodLabel(method: ConnectMethod) {
-  if (method.type === "key") return method.label ?? "API key"
-  return method.label
-}

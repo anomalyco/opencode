@@ -71,8 +71,12 @@ const answerField = Effect.fn("cli.auth.form.field")(function* (field: FormField
     if (values.includes(custom)) {
       selected.push(yield* prompt<string>(() => text({ message: "Enter value", validate: required })))
     }
-    const invalid = validateMultiselect(field, selected)
-    if (invalid) return yield* Effect.fail(new Error(invalid))
+    if (field.minItems !== undefined && selected.length < field.minItems) {
+      return yield* Effect.fail(new Error(`Select at least ${field.minItems}`))
+    }
+    if (field.maxItems !== undefined && selected.length > field.maxItems) {
+      return yield* Effect.fail(new Error(`Select at most ${field.maxItems}`))
+    }
     return selected
   }
   if (field.type === "string" && field.options) {
@@ -145,11 +149,5 @@ function validateText(field: Exclude<FormField, { type: "boolean" | "external" |
     if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return "Expected a date"
   }
   if (field.format === "date-time" && Number.isNaN(Date.parse(value))) return "Expected a date and time"
-  return undefined
-}
-
-function validateMultiselect(field: Extract<FormField, { type: "multiselect" }>, value: string[]) {
-  if (field.minItems !== undefined && value.length < field.minItems) return `Select at least ${field.minItems}`
-  if (field.maxItems !== undefined && value.length > field.maxItems) return `Select at most ${field.maxItems}`
   return undefined
 }
