@@ -421,8 +421,48 @@ describe("ModelsDevPlugin", () => {
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
       expect(yield* integrations.get(Integration.ID.make("google-vertex-anthropic"))).toBeUndefined()
-      expect(ProviderPlugins.map((plugin) => plugin.id)).not.toContain("opencode.provider.azure-cognitive-services")
-      expect(ProviderPlugins.map((plugin) => plugin.id)).not.toContain("opencode.provider.google-vertex-anthropic")
+      expect(ProviderPlugins.map((plugin) => plugin.id)).not.toContain("opencode.provider.azure.cognitive.services")
+      expect(ProviderPlugins.map((plugin) => plugin.id)).not.toContain("opencode.provider.google.vertex.anthropic")
+    }),
+  )
+
+  it.effect("advertises only key-bearing Google Vertex environment variables", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const catalog = yield* Catalog.Service
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          catalog: catalogHost(catalog),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({
+            get: () =>
+              Effect.succeed([
+                {
+                  info: {
+                    id: Provider.ID.make("google-vertex"),
+                    name: "Google Vertex",
+                    activation: "auto",
+                    package: Provider.aisdk("@ai-sdk/google-vertex"),
+                  },
+                  environment: ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION", "GOOGLE_APPLICATION_CREDENTIALS"],
+                  models: [],
+                },
+              ] satisfies readonly ModelsDev.Snapshot[]),
+            refresh: () => Effect.void,
+          }),
+        ),
+      )
+
+      // Vertex authenticates through ADC; project, location, and the credentials
+      // file path are configuration, not API keys.
+      expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toMatchObject({
+        methods: [{ type: "key" }, { type: "env", names: ["GOOGLE_VERTEX_API_KEY"] }],
+      })
     }),
   )
 

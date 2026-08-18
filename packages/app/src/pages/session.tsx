@@ -1,6 +1,6 @@
-import type { FilePart, Project, UserMessage } from "@/types"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
-import { getFilename } from "@opencode-ai/core/util/path"
+import type { FilePart } from "@/types"
+import type { FileDiffInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+import { getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
@@ -37,33 +37,32 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
 import { showToast } from "@/utils/toast"
-import { checksum } from "@opencode-ai/core/util/encode"
-import { isWorkspaceDirectory } from "@/utils/workspace"
+import { checksum } from "@opencode-ai/util/encode"
+import { containsDirectory, isWorkspaceDirectory } from "@/utils/workspace"
 import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { ErrorPage } from "@/pages/error"
 import { CommentsProvider, useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
-import { DirectoryDataProvider } from "@/pages/directory-layout"
-import { useServerSync } from "@/context/server-sync"
+import { SessionUIProvider } from "@/pages/directory-layout"
+import { useData, useServer } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { useNotification } from "@/context/notification"
 import { PromptProvider, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
-import { SDKProvider, useSDK } from "@/context/sdk"
+import { LocationProvider, useWorkspaceLocation } from "@/context/location"
 import { useServerSDK } from "@/context/server-sdk"
 import { ServerConnection, serverName, useServers } from "@/context/servers"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { promptLength } from "@/components/prompt-input/history"
-import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
+import type { FollowupDraft } from "@/components/prompt-input/submit"
 import {
   createPromptInputController,
   createSessionComposerController,
@@ -93,13 +92,11 @@ import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
-import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
-import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
-import { createSessionLineage } from "./session/session-lineage"
+import { createSessionResolution } from "./session/session-resolution"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -118,37 +115,14 @@ function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undef
   return isSessionNotFoundError(error, sessionID) || isLocalSessionNotFoundError(error, sessionID)
 }
 
-async function runPromptRollbackMutation<T, R>(input: {
-  capturePrompt: () => { current: () => T[]; set: (value: T[]) => void; reset: () => void }
-  optimistic: (prompt: { set: (value: T[]) => void; reset: () => void }) => void
-  request: () => Promise<R>
-  complete: (result: R) => void
-  rollback: () => void
-  fail: (error: unknown) => void
-}) {
-  const prompt = input.capturePrompt()
-  const previous = prompt.current().slice()
-  batch(() => input.optimistic(prompt))
-  await input
-    .request()
-    .then(input.complete)
-    .catch((error) => {
-      batch(() => {
-        input.rollback()
-        prompt.set(previous)
-      })
-      input.fail(error)
-    })
-}
-
 // Rendered under app.tsx's TargetSessionRoute, which owns the per-server keyed
 // remount around the server-scoped providers. Nothing here may key on the
 // session ID: session tabs on the same server share this route instance, and
 // workspace-scoped state (terminal, directory providers) lives below.
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
-  const serverSync = useServerSync()
-  const directory = createMemo(() => serverSync.session.lineage.peek(params.id)?.session.location.directory)
+  const data = useData()
+  const directory = createMemo(() => data.session.get(params.id)?.location.directory)
   return (
     // Settings must keep the target-server SDK, sync, and models context and remain registered
     // when session content falls back to the route error boundary.
@@ -232,37 +206,28 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
 }
 
 function ResolvedTargetSessionRoute() {
-  const params = useParams<{ serverKey: string; id: string }>()
-  const tabs = useTabs()
-  const sync = useServerSync()
-  const serverKey = createMemo(() => requireServerKey(params.serverKey))
-  const current = createSessionLineage(
+  const params = useParams<{ id: string }>()
+  const server = useServer()
+  const data = useData()
+  const current = createSessionResolution(
     () => params.id,
-    () => sync.session.lineage,
+    () => data.session,
+    { children: true },
   )
-  const directory = createMemo(() => current()?.session.location.directory)
-
-  createEffect(() => {
-    const session = current()
-    if (!session) return
-    tabs.addSessionTab({
-      server: serverKey(),
-      sessionId: session.root.id,
-    })
-  })
+  const directory = createMemo(() => current()?.location.directory)
 
   return (
     // Non-keyed: closes only while the target's directory is unknown (uncached
-    // lineage mid-resolution), which tears down the workspace subtree including
+    // session mid-resolution), which tears down the workspace subtree including
     // the terminal. Same-workspace tab switches keep it open because warm
     // targets resolve synchronously from the sync cache.
     <Show when={directory()}>
       {(dir) => (
-        <SDKProvider directory={dir()}>
-          <DirectoryDataProvider directory={dir()} server={serverKey()}>
+        <LocationProvider directory={dir()}>
+          <SessionUIProvider directory={dir()} server={server.key}>
             <TargetSessionPage />
-          </DirectoryDataProvider>
-        </SDKProvider>
+          </SessionUIProvider>
+        </LocationProvider>
       )}
     </Show>
   )
@@ -272,10 +237,10 @@ function ResolvedTargetSessionRoute() {
 // key: SessionPage handles session changes reactively, and remounting here
 // destroys workspace-scoped state (terminal PTYs, file/prompt providers).
 function TargetSessionPage() {
-  const sdk = useSDK()
+  const location = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   return (
-    <Show when={`${serverSDK.scope}\0${sdk().directory}`} keyed>
+    <Show when={`${serverSDK.scope}\0${location().directory}`} keyed>
       <TerminalProvider>
         <FileProvider>
           <PromptProvider>
@@ -322,15 +287,14 @@ function SessionPanelFrame(props: ParentProps<{ raised?: boolean }>) {
 }
 
 export default function Page() {
-  const serverSync = useServerSync()
+  const data = useData()
   const layout = useLayout()
   const local = useLocal()
   const file = useFile()
-  const sync = useSync()
   const queryClient = useQueryClient()
   const dialog = useDialog()
   const language = useLanguage()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const settings = useSettings()
   const platform = usePlatform()
@@ -340,8 +304,17 @@ export default function Page() {
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
   const navigate = useNavigate()
+  const params = useParams()
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const canReview = createMemo(() => !!sync().project)
+  const project = createMemo(() => {
+    const info = params.id ? data.session.get(params.id) : undefined
+    const value = info?.projectID
+      ? data.project.get(info.projectID)
+      : data.project.list().find((item) => containsDirectory(item.canonical, sdk().directory))
+    if (!value) return
+    return { ...value, worktree: value.canonical, worktrees: [] }
+  })
+  const canReview = createMemo(() => !!project())
   const controller = createSessionController({
     review: isDesktop,
     hasReview: canReview,
@@ -376,7 +349,6 @@ export default function Page() {
   const inputController = createPromptInputController({
     sessionKey: controller.identity.sessionKey,
     sessionID: () => controller.identity.params.id,
-    queryOptions: serverSync.queryOptions,
   })
 
   const sessionPanelKey = createMemo(() =>
@@ -446,7 +418,7 @@ export default function Page() {
   }
 
   const sessionDirectory = createMemo(() => controller.data.info()?.location.directory ?? sdk().directory)
-  const workspaceSession = createMemo(() => isWorkspaceDirectory(sync().project, sessionDirectory()))
+  const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
   const timeline = createTimelineModel({ session: controller })
   const historyLoading = timeline.history.loading
   const historyMore = timeline.history.more
@@ -466,11 +438,29 @@ export default function Page() {
 
   createEffect(
     on(
-      () => lastUserMessage()?.id,
+      () => [lastUserMessage(), controller.data.info()] as const,
       () => {
-        const msg = lastUserMessage()
-        if (!msg) return
-        syncSessionModel(local, msg)
+        const message = lastUserMessage()
+        const info = controller.data.info()
+        const metadata = message?.metadata
+        const agent = typeof metadata?.agent === "string" ? metadata.agent : info?.agent
+        const model = metadata?.model
+        const selected =
+          model &&
+          typeof model === "object" &&
+          !Array.isArray(model) &&
+          typeof model.providerID === "string" &&
+          typeof model.modelID === "string"
+            ? {
+                providerID: model.providerID,
+                modelID: model.modelID,
+                variant: typeof model.variant === "string" ? model.variant : undefined,
+              }
+            : info?.model
+              ? { providerID: info.model.providerID, modelID: info.model.id, variant: info.model.variant }
+              : undefined
+        if (!info || !agent || !selected) return
+        syncSessionModel(local, { sessionID: info.id, agent, model: selected })
       },
     ),
   )
@@ -506,7 +496,7 @@ export default function Page() {
   })
 
   const [followup, setFollowup] = persisted(
-    Persist.serverWorkspace(serverSDK.scope, sdk().directory, "followup", ["followup.v1"]),
+    Persist.serverWorkspace(serverSDK.scope, sdk().directory, "followup"),
     createStore<{
       items: Record<string, FollowupItem[] | undefined>
       failed: Record<string, string | undefined>
@@ -533,10 +523,6 @@ export default function Page() {
   })
 
   let reviewFrame: number | undefined
-  let todoFrame: number | undefined
-  let todoTimer: number | undefined
-  let diffFrame: number | undefined
-  let diffTimer: number | undefined
 
   createComputed((prev) => {
     const open = desktopReviewOpen()
@@ -551,20 +537,23 @@ export default function Page() {
     return open
   }, desktopReviewOpen())
 
-  const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
   const nogit = createMemo(() => {
-    const project = sync().project
-    return !!project && project.vcs !== "git"
+    const current = project()
+    return !!current && current.vcs !== "git"
   })
+  const vcs = createMemo(() => data.location.vcs.info({ directory: sdk().directory }))
   const changesOptions = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
-    const project = sync().project
-    const vcs = sync().data.vcs
-    if (project?.vcs === "git") list.push("git")
-    if (project?.vcs === "git" && vcs?.branch && vcs?.default_branch && vcs.branch !== vcs.default_branch) {
+    const current = project()
+    if (current?.vcs === "git") list.push("git")
+    if (
+      current?.vcs === "git" &&
+      vcs()?.branch.current &&
+      vcs()?.branch.default &&
+      vcs()?.branch.current !== vcs()?.branch.default
+    ) {
       list.push("branch")
     }
-    list.push("turn")
     return list
   })
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
@@ -584,13 +573,13 @@ export default function Page() {
         serverSDK.scope,
         "session-vcs",
         sdk().directory,
-        sync().data.vcs?.branch ?? "",
-        sync().data.vcs?.default_branch ?? "",
+        vcs()?.branch.current ?? "",
+        vcs()?.branch.default ?? "",
       ] as const,
   )
   const vcsQuery = createQuery(() => {
     const mode = vcsMode()
-    const enabled = serverSDK.connection.status() === "connected" && wantsReview() && sync().project?.vcs === "git"
+    const enabled = serverSDK.connection.status() === "connected" && wantsReview() && project()?.vcs === "git"
 
     return {
       queryKey: [...vcsKey(), mode] as const,
@@ -599,18 +588,21 @@ export default function Page() {
       refetchOnWindowFocus: true,
       queryFn: mode
         ? () =>
-            sdk()
-              .api.vcs.diff({ location: { directory: sdk().directory }, mode: mode === "git" ? "working" : mode })
+            serverSDK.api.vcs
+              .diff({
+                location: { directory: sdk().directory },
+                mode: mode === "git" ? "working" : mode,
+              })
               .then((result) => result.data)
         : skipToken,
     }
   })
   const sessionDetailsQuery = createQuery(() => ({
     queryKey: [serverSDK.scope, "session-details", sessionDirectory()] as const,
-    enabled: store.sessionDetailsOpen && serverSDK.connection.status() === "connected" && sync().project?.vcs === "git",
+    enabled: store.sessionDetailsOpen && serverSDK.connection.status() === "connected" && project()?.vcs === "git",
     queryFn: () =>
-      sdk()
-        .api.vcs.diff({ location: { directory: sessionDirectory() }, mode: "working" })
+      serverSDK.api.vcs
+        .diff({ location: { directory: sessionDirectory() }, mode: "working" })
         .then((result) => result.data)
         .catch((error) => {
           console.debug("[session-review] failed to load session details diff", { error })
@@ -624,7 +616,7 @@ export default function Page() {
   }, 100)
   onCleanup(
     sdk().event.listen((event) => {
-      if (event.details.type === "filesystem.changed") refreshVcs()
+      if (event.type === "filesystem.changed") refreshVcs()
     }),
   )
   createEffect(
@@ -641,7 +633,8 @@ export default function Page() {
     if (reviewMode() === "git" || reviewMode() === "branch")
       // avoids suspense
       return vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
-    return turnDiffs()
+    // TODO: Restore turn diffs when the V2 transcript exposes snapshot diffs.
+    return []
   }
   const activeReviewFile = () => {
     const diffs = reviewDiffs()
@@ -658,7 +651,7 @@ export default function Page() {
   const loadReviewDiff = async (file: string, version?: number): Promise<FileDiffInfo | undefined> => {
     const mode = vcsMode()
     if (!mode) return
-    const root = reviewRootDirectory(sync().project?.worktree ?? sdk().directory)
+    const root = reviewRootDirectory(project()?.worktree ?? sdk().directory)
     const directory = reviewDiffDirectory(root, file)
     const source = reviewDiffs().find((diff) => diff.file === file)
     const valid = (diff: FileDiffInfo | undefined) => {
@@ -674,8 +667,8 @@ export default function Page() {
           staleTime: Number.POSITIVE_INFINITY,
           retry: 2,
           queryFn: () =>
-            sdk()
-              .api.vcs.diff({
+            serverSDK.api.vcs
+              .diff({
                 location: { directory: scope },
                 mode: mode === "git" ? "working" : mode,
                 context,
@@ -702,12 +695,12 @@ export default function Page() {
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
-    const project = sync().project
-    if (project && sdk().directory !== project.worktree) return sdk().directory
+    const current = project()
+    if (current && sdk().directory !== current.worktree) return sdk().directory
     return "main"
   })
 
-  const setActiveMessage = (message: UserMessage | undefined) => {
+  const setActiveMessage = (message: SessionMessageUser | undefined) => {
     messageMark = scrollMark
     setStore("messageId", message?.id)
   }
@@ -764,25 +757,6 @@ export default function Page() {
     scrollToMessage(msgs[targetIndex], "auto")
   }
 
-  function upsert(next: Project) {
-    const list = serverSync.data.project
-    sync().set("project", next.id)
-    const idx = list.findIndex((item) => item.id === next.id)
-    if (idx >= 0) {
-      serverSync.set(
-        "project",
-        list.map((item, i) => (i === idx ? { ...item, ...next } : item)),
-      )
-      return
-    }
-    const at = list.findIndex((item) => item.id > next.id)
-    if (at >= 0) {
-      serverSync.set("project", [...list.slice(0, at), next, ...list.slice(at)])
-      return
-    }
-    serverSync.set("project", [...list, next])
-  }
-
   const gitMutation = useMutation(() => ({
     // TODO: Restore Git initialization when the V2 client exposes this operation.
     mutationFn: async () => Promise.reject(new Error("Git initialization is unavailable")),
@@ -825,40 +799,7 @@ export default function Page() {
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
-  createEffect(
-    on(
-      () => {
-        const id = controller.identity.params.id
-        return [
-          sdk().directory,
-          id,
-          id ? (sync().data.session_status[id]?.type ?? "idle") : "idle",
-          id ? composer.blocked() : false,
-        ] as const
-      },
-      ([dir, id, status, blocked]) => {
-        if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
-        if (todoTimer !== undefined) window.clearTimeout(todoTimer)
-        todoFrame = undefined
-        todoTimer = undefined
-        if (!id) return
-        if (status === "idle" && !blocked) return
-        const cached = untrack(() => sync().data.todo[id] !== undefined)
-
-        todoFrame = requestAnimationFrame(() => {
-          todoFrame = undefined
-          todoTimer = window.setTimeout(() => {
-            todoTimer = undefined
-            if (sdk().directory !== dir || controller.identity.params.id !== id) return
-            untrack(() => {
-              void sync().session.todo(id, cached ? { force: true } : undefined)
-            })
-          }, 0)
-        })
-      },
-      { defer: true },
-    ),
-  )
+  // TODO: Restore todo refresh when todos are available from the current session API.
 
   createEffect(
     on(
@@ -1005,8 +946,8 @@ export default function Page() {
 
   createEffect(() => {
     if (!layout.ready()) return
-    if (sync().status !== "complete") return
-    if (!sync().project) return
+    if (serverSDK.connection.status() !== "connected") return
+    if (!project()) return
     const list = changesOptions()
     const mode = reviewMode()
     if (list.includes(mode)) return
@@ -1017,7 +958,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => sync().data.session_status[controller.identity.params.id ?? ""]?.type,
+      () => data.session.status(controller.identity.params.id ?? ""),
       (next, prev) => {
         if (next !== "idle" || prev === undefined || prev === "idle") return
         refreshVcs()
@@ -1380,7 +1321,7 @@ export default function Page() {
     const dir = sdk().directory
     if (!isDesktop()) return
     if (!layout.fileTree.opened()) return
-    if (sync().status === "loading") return
+    if (serverSDK.connection.status() !== "connected") return
 
     fileTreeTab()
     const refresh = treeDir !== dir
@@ -1576,41 +1517,6 @@ export default function Page() {
     ),
   )
 
-  const draft = (id: string) =>
-    extractPromptFromParts(sync().data.part[id] ?? [], {
-      directory: sdk().directory,
-      attachmentName: language.t("common.attachment"),
-    })
-
-  const line = (id: string) => {
-    const text = draft(id)
-      .map((part) => (part.type === "image" ? `[image:${part.filename}]` : part.content))
-      .join("")
-      .replace(/\s+/g, " ")
-      .trim()
-    if (text) return text
-    return `[${language.t("common.attachment")}]`
-  }
-
-  const fail = (err: unknown) => {
-    showToast({
-      variant: "error",
-      title: language.t("common.requestFailed"),
-      description: formatServerError(err, language.t),
-    })
-  }
-
-  const roll = (
-    sessionID: string,
-    next: NonNullable<ReturnType<typeof controller.data.info>>["revert"],
-    target = sync(),
-  ) => {
-    const session = target.session.get(sessionID)
-    if (!session) return
-    target.session.remember({ ...session, revert: next })
-  }
-
-  const busy = (sessionID: string) => sync().data.session_working(sessionID)
   const queuedFollowups = createMemo(() => {
     const id = controller.identity.params.id
     if (!id) return emptyFollowups
@@ -1631,29 +1537,13 @@ export default function Page() {
 
   const followupMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
-      const owner = controller.ownership.capture()
-      const item = (followup.items[input.sessionID] ?? []).find((entry) => entry.id === input.id)
-      if (!item) return
+      if (!(followup.items[input.sessionID] ?? []).some((entry) => entry.id === input.id)) return
 
       if (input.manual) setFollowup("paused", input.sessionID, undefined)
       setFollowup("failed", input.sessionID, undefined)
 
-      const ok = await sendFollowupDraft({
-        api: sdk().api.session,
-        sync: sync(),
-        serverSync: serverSync,
-        session: () => sync().session.get(input.sessionID),
-        draft: item,
-        optimisticBusy: item.sessionDirectory === sdk().directory,
-      }).catch((err) => {
-        setFollowup("failed", input.sessionID, input.id)
-        fail(err)
-        return false
-      })
-      if (!ok) return
-
-      setFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id))
-      if (input.manual) owner.run(resumeScroll)
+      // TODO: Restore queued followups once submission no longer requires the legacy sync transcript.
+      setFollowup("failed", input.sessionID, input.id)
     },
   }))
 
@@ -1670,12 +1560,8 @@ export default function Page() {
   const queueEnabled = createMemo(() => {
     const id = controller.identity.params.id
     if (!id) return false
-    return (
-      settings.general.followup() === "queue" &&
-      controller.data.working() &&
-      !composer.blocked() &&
-      !controller.data.isChild()
-    )
+    // TODO: Restore queued followups with current session admission APIs.
+    return false
   })
 
   const followupText = (item: FollowupDraft) => {
@@ -1707,7 +1593,7 @@ export default function Page() {
   const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item) })))
 
   const sendFollowup = (sessionID: string, id: string, opts?: { manual?: boolean }) => {
-    if (sync().session.get(sessionID)?.parentID) return Promise.resolve()
+    if (data.session.get(sessionID)?.parentID) return Promise.resolve()
     const item = (followup.items[sessionID] ?? []).find((entry) => entry.id === id)
     if (!item) return Promise.resolve()
     if (followupBusy(sessionID)) return Promise.resolve()
@@ -1738,88 +1624,12 @@ export default function Page() {
     setFollowup("edit", id, undefined)
   }
 
-  const halt = (sessionID: string) =>
-    busy(sessionID)
-      ? sdk()
-          .api.session.interrupt({ sessionID })
-          .catch(() => {})
-      : Promise.resolve()
-
-  const revertMutation = useMutation(() => ({
-    mutationFn: async (input: { sessionID: string; messageID: string }) => {
-      const api = sdk().api.session
-      const target = sync()
-      const last = target.session.get(input.sessionID)?.revert
-      const value = draft(input.messageID)
-      await runPromptRollbackMutation({
-        capturePrompt: prompt.capture,
-        optimistic: (prompt) => {
-          roll(input.sessionID, { messageID: input.messageID }, target)
-          prompt.set(value)
-        },
-        request: () => halt(input.sessionID).then(() => api.revert.stage(input)),
-        complete: () => undefined,
-        rollback: () => roll(input.sessionID, last, target),
-        fail,
-      })
-    },
-  }))
-
-  const restoreMutation = useMutation(() => ({
-    mutationFn: async (id: string) => {
-      const sessionID = controller.identity.params.id
-      if (!sessionID) return
-
-      const api = sdk().api.session
-      const target = sync()
-      const index = userMessages().findIndex((item) => item.id === id)
-      if (index < 0) return
-      const next = userMessages()[index + 1]
-      const last = target.session.get(sessionID)?.revert
-
-      await runPromptRollbackMutation({
-        capturePrompt: prompt.capture,
-        optimistic: (promptSession) => {
-          roll(sessionID, next ? { messageID: next.id } : undefined, target)
-          if (next) {
-            promptSession.set(draft(next.id))
-            return
-          }
-          promptSession.reset()
-        },
-        request: () =>
-          !next
-            ? halt(sessionID).then(() => api.revert.clear({ sessionID }))
-            : halt(sessionID).then(() => api.revert.stage({ sessionID, messageID: next.id }).then(() => undefined)),
-        complete: () => undefined,
-        rollback: () => roll(sessionID, last, target),
-        fail,
-      })
-    },
-  }))
-
-  const reverting = createMemo(() => revertMutation.isPending || restoreMutation.isPending)
-  const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables : undefined))
-
-  const revert = (input: { sessionID: string; messageID: string }) => {
-    if (reverting()) return
-    return revertMutation.mutateAsync(input)
-  }
-
-  const restore = (id: string) => {
-    if (!controller.identity.params.id || reverting()) return
-    return restoreMutation.mutateAsync(id)
-  }
-
-  const rolled = createMemo(() => {
-    const id = controller.data.revertMessageID()
-    if (!id) return []
-    const index = userMessages().findIndex((item) => item.id === id)
-    if (index < 0) return []
-    return userMessages()
-      .slice(index)
-      .map((item) => ({ id: item.id, text: line(item.id) }))
-  })
+  // TODO: Restore revert drafts when current transcript messages expose prompt parts.
+  const reverting = () => false
+  const restoring = () => undefined
+  const revert = (_input: { sessionID: string; messageID: string }) => undefined
+  const restore = (_id: string) => undefined
+  const rolled = () => []
 
   // attachment bytes are embedded as a data URL, so downloading always works;
   // revealing requires the on-disk path captured by the client that attached the file
@@ -1891,7 +1701,8 @@ export default function Page() {
     visibleUserMessages,
     historyMore,
     historyLoading,
-    loadMore: (sessionID) => sync().session.history.loadMore(sessionID),
+    // TODO: Restore hash paging when the current message API exposes history cursors.
+    loadMore: async () => undefined,
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
@@ -1925,10 +1736,6 @@ export default function Page() {
 
   onCleanup(() => {
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
-    if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
-    if (todoTimer !== undefined) window.clearTimeout(todoTimer)
-    if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
-    if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
@@ -2057,10 +1864,6 @@ export default function Page() {
             prompt,
             ready: () => !store.deferRender && messagesReady(),
             centered,
-            todo: {
-              collapsed: () => controller.layout.view().todoCollapsed.get(),
-              onToggle: () => controller.layout.view().todoCollapsed.set(!controller.layout.view().todoCollapsed.get()),
-            },
             followup: () =>
               controller.identity.params.id && !controller.data.isChild()
                 ? {
@@ -2083,11 +1886,7 @@ export default function Page() {
             openParent: () => {
               const id = controller.data.parentID()
               if (!id) return
-              navigate(
-                controller.identity.params.serverKey
-                  ? sessionHref(requireServerKey(controller.identity.params.serverKey), id)
-                  : legacySessionHref(sdk().directory, id),
-              )
+              navigate(sessionHref(requireServerKey(controller.identity.params.serverKey), id))
             },
             setPromptRef: (el) => {
               inputRef = el

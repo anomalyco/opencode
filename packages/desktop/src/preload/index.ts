@@ -1,137 +1,138 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
-import type { ElectronAPI, WslServersEvent } from "./types"
+import type { IpcRendererEvent } from "electron"
+import type { ElectronAPI } from "./types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
+import {
+  Ipc,
+  type IpcEvent,
+  type IpcEventListener,
+  type IpcInvoke,
+  type IpcInvokeArgs,
+  type IpcInvokeResult,
+  type IpcSend,
+} from "../shared/ipc-contract"
+
+function invoke<Channel extends keyof IpcInvoke>(channel: Channel, ...args: IpcInvokeArgs<Channel>) {
+  return ipcRenderer.invoke(channel, ...args) as Promise<IpcInvokeResult<Channel>>
+}
+
+function send<Channel extends keyof IpcSend>(channel: Channel, ...args: IpcSend[Channel]) {
+  ipcRenderer.send(channel, ...args)
+}
+
+function listen<Channel extends keyof IpcEvent>(channel: Channel, listener: IpcEventListener<Channel>) {
+  const handler = (_event: IpcRendererEvent, ...args: IpcEvent[Channel]) => listener(...args)
+  ipcRenderer.on(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
+}
 
 const updaterCallbacks = new Set<(state: UpdaterState) => void>()
 let updaterState: UpdaterState | undefined
 let updaterSubscription: Promise<void> | undefined
-const updaterHandler = (_: unknown, state: UpdaterState) => {
+let updaterListener: (() => void) | undefined
+const updaterHandler = (state: UpdaterState) => {
   updaterState = state
   updaterCallbacks.forEach((callback) => callback(state))
 }
 
 const api: ElectronAPI = {
-  killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
-  awaitInitialization: () => ipcRenderer.invoke("await-initialization"),
+  awaitInitialization: () => invoke(Ipc.app.awaitInitialization),
   wslServers: {
-    getState: () => ipcRenderer.invoke("wsl-servers-get-state"),
+    getState: () => invoke(Ipc.wsl.getState),
     subscribe: (cb) => {
-      const handler = (_: unknown, event: WslServersEvent) => cb(event)
-      ipcRenderer.on("wsl-servers-event", handler)
-      void ipcRenderer.invoke("wsl-servers-subscribe")
+      const dispose = listen(Ipc.wsl.event, cb)
+      void invoke(Ipc.wsl.subscribe)
       return () => {
-        ipcRenderer.removeListener("wsl-servers-event", handler)
-        void ipcRenderer.invoke("wsl-servers-unsubscribe")
+        dispose()
+        void invoke(Ipc.wsl.unsubscribe)
       }
     },
-    probeRuntime: () => ipcRenderer.invoke("wsl-servers-probe-runtime"),
-    refreshDistros: () => ipcRenderer.invoke("wsl-servers-refresh-distros"),
-    installWsl: () => ipcRenderer.invoke("wsl-servers-install-wsl"),
-    installDistro: (name) => ipcRenderer.invoke("wsl-servers-install-distro", name),
-    probeAddable: (distros) => ipcRenderer.invoke("wsl-servers-probe-addable", distros),
-    installOpencode: (name) => ipcRenderer.invoke("wsl-servers-install-opencode", name),
-    openTerminal: (name) => ipcRenderer.invoke("wsl-servers-open-terminal", name),
-    addServer: (distro) => ipcRenderer.invoke("wsl-servers-add", distro),
-    removeServer: (id) => ipcRenderer.invoke("wsl-servers-remove", id),
-    startServer: (id) => ipcRenderer.invoke("wsl-servers-start", id),
+    probeRuntime: () => invoke(Ipc.wsl.probeRuntime),
+    refreshDistros: () => invoke(Ipc.wsl.refreshDistros),
+    installWsl: () => invoke(Ipc.wsl.installWsl),
+    installDistro: (name) => invoke(Ipc.wsl.installDistro, name),
+    probeAddable: (distros) => invoke(Ipc.wsl.probeAddable, distros),
+    installOpencode: (name) => invoke(Ipc.wsl.installOpencode, name),
+    openTerminal: (name) => invoke(Ipc.wsl.openTerminal, name),
+    addServer: (distro) => invoke(Ipc.wsl.addServer, distro),
+    removeServer: (id) => invoke(Ipc.wsl.removeServer, id),
+    startServer: (id) => invoke(Ipc.wsl.startServer, id),
   },
   updater: {
     subscribe: async (cb) => {
       updaterCallbacks.add(cb)
       if (updaterState) cb(updaterState)
       if (!updaterSubscription) {
-        ipcRenderer.on("updater-state", updaterHandler)
-        updaterSubscription = ipcRenderer.invoke("updater-subscribe")
+        updaterListener = listen(Ipc.updater.state, updaterHandler)
+        updaterSubscription = invoke(Ipc.updater.subscribe)
       }
       await updaterSubscription
       return () => {
         updaterCallbacks.delete(cb)
         if (updaterCallbacks.size > 0) return
-        ipcRenderer.removeListener("updater-state", updaterHandler)
+        updaterListener?.()
+        updaterListener = undefined
         updaterSubscription = undefined
-        void ipcRenderer.invoke("updater-unsubscribe")
+        void invoke(Ipc.updater.unsubscribe)
       }
     },
-    check: () => ipcRenderer.invoke("updater-check"),
-    install: () => ipcRenderer.invoke("updater-install"),
+    check: () => invoke(Ipc.updater.check),
+    install: () => invoke(Ipc.updater.install),
   },
-  consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),
-  getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),
-  setDefaultServerUrl: (url) => ipcRenderer.invoke("set-default-server-url", url),
-  isFirstLaunchOnboardingPending: () => ipcRenderer.invoke("is-first-launch-onboarding-pending"),
+  consumeInitialDeepLinks: () => invoke(Ipc.app.consumeInitialDeepLinks),
+  getDefaultServerUrl: () => invoke(Ipc.app.getDefaultServerUrl),
+  setDefaultServerUrl: (url) => invoke(Ipc.app.setDefaultServerUrl, url),
+  isFirstLaunchOnboardingPending: () => invoke(Ipc.app.isFirstLaunchOnboardingPending),
   finishFirstLaunchOnboarding: (createDefaultProject) =>
-    ipcRenderer.invoke("finish-first-launch-onboarding", createDefaultProject),
-  isOldLayoutEligible: () => ipcRenderer.invoke("is-old-layout-eligible"),
-  getDisplayBackend: () => ipcRenderer.invoke("get-display-backend"),
-  setDisplayBackend: (backend) => ipcRenderer.invoke("set-display-backend", backend),
-  checkAppExists: (appName) => ipcRenderer.invoke("check-app-exists", appName),
-  resolveAppPath: (appName) => ipcRenderer.invoke("resolve-app-path", appName),
-  storeGet: (name, key) => ipcRenderer.invoke("store-get", name, key),
-  storeSet: (name, key, value) => ipcRenderer.invoke("store-set", name, key, value),
-  storeDelete: (name, key) => ipcRenderer.invoke("store-delete", name, key),
-  storeClear: (name) => ipcRenderer.invoke("store-clear", name),
-  storeKeys: (name) => ipcRenderer.invoke("store-keys", name),
-  storeLength: (name) => ipcRenderer.invoke("store-length", name),
-  draftGet: (key) => ipcRenderer.invoke("draft-get", key),
-  draftSet: (key, value) => ipcRenderer.invoke("draft-set", key, value),
-  draftDelete: (key) => ipcRenderer.invoke("draft-delete", key),
-  draftBlobPut: (data) => ipcRenderer.invoke("draft-blob-put", data),
-  draftBlobGet: (id) => ipcRenderer.invoke("draft-blob-get", id),
+    invoke(Ipc.app.finishFirstLaunchOnboarding, createDefaultProject),
+  checkAppExists: (appName) => invoke(Ipc.app.checkAppExists, appName),
+  resolveAppPath: (appName) => invoke(Ipc.app.resolveAppPath, appName),
+  storeGet: (name, key) => invoke(Ipc.storage.get, name, key),
+  storeSet: (name, key, value) => invoke(Ipc.storage.set, name, key, value),
+  storeDelete: (name, key) => invoke(Ipc.storage.delete, name, key),
+  storeClear: (name) => invoke(Ipc.storage.clear, name),
+  storeKeys: (name) => invoke(Ipc.storage.keys, name),
+  storeLength: (name) => invoke(Ipc.storage.length, name),
+  draftGet: (key) => invoke(Ipc.drafts.get, key),
+  draftSet: (key, value) => invoke(Ipc.drafts.set, key, value),
+  draftDelete: (key) => invoke(Ipc.drafts.delete, key),
+  draftBlobPut: (data) => invoke(Ipc.drafts.putBlob, data),
+  draftBlobGet: (id) => invoke(Ipc.drafts.getBlob, id),
 
-  getWindowID: () => ipcRenderer.invoke("get-window-id"),
-  onMenuCommand: (cb) => {
-    const handler = (_: unknown, id: string) => cb(id)
-    ipcRenderer.on("menu-command", handler)
-    return () => ipcRenderer.removeListener("menu-command", handler)
-  },
-  onDeepLink: (cb) => {
-    const handler = (_: unknown, urls: string[]) => cb(urls)
-    ipcRenderer.on("deep-link", handler)
-    return () => ipcRenderer.removeListener("deep-link", handler)
-  },
+  getWindowID: () => invoke(Ipc.window.getId),
+  onMenuCommand: (cb) => listen(Ipc.menu.command, cb),
+  onDeepLink: (cb) => listen(Ipc.app.deepLink, cb),
 
-  openDirectoryPicker: (opts) => ipcRenderer.invoke("open-directory-picker", opts),
-  openFilePicker: (opts) => ipcRenderer.invoke("open-file-picker", opts),
-  readPickedFile: (token, path) => ipcRenderer.invoke("read-picked-file", token, path),
-  releasePickedFiles: (token) => ipcRenderer.invoke("release-picked-files", token),
+  openDirectoryPicker: (opts) => invoke(Ipc.files.openDirectoryPicker, opts),
+  openFilePicker: (opts) => invoke(Ipc.files.openFilePicker, opts),
+  readPickedFile: (token, path) => invoke(Ipc.files.readPickedFile, token, path),
+  releasePickedFiles: (token) => invoke(Ipc.files.releasePickedFiles, token),
   getPathForFile: (file) => webUtils.getPathForFile(file),
-  saveFilePicker: (opts) => ipcRenderer.invoke("save-file-picker", opts),
-  openExternal: (url) => ipcRenderer.send("open-external", url),
-  openLocalFile: (url) => ipcRenderer.send("open-local-file", url),
-  openPath: (path, app) => ipcRenderer.invoke("open-path", path, app),
-  revealPath: (path) => ipcRenderer.invoke("reveal-path", path),
-  readClipboardImage: () => ipcRenderer.invoke("read-clipboard-image"),
-  getWindowFocused: () => ipcRenderer.invoke("get-window-focused"),
-  getWindowFullscreen: () => ipcRenderer.invoke("get-window-fullscreen"),
-  onWindowFullscreenChanged: (cb) => {
-    const handler = (_: unknown, fullscreen: boolean) => cb(fullscreen)
-    ipcRenderer.on("window-fullscreen-changed", handler)
-    return () => ipcRenderer.removeListener("window-fullscreen-changed", handler)
-  },
-  setWindowFocus: () => ipcRenderer.invoke("set-window-focus"),
-  showWindow: () => ipcRenderer.invoke("show-window"),
-  relaunch: () => ipcRenderer.send("relaunch"),
-  getZoomFactor: () => ipcRenderer.invoke("get-zoom-factor"),
-  setZoomFactor: (factor) => ipcRenderer.invoke("set-zoom-factor", factor),
-  getPinchZoomEnabled: () => ipcRenderer.invoke("get-pinch-zoom-enabled"),
-  setPinchZoomEnabled: (enabled) => ipcRenderer.invoke("set-pinch-zoom-enabled", enabled),
-  onPinchZoomEnabledChanged: (cb) => {
-    const handler = (_: unknown, enabled: boolean) => cb(enabled)
-    ipcRenderer.on("pinch-zoom-enabled-changed", handler)
-    return () => ipcRenderer.removeListener("pinch-zoom-enabled-changed", handler)
-  },
-  onZoomFactorChanged: (cb) => {
-    const handler = (_: unknown, factor: number) => cb(factor)
-    ipcRenderer.on("zoom-factor-changed", handler)
-    return () => ipcRenderer.removeListener("zoom-factor-changed", handler)
-  },
-  setTitlebar: (theme) => ipcRenderer.invoke("set-titlebar", theme),
-  runDesktopMenuAction: (action) => ipcRenderer.invoke("run-desktop-menu-action", action),
-  setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
-  exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
-  setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
-  recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
-  setNativeTranslations: (bundle) => ipcRenderer.invoke("set-native-translations", bundle),
+  saveFilePicker: (opts) => invoke(Ipc.files.saveFilePicker, opts),
+  openExternal: (url) => send(Ipc.files.openExternal, url),
+  openLocalFile: (url) => send(Ipc.files.openLocalFile, url),
+  openPath: (path, app) => invoke(Ipc.files.openPath, path, app),
+  revealPath: (path) => invoke(Ipc.files.revealPath, path),
+  readClipboardImage: () => invoke(Ipc.files.readClipboardImage),
+  getWindowFocused: () => invoke(Ipc.window.getFocused),
+  getWindowFullscreen: () => invoke(Ipc.window.getFullscreen),
+  onWindowFullscreenChanged: (cb) => listen(Ipc.window.fullscreenChanged, cb),
+  setWindowFocus: () => invoke(Ipc.window.setFocus),
+  showWindow: () => invoke(Ipc.window.show),
+  relaunch: () => send(Ipc.app.relaunch),
+  getZoomFactor: () => invoke(Ipc.window.getZoomFactor),
+  setZoomFactor: (factor) => invoke(Ipc.window.setZoomFactor, factor),
+  getPinchZoomEnabled: () => invoke(Ipc.window.getPinchZoomEnabled),
+  setPinchZoomEnabled: (enabled) => invoke(Ipc.window.setPinchZoomEnabled, enabled),
+  onPinchZoomEnabledChanged: (cb) => listen(Ipc.window.pinchZoomEnabledChanged, cb),
+  onZoomFactorChanged: (cb) => listen(Ipc.window.zoomFactorChanged, cb),
+  setTitlebar: (theme) => invoke(Ipc.window.setTitlebar, theme),
+  runDesktopMenuAction: (action) => invoke(Ipc.menu.runAction, action),
+  setBackgroundColor: (color) => invoke(Ipc.app.setBackgroundColor, color),
+  exportDebugLogs: () => invoke(Ipc.app.exportDebugLogs),
+  setForceFocus: (enabled) => invoke(Ipc.app.setForceFocus, enabled),
+  recordFatalRendererError: (error) => invoke(Ipc.app.recordFatalRendererError, error),
+  setNativeTranslations: (bundle) => invoke(Ipc.app.setNativeTranslations, bundle),
 }
 
 contextBridge.exposeInMainWorld("api", api)

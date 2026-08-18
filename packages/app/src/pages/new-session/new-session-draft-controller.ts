@@ -4,7 +4,6 @@ import { usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useComments } from "@/context/comments"
 import { useLocal } from "@/context/local"
 import { usePrompt } from "@/context/prompt"
-import { useServerSync } from "@/context/server-sync"
 import { createPromptInputController, createPromptProjectControls } from "@/pages/session/composer"
 import { createPromptModelSelection } from "@/pages/session/composer/prompt-model-selection"
 import { useSessionKey } from "@/pages/session/session-layout"
@@ -17,7 +16,6 @@ export function createNewSessionDraftController(props: {
   onSubmit: () => void
 }) {
   const prompt = usePrompt()
-  const serverSync = useServerSync()
   const comments = useComments()
   const local = useLocal()
   const route = useSessionKey()
@@ -29,7 +27,6 @@ export function createNewSessionDraftController(props: {
   const controls = createPromptInputController({
     sessionKey: route.sessionKey,
     sessionID: () => route.params.id,
-    queryOptions: serverSync.queryOptions,
     model,
   })
   const projectControls = createPromptProjectControls({

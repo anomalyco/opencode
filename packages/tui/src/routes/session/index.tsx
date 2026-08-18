@@ -1062,7 +1062,7 @@ export function Session(props: { verticalTabsWidth: number }) {
     {
       title: "View queued prompts",
       id: "session.queued_prompts",
-      group: "Session",
+      group: "Prompt",
       enabled: queuedPrompts().length > 0,
       run: openQueuedPrompts,
     },
@@ -2595,56 +2595,59 @@ type ToolProps = {
 }
 function GenericTool(props: ToolProps) {
   const theme = useTheme()
-  const { currentSyntax: syntax } = useThemes()
   const output = createMemo(() => props.output?.trim() ?? "")
-  const args = createMemo(() => JSON.stringify(props.input, null, 2))
+  const input = createMemo(() => Object.entries(props.input))
   const [expanded, setExpanded] = createSignal(false)
-  const expandable = createMemo(() => Object.keys(props.input).length > 0 || output().length > 0)
+  const expandable = createMemo(() => input().length > 0 || output().length > 0)
+  const loading = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
 
   return (
-    <BlockTool
-      title={`◆ ${props.tool}`}
-      part={props.part}
-      spinner={props.part.state.status === "streaming" || props.part.state.status === "running"}
-      onClick={expandable() ? () => setExpanded((value) => !value) : undefined}
-    >
+    <>
+      <InlineTool
+        icon={props.part.state.status === "error" ? "✗" : "✓"}
+        complete={props.part.state.status === "completed"}
+        pending={props.tool}
+        spinner={loading()}
+        part={props.part}
+        onClick={expandable() ? () => setExpanded((value) => !value) : undefined}
+      >
+        {genericToolSummary(props.tool, props.input)}
+      </InlineTool>
       <Show when={expanded()}>
-        <box gap={1} paddingTop={1}>
-          <Show when={Object.keys(props.input).length > 0}>
-            <box gap={1}>
-              <text>
-                <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}> Input </span>
-              </text>
-              <box paddingLeft={1}>
-                <code
-                  content={args()}
-                  filetype="json"
-                  syntaxStyle={syntax()}
-                  conceal={false}
-                  drawUnstyledText={false}
-                  fg={theme.text.default}
-                />
+        <box paddingLeft={3 + INLINE_TOOL_ICON_WIDTH}>
+          <For each={input()}>
+            {([key, value]) => (
+              <box flexDirection="row">
+                <text flexShrink={0} fg={theme.text.subdued}>
+                  {key}:{" "}
+                </text>
+                <text flexGrow={1} wrapMode="word" fg={theme.text.default}>
+                  {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
+                </text>
               </box>
-            </box>
-          </Show>
+            )}
+          </For>
           <Show when={output()}>
             {(value) => (
-              <box gap={1}>
-                <text>
-                  <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}> Output </span>
+              <box flexDirection="row">
+                <text flexShrink={0} fg={theme.text.subdued}>
+                  output:{" "}
                 </text>
-                <box paddingLeft={1}>
-                  <text fg={theme.text.default} wrapMode="word">
-                    {value()}
-                  </text>
-                </box>
+                <text flexGrow={1} fg={theme.text.default} wrapMode="word">
+                  {value()}
+                </text>
               </box>
             )}
           </Show>
         </box>
       </Show>
-    </BlockTool>
+    </>
   )
+}
+
+export function genericToolSummary(tool: string, input: Record<string, unknown>) {
+  const args = primitiveInputSummary(input).replace(/\s+/g, " ")
+  return `${tool}${args ? ` ${args}` : ""}`
 }
 
 function useToolPermission(part: () => SessionMessageAssistantTool | undefined) {

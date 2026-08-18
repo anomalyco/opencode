@@ -1,24 +1,14 @@
 import type {
   SessionMessageAssistant,
   SessionMessageAssistantTool,
-  SessionMessageInfo,
-  SessionMessageShell,
   SessionMessageUser,
 } from "@opencode-ai/client/promise"
-import type { AssistantMessage, FilePart, Message, Part, ToolPart, UserMessage } from "@/types"
+import type { AssistantMessage, FilePart, Part, ToolPart, UserMessage } from "@/types"
 import { Option, Schema } from "effect"
+import { createCommentMetadata, formatCommentNote, readPromptPresentation } from "./comment-note"
 
 const emptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-const emptyModel: { id: string; providerID: string; variant?: string } = { id: "", providerID: "" }
-const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
-
-export function compareMessages(a: Pick<Message, "id" | "time">, b: Pick<Message, "id" | "time">) {
-  const left = messageKey(a)
-  const right = messageKey(b)
-  return left < right ? -1 : left > right ? 1 : 0
-}
-
-export const messageKey = (message: Pick<Message, "id" | "time">) => message.time.created + message.id
+const decodeToolInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -45,148 +35,11 @@ function normalizeToolMetadata(name: string, metadata: Record<string, unknown>) 
   }
 }
 
-export function normalizeSessionMessages(sessionID: string, source: readonly SessionMessageInfo[]) {
-  const messages: Message[] = []
-  const parts = new Map<string, Part[]>()
-  let agent = ""
-  let model = emptyModel
-  let parentID: string | undefined
-
-  source.forEach((message) => {
-    if (message.type === "agent-switched") {
-      agent = message.agent
-      return
-    }
-    if (message.type === "model-switched") {
-      model = message.model
-      return
-    }
-    if (message.type === "user") {
-      parentID = message.id
-      messages.push(userMessage(sessionID, message, agent, model))
-      parts.set(message.id, userParts(sessionID, message))
-      return
-    }
-    if (message.type === "synthetic" && message.description?.trim()) {
-      parentID = message.id
-      messages.push({
-        id: message.id,
-        sessionID,
-        role: "user",
-        time: message.time,
-        agent,
-        model: { providerID: model.providerID, modelID: model.id, variant: model.variant },
-      })
-      parts.set(message.id, [textPart(sessionID, message.id, 0, message.description, true)])
-      return
-    }
-    if (message.type === "shell") {
-      messages.push(...shellMessages(sessionID, message, agent, model))
-      parts.set(message.id, [textPart(sessionID, message.id, 0, message.command)])
-      parts.set(`${message.id}:assistant`, [shellPart(sessionID, message)])
-      parentID = undefined
-      return
-    }
-    if (message.type === "assistant") {
-      agent = message.agent
-      model = message.model
-      if (!parentID) return
-      const parent = messages.findLast((item) => item.id === parentID)
-      if (parent?.role === "user") {
-        parent.agent = message.agent
-        parent.model = {
-          providerID: message.model.providerID,
-          modelID: message.model.id,
-          variant: message.model.variant,
-        }
-      }
-      messages.push(assistantMessage(sessionID, parentID, message))
-      parts.set(message.id, assistantParts(sessionID, message))
-      return
-    }
-    if (message.type !== "compaction" || !parentID) return
-    parts.set(parentID, [
-      ...(parts.get(parentID) ?? []),
-      {
-        id: `${message.id}:compaction`,
-        sessionID,
-        messageID: parentID,
-        type: "compaction",
-        auto: message.reason === "auto",
-      },
-    ])
-  })
-
-  return { messages, parts }
-}
-
-function shellMessages(
-  sessionID: string,
-  message: SessionMessageShell,
-  agent: string,
-  model: { id: string; providerID: string; variant?: string },
-): [UserMessage, AssistantMessage] {
-  return [
-    {
-      id: message.id,
-      sessionID,
-      role: "user",
-      time: { created: message.time.created },
-      agent,
-      model: { providerID: model.providerID, modelID: model.id, variant: model.variant },
-    },
-    {
-      id: `${message.id}:assistant`,
-      sessionID,
-      role: "assistant",
-      time: message.time,
-      parentID: message.id,
-      modelID: model.id,
-      providerID: model.providerID,
-      variant: model.variant,
-      mode: agent,
-      agent,
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: emptyTokens,
-    },
-  ]
-}
-
-function shellPart(sessionID: string, message: SessionMessageShell): ToolPart {
-  const input = { command: message.command }
-  const start = message.time.created
-  const state: ToolPart["state"] =
-    message.status === "running"
-      ? { status: "running", input, time: { start } }
-      : {
-          status: "completed",
-          input,
-          output: message.output?.output ?? "",
-          title: "Shell",
-          metadata: {
-            status: message.status,
-            exit: message.exit,
-            truncated: message.output?.truncated,
-          },
-          time: { start, end: message.time.completed ?? start },
-        }
-  return {
-    id: `${message.id}:tool`,
-    sessionID,
-    messageID: `${message.id}:assistant`,
-    type: "tool",
-    callID: message.shellID,
-    tool: "bash",
-    state,
-  }
-}
-
 export function sessionMessagePartID(messageID: string, type: "text" | "reasoning", ordinal: number) {
   return `${messageID}:${type}:${ordinal}`
 }
 
-function userMessage(
+export function presentUserMessage(
   sessionID: string,
   message: SessionMessageUser,
   agent: string,
@@ -202,9 +55,11 @@ function userMessage(
   }
 }
 
-function userParts(sessionID: string, message: SessionMessageUser): Part[] {
+export function presentUserParts(sessionID: string, message: SessionMessageUser): Part[] {
+  const presentation = readPromptPresentation(message.metadata)
+  const text = presentation?.displayText ?? message.text
   return [
-    ...(message.text ? [textPart(sessionID, message.id, 0, message.text)] : []),
+    ...(text ? [textPart(sessionID, message.id, 0, text)] : []),
     ...(message.files ?? []).map(
       (file, index): FilePart => ({
         id: `${message.id}:file:${index}`,
@@ -218,7 +73,7 @@ function userParts(sessionID: string, message: SessionMessageUser): Part[] {
           ? {
               type: "file",
               text: { value: file.mention.text, start: file.mention.start, end: file.mention.end },
-              path: file.mention.text.startsWith("@") ? file.mention.text.slice(1) : (file.name ?? file.mention.text),
+              path: file.mention.text.startsWith("@") ? file.mention.text.slice(1) : file.mention.text,
             }
           : undefined,
       }),
@@ -235,10 +90,25 @@ function userParts(sessionID: string, message: SessionMessageUser): Part[] {
           : undefined,
       }),
     ),
+    ...(presentation?.comments ?? []).map(
+      (comment, index): Part => ({
+        id: `${message.id}:comment:${index}`,
+        sessionID,
+        messageID: message.id,
+        type: "text",
+        text: formatCommentNote(comment),
+        synthetic: true,
+        metadata: createCommentMetadata(comment),
+      }),
+    ),
   ]
 }
 
-function assistantMessage(sessionID: string, parentID: string, message: SessionMessageAssistant): AssistantMessage {
+export function presentAssistantMessage(
+  sessionID: string,
+  parentID: string,
+  message: SessionMessageAssistant,
+): AssistantMessage {
   const error = message.error
     ? message.error.type.toLowerCase().includes("abort") || message.error.type.toLowerCase().includes("interrupt")
       ? { name: "MessageAbortedError" as const, data: { message: message.error.message } }
@@ -263,30 +133,38 @@ function assistantMessage(sessionID: string, parentID: string, message: SessionM
   }
 }
 
-function assistantParts(sessionID: string, message: SessionMessageAssistant): Part[] {
+export function presentAssistantParts(sessionID: string, message: SessionMessageAssistant): Part[] {
   const ordinals = { text: 0, reasoning: 0 }
   return message.content.flatMap((content): Part[] => {
-    if (content.type === "text") {
-      const part = textPart(sessionID, message.id, ordinals.text++, content.text)
-      return content.text.trim() ? [part] : []
-    }
-    if (content.type === "reasoning") {
-      const part: Part = {
-        id: sessionMessagePartID(message.id, "reasoning", ordinals.reasoning++),
-        sessionID,
-        messageID: message.id,
-        type: "reasoning",
-        text: content.text,
-        metadata: content.state,
-        time: {
-          start: content.time?.created ?? message.time.created,
-          end: content.time?.completed,
-        },
-      }
-      return content.text.trim() ? [part] : []
-    }
-    return [toolPart(sessionID, message.id, content)]
+    const id =
+      content.type === "tool" ? content.id : sessionMessagePartID(message.id, content.type, ordinals[content.type]++)
+    const part = presentAssistantContent(sessionID, message, id, content)
+    if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return []
+    return [part]
   })
+}
+
+export function presentAssistantContent(
+  sessionID: string,
+  message: SessionMessageAssistant,
+  id: string,
+  content: SessionMessageAssistant["content"][number],
+): Part {
+  if (content.type === "text") return { id, sessionID, messageID: message.id, type: "text", text: content.text }
+  if (content.type === "reasoning")
+    return {
+      id,
+      sessionID,
+      messageID: message.id,
+      type: "reasoning",
+      text: content.text,
+      metadata: content.state,
+      time: {
+        start: content.time?.created ?? message.time.created,
+        end: content.time?.completed,
+      },
+    }
+  return toolPart(sessionID, message.id, content)
 }
 
 function textPart(sessionID: string, messageID: string, ordinal: number, text: string, synthetic?: boolean): Part {
@@ -312,7 +190,6 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
       return {
         status: "running" as const,
         input: normalizeToolInput(tool.name, tool.state.input),
-        // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
         metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
         time: { start },
       }
@@ -322,7 +199,6 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
         status: "error" as const,
         input: normalizeToolInput(tool.name, tool.state.input),
         error: tool.state.error.message,
-        // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
         metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
         time: { start, end: tool.time.completed ?? start },
       }
@@ -347,7 +223,6 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
       input: normalizeToolInput(tool.name, tool.state.input),
       output: tool.state.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n"),
       title: tool.name,
-      // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
       metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
       time: { start, end: tool.time.completed ?? start },
       attachments: attachments.length ? attachments : undefined,

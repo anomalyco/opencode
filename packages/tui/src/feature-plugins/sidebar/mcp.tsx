@@ -71,7 +71,7 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
 }
 
 export default Plugin.define({
-  id: "internal:sidebar-mcp",
+  id: "opencode.sidebar.mcp",
   setup(context) {
     context.ui.slot({
       append: "sidebar.content",

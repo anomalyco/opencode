@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ScopedKey, ServerScope, SessionRouteKey, SessionStateKey, migrateLegacySessionStateKeys } from "./server-scope"
+import { ScopedKey, ServerScope, SessionRouteKey, SessionStateKey } from "./server-scope"
 
 describe("ServerScope", () => {
   test("uses a stable local scope for the canonical sidecar", () => {
@@ -32,25 +32,16 @@ describe("SessionStateKey", () => {
     )
   })
 
-  test("extracts route keys from scoped and legacy state keys", () => {
-    expect(String(SessionStateKey.route("cmVwbw/session-1"))).toBe("cmVwbw/session-1")
+  test("extracts route keys from scoped state keys", () => {
     expect(String(SessionStateKey.route("local\0cmVwbw/session-1"))).toBe("cmVwbw/session-1")
     expect(String(SessionStateKey.route("https://debian.example\0cmVwbw/session-1"))).toBe("cmVwbw/session-1")
   })
-})
 
-describe("migrateLegacySessionStateKeys", () => {
-  test("copies legacy route keys into local scope without overwriting scoped state", () => {
-    expect(
-      migrateLegacySessionStateKeys({
-        "cmVwbw/session-1": { active: "legacy" },
-        "local\0cmVwbw/session-1": { active: "scoped" },
-        "https://debian.example\0cmVwbw/session-1": { active: "remote" },
-      }),
-    ).toEqual({
-      "local\0cmVwbw/session-1": { active: "scoped" },
-      "https://debian.example\0cmVwbw/session-1": { active: "remote" },
-    })
+  test("rejects unscoped state keys", () => {
+    expect(SessionStateKey.is("cmVwbw/session-1")).toBe(false)
+    expect(SessionStateKey.is("local\0cmVwbw/session-1")).toBe(true)
+    expect(() => SessionStateKey.route("cmVwbw/session-1")).toThrow("Session state key must include server scope")
+    expect(() => SessionStateKey.scope("cmVwbw/session-1")).toThrow("Session state key must include server scope")
   })
 
   test("rejects invalid identity fragments", () => {

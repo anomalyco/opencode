@@ -141,6 +141,52 @@ describe("GoogleVertexPlugin", () => {
     ),
   )
 
+  it.effect("enables the provider when a project resolves and leaves it automatic otherwise", () =>
+    withEnv(
+      {
+        GOOGLE_VERTEX_PROJECT: undefined,
+        GOOGLE_CLOUD_PROJECT: undefined,
+        GCP_PROJECT: undefined,
+        GCLOUD_PROJECT: undefined,
+      },
+      () =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          yield* catalog.transform((catalog) =>
+            catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
+              provider.package = Provider.aisdk("@ai-sdk/google-vertex")
+            }),
+          )
+          yield* addPlugin()
+
+          expect(required(yield* catalog.provider.get(Provider.ID.make("google-vertex"))).activation).toBe("auto")
+        }),
+    ),
+  )
+
+  it.effect("enables the provider when a project resolves from env", () =>
+    withEnv(
+      {
+        GOOGLE_VERTEX_PROJECT: undefined,
+        GOOGLE_CLOUD_PROJECT: "adc-project",
+        GCP_PROJECT: undefined,
+        GCLOUD_PROJECT: undefined,
+      },
+      () =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          yield* catalog.transform((catalog) =>
+            catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
+              provider.package = Provider.aisdk("@ai-sdk/google-vertex")
+            }),
+          )
+          yield* addPlugin()
+
+          expect(required(yield* catalog.provider.get(Provider.ID.make("google-vertex"))).activation).toBe("enabled")
+        }),
+    ),
+  )
+
   it.effect("resolves the advertised GOOGLE_VERTEX_PROJECT env for provider updates and SDKs", () =>
     withEnv(
       {

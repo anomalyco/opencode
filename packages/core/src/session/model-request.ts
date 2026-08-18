@@ -231,7 +231,8 @@ export const layer = Layer.effect(
         http: {
           headers: SessionModelHeaders.make(session, app),
         },
-        promptCacheKey: SessionPromptCacheKey.make(session.id),
+        // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
+        promptCacheKey: SessionPromptCacheKey.make(session.fork?.sessionID ?? session.id),
         system: context.system,
         messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
         tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),

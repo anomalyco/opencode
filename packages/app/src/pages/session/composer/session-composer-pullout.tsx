@@ -6,7 +6,7 @@ import { createEffect, createMemo, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 
 export function SessionComposerPullout(props: {
-  name: "todo" | "background"
+  name: "background"
   label: JSX.Element
   ariaLabel: string
   preview?: string

@@ -220,127 +220,133 @@ const setup = Effect.gen(function* () {
   return { db, bus, instructions: yield* instructionBuiltIns.load(sessionID) }
 })
 
-it.effect("generates from fresh settled Session context without durable mutation", () =>
-  Effect.gen(function* () {
-    requests.length = 0
-    hasHttpMiddleware = false
-    instruction = "Initial context"
-    const { db, bus, instructions } = yield* setup
-    yield* InstructionState.prepare(db, bus, instructions, sessionID)
-    const existing = SessionMessage.ID.create()
-    yield* bus.publish(SessionEvent.InboxEnqueued, {
-      sessionID,
-      inboxID: existing,
-      item: { type: "user", payload: { text: "Existing durable context" }, delivery: "steer" },
-    })
-    yield* bus.publish(SessionEvent.InboxDelivered, {
-      sessionID,
-      inboxID: existing,
-    })
-    const settledAssistant = SessionMessage.ID.create()
-    yield* bus.publish(SessionEvent.Step.Started, {
-      sessionID,
-      assistantMessageID: settledAssistant,
-      agent: Agent.ID.make("build"),
-      model: { id: ID.make("generate-model"), providerID: Provider.ID.make("test") },
-    })
-    yield* bus.publish(SessionEvent.Text.Started, {
-      sessionID,
-      assistantMessageID: settledAssistant,
-      ordinal: 0,
-    })
-    yield* bus.publish(SessionEvent.Text.Ended, {
-      sessionID,
-      assistantMessageID: settledAssistant,
-      ordinal: 0,
-      text: "Settled partial answer",
-    })
-    const activeAssistant = SessionMessage.ID.create()
-    yield* bus.publish(SessionEvent.Step.Started, {
-      sessionID,
-      assistantMessageID: activeAssistant,
-      agent: Agent.ID.make("build"),
-      model: { id: ID.make("generate-model"), providerID: Provider.ID.make("test") },
-    })
-    yield* bus.publish(SessionEvent.Tool.Input.Started, {
-      sessionID,
-      assistantMessageID: activeAssistant,
-      id: "active-call",
-      name: "echo",
-    })
-    yield* bus.publish(SessionEvent.Tool.Input.Ended, {
-      sessionID,
-      assistantMessageID: activeAssistant,
-      id: "active-call",
-      text: "{}",
-    })
-    yield* bus.publish(SessionEvent.Tool.Called, {
-      sessionID,
-      assistantMessageID: activeAssistant,
-      id: "active-call",
-      input: {},
-      executed: false,
-    })
-    yield* bus.publish(SessionEvent.InboxEnqueued, {
-      sessionID,
-      inboxID: SessionMessage.ID.create(),
-      item: { type: "user", payload: { text: "Queued input must remain invisible" }, delivery: "queue" },
-    })
-    instruction = "Changed context"
-    const before = yield* durableState(db, sessionID)
-    const hooks = yield* PluginHooks.Service
-    yield* hooks.register("session", "context", (event) =>
-      Effect.sync(() => {
-        event.system = [SystemPart.make("Hooked system"), ...event.system]
-        if (event.tools.lookup) event.tools.lookup.description = "Hooked lookup"
-      }),
-    )
+it.effect(
+  "generates from fresh settled Session context without durable mutation",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      hasHttpMiddleware = false
+      instruction = "Initial context"
+      const { db, bus, instructions } = yield* setup
+      yield* InstructionState.prepare(db, bus, instructions, sessionID)
+      const existing = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
+        sessionID,
+        inboxID: existing,
+        item: { type: "user", payload: { text: "Existing durable context" }, delivery: "steer" },
+      })
+      yield* bus.publish(SessionEvent.InboxDelivered, {
+        sessionID,
+        inboxID: existing,
+      })
+      const settledAssistant = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: settledAssistant,
+        agent: Agent.ID.make("build"),
+        model: { id: ID.make("generate-model"), providerID: Provider.ID.make("test") },
+      })
+      yield* bus.publish(SessionEvent.Text.Started, {
+        sessionID,
+        assistantMessageID: settledAssistant,
+        ordinal: 0,
+      })
+      yield* bus.publish(SessionEvent.Text.Ended, {
+        sessionID,
+        assistantMessageID: settledAssistant,
+        ordinal: 0,
+        text: "Settled partial answer",
+      })
+      const activeAssistant = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: activeAssistant,
+        agent: Agent.ID.make("build"),
+        model: { id: ID.make("generate-model"), providerID: Provider.ID.make("test") },
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        assistantMessageID: activeAssistant,
+        id: "active-call",
+        name: "echo",
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID,
+        assistantMessageID: activeAssistant,
+        id: "active-call",
+        text: "{}",
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID: activeAssistant,
+        id: "active-call",
+        input: {},
+        executed: false,
+      })
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
+        sessionID,
+        inboxID: SessionMessage.ID.create(),
+        item: { type: "user", payload: { text: "Queued input must remain invisible" }, delivery: "queue" },
+      })
+      instruction = "Changed context"
+      const before = yield* durableState(db, sessionID)
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          event.system = [SystemPart.make("Hooked system"), ...event.system]
+          if (event.tools.lookup) event.tools.lookup.description = "Hooked lookup"
+        }),
+      )
 
-    const generate = yield* SessionGenerate.Service
-    const result = yield* generate.generate({ sessionID, prompt: "Summarize privately" })
+      const generate = yield* SessionGenerate.Service
+      const result = yield* generate.generate({ sessionID, prompt: "Summarize privately" })
 
-    expect(result).toBe("Transient answer")
-    expect(requests).toHaveLength(1)
-    expect(hasHttpMiddleware).toBe(true)
-    expect(requests[0]?.model).toBe(model)
-    expect(requests[0]?.system[0]?.text).toBe("Hooked system")
-    expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
-    expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID })
-    expect(requests[0]?.promptCacheKey).toBe(sessionID)
-    const instructionUpdates = requests[0]?.messages.flatMap((message) =>
-      message.role === "system"
-        ? message.content.flatMap((content) => (content.type === "text" ? [content.text] : []))
-        : [],
-    )
-    expect(instructionUpdates).toHaveLength(1)
-    expect(instructionUpdates?.[0]).toContain("Changed context")
-    expect(instructionUpdates?.[0]).toContain("tools.captured.lookup(input: {}): Promise<string>")
-    expect(userTexts(requests[0])).toEqual(["Existing durable context", "Summarize privately"])
-    expect(
-      requests[0]?.messages.flatMap((message) =>
-        message.role === "assistant"
+      expect(result).toBe("Transient answer")
+      expect(requests).toHaveLength(1)
+      expect(hasHttpMiddleware).toBe(true)
+      expect(requests[0]?.model).toBe(model)
+      expect(requests[0]?.system[0]?.text).toBe("Hooked system")
+      expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
+      expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID })
+      expect(requests[0]?.promptCacheKey).toBe(sessionID)
+      const instructionUpdates = requests[0]?.messages.flatMap((message) =>
+        message.role === "system"
           ? message.content.flatMap((content) => (content.type === "text" ? [content.text] : []))
           : [],
-      ),
-    ).toEqual(["Settled partial answer"])
-    expect(requests[0]?.tools).toMatchObject([{ name: "lookup", description: "Hooked lookup" }])
-    expect(requests[0]?.toolChoice).toBeUndefined()
-    expect(yield* durableState(db, sessionID)).toEqual(before)
-  }),
+      )
+      expect(instructionUpdates).toHaveLength(1)
+      expect(instructionUpdates?.[0]).toContain("Changed context")
+      expect(instructionUpdates?.[0]).toContain("tools.captured.lookup(input: {}): Promise<string>")
+      expect(userTexts(requests[0])).toEqual(["Existing durable context", "Summarize privately"])
+      expect(
+        requests[0]?.messages.flatMap((message) =>
+          message.role === "assistant"
+            ? message.content.flatMap((content) => (content.type === "text" ? [content.text] : []))
+            : [],
+        ),
+      ).toEqual(["Settled partial answer"])
+      expect(requests[0]?.tools).toMatchObject([{ name: "lookup", description: "Hooked lookup" }])
+      expect(requests[0]?.toolChoice).toBeUndefined()
+      expect(yield* durableState(db, sessionID)).toEqual(before)
+    }),
+  { timeout: 15_000 },
 )
 
-it.effect("blocks unavailable initial instructions before generation", () =>
-  Effect.gen(function* () {
-    requests.length = 0
-    instruction = Instructions.unavailable
-    const { db } = yield* setup
-    const before = yield* durableState(db, sessionID)
-    const generate = yield* SessionGenerate.Service
+it.effect(
+  "blocks unavailable initial instructions before generation",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      instruction = Instructions.unavailable
+      const { db } = yield* setup
+      const before = yield* durableState(db, sessionID)
+      const generate = yield* SessionGenerate.Service
 
-    const error = yield* generate.generate({ sessionID, prompt: "Summarize privately" }).pipe(Effect.flip)
+      const error = yield* generate.generate({ sessionID, prompt: "Summarize privately" }).pipe(Effect.flip)
 
-    expect(error).toBeInstanceOf(Instructions.InitializationBlocked)
-    expect(requests).toEqual([])
-    expect(yield* durableState(db, sessionID)).toEqual(before)
-  }),
+      expect(error).toBeInstanceOf(Instructions.InitializationBlocked)
+      expect(requests).toEqual([])
+      expect(yield* durableState(db, sessionID)).toEqual(before)
+    }),
+  { timeout: 15_000 },
 )

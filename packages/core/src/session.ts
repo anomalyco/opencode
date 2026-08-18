@@ -52,6 +52,7 @@ import { Global } from "@opencode-ai/util/global"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { fileURLToPath } from "url"
+import { SessionEnvironment } from "./session/environment.js"
 
 // get project -> project.locations
 //
@@ -111,46 +112,46 @@ type ForkInput = {
 
 export { MessageDecodeError, NotFoundError }
 
-export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
+export class PromptConflictError extends Schema.TaggedError<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
-export class SyntheticConflictError extends Schema.TaggedErrorClass<SyntheticConflictError>()(
+export class SyntheticConflictError extends Schema.TaggedError<SyntheticConflictError>()(
   "Session.SyntheticConflictError",
   {
     sessionID: SessionSchema.ID,
     inputID: SessionMessage.ID,
   },
 ) {}
-export class AttachmentError extends Schema.TaggedErrorClass<AttachmentError>()("Session.AttachmentError", {
+export class AttachmentError extends Schema.TaggedError<AttachmentError>()("Session.AttachmentError", {
   uri: Schema.String,
   message: Schema.String,
 }) {}
-export class CompactionConflictError extends Schema.TaggedErrorClass<CompactionConflictError>()(
+export class CompactionConflictError extends Schema.TaggedError<CompactionConflictError>()(
   "Session.CompactionConflictError",
   {
     sessionID: SessionSchema.ID,
     inputID: SessionMessage.ID,
   },
 ) {}
-export class BusyError extends Schema.TaggedErrorClass<BusyError>()("Session.BusyError", {
+export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyError", {
   sessionID: SessionSchema.ID,
 }) {}
-export class InboxConflictError extends Schema.TaggedErrorClass<InboxConflictError>()("Session.InboxConflictError", {
+export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()("Session.InboxConflictError", {
   sessionID: SessionSchema.ID,
   inboxID: SessionMessage.ID,
 }) {}
 type InboxItemRef = { readonly sessionID: SessionSchema.ID; readonly inboxID: SessionMessage.ID }
-export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
+export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()("Session.SkillNotFoundError", {
   skill: Skill.ID,
 }) {}
 
-export class DestinationNotFoundError extends Schema.TaggedErrorClass<DestinationNotFoundError>()(
+export class DestinationNotFoundError extends Schema.TaggedError<DestinationNotFoundError>()(
   "Session.DestinationNotFoundError",
   { directory: AbsolutePath },
 ) {}
 
-export class DestinationNotDirectoryError extends Schema.TaggedErrorClass<DestinationNotDirectoryError>()(
+export class DestinationNotDirectoryError extends Schema.TaggedError<DestinationNotDirectoryError>()(
   "Session.DestinationNotDirectoryError",
   { directory: AbsolutePath },
 ) {}
@@ -166,6 +167,10 @@ export interface Interface {
     input: ForkInput,
   ) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError | ForkEmptyError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  readonly environment: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly variables?: SessionEnvironment.Variables
+  }) => Effect.Effect<SessionEnvironment.Variables | undefined, NotFoundError>
   readonly remove: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -305,6 +310,7 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
     const fs = yield* FSUtil.Service
     const jobs = yield* Job.Service
+    const environments = yield* SessionEnvironment.Service
     const scope = yield* Scope.Scope
     const activeShells = new Set<SessionSchema.ID>()
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
@@ -448,6 +454,11 @@ const layer = Layer.effect(
         if (!session) return yield* new NotFoundError({ sessionID })
         return session
       }),
+      environment: Effect.fn("Session.environment")(function* (input) {
+        yield* result.get(input.sessionID)
+        if (input.variables !== undefined) yield* environments.set(input.sessionID, input.variables)
+        return yield* environments.get(input.sessionID)
+      }),
       remove: Effect.fn("Session.remove")(function* (sessionID) {
         const session = yield* result.get(sessionID)
         yield* execution.interrupt(sessionID)
@@ -455,6 +466,7 @@ const layer = Layer.effect(
         yield* closeTransport(session)
         const children = yield* result.list({ parentID: sessionID })
         yield* Effect.forEach(children.data, (child) => result.remove(child.id), { concurrency: 1, discard: true })
+        yield* environments.clear(sessionID)
         yield* bus.publish(SessionEvent.Deleted, { sessionID })
         yield* bus.remove(sessionID)
       }),
@@ -657,7 +669,12 @@ const layer = Layer.effect(
             const started = yield* Effect.gen(function* () {
               const shell = yield* Shell.Service
               return yield* shell
-                .create({ command: input.command, cwd: session.location.directory, timeout: 0 })
+                .create({
+                  command: input.command,
+                  cwd: session.location.directory,
+                  timeout: 0,
+                  metadata: { sessionID: input.sessionID },
+                })
                 .pipe(Effect.orDie)
             }).pipe(Effect.provide(locations.get(session.location)))
             yield* bus.publish(
@@ -1107,6 +1124,7 @@ export const node = makeGlobalNode({
   layer: layer.pipe(Layer.orDie),
   deps: [
     Job.node,
+    SessionEnvironment.node,
     Database.node,
     Bus.node,
     Project.node,

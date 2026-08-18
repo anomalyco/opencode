@@ -9,7 +9,7 @@ import { Capabilities, ID, Info, Ref, VariantID } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { SessionSchema } from "../schema.js"
 
-export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelectedError>()(
+export class ModelNotSelectedError extends Schema.TaggedError<ModelNotSelectedError>()(
   "SessionRunnerModel.ModelNotSelectedError",
   { sessionID: SessionSchema.ID },
 ) {
@@ -18,7 +18,7 @@ export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelec
   }
 }
 
-export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavailableError>()(
+export class ModelUnavailableError extends Schema.TaggedError<ModelUnavailableError>()(
   "SessionRunnerModel.ModelUnavailableError",
   { providerID: Provider.ID, modelID: ID },
 ) {

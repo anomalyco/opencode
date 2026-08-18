@@ -29,7 +29,7 @@ import {
 } from "./directory-picker-domain"
 import "./dialog-select-directory-v2.css"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { getFilename } from "@opencode-ai/util/path"
 
 interface DialogSelectDirectoryV2Props {
   title?: string

@@ -541,10 +541,10 @@ describe("Config", () => {
   it.effect("migrates arbitrary v1 configuration into valid v2 configuration", () =>
     Effect.sync(() => {
       FastCheck.assert(
-        FastCheck.property(Schema.toArbitrary(ConfigV1.Info), (info) => {
+        FastCheck.property(Schema.toArbitrary(ConfigV1.Info)(FastCheck), (info) => {
           const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
-            Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(
-              Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(info),
+            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
+              Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(info),
             ),
           )
           Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })

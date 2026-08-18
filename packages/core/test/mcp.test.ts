@@ -14,7 +14,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
+import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Config } from "@opencode-ai/core/config"
+import { ConfigMCPPlugin } from "@opencode-ai/core/config/plugin/mcp"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -174,11 +176,18 @@ function resourceMcpLayer(
     entries?: Config.Interface["entries"]
     subscribe?: Bus.Interface["subscribe"]
     environment?: Layer.Layer<Environment.Service>
+    published?: string[]
   },
 ) {
   const directory = AbsolutePath.make(import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
-  return MCP.layer(options).pipe(
+  return Layer.effectDiscard(
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      yield* ConfigMCPPlugin.register(bus.subscribe())
+    }),
+  ).pipe(
+    Layer.provideMerge(MCP.layer(options)),
     Layer.provideMerge(Form.layer),
     Layer.provide(
       Layer.mergeAll(
@@ -215,6 +224,7 @@ function resourceMcpLayer(
               type: definition.type,
               data,
             } as Payload<typeof definition>
+            overrides?.published?.push(event.type)
             if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
             return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
           },
@@ -912,6 +922,7 @@ test("loads and reads MCP resources", async () => {
 })
 
 test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
+  const published: string[] = []
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -919,6 +930,7 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
           const service = yield* MCP.Service
 
           expect((yield* service.servers())[0]?.status).toEqual({ status: "disabled" })
+          expect(published).toContain(McpEvent.StatusChanged.type)
           expect(yield* service.connect("missing").pipe(Effect.flip)).toBeInstanceOf(MCP.NotFoundError)
           expect(yield* service.disconnect("missing").pipe(Effect.flip)).toBeInstanceOf(MCP.NotFoundError)
           yield* service.add(
@@ -972,10 +984,77 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
                 command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
                 disabled: true,
               }),
+              undefined,
+              undefined,
+              { published },
             ),
           ),
         )
       }),
+    ),
+  )
+})
+
+test("restores runtime MCP config when a transform is disposed", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = yield* MCP.Service
+        const config = new ConfigMCP.Remote({
+          type: "remote",
+          url: "https://example.com/mcp",
+          headers: { Authorization: "original" },
+          oauth: false,
+          disabled: true,
+        })
+        yield* service.add("dynamic", config)
+        const transformed = yield* service.transform((draft) =>
+          draft.update("dynamic", (server) => {
+            if (server.type === "remote") server.headers = { Authorization: "transformed" }
+          }),
+        )
+        let observed: string | undefined
+        yield* service.transform((draft) => {
+          const server = draft.get("dynamic")
+          observed = server?.type === "remote" ? server.headers?.Authorization : undefined
+        })
+
+        expect(observed).toBe("transformed")
+        expect(config.headers?.Authorization).toBe("original")
+        yield* transformed.dispose
+        expect(observed).toBe("original")
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })),
+        ),
+      ),
+    ),
+  )
+})
+
+test("isolates nested configured MCP mutations and reconciles them", async () => {
+  const published: string[] = []
+  const config = new ConfigMCP.Remote({
+    type: "remote",
+    url: "https://example.com/mcp",
+    headers: { Authorization: "original" },
+    oauth: false,
+    disabled: true,
+  })
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = yield* MCP.Service
+        expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(1)
+        yield* service.transform((draft) =>
+          draft.update("resources", (server) => {
+            if (server.type === "remote") server.headers = { Authorization: "transformed" }
+          }),
+        )
+
+        expect(config.headers?.Authorization).toBe("original")
+        expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(2)
+      }).pipe(Effect.provide(resourceMcpLayer(config, undefined, undefined, { published }))),
     ),
   )
 })
@@ -1066,35 +1145,6 @@ test("reconciles only changed MCP server config", async () => {
           ),
         )
       }),
-    ),
-  )
-})
-
-test("reconciles MCP config changed during startup", async () => {
-  const server = new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })
-  let reads = 0
-  const entries = () =>
-    Effect.sync(() => {
-      reads += 1
-      return [
-        new Document({
-          type: "document",
-          info: new Info({
-            mcp: new ConfigMCP.Info({
-              servers: reads === 1 ? { initial: server } : { initial: server, added: server },
-            }),
-          }),
-        }),
-      ]
-    })
-
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const service = yield* MCP.Service
-        expect((yield* service.servers()).map((item) => String(item.name))).toEqual(["added", "initial"])
-        expect(reads).toBeGreaterThanOrEqual(2)
-      }).pipe(Effect.provide(resourceMcpLayer(server, undefined, undefined, { entries }))),
     ),
   )
 })

@@ -7,6 +7,7 @@ import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
 import { createServerSyncContext } from "./server-sync"
 import { getOwner } from "solid-js/web"
+import { createData } from "@opencode-ai/client/solid"
 import type { ServerScope } from "@/utils/server-scope"
 import { createServerPermissionState } from "./permission"
 import { createServerNotificationState } from "./notification"
@@ -99,9 +100,18 @@ function createServerController(
 ) {
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
-  const sync = createServerSyncContext(sdk)
-  const permission = createServerPermissionState({ sdk, sync })
-  const notification = createServerNotificationState({ sdk, sync, key: connKey })
+  const data = createData({
+    api: () => sdk.api,
+    event: {
+      on: sdk.event.on,
+      listen: (handler) => sdk.event.listen((event) => handler({ name: event.type, details: event })),
+    },
+    connection: sdk.connection,
+    directory: "",
+  })
+  const sync = createServerSyncContext(sdk, data)
+  const permission = createServerPermissionState({ sdk, sync, data })
+  const notification = createServerNotificationState({ sdk, data, key: connKey })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })
@@ -134,6 +144,7 @@ function createServerController(
     (conn?.type === "sidecar" && conn.variant === "base") || (conn?.type === "http" && isLocalHost(conn.http.url))
 
   return {
+    data,
     sdk,
     sync,
     isLocal,

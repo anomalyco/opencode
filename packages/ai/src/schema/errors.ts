@@ -148,7 +148,7 @@ export const AIErrorReason = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("_tag"))
 export type AIErrorReason = Schema.Schema.Type<typeof AIErrorReason>
 
-export class AIError extends Schema.TaggedErrorClass<AIError>()("AI.Error", {
+export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
   module: Schema.String,
   method: Schema.String,
   reason: AIErrorReason,

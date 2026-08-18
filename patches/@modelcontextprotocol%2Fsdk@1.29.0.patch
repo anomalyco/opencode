@@ -1,5 +1,138 @@
+diff --git a/dist/cjs/client/auth.d.ts b/dist/cjs/client/auth.d.ts
+index f4363ce7c94fbddf0e1d5943b1b26682bdbaa40e..b4a3a3b33bc97206c6835e2ee221cc13456210e4 100644
+--- a/dist/cjs/client/auth.d.ts
++++ b/dist/cjs/client/auth.d.ts
+@@ -205,6 +205,15 @@ export declare function selectClientAuthMethod(clientInformation: OAuthClientInf
+  * @returns A Promise that resolves to an OAuthError instance
+  */
+ export declare function parseErrorResponse(input: Response | string): Promise<OAuthError>;
++/**
++ * Selects scopes per the MCP spec and augments them for refresh token support.
++ */
++export declare function determineScope(options: {
++    requestedScope?: string;
++    resourceMetadata?: OAuthProtectedResourceMetadata;
++    authServerMetadata?: AuthorizationServerMetadata;
++    clientMetadata: OAuthClientMetadata;
++}): string | undefined;
+ /**
+  * Orchestrates the full auth flow with a server.
+  *
+diff --git a/dist/cjs/client/auth.js b/dist/cjs/client/auth.js
+index c2e4fa91d26f5336889f6afa416147db75fc4872..152eed7cbb6e39ce4d711cf28a3e8d8fcf6d699d 100644
+--- a/dist/cjs/client/auth.js
++++ b/dist/cjs/client/auth.js
+@@ -7,6 +7,7 @@ exports.UnauthorizedError = void 0;
+ exports.selectClientAuthMethod = selectClientAuthMethod;
+ exports.parseErrorResponse = parseErrorResponse;
+ exports.auth = auth;
++exports.determineScope = determineScope;
+ exports.isHttpsUrl = isHttpsUrl;
+ exports.selectResourceURL = selectResourceURL;
+ exports.extractWWWAuthenticateParams = extractWWWAuthenticateParams;
+@@ -186,6 +187,19 @@ async function auth(provider, options) {
+         throw error;
+     }
+ }
++/**
++ * Selects scopes per the MCP spec and augments them for refresh token support.
++ */
++function determineScope({ requestedScope, resourceMetadata, authServerMetadata, clientMetadata }) {
++    let effectiveScope = requestedScope || resourceMetadata?.scopes_supported?.join(' ') || clientMetadata.scope;
++    if (effectiveScope &&
++        authServerMetadata?.scopes_supported?.includes('offline_access') &&
++        !effectiveScope.split(' ').includes('offline_access') &&
++        clientMetadata.grant_types?.includes('refresh_token')) {
++        effectiveScope = `${effectiveScope} offline_access`;
++    }
++    return effectiveScope;
++}
+ async function authInternal(provider, { serverUrl, authorizationCode, scope, resourceMetadataUrl, fetchFn }) {
+     // Check if the provider has cached discovery state to skip discovery
+     const cachedState = await provider.discoveryState?.();
+@@ -241,12 +255,12 @@ async function authInternal(provider, { serverUrl, authorizationCode, scope, res
+         });
+     }
+     const resource = await selectResourceURL(serverUrl, provider, resourceMetadata);
+-    // Apply scope selection strategy (SEP-835):
+-    // 1. WWW-Authenticate scope (passed via `scope` param)
+-    // 2. PRM scopes_supported
+-    // 3. Client metadata scope (user-configured fallback)
+-    // The resolved scope is used consistently for both DCR and the authorization request.
+-    const resolvedScope = scope || resourceMetadata?.scopes_supported?.join(' ') || provider.clientMetadata.scope;
++    const resolvedScope = determineScope({
++        requestedScope: scope,
++        resourceMetadata,
++        authServerMetadata: metadata,
++        clientMetadata: provider.clientMetadata
++    });
+     // Handle client registration if needed
+     let clientInformation = await Promise.resolve(provider.clientInformation());
+     if (!clientInformation) {
+@@ -741,7 +755,7 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
+     if (scope) {
+         authorizationUrl.searchParams.set('scope', scope);
+     }
+-    if (scope?.includes('offline_access')) {
++    if (scope?.split(' ').includes('offline_access')) {
+         // if the request includes the OIDC-only "offline_access" scope,
+         // we need to set the prompt to "consent" to ensure the user is prompted to grant offline access
+         // https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess
+@@ -837,21 +851,38 @@ async function exchangeAuthorization(authorizationServerUrl, { metadata, clientI
+  * @returns Promise resolving to OAuth tokens (preserves original refresh_token if not replaced)
+  * @throws {Error} When token refresh fails or authentication is invalid
+  */
++const refreshes = new Map();
+ async function refreshAuthorization(authorizationServerUrl, { metadata, clientInformation, refreshToken, resource, addClientAuthentication, fetchFn }) {
+-    const tokenRequestParams = new URLSearchParams({
+-        grant_type: 'refresh_token',
+-        refresh_token: refreshToken
+-    });
+-    const tokens = await executeTokenRequest(authorizationServerUrl, {
+-        metadata,
+-        tokenRequestParams,
+-        clientInformation,
+-        addClientAuthentication,
+-        resource,
+-        fetchFn
+-    });
+-    // Preserve original refresh token if server didn't return a new one
+-    return { refresh_token: refreshToken, ...tokens };
++    const key = `${authorizationServerUrl}\0${clientInformation.client_id}\0${refreshToken}`;
++    const current = refreshes.get(key);
++    if (current) {
++        return current;
++    }
++    const refresh = (async () => {
++        const tokenRequestParams = new URLSearchParams({
++            grant_type: 'refresh_token',
++            refresh_token: refreshToken
++        });
++        const tokens = await executeTokenRequest(authorizationServerUrl, {
++            metadata,
++            tokenRequestParams,
++            clientInformation,
++            addClientAuthentication,
++            resource,
++            fetchFn
++        });
++        // Preserve original refresh token if server didn't return a new one
++        return { refresh_token: refreshToken, ...tokens };
++    })();
++    refreshes.set(key, refresh);
++    try {
++        return await refresh;
++    }
++    finally {
++        if (refreshes.get(key) === refresh) {
++            refreshes.delete(key);
++        }
++    }
+ }
+ /**
+  * Unified token fetching that works with any grant type via provider.prepareTokenRequest().
 diff --git a/dist/cjs/client/index.d.ts b/dist/cjs/client/index.d.ts
-index 1822bf749aec71d2bb295083d832114ee187bb67..58b859a7b32222fb5cb9f2011fdc5d010f3d05fb 100644
+index 6f567a193626587a2730b5a49293ca5dfd4181ea..5b7c841c000508e389ce617f559f7c2a5126ca9f 100644
 --- a/dist/cjs/client/index.d.ts
 +++ b/dist/cjs/client/index.d.ts
 @@ -428,6 +428,8 @@ export declare class Client<RequestT extends Request = Request, NotificationT ex
@@ -11,21 +144,8 @@ index 1822bf749aec71d2bb295083d832114ee187bb67..58b859a7b32222fb5cb9f2011fdc5d01
      callTool(params: CallToolRequest['params'], resultSchema?: typeof CallToolResultSchema | typeof CompatibilityCallToolResultSchema, options?: RequestOptions): Promise<{
          [x: string]: unknown;
          content: ({
-diff --git a/dist/esm/client/index.d.ts b/dist/esm/client/index.d.ts
-index 1822bf749aec71d2bb295083d832114ee187bb67..58b859a7b32222fb5cb9f2011fdc5d010f3d05fb 100644
---- a/dist/esm/client/index.d.ts
-+++ b/dist/esm/client/index.d.ts
-@@ -428,6 +428,8 @@ export declare class Client<RequestT extends Request = Request, NotificationT ex
-      *
-      * For task-based execution with streaming behavior, use client.experimental.tasks.callToolStream() instead.
-      */
-+    callTool(params: CallToolRequest['params'], resultSchema?: undefined, options?: RequestOptions): Promise<SchemaOutput<typeof CallToolResultSchema>>;
-+    callTool<T extends typeof CallToolResultSchema | typeof CompatibilityCallToolResultSchema>(params: CallToolRequest['params'], resultSchema: T, options?: RequestOptions): Promise<SchemaOutput<T>>;
-     callTool(params: CallToolRequest['params'], resultSchema?: typeof CallToolResultSchema | typeof CompatibilityCallToolResultSchema, options?: RequestOptions): Promise<{
-         [x: string]: unknown;
-         content: ({
 diff --git a/dist/cjs/client/index.js b/dist/cjs/client/index.js
-index 6ac1da14dc7f6211ae70f7711c124b76098816d8..adb5b7bd45514a406a0f7e40b64631c101584c84 100644
+index 6ac1da14dc7f6211ae70f7711c124b76098816d8..8a0200720454eac591e174f6a948212af8f852fc 100644
 --- a/dist/cjs/client/index.js
 +++ b/dist/cjs/client/index.js
 @@ -288,41 +288,16 @@ class Client extends protocol_js_1.Protocol {
@@ -112,7 +232,8 @@ index 6ac1da14dc7f6211ae70f7711c124b76098816d8..adb5b7bd45514a406a0f7e40b64631c1
      /**
       * After initialization has completed, this will be populated with the server's reported capabilities.
       */
-@@ -541,9 +547,11 @@ class Client extends protocol_js_1.Protocol {
+@@ -540,10 +546,12 @@ class Client extends protocol_js_1.Protocol {
+      * Cache validators for tool output schemas.
       * Called after listTools() to pre-compile validators for better performance.
       */
 -    cacheToolMetadata(tools) {
@@ -138,7 +259,7 @@ index 6ac1da14dc7f6211ae70f7711c124b76098816d8..adb5b7bd45514a406a0f7e40b64631c1
      }
      /**
 diff --git a/dist/cjs/client/streamableHttp.js b/dist/cjs/client/streamableHttp.js
-index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eedff5443c9 100644
+index a29a7d3a0f14d9cd800ef5b296485237350c666f..a55e7ed79d18c5fb913227d5b8e5ca6f44cb51e4 100644
 --- a/dist/cjs/client/streamableHttp.js
 +++ b/dist/cjs/client/streamableHttp.js
 @@ -204,7 +204,7 @@ class StreamableHTTPClientTransport {
@@ -238,7 +359,7 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
                  }
                  throw new StreamableHTTPError(response.status, `Error POSTing to endpoint: ${text}`);
 diff --git a/dist/cjs/shared/protocol.js b/dist/cjs/shared/protocol.js
-index 3617e787f0ba70447c99501aee7aa67584d89758..4a96d6a0328fa348b96f3869ab7e0bb77538182b 100644
+index 3617e787f0ba70447c99501aee7aa67584d89758..4ee4d158391558fdc1f977f5134b7cacfc45e8c3 100644
 --- a/dist/cjs/shared/protocol.js
 +++ b/dist/cjs/shared/protocol.js
 @@ -744,7 +744,12 @@ class Protocol {
@@ -255,91 +376,11 @@ index 3617e787f0ba70447c99501aee7aa67584d89758..4a96d6a0328fa348b96f3869ab7e0bb7
                      this._cleanupTimeout(messageId);
                      reject(error);
                  });
-diff --git a/dist/cjs/client/auth.d.ts b/dist/cjs/client/auth.d.ts
-index f4363ce7c94fbddf0e1d5943b1b26682bdbaa40e..e7dd57096e4f056bcd735d5081433beea1b32f04 100644
---- a/dist/cjs/client/auth.d.ts
-+++ b/dist/cjs/client/auth.d.ts
-@@ -205,6 +205,15 @@ export declare function parseErrorResponse(input: Response | string): Promise<OA
-  * @returns A Promise that resolves to an OAuthError instance
-  */
- export declare function parseErrorResponse(input: Response | string): Promise<OAuthError>;
-+/**
-+ * Selects scopes per the MCP spec and augments them for refresh token support.
-+ */
-+export declare function determineScope(options: {
-+    requestedScope?: string;
-+    resourceMetadata?: OAuthProtectedResourceMetadata;
-+    authServerMetadata?: AuthorizationServerMetadata;
-+    clientMetadata: OAuthClientMetadata;
-+}): string | undefined;
- /**
-  * Orchestrates the full auth flow with a server.
-  *
-diff --git a/dist/cjs/client/auth.js b/dist/cjs/client/auth.js
-index c2e4fa91d26f5336889f6afa416147db75fc4872..178d7cfd96412d53bc14bbc13a8f76c11f727ee7 100644
---- a/dist/cjs/client/auth.js
-+++ b/dist/cjs/client/auth.js
-@@ -7,6 +7,7 @@ exports.UnauthorizedError = void 0;
- exports.selectClientAuthMethod = selectClientAuthMethod;
- exports.parseErrorResponse = parseErrorResponse;
- exports.auth = auth;
-+exports.determineScope = determineScope;
- exports.isHttpsUrl = isHttpsUrl;
- exports.selectResourceURL = selectResourceURL;
- exports.extractWWWAuthenticateParams = extractWWWAuthenticateParams;
-@@ -186,6 +187,19 @@ async function auth(provider, options) {
-         throw error;
-     }
- }
-+/**
-+ * Selects scopes per the MCP spec and augments them for refresh token support.
-+ */
-+function determineScope({ requestedScope, resourceMetadata, authServerMetadata, clientMetadata }) {
-+    let effectiveScope = requestedScope || resourceMetadata?.scopes_supported?.join(' ') || clientMetadata.scope;
-+    if (effectiveScope &&
-+        authServerMetadata?.scopes_supported?.includes('offline_access') &&
-+        !effectiveScope.split(' ').includes('offline_access') &&
-+        clientMetadata.grant_types?.includes('refresh_token')) {
-+        effectiveScope = `${effectiveScope} offline_access`;
-+    }
-+    return effectiveScope;
-+}
- async function authInternal(provider, { serverUrl, authorizationCode, scope, resourceMetadataUrl, fetchFn }) {
-     // Check if the provider has cached discovery state to skip discovery
-     const cachedState = await provider.discoveryState?.();
-@@ -241,12 +255,12 @@ async function authInternal(provider, { serverUrl, authorizationCode, scope, res
-         });
-     }
-     const resource = await selectResourceURL(serverUrl, provider, resourceMetadata);
--    // Apply scope selection strategy (SEP-835):
--    // 1. WWW-Authenticate scope (passed via `scope` param)
--    // 2. PRM scopes_supported
--    // 3. Client metadata scope (user-configured fallback)
--    // The resolved scope is used consistently for both DCR and the authorization request.
--    const resolvedScope = scope || resourceMetadata?.scopes_supported?.join(' ') || provider.clientMetadata.scope;
-+    const resolvedScope = determineScope({
-+        requestedScope: scope,
-+        resourceMetadata,
-+        authServerMetadata: metadata,
-+        clientMetadata: provider.clientMetadata
-+    });
-     // Handle client registration if needed
-     let clientInformation = await Promise.resolve(provider.clientInformation());
-     if (!clientInformation) {
-@@ -741,7 +755,7 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
-     if (scope) {
-         authorizationUrl.searchParams.set('scope', scope);
-     }
--    if (scope?.includes('offline_access')) {
-+    if (scope?.split(' ').includes('offline_access')) {
-         // if the request includes the OIDC-only "offline_access" scope,
-         // we need to set the prompt to "consent" to ensure the user is prompted to grant offline access
-         // https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess
 diff --git a/dist/esm/client/auth.d.ts b/dist/esm/client/auth.d.ts
-index f4363ce7c94fbddf0e1d5943b1b26682bdbaa40e..e7dd57096e4f056bcd735d5081433beea1b32f04 100644
+index f4363ce7c94fbddf0e1d5943b1b26682bdbaa40e..b4a3a3b33bc97206c6835e2ee221cc13456210e4 100644
 --- a/dist/esm/client/auth.d.ts
 +++ b/dist/esm/client/auth.d.ts
-@@ -205,6 +205,15 @@ export declare function parseErrorResponse(input: Response | string): Promise<OA
+@@ -205,6 +205,15 @@ export declare function selectClientAuthMethod(clientInformation: OAuthClientInf
   * @returns A Promise that resolves to an OAuthError instance
   */
  export declare function parseErrorResponse(input: Response | string): Promise<OAuthError>;
@@ -356,7 +397,7 @@ index f4363ce7c94fbddf0e1d5943b1b26682bdbaa40e..e7dd57096e4f056bcd735d5081433bee
   * Orchestrates the full auth flow with a server.
   *
 diff --git a/dist/esm/client/auth.js b/dist/esm/client/auth.js
-index e183040fc2bba22ca1ccc784984f3310854403b7..d367661e580ee61a96654f7af78b2af61dcad98b 100644
+index e183040fc2bba22ca1ccc784984f3310854403b7..1fef5ff7926604d74d8bfae100a2be01040a0e99 100644
 --- a/dist/esm/client/auth.js
 +++ b/dist/esm/client/auth.js
 @@ -161,6 +161,19 @@ export async function auth(provider, options) {
@@ -407,8 +448,74 @@ index e183040fc2bba22ca1ccc784984f3310854403b7..d367661e580ee61a96654f7af78b2af6
          // if the request includes the OIDC-only "offline_access" scope,
          // we need to set the prompt to "consent" to ensure the user is prompted to grant offline access
          // https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess
+@@ -812,21 +825,38 @@ export async function exchangeAuthorization(authorizationServerUrl, { metadata,
+  * @returns Promise resolving to OAuth tokens (preserves original refresh_token if not replaced)
+  * @throws {Error} When token refresh fails or authentication is invalid
+  */
++const refreshes = new Map();
+ export async function refreshAuthorization(authorizationServerUrl, { metadata, clientInformation, refreshToken, resource, addClientAuthentication, fetchFn }) {
+-    const tokenRequestParams = new URLSearchParams({
+-        grant_type: 'refresh_token',
+-        refresh_token: refreshToken
+-    });
+-    const tokens = await executeTokenRequest(authorizationServerUrl, {
+-        metadata,
+-        tokenRequestParams,
+-        clientInformation,
+-        addClientAuthentication,
+-        resource,
+-        fetchFn
+-    });
+-    // Preserve original refresh token if server didn't return a new one
+-    return { refresh_token: refreshToken, ...tokens };
++    const key = `${authorizationServerUrl}\0${clientInformation.client_id}\0${refreshToken}`;
++    const current = refreshes.get(key);
++    if (current) {
++        return current;
++    }
++    const refresh = (async () => {
++        const tokenRequestParams = new URLSearchParams({
++            grant_type: 'refresh_token',
++            refresh_token: refreshToken
++        });
++        const tokens = await executeTokenRequest(authorizationServerUrl, {
++            metadata,
++            tokenRequestParams,
++            clientInformation,
++            addClientAuthentication,
++            resource,
++            fetchFn
++        });
++        // Preserve original refresh token if server didn't return a new one
++        return { refresh_token: refreshToken, ...tokens };
++    })();
++    refreshes.set(key, refresh);
++    try {
++        return await refresh;
++    }
++    finally {
++        if (refreshes.get(key) === refresh) {
++            refreshes.delete(key);
++        }
++    }
+ }
+ /**
+  * Unified token fetching that works with any grant type via provider.prepareTokenRequest().
+diff --git a/dist/esm/client/index.d.ts b/dist/esm/client/index.d.ts
+index 6f567a193626587a2730b5a49293ca5dfd4181ea..5b7c841c000508e389ce617f559f7c2a5126ca9f 100644
+--- a/dist/esm/client/index.d.ts
++++ b/dist/esm/client/index.d.ts
+@@ -428,6 +428,8 @@ export declare class Client<RequestT extends Request = Request, NotificationT ex
+      *
+      * For task-based execution with streaming behavior, use client.experimental.tasks.callToolStream() instead.
+      */
++    callTool(params: CallToolRequest['params'], resultSchema?: undefined, options?: RequestOptions): Promise<SchemaOutput<typeof CallToolResultSchema>>;
++    callTool<T extends typeof CallToolResultSchema | typeof CompatibilityCallToolResultSchema>(params: CallToolRequest['params'], resultSchema: T, options?: RequestOptions): Promise<SchemaOutput<T>>;
+     callTool(params: CallToolRequest['params'], resultSchema?: typeof CallToolResultSchema | typeof CompatibilityCallToolResultSchema, options?: RequestOptions): Promise<{
+         [x: string]: unknown;
+         content: ({
 diff --git a/dist/esm/client/index.js b/dist/esm/client/index.js
-index 49b12c6cd918c457420fef7ad5528a9443d1a191..2afe2e22e960f26c9d516ef135d89f8eb9e4caff 100644
+index 49b12c6cd918c457420fef7ad5528a9443d1a191..98c214181d9c4c1b197c53dfa79059788e2042e8 100644
 --- a/dist/esm/client/index.js
 +++ b/dist/esm/client/index.js
 @@ -284,41 +284,16 @@ export class Client extends Protocol {
@@ -495,7 +602,8 @@ index 49b12c6cd918c457420fef7ad5528a9443d1a191..2afe2e22e960f26c9d516ef135d89f8e
      /**
       * After initialization has completed, this will be populated with the server's reported capabilities.
       */
-@@ -537,9 +543,11 @@ export class Client extends Protocol {
+@@ -536,10 +542,12 @@ export class Client extends Protocol {
+      * Cache validators for tool output schemas.
       * Called after listTools() to pre-compile validators for better performance.
       */
 -    cacheToolMetadata(tools) {
@@ -521,7 +629,7 @@ index 49b12c6cd918c457420fef7ad5528a9443d1a191..2afe2e22e960f26c9d516ef135d89f8e
      }
      /**
 diff --git a/dist/esm/client/streamableHttp.js b/dist/esm/client/streamableHttp.js
-index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da884fcc627a 100644
+index 624172aa24ae255a67c083f9c19053343e4a0581..f92c889456cab12de963959716846fb9770ed71d 100644
 --- a/dist/esm/client/streamableHttp.js
 +++ b/dist/esm/client/streamableHttp.js
 @@ -1,5 +1,5 @@
@@ -628,7 +736,7 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
                  }
                  throw new StreamableHTTPError(response.status, `Error POSTing to endpoint: ${text}`);
 diff --git a/dist/esm/shared/protocol.js b/dist/esm/shared/protocol.js
-index bfa2b7120a0f50c569364ea5264e6f811076f44f..abd8dfd707c155f71dae7aeeeeaf7547368ac749 100644
+index bfa2b7120a0f50c569364ea5264e6f811076f44f..dec477d16a0fd796854542c1144279a6e86567f2 100644
 --- a/dist/esm/shared/protocol.js
 +++ b/dist/esm/shared/protocol.js
 @@ -740,7 +740,12 @@ export class Protocol {

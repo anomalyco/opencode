@@ -1,7 +1,5 @@
 import type {
   HealthGetOutput,
-  HealthStopInput,
-  HealthStopOutput,
   ServerGetOutput,
   LocationGetInput,
   LocationGetOutput,
@@ -80,6 +78,8 @@ import type {
   SessionBackgroundOutput,
   SessionMessageInput,
   SessionMessageOutput,
+  SessionEnvironmentInput,
+  SessionEnvironmentOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -363,18 +363,6 @@ export function make(options: ClientOptions) {
       get: (requestOptions?: RequestOptions) =>
         request<HealthGetOutput>(
           { method: "GET", path: `/api/health`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
-          requestOptions,
-        ),
-      stop: (input: HealthStopInput, requestOptions?: RequestOptions) =>
-        request<HealthStopOutput>(
-          {
-            method: "POST",
-            path: `/api/service/stop`,
-            body: { instanceID: input["instanceID"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
           requestOptions,
         ),
     },
@@ -896,6 +884,18 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      environment: (input: SessionEnvironmentInput, requestOptions?: RequestOptions) =>
+        request<SessionEnvironmentOutput>(
+          {
+            method: "PUT",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/environment`,
+            body: { variables: input["variables"] },
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
     },
     message: {
       list: (input: MessageListInput, requestOptions?: RequestOptions) =>

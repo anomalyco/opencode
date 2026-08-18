@@ -81,7 +81,7 @@ describe("ConfigNormalize", () => {
 
   test("preserves arbitrary JSON-round-tripped native configuration", () => {
     FastCheck.assert(
-      FastCheck.property(Schema.toArbitrary(Info), (info) => {
+      FastCheck.property(Schema.toArbitrary(Info)(FastCheck), (info) => {
         const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
         const result = normalized(source)
         expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(
@@ -150,6 +150,16 @@ describe("ConfigNormalize", () => {
   })
 
   test("migrates the legacy small model to the title agent", () => {
+    const result = normalized({ small_model: "anthropic/claude-haiku-4-5" })
+    expect(result.encoded.agents).toEqual({
+      title: {
+        model: { providerID: "anthropic", model: "claude-haiku-4-5" },
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
+  test("merges the legacy small model with the title agent", () => {
     const result = normalized({
       small_model: "anthropic/claude-haiku-4-5",
       agent: { title: { prompt: "Custom title prompt" } },

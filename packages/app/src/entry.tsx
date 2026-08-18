@@ -169,7 +169,6 @@ if (root instanceof HTMLElement) {
               defaultServer={ServerConnection.Key.make(getDefaultUrl())}
               canonicalLocalServer={ServerConnection.key(server)}
               servers={[server]}
-              disableHealthCheck
             />
           </AppBaseProviders>
         </PlatformProvider>

@@ -1,5 +1,4 @@
-import type { SessionMessageInfo, SessionStatus } from "@opencode-ai/client/promise"
-import type { AssistantMessage, Message, Part, UserMessage } from "@/types"
+import type { ModelRef, SessionMessageInfo, SessionStatus } from "@opencode-ai/client/promise"
 import { createMemo, type Accessor } from "solid-js"
 import { reuseTimelineRows } from "./row-reconciliation"
 import { Timeline, TimelineRow } from "./rows"
@@ -7,39 +6,76 @@ import { Timeline, TimelineRow } from "./rows"
 export { reuseTimelineRows } from "./row-reconciliation"
 
 export function createTimelineProjection(input: {
-  messages: Accessor<Message[]>
-  userMessages: Accessor<UserMessage[]>
   sessionMessages: Accessor<SessionMessageInfo[]>
-  parts: (messageID: string) => Part[]
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
 }) {
-  const messageByID = createMemo(() => new Map(input.messages().map((message) => [message.id, message] as const)))
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
   )
+  const userContextByID = createMemo(() => {
+    const result = new Map<string, { agent: string; model: ModelRef }>()
+    let agent = ""
+    let model: ModelRef = { id: "", providerID: "" }
+    let userID: string | undefined
+    input.sessionMessages().forEach((message) => {
+      if (message.type === "agent-switched") agent = message.agent
+      if (message.type === "model-switched") model = message.model
+      if (message.type === "user") {
+        userID = message.id
+        const metadata = message.metadata
+        const localAgent = typeof metadata?.agent === "string" ? metadata.agent : agent
+        const localModel = metadata?.model
+        const localModelID =
+          localModel && typeof localModel === "object" && !Array.isArray(localModel)
+            ? typeof localModel.id === "string"
+              ? localModel.id
+              : typeof localModel.modelID === "string"
+                ? localModel.modelID
+                : undefined
+            : undefined
+        result.set(message.id, {
+          agent: localAgent,
+          model:
+            localModel &&
+            typeof localModel === "object" &&
+            !Array.isArray(localModel) &&
+            localModelID &&
+            typeof localModel.providerID === "string"
+              ? {
+                  id: localModelID,
+                  providerID: localModel.providerID,
+                  variant: typeof localModel.variant === "string" ? localModel.variant : undefined,
+                }
+              : model,
+        })
+      }
+      if (message.type === "shell") userID = undefined
+      if (message.type !== "assistant") return
+      agent = message.agent
+      model = message.model
+      if (userID) result.set(userID, { agent, model })
+    })
+    return result
+  })
   const assistantMessagesByParent = createMemo(() => {
-    const result = new Map<string, AssistantMessage[]>()
-    input.messages().forEach((message) => {
-      if (message.role !== "assistant") return
-      const messages = result.get(message.parentID)
+    const result = new Map<string, Extract<SessionMessageInfo, { type: "assistant" }>[]>()
+    let userID: string | undefined
+    input.sessionMessages().forEach((message) => {
+      if (message.type === "user") userID = message.id
+      if (message.type === "shell") userID = undefined
+      if (message.type !== "assistant" || !userID) return
+      const messages = result.get(userID)
       if (messages) {
         messages.push(message)
         return
       }
-      result.set(message.parentID, [message])
+      result.set(userID, [message])
     })
     return result
   })
   const projection = createMemo(() =>
-    Timeline.constructSessionMessageRows(
-      input.sessionMessages(),
-      (messageID) => messageByID().get(messageID) as UserMessage | AssistantMessage | undefined,
-      input.parts,
-      input.showReasoningSummaries(),
-      input.status().type,
-      input.userMessages(),
-    ),
+    Timeline.constructSessionMessageRows(input.sessionMessages(), input.showReasoningSummaries(), input.status().type),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
@@ -73,11 +109,12 @@ export function createTimelineProjection(input: {
     activeMessageID,
     assistantMessagesByParent,
     lastAssistantGroupKey,
-    messageByID,
+    messageByID: sessionMessageByID,
     messageRowIndex,
     messageLastRowIndex,
     rowByKey,
     rows,
     sessionMessageByID,
+    userContextByID,
   }
 }

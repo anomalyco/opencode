@@ -93,6 +93,8 @@ type Store = {
     family: Record<string, string[]>
     active: Record<string, DataSessionStatus>
     message: Record<string, SessionMessageInfo[]>
+    messageCursor: Record<string, string | undefined>
+    messageLoading: Record<string, boolean>
     pending: Record<string, SessionInboxInfo[]>
     input: Record<string, string[]>
     permission: Record<string, PermissionRequest[]>
@@ -154,6 +156,8 @@ export function createData(config: CreateDataInput) {
       family: {},
       active: {},
       message: {},
+      messageCursor: {},
+      messageLoading: {},
       pending: {},
       input: {},
       permission: {},
@@ -333,6 +337,8 @@ export function createData(config: CreateDataInput) {
         delete draft.info[sessionID]
         delete draft.active[sessionID]
         delete draft.message[sessionID]
+        delete draft.messageCursor[sessionID]
+        delete draft.messageLoading[sessionID]
         delete draft.pending[sessionID]
         delete draft.input[sessionID]
         delete draft.permission[sessionID]
@@ -1017,38 +1023,6 @@ export function createData(config: CreateDataInput) {
       setStatus(sessionID: string, status: DataSessionStatus) {
         setSessionActive(sessionID, status)
       },
-      lineage: {
-        peek(sessionID: string) {
-          const session = store.session.info[sessionID]
-          if (!session) return
-          const seen = new Set([session.id])
-          let root = session
-          while (root.parentID) {
-            if (seen.has(root.parentID)) return { session, root }
-            seen.add(root.parentID)
-            const parent = store.session.info[root.parentID]
-            if (!parent) return
-            root = parent
-          }
-          return { session, root }
-        },
-        async resolve(sessionID: string) {
-          await result.session.sync(sessionID)
-          const session = store.session.info[sessionID]
-          if (!session) throw new Error(`Session not found: ${sessionID}`)
-          const seen = new Set([session.id])
-          let root = session
-          while (root.parentID) {
-            if (seen.has(root.parentID)) return { session, root }
-            seen.add(root.parentID)
-            await result.session.sync(root.parentID)
-            const parent = store.session.info[root.parentID]
-            if (!parent) throw new Error(`Session not found: ${root.parentID}`)
-            root = parent
-          }
-          return { session, root }
-        },
-      },
       root(sessionID: string) {
         return resolveRoot(sessionID)
       },
@@ -1133,10 +1107,33 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
-            const messages = (await api().message.list({ sessionID, limit: 200, order: "desc" })).data.toReversed()
+            const response = await api().message.list({ sessionID, limit: 200, order: "desc" })
+            const messages = response.data.toReversed()
             messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
             setStore("session", "message", sessionID, reconcile(messages))
+            setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
           })
+        },
+        more(sessionID: string) {
+          return store.session.messageCursor[sessionID] !== undefined
+        },
+        loading(sessionID: string) {
+          return store.session.messageLoading[sessionID] ?? false
+        },
+        async loadMore(sessionID: string) {
+          const cursor = store.session.messageCursor[sessionID]
+          if (!cursor || store.session.messageLoading[sessionID]) return
+          setStore("session", "messageLoading", sessionID, true)
+          const response = await api()
+            .message.list({ sessionID, limit: 200, cursor })
+            .finally(() => setStore("session", "messageLoading", sessionID, false))
+          const older = response.data.toReversed()
+          const existing = store.session.message[sessionID] ?? []
+          const ids = new Set(existing.map((item) => item.id))
+          const messages = [...older.filter((item) => !ids.has(item.id)), ...existing]
+          messageIndex.set(sessionID, new Map(messages.map((item, position) => [item.id, position])))
+          setStore("session", "message", sessionID, reconcile(messages))
+          setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
         },
         invalidate(sessionID: string) {
           sync.invalidate(`session.message:${sessionID}`)
@@ -1440,6 +1437,7 @@ export function createData(config: CreateDataInput) {
             const response = await api().model.list({ location: locationQuery(ref ?? defaultLocation()) })
             const key = locationKey(response.location)
             setStore("location", key, { ...store.location[key], model: response.data })
+            if (key !== id) setStore("location", id, { ...store.location[id], model: response.data })
           })
         },
         invalidate(ref?: LocationRef) {
@@ -1456,6 +1454,7 @@ export function createData(config: CreateDataInput) {
             const response = await api().provider.list({ location: locationQuery(ref ?? defaultLocation()) })
             const key = locationKey(response.location)
             setStore("location", key, { ...store.location[key], provider: response.data })
+            if (key !== id) setStore("location", id, { ...store.location[id], provider: response.data })
           })
         },
         invalidate(ref?: LocationRef) {

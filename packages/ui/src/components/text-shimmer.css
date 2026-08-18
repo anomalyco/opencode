@@ -5,7 +5,8 @@
   --text-shimmer-index: 0;
   --text-shimmer-angle: 90deg;
   --text-shimmer-spread: 5.2ch;
-  --text-shimmer-size: 360%;
+  --text-shimmer-gutter: calc(var(--text-shimmer-spread) + 1ch);
+  --text-shimmer-size: calc(200% + var(--text-shimmer-gutter) + var(--text-shimmer-gutter));
   --text-shimmer-base-color: var(--text-weak);
   --text-shimmer-peak-color: var(--text-strong);
   --text-shimmer-sweep: linear-gradient(

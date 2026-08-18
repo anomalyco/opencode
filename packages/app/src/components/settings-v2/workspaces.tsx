@@ -1,6 +1,6 @@
 import type { Component } from "solid-js"
 import { For, Show, createMemo } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { useQuery } from "@tanstack/solid-query"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
@@ -10,12 +10,13 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { getFilename } from "@opencode-ai/util/path"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
 import { showToast } from "@/utils/toast"
 import { getRelativeTime } from "@/utils/time"
+import { sessionLabel } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { SettingsListV2 } from "./parts/list"
 import { InlineServerSelect } from "./parts/server-select"
@@ -37,6 +38,7 @@ import {
 } from "@/utils/workspace"
 import { listAllSessions } from "@/utils/session"
 import type { ServerScope } from "@/utils/server-scope"
+import { normalizeProjectInfo } from "@/context/global-sync/utils"
 import "./settings-v2.css"
 
 type Workspace = {
@@ -48,7 +50,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
-  const serverSync = useServerSync()
+  const data = useData()
   const tabs = useTabs()
   const platform = usePlatform()
   const [store, setStore] = createStore({
@@ -56,9 +58,22 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
     transaction: undefined as "confirm" | "running" | undefined,
   })
 
-  const workspaces = createMemo(() => workspaceInventory(serverSync.data.project))
+  const projectQuery = useQuery(() => ({
+    queryKey: [serverSDK.scope, "settings-workspace-projects"] as const,
+    queryFn: async () =>
+      Promise.all(
+        (await serverSDK.api.project.list()).map(async (project) => {
+          const worktrees = await serverSDK.api.worktree
+            .list({ projectID: project.id })
+            .catch(() => [{ directory: project.canonical }, ...project.sandboxes.map((directory) => ({ directory }))])
+          return normalizeProjectInfo({ ...project, worktrees })
+        }),
+      ),
+    refetchOnMount: "always",
+  }))
+  const workspaces = createMemo(() => workspaceInventory(projectQuery.data ?? []))
   const projects = createMemo(() =>
-    serverSync.data.project.filter((project) => managedWorkspaceDirectories(project).length > 0),
+    (projectQuery.data ?? []).filter((project) => managedWorkspaceDirectories(project).length > 0),
   )
   const projectName = (project: Project) => project.name || getFilename(project.worktree)
   const projectOptions = createMemo(() => [
@@ -71,18 +86,21 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   const filtered = createMemo(() => filterWorkspaceInventory(workspaces(), selectedProject()))
   const captureDeleteContext = () => {
     const sdk = serverSDK
-    return { sdk, sync: serverSync, server: ServerConnection.key(sdk.server), activeDirectory: props.activeDirectory }
+    return {
+      sdk,
+      data,
+      server: ServerConnection.key(sdk.server),
+      activeDirectory: props.activeDirectory,
+    }
   }
   const loadSessions = async (context = captureDeleteContext()) => {
     const fetched = await listAllSessions(context.sdk.api.session, { order: "desc" })
-    return mergeWorkspaceSessionInventory(
-      fetched,
-      Object.values(context.sync.session.data.info).filter((session): session is SessionInfo => !!session),
-    )
+    fetched.forEach(context.data.session.remember)
+    return mergeWorkspaceSessionInventory(fetched, context.data.session.list())
   }
   const sessionQuery = useQuery(() => ({
     queryKey: [serverSDK.scope, null, "settings-workspace-sessions"] as const,
-    queryFn: () => loadSessions(),
+    queryFn: () => loadSessions().then(() => Date.now()),
     refetchOnMount: "always",
   }))
   const sessionsByWorkspace = createMemo(
@@ -90,7 +108,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
       new Map(
         workspaces().map((workspace) => [
           pathKey(workspace.directory),
-          sessionQuery.isSuccess ? sessionsForWorkspace(sessionQuery.data ?? [], workspace.directory) : [],
+          sessionQuery.isSuccess ? sessionsForWorkspace(data.session.list(), workspace.directory) : [],
         ]),
       ),
   )
@@ -176,25 +194,8 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
         worktree: undefined,
       })
     })
-    clearWorkspaceTerminals(
-      workspace.directory,
-      preflight.sessions.map((session) => session.id),
-      platform,
-      context.sdk.scope,
-    )
-    context.sync.set(
-      "project",
-      produce((draft) => {
-        const project = draft.find((item) => item.id === workspace.project.id)
-        if (!project) return
-        project.sandboxes = (project.sandboxes ?? []).filter(
-          (directory) => pathKey(directory) !== pathKey(workspace.directory),
-        )
-        project.worktrees = project.worktrees.filter(
-          (worktree) => pathKey(worktree.directory) !== pathKey(workspace.directory),
-        )
-      }),
-    )
+    clearWorkspaceTerminals(workspace.directory, platform, context.sdk.scope)
+    await projectQuery.refetch()
   }
 
   let inspectionID = 0
@@ -382,7 +383,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
                           <For each={linked()}>
                             {(session) => (
                               <div class="settings-v2-workspaces-session">
-                                <span>{session.title}</span>
+                                <span>{sessionLabel(session)}</span>
                                 <Show when={sessionTime(session)}>
                                   {(time) => <span class="settings-v2-workspaces-session-time">{time()}</span>}
                                 </Show>

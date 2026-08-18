@@ -138,7 +138,7 @@ export const make = Effect.gen(function* () {
     scope: yield* Scope.Scope,
   }
 
-  const settle = Effect.fn("Job.settle")(function* (id: string, token: object, exit: Exit.Exit<string, unknown>) {
+  const settle = Effect.fnUntraced(function* (id: string, token: object, exit: Exit.Exit<string, unknown>) {
     const completed_at = yield* Clock.currentTimeMillis
     const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [FinishResult, Map<string, Active>] => {
       const job = jobs.get(id)
@@ -170,7 +170,7 @@ export const make = Effect.gen(function* () {
     return result.info
   })
 
-  const fork = Effect.fn("Job.fork")(function* (
+  const fork = Effect.fnUntraced(function* (
     scope: Scope.Scope,
     id: string,
     token: object,
@@ -192,7 +192,7 @@ export const make = Effect.gen(function* () {
     return snapshot(job)
   })
 
-  const start: Interface["start"] = Effect.fn("Job.start")(function* (input) {
+  const start: Interface["start"] = Effect.fnUntraced(function* (input) {
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const id = input.id ?? Identifier.ascending("job")
@@ -247,7 +247,7 @@ export const make = Effect.gen(function* () {
     return { info: snapshot(job), timedOut: true }
   })
 
-  const removeBlock = Effect.fn("Job.removeBlock")(function* (input: BlockInput) {
+  const removeBlock = Effect.fnUntraced(function* (input: BlockInput) {
     yield* SynchronizedRef.update(state.jobs, (jobs) => {
       const job = jobs.get(input.id)
       if (!job || job.info.status !== "running" || job.isBackgrounded) return jobs
@@ -258,7 +258,7 @@ export const make = Effect.gen(function* () {
     })
   })
 
-  const block: Interface["block"] = Effect.fn("Job.block")(function* (input) {
+  const block: Interface["block"] = Effect.fnUntraced(function* (input) {
     const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [BlockStart, Map<string, Active>] => {
       const job = jobs.get(input.id)
       if (!job) return [{ type: "missing" }, jobs]

@@ -1,16 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import type { UserMessage } from "@/types"
 import { resetSessionModel, restorePromptModel, syncPromptModel, syncSessionModel } from "./session-model-helpers"
 
-const message = (input?: { agent?: string; model?: UserMessage["model"] }) =>
-  ({
-    id: "msg",
-    sessionID: "session",
-    role: "user",
-    time: { created: 1 },
-    agent: input?.agent ?? "build",
-    model: input?.model ?? { providerID: "anthropic", modelID: "claude-sonnet-4" },
-  }) as UserMessage
+const message = (input?: { agent?: string; model?: { providerID: string; modelID: string; variant?: string } }) => ({
+  sessionID: "session",
+  agent: input?.agent ?? "build",
+  model: input?.model ?? { providerID: "anthropic", modelID: "claude-sonnet-4" },
+})
 
 describe("syncSessionModel", () => {
   test("restores the last message through session state", () => {

@@ -1,6 +1,7 @@
-import type { AgentPart as MessageAgentPart, FilePart, Part, TextPart } from "@/types"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { createLegacyBlobReference } from "@/utils/draft-store"
+import type { SessionMessageUser } from "@opencode-ai/client/promise"
+import { readPromptPresentation } from "./comment-note"
 
 type Inline =
   | {
@@ -39,94 +40,69 @@ function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["s
   }
 }
 
-function textPartValue(parts: Part[]) {
-  const candidates = parts
-    .filter((part): part is TextPart => part.type === "text")
-    .filter((part) => !part.synthetic && !part.ignored)
-  return candidates.reduce((best: TextPart | undefined, part) => {
-    if (!best) return part
-    if (part.text.length > best.text.length) return part
-    return best
-  }, undefined)
-}
-
-/**
- * Extract prompt content from message parts for restoring into the prompt input.
- * This is used by undo to restore the original user prompt.
- */
-export function extractPromptFromParts(parts: Part[], opts?: { directory?: string; attachmentName?: string }): Prompt {
-  const textPart = textPartValue(parts)
-  const text = textPart?.text ?? ""
+export function extractPromptFromMessage(
+  message: SessionMessageUser,
+  opts?: { directory?: string; attachmentName?: string },
+): Prompt {
+  const text = readPromptPresentation(message.metadata)?.displayText ?? message.text
   const directory = opts?.directory
   const attachmentName = opts?.attachmentName ?? "attachment"
-
   const toRelative = (path: string) => {
     if (!directory) return path
-
     const prefix = directory.endsWith("/") ? directory : directory + "/"
     if (path.startsWith(prefix)) return path.slice(prefix.length)
-
-    if (path.startsWith(directory)) {
-      const next = path.slice(directory.length)
-      if (next.startsWith("/")) return next.slice(1)
-      return next
-    }
-
     return path
   }
-
   const inline: Inline[] = []
   const images: ImageAttachmentPart[] = []
-
-  for (const part of parts) {
-    if (part.type === "file") {
-      const filePart = part as FilePart
-      const sourceText = filePart.source?.text
-      if (sourceText) {
-        const value = sourceText.value
-        const start = sourceText.start
-        const end = sourceText.end
-        let path = value
-        if (value.startsWith("@")) path = value.slice(1)
-        if (!value.startsWith("@") && filePart.source && "path" in filePart.source) {
-          path = filePart.source.path
-        }
-        inline.push({
-          type: "file",
-          start,
-          end,
-          value,
-          path: toRelative(path),
-          selection: selectionFromFileUrl(filePart.url),
-        })
-        continue
-      }
-
-      if (filePart.url.startsWith("data:")) {
-        images.push({
-          type: "image",
-          id: filePart.id,
-          filename: filePart.filename ?? attachmentName,
-          mime: filePart.mime,
-          blob: createLegacyBlobReference(filePart.url),
-        })
-      }
-    }
-
-    if (part.type === "agent") {
-      const agentPart = part as MessageAgentPart
-      const source = agentPart.source
-      if (!source) continue
+  for (const file of message.files ?? []) {
+    const mention = file.mention
+    const uri = file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+    if (mention) {
       inline.push({
-        type: "agent",
-        start: source.start,
-        end: source.end,
-        value: source.value,
-        name: agentPart.name,
+        type: "file",
+        start: mention.start,
+        end: mention.end,
+        value: mention.text,
+        path: toRelative(mention.text.startsWith("@") ? mention.text.slice(1) : mention.text),
+        selection: selectionFromFileUrl(uri),
       })
+      continue
     }
+    const dataUrl =
+      file.source.type === "uri" && file.source.uri.startsWith("data:")
+        ? file.source.uri
+        : file.data
+          ? `data:${file.mime};base64,${file.data}`
+          : undefined
+    if (!dataUrl) continue
+    images.push({
+      type: "image",
+      id: `${message.id}:file:${images.length}`,
+      filename: file.name ?? attachmentName,
+      mime: file.mime,
+      blob: createLegacyBlobReference(dataUrl),
+    })
   }
+  for (const agent of message.agents ?? []) {
+    const mention = agent.mention
+    if (!mention) continue
+    inline.push({
+      type: "agent",
+      start: mention.start,
+      end: mention.end,
+      value: mention.text,
+      name: agent.name,
+    })
+  }
+  return buildPrompt(text, inline, images)
+}
 
+export function extractPromptComments(message: SessionMessageUser) {
+  return readPromptPresentation(message.metadata)?.comments ?? []
+}
+
+function buildPrompt(text: string, inline: Inline[], images: ImageAttachmentPart[]): Prompt {
   inline.sort((a, b) => {
     if (a.start !== b.start) return a.start - b.start
     return a.end - b.end

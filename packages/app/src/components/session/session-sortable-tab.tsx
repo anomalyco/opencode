@@ -1,7 +1,7 @@
 import { Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { getFilename } from "@opencode-ai/util/path"
 
 export function FileVisual(props: { path: string; active?: boolean; temporary?: boolean }): JSX.Element {
   return (

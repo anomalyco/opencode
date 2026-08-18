@@ -244,6 +244,7 @@ test("keeps scroll anchors for open session tabs", async () => {
 
   try {
     await wait(() => setup.tabs.current() === "first")
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "first"))
     setup.tabs.setScrollAnchor("first", { messageID: "msg_1", screenY: -3 })
 
     expect(setup.tabs.scrollAnchor("first")).toEqual({ messageID: "msg_1", screenY: -3 })

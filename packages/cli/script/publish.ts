@@ -3,6 +3,7 @@ import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 import { fileURLToPath } from "url"
+import { existsSync } from "fs"
 import { UpdateArtifact } from "../../../script/update-artifact"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
@@ -79,12 +80,14 @@ await publishDistribution({
   binary: "opencode2",
   packagePrefix: "@opencode-ai/cli-",
 })
-await publishDistribution({
-  root: "./dist/node",
-  name: "opencode-node",
-  binary: "opencode2-node",
-  packagePrefix: "@opencode-ai/cli-node-",
-})
+if (existsSync("./dist/node")) {
+  await publishDistribution({
+    root: "./dist/node",
+    name: "opencode-node",
+    binary: "opencode2-node",
+    packagePrefix: "@opencode-ai/cli-node-",
+  })
+}
 await UpdateArtifact.publish({
   channel: Script.channel,
   name: "cli",

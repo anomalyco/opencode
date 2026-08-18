@@ -1,16 +1,10 @@
-import {
-  AssistantMessage,
-  type SnapshotFileDiff,
-  Message as MessageType,
-  Part as PartType,
-} from "@opencode-ai/sdk/v2/client"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
-import type { SessionStatus } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo, SessionStatus } from "@opencode-ai/client/promise"
+import type { AssistantMessage, Message as MessageType, Part, PresentationFileDiff } from "../presentation"
 import { useData } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 
-import { Binary } from "@opencode-ai/core/util/binary"
-import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { Binary } from "@opencode-ai/util/binary"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
@@ -91,15 +85,15 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-type SummaryDiff = (SnapshotFileDiff & { file: string }) | FileDiffInfo
+type SummaryDiff = (PresentationFileDiff & { file: string }) | FileDiffInfo
 
-function summaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
+function summaryDiff(value: PresentationFileDiff): value is SummaryDiff {
   return typeof value.file === "string"
 }
 
 const hidden = new Set(["todowrite"])
 
-function partState(part: PartType, showReasoningSummaries: boolean) {
+function partState(part: Part, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
     if (hidden.has(part.tool)) return
     if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return
@@ -174,7 +168,7 @@ export function SessionTurn(
   const fileComponent = useFileComponent()
 
   const emptyMessages: MessageType[] = []
-  const emptyParts: PartType[] = []
+  const emptyParts: Part[] = []
   const emptyAssistant: AssistantMessage[] = []
   const emptyDiffs: SummaryDiff[] = []
   const idle = { type: "idle" as const }

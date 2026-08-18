@@ -9,6 +9,7 @@ import {
 import {
   assistantMessage,
   partUpdated,
+  renderedPartID,
   setupTimeline,
   shell,
   textPart,
@@ -34,13 +35,16 @@ for (const deviceScaleFactor of [1, 1.25]) {
       seedHistory: true,
     })
     await waitForVisualSettle(page, [
-      `[data-timeline-part-id="${shellID}"]`,
-      `[data-timeline-part-id="${followingID}"]`,
+      `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+      `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
     ])
     const regions = defineVisualRegions({
-      shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+      shell: {
+        selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+        closest: '[data-timeline-row="AssistantPart"]',
+      },
       following: {
-        selector: `[data-timeline-part-id="${followingID}"]`,
+        selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
@@ -71,13 +75,16 @@ for (const reducedMotion of [true]) {
       seedHistory: true,
     })
     await waitForVisualSettle(page, [
-      `[data-timeline-part-id="${shellID}"]`,
-      `[data-timeline-part-id="${followingID}"]`,
+      `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+      `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
     ])
     const regions = defineVisualRegions({
-      shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+      shell: {
+        selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+        closest: '[data-timeline-row="AssistantPart"]',
+      },
       following: {
-        selector: `[data-timeline-part-id="${followingID}"]`,
+        selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })

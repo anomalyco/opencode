@@ -54,7 +54,7 @@ const layer = Layer.effect(
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
 
     return Service.of({
-      get: Effect.fn("SessionStore.get")(function* (sessionID) {
+      get: Effect.fnUntraced(function* (sessionID) {
         const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
         return row ? fromRow(row) : undefined
       }),

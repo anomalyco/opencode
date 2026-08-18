@@ -32,7 +32,8 @@ export default [
           format: "es",
         },
         optimizeDeps: {
-          exclude: ["@shikijs/stream", "katex", "marked", "marked-shiki", "remend"],
+          exclude: ["@shikijs/stream", "marked", "marked-shiki", "remend"],
+          include: ["@opencode-ai/session-ui > mermaid", "@opencode-ai/session-ui > mermaid > katex"],
         },
       }
     },

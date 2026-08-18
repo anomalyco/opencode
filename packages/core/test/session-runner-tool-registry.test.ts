@@ -10,7 +10,7 @@ import { Tool } from "@opencode-ai/core/tool"
 import type { Info } from "@opencode-ai/schema/tool"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { executeTool, toolDefinitions } from "./lib/tool"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
 const imageStore = Layer.mock(Image.Service, {
@@ -127,7 +127,7 @@ describe("Tool", () => {
 
       expect(error).toBeInstanceOf(Tool.RegistrationError)
       expect(error.name).toBe("phone_type")
-      expect(error.message).toContain('Expected string, got undefined\n  at ["description"]')
+      expect(error.message).toContain('Expected string\n  at ["description"]')
       expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
     }),
   )
@@ -529,7 +529,7 @@ describe("Tool", () => {
                   encode: SchemaGetter.transformOrFail((value) =>
                     value === "valid"
                       ? Effect.succeed(true)
-                      : Effect.fail(new SchemaIssue.InvalidValue(Option.some(value), { message: "invalid output" })),
+                      : Effect.fail(new SchemaIssue.InvalidValue({ message: "invalid output" }, value)),
                   ),
                 }),
               ),

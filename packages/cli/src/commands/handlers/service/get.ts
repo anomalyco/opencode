@@ -7,6 +7,8 @@ import { ServiceConfig } from "../../../services/service-config"
 export default Runtime.handler(
   Commands.commands.service.commands.get,
   Effect.fn("cli.service.get")(function* (input) {
-    process.stdout.write((yield* ServiceConfig.get(Option.getOrUndefined(input.key))) + EOL)
+    process.stdout.write(
+      (yield* ServiceConfig.get(Option.getOrUndefined(input.key), Option.getOrUndefined(input.name))) + EOL,
+    )
   }),
 )

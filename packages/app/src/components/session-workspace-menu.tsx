@@ -1,12 +1,12 @@
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
-import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createStore } from "solid-js/store"
 import { createSignal, For, Show, type ComponentProps, type JSX } from "solid-js"
 import type { Project } from "@/types"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { pathKey } from "@/utils/path-key"
 import { showToast } from "@/utils/toast"
@@ -26,11 +26,11 @@ export function SessionWorkspaceMenu(props: {
 }) {
   const language = useLanguage()
   const serverSDK = useServerSDK()
-  const serverSync = useServerSync()
+  const data = useData()
   const openWorkspaces = useSettingsDialog("workspaces")
   const [store, setStore] = createStore({ selected: undefined as string | undefined })
   const [directories, setDirectories] = createSignal(workspaceDirectories(props.project))
-  const blocked = () => props.eligible === false || serverSync.session.data.session_working(props.sessionID)
+  const blocked = () => props.eligible === false || data.session.status(props.sessionID) === "running"
   const currentWorkspace = () => directories().find((workspace) => containsDirectory(workspace, props.directory))
   const workspaces = () =>
     directories().filter((workspace) => pathKey(workspace) !== pathKey(currentWorkspace() ?? props.directory))

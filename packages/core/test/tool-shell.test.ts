@@ -260,6 +260,36 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  productionIt.live(
+    "uses the session environment instead of the server environment",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              yield* sessions.environment({
+                sessionID,
+                variables: { OPENCODE_SESSION_ENV_TEST: "from-session" },
+              })
+              const command = isWindows
+                ? "[Console]::Out.Write($env:OPENCODE_SESSION_ENV_TEST)"
+                : 'printf %s "$OPENCODE_SESSION_ENV_TEST"'
+
+              const settled = yield* executeTool(registry, call({ command }))
+
+              expect(settled.status).toBe("completed")
+              expect(settled.content?.[0]).toEqual({ type: "text", text: "from-session" })
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
   it.live("resolves a relative workdir from the active Location", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -781,6 +811,40 @@ describe("ShellTool", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
   )
+
+  if (!isWindows) {
+    it.live("settles a shell terminated by an external signal", () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              const settled = yield* executeTool(
+                registry,
+                call({ command: idleCommand, background: true }, "call-external-signal"),
+              )
+              const shellID = settled.metadata?.shellID
+              expect(typeof shellID).toBe("string")
+              if (typeof shellID !== "string") return
+              const id = ShellSchema.ID.make(shellID)
+              const info = yield* shell.get(id)
+              expect(typeof info.pid).toBe("number")
+              if (info.pid === undefined) return
+
+              process.kill(-info.pid, "SIGTERM")
+              const result = yield* shell.wait(id).pipe(Effect.timeoutOption(Duration.seconds(1)))
+              expect(result._tag).toBe("Some")
+              if (result._tag === "Some") expect(result.value.status).toBe("exited")
+              expect((yield* shell.list()).map((item) => item.id)).not.toContain(id)
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    )
+  }
 
   it.live("backgrounds a foreground command when the session is signaled", () =>
     Effect.acquireUseRelease(

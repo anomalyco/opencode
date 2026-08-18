@@ -1,4 +1,4 @@
-import type { UserMessage } from "@/types"
+import type { SessionMessageUser } from "@opencode-ai/client/promise"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { messageIdFromHash } from "./message-id-from-hash"
@@ -7,14 +7,14 @@ export const useSessionHashScroll = (input: {
   sessionKey: () => string
   sessionID: () => string | undefined
   messagesReady: () => boolean
-  visibleUserMessages: () => UserMessage[]
+  visibleUserMessages: () => SessionMessageUser[]
   historyMore: () => boolean
   historyLoading: () => boolean
   loadMore: (sessionID: string) => Promise<void>
   currentMessageId: () => string | undefined
   pendingMessage: () => string | undefined
   setPendingMessage: (value: string | undefined) => void
-  setActiveMessage: (message: UserMessage | undefined) => void
+  setActiveMessage: (message: SessionMessageUser | undefined) => void
   autoScroll: { pause: () => void; forceScrollToBottom: () => void }
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
@@ -85,7 +85,7 @@ export const useSessionHashScroll = (input: {
     return false
   }
 
-  const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
+  const scrollToMessage = (message: SessionMessageUser, behavior: ScrollBehavior = "smooth") => {
     cancel()
     if (input.currentMessageId() !== message.id) input.setActiveMessage(message)
     input.revealMessage?.(message.id)

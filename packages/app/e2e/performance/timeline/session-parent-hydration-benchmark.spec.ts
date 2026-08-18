@@ -1,3 +1,4 @@
+import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
 import type { Page } from "@playwright/test"
 import { expectSessionTitle } from "../../utils/waits"
 import { mockOpenCodeServer } from "../../utils/mock-server"
@@ -11,42 +12,35 @@ type ParentHydrationBenchmarkMode = "natural" | "candidate"
 const mode = process.env.SESSION_PARENT_HYDRATION_BENCHMARK_MODE ?? "natural"
 if (mode !== "natural" && mode !== "candidate") throw new Error(`Unknown parent hydration benchmark mode: ${mode}`)
 const userID = "msg_parent_hydration_user"
+const userSeed = fixture.messages[fixture.targetID][0] as SessionMessageUser
 const user = {
-  ...fixture.messages[fixture.targetID][0]!,
-  info: { ...fixture.messages[fixture.targetID][0]!.info, id: userID, time: { created: 1700001000000 } },
-  parts: fixture.messages[fixture.targetID][0]!.parts.map((part, index) => ({
-    ...part,
-    id: `prt_parent_hydration_user_${index}`,
-    messageID: userID,
-  })),
-}
-const assistantSeed = fixture.messages[fixture.targetID][3]!
+  ...userSeed,
+  id: userID,
+  time: { created: 1700001000000 },
+} satisfies SessionMessageInfo
+const assistantSeed = fixture.messages[fixture.targetID][3] as SessionMessageAssistant
 const assistants = Array.from({ length: 14 }, (_, index) => {
   const messageID = `msg_parent_hydration_${String(index).padStart(2, "0")}`
   return {
     ...assistantSeed,
-    info: {
-      ...assistantSeed.info,
-      id: messageID,
-      parentID: userID,
-      time: { created: 1700001001000 + index * 1_000, completed: 1700001001500 + index * 1_000 },
-    },
-    parts: assistantSeed.parts.map((part, partIndex) => ({
-      ...part,
-      id: `prt_parent_hydration_${String(index).padStart(2, "0")}_${partIndex}`,
-      messageID,
-    })),
-  }
+    id: messageID,
+    time: { created: 1700001001000 + index * 1_000, completed: 1700001001500 + index * 1_000 },
+    content: assistantSeed.content.map((part, partIndex) =>
+      part.type === "tool"
+        ? { ...part, id: `call_parent_hydration_${String(index).padStart(2, "0")}_${partIndex}` }
+        : part,
+    ),
+  } satisfies SessionMessageInfo
 })
 const messages = [user, ...assistants]
 const target = fixture.sessions.find((session) => session.id === fixture.targetID)!
 const lastID = userID
 const lastAssistant = assistants.at(-1)!
-const lastPart = lastAssistant.parts.at(-1)!
+const lastPart = lastAssistant.content.at(-1)!
 const lastPartID =
   lastPart.type === "tool"
     ? lastPart.id
-    : `${lastAssistant.info.id}:${lastPart.type}:${lastAssistant.parts.filter((part) => part.type === lastPart.type).length - 1}`
+    : `${lastAssistant.id}:${lastPart.type}:${lastAssistant.content.filter((part) => part.type === lastPart.type).length - 1}`
 
 benchmark("hydrates an orphaned latest turn after a cold session click", async ({ browser, report }, testInfo) => {
   benchmark.setTimeout(180_000)
@@ -107,30 +101,25 @@ async function trial(page: Page, mode: ParentHydrationBenchmarkMode) {
     },
     pageMessages: (sessionID, limit, before) => {
       const items = sessionID === fixture.targetID ? messages : fixture.messages[fixture.sourceID]
-      const end = before ? items.findIndex((message) => message.info.id === before) : items.length
+      const end = before ? items.findIndex((message) => message.id === before) : items.length
       const start = Math.max(0, end - limit)
-      return { items: items.slice(start, end), cursor: start > 0 ? items[start]!.info.id : undefined }
+      return { items: items.slice(start, end), cursor: start > 0 ? items[start]!.id : undefined }
     },
   })
-  await page.route(`**/session/${fixture.targetID}`, (route) => {
-    const current = new URL(route.request().url()).pathname.startsWith("/api/")
-    return route.fulfill({
+  await page.route(`**/api/session/${fixture.targetID}`, (route) =>
+    route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(
-        current
-          ? {
-              data: {
-                ...target,
-                cost: 0,
-                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-                location: { directory: target.directory },
-              },
-            }
-          : target,
-      ),
-    })
-  })
+      body: JSON.stringify({
+        data: {
+          ...target,
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          location: { directory: target.directory },
+        },
+      }),
+    }),
+  )
   await installStressSessionTabs(page, { sessionIDs: [fixture.sourceID] })
   await page.goto(stressSessionHref(fixture.sourceID))
   await expectSessionTitle(page, fixture.expected.sourceTitle)
@@ -148,8 +137,8 @@ async function trial(page: Page, mode: ParentHydrationBenchmarkMode) {
     { href, title: target.title },
   )
   const metrics = await measureSessionSwitch(page, {
-    destinationIDs: messages.map((message) => message.info.id),
-    sourceIDs: fixture.messages[fixture.sourceID].map((message) => message.info.id),
+    destinationIDs: messages.map((message) => message.id),
+    sourceIDs: fixture.messages[fixture.sourceID].map((message) => message.id),
     lastID,
     requiredPartID: lastPartID,
     requireBottomAnchor: false,

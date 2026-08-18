@@ -60,7 +60,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const [store, setStore, _, ready] = persisted(
       {
         ...Persist.window("tabs"),
-        migrate: (value: unknown) => migrateTabs(value, ServerConnection.key(servers.list[0])),
+        migrate: migrateTabs,
       },
       createStore<Tab[]>([]),
     )

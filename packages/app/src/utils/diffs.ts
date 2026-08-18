@@ -1,5 +1,4 @@
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
-import type { Message } from "@/types"
 
 type Diff = FileDiffInfo
 
@@ -23,27 +22,4 @@ export function diffs(value: unknown): Diff[] {
   if (diff(value)) return [value]
   if (!object(value)) return []
   return Object.values(value).filter(diff)
-}
-
-export function message(value: Message): Message {
-  if (value.role !== "user") return value
-
-  const raw = value.summary as unknown
-  if (raw === undefined) return value
-  if (!object(raw)) return { ...value, summary: undefined }
-
-  const title = typeof raw.title === "string" ? raw.title : undefined
-  const body = typeof raw.body === "string" ? raw.body : undefined
-  const next = diffs(raw.diffs)
-
-  if (title === raw.title && body === raw.body && next === raw.diffs) return value
-
-  return {
-    ...value,
-    summary: {
-      ...(title === undefined ? {} : { title }),
-      ...(body === undefined ? {} : { body }),
-      diffs: next,
-    },
-  }
 }

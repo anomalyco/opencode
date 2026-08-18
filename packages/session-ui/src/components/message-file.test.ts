@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { FilePart } from "@opencode-ai/sdk/v2"
+import type { FilePart } from "../presentation"
 import { attached, inline, kind, typeLabel } from "./message-file"
 
 function file(part: Partial<FilePart> = {}): FilePart {

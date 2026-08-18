@@ -1,4 +1,4 @@
-import { getFilename } from "@opencode-ai/core/util/path"
+import { getFilename } from "@opencode-ai/util/path"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { pathKey } from "@/utils/path-key"
 import type { ServerConnection } from "@/context/servers"

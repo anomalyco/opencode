@@ -14,7 +14,7 @@ export const name = "subagent"
 const NO_TEXT = "Subagent completed without a text response."
 const backgroundStarted = (sessionID: SessionSchema.ID) =>
   [
-    `The subagent is working in the background (id: ${sessionID}). You will be notified automatically when it finishes.`,
+    `The subagent is working in the background (sessionID: ${sessionID}). You will be notified automatically when it finishes.`,
     "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
   ].join("\n")
@@ -23,6 +23,10 @@ export const Input = Schema.Struct({
   agent: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
   description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
+  sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
+    description:
+      "Continue a specific previous subagent conversation by passing its sessionID. Calls without a sessionID start a new conversation.",
+  }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
@@ -36,7 +40,8 @@ export const Output = Schema.Struct({
 })
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
-  "Include all relevant context and instructions in the prompt because the child starts with fresh context.",
+  "The output includes a sessionID you can pass back later to continue that specific conversation with the subagent.",
+  "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
   "Foreground (default) runs the subagent to completion and returns its final response.",
   "Background mode (background=true) launches it asynchronously and returns immediately; you are notified when it finishes.",
   "Use background only for independent work that can run while you continue elsewhere.",
@@ -50,6 +55,9 @@ export const Plugin = {
     const config = yield* Config.Service
     const permission = yield* Permission.Service
     const scope = yield* Scope.Scope
+    // One completion observer per job generation. Keyed by child plus start time so a fresh
+    // continuation job is observable even while a settled generation's observer is finalizing.
+    const notifications = new Set<string>()
 
     // Concatenate the child's final completed assistant text. Distinguishes "completed with no
     // text" (generic string) from "failed" (the run effect fails, surfaced as a job error).
@@ -77,7 +85,7 @@ export const Plugin = {
     ) {
       yield* runtime.session.synthetic({
         sessionID: parentID,
-        text: `<subagent id="${childID}" state="${state}" description="${description}">\n${text}\n</subagent>`,
+        text: `<subagent sessionID="${childID}" state="${state}" description="${description}">\n${text}\n</subagent>`,
         description,
         metadata: { source: "subagent", childID, agent, state },
       })
@@ -88,7 +96,11 @@ export const Plugin = {
       childID: SessionSchema.ID,
       agent: string,
       description: string,
+      startedAt: number,
     ) {
+      const key = `${childID}:${startedAt}`
+      if (notifications.has(key)) return
+      notifications.add(key)
       yield* runtime.job.wait({ id: childID }).pipe(
         Effect.flatMap((result) => {
           if (result.info?.status === "completed")
@@ -106,6 +118,7 @@ export const Plugin = {
             return injectCompletion(parentID, childID, agent, description, "cancelled", "Subagent cancelled")
           return Effect.void
         }),
+        Effect.ensuring(Effect.sync(() => notifications.delete(key))),
         Effect.forkIn(scope, { startImmediately: true }),
       )
     })
@@ -163,33 +176,74 @@ export const Plugin = {
                 })
                 .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))
 
-              // Model selection is policy/config/session state, not an LLM-facing tool argument.
-              const model = agent.model ?? parent.model
-              const child = yield* runtime.session
-                .create({
-                  parentID: context.sessionID,
-                  title: input.description,
-                  agent: Agent.ID.make(input.agent),
-                  model,
-                  // TODO(opencode kkdvxn): derive restricted subagent permissions from the parent
-                  // session (V1 deriveSubagentSessionPermission). MVP uses the agent's own permissions.
+              const existing =
+                input.sessionID === undefined
+                  ? undefined
+                  : yield* runtime.session
+                      .get(input.sessionID)
+                      .pipe(
+                        Effect.mapError(
+                          (error) =>
+                            new ToolFailure({ message: `Subagent session not found: ${input.sessionID}`, error }),
+                        ),
+                      )
+              if (existing !== undefined && existing.parentID !== context.sessionID)
+                return yield* new ToolFailure({
+                  message: `Session ${existing.id} is not a child of the current session`,
                 })
-                .pipe(
+              // Continuing with a different agent switches the child, mirroring create semantics
+              // where the agent's configured model wins over the inherited one.
+              if (existing !== undefined && existing.agent !== agent.id) {
+                yield* runtime.session.switchAgent({ sessionID: existing.id, agent: agent.id }).pipe(
+                  Effect.andThen(
+                    agent.model === undefined
+                      ? Effect.void
+                      : runtime.session.switchModel({ sessionID: existing.id, model: agent.model }),
+                  ),
                   Effect.mapError(
-                    (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
+                    (error) =>
+                      new ToolFailure({ message: `Failed to switch subagent session agent: ${existing.id}`, error }),
                   ),
                 )
+              }
+
+              // Model selection is policy/config/session state, not an LLM-facing tool argument.
+              const model = agent.model ?? parent.model
+              const child =
+                existing ??
+                (yield* runtime.session
+                  .create({
+                    parentID: context.sessionID,
+                    title: input.description,
+                    agent: Agent.ID.make(input.agent),
+                    model,
+                  })
+                  .pipe(
+                    Effect.mapError(
+                      (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
+                    ),
+                  ))
 
               const background = input.background === true
               yield* context.progress({ sessionID: child.id, status: "running" })
 
-              const run = Effect.gen(function* () {
-                // The child session owns its agent/model (set at create); prompt only admits input.
-                yield* runtime.session.prompt({
+              // Standard prompt admission outside the job: Job.start joining a running child skips
+              // its run effect, and the default wake starts an idle child or steers a running one.
+              yield* runtime.session
+                .prompt({
                   sessionID: child.id,
-                  text: ["You are a subagent spawned by another session.", input.prompt].join("\n"),
-                  resume: false,
+                  text:
+                    existing === undefined
+                      ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
+                      : input.prompt,
                 })
+                .pipe(
+                  Effect.mapError(
+                    (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
+                  ),
+                )
+
+              const run = Effect.gen(function* () {
                 yield* runtime.session.resume(child.id)
                 return yield* latestAssistantText(child.id)
               }).pipe(Effect.onInterrupt(() => runtime.session.interrupt(child.id)))
@@ -204,7 +258,7 @@ export const Plugin = {
 
               if (background) {
                 yield* runtime.job.background(info.id)
-                yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description)
+                yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description, info.started_at)
                 return {
                   sessionID: child.id,
                   status: "running" as const,
@@ -220,21 +274,34 @@ export const Plugin = {
                 ),
               )
               if (result?.type === "backgrounded") {
-                yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description)
+                yield* notifyWhenDone(
+                  context.sessionID,
+                  child.id,
+                  agent.name,
+                  input.description,
+                  result.info.started_at,
+                )
                 return {
                   sessionID: child.id,
                   status: "running" as const,
                   output: backgroundStarted(child.id),
                 }
               }
+              // Failure surfaces keep the sessionID visible so the model can continue the child.
               if (result?.info.status === "error")
-                return yield* new ToolFailure({ message: result.info.error ?? "Subagent failed" })
-              if (result?.info.status === "cancelled") return yield* new ToolFailure({ message: "Subagent cancelled" })
+                return yield* new ToolFailure({
+                  message: `Subagent failed (sessionID: ${child.id}): ${result.info.error ?? "unknown error"}`,
+                })
+              if (result?.info.status === "cancelled")
+                return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
               return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
             }).pipe(
               Effect.map((output) => ({
                 output,
-                content: output.output,
+                content:
+                  output.status === "completed"
+                    ? `<subagent sessionID="${output.sessionID}" state="completed">\n${output.output}\n</subagent>`
+                    : output.output,
                 metadata: { sessionID: output.sessionID, status: output.status },
               })),
             ),

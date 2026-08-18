@@ -9,6 +9,7 @@ import {
 import {
   assistantMessage,
   partUpdated,
+  renderedPartID,
   setupTimeline,
   textPart,
   toolPart,
@@ -35,12 +36,23 @@ test("adds patch files incrementally without resetting outer expansion", async (
     cpuRate: 4,
     seedHistory: true,
   })
-  const trigger = page.locator(`[data-timeline-part-id="${patchID}"] [data-slot="collapsible-trigger"]`).first()
+  const trigger = page
+    .locator(`[data-timeline-part-id="${renderedPartID(patchID)}"] [data-slot="collapsible-trigger"]`)
+    .first()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
-  await waitForVisualSettle(page, [`[data-timeline-part-id="${patchID}"]`, `[data-timeline-part-id="${followingID}"]`])
+  await waitForVisualSettle(page, [
+    `[data-timeline-part-id="${renderedPartID(patchID)}"]`,
+    `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
+  ])
   const regions = defineVisualRegions({
-    patch: { selector: `[data-timeline-part-id="${patchID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
-    following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+    patch: {
+      selector: `[data-timeline-part-id="${renderedPartID(patchID)}"]`,
+      closest: '[data-timeline-row="AssistantPart"]',
+    },
+    following: {
+      selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
+      closest: '[data-timeline-row="AssistantPart"]',
+    },
   })
   await startVisualProbe(page, regions)
   const second = patchFile("src/b.ts", "add")

@@ -9,7 +9,7 @@ import { showToast } from "@/utils/toast"
 import { batch, For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { ExternalLink } from "@/components/external-link"
-import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { type FormState, headerRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
 
@@ -41,7 +41,7 @@ export function DialogCustomProvider(props: Props) {
 
 export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
   const dialog = useDialog()
-  const serverSync = useServerSync()
+  const data = useData()
   const language = useLanguage()
 
   const [form, setForm] = createStore<FormState>({
@@ -116,8 +116,9 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
     const output = validateCustomProvider({
       form,
       t: language.t,
-      disabledProviders: serverSync.data.config.disabled_providers ?? [],
-      existingProviderIDs: new Set(serverSync.data.provider.all.keys()),
+      // TODO: Restore disabled-provider validation when V2 exposes config reads.
+      disabledProviders: [],
+      existingProviderIDs: new Set((data.location.provider.list() ?? []).map((provider) => provider.id)),
     })
     batch(() => {
       setForm("err", output.err)

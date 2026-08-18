@@ -1,4 +1,4 @@
-import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { Dialog, DialogBody } from "@opencode-ai/ui/v2/dialog-v2"

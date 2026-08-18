@@ -21,7 +21,7 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 export const MaxValueBytes = 8 * 1024
 
-export class ValueTooLargeError extends Schema.TaggedErrorClass<ValueTooLargeError>()(
+export class ValueTooLargeError extends Schema.TaggedError<ValueTooLargeError>()(
   "InstructionEntryValueTooLargeError",
   {
     actualBytes: Schema.Int,

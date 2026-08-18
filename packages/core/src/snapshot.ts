@@ -15,7 +15,7 @@ import { Hash } from "@opencode-ai/util/hash"
 
 export { ID }
 
-export class Error extends Schema.TaggedErrorClass<Error>()("Snapshot.Error", {
+export class Error extends Schema.TaggedError<Error>()("Snapshot.Error", {
   operation: Schema.Literals(["capture", "files", "diff", "restore"]),
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),

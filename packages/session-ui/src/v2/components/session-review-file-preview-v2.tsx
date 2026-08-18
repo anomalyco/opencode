@@ -1,4 +1,4 @@
-import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import type { SelectedLineRange } from "@pierre/diffs"
 import { DiffChanges } from "@opencode-ai/ui/v2/diff-changes-v2"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -6,8 +6,8 @@ import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { mediaKindFromPath } from "../../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../../pierre/selection-bridge"
-import type { FileContent, SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import type { PresentationFileContent, PresentationFileDiff } from "../../presentation"
 import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
@@ -28,14 +28,14 @@ import { LineCommentV2OverflowIcon } from "@opencode-ai/ui/v2/line-comment-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import "./session-review-v2.css"
 
-type ReviewDiff = (SnapshotFileDiff & { file: string }) | FileDiffInfo | VcsFileDiff
+type ReviewDiff = (PresentationFileDiff & { file: string }) | FileDiffInfo
 
 export type SessionReviewFilePreviewV2Props = {
   file: string
   diff: ReviewDiff
   diffStyle: SessionReviewDiffStyle
   expandMode?: SessionReviewExpandMode
-  readFile?: (path: string) => Promise<FileContent | undefined>
+  readFile?: (path: string) => Promise<PresentationFileContent | undefined>
   onLineComment?: (comment: SessionReviewLineComment) => void
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void

@@ -11,20 +11,10 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Dynamic } from "solid-js/web"
 import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
-import { Accordion } from "@opencode-ai/ui/accordion"
 import { Card } from "@opencode-ai/ui/card"
-import {
-  ContextToolGroup,
-  Message,
-  MessageDivider,
-  Part as MessagePart,
-  partDefaultOpen,
-  type UserActions,
-} from "@opencode-ai/session-ui/message-part"
+import { MessageDivider, SessionShellMessage, type UserActions } from "@opencode-ai/session-ui/message-part"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { Icon } from "@opencode-ai/ui/icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
@@ -34,33 +24,34 @@ import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
-import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import type { AssistantMessage, Project, ToolPart, UserMessage } from "@/types"
-import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import type { Project } from "@/types"
+import { getFilename } from "@opencode-ai/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
-import { normalize } from "@opencode-ai/session-ui/session-diff"
-import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useLanguage } from "@/context/language"
-import { useServerSync } from "@/context/server-sync"
-import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
+import { useWorkspaceLocation } from "@/context/location"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
-import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
+import { MessageComment, Timeline, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { containsDirectory, isWorkspaceDirectory, workspaceDirectories } from "@/utils/workspace"
 import { SessionWorkspaceMenu } from "@/components/session-workspace-menu"
 import { getProjectAvatarVariant } from "@/context/layout"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+import {
+  CurrentAssistantContent,
+  CurrentContextToolGroup,
+  CurrentUserMessage,
+  currentPartDefaultOpen,
+} from "./current-message"
 
-const emptyTools: ToolPart[] = []
-const emptyAssistantMessages: AssistantMessage[] = []
+const emptyAssistantMessages: SessionMessageAssistant[] = []
 
 type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "TurnGap" }>
 type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
@@ -108,89 +99,6 @@ function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSu
       <Show when={!props.showReasoningSummaries}>
         <TextReveal text={props.reasoningHeading} class="session-turn-thinking-heading" travel={25} duration={700} />
       </Show>
-    </div>
-  )
-}
-
-function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[]; action?: JSX.Element }) {
-  const language = useLanguage()
-  const maxFiles = 10
-  const [state, setState] = createStore({
-    showAll: false,
-    expanded: [] as string[],
-  })
-  const showAll = () => state.showAll
-  const expanded = () => state.expanded
-  const overflow = createMemo(() => Math.max(0, props.diffs.length - maxFiles))
-  const visible = createMemo(() => (showAll() ? props.diffs : props.diffs.slice(0, maxFiles)))
-
-  return (
-    <div
-      data-slot="session-turn-diffs"
-      data-component="session-turn-diffs-group"
-      data-show-all={showAll() || undefined}
-    >
-      <div data-slot="session-turn-diffs-header">
-        <span data-slot="session-turn-diffs-label">
-          {language.plural("ui.sessionTurn.diffs.changed", props.diffs.length)}
-        </span>
-        <DiffChanges changes={props.diffs} />
-        <Show when={overflow() > 0}>
-          <span data-slot="session-turn-diffs-toggle" onClick={() => setState("showAll", !showAll())}>
-            {showAll() ? language.t("ui.sessionTurn.diffs.showLess") : language.t("ui.sessionTurn.diffs.showAll")}
-          </span>
-        </Show>
-        {props.action}
-      </div>
-      <div data-component="session-turn-diffs-content">
-        <Accordion
-          multiple
-          style={{ "--sticky-accordion-offset": "44px" }}
-          value={expanded()}
-          onChange={(value) => setState("expanded", Array.isArray(value) ? value : value ? [value] : [])}
-        >
-          <For each={visible()}>
-            {(diff) => {
-              const opened = createMemo(() => expanded().includes(diff.file))
-
-              return (
-                <Accordion.Item value={diff.file}>
-                  <StickyAccordionHeader>
-                    <Accordion.Trigger>
-                      <div data-slot="session-turn-diff-trigger">
-                        <span data-slot="session-turn-diff-path">
-                          <Show when={diff.file.includes("/")}>
-                            <span data-slot="session-turn-diff-directory">{`\u202A${getDirectory(diff.file)}\u202C`}</span>
-                          </Show>
-                          <span data-slot="session-turn-diff-filename">{getFilename(diff.file)}</span>
-                        </span>
-                        <div data-slot="session-turn-diff-meta">
-                          <span data-slot="session-turn-diff-changes">
-                            <DiffChanges changes={diff} />
-                          </span>
-                          <span data-slot="session-turn-diff-chevron">
-                            <Icon name="chevron-down" size="small" />
-                          </span>
-                        </div>
-                      </div>
-                    </Accordion.Trigger>
-                  </StickyAccordionHeader>
-                  <Accordion.Content>
-                    <Show when={opened()}>
-                      <TimelineDiffView diff={diff} />
-                    </Show>
-                  </Accordion.Content>
-                </Accordion.Item>
-              )
-            }}
-          </For>
-        </Accordion>
-        <Show when={!showAll() && overflow() > 0}>
-          <div data-slot="session-turn-diffs-more" onClick={() => setState("showAll", true)}>
-            {language.t("ui.sessionTurn.diffs.more", { count: String(overflow()) })}
-          </div>
-        </Show>
-      </div>
     </div>
   )
 }
@@ -354,17 +262,6 @@ function SessionSummaryPanel(props: {
   )
 }
 
-function TimelineDiffView(props: { diff: SummaryDiff }) {
-  const fileComponent = useFileComponent()
-  const view = normalize(props.diff)
-
-  return (
-    <div data-slot="session-turn-diff-view" data-scrollable>
-      <Dynamic component={fileComponent} mode="diff" virtualize={false} fileDiff={view.fileDiff} />
-    </div>
-  )
-}
-
 type MessageTimelineProps = {
   session: TimelineSessionSource
   actions?: UserActions
@@ -381,7 +278,7 @@ type MessageTimelineProps = {
   shouldAnchorBottom: boolean
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
-  userMessages: UserMessage[]
+  userMessages: SessionMessageUser[]
   diffs: Accessor<{ additions: number; deletions: number }[] | undefined>
   onReview: () => void
   workspaceMoveEligible: boolean
@@ -393,7 +290,7 @@ type MessageTimelineProps = {
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
-  const controller = createTimelineController({ session: props.session, userMessages: () => props.userMessages })
+  const controller = createTimelineController({ session: props.session })
   return (
     <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
   )
@@ -408,9 +305,8 @@ function MessageTimelineView(
 ) {
   let touchGesture: number | undefined
   const language = useLanguage()
-  const serverSync = useServerSync()
-  const sdk = useSDK()
-  const sync = useSync()
+  const data = useData()
+  const sdk = useWorkspaceLocation()
   const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
   const hasScrollGesture = createMemo(() => props.hasScrollGesture)
   const ownerSessionKey = props.data.sessionKey()
@@ -427,11 +323,22 @@ function MessageTimelineView(
   const parentID = props.data.parentID
   const parentTitle = props.data.parentTitle
   const childTitle = props.data.childTitle
-  const getMsgParts = props.data.parts
-  const getMsgPart = props.data.part
   const projection = props.data.projection
   const sessionDirectory = createMemo(() => props.session.data.info()?.location.directory ?? sdk().directory)
-  const workspaceSession = createMemo(() => isWorkspaceDirectory(sync().project, sessionDirectory()))
+  const project = createMemo(() => {
+    const projectID = props.session.data.info()?.projectID
+    const value = projectID
+      ? data.project.get(projectID)
+      : data.project.list().find((item) => containsDirectory(item.canonical, sessionDirectory()))
+    if (!value) return
+    return { ...value, worktree: value.canonical, worktrees: [] }
+  })
+  const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
+  createEffect(() => {
+    const directory = project()?.worktree
+    if (!directory) return
+    void data.location.vcs.sync({ directory }).catch(() => undefined)
+  })
   const [workspaceSuggestionDismissed, setWorkspaceSuggestionDismissed] = createSignal(false)
   const [summaryOpen, setSummaryOpen] = createSignal(false)
   const setSummary = (open: boolean) => {
@@ -834,7 +741,7 @@ function MessageTimelineView(
 
   const turnDurationMs = (userMessageID: string) => {
     const message = messageByID().get(userMessageID)
-    if (!message || message.role !== "user") return
+    if (message?.type !== "user") return
     const end = (assistantMessagesByParent().get(userMessageID) ?? emptyAssistantMessages).reduce<number | undefined>(
       (max, item) => {
         const completed = item.time.completed
@@ -857,23 +764,27 @@ function MessageTimelineView(
       const message = messages[i]
       if (!message) continue
 
-      const parts = getMsgParts(message.id)
-      for (let j = parts.length - 1; j >= 0; j--) {
-        const part = parts[j]
-        if (!part || part.type !== "text" || !part.text?.trim()) continue
-        return part.id
+      const contents = Timeline.contentEntries(message)
+      for (let j = contents.length - 1; j >= 0; j--) {
+        const entry = contents[j]
+        if (entry?.content.type !== "text" || !entry.content.text.trim()) continue
+        return entry.id
       }
     }
   }
 
   const renderAssistantPartGroup = (row: Accessor<TimelineRowMap["AssistantPart"]>, onSizeChange?: () => void) => {
     if (row().group.type === "context") {
-      const parts = createMemo(() => {
+      const tools = createMemo(() => {
         const group = row().group
-        if (group.type !== "context") return emptyTools
-        return group.refs
-          .map((ref) => getMsgPart(ref.messageID, ref.partID))
-          .filter((part): part is ToolPart => part?.type === "tool")
+        if (group.type !== "context") return []
+        return group.refs.flatMap((ref) => {
+          const message = messageByID().get(ref.messageID)
+          const content = Timeline.resolveContent(message, ref.partID)
+          return message?.type === "assistant" && content?.type === "tool"
+            ? [{ message, content, contentID: ref.partID }]
+            : []
+        })
       })
       const contextOpenKey = () => `context:${row().group.key}`
       const open = createMemo(() => {
@@ -881,8 +792,9 @@ function MessageTimelineView(
       })
 
       return (
-        <ContextToolGroup
-          parts={parts()}
+        <CurrentContextToolGroup
+          sessionID={sessionID()!}
+          tools={tools()}
           open={open()}
           onOpenChange={(value) => setToolOpen(contextOpenKey(), value)}
           busy={
@@ -898,33 +810,52 @@ function MessageTimelineView(
       if (group.type !== "part") return
       return messageByID().get(group.ref.messageID)
     })
-    const part = createMemo(() => {
+    const contentID = createMemo(() => {
       const group = row().group
       if (group.type !== "part") return
-      return getMsgPart(group.ref.messageID, group.ref.partID)
+      return group.ref.partID
+    })
+    const content = createMemo(() => {
+      const current = message()
+      const id = contentID()
+      if (current?.type !== "assistant" || !id) return
+      return Timeline.resolveContent(current, id)
     })
     const defaultOpen = createMemo(() => {
-      const item = part()
+      const group = row().group
+      const current = message()
+      if (group.type !== "part" || current?.type !== "assistant") return
+      const item = content()
       if (!item) return
-      return partDefaultOpen(item, props.data.shellToolPartsExpanded(), props.data.editToolPartsExpanded())
+      return currentPartDefaultOpen(
+        sessionID()!,
+        current,
+        item,
+        group.ref.partID,
+        props.data.shellToolPartsExpanded(),
+        props.data.editToolPartsExpanded(),
+      )
     })
+    const id = contentID()
+    if (!id) return
 
     return (
-      <Show when={message()}>
+      <Show when={message()?.type === "assistant" ? (message() as SessionMessageAssistant) : undefined}>
         {(message) => (
-          <Show when={part()}>
-            {(part) => (
-              <MessagePart
-                part={part()}
+          <Show when={content()}>
+            {(content) => (
+              <CurrentAssistantContent
+                sessionID={sessionID()!}
+                parentID={row().userMessageID}
                 message={message()}
+                content={content()}
+                contentID={id}
                 showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
                 turnDurationMs={turnDurationMs(row().userMessageID)}
                 useV2Actions
                 defaultOpen={defaultOpen()}
-                toolOpen={toolOpen[part().id] ?? defaultOpen()}
-                onToolOpenChange={(open) => setToolOpen(part().id, open)}
-                deferToolContent
-                virtualizeDiff={false}
+                toolOpen={toolOpen[row().group.key] ?? defaultOpen()}
+                onToolOpenChange={(open) => setToolOpen(row().group.key, open)}
                 onContentRendered={onSizeChange}
               />
             )}
@@ -967,25 +898,52 @@ function MessageTimelineView(
         const userMessageRow = row as Accessor<TimelineRowByTag<"UserMessage">>
         const message = createMemo(() => {
           const m = messageByID().get(userMessageRow().userMessageID)
-          if (m?.role === "user") return m
+          if (m?.type === "user") return m
         })
         const messageComments = createMemo(() => {
-          return getMsgParts(userMessageRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? [])
+          const current = message()
+          return current ? MessageComment.fromMessage(current) : []
         })
+        const context = createMemo(() => projection.userContextByID().get(userMessageRow().userMessageID))
         return (
           <TimelineRowFrame row={userMessageRow()}>
             <Show when={message()}>
               {(message) => (
                 <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
                   <div data-slot="session-turn-message-content" aria-live="off">
-                    <Message
+                    <CurrentUserMessage
+                      sessionID={sessionID()!}
                       message={message()}
-                      parts={getMsgParts(userMessageRow().userMessageID)}
+                      agent={context()?.agent ?? ""}
+                      model={context()?.model ?? { id: "", providerID: "" }}
                       actions={props.actions}
                       useV2Actions
                       comments={messageComments()}
                     />
                   </div>
+                </div>
+              )}
+            </Show>
+          </TimelineRowFrame>
+        )
+      }
+      case "Shell": {
+        const shellRow = row as Accessor<TimelineRowByTag<"Shell">>
+        const message = createMemo(() => {
+          const current = sessionMessageByID().get(shellRow().messageID)
+          return current?.type === "shell" ? current : undefined
+        })
+        return (
+          <TimelineRowFrame row={shellRow()}>
+            <Show when={message()}>
+              {(message) => (
+                <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
+                  <SessionShellMessage
+                    message={message()}
+                    defaultOpen={props.data.shellToolPartsExpanded()}
+                    open={toolOpen[message().id]}
+                    onOpenChange={(open) => setToolOpen(message().id, open)}
+                  />
                 </div>
               )}
             </Show>
@@ -1020,11 +978,7 @@ function MessageTimelineView(
           <TimelineRowFrame row={turnDividerRow()}>
             <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <div data-slot="session-turn-compaction">
-                <MessageDivider
-                  label={language.t(
-                    turnDividerRow().label === "compaction" ? "ui.messagePart.compaction" : "ui.message.interrupted",
-                  )}
-                />
+                <MessageDivider label={language.t("ui.message.interrupted")} />
               </div>
             </div>
           </TimelineRowFrame>
@@ -1060,43 +1014,17 @@ function MessageTimelineView(
       }
       case "Retry": {
         const retryRow = row as Accessor<TimelineRowByTag<"Retry">>
+        const status = createMemo(() => {
+          const retry = (assistantMessagesByParent().get(retryRow().userMessageID) ?? emptyAssistantMessages).at(
+            -1,
+          )?.retry
+          if (!retry) return sessionStatus()
+          return { type: "retry" as const, attempt: retry.attempt, message: retry.error.message, next: retry.at }
+        })
         return (
           <TimelineRowFrame row={retryRow()}>
             <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
-              <SessionRetry status={sessionStatus()} show={activeMessageID() === retryRow().userMessageID} />
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "DiffSummary": {
-        const diffSummaryRow = row as Accessor<TimelineRowByTag<"DiffSummary">>
-        const canMove = () =>
-          diffSummaryRow().userMessageID === props.userMessages.at(-1)?.id &&
-          !workspaceSession() &&
-          props.workspaceMoveEligible &&
-          sync().project?.vcs === "git" &&
-          sessionStatus().type === "idle"
-        return (
-          <TimelineRowFrame row={diffSummaryRow()}>
-            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
-              <TimelineDiffSummaryRow
-                diffs={diffSummaryRow().diffs}
-                action={
-                  <Show when={canMove() && sync().project}>
-                    {(project) => (
-                      <WorkspaceMoveAction
-                        variant="inline"
-                        eligible={props.workspaceMoveEligible}
-                        sessionID={sessionID()!}
-                        project={project()}
-                        directory={sessionDirectory()}
-                        dismissed={workspaceSuggestionDismissed()}
-                        onDismiss={() => setWorkspaceSuggestionDismissed(true)}
-                      />
-                    )}
-                  </Show>
-                }
-              />
+              <SessionRetry status={status()} show={activeMessageID() === retryRow().userMessageID} />
             </div>
           </TimelineRowFrame>
         )
@@ -1129,10 +1057,10 @@ function MessageTimelineView(
     const tool = () => {
       const value = row()
       if (value._tag !== "AssistantPart" || value.group.type !== "part") return
-      const part = getMsgPart(value.group.ref.messageID, value.group.ref.partID)
-      if (part?.type === "tool") return part
+      const content = Timeline.resolveContent(messageByID().get(value.group.ref.messageID), value.group.ref.partID)
+      if (content?.type === "tool") return content
     }
-    const asyncFile = () => ["edit", "write", "apply_patch"].includes(tool()?.tool ?? "")
+    const asyncFile = () => ["edit", "write", "apply_patch"].includes(tool()?.name ?? "")
     const [ready, setReady] = createSignal(initialItem.size <= timelineFallbackItemSize || !asyncFile())
     let contentMeasureFrame: number | undefined
 
@@ -1331,7 +1259,7 @@ function MessageTimelineView(
                 {(id) => (
                   <div class="shrink-0 flex items-center gap-2">
                     <SessionContextUsage placement="bottom" />
-                    <Show when={!parentID() && sync().project}>
+                    <Show when={!parentID() && project()}>
                       {(project) => (
                         <KobaltePopover
                           open={summaryOpen()}
@@ -1354,8 +1282,8 @@ function MessageTimelineView(
                                 project={project()}
                                 directory={sessionDirectory()}
                                 local={!workspaceSession()}
-                                branch={sync().data.vcs?.branch}
-                                baseBranch={serverSync.child(project().worktree)[0].vcs?.branch}
+                                branch={data.location.vcs.info({ directory: sdk().directory })?.branch.current}
+                                baseBranch={data.location.vcs.info({ directory: project().worktree })?.branch.current}
                                 diffs={sessionDiffs()}
                                 sessionID={id}
                                 moveEligible={props.workspaceMoveEligible}

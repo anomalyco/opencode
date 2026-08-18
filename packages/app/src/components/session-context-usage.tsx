@@ -7,11 +7,10 @@ import { createMediaQuery } from "@solid-primitives/media"
 
 import { useFile } from "@/context/file"
 import { useLayout } from "@/context/layout"
-import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
-import { useSDK } from "@/context/sdk"
-import { getSessionContext } from "@/components/session/session-context-metrics"
+import { useWorkspaceLocation } from "@/context/location"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 
@@ -40,11 +39,11 @@ function openSessionContext(args: {
 }
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
-  const sync = useSync()
+  const data = useData()
   const file = useFile()
   const layout = useLayout()
   const language = useLanguage()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const providers = useProviders(() => sdk().directory)
   const { params, tabs, view } = useSessionLayout()
   const isDesktop = createMediaQuery("(min-width: 768px)")
@@ -56,8 +55,8 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
     fileBrowser: () => isDesktop() && !!params.id,
   })
-  const messages = createMemo(() => (params.id ? (sync().data.message[params.id] ?? []) : []))
-  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
+  const messages = createMemo(() => (params.id ? data.session.message.list(params.id) : []))
+  const info = createMemo(() => (params.id ? data.session.get(params.id) : undefined))
 
   const usd = createMemo(
     () =>
@@ -67,7 +66,21 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       }),
   )
 
-  const context = createMemo(() => getSessionContext(messages(), [...providers.all().values()]))
+  const context = createMemo(() => {
+    const message = messages().findLast((item) => item.type === "assistant" && !!item.tokens)
+    if (message?.type !== "assistant" || !message.tokens) return
+    const model = providers.all().get(message.model.providerID)?.models[message.model.id]
+    const total =
+      message.tokens.input +
+      message.tokens.output +
+      message.tokens.reasoning +
+      message.tokens.cache.read +
+      message.tokens.cache.write
+    return {
+      total,
+      usage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+    }
+  })
   const cost = createMemo(() => {
     return usd().format(info()?.cost ?? 0)
   })

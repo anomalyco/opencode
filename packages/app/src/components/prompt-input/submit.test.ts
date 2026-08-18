@@ -11,18 +11,6 @@ type SessionCreateInput = {
   model?: { id: string; providerID: string; variant?: string }
   location?: { directory: string }
 }
-const admitted: Array<{
-  directory?: string
-  sessionID: string
-  messageID: string
-  text: string
-  displayText: string
-  agent: string
-  model: { providerID: string; modelID: string; variant?: string }
-  comments: unknown[]
-}> = []
-const confirmed: unknown[] = []
-const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const sentShell: Array<{ sessionID: string; id?: string; command: string }> = []
 const sentShellDirectories: string[] = []
 const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
@@ -36,12 +24,10 @@ const switchedModels: Array<{
 }> = []
 const sessionRequestOrder: string[] = []
 const updatedDrafts: Array<{ draftID: string; worktree?: string }> = []
-const syncedServers: string[] = []
-const admittedServers: string[] = []
 const promptCaptures: Array<{ scope?: unknown; target?: unknown }> = []
+const navigations: string[] = []
 let serverSessionSyncs = 0
 let restoredPrompts = 0
-let clearEchoCalls = 0
 
 let params: { id?: string } = {}
 let search: { draftId?: string } = {}
@@ -52,15 +38,12 @@ let createWorktreeGate: Promise<void> | undefined
 let worktreeFailure: Error | undefined
 let locationFailure: Error | undefined
 let promptFailure: Error | undefined
-let clearEchoResult = true
 let worktreeCreates = 0
 let activeSDK = "server-a"
-let activeServerSync = "server-a"
-let activeDirectorySync = "server-a"
+let activeServer = "server-a"
 let commands: Array<{ name: string }> = []
 let worktreeDirectory = "/repo/new-0"
 let worktreeID = 0
-const draftServers: Record<string, string> = {}
 const sessionDirectories: Record<string, string> = {}
 
 let promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
@@ -178,7 +161,7 @@ beforeAll(async () => {
   const rootClient = clientFor("/repo/main")
 
   mock.module("@solidjs/router", () => ({
-    useNavigate: () => () => undefined,
+    useNavigate: () => (href: string) => navigations.push(href),
     useParams: () => params,
     useLocation: () => ({}),
     useSearchParams: () => [search, () => undefined],
@@ -190,8 +173,11 @@ beforeAll(async () => {
     showToast: () => 0,
   }))
 
-  mock.module("@opencode-ai/core/util/encode", () => ({
+  mock.module("@opencode-ai/util/encode", () => ({
+    base64Decode: (value: string) => value,
     base64Encode: (value: string) => value,
+    checksum: (value: string) => value,
+    sampledChecksum: (value: string) => value,
   }))
 
   mock.module("@/context/local", () => ({
@@ -213,13 +199,8 @@ beforeAll(async () => {
     return { usePermission: () => ({ currentServerState: () => ({ enableAutoAccept: () => undefined }) }) }
   })
 
-  mock.module("@/context/server", () => ({
-    useServer: () => ({ key: "server-key" }),
-  }))
-
   mock.module("@/context/tabs", () => ({
     useTabs: () => ({
-      draft: (draftID: string) => ({ server: draftServers[draftID] ?? "project-server" }),
       updateDraft: (draftID: string, draft: { worktree?: string }) => {
         updatedDrafts.push({ draftID, ...draft })
       },
@@ -233,83 +214,35 @@ beforeAll(async () => {
     usePrompt: () => prompt,
   }))
 
-  mock.module("@/context/sdk", () => ({
-    useSDK: () => {
+  mock.module("@/context/location", () => ({
+    useWorkspaceLocation: () => {
       return () => ({
-        scope: activeSDK === "server-a" ? ServerScope.local : "server-b",
         directory: activeSDK === "server-a" ? "/repo/main" : "/repo/other",
-        api: rootClient.api,
-        url: "http://localhost:4096",
       })
     },
   }))
 
-  mock.module("@/context/sync", () => ({
-    useSync: () => () => {
-      const server = activeDirectorySync
-      return {
-        data: { command: commands, project: "project" },
-        session: {
-          inbox: {
-            echo: (value: {
-              directory?: string
-              sessionID: string
-              messageID: string
-              text: string
-              displayText: string
-              agent: string
-              model: { providerID: string; modelID: string; variant?: string }
-              comments: unknown[]
-            }) => {
-              admittedServers.push(server)
-              admitted.push(value)
-            },
-            confirm: (value: unknown) => {
-              confirmed.push(value)
-            },
-            clearEcho: () => {
-              clearEchoCalls++
-              return clearEchoResult
-            },
-          },
-        },
-        set: () => undefined,
-        project: { worktree: server === "server-a" ? "/repo/main" : "/repo/other" },
-      }
-    },
+  mock.module("@/context/server-sdk", () => ({
+    useServerSDK: () => ({
+      scope: activeSDK === "server-a" ? ServerScope.local : "server-b",
+      api: rootClient.api,
+    }),
   }))
 
-  mock.module("@/context/server-sync", () => ({
-    useServerSync: () => {
-      const server = activeServerSync
-      return {
-        session: {
-          remember: () => undefined,
-          set: () => undefined,
-          sync: async () => {
-            serverSessionSyncs++
-          },
+  mock.module("@/context/server", () => ({
+    useServer: () => ({ key: activeServer }),
+    useData: () => ({
+      session: {
+        remember: () => undefined,
+        setStatus: () => undefined,
+      },
+      location: {
+        info: () => ({ project: { id: "project", directory: "/repo/main" } }),
+        command: {
+          list: () => commands,
         },
-        child: (directory: string) => {
-          syncedServers.push(server)
-          storedSessions[directory] ??= []
-          return [
-            { session: storedSessions[directory] },
-            (...args: unknown[]) => {
-              if (args[0] !== "session") return
-              const next = args[1]
-              if (typeof next === "function") {
-                storedSessions[directory] = next(storedSessions[directory]) as Array<{ id: string; title?: string }>
-                return
-              }
-              if (Array.isArray(next)) {
-                storedSessions[directory] = next as Array<{ id: string; title?: string }>
-              }
-            },
-          ]
-        },
-      }
-    },
+      },
+    }),
   }))
 
   mock.module("@/context/platform", () => ({
@@ -330,8 +263,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   createdSessions.length = 0
-  admitted.length = 0
-  confirmed.length = 0
   promotedDrafts.length = 0
   updatedDrafts.length = 0
   sentCommands.length = 0
@@ -340,11 +271,9 @@ beforeEach(() => {
   switchedAgents.length = 0
   switchedModels.length = 0
   sessionRequestOrder.length = 0
-  syncedServers.length = 0
-  admittedServers.length = 0
   promptCaptures.length = 0
+  navigations.length = 0
   restoredPrompts = 0
-  clearEchoCalls = 0
   params = {}
   search = {}
   sentShell.length = 0
@@ -352,8 +281,7 @@ beforeEach(() => {
   selected = "/repo/worktree-a"
   variant = undefined
   activeSDK = "server-a"
-  activeServerSync = "server-a"
-  activeDirectorySync = "server-a"
+  activeServer = "server-a"
   commands = []
   promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
   worktreeDirectory = `/repo/new-${++worktreeID}`
@@ -363,11 +291,8 @@ beforeEach(() => {
   worktreeFailure = undefined
   locationFailure = undefined
   promptFailure = undefined
-  clearEchoResult = true
   worktreeCreates = 0
-  for (const key of Object.keys(draftServers)) delete draftServers[key]
   for (const key of Object.keys(sessionDirectories)) delete sessionDirectories[key]
-  for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
 const event = { preventDefault: () => undefined } as unknown as Event
@@ -414,6 +339,7 @@ describe("prompt submit worktree selection", () => {
     expect(worktreeCreates).toBe(1)
     expect(createdSessions).toHaveLength(1)
     expect(sentPrompts).toEqual([worktreeDirectory])
+    expect(navigations).toEqual(["/server/server-a/session/session-1"])
   })
 
   test("stops when the created workspace cannot initialize", async () => {
@@ -429,8 +355,6 @@ describe("prompt submit worktree selection", () => {
 
   test("keeps async submission effects bound to the initiating context", async () => {
     search = { draftId: "draft-1" }
-    draftServers["draft-1"] = "project-server-a"
-    draftServers["draft-2"] = "project-server-b"
     let release = () => {}
     createSessionGate = new Promise<void>((resolve) => {
       release = resolve
@@ -442,18 +366,15 @@ describe("prompt submit worktree selection", () => {
 
     const result = submit.handleSubmit(event)
     activeSDK = "server-b"
-    activeServerSync = "server-b"
-    activeDirectorySync = "server-b"
+    activeServer = "server-b"
     search.draftId = "draft-2"
     release()
     await result
     await settle()
 
     expect(updatedDrafts).toEqual([{ draftID: "draft-1", worktree: undefined }])
-    expect(promotedDrafts).toEqual([{ draftID: "draft-1", server: "project-server-a", sessionId: "session-1" }])
-    expect(syncedServers.every((server) => server === "server-a")).toBe(true)
-    expect(admittedServers).toEqual(["server-a"])
-    expect(promptCaptures.at(-1)?.target).toEqual({ server: "project-server-a", scope: ServerScope.local })
+    expect(promotedDrafts).toEqual([{ draftID: "draft-1", server: "server-a", sessionId: "session-1" }])
+    expect(promptCaptures.at(-1)?.target).toEqual({ server: "server-a", scope: ServerScope.local })
     expect(submitted).toBe(0)
   })
 
@@ -472,15 +393,6 @@ describe("prompt submit worktree selection", () => {
     await submit.handleSubmit(event)
     await Bun.sleep(0)
 
-    expect(admitted).toHaveLength(1)
-    expect(admitted[0]).toMatchObject({
-      sessionID: "session-1",
-      text: "ls",
-      agent: "agent",
-      model: { providerID: "provider", modelID: "model", variant: "high" },
-    })
-    expect(admitted[0]?.messageID).toStartWith("msg_")
-    expect(confirmed).toMatchObject([{ id: admitted[0]?.messageID, sessionID: "session-1" }])
     expect(sentPrompts).toEqual(["/repo/main"])
     expect(switchedAgents).toEqual([{ sessionID: "session-1", agent: "agent" }])
     expect(switchedModels).toEqual([
@@ -495,14 +407,19 @@ describe("prompt submit worktree selection", () => {
       text: "ls",
       files: [],
       agents: [],
+      metadata: {
+        displayText: "ls",
+        comments: [],
+        agent: "agent",
+        model: { providerID: "provider", modelID: "model", variant: "high" },
+      },
     })
     expect((promptInputs[0] as { id?: string }).id).toStartWith("msg_")
   })
 
-  test("keeps a confirmed echo when the prompt response is lost", async () => {
+  test("restores the prompt when sending fails", async () => {
     params = { id: "session-1" }
     promptFailure = new Error("connection lost")
-    clearEchoResult = false
     const submit = makeSubmit({
       info: () => ({ id: "session-1", agent: "agent", model: { id: "model", providerID: "provider" } }),
     })
@@ -510,9 +427,7 @@ describe("prompt submit worktree selection", () => {
     await submit.handleSubmit(event)
     await settle()
 
-    expect(admitted).toHaveLength(1)
-    expect(clearEchoCalls).toBe(1)
-    expect(restoredPrompts).toBe(0)
+    expect(restoredPrompts).toBe(1)
   })
 
   test("submits slash commands through the current session API", async () => {

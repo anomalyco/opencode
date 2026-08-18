@@ -2,7 +2,6 @@ import { createMemo, createResource, onMount, type Accessor } from "solid-js"
 import type { ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { usePermission } from "@/context/permission"
-import { useServerSync } from "@/context/server-sync"
 import {
   monoDefault,
   monoFontFamily,
@@ -34,7 +33,7 @@ export function createPermissionScopeController(
     const s = server()
     const id = sessionID()
     if (!s || !id) return undefined
-    return serverCtx()?.sync.session.lineage.peek(id)?.session.location.directory
+    return serverCtx()?.data.session.get(id)?.location.directory
   })
 
   return {

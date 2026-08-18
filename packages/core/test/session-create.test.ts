@@ -679,13 +679,18 @@ describe("Session.create", () => {
         const created = yield* session.create({
           location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
         })
+        yield* session.environment({ sessionID: created.id, variables: { OPENCODE_SESSION_ENV_TEST: "attached" } })
 
-        yield* session.shell({ sessionID: created.id, command: "echo hello" })
+        const command =
+          process.platform === "win32"
+            ? "[Console]::Out.Write($env:OPENCODE_SESSION_ENV_TEST)"
+            : 'printf %s "$OPENCODE_SESSION_ENV_TEST"'
+        yield* session.shell({ sessionID: created.id, command })
 
         const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
         const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
-        expect(shell).toMatchObject({ type: "shell", command: "echo hello", status: "exited", exit: 0 })
-        expect(shell?.output?.output).toContain("hello")
+        expect(shell).toMatchObject({ type: "shell", command, status: "exited", exit: 0 })
+        expect(shell?.output?.output).toContain("attached")
         expect(shell?.output?.truncated).toBe(false)
         expect(shell?.time.completed).toBeDefined()
       }),

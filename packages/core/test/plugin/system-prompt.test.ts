@@ -48,12 +48,12 @@ describe("SystemPromptPlugin", () => {
 
   test("uses granular IDs with a common prefix", () => {
     expect(SystemPromptPlugin.Plugins.map((plugin) => plugin.id)).toEqual([
-      "opencode.system-prompt.openai",
-      "opencode.system-prompt.google",
-      "opencode.system-prompt.anthropic",
-      "opencode.system-prompt.kimi",
-      "opencode.system-prompt.arcee",
-      "opencode.system-prompt.meta",
+      "opencode.prompt.openai",
+      "opencode.prompt.google",
+      "opencode.prompt.anthropic",
+      "opencode.prompt.kimi",
+      "opencode.prompt.arcee",
+      "opencode.prompt.meta",
     ])
   })
 

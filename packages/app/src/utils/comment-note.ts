@@ -53,6 +53,33 @@ export function readCommentMetadata(value: unknown) {
   } satisfies PromptComment
 }
 
+export function readPromptPresentation(value: unknown) {
+  if (!value || typeof value !== "object") return
+  const displayText = (value as { displayText?: unknown }).displayText
+  const comments = (value as { comments?: unknown }).comments
+  if (typeof displayText !== "string" || !Array.isArray(comments)) return
+  return {
+    displayText,
+    comments: comments.flatMap((item): PromptComment[] => {
+      if (!item || typeof item !== "object") return []
+      const path = (item as { path?: unknown }).path
+      const comment = (item as { comment?: unknown }).comment
+      if (typeof path !== "string" || typeof comment !== "string") return []
+      const preview = (item as { preview?: unknown }).preview
+      const origin = (item as { origin?: unknown }).origin
+      return [
+        {
+          path,
+          comment,
+          selection: selection((item as { selection?: unknown }).selection),
+          preview: typeof preview === "string" ? preview : undefined,
+          origin: origin === "review" || origin === "file" ? origin : undefined,
+        },
+      ]
+    }),
+  }
+}
+
 export function formatCommentNote(input: { path: string; selection?: FileSelection; comment: string }) {
   const start = input.selection ? Math.min(input.selection.startLine, input.selection.endLine) : undefined
   const end = input.selection ? Math.max(input.selection.startLine, input.selection.endLine) : undefined

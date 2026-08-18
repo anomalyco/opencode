@@ -51,7 +51,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const directory = path.join(global.data, DIRECTORY)
 
-    const truncate = Effect.fn("ToolOutput.truncate")(function* (result: Result) {
+    const truncate = Effect.fnUntraced(function* (result: Result) {
       if (result.metadata?.truncated !== undefined) return result
       const content =
         typeof result.content === "string" ? [{ type: "text" as const, text: result.content }] : (result.content ?? [])

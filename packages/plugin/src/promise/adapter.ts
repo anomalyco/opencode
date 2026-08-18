@@ -67,6 +67,7 @@ function compileEndpoint(endpoint: HttpApiEndpoint.Top) {
 export function fromPromise(plugin: Plugin) {
   return define({
     id: plugin.id,
+    tui: plugin.tui,
     effect: (host) =>
       Effect.gen(function* () {
         const [{ ClientApi }, { OpenCodeEvent }] = yield* Effect.promise(() =>
@@ -75,6 +76,7 @@ export function fromPromise(plugin: Plugin) {
         const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
         const CommandEndpoints = ClientApi.groups["server.command"].endpoints
         const IntegrationEndpoints = ClientApi.groups["server.integration"].endpoints
+        const McpEndpoints = ClientApi.groups["server.mcp"].endpoints
         const ModelEndpoints = ClientApi.groups["server.model"].endpoints
         const PluginEndpoints = ClientApi.groups["server.plugin"].endpoints
         const ProviderEndpoints = ClientApi.groups["server.provider"].endpoints
@@ -234,6 +236,15 @@ export function fromPromise(plugin: Plugin) {
               active: (id) => Effect.runPromiseWith(context)(host.integration.connection.active(id)),
               resolve: (connection) => Effect.runPromiseWith(context)(host.integration.connection.resolve(connection)),
             },
+          },
+          mcp: {
+            list: adaptApiMethod(McpEndpoints["mcp.list"], host.mcp.list),
+            add: adaptApiMethod(McpEndpoints["mcp.add"], host.mcp.add),
+            remove: adaptApiMethod(McpEndpoints["mcp.remove"], host.mcp.remove),
+            connect: adaptApiMethod(McpEndpoints["mcp.connect"], host.mcp.connect),
+            disconnect: adaptApiMethod(McpEndpoints["mcp.disconnect"], host.mcp.disconnect),
+            transform: transform(host.mcp),
+            reload: () => run(host.mcp.reload()),
           },
           plugin: {
             list: adaptApiMethod(PluginEndpoints["plugin.list"], host.plugin.list),

@@ -43,7 +43,7 @@ export const Manifest = Schema.Struct({
 })
 export interface Manifest extends Schema.Schema.Type<typeof Manifest> {}
 
-export class ResolveError extends Schema.TaggedErrorClass<ResolveError>()("DriveManifest.ResolveError", {
+export class ResolveError extends Schema.TaggedError<ResolveError>()("DriveManifest.ResolveError", {
   reason: Schema.Literals(["config", "not-found", "read", "decode"]),
   path: Schema.optionalKey(Schema.String),
   message: Schema.String,

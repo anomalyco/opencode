@@ -41,13 +41,8 @@ import type { Config } from "@opencode-ai/schema/config"
 export type Endpoint0_0Output = { readonly healthy: true; readonly version: string; readonly pid: number }
 export type HealthGetOperation<E = never> = () => Effect.Effect<Endpoint0_0Output, E>
 
-export type Endpoint0_1Input = { readonly instanceID: string }
-export type Endpoint0_1Output = { readonly accepted: boolean }
-export type HealthStopOperation<E = never> = (input: Endpoint0_1Input) => Effect.Effect<Endpoint0_1Output, E>
-
 export interface HealthApi<E = never> {
   readonly get: HealthGetOperation<E>
-  readonly stop: HealthStopOperation<E>
 }
 
 export type Endpoint1_0Output = { readonly urls: ReadonlyArray<string> }
@@ -914,6 +909,10 @@ export type Endpoint5_34Input = { readonly sessionID: Session.ID; readonly messa
 export type Endpoint5_34Output = SessionMessage.Info
 export type SessionMessageOperation<E = never> = (input: Endpoint5_34Input) => Effect.Effect<Endpoint5_34Output, E>
 
+export type Endpoint5_35Input = { readonly sessionID: Session.ID; readonly variables: { readonly [x: string]: string } }
+export type Endpoint5_35Output = void
+export type SessionEnvironmentOperation<E = never> = (input: Endpoint5_35Input) => Effect.Effect<Endpoint5_35Output, E>
+
 export interface SessionApi<E = never> {
   readonly list: SessionListOperation<E>
   readonly create: SessionCreateOperation<E>
@@ -958,6 +957,7 @@ export interface SessionApi<E = never> {
   readonly interrupt: SessionInterruptOperation<E>
   readonly background: SessionBackgroundOperation<E>
   readonly message: SessionMessageOperation<E>
+  readonly environment: SessionEnvironmentOperation<E>
 }
 
 export type Endpoint6_0Input = {
