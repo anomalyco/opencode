@@ -43,7 +43,7 @@ import { webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "../../context/sdk"
 import { useEditorContext } from "../../context/editor"
-import { openEditor } from "../../editor"
+import { openEditor, openFileAtLocation } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
@@ -2149,8 +2149,21 @@ function Write(props: ToolProps) {
 
 function Glob(props: ToolProps) {
   const pathFormatter = usePathFormatter()
+  const paths = useTuiPaths()
+  const targetPath = createMemo(() => stringValue(props.input.path))
   return (
-    <InlineTool icon="✱" pending="Finding files..." complete={stringValue(props.input.pattern)} part={props.part}>
+    <InlineTool
+      icon="✱"
+      pending="Finding files..."
+      complete={stringValue(props.input.pattern)}
+      part={props.part}
+      onClick={() => {
+        const target = targetPath()
+        if (!target) return
+        const filePath = path.isAbsolute(target) ? target : path.resolve(paths.cwd, target)
+        openFileAtLocation({ filePath, cwd: paths.cwd })
+      }}
+    >
       Glob "{stringValue(props.input.pattern)}"{" "}
       <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
       <Show when={numberValue(props.metadata.count)}>
@@ -2163,6 +2176,7 @@ function Glob(props: ToolProps) {
 function Read(props: ToolProps) {
   const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
+  const paths = useTuiPaths()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const loaded = createMemo(() => {
     if (props.part.state.status !== "completed") return []
@@ -2179,13 +2193,27 @@ function Read(props: ToolProps) {
         complete={stringValue(props.input.filePath)}
         spinner={isRunning()}
         part={props.part}
+        onClick={() => {
+          const target = stringValue(props.input.filePath)
+          if (!target) return
+          const filePath = path.isAbsolute(target) ? target : path.resolve(paths.cwd, target)
+          const line = numberValue(props.input.offset)
+          openFileAtLocation({ filePath, line, cwd: paths.cwd })
+        }}
       >
         Read {pathFormatter.format(stringValue(props.input.filePath))} {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.textMuted}>
+            <text
+              paddingLeft={3}
+              fg={theme.textMuted}
+              onMouseUp={() => {
+                const filePath = path.isAbsolute(filepath) ? filepath : path.resolve(paths.cwd, filepath)
+                openFileAtLocation({ filePath, cwd: paths.cwd })
+              }}
+            >
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>
           </box>
@@ -2197,8 +2225,21 @@ function Read(props: ToolProps) {
 
 function Grep(props: ToolProps) {
   const pathFormatter = usePathFormatter()
+  const paths = useTuiPaths()
+  const targetPath = createMemo(() => stringValue(props.input.path))
   return (
-    <InlineTool icon="✱" pending="Searching content..." complete={stringValue(props.input.pattern)} part={props.part}>
+    <InlineTool
+      icon="✱"
+      pending="Searching content..."
+      complete={stringValue(props.input.pattern)}
+      part={props.part}
+      onClick={() => {
+        const target = targetPath()
+        if (!target) return
+        const filePath = path.isAbsolute(target) ? target : path.resolve(paths.cwd, target)
+        openFileAtLocation({ filePath, cwd: paths.cwd })
+      }}
+    >
       Grep "{stringValue(props.input.pattern)}"{" "}
       <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
       <Show when={numberValue(props.metadata.matches)}>

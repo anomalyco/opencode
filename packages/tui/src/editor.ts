@@ -53,6 +53,46 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
   }
 }
 
+const GOTO_CAPABLE_BINARIES = new Set(["code", "code-insiders", "cursor", "codium", "windsurf"])
+
+/**
+ * Opens a file (optionally at a specific line/column) using the user's
+ * configured editor (`$VISUAL`/`$EDITOR`, falling back to `code`).
+ *
+ * This spawns the editor detached and does not wait for it to exit, so it is
+ * safe to call from a click handler without blocking or suspending the TUI
+ * renderer (unlike `openEditor`, which is used for the blocking "compose in
+ * external editor" flow).
+ */
+export function openFileAtLocation(input: { filePath: string; line?: number; column?: number; cwd?: string }) {
+  const editorEnv = process.env.VISUAL || process.env.EDITOR
+  const parts = editorEnv ? editorEnv.trim().split(/\s+/) : ["code"]
+  const bin = parts[0]!
+  const baseArgs = parts.slice(1)
+  const binName = path.basename(bin).replace(/\.(cmd|exe)$/i, "")
+
+  const useGoto = input.line !== undefined && GOTO_CAPABLE_BINARIES.has(binName)
+  const target = useGoto
+    ? `${input.filePath}:${input.line}${input.column ? `:${input.column}` : ""}`
+    : input.filePath
+
+  const args = useGoto ? [...baseArgs, "--goto", target] : [...baseArgs, target]
+
+  try {
+    const child = spawn(bin, args, {
+      cwd: input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd(),
+      stdio: "ignore",
+      detached: true,
+      shell: process.platform === "win32",
+    })
+    child.on("error", () => {})
+    child.unref()
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function discoverEditorConnection(directory: string) {
   const root = path.join(os.homedir(), ".claude", "ide")
   const contains = (parent: string) => {
