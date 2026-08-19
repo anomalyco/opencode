@@ -79,6 +79,7 @@ type Registration = {
 type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "options"> & { enabled: boolean }
 
 const PluginContext = createContext<Value>()
+let sourceVersion = Date.now()
 
 export function combineMarkdownRenderers(
   sources: ReadonlyArray<Readonly<Record<string, MarkdownCodeBlockRenderer>>>,
@@ -116,7 +117,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     const digest = Hash.sha256(await readFile(new URL(entrypoint)))
     const previous = sourceVersions.get(entrypoint)
     if (previous?.digest === digest) return previous.generation
-    const generation = previous ? previous.generation + 1 : Date.now()
+    const generation = ++sourceVersion
     sourceVersions.set(entrypoint, { digest, generation })
     return generation
   }
@@ -127,15 +128,18 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       ),
     ),
   )
+  const clearContributions = (id: string) => {
+    setStore("registrations", id, "routes", reconcileStore({}))
+    setStore("registrations", id, "slots", reconcileStore({}))
+    setStore("registrations", id, "markdown", reconcileStore({}))
+  }
 
   const activate = async (id: string) => {
     const item = store.registrations[id]
     if (!item) return false
     await deactivate(id)
     batch(() => {
-      setStore("registrations", id, "routes", reconcileStore({}))
-      setStore("registrations", id, "slots", reconcileStore({}))
-      setStore("registrations", id, "markdown", reconcileStore({}))
+      clearContributions(id)
       setStore("registrations", id, "cleanups", [])
     })
     const owned: Dispose[] = []
@@ -163,19 +167,17 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       },
     })
     const cleanup = await setup(item.plugin, context, owned).catch((error) => {
-      setStore("registrations", id, "routes", reconcileStore({}))
-      setStore("registrations", id, "slots", reconcileStore({}))
-      setStore("registrations", id, "markdown", reconcileStore({}))
+      clearContributions(id)
       if (item.target)
         setupFailures.set(item.target, {
           version: item.version,
-          options: item.options ? structuredClone(unwrap(item.options)) : undefined,
+          options: snapshotOptions(item.options),
           error: errorMessage(error),
         })
       throw error
     })
     if (cleanup) owned.push(async () => cleanup())
-    if (item.target && setupFailures.get(item.target)?.version === item.version) setupFailures.delete(item.target)
+    if (item.target && sameGeneration(setupFailures.get(item.target), item)) setupFailures.delete(item.target)
     batch(() => {
       setStore("registrations", id, "cleanups", owned)
       setStore("registrations", id, "active", true)
@@ -199,9 +201,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     await disposeAll(cleanups).finally(() =>
       batch(() => {
         if (store.registrations[id]) {
-          setStore("registrations", id, "routes", reconcileStore({}))
-          setStore("registrations", id, "slots", reconcileStore({}))
-          setStore("registrations", id, "markdown", reconcileStore({}))
+          clearContributions(id)
         }
         setStore("states", (items) =>
           items.map((state) =>
@@ -318,7 +318,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         continue
       }
       const setupFailure = setupFailures.get(target)
-      if (setupFailure?.version === resolved.version && sameOptions(setupFailure.options, options) && previous) {
+      if (setupFailure && sameGeneration(setupFailure, { version: resolved.version, options }) && previous) {
         failures.push({
           target,
           id: previous.plugin.id,
@@ -360,11 +360,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
           // enabled derives from config directives alone, so config wins over
           // manual dialog toggles on every reconcile — the same semantics
           // config saves had before hot reload existed, just more frequent.
-          return (
-            registration.version !== item.version ||
-            !sameOptions(registration.options, item.options) ||
-            registration.active !== item.enabled
-          )
+          return !sameGeneration(registration, item) || registration.active !== item.enabled
         })
 
     // Swap: cleanup failures surface as a toast, never propagate, so one
@@ -373,8 +369,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     for (const id of changed) {
       const item = desired.get(id)!
       const registration = store.registrations[id]
-      const replaced =
-        !registration || registration.version !== item.version || !sameOptions(registration.options, item.options)
+      const replaced = !registration || !sameGeneration(registration, item)
       // Snapshot the running version before it is overwritten: an import
       // failure keeps last-good in the resolve phase, and a setup failure
       // must not cost the previous version either.
@@ -603,7 +598,7 @@ function toRegistration(item: Desired): Registration {
     source: item.source,
     target: item.target,
     version: item.version,
-    options: item.options,
+    options: snapshotOptions(item.options),
     active: false,
     routes: {},
     slots: {},
@@ -625,6 +620,17 @@ function toDesired(item: Registration): Desired {
 
 function sameOptions(a: Registration["options"], b: Registration["options"]) {
   return isDeepEqual(a ?? null, b ?? null)
+}
+
+function sameGeneration(
+  a: Pick<Registration, "version" | "options"> | undefined,
+  b: Pick<Registration, "version" | "options">,
+) {
+  return a?.version === b.version && sameOptions(a.options, b.options)
+}
+
+function snapshotOptions(options: Registration["options"]) {
+  return options ? structuredClone(unwrap(options)) : undefined
 }
 
 async function resolveLocal(url: URL) {
