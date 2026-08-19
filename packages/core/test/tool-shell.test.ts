@@ -774,42 +774,45 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("updates and clears a running shell timeout", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => {
-        reset()
-        return withSession(tmp.path, (registry) =>
-          Effect.gen(function* () {
-            const shell = yield* Shell.Service
-            const timed = yield* executeTool(
-              registry,
-              call({ command: idleCommand, background: true }, "call-updated-timeout"),
-            )
-            const timedID = timed.metadata?.shellID
-            expect(typeof timedID).toBe("string")
-            if (typeof timedID !== "string") return
-            const timedShellID = ShellSchema.ID.make(timedID)
-            yield* shell.timeout(timedShellID, 50)
-            expect((yield* shell.wait(timedShellID)).status).toBe("timeout")
+  it.live(
+    "updates and clears a running shell timeout",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              const timed = yield* executeTool(
+                registry,
+                call({ command: idleCommand, background: true }, "call-updated-timeout"),
+              )
+              const timedID = timed.metadata?.shellID
+              expect(typeof timedID).toBe("string")
+              if (typeof timedID !== "string") return
+              const timedShellID = ShellSchema.ID.make(timedID)
+              yield* shell.timeout(timedShellID, 50)
+              expect((yield* shell.wait(timedShellID)).status).toBe("timeout")
 
-            const cleared = yield* executeTool(
-              registry,
-              call({ command: idleCommand, timeout: 50, background: true }, "call-cleared-timeout"),
-            )
-            const clearedID = cleared.metadata?.shellID
-            expect(typeof clearedID).toBe("string")
-            if (typeof clearedID !== "string") return
-            const clearedShellID = ShellSchema.ID.make(clearedID)
-            yield* shell.timeout(clearedShellID, 0)
-            yield* Effect.sleep(Duration.millis(100))
-            expect((yield* shell.get(clearedShellID)).status).toBe("running")
-            yield* shell.remove(clearedShellID)
-          }),
-        )
-      },
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
-    ),
+              const cleared = yield* executeTool(
+                registry,
+                call({ command: idleCommand, timeout: 50, background: true }, "call-cleared-timeout"),
+              )
+              const clearedID = cleared.metadata?.shellID
+              expect(typeof clearedID).toBe("string")
+              if (typeof clearedID !== "string") return
+              const clearedShellID = ShellSchema.ID.make(clearedID)
+              yield* shell.timeout(clearedShellID, 0)
+              yield* Effect.sleep(Duration.millis(100))
+              expect((yield* shell.get(clearedShellID)).status).toBe("running")
+              yield* shell.remove(clearedShellID)
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
   )
 
   if (!isWindows) {

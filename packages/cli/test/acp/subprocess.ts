@@ -124,9 +124,9 @@ export async function createAcpFixture(options: { readonly skill?: string } = {}
       return acp
     },
     async [Symbol.asyncDispose]() {
-      await Promise.all([...processes].map((process) => process[Symbol.asyncDispose]()))
+      await Promise.all([...processes].map((process) => process.close().catch(() => process[Symbol.asyncDispose]())))
       await llm.stop(true)
-      await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      await fs.rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
     },
   }
 }

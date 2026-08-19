@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import fs from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 
 type Message = { readonly id?: number; readonly result?: unknown; readonly error?: unknown }
 const children: Bun.Subprocess[] = []
+const roots: string[] = []
 
 afterEach(async () => {
   await Promise.all(
@@ -11,6 +14,7 @@ afterEach(async () => {
       await child.exited
     }),
   )
+  await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })))
 })
 
 describe("acp command", () => {
@@ -21,7 +25,7 @@ describe("acp command", () => {
   })
 
   test("initializes over ndjson and exits on stdin eof", async () => {
-    const child = spawn()
+    const child = await spawn()
     const stderr = new Response(child.stderr).text()
     await child.stdin.write(
       new TextEncoder().encode(
@@ -55,9 +59,25 @@ describe("acp command", () => {
   }, 30_000)
 })
 
-function spawn() {
+async function spawn() {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-cli-acp-command-"))
+  roots.push(root)
   const child = Bun.spawn([process.execPath, "run", "src/index.ts", "acp"], {
     cwd: path.join(import.meta.dir, "../.."),
+    env: {
+      ...process.env,
+      HOME: root,
+      OPENCODE_CONFIG_CONTENT: "{}",
+      OPENCODE_CONFIG_DIR: path.join(root, "config"),
+      OPENCODE_DB: path.join(root, "opencode.db"),
+      OPENCODE_DISABLE_FILEWATCHER: "true",
+      OPENCODE_DISABLE_MODELS_FETCH: "true",
+      OPENCODE_TEST_HOME: root,
+      XDG_CACHE_HOME: path.join(root, "cache"),
+      XDG_CONFIG_HOME: path.join(root, "xdg-config"),
+      XDG_DATA_HOME: path.join(root, "data"),
+      XDG_STATE_HOME: path.join(root, "state"),
+    },
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
