@@ -80,7 +80,14 @@ export const AmazonBedrockPlugin = define({
     )
     yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
-        if (!["@ai-sdk/amazon-bedrock", "@ai-sdk/amazon-bedrock/mantle"].includes(evt.package)) return
+        if (
+          ![
+            "@ai-sdk/amazon-bedrock",
+            "@ai-sdk/amazon-bedrock/mantle",
+            "@ai-sdk/amazon-bedrock/mantle-anthropic",
+          ].includes(evt.package)
+        )
+          return
         const options = { ...evt.options }
         const profile = typeof options.profile === "string" ? options.profile : process.env.AWS_PROFILE
         const region = typeof options.region === "string" ? options.region : (process.env.AWS_REGION ?? "us-east-1")
@@ -107,6 +114,12 @@ export const AmazonBedrockPlugin = define({
           return
         }
 
+        if (evt.package === "@ai-sdk/amazon-bedrock/mantle-anthropic") {
+          const mod = yield* Effect.promise(() => import("../../amazon-bedrock/mantle-anthropic"))
+          evt.sdk = mod.createBedrockMantleAnthropic(options)
+          return
+        }
+
         const mod = yield* Effect.promise(() => import("@ai-sdk/amazon-bedrock"))
         evt.sdk = mod.createAmazonBedrock(options)
       }),
@@ -116,6 +129,11 @@ export const AmazonBedrockPlugin = define({
         if (evt.model.providerID !== ProviderV2.ID.amazonBedrock) return
         if (evt.model.api.type === "aisdk" && evt.model.api.package === "@ai-sdk/amazon-bedrock/mantle") {
           evt.language = selectMantleModel(evt.sdk, evt.model.api.id)
+          return
+        }
+        // Mantle has no cross-region inference profiles, so the model ID is used as-is.
+        if (evt.model.api.type === "aisdk" && evt.model.api.package === "@ai-sdk/amazon-bedrock/mantle-anthropic") {
+          evt.language = evt.sdk.languageModel(evt.model.api.id)
           return
         }
         const region = typeof evt.options.region === "string" ? evt.options.region : process.env.AWS_REGION
