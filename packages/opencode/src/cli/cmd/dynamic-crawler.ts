@@ -51,6 +51,10 @@ export interface DynamicCrawlOptions {
   siteProfile?: "linkedin" | "whatsapp" | "instagram" | "generic"
   /** Validate auth cookies are valid. */
   validateAuth?: boolean
+  /** Use GodMode as fallback when CDP extraction is incomplete. */
+  godModeFallback?: boolean
+  /** Timeout for GodMode fallback in ms. */
+  godModeTimeout?: number
 }
 
 export interface DynamicCrawlResult {
@@ -1394,6 +1398,59 @@ async function smartNavigateCdp(
 }
 
 // ---------------------------------------------------------------------------
+// Content completeness check
+// ---------------------------------------------------------------------------
+
+interface ContentCheckResult {
+  isComplete: boolean
+  reasons: string[]
+}
+
+/**
+ * Check if extracted content is complete and usable.
+ * Returns false if content is likely incomplete (thin text, missing links, etc.)
+ */
+export function isContentComplete(content: {
+  text: string
+  html: string
+  links: string[]
+  images: string[]
+}): ContentCheckResult {
+  const reasons: string[] = []
+
+  // Check if text is too thin
+  if (content.text.length < 150) {
+    reasons.push(`Text too thin: ${content.text.length} chars`)
+  }
+
+  // Check if there are no links (typical for rich content pages)
+  if (content.links.length === 0 && content.text.length < 500) {
+    reasons.push("No links found with minimal text")
+  }
+
+  // Check if HTML is large but text is very small (likely blocked/dynamic content)
+  if (content.html.length > 10000 && content.text.length < 100) {
+    reasons.push(`HTML ${content.html.length} chars but text only ${content.text.length} chars`)
+  }
+
+  // Check if content looks like a login page or error
+  const lowerText = content.text.toLowerCase()
+  if (
+    lowerText.includes("log in") ||
+    lowerText.includes("sign in") ||
+    lowerText.includes("access denied") ||
+    lowerText.includes("please enable javascript")
+  ) {
+    reasons.push("Content appears to be login page or error")
+  }
+
+  return {
+    isComplete: reasons.length === 0,
+    reasons,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public API: Scrape single page
 // ---------------------------------------------------------------------------
 
@@ -1412,6 +1469,8 @@ export async function scrapeDynamic(
     validateAuth = false,
     siteProfile,
     retries = 2,
+    godModeFallback = true,
+    godModeTimeout = 30000,
   } = options
 
   const profile = getSiteProfile(url, siteProfile)
@@ -1578,6 +1637,62 @@ export async function scrapeDynamic(
         await state.client.send("Target.closeTarget", { targetId: localTargetId })
       } catch {}
 
+      // GodMode fallback: use when content is incomplete and fallback is enabled
+      const contentCheck = isContentComplete({
+        text: content.text,
+        html: content.html,
+        links: content.links,
+        images: content.images,
+      })
+
+      if (!contentCheck.isComplete && godModeFallback) {
+        debugLog(`Content incomplete (${contentCheck.reasons.join(", ")}), attempting GodMode fallback...`)
+
+        try {
+          const { godmodeAvailable, godmodeFetchRenderedContent } = await import("./godmode-client")
+
+          if (await godmodeAvailable()) {
+            const godModeResult = await godmodeFetchRenderedContent(url, {
+              timeout: godModeTimeout,
+              waitFor: waitFor,
+            })
+
+            if (!godModeResult.error && godModeResult.html) {
+              debugLog(`GodMode captured ${godModeResult.html.length} chars of rendered HTML`)
+
+              // Parse the GodMode HTML through existing extraction pipeline
+              const godModeMarkdown = htmlToMarkdown(sanitizeHtml(godModeResult.html))
+
+              // Use GodMode content if it's more complete
+              if (godModeMarkdown.length > markdown.length) {
+                debugLog(`GodMode content is richer (${godModeMarkdown.length} > ${markdown.length} chars)`)
+                return {
+                  url,
+                  markdown: godModeMarkdown,
+                  html: godModeResult.html,
+                  rawHtml: godModeResult.html,
+                  links: content.links,
+                  images: content.images,
+                  metadata: {
+                    ...content.metadata,
+                    title: content.title,
+                    description: content.description,
+                    sourceURL: url,
+                    scrapedAt: new Date().toISOString(),
+                    godModeUsed: true,
+                  },
+                  authValid,
+                  retries: attempt,
+                }
+              }
+            }
+          }
+        } catch (err) {
+          debugLog(`GodMode fallback failed: ${err instanceof Error ? err.message : err}`)
+          // Continue with existing content
+        }
+      }
+
       return {
         url,
         markdown,
@@ -1591,6 +1706,7 @@ export async function scrapeDynamic(
           description: content.description,
           sourceURL: url,
           scrapedAt: new Date().toISOString(),
+          godModeUsed: false,
         },
         authValid,
         retries: attempt,

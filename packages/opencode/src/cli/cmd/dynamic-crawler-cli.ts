@@ -58,6 +58,15 @@ export const DynamicScrapeCommand = effectCmd({
         describe: "check for auth walls before scraping",
         type: "boolean",
         default: false,
+      })
+      .option("godmode-fallback", {
+        describe: "use GodMode as fallback when CDP extraction is incomplete",
+        type: "boolean",
+        default: true,
+      })
+      .option("no-godmode-fallback", {
+        describe: "disable GodMode fallback",
+        type: "boolean",
       }),
   handler: (args) =>
     Effect.gen(function* () {
@@ -122,6 +131,15 @@ export const DynamicCrawlCommand = effectCmd({
         describe: "check for auth walls before scraping",
         type: "boolean",
         default: false,
+      })
+      .option("godmode-fallback", {
+        describe: "use GodMode as fallback when CDP extraction is incomplete",
+        type: "boolean",
+        default: true,
+      })
+      .option("no-godmode-fallback", {
+        describe: "disable GodMode fallback",
+        type: "boolean",
       })
       .option("limit", {
         describe: "max pages to crawl",

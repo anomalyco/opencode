@@ -47,6 +47,8 @@ export const dynamicScrapeHandler = Effect.fn("Cli.dynamic.scrape")(function* (a
   "wait-for-selector"?: string
   retries: number
   "validate-auth": boolean
+  "godmode-fallback": boolean
+  "no-godmode-fallback"?: boolean
 }) {
   UI.empty()
   UI.println(UI.Style.TEXT_HIGHLIGHT_BOLD + "  Dynamic Scrape" + UI.Style.TEXT_NORMAL)
@@ -59,6 +61,7 @@ export const dynamicScrapeHandler = Effect.fn("Cli.dynamic.scrape")(function* (a
   UI.println(UI.Style.TEXT_DIM + "  Wait for:         " + UI.Style.TEXT_NORMAL + `${args["wait-for"]}ms`)
   UI.println(UI.Style.TEXT_DIM + "  Retries:          " + UI.Style.TEXT_NORMAL + `${args.retries}`)
   UI.println(UI.Style.TEXT_DIM + "  Validate auth:    " + UI.Style.TEXT_NORMAL + `${args["validate-auth"]}`)
+  UI.println(UI.Style.TEXT_DIM + "  GodMode fallback: " + UI.Style.TEXT_NORMAL + `${args["no-godmode-fallback"] ? false : args["godmode-fallback"]}`)
   if (args.cookie) {
     UI.println(UI.Style.TEXT_DIM + "  Cookie:           " + UI.Style.TEXT_NORMAL + "(set)")
   }
@@ -91,6 +94,7 @@ export const dynamicScrapeHandler = Effect.fn("Cli.dynamic.scrape")(function* (a
       retries: args.retries,
       validateAuth: args["validate-auth"],
       siteProfile: args["site-profile"],
+      godModeFallback: args["no-godmode-fallback"] ? false : args["godmode-fallback"],
     }),
     catch: (e) => new CliError({ message: `Scrape failed: ${e instanceof Error ? e.message : String(e)}` }),
   })
@@ -151,6 +155,8 @@ export const dynamicCrawlHandler = Effect.fn("Cli.dynamic.crawl")(function* (arg
   "wait-for-selector"?: string
   retries: number
   "validate-auth": boolean
+  "godmode-fallback": boolean
+  "no-godmode-fallback"?: boolean
   limit: number
   "max-depth"?: number
   "include-external-links": boolean
@@ -168,6 +174,7 @@ export const dynamicCrawlHandler = Effect.fn("Cli.dynamic.crawl")(function* (arg
   UI.println(UI.Style.TEXT_DIM + "  Wait for:         " + UI.Style.TEXT_NORMAL + `${args["wait-for"]}ms`)
   UI.println(UI.Style.TEXT_DIM + "  Retries:          " + UI.Style.TEXT_NORMAL + `${args.retries}`)
   UI.println(UI.Style.TEXT_DIM + "  Validate auth:    " + UI.Style.TEXT_NORMAL + `${args["validate-auth"]}`)
+  UI.println(UI.Style.TEXT_DIM + "  GodMode fallback: " + UI.Style.TEXT_NORMAL + `${args["no-godmode-fallback"] ? false : args["godmode-fallback"]}`)
   if (args.cookie) {
     UI.println(UI.Style.TEXT_DIM + "  Cookie:           " + UI.Style.TEXT_NORMAL + "(set)")
   }
@@ -202,6 +209,7 @@ export const dynamicCrawlHandler = Effect.fn("Cli.dynamic.crawl")(function* (arg
       maxDepth: args["max-depth"],
       includeExternalLinks: args["include-external-links"],
       skipPatterns: args["skip-patterns"],
+      godModeFallback: args["no-godmode-fallback"] ? false : args["godmode-fallback"],
     }),
     catch: (e) => new CliError({ message: `Crawl failed: ${e instanceof Error ? e.message : String(e)}` }),
   })
