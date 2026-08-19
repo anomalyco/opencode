@@ -3,9 +3,7 @@ export * as SessionCompaction from "./compaction.js"
 import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest, type LanguageModel } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Document, type Entry } from "@opencode-ai/schema/config"
 import { Context, Effect, Layer, Stream } from "effect"
-import { Config } from "../config.js"
 import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../effect/app-node-platform.js"
@@ -24,6 +22,7 @@ import type { Info, Ref } from "../model.js"
 import { SessionUsage } from "./usage.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { Agent } from "../agent.js"
+import { State } from "../state.js"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 15_000
@@ -61,10 +60,14 @@ Rules:
 - Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
 - Do not mention the summary process or that context was compacted.`
 
-type Settings = {
-  readonly auto: boolean
-  readonly buffer: number
-  readonly tokens: number
+export type Settings = {
+  auto: boolean
+  buffer: number
+  tokens: number
+}
+
+export type Draft = {
+  configure: (settings: Partial<Settings>) => void
 }
 
 type Dependencies = {
@@ -74,7 +77,6 @@ type Dependencies = {
     readonly stream: (request: LLMRequest, options?: StreamOptions) => Stream.Stream<LLMEvent, AIError>
   }
   readonly models: SessionRunnerModel.Interface
-  readonly config: Settings
   readonly hooks: PluginHooks.Interface
 }
 
@@ -111,7 +113,7 @@ export type Outcome =
   | Pick<SessionMessage.CompactionCompleted, "status">
   | Pick<SessionMessage.CompactionFailed, "status" | "error">
 
-export interface Interface {
+export interface Interface extends State.Transformable<Draft> {
   readonly required: (input: RequiredInput) => boolean
   readonly compact: (input: AutoInput) => Effect.Effect<Outcome>
   readonly compactManual: (input: ManualInput) => Effect.Effect<Outcome>
@@ -163,17 +165,6 @@ const serialize = (message: SessionMessage.Info) => {
   if (message.type === "skill") return `[Skill activated: ${message.name}]\n${message.text}`
   if (message.type === "shell") return `[Shell]: ${message.command}\n${truncate(message.output?.output ?? "")}`
   return ""
-}
-
-const settings = (documents: readonly Entry[]) => {
-  const configured = documents
-    .filter((entry): entry is Document => entry.type === "document")
-    .flatMap((entry) => (entry.info.compaction ? [entry.info.compaction] : []))
-  return {
-    auto: configured.findLast((value) => value.auto !== undefined)?.auto ?? true,
-    buffer: configured.findLast((value) => value.buffer !== undefined)?.buffer ?? DEFAULT_BUFFER,
-    tokens: configured.findLast((value) => value.keep?.tokens !== undefined)?.keep?.tokens ?? DEFAULT_KEEP_TOKENS,
-  }
 }
 
 const select = (
@@ -240,7 +231,17 @@ const planContent = (messages: readonly SessionMessage.Info[], tokens: number) =
 }
 
 const make = (dependencies: Dependencies) => {
-  const config = dependencies.config
+  const state = State.create<Settings, Draft>({
+    name: "session-compaction",
+    initial: () => ({ auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS }),
+    draft: (draft) => ({
+      configure: (settings) => {
+        if (settings.auto !== undefined) draft.auto = settings.auto
+        if (settings.buffer !== undefined) draft.buffer = settings.buffer
+        if (settings.tokens !== undefined) draft.tokens = settings.tokens
+      },
+    }),
+  })
   const failed = Effect.fnUntraced(function* (input: {
     readonly sessionID: SessionSchema.ID
     readonly reason: SessionMessage.Compaction["reason"]
@@ -350,7 +351,7 @@ const make = (dependencies: Dependencies) => {
     return { status: "completed" as const }
   })
   const compact = Effect.fn("SessionCompaction.compact")(function* (input: AutoInput) {
-    const content = planContent(input.messages, config.tokens)
+    const content = planContent(input.messages, state.get().tokens)
     if (content)
       return yield* execute({
         session: input.session,
@@ -368,6 +369,7 @@ const make = (dependencies: Dependencies) => {
     })
   })
   const required = (input: RequiredInput) => {
+    const config = state.get()
     if (!config.auto) return false
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
@@ -388,7 +390,7 @@ const make = (dependencies: Dependencies) => {
     return used >= promptCeiling
   }
   const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
-    const content = planContent(input.messages, config.tokens)
+    const content = planContent(input.messages, state.get().tokens)
     if (!content)
       return yield* failed({
         sessionID: input.session.id,
@@ -419,6 +421,8 @@ const make = (dependencies: Dependencies) => {
     })
   })
   return Service.of({
+    transform: state.transform,
+    reload: state.reload,
     required,
     compact,
     compactManual,
@@ -430,16 +434,15 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
-    const config = yield* Config.Service
     const models = yield* SessionRunnerModel.Service
     const app = yield* App.Metadata
     const hooks = yield* PluginHooks.Service
-    return make({ bus, llm, models, config: settings(yield* config.entries()), app, hooks })
+    return make({ bus, llm, models, app, hooks })
   }),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, llmClient, Config.node, SessionRunnerModel.node, App.node, PluginHooks.node],
+  deps: [Bus.node, llmClient, SessionRunnerModel.node, App.node, PluginHooks.node],
 })

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
-import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -67,7 +66,6 @@ const client = Layer.mock(LLMClient.Service)({
   },
   generate: () => Effect.die("unused"),
 })
-const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: () =>
     Effect.succeed(
@@ -83,7 +81,6 @@ const it = testEffect(
     [
       [Bus.node, Bus.configured({ persist: true })],
       [llmClient, client],
-      [Config.node, config],
       [SessionRunnerModel.node, models],
     ],
   ),
