@@ -345,10 +345,13 @@ export const dict = {
   "go.faq.a5.used": "Brugt",
   "go.faq.a5.notUsed": "Ikke brugt",
   "go.faq.a5.noAgreement": "Ingen aftale",
+  "go.faq.a5.notZdr": "Ikke ZDR",
   "go.faq.a5.grokRetention":
     "ZDR deaktiverer vigtige API-funktioner, der afhænger af lagrede data, herunder den tilstandsbevarende Responses API, Files and Collections og Batch API.",
   "go.faq.a5.gptRetention":
     "Logfiler til overvågning af misbrug genereres ved al brug af API-funktioner og opbevares i op til 30 dage.",
+  "go.faq.a5.museRetention":
+    "Kraftigt nedsatte tokenpriser til gengæld for tilladelse til at bruge dine prompts og modelsvar til at træne fremtidige Meta-modeller.",
   "go.faq.a5.learnMore": "Læs mere",
   "go.faq.a5.deepseekRetention":
     "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 31. august 2026.",
@@ -391,6 +394,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Modellen er deaktiveret",
   "zen.api.error.regionNotAllowed":
     "Den nyeste version af denne model er kun tilgængelig som hostet i Kina og kræver, at du aktivt tilvælger den: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Denne model er ikke tilgængelig i dit land.",
+  "zen.api.error.trainingNotAllowed":
+    "Denne model indsamler data, der bruges til at forbedre dens kvalitet, og kræver, at du aktivt tilvælger den: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Den gratis kampagne for {{model}} er afsluttet. Du kan fortsætte med at bruge modellen ved at abonnere på OpenCode Go - {{link}}",
 
