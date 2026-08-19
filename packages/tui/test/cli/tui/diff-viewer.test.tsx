@@ -5,11 +5,12 @@ import { DiffRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/c
 import { testRender, useRenderer } from "@opentui/solid"
 import type { TuiPluginApi, TuiPluginMeta, TuiRouteCurrent, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
+import { onCleanup } from "solid-js"
 import { KVProvider } from "../../../src/context/kv"
 import { ThemeProvider } from "../../../src/context/theme"
 import { TuiConfigProvider } from "../../../src/config"
 import { TuiKeybind } from "../../../src/config/keybind"
-import { OpencodeKeymapProvider } from "../../../src/keymap"
+import { OpencodeKeymapProvider, getOpencodeModeStack, registerOpencodeKeymap } from "../../../src/keymap"
 import diffViewerPlugin from "../../../src/feature-plugins/system/diff-viewer"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -27,6 +28,27 @@ test("closing the diff viewer returns to the route it opened from", async () => 
     expect(viewer.commands.has("diff.close")).toBe(true)
     viewer.commands.get("diff.close")!.run?.({} as never)
     expect(viewer.current()).toEqual(startRoute)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("diff viewer exposes close instead of open and blocks re-entry", async () => {
+  const viewer = await renderDiffViewer([])
+  try {
+    expect(viewer.initialPaletteCommands).toEqual(["diff.open"])
+    expect(diffPaletteCommands(viewer.keymap())).toEqual(["diff.close"])
+
+    const popModal = getOpencodeModeStack(viewer.keymap()).push("modal")
+    expect(diffPaletteCommands(viewer.keymap())).toEqual(["diff.close"])
+    popModal()
+
+    const current = viewer.current()
+    await viewer.keymap().dispatchCommand("diff.open")
+    expect(viewer.current()).toBe(current)
+
+    viewer.commands.get("diff.open")!.run?.({} as never)
+    expect(viewer.current()).toBe(current)
   } finally {
     viewer.app.renderer.destroy()
   }
@@ -107,10 +129,18 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
   let renderDiff: TuiRouteDefinition["render"] | undefined
   let vcsDiffInput: unknown
   let sessionDiffInput: unknown
+  let keymapRef: ReturnType<typeof createDefaultOpenTuiKeymap> | undefined
+  let initialPaletteCommands: string[] = []
   const config = createTuiResolvedConfig()
   function Harness() {
     const renderer = useRenderer()
     const keymap = createDefaultOpenTuiKeymap(renderer)
+    keymapRef = keymap
+    const offKeymap = registerOpencodeKeymap(keymap, renderer, {
+      keybinds: config.keybinds,
+      leader_timeout: config.leader_timeout,
+    })
+    onCleanup(offKeymap)
     const registerLayer = keymap.registerLayer.bind(keymap)
     keymap.registerLayer = (layer) => {
       layer.commands?.forEach((command) => commands.set(command.name, command))
@@ -155,6 +185,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
     } satisfies TuiPluginApi
 
     void diffViewerPlugin.tui(api, undefined, pluginMeta)
+    initialPaletteCommands = diffPaletteCommands(keymap)
     if (!initialRoute) commands.get("diff.open")?.run?.({} as never)
 
     return (
@@ -177,6 +208,8 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
   return {
     app,
     commands,
+    initialPaletteCommands,
+    keymap: () => keymapRef!,
     current: () => current,
     vcsDiffInput: () => vcsDiffInput,
     sessionDiffInput: () => sessionDiffInput,
@@ -207,6 +240,13 @@ const session = {
     updated: 0,
   },
 } satisfies Session
+
+function diffPaletteCommands(keymap: ReturnType<typeof createDefaultOpenTuiKeymap>) {
+  return keymap
+    .getCommandEntries({ visibility: "reachable", namespace: "palette" })
+    .map((entry) => entry.command.name)
+    .filter((name) => name.startsWith("diff."))
+}
 
 test("branch diff source requests branch VCS diff", async () => {
   const viewer = await renderDiffViewer([], 20, {

@@ -435,6 +435,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       name: "diff.close",
       title: "Close diff viewer",
       category: "VCS",
+      namespace: "palette",
       run() {
         const returnRoute = params()?.returnRoute
         props.api.ui.dialog.clear()
@@ -1058,7 +1059,9 @@ const tui: TuiPlugin = async (api) => {
         slashName: "diff",
         category: "VCS",
         namespace: "palette",
+        enabled: () => api.route.current.name !== ROUTE,
         run() {
+          if (api.route.current.name === ROUTE) return
           api.route.navigate(ROUTE, {
             mode: "git",
             sessionID: "params" in api.route.current ? api.route.current.params?.sessionID : undefined,
