@@ -319,7 +319,7 @@ const layer = Layer.effect(
 )
 
 export function fmt(list: Info[], opts: { verbose: boolean }) {
-  const described = list.filter((skill) => skill.description !== undefined)
+  const described = list.filter((skill): skill is Info & { description: string } => skill.description !== undefined)
   if (described.length === 0) return "No skills are currently available."
   if (opts.verbose) {
     return [
@@ -329,7 +329,7 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
         .flatMap((skill) => [
           "  <skill>",
           `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
+          `    <description>${escapeHtml(skill.description)}</description>`,
           `    <location>${escapeHtml(skill.location)}</location>`,
           "  </skill>",
         ]),
