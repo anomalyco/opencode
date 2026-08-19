@@ -14,7 +14,7 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { createApi, createEventStream, createFetch } from "../../fixture/tui-client"
 
-async function mountForm(root: string, width = 80, fields?: FormWithLocation["fields"], height = 20) {
+async function mountForm(root: string, width = 80, fields?: FormWithLocation["fields"], height = 20, pasted?: string) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
 
@@ -58,7 +58,7 @@ async function mountForm(root: string, width = 80, fields?: FormWithLocation["fi
         }}
         clipboard={{
           async read() {
-            return undefined
+            return pasted ? { data: pasted, mime: "text/plain" } : undefined
           },
           write(text) {
             copied.push(text)
@@ -212,6 +212,34 @@ test("pasting on a custom choice opens its editor without submitting", async () 
     await prompt.app.waitForFrame((frame) => frame.includes("production"))
     expect(prompt.app.captureCharFrame()).not.toContain("Type your own answer")
     expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("ctrl-v pastes clipboard text into a custom answer", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(
+    tmp.path,
+    80,
+    [
+      {
+        key: "target",
+        type: "string",
+        options: [{ value: "staging", label: "Staging" }],
+        custom: true,
+      },
+    ],
+    20,
+    "production west",
+  )
+  try {
+    prompt.app.mockInput.pressArrow("down")
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+
+    prompt.app.mockInput.pressKey("v", { ctrl: true })
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "production west")
   } finally {
     prompt.app.renderer.destroy()
   }
