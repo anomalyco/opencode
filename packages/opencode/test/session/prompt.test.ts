@@ -2440,3 +2440,123 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+
+// Model-swap survival: a model-less prompt (e.g. plugin completion-reminder)
+// must not overwrite a model the user explicitly stored on the session.
+
+noLLMServer.instance(
+  "model-less prompt does not clobber user's stored model swap",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      // User explicitly swaps to kimi — the session row should persist it.
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: { providerID: ProviderV2.ID.make("opencode"), modelID: ModelV2.ID.make("kimi-k2.5-free") },
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      const afterSwap = yield* sessions.get(session.id)
+      expect(afterSwap.model?.id).toBe(ModelV2.ID.make("kimi-k2.5-free"))
+
+      // A model-less prompt (as OMO completion-reminders send) resolves the
+      // agent's configured model for the turn — that design is preserved (see
+      // "applies agent variant only when using agent model" above).  But it
+      // must NOT overwrite the user's swap in the session row.
+      const match = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "reminder" }],
+      })
+      if (match.info.role !== "user") throw new Error("expected user message")
+      // The turn uses the agent's model (existing design, unchanged).
+      expect(match.info.model.modelID).toBe(ModelV2.ID.make("test-model"))
+      // The session row keeps the user's swap — the fix.
+      const afterReminder = yield* sessions.get(session.id)
+      expect(afterReminder.model?.id).toBe(ModelV2.ID.make("kimi-k2.5-free"))
+
+      yield* sessions.remove(session.id)
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { xhigh: {}, high: {} },
+            },
+          },
+        },
+      },
+      agent: {
+        build: {
+          model: "test/test-model",
+          variant: "xhigh",
+        },
+      },
+    },
+  },
+  90_000,
+)
+
+// Fresh-session initialization: a model-less first prompt persists the agent's
+// model to the session row (no existing user swap to protect).
+
+noLLMServer.instance(
+  "model-less first prompt on fresh session persists agent model to row",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const match = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "fresh start" }],
+      })
+      if (match.info.role !== "user") throw new Error("expected user message")
+      expect(match.info.model.modelID).toBe(ModelV2.ID.make("test-model"))
+
+      // The session row should now carry the agent's model.
+      const row = yield* sessions.get(session.id)
+      expect(row.model?.id).toBe(ModelV2.ID.make("test-model"))
+
+      yield* sessions.remove(session.id)
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { xhigh: {}, high: {} },
+            },
+          },
+        },
+      },
+      agent: {
+        build: {
+          model: "test/test-model",
+          variant: "xhigh",
+        },
+      },
+    },
+  },
+  90_000,
+)
