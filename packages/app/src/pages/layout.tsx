@@ -70,6 +70,7 @@ import {
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
+  collectOpenSessionDeepLinks,
   deepLinkEvent,
   drainPendingDeepLinks,
 } from "./layout/deep-links"
@@ -1277,6 +1278,21 @@ export default function LegacyLayout(props: ParentProps) {
       }
       const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
       navigateWithSidebarReset(href)
+    }
+
+    for (const sessionID of collectOpenSessionDeepLinks(urls)) {
+      void serverSDK()
+        .api.session.get({ sessionID })
+        .then((session) => {
+          void openProject(session.location.directory, false)
+          navigateWithSidebarReset(`/${base64Encode(session.location.directory)}/session/${session.id}`)
+        })
+        .catch(() =>
+          showToast({
+            title: language.t("session.error.notFound"),
+            description: language.t("session.error.notFound.description"),
+          }),
+        )
     }
   }
 

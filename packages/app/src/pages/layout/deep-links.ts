@@ -30,11 +30,21 @@ export const parseNewSessionDeepLink = (input: string) => {
   return { directory, prompt }
 }
 
+export const parseOpenSessionDeepLink = (input: string) => {
+  const url = parseUrl(input)
+  if (!url) return
+  if (url.hostname !== "open-session") return
+  return url.pathname.split("/").filter(Boolean)[0]
+}
+
 export const collectOpenProjectDeepLinks = (urls: string[]) =>
   urls.map(parseDeepLink).filter((directory): directory is string => !!directory)
 
 export const collectNewSessionDeepLinks = (urls: string[]) =>
   urls.map(parseNewSessionDeepLink).filter((link): link is { directory: string; prompt?: string } => !!link)
+
+export const collectOpenSessionDeepLinks = (urls: string[]) =>
+  urls.map(parseOpenSessionDeepLink).filter((sessionID): sessionID is string => !!sessionID)
 
 type OpenCodeWindow = Window & {
   __OPENCODE__?: {
