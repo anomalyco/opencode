@@ -3,8 +3,6 @@ import { exec } from "child_process"
 import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
-import { Octokit } from "@octokit/rest"
-import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
@@ -33,7 +31,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
+import { createGithubClients, extractResponseText, formatPromptTooLargeError } from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -431,8 +429,8 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
 
     let appToken: string
-    let octoRest: Octokit
-    let octoGraph: typeof graphql
+    let octoRest: ReturnType<typeof createGithubClients>["rest"]
+    let octoGraph: ReturnType<typeof createGithubClients>["graph"]
     let gitConfig: string
     let session: { id: SessionID; title: string; version: string }
     let shareId: string | undefined
@@ -481,10 +479,9 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         const actionToken = isMock ? args.token! : await getOidcToken()
         appToken = await exchangeForAppToken(actionToken)
       }
-      octoRest = new Octokit({ auth: appToken })
-      octoGraph = graphql.defaults({
-        headers: { authorization: `token ${appToken}` },
-      })
+      const clients = createGithubClients(appToken)
+      octoRest = clients.rest
+      octoGraph = clients.graph
 
       const { userPrompt, promptFiles } = await getUserPrompt()
       if (!useGithubToken) {
