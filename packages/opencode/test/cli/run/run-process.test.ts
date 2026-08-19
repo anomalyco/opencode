@@ -318,13 +318,15 @@ describe("opencode run (non-interactive subprocess)", () => {
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.hang
-        const run = yield* opencode.startRun("wait forever")
-        yield* llm.wait(1)
-        run.interrupt()
-        const result = yield* run.result
+        const result = yield* Effect.gen(function* () {
+          const run = yield* opencode.startRun("wait forever")
+          yield* llm.wait(1)
+          run.interrupt()
+          return yield* run.result
+        }).pipe(Effect.timeout("24 seconds"))
 
         expect(result.exitCode).not.toBe(0)
-        expect(result.durationMs).toBeLessThan(30_000)
+        expect(result.durationMs).toBeLessThan(24_000)
       }),
     30_000,
   )
