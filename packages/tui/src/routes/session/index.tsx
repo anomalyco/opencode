@@ -2946,6 +2946,10 @@ function Shell(props: ToolProps) {
   const isRunning = createMemo(() => props.part.state.status === "running" || backgroundRunning())
   const command = createMemo(() => stringValue(props.input.command))
   const workdir = createMemo(() => pathFormatter.format(stringValue(props.input.workdir)))
+  const failedExit = createMemo(() => {
+    const exit = finiteNumber(props.metadata.exit)
+    return exit !== undefined && exit !== 0 ? exit : undefined
+  })
   const [expanded, setExpanded] = createSignal(false)
   const [backgroundOutput, setBackgroundOutput] = createSignal("")
   const [outputTruncated, setOutputTruncated] = createSignal(false)
@@ -3055,6 +3059,9 @@ function Shell(props: ToolProps) {
           <Show when={limitedOutput()}>
             <text fg={theme.text.subdued}>{limitedOutput()}</text>
           </Show>
+        </Show>
+        <Show when={failedExit()}>
+          {(exit) => <text fg={theme.text.feedback.error.default}>× exited with code {exit()}</text>}
         </Show>
         <Show when={background()}>
           <StatusBadge>Background</StatusBadge>
