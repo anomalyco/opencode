@@ -105,8 +105,21 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
       return true
     })
 
-    const load = (input: LoadInput): Effect.Effect<InstanceContext> => {
+    const hasReplacementCharacters = (input: string): boolean => {
+      for (let i = 0; i < input.length; i++) {
+        if (input.charCodeAt(i) === 0xfffd) return true
+      }
+      return false
+    }
+
+    const loadSafe = (input: LoadInput): string => {
       const directory = FSUtil.resolve(input.directory)
+      if (hasReplacementCharacters(directory)) return FSUtil.resolve(process.cwd())
+      return directory
+    }
+
+    const load = (input: LoadInput): Effect.Effect<InstanceContext> => {
+      const directory = loadSafe(input)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const existing = cache.get(directory)
@@ -124,7 +137,7 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
     }
 
     const reload = (input: LoadInput): Effect.Effect<InstanceContext> => {
-      const directory = FSUtil.resolve(input.directory)
+      const directory = loadSafe(input)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const previous = cache.get(directory)

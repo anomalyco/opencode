@@ -12,6 +12,13 @@ export class InstanceContextMiddleware extends HttpApiMiddleware.Service<
   }
 >()("@opencode/ExperimentalHttpApiInstanceContext") {}
 
+function hasReplacementCharacters(input: string): boolean {
+  for (let i = 0; i < input.length; i++) {
+    if (input.charCodeAt(i) === 0xfffd) return true
+  }
+  return false
+}
+
 function decode(input: string): string {
   try {
     return decodeURIComponent(input)
@@ -26,7 +33,9 @@ function provideInstanceContext<E>(
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext> {
   return Effect.gen(function* () {
     const route = yield* WorkspaceRouteContext
-    const ctx = yield* store.load({ directory: decode(route.directory) })
+    const directory = decode(route.directory)
+    const clean = hasReplacementCharacters(directory) ? process.cwd() : directory
+    const ctx = yield* store.load({ directory: clean })
     return yield* effect.pipe(
       Effect.provideService(InstanceRef, ctx),
       Effect.provideService(WorkspaceRef, route.workspaceID),

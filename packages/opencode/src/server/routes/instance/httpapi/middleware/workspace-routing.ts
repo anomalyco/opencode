@@ -83,8 +83,17 @@ function selectedV2WorkspaceID(
   return workspaceID.value
 }
 
+function hasReplacementCharacters(input: string): boolean {
+  for (let i = 0; i < input.length; i++) {
+    if (input.charCodeAt(i) === 0xfffd) return true
+  }
+  return false
+}
+
 function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string {
-  return url.searchParams.get("directory") || request.headers["x-opencode-directory"] || process.cwd()
+  const dir = url.searchParams.get("directory") || request.headers["x-opencode-directory"] || ""
+  if (dir && !hasReplacementCharacters(dir)) return dir
+  return process.cwd()
 }
 
 function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {
@@ -178,8 +187,9 @@ function planRequest(
       return yield* planWorkspaceRequest(request, url, workspace)
     }
 
+    const sessionDir = session?.directory
     return RequestPlan.Local({
-      directory: session?.directory || defaultDirectory(request, url),
+      directory: sessionDir && !hasReplacementCharacters(sessionDir) ? sessionDir : defaultDirectory(request, url),
       workspaceID: envWorkspaceID ?? workspaceID,
     })
   })
