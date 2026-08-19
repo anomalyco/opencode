@@ -328,6 +328,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         desired.set(previous.plugin.id, toDesired(previous))
         continue
       }
+      setupFailures.delete(target)
       desired.set(resolved.plugin.id, {
         plugin: resolved.plugin,
         source: "external",

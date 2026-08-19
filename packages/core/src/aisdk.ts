@@ -460,7 +460,20 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
 function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[] {
   switch (input.role) {
     case "system":
-      return [{ role: "system", content: input.content.flatMap(text).join("\n\n") }]
+      // The initial privileged prompt lives in `request.system` and is prepended above. A system message here is a
+      // chronological instruction update, but opaque AI SDK providers do not uniformly allow the system role after
+      // conversation history, so preserve its position using the safe wrapped-user fallback.
+      return [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: ProviderShared.wrapSystemUpdate(input.content.filter((part) => part.type === "text")),
+            },
+          ],
+        },
+      ]
     case "user":
       return [{ role: "user", content: input.content.flatMap(userPart) }]
     case "assistant":
