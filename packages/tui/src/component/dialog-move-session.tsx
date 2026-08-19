@@ -25,13 +25,18 @@ export type MoveSessionSelection =
   | { type: "new"; name: string }
 type ProjectDirectory = WorktreeListOutput[number]
 
+export type MoveSessionWorktrees = {
+  list: (projectID: string) => Promise<ReadonlyArray<ProjectDirectory>>
+  remove: (input: { projectID: string; directory: string; force: boolean }) => Promise<unknown>
+}
+
 type DialogMoveSessionProps = {
   projectID: string
   current?: MoveSessionSelection
   onSelect: (selection: MoveSessionSelection) => void
   onCurrentChange?: (selection: MoveSessionSelection) => void
   initialDirectories?: ReadonlyArray<ProjectDirectory>
-  fixture?: boolean
+  worktrees?: MoveSessionWorktrees
   initialRemoving?: string
 }
 
@@ -45,6 +50,13 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   const toast = useToast()
   const paths = useTuiPaths()
   const shortcuts = Keymap.useShortcuts()
+  const worktrees: MoveSessionWorktrees = props.worktrees ?? {
+    list: async (projectID) => {
+      await client.api.worktree.refresh({ projectID })
+      return client.api.worktree.list({ projectID })
+    },
+    remove: (input) => client.api.worktree.remove(input),
+  }
   const location = createMemo(() => sessionData.location.info())
   const [working, setWorking] = createSignal(Boolean(props.initialRemoving))
   const [toDelete, setToDelete] = createSignal<string>()
@@ -63,7 +75,8 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   // swallow it and let the directory list render without a current marker.
   // Once the current project is known, a mismatch is a guaranteed miss.
   const [loadedProject] = createResource(
-    () => (location()?.project.id === props.projectID ? undefined : props.projectID),
+    () =>
+      props.current?.type === "directory" || location()?.project.id === props.projectID ? undefined : props.projectID,
     (projectID) =>
       client.api.project
         .current({ location: { directory: location()?.directory || paths.cwd } })
@@ -76,11 +89,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   })
 
   const [directories, { refetch }] = createResource(
-    () => (props.fixture || props.initialRemoving ? undefined : props.projectID),
+    () => (props.initialRemoving ? undefined : props.projectID),
     async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
-        await client.api.worktree.refresh({ projectID })
-        const directories = await client.api.worktree.list({ projectID })
+        const directories = await worktrees.list(projectID)
         setLoadError(undefined)
         return directories
       } catch (error) {
@@ -223,7 +235,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     setToDelete(undefined)
     setRemoving(selected.directory)
     setWorking(true)
-    const error = await client.api.worktree
+    const error = await worktrees
       .remove({
         projectID: props.projectID,
         directory: selected.directory,
@@ -249,7 +261,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
           return
         }
         reopen(selected.directory)
-        const forcedError = await client.api.worktree
+        const forcedError = await worktrees
           .remove({
             projectID: props.projectID,
             directory: selected.directory,
@@ -345,7 +357,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         }}
         onMove={() => setToDelete(undefined)}
         actions={
-          showError() || props.fixture
+          showError()
             ? []
             : [
                 {
