@@ -137,7 +137,7 @@ describe("OpenAIPlugin", () => {
       const proxy = yield* request(Provider.ID.openai, "https://proxy.example/v1?region=us")
 
       const provider = required(yield* catalog.provider.get(Provider.ID.openai))
-      expect(provider.package).toBe("@opencode-ai/ai/providers/openai")
+      expect(provider.package).toBe(Provider.aisdk("@ai-sdk/openai"))
       expect(provider.settings).toMatchObject({ baseURL: "https://chatgpt.com/backend-api/codex" })
       expect(provider.headers).toMatchObject({ originator: "opencode", "chatgpt-account-id": "acct_123" })
       expect(direct.baseURL).toBe("https://chatgpt.com/backend-api/codex")
@@ -147,7 +147,7 @@ describe("OpenAIPlugin", () => {
       expect(proxy.baseURL).toBe("https://proxy.example/v1?region=us")
       expect(proxy.headers).toMatchObject({ originator: "opencode", "session-id": "ses_test" })
       const eligible = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
-      expect(eligible.package).toBe("@opencode-ai/ai/providers/openai")
+      expect(eligible.package).toBe(Provider.aisdk("@ai-sdk/openai"))
       expect(eligible.headers).toMatchObject({ originator: "opencode", "chatgpt-account-id": "acct_123" })
       expect(eligible.cost).toEqual([])
       expect(eligible.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
@@ -194,7 +194,7 @@ describe("OpenAIPlugin", () => {
 
       const provider = required(yield* catalog.provider.get(Provider.ID.openai))
       const model = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
-      expect(model.package).toBe("@opencode-ai/ai/providers/openai")
+      expect(model.package).toBe(Provider.aisdk("@ai-sdk/openai"))
       expect(model.enabled).toBe(true)
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(direct.headers).not.toHaveProperty("originator")

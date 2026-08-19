@@ -1,6 +1,6 @@
 import { Component, createEffect, createMemo, createSignal, startTransition } from "solid-js"
-import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
-import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
+import { Dialog } from "@opencode-ai/ui/dialog"
+import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -73,66 +73,66 @@ export const DialogSettings: Component<{
 
   return (
     <Dialog size="x-large" variant="settings" class="settings-v2-dialog">
-      <TabsV2
+      <Tabs
         orientation="vertical"
         variant="settings"
         value={tab()}
         onChange={(value) => void startTransition(() => setTab(value))}
         class="settings-v2"
       >
-        <TabsV2.List>
+        <Tabs.List>
           <div class="flex flex-col justify-between h-full w-full">
             <div class="flex flex-col gap-4 w-full">
               {/* Group 1: Preferences */}
               <div class="flex flex-col gap-1 w-full">
-                <TabsV2.Trigger value="general">
+                <Tabs.Trigger value="general">
                   <Icon name="sliders" />
                   {language.t("settings.tab.preferences")}
-                </TabsV2.Trigger>
-                <TabsV2.Trigger value="appearance">
+                </Tabs.Trigger>
+                <Tabs.Trigger value="appearance">
                   <Icon name="appearance" />
                   {language.t("settings.general.section.appearance")}
-                </TabsV2.Trigger>
-                <TabsV2.Trigger value="notifications">
+                </Tabs.Trigger>
+                <Tabs.Trigger value="notifications">
                   <Icon name="notifications" />
                   {language.t("settings.tab.notifications")}
-                </TabsV2.Trigger>
-                <TabsV2.Trigger value="shortcuts">
+                </Tabs.Trigger>
+                <Tabs.Trigger value="shortcuts">
                   <Icon name="keyboard" />
                   {language.t("settings.tab.shortcuts")}
-                </TabsV2.Trigger>
+                </Tabs.Trigger>
               </div>
 
               {/* Group 2: Environment & Workspaces */}
               <div class="flex flex-col gap-1 w-full">
-                <TabsV2.Trigger value="servers">
+                <Tabs.Trigger value="servers">
                   <Icon name="server" />
                   {language.t("status.popover.tab.servers")}
-                </TabsV2.Trigger>
-                <TabsV2.Trigger value="projects">
+                </Tabs.Trigger>
+                <Tabs.Trigger value="projects">
                   <Icon name="folder" />
                   {language.t("settings.tab.projects")}
-                </TabsV2.Trigger>
-                <TabsV2.Trigger value="workspaces">
+                </Tabs.Trigger>
+                <Tabs.Trigger value="workspaces">
                   <Icon name="workspace-isolated" />
                   {language.t("settings.tab.workspaces")}
-                </TabsV2.Trigger>
+                </Tabs.Trigger>
               </div>
 
               {/* Group 3: Capabilities & Extensions */}
               <div class="flex flex-col gap-1 w-full">
-                <TabsV2.Trigger value="providers">
+                <Tabs.Trigger value="providers">
                   <Icon name="providers" />
                   {language.t("settings.providers.title")}
-                </TabsV2.Trigger>
-                <TabsV2.Trigger value="models">
+                </Tabs.Trigger>
+                <Tabs.Trigger value="models">
                   <Icon name="models" />
                   {language.t("settings.models.title")}
-                </TabsV2.Trigger>
-                <TabsV2.Trigger value="extensions">
+                </Tabs.Trigger>
+                <Tabs.Trigger value="extensions">
                   <Icon name="extensions" />
                   {language.t("settings.tab.extensions")}
-                </TabsV2.Trigger>
+                </Tabs.Trigger>
               </div>
             </div>
 
@@ -141,41 +141,41 @@ export const DialogSettings: Component<{
               <span>v{platform.version}</span>
             </div>
           </div>
-        </TabsV2.List>
+        </Tabs.List>
 
-        <TabsV2.Content value="general" class="settings-v2-panel">
+        <Tabs.Content value="general" class="settings-v2-panel">
           <SettingsGeneral server={server()} sessionID={props.sessionID} />
-        </TabsV2.Content>
-        <TabsV2.Content value="appearance" class="settings-v2-panel">
+        </Tabs.Content>
+        <Tabs.Content value="appearance" class="settings-v2-panel">
           <SettingsAppearanceV2 />
-        </TabsV2.Content>
-        <TabsV2.Content value="notifications" class="settings-v2-panel">
+        </Tabs.Content>
+        <Tabs.Content value="notifications" class="settings-v2-panel">
           <SettingsNotificationsV2 />
-        </TabsV2.Content>
-        <TabsV2.Content value="shortcuts" class="settings-v2-panel">
+        </Tabs.Content>
+        <Tabs.Content value="shortcuts" class="settings-v2-panel">
           <SettingsKeybinds />
-        </TabsV2.Content>
-        <TabsV2.Content value="servers" class="settings-v2-panel">
+        </Tabs.Content>
+        <Tabs.Content value="servers" class="settings-v2-panel">
           <SettingsServersV2 />
-        </TabsV2.Content>
-        <TabsV2.Content value="projects" class="settings-v2-panel">
+        </Tabs.Content>
+        <Tabs.Content value="projects" class="settings-v2-panel">
           <SettingsProjectsV2 />
-        </TabsV2.Content>
+        </Tabs.Content>
         <SettingsServerScope directory={directory()}>
-          <TabsV2.Content value="workspaces" class="settings-v2-panel">
+          <Tabs.Content value="workspaces" class="settings-v2-panel">
             <SettingsWorkspacesV2 activeDirectory={directory()} />
-          </TabsV2.Content>
-          <TabsV2.Content value="providers" class="settings-v2-panel">
+          </Tabs.Content>
+          <Tabs.Content value="providers" class="settings-v2-panel">
             <SettingsProvidersV2 directory={directory()} onBack={showProviders} />
-          </TabsV2.Content>
-          <TabsV2.Content value="models" class="settings-v2-panel">
+          </Tabs.Content>
+          <Tabs.Content value="models" class="settings-v2-panel">
             <SettingsModelsV2 />
-          </TabsV2.Content>
-          <TabsV2.Content value="extensions" class="settings-v2-panel">
+          </Tabs.Content>
+          <Tabs.Content value="extensions" class="settings-v2-panel">
             <SettingsExtensionsV2 />
-          </TabsV2.Content>
+          </Tabs.Content>
         </SettingsServerScope>
-      </TabsV2>
+      </Tabs>
     </Dialog>
   )
 }

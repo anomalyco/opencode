@@ -9,10 +9,9 @@ import {
   type ComponentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { Menu } from "@opencode-ai/ui/menu"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
 import { getProjectAvatarVariant } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
@@ -277,7 +276,8 @@ export function PromptProjectSelector(props: {
   })
 
   return (
-    <DropdownMenu
+    <Menu
+      appearance="standard"
       open={triggerReady() && props.controller.open()}
       placement={props.placement ?? "bottom"}
       gutter={4}
@@ -287,9 +287,9 @@ export function PromptProjectSelector(props: {
         props.controller.setOpen(open)
       }}
     >
-      <DropdownMenu.Trigger as={ProjectTrigger} ref={setTriggerRef} controller={props.controller} />
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
+      <Menu.Trigger as={ProjectTrigger} ref={setTriggerRef} controller={props.controller} />
+      <Menu.Portal>
+        <Menu.Content
           ref={contentRef}
           id="prompt-project-menu"
           class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none [&[data-closed]]:!animate-none"
@@ -360,13 +360,13 @@ export function PromptProjectSelector(props: {
               <Show
                 when={props.controller.servers().length > 1}
                 fallback={
-                  <DropdownMenu.RadioGroup value={selectedValue()}>
+                  <Menu.RadioGroup value={selectedValue()}>
                     <For each={props.controller.projects()}>
                       {(project) => (
                         <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
                       )}
                     </For>
-                  </DropdownMenu.RadioGroup>
+                  </Menu.RadioGroup>
                 }
               >
                 <For
@@ -381,7 +381,7 @@ export function PromptProjectSelector(props: {
                       <div class="flex h-7 select-none items-center pl-1.5 pr-3 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-faint">
                         {server!.name}
                       </div>
-                      <DropdownMenu.RadioGroup value={selectedValue()}>
+                      <Menu.RadioGroup value={selectedValue()}>
                         <For
                           each={props.controller.projects().filter((project) => project.server?.key === server!.key)}
                         >
@@ -389,7 +389,7 @@ export function PromptProjectSelector(props: {
                             <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
                           )}
                         </For>
-                      </DropdownMenu.RadioGroup>
+                      </Menu.RadioGroup>
                     </div>
                   )}
                 </For>
@@ -408,8 +408,8 @@ export function PromptProjectSelector(props: {
                 />
               }
             >
-              <DropdownMenu.Sub>
-                <DropdownMenu.SubTrigger
+              <Menu.Sub>
+                <Menu.SubTrigger
                   id={props.controller.actionKey()}
                   data-option-key={props.controller.actionKey()}
                   class={projectActionClass}
@@ -419,24 +419,23 @@ export function PromptProjectSelector(props: {
                   onMouseEnter={() => props.controller.setActive(props.controller.actionKey())}
                 >
                   <Icon name="plus" size="small" />
-                  <span data-slot="dropdown-menu-item-label" class="min-w-0 flex-1 truncate leading-5">
+                  <span class="min-w-0 flex-1 truncate leading-5">
                     {props.controller.labels.add()}
                   </span>
-                  <Icon name="chevron-right" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-                </DropdownMenu.SubTrigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.SubContent class="min-w-[180px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0.5 shadow-[var(--v2-elevation-floating)] focus:outline-none">
+                </Menu.SubTrigger>
+                <Menu.Portal>
+                  <Menu.SubContent class="min-w-[180px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0.5 shadow-[var(--v2-elevation-floating)] focus:outline-none">
                     <For each={props.controller.servers()}>
                       {(server) => <ServerAction server={server!} onSelect={selectAction} />}
                     </For>
-                  </DropdownMenu.SubContent>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Sub>
+                  </Menu.SubContent>
+                </Menu.Portal>
+              </Menu.Sub>
             </Show>
           </div>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
   )
 }
 
@@ -507,7 +506,7 @@ function ProjectItem(props: {
 }) {
   const key = () => props.controller.projectKey(props.project)
   return (
-    <DropdownMenu.RadioItem
+    <Menu.RadioItem
       id={key()}
       value={key()}
       data-option-key={key()}
@@ -534,11 +533,8 @@ function ProjectItem(props: {
         src={getProjectAvatarSource(props.project.id, props.project.icon)}
         variant={getProjectAvatarVariant(props.project.icon?.color)}
       />
-      <DropdownMenu.ItemLabel class="min-w-0 truncate leading-5">{displayName(props.project)}</DropdownMenu.ItemLabel>
-      <DropdownMenu.ItemIndicator style={{ width: "14px", height: "14px", right: "12px" }}>
-        <IconV2 name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
-      </DropdownMenu.ItemIndicator>
-    </DropdownMenu.RadioItem>
+      <span class="min-w-0 truncate leading-5">{displayName(props.project)}</span>
+    </Menu.RadioItem>
   )
 }
 
@@ -552,7 +548,7 @@ function ProjectAction(props: {
 }) {
   const key = () => props.controller.actionKey(props.server)
   return (
-    <DropdownMenu.Item
+    <Menu.Item
       id={key()}
       data-option-key={key()}
       class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
@@ -573,17 +569,17 @@ function ProjectAction(props: {
       onSelect={() => props.onSelect(props.server)}
     >
       <Icon name="plus" size="small" />
-      <DropdownMenu.ItemLabel class="min-w-0 truncate leading-5">
+      <span class="min-w-0 truncate leading-5">
         {props.controller.labels.add()}
-      </DropdownMenu.ItemLabel>
-    </DropdownMenu.Item>
+      </span>
+    </Menu.Item>
   )
 }
 
 function ServerAction(props: { server: { key: string; name: string }; onSelect: (server: string) => void }) {
   return (
-    <DropdownMenu.Item class={projectActionClass} onSelect={() => props.onSelect(props.server.key)}>
-      <DropdownMenu.ItemLabel class="min-w-0 flex-1 truncate leading-5">{props.server.name}</DropdownMenu.ItemLabel>
-    </DropdownMenu.Item>
+    <Menu.Item class={projectActionClass} onSelect={() => props.onSelect(props.server.key)}>
+      <span class="min-w-0 flex-1 truncate leading-5">{props.server.name}</span>
+    </Menu.Item>
   )
 }

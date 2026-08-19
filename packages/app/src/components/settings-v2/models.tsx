@@ -1,9 +1,9 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Switch } from "@opencode-ai/ui/v2/switch-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { Switch } from "@opencode-ai/ui/switch"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { TextInput } from "@opencode-ai/ui/text-input"
 import { type Component, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -62,7 +62,7 @@ export const SettingsModelsV2: Component = () => {
           <InlineServerSelect />
         </div>
         <div class="settings-v2-tab-search">
-          <TextInputV2
+          <TextInput
             type="search"
             appearance="base"
             value={list.filter()}
@@ -75,12 +75,12 @@ export const SettingsModelsV2: Component = () => {
             aria-label={language.t("dialog.model.search.placeholder")}
           />
           <Show when={list.filter()}>
-            <IconButtonV2
+            <IconButton
               type="button"
               variant="ghost-muted"
               size="small"
               class="settings-v2-tab-search-clear"
-              icon={<IconV2 name="close" size="large" class="text-v2-icon-icon-muted" />}
+              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
               onClick={() => list.clear()}
             />
           </Show>

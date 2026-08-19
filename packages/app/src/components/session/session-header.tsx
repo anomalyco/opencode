@@ -1,4 +1,3 @@
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { createMemo, Show } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Portal } from "solid-js/web"
@@ -7,10 +6,10 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { StatusPopoverV2 } from "../status-popover"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Keybind } from "@opencode-ai/ui/keybind"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { reviewTooltipKeybind } from "../command-tooltip-keybind"
 import { useTitlebarRightMount } from "../titlebar"
 
@@ -60,24 +59,24 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
   return (
     <div class="flex items-center gap-2">
       <Show when={props.state.statusVisible}>
-        <Tooltip placement="bottom" value={props.state.statusLabel}>
+        <Tooltip appearance="standard" placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />
         </Tooltip>
       </Show>
       <Show when={props.state.reviewVisible}>
-        <TooltipV2
+        <Tooltip
           class="shrink-0"
           placement="bottom"
           value={
             <>
               {props.state.reviewLabel}
               <Show when={props.state.reviewKeybind.length > 0}>
-                <KeybindV2 keys={props.state.reviewKeybind} variant="neutral" />
+                <Keybind keys={props.state.reviewKeybind} variant="neutral" />
               </Show>
             </>
           }
         >
-          <IconButtonV2
+          <IconButton
             type="button"
             variant="ghost-muted"
             size="large"
@@ -87,9 +86,9 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
             aria-label={props.state.reviewLabel}
             aria-expanded={props.state.reviewOpened}
             aria-controls="review-panel"
-            icon={<IconV2 name="sidebar-right" />}
+            icon={<Icon name="sidebar-right" />}
           />
-        </TooltipV2>
+        </Tooltip>
       </Show>
     </div>
   )

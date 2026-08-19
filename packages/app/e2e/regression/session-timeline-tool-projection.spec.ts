@@ -131,15 +131,14 @@ test("labels V2 skill tools from IDs and result metadata", async ({ page }) => {
     "aria-label",
     "sample-skill",
   )
-  await expect(page.locator(`[data-timeline-part-id="${completed}"] [data-component="text-shimmer"]`)).toHaveAttribute(
-    "aria-label",
-    "OpenCode",
-  )
+  await expect(
+    page.locator(`[data-timeline-part-id="${completed}"] [data-component="text-shimmer"]`),
+  ).toHaveAttribute("aria-label", "OpenCode")
   for (const id of [pending, completed]) {
     const skill = page.locator(`[data-timeline-part-id="${id}"]`)
     await expect(skill.locator('[data-slot="skill-tool-label"]')).toHaveText("Skill")
     await expect(skill.locator('[data-slot="skill-tool-separator"]')).toHaveText("·")
-    await expect(skill.locator('use[href="#opencode-icon-post-skill"]')).toBeVisible()
+    await expect(skill.locator('use[href="#opencode-v2-icon-post-skill"]')).toBeVisible()
   }
 })
 

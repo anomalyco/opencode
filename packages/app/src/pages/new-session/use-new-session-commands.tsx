@@ -21,8 +21,8 @@ export function useNewSessionCommands(input: {
       title: language.t("command.palette"),
       hidden: true,
       onSelect: async () => {
-        const { DialogSelectFile } = await import("@/components/dialog-select-file")
-        void dialog.show(() => <DialogSelectFile />)
+        const { DialogCommandPaletteV2 } = await import("@/components/dialog-command-palette-v2")
+        void dialog.show(() => <DialogCommandPaletteV2 />)
       },
     },
     {

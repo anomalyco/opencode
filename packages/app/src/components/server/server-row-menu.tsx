@@ -1,6 +1,6 @@
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Menu } from "@opencode-ai/ui/menu"
 import { type Component, Show } from "solid-js"
 import type { ServerActionsController } from "@/components/server/server-management-controller"
 import { useLanguage } from "@/context/language"
@@ -59,19 +59,19 @@ export const ServerRowMenuView: Component<{
   const builtin = () => ServerConnection.builtin(props.server)
   const httpServer = () => (props.server.type === "http" ? props.server : undefined)
   return (
-    <MenuV2 gutter={6} modal={false} placement="bottom-end" open={props.open} onOpenChange={props.onOpenChange}>
-      <MenuV2.Trigger
-        as={IconButtonV2}
+    <Menu gutter={6} modal={false} placement="bottom-end" open={props.open} onOpenChange={props.onOpenChange}>
+      <Menu.Trigger
+        as={IconButton}
         variant="ghost-muted"
         size="small"
-        icon={<IconV2 name="outline-dots" />}
+        icon={<Icon name="outline-dots" />}
         aria-label={props.labels.more}
       />
-      <MenuV2.Portal>
-        <MenuV2.Content>
-          <MenuV2.Group>
-            <MenuV2.GroupLabel>{props.labels.server}</MenuV2.GroupLabel>
-            <MenuV2.Item
+      <Menu.Portal>
+        <Menu.Content>
+          <Menu.Group>
+            <Menu.GroupLabel>{props.labels.server}</Menu.GroupLabel>
+            <Menu.Item
               disabled={builtin() || !httpServer()}
               onSelect={() => {
                 const server = httpServer()
@@ -79,20 +79,20 @@ export const ServerRowMenuView: Component<{
               }}
             >
               {props.labels.edit}
-            </MenuV2.Item>
+            </Menu.Item>
             <Show when={props.canDefault && !props.isDefault}>
-              <MenuV2.Item onSelect={props.onSetDefault}>{props.labels.default}</MenuV2.Item>
+              <Menu.Item onSelect={props.onSetDefault}>{props.labels.default}</Menu.Item>
             </Show>
             <Show when={props.canDefault && props.isDefault}>
-              <MenuV2.Item onSelect={props.onRemoveDefault}>{props.labels.defaultRemove}</MenuV2.Item>
+              <Menu.Item onSelect={props.onRemoveDefault}>{props.labels.defaultRemove}</Menu.Item>
             </Show>
             <Show when={props.canRemove}>
-              <MenuV2.Separator />
-              <MenuV2.Item onSelect={props.onRemove}>{props.labels.delete}</MenuV2.Item>
+              <Menu.Separator />
+              <Menu.Item onSelect={props.onRemove}>{props.labels.delete}</Menu.Item>
             </Show>
-          </MenuV2.Group>
-        </MenuV2.Content>
-      </MenuV2.Portal>
-    </MenuV2>
+          </Menu.Group>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
   )
 }

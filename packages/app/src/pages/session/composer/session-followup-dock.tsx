@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { DockTray } from "@opencode-ai/ui/dock-surface"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/context/language"
 
 export function SessionFollowupDock(props: {
@@ -48,7 +49,7 @@ export function SessionFollowupDock(props: {
         <div class="ml-auto shrink-0">
           <IconButton
             data-collapsed={store.collapsed ? "true" : "false"}
-            icon="chevron-down"
+            icon={<Icon name="chevron-down" />}
             size="normal"
             variant="ghost"
             style={{ transform: `rotate(${store.collapsed ? 180 : 0}deg)` }}
@@ -79,7 +80,7 @@ export function SessionFollowupDock(props: {
                 <span class="min-w-0 flex-1 truncate text-13-regular text-text-strong">{item.text}</span>
                 <Button
                   size="small"
-                  variant="secondary"
+                  variant="neutral"
                   class="shrink-0"
                   disabled={!!props.sending}
                   onClick={() => props.onSend(item.id)}

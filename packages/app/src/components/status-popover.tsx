@@ -1,7 +1,6 @@
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Suspense, createMemo, createSignal, lazy, Show, type JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
@@ -157,7 +156,7 @@ function StatusPopoverView(props: { state: StatusPopoverState }) {
     <Popover
       open={props.state.shown}
       onOpenChange={props.state.onOpenChange}
-      triggerAs={IconButtonV2}
+      triggerAs={IconButton}
       triggerProps={{
         variant: "ghost-muted",
         size: "large",
@@ -167,7 +166,7 @@ function StatusPopoverView(props: { state: StatusPopoverState }) {
       }}
       trigger={
         <div class="relative size-4">
-          <IconV2 name={props.state.shown ? "status-active" : "status"} />
+          <Icon name={props.state.shown ? "status-active" : "status"} />
           <div
             class={`absolute -top-1 -right-1 size-2 rounded-full border border-[var(--v2-background-bg-deep)] ${serverStatusDotClass(props.state)}`}
           />

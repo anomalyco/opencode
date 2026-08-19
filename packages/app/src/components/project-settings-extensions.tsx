@@ -1,6 +1,6 @@
 import { Icon } from "@opencode-ai/ui/icon"
-import { Switch } from "@opencode-ai/ui/v2/switch-v2"
-import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
+import { Switch } from "@opencode-ai/ui/switch"
+import { Tabs } from "@opencode-ai/ui/tabs"
 import { type Component, For, Show, createEffect, createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useMcpToggle } from "@/context/mcp"
@@ -149,15 +149,15 @@ export const ProjectSettingsExtensions: Component = () => {
         <span>{language.t("project.settings.extensions.description")}</span>
       </div>
 
-      <TabsV2 variant="pill" defaultValue="mcps" class="project-settings-extension-tabs">
-        <TabsV2.List>
-          <TabsV2.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</TabsV2.Trigger>
-          <TabsV2.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</TabsV2.Trigger>
-          <TabsV2.Trigger value="skills">{language.t("settings.extensions.tab.skills")}</TabsV2.Trigger>
+      <Tabs variant="pill" defaultValue="mcps" class="project-settings-extension-tabs">
+        <Tabs.List>
+          <Tabs.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</Tabs.Trigger>
+          <Tabs.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</Tabs.Trigger>
+          <Tabs.Trigger value="skills">{language.t("settings.extensions.tab.skills")}</Tabs.Trigger>
           {/* TODO: Restore LSP status when V2 exposes it. */}
-        </TabsV2.List>
+        </Tabs.List>
 
-        <TabsV2.Content value="mcps">
+        <Tabs.Content value="mcps">
           <div class="project-settings-extension-section">
             <div class="project-settings-extension-section-header">
               <span>{language.t("project.settings.extensions.added")}</span>
@@ -168,9 +168,9 @@ export const ProjectSettingsExtensions: Component = () => {
             </Show>
             <SharedSection count={globalMcpNames().length}>{mcpRows(globalMcpNames())}</SharedSection>
           </div>
-        </TabsV2.Content>
+        </Tabs.Content>
 
-        <TabsV2.Content value="plugins">
+        <Tabs.Content value="plugins">
           <div class="project-settings-extension-section">
             <div class="project-settings-extension-section-header">
               <span>{language.t("project.settings.extensions.added")}</span>
@@ -181,9 +181,9 @@ export const ProjectSettingsExtensions: Component = () => {
             </Show>
             <SharedSection count={globalPlugins().length}>{pluginRows(globalPlugins())}</SharedSection>
           </div>
-        </TabsV2.Content>
+        </Tabs.Content>
 
-        <TabsV2.Content value="skills">
+        <Tabs.Content value="skills">
           <div class="project-settings-extension-section">
             <div class="project-settings-extension-section-header">
               <span>{language.t("project.settings.extensions.added")}</span>
@@ -196,8 +196,8 @@ export const ProjectSettingsExtensions: Component = () => {
             </Show>
             <SharedSection count={serverSkills().length}>{skillRows(serverSkills())}</SharedSection>
           </div>
-        </TabsV2.Content>
-      </TabsV2>
+        </Tabs.Content>
+      </Tabs>
     </div>
   )
 }

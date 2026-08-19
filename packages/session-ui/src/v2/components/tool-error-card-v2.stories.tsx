@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Button } from "@opencode-ai/ui/button"
 import { ToolErrorCardV2, type ToolErrorCardV2Props } from "./tool-error-card-v2"
 
 const docs = `### Overview
@@ -75,9 +75,9 @@ export const Controlled = {
     const [open, setOpen] = createSignal(false)
     return (
       <div style={{ display: "flex", "flex-direction": "column", gap: "24px", "max-width": "420px" }}>
-        <ButtonV2 type="button" classList={{ "w-fit": true }} onClick={() => setOpen((o) => !o)}>
+        <Button type="button" classList={{ "w-fit": true }} onClick={() => setOpen((o) => !o)}>
           Toggle from outside: {open() ? "Open" : "Closed"}
-        </ButtonV2>
+        </Button>
         <ToolErrorCardV2
           title="Grep"
           subtitle="Timeout"

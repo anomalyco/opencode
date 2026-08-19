@@ -10,6 +10,7 @@ import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch } fro
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { iife } from "@opencode-ai/core/util/iife"
 import { Binary } from "@opencode-ai/util/binary"
@@ -283,14 +284,14 @@ export default function () {
                                 as={"a"}
                                 href="https://github.com/anomalyco/opencode"
                                 target="_blank"
-                                icon="github"
+                                icon={<Icon name="github" />}
                                 variant="ghost"
                               />
                               <IconButton
                                 as={"a"}
                                 href="https://opencode.ai/discord"
                                 target="_blank"
-                                icon="discord"
+                                icon={<Icon name="discord" />}
                                 variant="ghost"
                               />
                             </div>

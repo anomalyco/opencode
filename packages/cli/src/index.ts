@@ -13,6 +13,7 @@ import { AppProcess } from "@opencode-ai/util/process"
 import { Config } from "./config"
 import { Npm } from "@opencode-ai/util/npm"
 import { Heap } from "./heap"
+import { CpuProfile } from "./cpu-profile"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -38,6 +39,8 @@ const Handlers = Runtime.handlers(Commands, {
   },
   plugin: {
     list: () => import("./commands/handlers/plugin/list"),
+    add: () => import("./commands/handlers/plugin/add"),
+    remove: () => import("./commands/handlers/plugin/remove"),
   },
   models: () => import("./commands/handlers/models"),
   export: () => import("./commands/handlers/export"),
@@ -59,6 +62,7 @@ const Handlers = Runtime.handlers(Commands, {
 
 Effect.gen(function* () {
   yield* Heap.listen
+  yield* CpuProfile.listen
   const runFork = Effect.runForkWith(yield* Effect.context<never>())
   const uncaughtException = (cause: Error, origin: "uncaughtException" | "unhandledRejection") => {
     runFork(Effect.logError("uncaught exception", { cause, origin }))

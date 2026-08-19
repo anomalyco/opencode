@@ -275,6 +275,9 @@ export function Session(props: { verticalTabsWidth: number }) {
   const sessionTabs = useSessionTabs()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
+  createEffect(() => {
+    if (!awayFromBottom()) setLatestHovered(false)
+  })
 
   const clearMessageNavigation = () => {
     setNavigationSlack(0)
@@ -1196,16 +1199,15 @@ export function Session(props: { verticalTabsWidth: number }) {
             <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
               <Show when={awayFromBottom()}>
                 <box
+                  id="session-jump-to-latest"
                   paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={
-                    latestHovered() ? theme.background.action.primary.focused : theme.background.action.primary.default
-                  }
                   onMouseOver={() => setLatestHovered(true)}
                   onMouseOut={() => setLatestHovered(false)}
                   onMouseUp={toBottom}
                 >
-                  <text fg={latestHovered() ? theme.text.action.primary.focused : theme.text.action.primary.default}>
+                  <text
+                    fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.default}
+                  >
                     Jump to latest ↓
                   </text>
                 </box>

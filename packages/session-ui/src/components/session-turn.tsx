@@ -437,7 +437,7 @@ export function SessionTurn(
                     <span data-slot="session-turn-diffs-label">
                       {i18n.plural("ui.sessionTurn.diffs.changed", edited())}
                     </span>
-                    <DiffChanges changes={diffs()} />
+                    <DiffChanges appearance="standard" changes={diffs()} />
                     <Show when={overflow() > 0}>
                       <span data-slot="session-turn-diffs-toggle" onClick={toggleAll}>
                         {showAll() ? i18n.t("ui.sessionTurn.diffs.showLess") : i18n.t("ui.sessionTurn.diffs.showAll")}
@@ -490,7 +490,7 @@ export function SessionTurn(
                                     </span>
                                     <div data-slot="session-turn-diff-meta">
                                       <span data-slot="session-turn-diff-changes">
-                                        <DiffChanges changes={diff} />
+                                        <DiffChanges appearance="standard" changes={diff} />
                                       </span>
                                       <span data-slot="session-turn-diff-chevron">
                                         <Icon name="chevron-down" size="small" />

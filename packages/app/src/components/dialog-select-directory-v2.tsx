@@ -1,8 +1,8 @@
 import "@pierre/trees/web-components"
 import { FileTree } from "@pierre/trees"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
+import { Button } from "@opencode-ai/ui/button"
+import { TextInput } from "@opencode-ai/ui/text-input"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { useGlobal } from "@/context/global"
@@ -28,7 +28,7 @@ import {
   pickerRoot,
 } from "./directory-picker-domain"
 import "./dialog-select-directory-v2.css"
-import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
+import { Divider } from "@opencode-ai/ui/divider"
 import { getFilename } from "@opencode-ai/util/path"
 
 interface DialogSelectDirectoryV2Props {
@@ -293,10 +293,10 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       <DialogHeader>
         <DialogTitle>{props.title ?? language.t("command.project.open")}</DialogTitle>
       </DialogHeader>
-      <DividerV2 />
+      <Divider />
       <DialogBody class="directory-picker-v2-body pt-4!">
         <div class="directory-picker-v2-path" ref={pathArea}>
-          <TextInputV2
+          <TextInput
             value={input()}
             autofocus
             autocomplete="off"
@@ -318,15 +318,15 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
             onKeyDown={handleInputKey}
           />
           <div class="directory-picker-v2-actions">
-            <ButtonV2 size="small" variant="ghost" onClick={() => void navigate(home())}>
+            <Button size="small" variant="ghost" onClick={() => void navigate(home())}>
               ~
-            </ButtonV2>
-            <ButtonV2 size="small" variant="ghost" onClick={() => void navigate(pickerRoot(root()) || root())}>
+            </Button>
+            <Button size="small" variant="ghost" onClick={() => void navigate(pickerRoot(root()) || root())}>
               {language.t("dialog.directory.root")}
-            </ButtonV2>
-            <ButtonV2 size="small" variant="ghost" onClick={() => void navigate(pickerParent(root()))}>
+            </Button>
+            <Button size="small" variant="ghost" onClick={() => void navigate(pickerParent(root()))}>
               {language.t("dialog.directory.parent")}
-            </ButtonV2>
+            </Button>
           </div>
           <Show when={suggestionsOpen() && currentSuggestions().length > 0}>
             <div id="directory-picker-v2-suggestions" role="listbox" class="directory-picker-v2-suggestions">
@@ -379,12 +379,12 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
         <div class="directory-picker-v2-selection">{policy.result(root(), selected(), rootValid())}</div>
       </DialogBody>
       <DialogFooter>
-        <ButtonV2 variant="neutral" onClick={() => dialog.close()}>
+        <Button variant="neutral" onClick={() => dialog.close()}>
           {language.t("common.cancel")}
-        </ButtonV2>
-        <ButtonV2 variant="contrast" disabled={!policy.result(root(), selected(), rootValid())} onClick={resolve}>
+        </Button>
+        <Button variant="contrast" disabled={!policy.result(root(), selected(), rootValid())} onClick={resolve}>
           {action[policy.action]}
-        </ButtonV2>
+        </Button>
       </DialogFooter>
     </Dialog>
   )

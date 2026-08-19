@@ -1,7 +1,7 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { Icon } from "@opencode-ai/ui/v2/icon"
+import { Menu } from "@opencode-ai/ui/menu"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Icon } from "@opencode-ai/ui/icon"
 import { getFilename } from "@opencode-ai/util/path"
 import { useLanguage } from "@/context/language"
 import { sameDirectory } from "@/utils/workspace"
@@ -58,7 +58,7 @@ export function PromptWorkspaceSelector(props: {
   return (
     <>
       <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
-      <TooltipV2
+      <Tooltip
         placement="top"
         openDelay={800}
         value={
@@ -77,8 +77,8 @@ export function PromptWorkspaceSelector(props: {
         contentClass={props.onboarding ? "max-w-[280px]" : undefined}
         class="min-w-0"
       >
-        <MenuV2 placement="bottom" gutter={4} onOpenChange={onOpenChange}>
-          <MenuV2.Trigger
+        <Menu placement="bottom" gutter={4} onOpenChange={onOpenChange}>
+          <Menu.Trigger
             aria-description={language.t("session.new.workspace.trigger.tooltip")}
             class="flex h-6 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted"
           >
@@ -92,14 +92,14 @@ export function PromptWorkspaceSelector(props: {
               />
             </Show>
             <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-          </MenuV2.Trigger>
-          <MenuV2.Portal>
-            <MenuV2.Content class="w-[200px]">
-              <MenuV2.Group>
-                <MenuV2.GroupLabel>{language.t("session.new.workspace.runIn")}</MenuV2.GroupLabel>
-                <MenuV2.Item onSelect={() => select("main")}>
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content class="w-[200px]">
+              <Menu.Group>
+                <Menu.GroupLabel>{language.t("session.new.workspace.runIn")}</Menu.GroupLabel>
+                <Menu.Item onSelect={() => select("main")}>
                   <Icon name="monitor" />
-                  <TooltipV2
+                  <Tooltip
                     placement="right"
                     openDelay={800}
                     value={
@@ -113,14 +113,14 @@ export function PromptWorkspaceSelector(props: {
                     class="min-w-0 flex-1"
                   >
                     <span class="min-w-0 truncate">{language.t("session.new.workspace.local")}</span>
-                  </TooltipV2>
+                  </Tooltip>
                   <Show when={selected() === "main"}>
                     <Icon name="check" size="small" class="shrink-0" />
                   </Show>
-                </MenuV2.Item>
-                <MenuV2.Item onSelect={() => select("create")}>
+                </Menu.Item>
+                <Menu.Item onSelect={() => select("create")}>
                   <Icon name="workspace-new" />
-                  <TooltipV2
+                  <Tooltip
                     placement="right"
                     openDelay={800}
                     value={
@@ -134,25 +134,25 @@ export function PromptWorkspaceSelector(props: {
                     class="min-w-0 flex-1"
                   >
                     <span class="min-w-0 truncate">{language.t("workspace.new")}</span>
-                  </TooltipV2>
+                  </Tooltip>
                   <Show when={selected() === "create"}>
                     <Icon name="check" size="small" class="shrink-0" />
                   </Show>
-                </MenuV2.Item>
-              </MenuV2.Group>
+                </Menu.Item>
+              </Menu.Group>
               <Show
                 when={props.workspaces.length > 0}
                 fallback={
                   <>
-                    <MenuV2.Separator class="h-[0.5px]" />
-                    <MenuV2.Item onSelect={() => (pending = { type: "viewAll" })}>
+                    <Menu.Separator class="h-[0.5px]" />
+                    <Menu.Item onSelect={() => (pending = { type: "viewAll" })}>
                       <span class="min-w-0 flex-1 truncate">{language.t("common.viewAll")}</span>
-                    </MenuV2.Item>
+                    </Menu.Item>
                   </>
                 }
               >
-                <MenuV2.Separator class="h-[0.5px]" />
-                <MenuV2.Sub
+                <Menu.Separator class="h-[0.5px]" />
+                <Menu.Sub
                   gutter={0}
                   overlap
                   overflowPadding={8}
@@ -166,7 +166,7 @@ export function PromptWorkspaceSelector(props: {
                     requestAnimationFrame(() => searchInput?.focus())
                   }}
                 >
-                  <MenuV2.SubTrigger
+                  <Menu.SubTrigger
                     onKeyDown={(event) => {
                       if (
                         event.key === "ArrowRight" ||
@@ -181,9 +181,9 @@ export function PromptWorkspaceSelector(props: {
                     <span class="min-w-0 flex-1 truncate">
                       {language.t("session.new.workspace.existing").replace(/(…|\.{3})$/, "")}
                     </span>
-                  </MenuV2.SubTrigger>
-                  <MenuV2.Portal>
-                    <MenuV2.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">
+                  </Menu.SubTrigger>
+                  <Menu.Portal>
+                    <Menu.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">
                       <Show when={props.workspaces.length >= 10}>
                         <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
                           <Icon name="magnifying-glass" size="small" class="shrink-0" />
@@ -211,27 +211,27 @@ export function PromptWorkspaceSelector(props: {
                       </Show>
                       <For each={workspaces()}>
                         {(workspace) => (
-                          <MenuV2.Item onSelect={() => select(workspace)}>
+                          <Menu.Item onSelect={() => select(workspace)}>
                             <Icon name="workspace-isolated" />
                             <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
                             <Show when={selected() === workspace}>
                               <Icon name="check" size="small" class="shrink-0" />
                             </Show>
-                          </MenuV2.Item>
+                          </Menu.Item>
                         )}
                       </For>
-                      <MenuV2.Separator class="h-[0.5px]" />
-                      <MenuV2.Item onSelect={() => (pending = { type: "viewAll" })}>
+                      <Menu.Separator class="h-[0.5px]" />
+                      <Menu.Item onSelect={() => (pending = { type: "viewAll" })}>
                         <span class="min-w-0 flex-1 truncate">{language.t("common.viewAll")}</span>
-                      </MenuV2.Item>
-                    </MenuV2.SubContent>
-                  </MenuV2.Portal>
-                </MenuV2.Sub>
+                      </Menu.Item>
+                    </Menu.SubContent>
+                  </Menu.Portal>
+                </Menu.Sub>
               </Show>
-            </MenuV2.Content>
-          </MenuV2.Portal>
-        </MenuV2>
-      </TooltipV2>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+      </Tooltip>
       <PromptGitStatus branch={props.branch} from={selected() === "create"} class="ms-1" />
     </>
   )
@@ -255,7 +255,7 @@ export function PromptGitStatus(props: { branch?: string; noGit?: boolean; from?
   return (
     <Show when={label()}>
       {(value) => (
-        <TooltipV2
+        <Tooltip
           placement="top"
           value={value()}
           class={`min-w-0 max-w-[220px] ${props.class ?? ""}`}
@@ -265,7 +265,7 @@ export function PromptGitStatus(props: { branch?: string; noGit?: boolean; from?
             <Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />
             <span class="min-w-0 truncate">{value()}</span>
           </div>
-        </TooltipV2>
+        </Tooltip>
       )}
     </Show>
   )

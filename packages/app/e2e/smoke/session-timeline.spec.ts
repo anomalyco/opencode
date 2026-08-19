@@ -477,7 +477,7 @@ async function configureSmokePage(page: Page, directory: string) {
     }
     let recordFrame: number | undefined
     const record = () => {
-      for (const toast of document.querySelectorAll<HTMLElement>('[data-component="toast"][data-variant="error"]')) {
+      for (const toast of document.querySelectorAll<HTMLElement>(".toast-v2--error")) {
         const text = toast.textContent?.trim()
         if (text && !smoke.__timelineSmokeErrorToasts!.includes(text)) smoke.__timelineSmokeErrorToasts!.push(text)
       }

@@ -39,7 +39,7 @@ import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { ToolErrorCard } from "./tool-error-card"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
@@ -51,10 +51,7 @@ import { CommentCardV2 } from "../v2/components/comment-card-v2"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Button } from "@opencode-ai/ui/button"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
@@ -213,34 +210,17 @@ function MessageActionButton(
 ) {
   const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
   return (
-    <Show
-      when={props.useV2}
-      fallback={
-        <Tooltip value={props.label} placement="top" gutter={4}>
-          <IconButton
-            icon={props.icon}
-            size="normal"
-            variant="ghost"
-            disabled={props.disabled}
-            onMouseDown={props.onMouseDown}
-            onClick={props.onClick}
-            aria-label={props["aria-label"]}
-          />
-        </Tooltip>
-      }
-    >
-      <TooltipV2 value={props.label} placement="top" gutter={4}>
-        <IconButtonV2
-          icon={<IconV2 name={icon()} size="small" />}
-          size="normal"
-          variant="ghost-muted"
-          disabled={props.disabled}
-          onMouseDown={props.onMouseDown}
-          onClick={props.onClick}
-          aria-label={props["aria-label"]}
-        />
-      </TooltipV2>
-    </Show>
+    <Tooltip appearance={props.useV2 ? "compact" : "standard"} value={props.label} placement="top" gutter={4}>
+      <IconButton
+        icon={<Icon name={icon()} size="small" />}
+        size="normal"
+        variant="ghost-muted"
+        disabled={props.disabled}
+        onMouseDown={props.onMouseDown}
+        onClick={props.onClick}
+        aria-label={props["aria-label"]}
+      />
+    </Tooltip>
   )
 }
 
@@ -363,7 +343,6 @@ function displayDirectory(path: string | undefined) {
   return relativizeProjectPath(getDirectory(path), data.directory)
 }
 
-import type { IconProps } from "@opencode-ai/ui/icon"
 import { normalize, resolveFileDiff } from "./session-diff"
 
 export type ToolInfo = {
@@ -1191,9 +1170,9 @@ function UserMessageComments(props: { comments: UserMessageComment[]; bounded: b
         )}
       </For>
       <Show when={props.bounded && props.comments.length > 5 && !state.expanded}>
-        <ButtonV2 size="small" variant="ghost-muted" onClick={() => setState("expanded", true)}>
+        <Button size="small" variant="ghost-muted" onClick={() => setState("expanded", true)}>
           {i18n.t("ui.common.showMore")}
-        </ButtonV2>
+        </Button>
       </Show>
     </div>
   )
@@ -2144,16 +2123,16 @@ function ConsoleOutput(props: { copy: string; children: JSX.Element }) {
   return (
     <div data-component="bash-output" dir="ltr">
       <div data-slot="bash-copy">
-        <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
-          <IconButtonV2
-            icon={<IconV2 name={copied() ? "check" : "outline-copy"} size="small" />}
+        <Tooltip value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
+          <IconButton
+            icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
             size="normal"
             variant="ghost-muted"
             onMouseDown={(event) => event.preventDefault()}
             onClick={copy}
             aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
           />
-        </TooltipV2>
+        </Tooltip>
       </div>
       <div
         data-slot="bash-scroll"
@@ -2350,7 +2329,7 @@ ToolRegistry.register({
               </div>
               <div data-slot="message-part-actions">
                 <Show when={!pending() && props.metadata.filediff}>
-                  <DiffChanges changes={props.metadata.filediff} />
+                  <DiffChanges appearance="standard" changes={props.metadata.filediff} />
                 </Show>
               </div>
             </div>
@@ -2361,7 +2340,7 @@ ToolRegistry.register({
               path={path()}
               actions={
                 <Show when={!pending() && props.metadata.filediff}>
-                  <DiffChanges changes={props.metadata.filediff!} />
+                  <DiffChanges appearance="standard" changes={props.metadata.filediff!} />
                 </Show>
               }
             >
@@ -2543,7 +2522,10 @@ ToolRegistry.register({
                                       </span>
                                     </Match>
                                     <Match when={true}>
-                                      <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
+                                      <DiffChanges
+                                        appearance="standard"
+                                        changes={{ additions: file.additions, deletions: file.deletions }}
+                                      />
                                     </Match>
                                   </Switch>
                                   <Icon name="chevron-grabber-vertical" size="small" />
@@ -2599,7 +2581,10 @@ ToolRegistry.register({
                 </div>
                 <div data-slot="message-part-actions">
                   <Show when={!pending()}>
-                    <DiffChanges changes={{ additions: single()!.additions, deletions: single()!.deletions }} />
+                    <DiffChanges
+                      appearance="standard"
+                      changes={{ additions: single()!.additions, deletions: single()!.deletions }}
+                    />
                   </Show>
                 </div>
               </div>
@@ -2625,7 +2610,10 @@ ToolRegistry.register({
                     </span>
                   </Match>
                   <Match when={true}>
-                    <DiffChanges changes={{ additions: single()!.additions, deletions: single()!.deletions }} />
+                    <DiffChanges
+                      appearance="standard"
+                      changes={{ additions: single()!.additions, deletions: single()!.deletions }}
+                    />
                   </Match>
                 </Switch>
               }

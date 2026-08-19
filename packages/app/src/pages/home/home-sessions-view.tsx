@@ -2,10 +2,10 @@ import type { SessionInfo } from "@opencode-ai/client/promise"
 import { createMemo, For, Show, Suspense } from "solid-js"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/servers"
 import { SessionTabAvatarView } from "@/pages/layout/session-tab-avatar"
@@ -83,7 +83,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
         <Suspense>
           <Show when={props.groups.length > 0 && props.canCreateSession}>
             <div class="pointer-events-none absolute right-0 top-[84px] z-20 flex lg:top-[108px]">
-              <ButtonV2
+              <Button
                 data-action="home-new-session"
                 variant="ghost-muted"
                 size="normal"
@@ -92,7 +92,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                 onClick={props.onCreateSession}
               >
                 {props.language.t("command.session.new")}
-              </ButtonV2>
+              </Button>
             </div>
           </Show>
         </Suspense>
@@ -273,7 +273,7 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
             duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02 focus-within:bg-v2-background-bg-layer-02
           `}
         >
-          <IconV2 name="magnifying-glass" />
+          <Icon name="magnifying-glass" />
           <input
             ref={props.onSetSearchInput}
             class={`
@@ -317,12 +317,12 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
             }}
           />
           <Show when={props.searchValue}>
-            <IconButtonV2
+            <IconButton
               type="button"
               variant="ghost-muted"
               size="small"
               class="relative z-20 shrink-0"
-              icon={<IconV2 name="close" size="large" class="text-v2-icon-icon-muted" />}
+              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
               aria-label={props.searchPlaceholder}
               onClick={() => {
                 props.onSearchClose()
@@ -458,12 +458,12 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
             group-hover/session:opacity-100 focus-within:opacity-100
           `}
         >
-          <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
-            <IconButtonV2
+          <Tooltip class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
+            <IconButton
               data-action="home-session-archive"
               variant="ghost-muted"
               size="large"
-              icon={<IconV2 name="archive" />}
+              icon={<Icon name="archive" />}
               aria-label={props.language.t("common.archive")}
               onClick={(event) => {
                 event.preventDefault()
@@ -471,7 +471,7 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
                 void props.onArchiveSession(props.record.session)
               }}
             />
-          </TooltipV2>
+          </Tooltip>
         </div>
       </Show>
     </div>
@@ -525,9 +525,9 @@ function HomeSessionsEmpty(props: { onNewSession?: () => void; language: ReturnT
       </p>
       <Show when={props.onNewSession}>
         {(onNewSession) => (
-          <ButtonV2 data-action="home-new-session" variant="neutral" size="normal" icon="edit" onClick={onNewSession()}>
+          <Button data-action="home-new-session" variant="neutral" size="normal" icon="edit" onClick={onNewSession()}>
             {props.language.t("command.session.new")}
-          </ButtonV2>
+          </Button>
         )}
       </Show>
     </div>

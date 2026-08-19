@@ -1,5 +1,5 @@
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { Badge } from "@opencode-ai/ui/badge"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { showToast } from "@/utils/toast"
@@ -160,7 +160,7 @@ export const SettingsProvidersV2: Component<{
                       />
                       <div class="settings-v2-provider-main">
                         <span class="settings-v2-provider-name truncate">{item.name}</span>
-                        <Tag>{type(item)}</Tag>
+                        <Badge>{type(item)}</Badge>
                       </div>
                     </div>
                     <Show
@@ -171,9 +171,9 @@ export const SettingsProvidersV2: Component<{
                         </span>
                       }
                     >
-                      <ButtonV2 size="normal" variant="ghost-muted" onClick={() => void disconnect(item.id, item.name)}>
+                      <Button size="normal" variant="ghost-muted" onClick={() => void disconnect(item.id, item.name)}>
                         {language.t("common.disconnect")}
-                      </ButtonV2>
+                      </Button>
                     </Show>
                   </div>
                 )}
@@ -199,7 +199,7 @@ export const SettingsProvidersV2: Component<{
                       <div class="settings-v2-provider-main">
                         <span class="settings-v2-provider-name">{item.name}</span>
                         <Show when={item.id === "opencode" || item.id === "opencode-go"}>
-                          <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                          <Badge>{language.t("dialog.provider.tag.recommended")}</Badge>
                         </Show>
                       </div>
                       <Show when={note(item.id)}>
@@ -207,9 +207,9 @@ export const SettingsProvidersV2: Component<{
                       </Show>
                     </div>
                   </div>
-                  <ButtonV2 size="normal" variant="neutral" icon="plus" onClick={() => connect(item.id)}>
+                  <Button size="normal" variant="neutral" icon="plus" onClick={() => connect(item.id)}>
                     {language.t("common.connect")}
-                  </ButtonV2>
+                  </Button>
                 </div>
               )}
             </For>
@@ -226,14 +226,14 @@ export const SettingsProvidersV2: Component<{
                   <div class="settings-v2-provider-copy">
                     <div class="settings-v2-provider-main">
                       <span class="settings-v2-provider-name">{language.t("provider.custom.title")}</span>
-                      <Tag>{language.t("settings.providers.tag.custom")}</Tag>
+                      <Badge>{language.t("settings.providers.tag.custom")}</Badge>
                     </div>
                     <p class="settings-v2-provider-description">
                       {language.t("settings.providers.custom.description")}
                     </p>
                   </div>
                 </div>
-                <ButtonV2
+                <Button
                   size="normal"
                   variant="neutral"
                   icon="plus"
@@ -246,7 +246,7 @@ export const SettingsProvidersV2: Component<{
                   }}
                 >
                   {language.t("common.connect")}
-                </ButtonV2>
+                </Button>
               </div>
             </Show>
           </SettingsListV2>

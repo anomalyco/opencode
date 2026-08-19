@@ -601,6 +601,8 @@ export function createData(config: CreateDataInput) {
             existing.retry = undefined
             existing.error = undefined
             existing.finish = undefined
+            existing.rawFinish = undefined
+            existing.providerState = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
             return
@@ -628,6 +630,8 @@ export function createData(config: CreateDataInput) {
           if (!currentAssistant) return
           currentAssistant.time.completed = event.created
           currentAssistant.finish = event.data.finish
+          currentAssistant.rawFinish = event.data.rawFinish
+          currentAssistant.providerState = event.data.providerState
           currentAssistant.cost = event.data.cost
           currentAssistant.tokens = event.data.tokens
           if (event.data.snapshot)
@@ -640,7 +644,9 @@ export function createData(config: CreateDataInput) {
           const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
           if (!currentAssistant) return
           currentAssistant.time.completed = event.created
-          currentAssistant.finish = "error"
+          currentAssistant.finish = event.data.finish ?? "error"
+          currentAssistant.rawFinish = event.data.rawFinish
+          currentAssistant.providerState = event.data.providerState
           currentAssistant.error = event.data.error
           currentAssistant.retry = undefined
           if (event.data.cost !== undefined && event.data.tokens !== undefined) {

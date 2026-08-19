@@ -9,14 +9,12 @@ import { EventLogger } from "@opencode-ai/core/event-logger"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
 import { Credential } from "@opencode-ai/core/credential"
 import { Config } from "@opencode-ai/core/config"
-import { Command } from "@opencode-ai/core/command"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
-import { Pty } from "@opencode-ai/core/pty"
 import { Project } from "@opencode-ai/core/project"
 import { Session } from "@opencode-ai/core/session"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
-import { Shell } from "@opencode-ai/core/shell"
+import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Job } from "@opencode-ai/core/job"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { Global } from "@opencode-ai/util/global"
@@ -115,9 +113,7 @@ function makeRoutes<AuthError, AuthServices>(
       }),
     ],
     [InstructionDiscovery.node, InstructionDiscovery.configured({ project: options.config?.project })],
-    [Command.node, Command.configured({ gitbash: options.windows?.gitbash })],
-    [Pty.node, Pty.configured({ gitbash: options.windows?.gitbash })],
-    [Shell.node, Shell.configured({ gitbash: options.windows?.gitbash })],
+    [ShellSelect.node, ShellSelect.configured({ gitbash: options.windows?.gitbash })],
     [
       MCP.node,
       MCP.configured({

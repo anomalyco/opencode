@@ -24,6 +24,7 @@
     "./context/client": "./src/context/client.tsx",
     "./context/theme": "./src/context/theme.tsx",
     "./theme/discovery": "./src/theme/discovery.ts",
+    "./plugin/discovery": "./src/plugin/discovery.ts",
     "./context/editor": "./src/context/editor.ts",
     "./context/clipboard": "./src/context/clipboard.tsx",
     "./attention": "./src/attention.ts",

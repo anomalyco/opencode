@@ -104,6 +104,43 @@ it.effect("projects request settings, headers, and body overlays", () =>
   }),
 )
 
+it.effect("lowers chronological system updates to wrapped user messages", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model(model("opaque-provider"))
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        system: "Initial instructions.",
+        messages: [
+          Message.user("Before."),
+          Message.system("Updated <rules> & constraints."),
+          Message.assistant("After."),
+        ],
+      }),
+    )
+
+    expect(prepared.body.prompt).toEqual([
+      { role: "system", content: "Initial instructions." },
+      { role: "user", content: [{ type: "text", text: "Before." }] },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "<system-update>\nUpdated &lt;rules&gt; &amp; constraints.\n</system-update>",
+          },
+        ],
+      },
+      { role: "assistant", content: [{ type: "text", text: "After." }] },
+    ])
+  }),
+)
+
 it.effect("leaves max output tokens unset when the request omits them", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service

@@ -1,8 +1,8 @@
 import { For, Show, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useLanguage } from "@/context/language"
 
 export function SessionRevertDock(props: {
@@ -45,7 +45,7 @@ export function SessionRevertDock(props: {
         onClick={toggle}
         onKeyDown={onHeaderKeyDown}
       >
-        <IconV2 name="outline-reset" size="normal" class="text-v2-icon-icon-muted" />
+        <Icon name="outline-reset" size="normal" class="text-v2-icon-icon-muted" />
         <span
           classList={{
             "font-[440] shrink-0 cursor-default text-[13px] leading-5 tracking-[-0.04px]": true,
@@ -61,8 +61,8 @@ export function SessionRevertDock(props: {
           </span>
         </Show>
         <div class="ml-auto shrink-0">
-          <IconButtonV2
-            icon={<IconV2 name="outline-chevron-down" size="small" />}
+          <IconButton
+            icon={<Icon name="outline-chevron-down" size="small" />}
             size="large"
             variant="ghost-muted"
             style={{ transform: `rotate(${store.collapsed ? 180 : 0}deg)` }}
@@ -95,7 +95,7 @@ export function SessionRevertDock(props: {
                 <span class="min-w-0 flex-1 truncate text-[13px] font-[400] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
                   {item.text}
                 </span>
-                <ButtonV2
+                <Button
                   size="small"
                   variant="neutral"
                   class="shrink-0"
@@ -103,7 +103,7 @@ export function SessionRevertDock(props: {
                   onClick={() => props.onRestore(item.id)}
                 >
                   {language.t("session.revertDock.restore")}
-                </ButtonV2>
+                </Button>
               </div>
             )}
           </For>

@@ -1,6 +1,6 @@
 import { Component } from "solid-js"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
-import { Switch } from "@opencode-ai/ui/v2/switch-v2"
+import { Select } from "@opencode-ai/ui/select"
+import { Switch } from "@opencode-ai/ui/switch"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { SettingsListV2 } from "./parts/list"
@@ -34,8 +34,7 @@ const SoundSetting: Component<{
   const config = () => soundSettings[props.kind]
   return (
     <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
-      <SelectV2
-        appearance="inline"
+      <Select
         data-action={config().action}
         options={soundOptions}
         current={props.channel.current()}

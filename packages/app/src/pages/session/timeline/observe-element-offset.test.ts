@@ -62,13 +62,16 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
 })
 
 test("keeps checking until stale reset-delay callbacks can no longer win", async () => {
-  const route = document.createElement("section")
-  const viewport = document.createElement("div")
+  const targetWindow = new Window()
+  const mutations = controlledMutations(targetWindow)
+  const animation = controlledAnimationFrames(targetWindow)
+  const route = targetWindow.document.createElement("section")
+  const viewport = targetWindow.document.createElement("div")
   route.append(viewport)
-  document.body.append(route)
+  targetWindow.document.body.append(route)
   const instance = {
     scrollElement: viewport,
-    targetWindow: window,
+    targetWindow,
     scrollOffset: 79_400,
     options: {
       horizontal: false,
@@ -83,20 +86,23 @@ test("keeps checking until stale reset-delay callbacks can no longer win", async
     instance.scrollOffset = offset
   })
 
-  route.remove()
-  document.body.append(route)
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await frames(1)
-  expect(instance.scrollOffset).toBe(0)
+  try {
+    mutations.remove(route)
+    mutations.append(targetWindow.document.body, route)
+    animation.run(16)
+    expect(instance.scrollOffset).toBe(0)
 
-  instance.scrollOffset = 79_400
-  await new Promise((resolve) => setTimeout(resolve, 25))
-  await frames(3)
+    instance.scrollOffset = 79_400
+    animation.run(32)
+    animation.run(48)
 
-  expect(instance.scrollOffset).toBe(0)
-  expect(calls).toEqual([0, 0])
-  cleanup?.()
-  route.remove()
+    expect(instance.scrollOffset).toBe(0)
+    expect(calls).toEqual([0, 0])
+    expect(animation.pending()).toBe(0)
+  } finally {
+    cleanup?.()
+    await targetWindow.happyDOM.close()
+  }
 })
 
 test.each([
@@ -233,5 +239,31 @@ function controlledMutations(targetWindow: Window) {
       parent.removeChild(node)
       emit(record(parent, [], [node]))
     },
+  }
+}
+
+function controlledAnimationFrames(targetWindow: Window) {
+  let time = 0
+  let id = 0
+  const callbacks = new Map<number, FrameRequestCallback>()
+  Object.defineProperty(targetWindow.performance, "now", { value: () => time })
+  Object.defineProperty(targetWindow, "requestAnimationFrame", {
+    value: (callback: FrameRequestCallback) => {
+      id += 1
+      callbacks.set(id, callback)
+      return id
+    },
+  })
+  Object.defineProperty(targetWindow, "cancelAnimationFrame", {
+    value: (frame: number) => callbacks.delete(frame),
+  })
+  return {
+    run(at: number) {
+      time = at
+      const pending = [...callbacks.values()]
+      callbacks.clear()
+      pending.forEach((callback) => callback(at))
+    },
+    pending: () => callbacks.size,
   }
 }

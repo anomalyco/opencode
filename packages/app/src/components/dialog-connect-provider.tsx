@@ -5,9 +5,8 @@ import { List } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { DialogBody, DialogHeader, DialogTitle, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode-ai/ui/dialog"
+import { TextInput } from "@opencode-ai/ui/text-input"
 import { showToast } from "@/utils/toast"
 import { type Component, createMemo, createUniqueId, For, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -75,7 +74,7 @@ export const DialogConnectProvider: Component<{
   }
 
   return (
-    <DialogV2
+    <Dialog
       containerClass="!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
       class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
     >
@@ -99,7 +98,7 @@ export const DialogConnectProvider: Component<{
           <Content />
         </div>
       </DialogBody>
-    </DialogV2>
+    </Dialog>
   )
 }
 
@@ -168,7 +167,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   return (
     <div ref={picker} class="flex min-h-0 flex-1 flex-col gap-4" onKeyDown={handleKeyDown}>
       <div class="shrink-0 px-1 pt-px">
-        <TextInputV2
+        <TextInput
           ref={search}
           type="search"
           class="!w-full [font-family:var(--v2-font-family-sans)]"
@@ -379,7 +378,7 @@ function ProviderConnection(props: {
                 setFormStore("value", field.key, value)
               }}
             />
-            <Button class="w-auto" type="submit" size="large" variant="primary" disabled={!valid()}>
+            <Button class="w-auto" type="submit" size="large" variant="contrast" disabled={!valid()}>
               {language.t("common.continue")}
             </Button>
           </Match>
@@ -516,7 +515,7 @@ function ProviderConnection(props: {
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
           <label class="flex w-full flex-col gap-1 font-[530] leading-4 text-v2-text-text-base">
             {language.t("provider.connect.apiKey.label", { provider: provider().name })}
-            <TextInputV2
+            <TextInput
               ref={apiKey}
               class="!w-full"
               name="apiKey"
@@ -537,9 +536,9 @@ function ProviderConnection(props: {
               </div>
             )}
           </Show>
-          <ButtonV2 type="submit" variant="contrast" data-action="provider-connect-submit">
+          <Button type="submit" variant="contrast" data-action="provider-connect-submit">
             {language.t("common.continue")}
-          </ButtonV2>
+          </Button>
         </form>
       </div>
     )
@@ -585,7 +584,7 @@ function ProviderConnection(props: {
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
           <label class="flex w-full flex-col gap-1 font-[530] leading-4 text-v2-text-text-base">
             {language.t("provider.connect.oauth.code.label", { method: controller.currentMethod()?.label ?? "" })}
-            <TextInputV2
+            <TextInput
               ref={codeInput}
               class="!w-full"
               name="code"
@@ -605,9 +604,9 @@ function ProviderConnection(props: {
               </div>
             )}
           </Show>
-          <ButtonV2 type="submit" variant="contrast">
+          <Button type="submit" variant="contrast">
             {language.t("common.continue")}
-          </ButtonV2>
+          </Button>
         </form>
       </div>
     )

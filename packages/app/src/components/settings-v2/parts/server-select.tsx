@@ -1,5 +1,5 @@
 import { Show, createMemo, type Component } from "solid-js"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { Select } from "@opencode-ai/ui/select"
 import { useGlobal } from "@/context/global"
 import { ServerConnection, serverName } from "@/context/servers"
 
@@ -20,8 +20,7 @@ export const InlineServerSelect: Component<{
 
   return (
     <Show when={options().length > 1}>
-      <SelectV2
-        appearance="inline"
+      <Select
         data-action="settings-server-select"
         options={options()}
         current={current()}
