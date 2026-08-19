@@ -382,5 +382,14 @@ export default {
         ],
       },
     },
+    {
+      filetype: "odin",
+      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-odin/releases/download/v1.3.0/tree-sitter-odin.wasm",
+      queries: {
+        highlights: [
+          "https://raw.githubusercontent.com/helix-editor/helix/16d06643a4444ee297058e608c1de1a5bd8db083/runtime/queries/odin/highlights.scm",
+        ],
+      },
+    },
   ],
 }
