@@ -45,7 +45,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Truncate") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -152,5 +152,6 @@ const layer = Layer.effect(
 )
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node] })
+export const defaultLayer = layer
 
 export * as Truncate from "./truncate"

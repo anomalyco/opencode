@@ -6,7 +6,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -24,6 +24,9 @@ import { Git } from "../../src/git"
 import { Image } from "../../src/image/image"
 
 import { Question } from "../../src/question"
+import { Interrupt } from "../../src/session/interrupt"
+import { Messaging } from "../../src/messaging"
+import { S2SStore } from "../../src/s2s/store"
 import { Todo } from "../../src/session/todo"
 import { Session } from "@/session/session"
 import { SessionMessageTable } from "@opencode-ai/core/session/sql"
@@ -191,7 +194,10 @@ const promptRoot = LayerNode.group([
   Database.node,
   EventV2Bridge.node,
   Question.node,
+  Messaging.node,
+  S2SStore.node,
   Todo.node,
+  Interrupt.node,
   ToolRegistry.node,
   Skill.node,
   Git.node,
@@ -239,9 +245,11 @@ function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[
   return makePrompt(input)
 }
 
-const it = testEffect(makeHttp())
-const noLLMServer = testEffect(makeHttpNoLLMServer())
-const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const it = testEffect(makeHttp() as unknown as Layer.Layer<any, any, never>)
+const noLLMServer = testEffect(makeHttpNoLLMServer() as unknown as Layer.Layer<any, any, never>)
+const raceNoLLMServer = testEffect(
+  makeHttpNoLLMServer({ processor: "blocking" }) as unknown as Layer.Layer<any, any, never>,
+)
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -251,7 +259,7 @@ const withMcpInstructions = testEffect(
         tools: ["guide-server_lookup"],
       },
     ],
-  }),
+  }) as unknown as Layer.Layer<any, any, never>,
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
@@ -2440,3 +2448,177 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+// Subagent interrupt consumption in runLoop
+
+it.instance("loop injects a synthetic steer frame and continues the run", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const interrupt = yield* Interrupt.Service
+    const chat = yield* sessions.create({
+      title: "Steer regression",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("after-steer")
+    // Seed the pending steer so the first turn boundary consumes it.
+    yield* interrupt.request({
+      sessionID: chat.id,
+      intent: "steer",
+      reason: "USE_THE_CONFIG_FILE",
+      origin: "parent",
+    })
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("stop")
+      expect(result.parts.some((part) => part.type === "text" && part.text === "after-steer")).toBe(true)
+    }
+
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+    const steered = messages.some(
+      (msg) =>
+        msg.info.role === "user" &&
+        msg.parts.some(
+          (part) =>
+            part.type === "text" &&
+            part.synthetic === true &&
+            part.text.includes("<steer") &&
+            part.text.includes("USE_THE_CONFIG_FILE"),
+        ),
+    )
+    expect(steered).toBe(true)
+    // The visible transcript marker is a second, non-synthetic text part on the
+    // same injected user message. The TUI filters out synthetic parts but shows
+    // this one, so the user sees "Steered by parent: ..." in the subagent log.
+    const steeredVisible = messages.some(
+      (msg) =>
+        msg.info.role === "user" &&
+        msg.parts.some(
+          (part) =>
+            part.type === "text" && part.synthetic === false && part.text === "⊘ Steered by parent: USE_THE_CONFIG_FILE",
+        ),
+    )
+    expect(steeredVisible).toBe(true)
+    // A steer must NOT mark the session as terminal-aborted.
+    expect(Option.isNone(yield* interrupt.terminal(chat.id))).toBe(true)
+  }),
+)
+
+it.instance("loop injects a synthetic cancel frame and records a terminal reason", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const interrupt = yield* Interrupt.Service
+    const chat = yield* sessions.create({
+      title: "Cancel regression",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("cancel-ack")
+    yield* interrupt.request({
+      sessionID: chat.id,
+      intent: "cancel",
+      reason: "STOP_REASON_X",
+      origin: "parent",
+    })
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+    const cancelled = messages.some(
+      (msg) =>
+        msg.info.role === "user" &&
+        msg.parts.some(
+          (part) =>
+            part.type === "text" &&
+            part.synthetic === true &&
+            part.text.includes("<cancel") &&
+            part.text.includes("STOP_REASON_X"),
+        ),
+    )
+    expect(cancelled).toBe(true)
+    // The visible transcript marker: a second, non-synthetic text part on the
+    // same injected user message.
+    const cancelledVisible = messages.some(
+      (msg) =>
+        msg.info.role === "user" &&
+        msg.parts.some(
+          (part) =>
+            part.type === "text" && part.synthetic === false && part.text === "⊘ Cancelled by parent: STOP_REASON_X",
+        ),
+    )
+    expect(cancelledVisible).toBe(true)
+
+    const terminal = yield* interrupt.terminal(chat.id)
+    expect(Option.isSome(terminal)).toBe(true)
+    if (Option.isSome(terminal)) {
+      expect(terminal.value.reason).toBe("STOP_REASON_X")
+    }
+  }),
+)
+
+it.instance("loop attributes a user-initiated steer visible marker to 'by user'", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const interrupt = yield* Interrupt.Service
+    const chat = yield* sessions.create({
+      title: "User-origin steer",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("user-steer-ack")
+    yield* interrupt.request({
+      sessionID: chat.id,
+      intent: "steer",
+      reason: "switch to plan",
+      origin: "user",
+    })
+
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+    const userSteerVisible = messages.some(
+      (msg) =>
+        msg.info.role === "user" &&
+        msg.parts.some(
+          (part) =>
+            part.type === "text" && part.synthetic === false && part.text === "⊘ Steered by user: switch to plan",
+        ),
+    )
+    expect(userSteerVisible).toBe(true)
+  }),
+)
+
+// F5 (cancel grace-break): SKIPPED — infeasible with the current harness.
+// After a cancel frame is injected, driving >CANCEL_GRACE_TURNS continuing
+// turns requires the model to keep emitting tool-calls without stopping.
+// TestLLMServer tool calls fail (no real executor), which causes the loop to
+// exit via the tool-error path before the grace deadline is reached. The grace
+// math (cancelDeadline = step + CANCEL_GRACE_TURNS, break when step >= deadline)
+// is verified by inspection of prompt.ts:1184-1193.

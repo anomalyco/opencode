@@ -23,6 +23,9 @@ import { type Target, type WorkspaceInfo, WorkspaceInfo as WorkspaceInfoSchema }
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
+import { S2SStore } from "@/s2s/store"
+import { Messaging } from "@/messaging"
+import { SessionStatus } from "@/session/status"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionID } from "@/session/schema"
 import { NotFoundError } from "@/storage/storage"
@@ -960,6 +963,12 @@ export const node = LayerNode.make({
     RuntimeFlags.node,
     FSUtil.node,
     Database.node,
+    // S2S recipient delivery: the C′ wake-poller (forked from SessionPrompt.loop)
+    // + runLoop D-drain resolve these from the ambient fiber context. Without
+    // them the poller throws "Service not found". (memory #340/#350)
+    S2SStore.node,
+    Messaging.node,
+    SessionStatus.node,
   ],
 })
 

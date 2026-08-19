@@ -29,6 +29,7 @@ import { SessionCompaction } from "@/session/compaction"
 import { SessionRevert } from "@/session/revert"
 import { SessionSummary } from "@/session/summary"
 import { SessionPrompt } from "@/session/prompt"
+import { Interrupt } from "@/session/interrupt"
 import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
 import { LSP } from "@/lsp/lsp"
@@ -54,6 +55,9 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { Messaging } from "@/messaging"
+import { S2SPoller } from "@/s2s/poller"
+import { S2SStore } from "@/s2s/store"
 
 export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
@@ -88,6 +92,10 @@ export const AppLayer = AppNodeBuilderV1.build(
     SessionRevert.node,
     SessionSummary.node,
     SessionPrompt.node,
+    Interrupt.node,
+    Messaging.node,
+    S2SStore.node,
+    S2SPoller.node,
     Instruction.node,
     LLM.node,
     LSP.node,

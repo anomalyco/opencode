@@ -67,6 +67,9 @@ export type Event =
   | EventQuestionV2Asked
   | EventQuestionV2Replied
   | EventQuestionV2Rejected
+  | EventInterruptRequested
+  | EventInterruptConsumed
+  | EventInterruptTerminal
   | EventTodoUpdated
   | EventLspUpdated
   | EventPermissionAsked
@@ -77,6 +80,9 @@ export type Event =
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
+  | EventMessagingSent
+  | EventMessagingReplied
+  | EventMessagingRejected
   | EventCommandExecuted
   | EventProjectUpdated
   | EventSessionStatus
@@ -1360,6 +1366,32 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "interrupt.requested"
+        properties: {
+          sessionID: string
+          intent: "steer" | "cancel"
+          reason: string
+          origin: "user" | "parent"
+        }
+      }
+    | {
+        id: string
+        type: "interrupt.consumed"
+        properties: {
+          sessionID: string
+          intent: "steer" | "cancel"
+        }
+      }
+    | {
+        id: string
+        type: "interrupt.terminal"
+        properties: {
+          sessionID: string
+          reason: string
+        }
+      }
+    | {
+        id: string
         type: "todo.updated"
         properties: {
           sessionID: string
@@ -1464,6 +1496,32 @@ export type GlobalEvent = {
         properties: {
           mcpName: string
           url: string
+        }
+      }
+    | {
+        id: string
+        type: "messaging.sent"
+        properties: {
+          childSessionID: string
+          parentSessionID: string
+          body: string
+          expectReply: boolean
+        }
+      }
+    | {
+        id: string
+        type: "messaging.replied"
+        properties: {
+          childSessionID: string
+          parentSessionID: string
+          body: string
+        }
+      }
+    | {
+        id: string
+        type: "messaging.rejected"
+        properties: {
+          childSessionID: string
         }
       }
     | {
@@ -1675,6 +1733,8 @@ export type PermissionConfig =
       external_directory?: PermissionRuleConfig
       todowrite?: PermissionActionConfig
       question?: PermissionActionConfig
+      interrupt?: PermissionActionConfig
+      message?: PermissionActionConfig
       webfetch?: PermissionActionConfig
       websearch?: PermissionActionConfig
       lsp?: PermissionRuleConfig
@@ -2025,6 +2085,7 @@ export type Config = {
     primary_tools?: Array<string>
     continue_loop_on_deny?: boolean
     mcp_timeout?: number
+    subagent_interrupt?: boolean
     policies?: Array<ConfigV2ExperimentalPolicy>
   }
 }
@@ -2915,6 +2976,9 @@ export type V2Event =
   | QuestionV2Asked
   | QuestionV2Replied
   | QuestionV2Rejected
+  | InterruptRequested
+  | InterruptConsumed
+  | InterruptTerminal
   | TodoUpdated
   | LspUpdated
   | PermissionAsked
@@ -2925,6 +2989,9 @@ export type V2Event =
   | TuiSessionSelect
   | McpToolsChanged
   | McpBrowserOpenFailed
+  | MessagingSent
+  | MessagingReplied
+  | MessagingRejected
   | CommandExecuted
   | ProjectUpdated
   | SessionStatus2
@@ -5658,6 +5725,62 @@ export type QuestionV2Rejected = {
   }
 }
 
+export type InterruptRequested = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "interrupt.requested"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    intent: "steer" | "cancel"
+    reason: string
+    origin: "user" | "parent"
+  }
+}
+
+export type InterruptConsumed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "interrupt.consumed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    intent: "steer" | "cancel"
+  }
+}
+
+export type InterruptTerminal = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "interrupt.terminal"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    reason: string
+  }
+}
+
 export type TodoUpdated = {
   id: string
   metadata?: {
@@ -5863,6 +5986,62 @@ export type McpBrowserOpenFailed = {
   data: {
     mcpName: string
     url: string
+  }
+}
+
+export type MessagingSent = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "messaging.sent"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    childSessionID: string
+    parentSessionID: string
+    body: string
+    expectReply: boolean
+  }
+}
+
+export type MessagingReplied = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "messaging.replied"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    childSessionID: string
+    parentSessionID: string
+    body: string
+  }
+}
+
+export type MessagingRejected = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "messaging.rejected"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    childSessionID: string
   }
 }
 
@@ -6839,6 +7018,35 @@ export type EventQuestionV2Rejected = {
   }
 }
 
+export type EventInterruptRequested = {
+  id: string
+  type: "interrupt.requested"
+  properties: {
+    sessionID: string
+    intent: "steer" | "cancel"
+    reason: string
+    origin: "user" | "parent"
+  }
+}
+
+export type EventInterruptConsumed = {
+  id: string
+  type: "interrupt.consumed"
+  properties: {
+    sessionID: string
+    intent: "steer" | "cancel"
+  }
+}
+
+export type EventInterruptTerminal = {
+  id: string
+  type: "interrupt.terminal"
+  properties: {
+    sessionID: string
+    reason: string
+  }
+}
+
 export type EventTodoUpdated = {
   id: string
   type: "todo.updated"
@@ -6899,6 +7107,35 @@ export type EventMcpBrowserOpenFailed = {
   properties: {
     mcpName: string
     url: string
+  }
+}
+
+export type EventMessagingSent = {
+  id: string
+  type: "messaging.sent"
+  properties: {
+    childSessionID: string
+    parentSessionID: string
+    body: string
+    expectReply: boolean
+  }
+}
+
+export type EventMessagingReplied = {
+  id: string
+  type: "messaging.replied"
+  properties: {
+    childSessionID: string
+    parentSessionID: string
+    body: string
+  }
+}
+
+export type EventMessagingRejected = {
+  id: string
+  type: "messaging.rejected"
+  properties: {
+    childSessionID: string
   }
 }
 
@@ -9985,6 +10222,39 @@ export type SessionAbortResponses = {
 }
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
+
+export type SessionInterruptData = {
+  body?: {
+    intent: "steer" | "cancel" | "abort"
+    reason: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/interrupt"
+}
+
+export type SessionInterruptErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type SessionInterruptError = SessionInterruptErrors[keyof SessionInterruptErrors]
+
+export type SessionInterruptResponses = {
+  /**
+   * Interrupt requested
+   */
+  200: boolean
+}
+
+export type SessionInterruptResponse = SessionInterruptResponses[keyof SessionInterruptResponses]
 
 export type SessionInitData = {
   body?: {

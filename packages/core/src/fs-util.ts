@@ -8,6 +8,7 @@ import type { PlatformError } from "effect/PlatformError"
 import { Glob } from "./util/glob"
 import { serviceUse } from "./effect/service-use"
 import { makeGlobalNode } from "./effect/app-node"
+import { LayerNode } from "./effect/layer-node"
 import { filesystem } from "./effect/app-node-platform"
 
 export namespace FSUtil {

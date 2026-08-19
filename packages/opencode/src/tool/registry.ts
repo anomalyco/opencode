@@ -4,12 +4,15 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
+import { MessageTool } from "./message"
+import { S2STool } from "./s2s"
 import { ShellTool } from "./shell"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { TaskSteerTool, TaskCancelTool, TaskAbortTool } from "./task-interrupt"
 import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -39,6 +42,8 @@ import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
 import { Question } from "../question"
+import { Messaging } from "../messaging"
+import { S2SStore } from "@/s2s/store"
 import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
@@ -48,6 +53,7 @@ import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
 import { BackgroundJob } from "@/background/job"
+import { Interrupt } from "../session/interrupt"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -88,7 +94,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -100,8 +106,13 @@ const layer = Layer.effect(
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
+    const taskSteer = yield* TaskSteerTool
+    const taskCancel = yield* TaskCancelTool
+    const taskAbort = yield* TaskAbortTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
+    const message = yield* MessageTool
+    const s2s = yield* S2STool
     const todo = yield* TodoWriteTool
     const lsptool = yield* LspTool
     const plan = yield* PlanExitTool
@@ -215,12 +226,17 @@ const layer = Layer.effect(
           edit: Tool.init(edit),
           write: Tool.init(writetool),
           task: Tool.init(task),
+          task_steer: Tool.init(taskSteer),
+          task_cancel: Tool.init(taskCancel),
+          task_abort: Tool.init(taskAbort),
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
+          message: Tool.init(message),
+          s2s: Tool.init(s2s),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
           ...(codeModeTool ? { execute: Tool.init(codeModeTool) } : {}),
@@ -231,6 +247,8 @@ const layer = Layer.effect(
           builtin: [
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
+            ...(flags.experimentalAgentMessaging ? [tool.message] : []),
+            ...(flags.experimentalS2S ? [tool.s2s] : []),
             tool.shell,
             tool.read,
             tool.glob,
@@ -238,6 +256,7 @@ const layer = Layer.effect(
             tool.edit,
             tool.write,
             tool.task,
+            ...(flags.experimentalSubagentInterrupt ? [tool.task_steer, tool.task_cancel, tool.task_abort] : []),
             tool.fetch,
             tool.todo,
             tool.search,
@@ -431,6 +450,9 @@ export const node = LayerNode.make({
     Config.node,
     Plugin.node,
     Question.node,
+    Messaging.node,
+    Permission.node,
+    Messaging.node,
     Todo.node,
     Agent.node,
     Skill.node,
@@ -441,6 +463,8 @@ export const node = LayerNode.make({
     Instruction.node,
     FSUtil.node,
     EventV2Bridge.node,
+    Interrupt.node,
+    S2SStore.node,
     httpClient,
     CrossSpawnSpawner.node,
     Format.node,
