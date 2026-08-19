@@ -34,6 +34,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
+import { buildTlsCa, createTlsFetch } from "./tls"
 
 const DEFAULT_TIMEOUT = 30_000
 const CLIENT_OPTIONS = {
@@ -266,12 +267,30 @@ const layer = Layer.effect(
         )
       }
 
+      let tlsFetch: typeof fetch | undefined
+
+      if (mcp.tls) {
+        const directory = yield* InstanceState.directory
+        const result = yield* Effect.tryPromise({
+          try: () => buildTlsCa(mcp.tls, directory, url),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        })
+        if (result instanceof Error) {
+          return {
+            client: undefined as MCPClient | undefined,
+            status: { status: "failed" as const, error: result.message },
+          }
+        }
+        if (result) tlsFetch = createTlsFetch(result)
+      }
+
       const transports: Array<{ name: string; transport: TransportWithAuth }> = [
         {
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            ...(tlsFetch ? { fetch: tlsFetch } : {}),
           }),
         },
         {
@@ -279,6 +298,7 @@ const layer = Layer.effect(
           transport: new SSEClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            ...(tlsFetch ? { fetch: tlsFetch } : {}),
           }),
         },
       ]
@@ -843,9 +863,22 @@ const layer = Layer.effect(
         auth,
       )
 
+      let tlsFetch: typeof fetch | undefined
+
+      if (mcpConfig.tls) {
+        const directory = yield* InstanceState.directory
+        const result = yield* Effect.tryPromise({
+          try: () => buildTlsCa(mcpConfig.tls, directory, url),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        })
+        if (result instanceof Error) throw new Error(result.message)
+        if (result) tlsFetch = createTlsFetch(result)
+      }
+
       const transport = new StreamableHTTPClientTransport(url, {
         authProvider,
         requestInit: mcpConfig.headers ? { headers: mcpConfig.headers } : undefined,
+        ...(tlsFetch ? { fetch: tlsFetch } : {}),
       })
       const directory = yield* InstanceState.directory
 

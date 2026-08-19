@@ -14,6 +14,8 @@ import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceState } from "@/effect/instance-state"
+import { buildTlsCa, createTlsFetch } from "../../mcp/tls"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
@@ -677,6 +679,17 @@ export const McpDebugCommand = effectCmd({
             entry: auth.get(args.name),
           })
         : undefined
+    let tlsFetch: typeof fetch | undefined
+    if (serverConfig && isMcpRemote(serverConfig) && serverConfig.tls) {
+      const directory = yield* InstanceState.directory
+      const url = new URL(serverConfig.url)
+      const result = yield* Effect.tryPromise({
+        try: () => buildTlsCa(serverConfig.tls, directory, url),
+        catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      })
+      if (result instanceof Error) throw new Error(result.message)
+      if (result) tlsFetch = createTlsFetch(result)
+    }
     yield* Effect.promise(async () => {
       UI.empty()
       prompts.intro("MCP OAuth Debug")
@@ -733,7 +746,7 @@ export const McpDebugCommand = effectCmd({
 
       // Test basic HTTP connectivity first
       try {
-        const response = await fetch(serverConfig.url, {
+        const response = await (tlsFetch ?? fetch)(serverConfig.url, {
           method: "POST",
           headers: {
             ...serverConfig.headers,
@@ -786,6 +799,7 @@ export const McpDebugCommand = effectCmd({
           const transport = new StreamableHTTPClientTransport(new URL(serverConfig.url), {
             authProvider,
             requestInit: serverConfig.headers ? { headers: serverConfig.headers } : undefined,
+            ...(tlsFetch ? { fetch: tlsFetch } : {}),
           })
 
           try {
