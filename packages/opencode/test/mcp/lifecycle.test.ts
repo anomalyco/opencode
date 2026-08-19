@@ -20,6 +20,7 @@ import { MCP } from "../../src/mcp/index"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
 import { TestInstance } from "../fixture/fixture"
 import { pollWithTimeout, testEffect } from "../lib/effect"
+import { InstanceStore } from "@/project/instance-store"
 
 const it = testEffect(LayerNode.compile(MCP.node))
 const stdioFixture = path.join(import.meta.dir, "../fixture/mcp-lifecycle-stdio.ts")
@@ -182,13 +183,55 @@ function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server:
 
 const remote = (url: string, timeout?: number) => ({ type: "remote" as const, url, oauth: false as const, timeout })
 
+const treeFiles = ["parent", "child", "grandchild"] as const
+
+function treeCleanup(directory: string) {
+  return Effect.addFinalizer(() =>
+    Effect.promise(async () => {
+      for (const name of treeFiles) {
+        const file = Bun.file(path.join(directory, `${name}.pid`))
+        if (!(await file.exists())) continue
+        try {
+          process.kill(Number(await file.text()), "SIGKILL")
+        } catch {}
+      }
+    }),
+  )
+}
+
+function readTree(directory: string) {
+  return pollWithTimeout(
+    Effect.promise(async () => {
+      const files = treeFiles.map((name) => Bun.file(path.join(directory, `${name}.pid`)))
+      if (!(await Promise.all(files.map((file) => file.exists()))).every(Boolean)) return
+      return Promise.all(files.map(async (file) => Number(await file.text())))
+    }),
+    "stdio fixture did not publish its process tree",
+  )
+}
+
+function processRunning(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function waitForTreeExit(pids: readonly number[]) {
+  return pollWithTimeout(
+    Effect.sync(() => (pids.every((pid) => !processRunning(pid)) ? true : undefined)),
+    "stdio fixture process tree was not terminated",
+  )
+}
+
 it.instance("advertises and lists the instance directory as its root", () =>
   Effect.gen(function* () {
     const server = yield* lifecycleServer({ requestRoots: true })
     const mcp = yield* MCP.Service
     const test = yield* TestInstance
     yield* mcp.add("roots", remote(server.url))
-
     const roots = yield* pollWithTimeout(
       Effect.sync(() => server.state.roots),
       "server did not receive roots",
@@ -527,6 +570,99 @@ it.instance("local stdio timeout terminates the real server process", () =>
     )
   }),
 )
+
+if (process.platform !== "win32") {
+  it.instance(
+    "disconnect terminates a real stdio process tree",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* treeCleanup(test.directory)
+        const mcp = yield* MCP.Service
+        const result = yield* mcp.add("tree-disconnect", {
+          type: "local",
+          command: [process.execPath, stdioFixture, "--tree"],
+          environment: { MCP_LIFECYCLE_DIR: test.directory },
+        })
+        expect(result.status).toMatchObject({ "tree-disconnect": { status: "connected" } })
+        const pids = yield* readTree(test.directory)
+        expect(pids.every(processRunning)).toBe(true)
+
+        yield* mcp.disconnect("tree-disconnect")
+
+        yield* waitForTreeExit(pids)
+        expect(yield* Effect.promise(() => Bun.file(path.join(test.directory, "grandchild.term")).exists())).toBe(true)
+      }),
+    20_000,
+  )
+
+  it.instance(
+    "replacement terminates only the old stdio process tree",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* treeCleanup(test.directory)
+        const mcp = yield* MCP.Service
+        yield* mcp.add("tree-replace", {
+          type: "local",
+          command: [process.execPath, stdioFixture, "--tree"],
+          environment: { MCP_LIFECYCLE_DIR: test.directory },
+        })
+        const pids = yield* readTree(test.directory)
+
+        const result = yield* mcp.add("tree-replace", {
+          type: "local",
+          command: [process.execPath, stdioFixture],
+        })
+
+        expect(statusName(result.status, "tree-replace")).toBe("connected")
+        yield* waitForTreeExit(pids)
+        expect(Object.keys(yield* mcp.tools())).toEqual(["tree-replace_current_directory"])
+      }),
+    20_000,
+  )
+
+  it.instance(
+    "tool discovery failure terminates a real stdio process tree",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* treeCleanup(test.directory)
+        const mcp = yield* MCP.Service
+        const result = yield* mcp.add("tree-list-failure", {
+          type: "local",
+          command: [process.execPath, stdioFixture, "--tree", "--list-error"],
+          environment: { MCP_LIFECYCLE_DIR: test.directory },
+        })
+        const pids = yield* readTree(test.directory)
+
+        expect(statusName(result.status, "tree-list-failure")).toBe("failed")
+        yield* waitForTreeExit(pids)
+      }),
+    20_000,
+  )
+
+  it.instance(
+    "instance disposal waits for real stdio process tree cleanup",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* treeCleanup(test.directory)
+        const mcp = yield* MCP.Service
+        yield* mcp.add("tree-dispose", {
+          type: "local",
+          command: [process.execPath, stdioFixture, "--tree"],
+          environment: { MCP_LIFECYCLE_DIR: test.directory },
+        })
+        const pids = yield* readTree(test.directory)
+
+        yield* InstanceStore.Service.use((store) => store.disposeDirectory(test.directory))
+
+        yield* waitForTreeExit(pids)
+      }),
+    20_000,
+  )
+}
 
 it.instance("remote timeout aborts both real HTTP transport attempts", () =>
   Effect.gen(function* () {
