@@ -122,6 +122,10 @@ const fill = (mode: "lines" | "bytes", n: number) => {
   if (PS.has(sh())) return `& ${text}`
   return text
 }
+const failFill = (mode: "lines" | "bytes", n: number) => {
+  const text = fill(mode, n)
+  return sh() === "cmd" ? `${text} & exit 1` : `${text}; exit 1`
+}
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
 
@@ -1195,5 +1199,45 @@ describe("tool.shell truncation", () => {
         expect(lines[lineCount - 1]).toBe(String(lineCount))
       }),
     ),
+  )
+  it.live("truncates failed command output to a short tail and saves full output to file", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const lineCount = Truncate.MAX_LINES + 500
+        const result = yield* run({
+          command: failFill("lines", lineCount),
+        })
+        expect(result.metadata.exit).not.toBe(0)
+        expect(result.metadata.truncated).toBe(true)
+        expect(result.output).toMatch(/\.\.\.output truncated\.\.\./)
+        expect(result.output).toMatch(/Command failed with exit code 1/)
+        expect(result.output).toMatch(/Full output saved to:\s+\S+/)
+        expect(result.output.split("\n").length).toBeLessThan(Truncate.MAX_LINES)
+
+        const filepath = (result.metadata as { outputPath?: string }).outputPath
+        expect(filepath).toBeTruthy()
+        const saved = yield* (yield* FSUtil.Service).readFileString(filepath!)
+        const lines = saved.trim().split(/\r?\n/)
+        expect(lines.length).toBe(lineCount)
+      }),
+    ),
+    30_000,
+  )
+
+  it.live("does not truncate failed command output when it is small", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const result = yield* run({
+          command: `exit 3`,
+        })
+        expect(result.metadata.exit).toBe(3)
+        expect(result.metadata.truncated).toBe(false)
+        expect(result.output).toContain("Command failed with exit code 3")
+        expect(result.output).toContain("(no output)")
+      }),
+    ),
+    30_000,
   )
 })

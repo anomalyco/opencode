@@ -254,6 +254,9 @@ function tail(text: string, maxLines: number, maxBytes: number) {
   }
 }
 
+const FAIL_TAIL_LINES = 50
+const FAIL_TAIL_BYTES = 8 * 1024
+
 const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boolean) {
   const tree = yield* Effect.promise(() => parser().then((p) => (ps ? p.ps : p.bash).parse(command)))
   if (!tree) throw new Error("Failed to parse command")
@@ -566,7 +569,10 @@ export const ShellTool = Tool.define(
       }
       if (aborted) meta.push("User aborted the command")
       const raw = list.map((item) => item.text).join("")
-      const end = tail(raw, limits.maxLines, limits.maxBytes)
+      const failed = typeof code === "number" && code !== 0
+      const end = failed
+        ? tail(raw, FAIL_TAIL_LINES, FAIL_TAIL_BYTES)
+        : tail(raw, limits.maxLines, limits.maxBytes)
       if (end.cut) cut = true
       if (!file && end.cut) {
         file = yield* trunc.write(raw)
@@ -575,8 +581,12 @@ export const ShellTool = Tool.define(
       let output = end.text
       if (!output) output = "(no output)"
 
+      const status = failed ? `Command failed with exit code ${code}.\n\n` : ""
       if (cut && file) {
-        output = `...output truncated...\n\nFull output saved to: ${file}\n\n` + output
+        output =
+          `...output truncated...\n\n${status}Full output saved to: ${file}\n\n` + output
+      } else if (status) {
+        output = status + output
       }
 
       if (meta.length > 0) {
