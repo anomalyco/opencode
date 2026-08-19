@@ -28,6 +28,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Image } from "@opencode-ai/core/image"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Snapshot } from "@opencode-ai/core/snapshot"
 import { testEffect } from "./lib/effect"
 
 const executionCalls: Session.ID[] = []
@@ -71,6 +72,10 @@ const locations = Layer.effect(
                 ready
                   ? Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content)
                   : Effect.die(new Error("Image service used before plugins were ready")),
+            }),
+            Layer.mock(Snapshot.Service, {
+              capture: () =>
+                ready ? Effect.succeed(undefined) : Effect.die(new Error("Snapshot used before plugins were ready")),
             }),
             Layer.succeed(
               PluginSupervisor.Service,
@@ -1047,6 +1052,18 @@ describe("Session.prompt", () => {
           message.type === "user" || message.type === "synthetic" ? message.text : message.type,
         ),
       ).toEqual(["First prompt", "Background completion", "Second prompt"])
+    }),
+  )
+})
+
+describe("Session.revert", () => {
+  it.effect("waits for location plugins before staging", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* Session.Service
+      yield* db.insert(SessionMessageTable).values(assistantRow(messageID, 0)).run().pipe(Effect.orDie)
+      yield* session.revert.stage({ sessionID, messageID })
     }),
   )
 })

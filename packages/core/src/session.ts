@@ -905,19 +905,23 @@ const layer = Layer.effect(
           const session = yield* result.get(input.sessionID)
           if ((yield* execution.active).has(input.sessionID))
             return yield* new BusyError({ sessionID: input.sessionID })
-          return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
-            Effect.provideService(Database.Service, database),
-            Effect.provideService(Bus.Service, bus),
-            Effect.provide(locations.get(session.location)),
-          )
+          return yield* Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush
+            return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
+              Effect.provideService(Database.Service, database),
+              Effect.provideService(Bus.Service, bus),
+            )
+          }).pipe(Effect.provide(locations.get(session.location)))
         }),
         clear: Effect.fn("Session.revert.clear")(function* (sessionID) {
           const session = yield* result.get(sessionID)
           if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          const revert = yield* SessionRevert.clear(session).pipe(
-            Effect.provideService(Bus.Service, bus),
-            Effect.provide(locations.get(session.location)),
-          )
+          const revert = yield* Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush
+            return yield* SessionRevert.clear(session).pipe(Effect.provideService(Bus.Service, bus))
+          }).pipe(Effect.provide(locations.get(session.location)))
           yield* execution.wake(sessionID)
           return revert
         }),
