@@ -129,6 +129,10 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     const upgradeRaw = Effect.fn("GlobalHttpApi.upgradeRaw")(function* (ctx: {
       request: HttpServerRequest.HttpServerRequest
     }) {
+      const contentType = ctx.request.headers["content-type"]?.split(";", 1)[0].trim().toLowerCase()
+      if (contentType !== "application/json") {
+        return HttpServerResponse.jsonUnsafe({ success: false, error: "Expected application/json" }, { status: 415 })
+      }
       const body = yield* Effect.orDie(ctx.request.text)
       const json = parseBody(body)
       if (json === undefined) {
