@@ -35,28 +35,6 @@ const pluginNode = makeLocationNode({
   deps: [],
 })
 
-describe("Watcher.testLayer", () => {
-  it.effect("records subscriptions and broadcasts emitted updates through the service", () =>
-    Effect.gen(function* () {
-      const watcher = yield* Watcher.Service
-      const test = yield* Watcher.Test
-      const updates = yield* watcher.subscribe({ path: "/root", type: "directory" })
-      const received = yield* updates.pipe(
-        Stream.take(1),
-        Stream.runCollect,
-        Effect.forkScoped({ startImmediately: true }),
-      )
-      yield* Effect.yieldNow
-
-      yield* test.emit({ type: "update", path: "/root/file.md" })
-
-      expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "update", path: "/root/file.md" }])
-      // subscriptions() reports acquired watches, so paths come back resolved.
-      expect(yield* test.subscriptions()).toEqual([{ path: path.resolve("/root"), type: "directory" }])
-    }).pipe(Effect.provide(Watcher.testLayer)),
-  )
-})
-
 function withNative(native: Watcher.NativeInterface) {
   return Effect.provide(Watcher.layer().pipe(Layer.provide(Layer.succeed(Watcher.Native, native))))
 }

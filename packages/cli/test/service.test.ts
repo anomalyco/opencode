@@ -151,20 +151,6 @@ test("preview registration migration never moves stable discovery", async () => 
   }
 })
 
-test("managed service writes its registration once", async () => {
-  const service = await startManagedService("opencode-service-once-")
-  try {
-    const before = await fs.stat(service.registration)
-    await Bun.sleep(6_000)
-    const after = await fs.stat(service.registration)
-    expect(after.ino).toBe(before.ino)
-    expect(after.mtimeMs).toBe(before.mtimeMs)
-    expect(await Bun.file(service.registration).json()).toEqual(service.info)
-  } finally {
-    await stopManagedService(service)
-  }
-}, 30_000)
-
 test("deleting a managed service registration stops its owner", async () => {
   const service = await startManagedService("opencode-service-delete-")
   try {

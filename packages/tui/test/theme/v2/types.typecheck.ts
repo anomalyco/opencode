@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test"
 import type { BackgroundDefinition, TextDefinition, ThemeDefinition, ThemeDocument } from "@opencode-ai/theme/tui"
 
 const text = {
@@ -51,25 +50,8 @@ const definition = {
   "@context:overlay": { background: { default: "$hue.neutral.300" } },
 } satisfies ThemeDefinition
 
-const document = { version: 2, light: definition, dark: definition } satisfies ThemeDocument
-const lightOnly = { version: 2, light: definition } satisfies ThemeDocument
-const darkOnly = { version: 2, dark: definition } satisfies ThemeDocument
+export const document = { version: 2, light: definition, dark: definition } satisfies ThemeDocument
+export const lightOnly = { version: 2, light: definition } satisfies ThemeDocument
+export const darkOnly = { version: 2, dark: definition } satisfies ThemeDocument
 // @ts-expect-error A theme document must provide at least one mode.
-const empty = { version: 2 } satisfies ThemeDocument
-
-test("supports property-first definitions, variants, states, and contexts", () => {
-  expect(text.action.primary.$hovered).toBe("$hue.neutral.200")
-  expect(text.action.primary.$pressed).toBe("$hue.neutral.300")
-  expect(text.formfield.$selected).toBe("$hue.neutral.100")
-  expect(background.action.destructive.default).toBe("$hue.red.600")
-  expect(background.action.primary.$selected).toBe("$hue.interactive.700")
-  expect(background.formfield.$hovered).toBe("$hue.neutral.200")
-  expect(background.surface.offset).toBe("$hue.neutral.200")
-  expect(definition["@context:elevated"].text?.default).toBe("$hue.neutral.800")
-  expect(definition["@context:overlay"].background?.default).toBe("$hue.neutral.300")
-  expect(definition.categorical).toEqual(["blue", "accent"])
-  expect(document.light).toBe(definition)
-  expect(lightOnly.light).toBe(definition)
-  expect(darkOnly.dark).toBe(definition)
-  expect(empty.version).toBe(2)
-})
+export const empty = { version: 2 } satisfies ThemeDocument
