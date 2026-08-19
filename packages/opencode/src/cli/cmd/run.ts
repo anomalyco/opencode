@@ -18,6 +18,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { open } from "node:fs/promises"
 import { Effect } from "effect"
+import { ActiveManifest } from "@/session/active-manifest"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
@@ -490,6 +491,26 @@ export const RunCommand = effectCmd({
         }
 
         const base = args.continue ? (await sdk.session.list()).data?.find((item) => !item.parentID) : undefined
+
+        if (!args.continue && !args.session) {
+          const crashed = await Effect.runPromise(ActiveManifest.hasCrashed()).catch(() => false)
+          if (crashed) {
+            const cfg = await sdk.config.get()
+            if (cfg.data?.session?.auto_resume) {
+              const active = await Effect.runPromise(ActiveManifest.read()).catch(() => [])
+              if (active.length > 0) {
+                UI.println(UI.Style.TEXT_WARNING_BOLD + "!" + UI.Style.TEXT_NORMAL + ` crash detected — resuming ${active.length} active session(s)`)
+                await Effect.runPromise(ActiveManifest.clear()).catch(() => {})
+                return {
+                  id: active[0].id,
+                  title: undefined,
+                  directory: undefined,
+                }
+              }
+            }
+            await Effect.runPromise(ActiveManifest.clear()).catch(() => {})
+          }
+        }
 
         if (base && args.fork) {
           const forked = await sdk.session.fork({

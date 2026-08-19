@@ -4,8 +4,6 @@ import { Effect } from "effect"
 
 export type ActiveSession = {
   id: string
-  model: { id: string; providerID: string; variant?: string }
-  agent: string | undefined
   timestamp: number
 }
 
