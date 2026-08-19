@@ -246,6 +246,56 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("replays model-generated image parts so follow-up turns can edit them", async () => {
+    const assistantID = "m-assistant"
+    const url = "data:image/png;base64,AAECAw=="
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-user"),
+        parts: [
+          { ...basePart(assistantID, "a1"), type: "text", text: "here you go" },
+          { ...basePart(assistantID, "a2"), type: "file", mime: "image/png", url },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "here you go" },
+          { type: "file", mediaType: "image/png", data: url, filename: undefined },
+        ],
+      },
+    ])
+  })
+
+  test("strips model-generated images under stripMedia", async () => {
+    const assistantID = "m-assistant"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-user"),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "file",
+            mime: "image/png",
+            url: "data:image/png;base64,AAECAw==",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model, { stripMedia: true })).toStrictEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "[Generated image/png]" }],
+      },
+    ])
+  })
+
   test("converts user text/file parts and injects compaction/subtask prompts", async () => {
     const messageID = "m-user"
 
