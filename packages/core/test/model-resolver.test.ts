@@ -922,6 +922,51 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("never loads the AI SDK for packages with native implementations", () =>
+    Effect.gen(function* () {
+      const packages = [
+        ["@ai-sdk/anthropic", "@opencode-ai/ai/providers/anthropic", "api-model"],
+        ["@ai-sdk/amazon-bedrock", "@opencode-ai/ai/providers/amazon-bedrock", "api-model"],
+        [
+          "@ai-sdk/amazon-bedrock/mantle",
+          "@opencode-ai/ai/providers/amazon-bedrock/mantle/responses",
+          "openai.gpt-oss-120b",
+        ],
+        ["@ai-sdk/azure", "@opencode-ai/ai/providers/azure/responses", "api-model"],
+        ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "api-model"],
+        ["@ai-sdk/google-vertex", "@opencode-ai/ai/providers/google-vertex", "api-model"],
+        [
+          "@ai-sdk/google-vertex/anthropic",
+          "@opencode-ai/ai/providers/google-vertex/messages",
+          "claude-sonnet-4-6",
+        ],
+        ["@ai-sdk/openai", "@opencode-ai/ai/providers/openai", "api-model"],
+        ["@ai-sdk/openai-compatible", "@opencode-ai/ai/providers/openai-compatible", "api-model"],
+        ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "api-model"],
+        ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", "api-model"],
+      ] as const
+
+      yield* Effect.forEach(packages, ([catalogPackage, nativePackage, modelID]) =>
+        ModelResolver.fromCatalogModel(
+          model(Provider.aisdk(catalogPackage), {
+            modelID,
+            settings: { baseURL: "https://provider.example/v1", region: "us-east-1" },
+          }),
+          undefined,
+          {
+            loadPackage: (specifier) => {
+              expect(specifier).toBe(nativePackage)
+              return Effect.succeed({
+                model: (id) => LanguageModel.make({ id, provider: "native-provider", route: OpenAIChat.route }),
+              })
+            },
+            loadAISDK: () => Effect.die(`AI SDK loader called for ${catalogPackage}`),
+          },
+        ),
+      )
+    }),
+  )
+
   it.effect("routes Vertex Anthropic catalog models through native Messages", () =>
     Effect.gen(function* () {
       const native = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/openai")))
