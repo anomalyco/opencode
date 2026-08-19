@@ -256,7 +256,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "folgenden Ausnahmen",
 
   "go.title": "OpenCode Go | Kostengünstige Coding-Modelle für alle",
-  "go.banner.text": "DeepSeek V4 Flash erhält für begrenzte Zeit 2x Nutzungslimits",
   "go.meta.description":
     "Go beginnt bei $5 für deinen ersten Monat, danach $10/Monat, mit großzügigen Nutzungslimits und zuverlässigem Zugang zu führenden Coding-Modellen.",
   "go.hero.title": "Kostengünstige Coding-Modelle für alle",
@@ -348,10 +347,13 @@ export const dict = {
   "go.faq.a5.used": "Verwendet",
   "go.faq.a5.notUsed": "Nicht verwendet",
   "go.faq.a5.noAgreement": "Keine Vereinbarung",
+  "go.faq.a5.notZdr": "Kein ZDR",
   "go.faq.a5.grokRetention":
     "ZDR deaktiviert wichtige API-Funktionen, die von gespeicherten Daten abhängen, einschließlich der zustandsbehafteten Responses API, Files and Collections und der Batch API.",
   "go.faq.a5.gptRetention":
     "Für die Nutzung aller API-Funktionen werden Protokolle zur Missbrauchsüberwachung erstellt und bis zu 30 Tage lang aufbewahrt.",
+  "go.faq.a5.museRetention":
+    "Stark vergünstigte Tokenpreise im Gegenzug für die Erlaubnis, deine Prompts und Vervollständigungen zum Trainieren zukünftiger Meta-Modelle zu verwenden.",
   "go.faq.a5.learnMore": "Mehr erfahren",
   "go.faq.a5.deepseekRetention":
     "Die ZDR-Vereinbarung wird monatlich erneuert. Die aktuelle Vereinbarung gilt bis einschließlich 31. August 2026.",
@@ -394,6 +396,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Modell ist deaktiviert",
   "zen.api.error.regionNotAllowed":
     "Die neueste Version dieses Modells ist nur verfügbar, wenn sie in China gehostet wird, und muss ausdrücklich aktiviert werden: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Dieses Modell ist in deinem Land nicht verfügbar.",
+  "zen.api.error.trainingNotAllowed":
+    "Dieses Modell erfasst Daten, die zur Verbesserung seiner Qualität verwendet werden, und erfordert deine ausdrückliche Zustimmung: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Die kostenlose Aktion für {{model}} ist beendet. Du kannst das Modell weiterhin nutzen, indem du OpenCode Go abonnierst - {{link}}",
 
