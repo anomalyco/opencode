@@ -29,6 +29,9 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+// fork: all custom CLI commands funnel through one array — keep this the only
+// fork-owned import in this block. See src/fork/commands.ts.
+import { ForkCommands } from "./fork/commands"
 
 const args = hideBin(process.argv)
 
@@ -101,6 +104,7 @@ const cli = yargs(args)
   .command(SessionCommand)
   .command(PluginCommand)
   .command(DbCommand)
+  .command(ForkCommands)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

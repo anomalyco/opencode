@@ -810,6 +810,64 @@
         ]
       }
     },
+    "/agents": {
+      "get": {
+        "tags": ["agents"],
+        "operationId": "agents.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metadata-only Agent presence records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentPresence"
+                  },
+                  "description": "Metadata-only Agent presence records"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List live Agent metadata for this opencode instance without session content.",
+        "summary": "List Agent presence",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.agents.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/capabilities": {
       "get": {
         "tags": ["experimental"],
@@ -2965,6 +3023,1210 @@
         ]
       }
     },
+    "/local/scan": {
+      "get": {
+        "tags": ["local"],
+        "operationId": "local.scan",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Discovered local llama-swap instances",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocalInstance"
+                  },
+                  "description": "Discovered local llama-swap instances"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Browse the local network via mDNS for llama-swap instances and probe each for its model list.",
+        "summary": "Scan for local providers",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.local.scan({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/local/connect": {
+      "post": {
+        "tags": ["local"],
+        "operationId": "local.connect",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider ID written to global config",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Provider ID written to global config"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Write an openai-compatible provider entry for a local llama-swap instance to the global config.",
+        "summary": "Add local provider to config",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalConnectPayload"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.local.connect({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/local/connect/{providerID}": {
+      "delete": {
+        "tags": ["local"],
+        "operationId": "local.disconnect",
+        "parameters": [
+          {
+            "name": "providerID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed provider ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Removed provider ID"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a local llama-swap provider entry from the global config.",
+        "summary": "Remove local provider from config",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.local.disconnect({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/local/model/{providerID}/{modelID}/ctx-size": {
+      "patch": {
+        "tags": ["local"],
+        "operationId": "local.model.setCtxSize",
+        "parameters": [
+          {
+            "name": "providerID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "modelID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Context size updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Context size updated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Patch the ctx_size for a model on a llama-swap backend.",
+        "summary": "Set model context window size",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalCtxSizePayload"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.local.model.setCtxSize({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/local/model/{providerID}/{modelID}/offload": {
+      "patch": {
+        "tags": ["local"],
+        "operationId": "local.model.setOffload",
+        "parameters": [
+          {
+            "name": "providerID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "modelID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Offload settings updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Offload settings updated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Patch CPU/MoE offload settings (n_cpu_moe, cpu_moe, cpu_offload_gb, override_tensor) for a model on a llama-skein backend.",
+        "summary": "Set model CPU/MoE offload",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalOffloadPayload"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.local.model.setOffload({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/local/model/{providerID}/{modelID}/offload-recommendation": {
+      "get": {
+        "tags": ["local"],
+        "operationId": "local.model.offloadRecommendation",
+        "parameters": [
+          {
+            "name": "providerID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "modelID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recommended offload settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalOffloadRecommendation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Fetch llama-skein's recommended n_cpu_moe for a model given current free VRAM. MoE-scoped.",
+        "summary": "Recommend model CPU/MoE offload",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.local.model.offloadRecommendation({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/local/capacity": {
+      "get": {
+        "tags": ["local"],
+        "operationId": "local.capacity",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Capacity snapshots for all known local providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocalCapacitySnapshot"
+                  },
+                  "description": "Capacity snapshots for all known local providers"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Probe every known local provider for hardware telemetry and return a normalised capacity snapshot per host. The signal field distinguishes exact queue depth from GPU-utilisation inference.",
+        "summary": "Provider capacity snapshots",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.local.capacity({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/gallery/hosts": {
+      "get": {
+        "tags": ["gallery"],
+        "operationId": "gallery.hosts",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "llama-skein hosts the gallery can offer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GalleryHostInfo"
+                  },
+                  "description": "llama-skein hosts the gallery can offer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Project opencode's existing llama-skein discovery into gallery hosts. Offline hosts are included so the UI can distinguish 'that host is down' from 'you have no such host'.",
+        "summary": "List gallery hosts",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.gallery.hosts({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/gallery/evaluate": {
+      "post": {
+        "tags": ["gallery"],
+        "operationId": "gallery.evaluate",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One ranked, classified entry per candidate/host pair",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GalleryEntry"
+                  },
+                  "description": "One ranked, classified entry per candidate/host pair"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Batch each candidate's variants through bounded concurrent hypothetical-fit calls to every compatible host, then filter, classify and rank. Entries carry an explained score breakdown rather than a bare number.",
+        "summary": "Evaluate candidates across hosts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalleryEvaluatePayload"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.gallery.evaluate({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/loop": {
+      "get": {
+        "tags": ["loop"],
+        "operationId": "loop.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of loops",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Loop"
+                  },
+                  "description": "List of loops"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List loops known to the server, most recently created first.",
+        "summary": "List loops",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.loop.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["loop"],
+        "operationId": "loop.create",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully created loop",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Loop"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Start a loop that repeats a prompt until it signals completion, hits the max iteration count, or stalls with no progress.",
+        "summary": "Create loop",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "maxIterations": {
+                    "type": "integer"
+                  },
+                  "interval": {
+                    "type": "number"
+                  },
+                  "noProgressLimit": {
+                    "type": "integer"
+                  },
+                  "completionToken": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["prompt", "queue"]
+                  },
+                  "queue": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "queueGuidance": {
+                    "type": "string"
+                  },
+                  "queueSync": {
+                    "type": "boolean"
+                  },
+                  "queuePush": {
+                    "type": "boolean"
+                  },
+                  "queueOptions": {
+                    "type": "object",
+                    "properties": {
+                      "testCommand": {
+                        "type": "string"
+                      },
+                      "verifyCommand": {
+                        "type": "string"
+                      },
+                      "defaultBranch": {
+                        "type": "string"
+                      },
+                      "cwd": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["prompt"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.loop.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/loop/{loopID}": {
+      "get": {
+        "tags": ["loop"],
+        "operationId": "loop.get",
+        "parameters": [
+          {
+            "name": "loopID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^loop"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get loop",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Loop"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve the current state of a loop, including its iteration history.",
+        "summary": "Get loop",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.loop.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/loop/{loopID}/pause": {
+      "post": {
+        "tags": ["loop"],
+        "operationId": "loop.pause",
+        "parameters": [
+          {
+            "name": "loopID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^loop"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Loop paused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Loop paused"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pause a running loop before its next iteration.",
+        "summary": "Pause loop",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.loop.pause({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/loop/{loopID}/resume": {
+      "post": {
+        "tags": ["loop"],
+        "operationId": "loop.resume",
+        "parameters": [
+          {
+            "name": "loopID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^loop"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Loop resumed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Loop resumed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Resume a paused loop.",
+        "summary": "Resume loop",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.loop.resume({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/loop/{loopID}/nudge": {
+      "post": {
+        "tags": ["loop"],
+        "operationId": "loop.nudge",
+        "parameters": [
+          {
+            "name": "loopID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^loop"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Correction accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Correction accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Give a running or paused loop a correction carried into every subsequent iteration. The in-flight iteration is not interrupted.",
+        "summary": "Steer loop",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.loop.nudge({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/loop/{loopID}/cancel": {
+      "post": {
+        "tags": ["loop"],
+        "operationId": "loop.cancel",
+        "parameters": [
+          {
+            "name": "loopID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^loop"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Loop cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Loop cancelled"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel a running or paused loop.",
+        "summary": "Cancel loop",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.loop.cancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/mcp": {
       "get": {
         "tags": ["mcp"],
@@ -5101,6 +6363,68 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.auth({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/provider/{providerID}/balance": {
+      "get": {
+        "tags": ["provider"],
+        "operationId": "provider.balance",
+        "parameters": [
+          {
+            "name": "providerID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account balance/credits for the provider, or undefined if unsupported",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderBalance"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Get the remaining credits/balance for a pay-as-you-go provider (e.g. OpenRouter). Returns undefined when the provider does not expose a balance or no key is configured.",
+        "summary": "Get provider account balance",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.balance({\n  ...\n})"
           }
         ]
       }
@@ -7392,6 +8716,132 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.command({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/side_question": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.side_question",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Side question response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "info": {
+                      "$ref": "#/components/schemas/Message"
+                    },
+                    "parts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Part"
+                      }
+                    }
+                  },
+                  "required": ["info", "parts"],
+                  "additionalProperties": false,
+                  "description": "Side question response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Ask a quick side question without adding to conversation history. The response has full visibility into the current conversation but does not persist to history.",
+        "summary": "Ask side question",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string"
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "modelID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "modelID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["question"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.side_question({\n  ...\n})"
           }
         ]
       }
@@ -15524,6 +16974,12 @@
             "$ref": "#/components/schemas/EventGlobalDisposed"
           },
           {
+            "$ref": "#/components/schemas/EventLoopUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/EventSide-questionResponse"
+          },
+          {
             "$ref": "#/components/schemas/EventServerInstanceDisposed"
           }
         ]
@@ -17398,6 +18854,131 @@
         "items": {
           "type": "string"
         }
+      },
+      "Loop": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^loop"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "parentSessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "paused", "completed", "stalled", "cancelled", "max_reached", "error"]
+          },
+          "maxIterations": {
+            "type": "integer"
+          },
+          "interval": {
+            "type": "number"
+          },
+          "noProgressLimit": {
+            "type": "integer"
+          },
+          "completionToken": {
+            "type": "string"
+          },
+          "iteration": {
+            "type": "integer"
+          },
+          "iterations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "iteration": {
+                  "type": "integer"
+                },
+                "sessionID": {
+                  "type": "string",
+                  "pattern": "^ses"
+                },
+                "toolCalls": {
+                  "type": "integer"
+                },
+                "outputLength": {
+                  "type": "integer"
+                },
+                "complete": {
+                  "type": "boolean"
+                },
+                "skipped": {
+                  "type": "boolean"
+                },
+                "startedAt": {
+                  "type": "number"
+                },
+                "finishedAt": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "iteration",
+                "sessionID",
+                "toolCalls",
+                "outputLength",
+                "complete",
+                "startedAt",
+                "finishedAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "iterationSessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["prompt", "queue"]
+          },
+          "currentChange": {
+            "type": "string"
+          },
+          "currentGate": {
+            "type": "string"
+          },
+          "report": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "lastRunAt": {
+            "type": "number"
+          },
+          "finishedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "directory",
+          "sessionID",
+          "prompt",
+          "status",
+          "maxIterations",
+          "noProgressLimit",
+          "completionToken",
+          "iteration",
+          "iterations",
+          "startedAt"
+        ],
+        "additionalProperties": false
       },
       "GlobalEvent": {
         "type": "object",
@@ -20416,6 +21997,64 @@
                 "additionalProperties": false
               },
               {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["loop.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "loop": {
+                        "$ref": "#/components/schemas/Loop"
+                      }
+                    },
+                    "required": ["loop"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["side-question.response"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["sessionID", "messageID", "text"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
                 "$ref": "#/components/schemas/EventServerInstanceDisposed"
               },
               {
@@ -20674,6 +22313,21 @@
             "type": "string",
             "enum": ["subagent", "primary", "all"]
           },
+          "placement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["inherit", "local"]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Where this role wants to run. 'inherit' (default) places subagents only when the parent is local. 'local' places on any eligible local host even when the parent is a cloud model — declaring it is the authorization that stops that being a silent downgrade. A list of provider ids prefers those hosts in order, then any eligible local host. Never fails a run: an unusable preference falls through to ordinary placement and then to the parent's model."
+          },
           "hidden": {
             "type": "boolean"
           },
@@ -20739,6 +22393,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "discoverModels": {
+            "type": "boolean"
           },
           "options": {
             "type": "object",
@@ -20971,6 +22628,10 @@
         },
         "additionalProperties": false
       },
+      "McpProtocolMode": {
+        "type": "string",
+        "enum": ["legacy", "auto", "modern"]
+      },
       "McpLocalConfig": {
         "type": "object",
         "properties": {
@@ -21001,6 +22662,12 @@
           "timeout": {
             "type": "integer",
             "exclusiveMinimum": 0
+          },
+          "protocolMode": {
+            "$ref": "#/components/schemas/McpProtocolMode"
+          },
+          "toolProfile": {
+            "type": "string"
           }
         },
         "required": ["type", "command"],
@@ -21065,6 +22732,12 @@
           "timeout": {
             "type": "integer",
             "exclusiveMinimum": 0
+          },
+          "protocolMode": {
+            "$ref": "#/components/schemas/McpProtocolMode"
+          },
+          "toolProfile": {
+            "type": "string"
           }
         },
         "required": ["type", "url"],
@@ -21213,6 +22886,15 @@
           "snapshot": {
             "type": "boolean"
           },
+          "auto_mode": {
+            "type": "boolean"
+          },
+          "auto_continue": {
+            "type": "boolean"
+          },
+          "auto_queue": {
+            "type": "boolean"
+          },
           "plugin": {
             "type": "array",
             "items": {
@@ -21353,6 +23035,15 @@
                   "additionalProperties": false
                 }
               ]
+            }
+          },
+          "mcpToolProfiles": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "formatter": {
@@ -21543,6 +23234,54 @@
                 "type": "integer",
                 "exclusiveMinimum": 0
               },
+              "mcp_protocol_mode": {
+                "$ref": "#/components/schemas/McpProtocolMode"
+              },
+              "local_subagent_placement": {
+                "type": "boolean"
+              },
+              "local_subagent_placement_models": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "queue_gate": {
+                "type": "object",
+                "properties": {
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "test_command": {
+                    "type": "string"
+                  },
+                  "verify_command": {
+                    "type": "string"
+                  },
+                  "default_branch": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "queue_personas": {
+                "type": "object",
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "boolean",
+                      "enum": [false]
+                    }
+                  ]
+                }
+              },
+              "stream_inactivity_seconds": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
               "policies": {
                 "type": "array",
                 "items": {
@@ -21585,6 +23324,9 @@
           },
           "family": {
             "type": "string"
+          },
+          "sizeBytes": {
+            "type": "number"
           },
           "capabilities": {
             "type": "object",
@@ -21780,6 +23522,9 @@
               },
               "output": {
                 "type": "number"
+              },
+              "contextMax": {
+                "type": "number"
               }
             },
             "required": ["context", "output"],
@@ -21856,6 +23601,77 @@
           }
         },
         "required": ["id", "name", "source", "env", "options", "models"],
+        "additionalProperties": false
+      },
+      "AgentPresence": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "enum": ["opencode-skein"]
+          },
+          "instanceID": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "loopID": {
+            "type": "string",
+            "pattern": "^loop"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["idle", "busy", "awaiting-permission", "cancelling", "stalled", "unreachable"]
+          },
+          "loopStatus": {
+            "type": "string",
+            "enum": ["running", "paused", "completed", "stalled", "cancelled", "max_reached", "error"]
+          },
+          "loopIteration": {
+            "type": "integer"
+          },
+          "lastEventAt": {
+            "type": "number"
+          },
+          "heartbeatAt": {
+            "type": "number"
+          },
+          "canPrompt": {
+            "type": "boolean"
+          },
+          "canBtw": {
+            "type": "boolean"
+          },
+          "canAbort": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "owner",
+          "instanceID",
+          "sessionID",
+          "directory",
+          "status",
+          "lastEventAt",
+          "heartbeatAt",
+          "canPrompt",
+          "canBtw",
+          "canAbort"
+        ],
         "additionalProperties": false
       },
       "ExperimentalCapabilities": {
@@ -22520,6 +24336,20 @@
             "type": "string",
             "enum": ["subagent", "primary", "all"]
           },
+          "placement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["inherit", "local"]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
           "native": {
             "type": "boolean"
           },
@@ -22606,12 +24436,679 @@
         "required": ["name", "extensions", "enabled"],
         "additionalProperties": false
       },
+      "LocalInstance": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "baseURL": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "configuredProviderID": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "host", "port", "baseURL", "online", "models"],
+        "additionalProperties": false
+      },
+      "LocalConnectPayload": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "baseURL": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "baseURL"],
+        "additionalProperties": false
+      },
+      "LocalCtxSizePayload": {
+        "type": "object",
+        "properties": {
+          "ctx_size": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": ["ctx_size"],
+        "additionalProperties": false
+      },
+      "LocalOffloadPayload": {
+        "type": "object",
+        "properties": {
+          "n_cpu_moe": {
+            "type": "integer"
+          },
+          "cpu_moe": {
+            "type": "boolean"
+          },
+          "cpu_offload_gb": {
+            "type": "integer"
+          },
+          "override_tensor": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LocalOffloadRecommendation": {
+        "type": "object",
+        "properties": {
+          "applicable": {
+            "type": "boolean"
+          },
+          "backend": {
+            "type": "string"
+          },
+          "n_cpu_moe": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "expert_bytes_total": {
+            "type": "integer"
+          },
+          "vram_free_mb": {
+            "type": "integer"
+          },
+          "fits_fully_on_gpu": {
+            "type": "boolean"
+          },
+          "ctx_size": {
+            "type": "integer"
+          }
+        },
+        "required": ["applicable", "backend"],
+        "additionalProperties": false
+      },
+      "LocalCapacitySnapshot": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "baseURL": {
+            "type": "string"
+          },
+          "reachable": {
+            "type": "boolean"
+          },
+          "signal": {
+            "type": "string",
+            "enum": ["exact", "inferred"]
+          },
+          "slotsTotal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "inFlight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "freeSlots": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "busy": {
+            "type": "boolean"
+          },
+          "loadedModel": {
+            "type": "string"
+          },
+          "probedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "ageMs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        },
+        "required": ["provider", "baseURL", "reachable", "probedAt", "ageMs", "stale"],
+        "additionalProperties": false
+      },
+      "GalleryHostInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "baseURL": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["mdns", "localhost", "lan"]
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "installedModelIDs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaultModel": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "baseURL", "source", "online", "installedModelIDs", "defaultModel"],
+        "additionalProperties": false
+      },
+      "GalleryEvaluatePayload": {
+        "type": "object",
+        "properties": {
+          "candidateIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "hostIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "desiredContext": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "requiredCapabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "includeIncompatible": {
+            "type": "boolean"
+          }
+        },
+        "required": ["candidateIds"],
+        "additionalProperties": false
+      },
+      "GalleryScoreComponent": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "points": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "measured": {
+            "type": "boolean"
+          }
+        },
+        "required": ["kind", "points", "detail", "measured"],
+        "additionalProperties": false
+      },
+      "GalleryVariantFit": {
+        "type": "object",
+        "properties": {
+          "variantName": {
+            "type": "string"
+          },
+          "fitLevel": {
+            "type": "string"
+          },
+          "maxFitCtx": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "vramRequiredMB": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "modelMB": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": ["variantName", "fitLevel", "maxFitCtx", "vramRequiredMB", "modelMB", "reason"],
+        "additionalProperties": false
+      },
+      "GalleryEntry": {
+        "type": "object",
+        "properties": {
+          "candidateId": {
+            "type": "string"
+          },
+          "hostId": {
+            "type": "string"
+          },
+          "hostName": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "busy": {
+            "type": "boolean"
+          },
+          "fitKnown": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string"
+          },
+          "stateDetail": {
+            "type": "string"
+          },
+          "replaces": {
+            "type": "string"
+          },
+          "compatible": {
+            "type": "boolean"
+          },
+          "incompatibleReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GalleryScoreComponent"
+            }
+          },
+          "bestVariant": {
+            "$ref": "#/components/schemas/GalleryVariantFit"
+          },
+          "recommendedVariant": {
+            "type": "string"
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GalleryVariantFit"
+            }
+          },
+          "vramFreeMB": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "vramTotalMB": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          }
+        },
+        "required": [
+          "candidateId",
+          "hostId",
+          "hostName",
+          "online",
+          "installed",
+          "fitKnown",
+          "state",
+          "stateDetail",
+          "compatible",
+          "incompatibleReasons",
+          "score",
+          "components",
+          "bestVariant",
+          "recommendedVariant",
+          "variants",
+          "vramFreeMB",
+          "vramTotalMB"
+        ],
+        "additionalProperties": false
+      },
+      "NotFoundError": {
+        "type": "object",
+        "required": ["name", "data"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["NotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "required": ["message"],
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
       "MCPStatusConnected": {
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
             "enum": ["connected"]
+          },
+          "era": {
+            "type": "string",
+            "enum": ["legacy", "modern"]
+          },
+          "protocolVersion": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": ["status"],
@@ -23011,6 +25508,84 @@
         "required": ["type", "label"],
         "additionalProperties": false
       },
+      "ProviderBalance": {
+        "type": "object",
+        "properties": {
+          "remaining": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "used": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "ProviderAuthAuthorization": {
         "type": "object",
         "properties": {
@@ -23062,25 +25637,6 @@
         },
         "required": ["name", "data"],
         "additionalProperties": false
-      },
-      "NotFoundError": {
-        "type": "object",
-        "required": ["name", "data"],
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["NotFoundError"]
-          },
-          "data": {
-            "type": "object",
-            "required": ["message"],
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            }
-          }
-        }
       },
       "TextPartInput": {
         "type": "object",
@@ -24265,6 +26821,12 @@
           },
           {
             "$ref": "#/components/schemas/GlobalDisposed"
+          },
+          {
+            "$ref": "#/components/schemas/LoopUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/Side-questionResponse"
           }
         ]
       },
@@ -33700,6 +36262,108 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
+      "LoopUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["loop.updated"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "loop": {
+                "$ref": "#/components/schemas/Loop"
+              }
+            },
+            "required": ["loop"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "Side-questionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["side-question.response"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "messageID", "text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
       "QuestionV2Request": {
         "type": "object",
         "properties": {
@@ -36680,6 +39344,64 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventLoopUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["loop.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "loop": {
+                "$ref": "#/components/schemas/Loop"
+              }
+            },
+            "required": ["loop"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSide-questionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["side-question.response"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "messageID", "text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "CredentialOAuth": {
         "type": "object",
         "properties": {
@@ -36814,6 +39536,9 @@
       "description": "Experimental HttpApi config routes."
     },
     {
+      "name": "agents"
+    },
+    {
       "name": "experimental",
       "description": "Experimental HttpApi read-only routes."
     },
@@ -36824,6 +39549,16 @@
     {
       "name": "instance",
       "description": "Experimental HttpApi instance read routes."
+    },
+    {
+      "name": "local"
+    },
+    {
+      "name": "gallery"
+    },
+    {
+      "name": "loop",
+      "description": "Experimental HttpApi loop routes."
     },
     {
       "name": "mcp",

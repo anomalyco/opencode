@@ -351,4 +351,6 @@ export const node = LayerNode.make({
   deps: [Discovery.node, Config.node, EventV2Bridge.node, FSUtil.node, Global.node, RuntimeFlags.node],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Discovery.defaultLayer), Layer.provide(Config.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(FSUtil.defaultLayer), Layer.provide(Global.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)))
+
 export * as Skill from "."

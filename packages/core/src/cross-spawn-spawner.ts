@@ -24,6 +24,7 @@ import {
 import * as NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
+import { LayerNode } from "./effect/layer-node"
 import { makeGlobalNode } from "./effect/app-node"
 import { filesystem, path } from "./effect/app-node-platform"
 
@@ -503,5 +504,7 @@ const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Pat
 )
 
 export const node = makeGlobalNode({ service: ChildProcessSpawner, layer, deps: [filesystem, path] })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(LayerNode.compile(filesystem)), Layer.provide(LayerNode.compile(path))))
 
 export * as CrossSpawnSpawner from "./cross-spawn-spawner"

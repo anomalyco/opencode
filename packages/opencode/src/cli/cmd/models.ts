@@ -5,6 +5,12 @@ import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
+function formatSize(bytes: number | undefined): string {
+  if (bytes === undefined || bytes <= 0) return ""
+  const gb = bytes / (1024 * 1024 * 1024)
+  return `(${gb.toFixed(1)} GB)`
+}
+
 export const ModelsCommand = effectCmd({
   command: "models [provider]",
   describe: "list all available models",
@@ -37,7 +43,9 @@ export const ModelsCommand = effectCmd({
       const p = providers[providerID]
       const sorted = Object.entries(p.models).sort(([a], [b]) => a.localeCompare(b))
       for (const [modelID, model] of sorted) {
-        process.stdout.write(`${providerID}/${modelID}`)
+        const sizeStr = formatSize(model.sizeBytes)
+        const suffix = sizeStr ? `  ${sizeStr}` : ""
+        process.stdout.write(`${providerID}/${modelID}${suffix}`)
         process.stdout.write(EOL)
         if (verbose) {
           process.stdout.write(JSON.stringify(model, null, 2))

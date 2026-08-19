@@ -551,6 +551,19 @@ export const {
         })
     }
 
+    async function refreshProviders() {
+      const workspace = project.workspace.current()
+      const [providers, providerList] = await Promise.all([
+        sdk.client.config.providers({ workspace }, { throwOnError: true }),
+        sdk.client.provider.list({ workspace }, { throwOnError: true }),
+      ])
+      batch(() => {
+        setStore("provider", reconcile(providers.data!.providers))
+        setStore("provider_default", reconcile(providers.data!.default))
+        setStore("provider_next", reconcile(providerList.data!))
+      })
+    }
+
     onMount(() => {
       void bootstrap()
     })
@@ -667,6 +680,7 @@ export const {
         },
       },
       bootstrap,
+      refreshProviders,
     }
     return result
   },

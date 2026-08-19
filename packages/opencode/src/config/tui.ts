@@ -261,6 +261,8 @@ const layer = Layer.effect(
 
 export const node = LayerNode.make({ service: Service, layer, deps: [Npm.node, FSUtil.node] })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Npm.defaultLayer), Layer.provide(FSUtil.defaultLayer)))
+
 const { runPromise } = makeRuntime(Service, AppNodeBuilder.build(node))
 
 export async function waitForDependencies() {

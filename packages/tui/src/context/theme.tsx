@@ -25,6 +25,8 @@ import { createSimpleContext } from "./helper"
 import { useKV } from "./kv"
 import { useTuiConfig } from "../config"
 import { Global } from "@opencode-ai/core/global"
+// fork: bridge active TUI theme to local-provider HTTP clients (X-Loading-Theme)
+import { ThemeState } from "@opencode-ai/core/local/theme-state"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
@@ -127,6 +129,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     createEffect(() => {
       const theme = config.theme
       if (theme) setStore("active", theme)
+    })
+
+    // fork: writer half of the local-backend themed-loading-screen feature;
+    // provider.ts reads ThemeState.get() per request to set X-Loading-Theme.
+    createEffect(() => {
+      ThemeState.set(store.active)
     })
 
     function syncCustomThemes() {

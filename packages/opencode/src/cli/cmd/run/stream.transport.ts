@@ -15,7 +15,7 @@
 // The tick counter prevents stale idle events from resolving the wrong turn.
 // We also re-check live session status before resolving an idle event so a
 // delayed idle from an older turn cannot complete a newer busy turn.
-import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Context, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import {
@@ -132,7 +132,12 @@ type TransportService = {
 
 class Service extends Context.Service<Service, TransportService>()("@opencode/RunStreamTransport") {}
 
-function sid(event: Event): string | undefined {
+type RunEvent = {
+  type: string
+  properties: any
+}
+
+function sid(event: RunEvent): string | undefined {
   if (event.type === "message.updated") {
     return event.properties.sessionID
   }
@@ -162,7 +167,7 @@ function sid(event: Event): string | undefined {
   return undefined
 }
 
-function isEvent(value: unknown): value is Event {
+function isEvent(value: unknown): value is RunEvent {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false
   }
@@ -181,7 +186,7 @@ function isGlobalEvent(value: unknown): value is GlobalEvent {
   return !!payload && typeof payload === "object"
 }
 
-function globalPayloadEvent(value: unknown): Event | undefined {
+function globalPayloadEvent(value: unknown): RunEvent | undefined {
   if (!isGlobalEvent(value)) {
     return undefined
   }
@@ -206,7 +211,7 @@ function isMatchingDisposeEvent(value: unknown, directory: string | undefined): 
   return value.payload.type === "server.instance.disposed"
 }
 
-function active(event: Event, sessionID: string): boolean {
+function active(event: RunEvent, sessionID: string): boolean {
   if (sid(event) !== sessionID) {
     return false
   }
@@ -455,7 +460,7 @@ function createLayer(input: StreamInput) {
         let replaying = false
         let replayDisabled = false
         let replayPending: SessionResizeReplayInput | undefined
-        const buffered: Event[] = []
+        const buffered: RunEvent[] = []
         const replayedParts = new Set<string>()
         const recovering = new Set<string>()
         const tracked = (sessionID: string | undefined) =>
@@ -477,7 +482,7 @@ function createLayer(input: StreamInput) {
           state.blockers.set(id, state.blockerTick)
         }
 
-        const trackBlocker = (event: Event) => {
+        const trackBlocker = (event: RunEvent) => {
           if (event.type !== "permission.asked" && event.type !== "question.asked") {
             return
           }
@@ -489,7 +494,7 @@ function createLayer(input: StreamInput) {
           seedBlocker(event.properties.id)
         }
 
-        const releaseBlocker = (event: Event) => {
+        const releaseBlocker = (event: RunEvent) => {
           if (
             event.type !== "permission.replied" &&
             event.type !== "question.replied" &&
@@ -824,7 +829,7 @@ function createLayer(input: StreamInput) {
           yield* Deferred.fail(next.done, error).pipe(Effect.ignore)
         })
 
-        const touch = (event: Event) => {
+        const touch = (event: RunEvent) => {
           const next = state.wait
           if (!next || !active(event, input.sessionID)) {
             return
@@ -847,7 +852,7 @@ function createLayer(input: StreamInput) {
           yield* Deferred.succeed(next.done, undefined).pipe(Effect.ignore)
         })
 
-        const mark = Effect.fn("RunStreamTransport.mark")(function* (event: Event) {
+        const mark = Effect.fn("RunStreamTransport.mark")(function* (event: RunEvent) {
           if (
             event.type !== "session.status" ||
             event.properties.sessionID !== input.sessionID ||
@@ -880,7 +885,7 @@ function createLayer(input: StreamInput) {
           })
         }
 
-        const applyEvent = Effect.fn("RunStreamTransport.applyEvent")(function* (event: Event) {
+        const applyEvent = Effect.fn("RunStreamTransport.applyEvent")(function* (event: RunEvent) {
           if (event.type === "message.part.delta" && event.properties.sessionID === input.sessionID) {
             if (replayedParts.has(event.properties.partID)) {
               const seen = state.data.text.get(event.properties.partID) ?? ""
@@ -953,7 +958,7 @@ function createLayer(input: StreamInput) {
         const drainBuffered = Effect.fn("RunStreamTransport.drainBuffered")(function* () {
           let pending = buffered.splice(0)
           while (pending.length > 0) {
-            const next: Event[] = []
+            const next: RunEvent[] = []
             let changed = false
             for (const event of pending) {
               if (!tracked(sid(event))) {
@@ -1273,47 +1278,81 @@ function createLayer(input: StreamInput) {
                   ),
                 )
               : command
-                ? Effect.sync(() => {
-                    input.trace?.write("send.command", { sessionID: input.sessionID, command: command.name })
-                  }).pipe(
-                    Effect.andThen(
-                      Effect.promise(() =>
-                        input.sdk.session.command(
-                          {
-                            sessionID: input.sessionID,
-                            messageID: next.prompt.messageID,
-                            agent: next.agent,
-                            model: next.model ? `${next.model.providerID}/${next.model.modelID}` : undefined,
-                            variant: next.variant,
-                            command: command.name,
-                            arguments: command.arguments,
-                            parts: [
-                              ...(next.includeFiles ? next.files : []),
-                              ...next.prompt.parts.filter(
-                                (item): item is Extract<RunPromptPart, { type: "file" }> => item.type === "file",
-                              ),
-                            ],
-                          },
-                          { signal: turn.signal },
-                        ),
-                      ).pipe(
-                        Effect.tap(() =>
-                          Effect.sync(() => {
-                            input.trace?.write("send.command.ok", {
+                ? command.name === "btw"
+                  ? Effect.sync(() => {
+                      input.trace?.write("send.sideQuestion", { sessionID: input.sessionID })
+                    }).pipe(
+                      Effect.andThen(
+                        Effect.promise(() =>
+                          input.sdk.session.sideQuestion(
+                            {
                               sessionID: input.sessionID,
-                              command: command.name,
-                            })
-                            item.armed = true
-                            item.live = true
-                          }),
+                              question: command.arguments,
+                              agent: next.agent,
+                              model: next.model
+                                ? { providerID: next.model.providerID, modelID: next.model.modelID }
+                                : undefined,
+                            },
+                            { signal: turn.signal },
+                          ),
+                        ).pipe(
+                          Effect.tap(() =>
+                            Effect.sync(() => {
+                              input.trace?.write("send.sideQuestion.ok", {
+                                sessionID: input.sessionID,
+                              })
+                              item.armed = true
+                              item.live = true
+                            }),
+                          ),
+                          Effect.flatMap(() => Deferred.succeed(item.done, undefined).pipe(Effect.ignore)),
+                          Effect.catch((error) => Deferred.fail(item.done, error).pipe(Effect.ignore)),
+                          Effect.forkIn(scope, { startImmediately: true }),
+                          Effect.asVoid,
                         ),
-                        Effect.flatMap(() => Deferred.succeed(item.done, undefined).pipe(Effect.ignore)),
-                        Effect.catch((error) => Deferred.fail(item.done, error).pipe(Effect.ignore)),
-                        Effect.forkIn(scope, { startImmediately: true }),
-                        Effect.asVoid,
                       ),
-                    ),
-                  )
+                    )
+                  : Effect.sync(() => {
+                      input.trace?.write("send.command", { sessionID: input.sessionID, command: command.name })
+                    }).pipe(
+                      Effect.andThen(
+                        Effect.promise(() =>
+                          input.sdk.session.command(
+                            {
+                              sessionID: input.sessionID,
+                              messageID: next.prompt.messageID,
+                              agent: next.agent,
+                              model: next.model ? `${next.model.providerID}/${next.model.modelID}` : undefined,
+                              variant: next.variant,
+                              command: command.name,
+                              arguments: command.arguments,
+                              parts: [
+                                ...(next.includeFiles ? next.files : []),
+                                ...next.prompt.parts.filter(
+                                  (item): item is Extract<RunPromptPart, { type: "file" }> => item.type === "file",
+                                ),
+                              ],
+                            },
+                            { signal: turn.signal },
+                          ),
+                        ).pipe(
+                          Effect.tap(() =>
+                            Effect.sync(() => {
+                              input.trace?.write("send.command.ok", {
+                                sessionID: input.sessionID,
+                                command: command.name,
+                              })
+                              item.armed = true
+                              item.live = true
+                            }),
+                          ),
+                          Effect.flatMap(() => Deferred.succeed(item.done, undefined).pipe(Effect.ignore)),
+                          Effect.catch((error) => Deferred.fail(item.done, error).pipe(Effect.ignore)),
+                          Effect.forkIn(scope, { startImmediately: true }),
+                          Effect.asVoid,
+                        ),
+                      ),
+                    )
                 : Effect.sync(() => {
                     input.trace?.write("send.prompt", req)
                   }).pipe(

@@ -23,7 +23,24 @@ describe("providerOptions", () => {
         { id: "mistral", name: "Mistral" },
         { id: "aws", name: "AWS Bedrock" },
       ]).map((option) => option.value),
-    ).toEqual(["openai", "anthropic", "aws", "mistral", "custom-z", "__opencode_custom_provider__"])
+    ).toEqual([
+      "openai",
+      "anthropic",
+      "aws",
+      "mistral",
+      "custom-z",
+      // fork: LAN discovery for llama-skein hosts sits with the synthetic
+      // entries at the end, after every configured provider.
+      "__opencode_local_provider__",
+      "__opencode_custom_provider__",
+    ])
+  })
+
+  test("the synthetic entries stay last, in a stable order", () => {
+    // "Other" must remain the final entry — `.at(-1)` is asserted above and is
+    // how the dialog finds the custom-provider flow.
+    const values = providerOptions([{ id: "openai", name: "OpenAI" }]).map((option) => option.value)
+    expect(values.slice(-2)).toEqual(["__opencode_local_provider__", "__opencode_custom_provider__"])
   })
 
   test("does not collide with a configured provider named other", () => {

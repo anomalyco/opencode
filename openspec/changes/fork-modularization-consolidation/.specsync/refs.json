@@ -1,0 +1,10 @@
+{
+  "github:androidand/opencode-skein": {
+    "provider": "github:androidand/opencode-skein",
+    "id": "26",
+    "url": "https://github.com/androidand/opencode-skein/issues/26",
+    "base_sha": "e5ec74c99af506d5e7dcad043c72cc027b662aefa5e5fdb426cf891ad58a2dc8",
+    "base": "# Tasks\n\n- [ ] Build capability matrix for all Skein features\n- [ ] Identify duplicate/overlapping implementations\n- [ ] Audit manifest for stale regressions: theme.tsx, cache_creation_tokens\n- [ ] Identify graphify-out generated state and clean .gitignore\n- [ ] Plan extension boundaries per capability\n- [ ] Move fork logic into owned modules, reduce patched files\n- [ ] Add behavioral verification tests\n- [ ] Update manifest with capability metadata and tests\n- [ ] Update FORK_WORKFLOW.md\n",
+    "base_closed": false
+  }
+}

@@ -640,13 +640,31 @@ beforeAll(() => {
   state.server = Bun.serve({
     port: 0,
     async fetch(req) {
+      const incomingURL = new URL(req.url)
+      if (req.method === "GET" && incomingURL.pathname.endsWith("/models")) {
+        return Response.json({ object: "list", data: [], models: [] })
+      }
+      // fork: openai-compatible discovery also probes the llama-skein control
+      // plane at `/api/fit`, one level up from the `/v1` base. It must not eat a
+      // queued response — an unconsumed queue is how this server reports
+      // "unexpected request", so letting the probe through fails the next real
+      // call instead of this one.
+      if (incomingURL.pathname.endsWith("/api/fit")) {
+        return new Response("not found", { status: 404 })
+      }
       const next = state.queue.shift()
       if (!next) {
         return new Response("unexpected request", { status: 500 })
       }
 
-      const url = new URL(req.url)
-      const body = (await req.json()) as Record<string, unknown>
+      const url = incomingURL
+      const body =
+        req.method === "GET" || req.method === "HEAD"
+          ? {}
+          : await req
+              .json()
+              .then((value) => value as Record<string, unknown>)
+              .catch(() => ({}))
       next.resolve({ url, headers: req.headers, body })
 
       if (!url.pathname.endsWith(next.path)) {

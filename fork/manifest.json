@@ -1,0 +1,732 @@
+{
+  "fork": "opencode-skein",
+  "upstreamRemote": "anomalyco/opencode",
+  "note": "Machine-readable inventory of everything this fork adds on top of upstream. Drives `bun run fork:verify` (run after every sync to prove nothing was silently dropped) and `bun run sync:check` (detect when upstream has moved past our baseline). Update `baseline` after each successful sync. Keep the human-readable rationale in FORK_WORKFLOW.md in step with this file.",
+  "baseline": {
+    "upstreamRef": "4643e65ad6334de3e4e68dedc201d5fbb828c9fe",
+    "upstreamBranch": "upstream/dev",
+    "syncedAt": "2026-08-14",
+    "forkTag": "fork/2026-08-14.1",
+    "comment": "Last upstream commit fully merged into dev. sync:check compares upstream/dev against this ref. Bump it (and forkTag) after every sync."
+  },
+  "owned": [
+    "packages/app/src/components/dialog-local-discovery.tsx",
+    "packages/core/src/config/event-journal.ts",
+    "packages/core/src/event/retention.ts",
+    "packages/core/src/local/theme-state.ts",
+    "packages/core/test/event-retention.test.ts",
+    "packages/opencode/src/agent/presence-status.ts",
+    "packages/opencode/src/agent/presence.ts",
+    "packages/opencode/src/auto-mode/service.ts",
+    "packages/opencode/src/beads/beads.ts",
+    "packages/opencode/src/beads/config.ts",
+    "packages/opencode/src/beads/mapping.ts",
+    "packages/opencode/src/beads/sync.ts",
+    "packages/opencode/src/cli/cmd/beads.ts",
+    "packages/opencode/src/cli/cmd/loop.ts",
+    "packages/opencode/src/fork/commands.ts",
+    "packages/opencode/src/fork/distribution.ts",
+    "packages/opencode/src/git/worktree.ts",
+    "packages/opencode/src/local/capacity.ts",
+    "packages/opencode/src/local/config-lock.ts",
+    "packages/opencode/src/local/llama-skein/gen/client.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/client/client.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/client/index.ts",
+    "packages/opencode/src/local/llama-skein/gen/client/types.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/client/utils.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/core/auth.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/core/bodySerializer.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/core/params.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/core/pathSerializer.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/core/queryKeySerializer.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/core/serverSentEvents.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/core/types.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/core/utils.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/index.ts",
+    "packages/opencode/src/local/llama-skein/gen/sdk.gen.ts",
+    "packages/opencode/src/local/llama-skein/gen/types.gen.ts",
+    "packages/opencode/src/local/mdns.ts",
+    "packages/opencode/src/local/model-catalog/adoption-manifest.ts",
+    "packages/opencode/src/local/model-catalog/cache.ts",
+    "packages/opencode/src/local/model-catalog/family.ts",
+    "packages/opencode/src/local/model-catalog/huggingface.ts",
+    "packages/opencode/src/local/model-catalog/llmfit.ts",
+    "packages/opencode/src/local/model-catalog/quant.ts",
+    "packages/opencode/src/local/model-catalog/seed.ts",
+    "packages/opencode/src/local/model-catalog/types.ts",
+    "packages/opencode/src/local/model-gallery/catalog.ts",
+    "packages/opencode/src/local/model-gallery/classify.ts",
+    "packages/opencode/src/local/model-gallery/filter.ts",
+    "packages/opencode/src/local/model-gallery/fit.ts",
+    "packages/opencode/src/local/model-gallery/hosts.ts",
+    "packages/opencode/src/local/model-gallery/join.ts",
+    "packages/opencode/src/local/model-gallery/rank.ts",
+    "packages/opencode/src/local/placement.ts",
+    "packages/opencode/src/local/skein-loading.ts",
+    "packages/opencode/src/local/sync.ts",
+    "packages/opencode/src/loop/completion.ts",
+    "packages/opencode/src/loop/continuation.ts",
+    "packages/opencode/src/loop/loop.ts",
+    "packages/opencode/src/loop/similarity.ts",
+    "packages/opencode/src/loop/spec-queue/authority.ts",
+    "packages/opencode/src/loop/spec-queue/brief.ts",
+    "packages/opencode/src/loop/spec-queue/gates.ts",
+    "packages/opencode/src/loop/spec-queue/personas.ts",
+    "packages/opencode/src/loop/spec-queue/queue.ts",
+    "packages/opencode/src/loop/spec-queue/tasks-md.ts",
+    "packages/opencode/src/provider/balance.ts",
+    "packages/opencode/src/server/routes/instance/httpapi/groups/agents.ts",
+    "packages/opencode/src/server/routes/instance/httpapi/groups/gallery.ts",
+    "packages/opencode/src/server/routes/instance/httpapi/groups/local.ts",
+    "packages/opencode/src/server/routes/instance/httpapi/groups/loop.ts",
+    "packages/opencode/src/server/routes/instance/httpapi/handlers/agents.ts",
+    "packages/opencode/src/server/routes/instance/httpapi/handlers/gallery.ts",
+    "packages/opencode/src/server/routes/instance/httpapi/handlers/local.ts",
+    "packages/opencode/src/server/routes/instance/httpapi/handlers/loop.ts",
+    "packages/opencode/src/session/peers.ts",
+    "packages/opencode/src/session/prompt/instella.txt",
+    "packages/opencode/src/session/stream-stalled.ts",
+    "packages/opencode/src/session/tool-activity.ts",
+    "packages/opencode/src/side-question/index.ts",
+    "packages/opencode/src/tool/peers.ts",
+    "packages/opencode/src/tool/peers.txt",
+    "packages/opencode/src/util/which.ts",
+    "packages/opencode/test/agent/presence.test.ts",
+    "packages/opencode/test/agent/repo-personas.test.ts",
+    "packages/opencode/test/fixtures/mcp-dual-era/server.ts",
+    "packages/opencode/test/fixtures/mcp-legacy/server.ts",
+    "packages/opencode/test/git/worktree.test.ts",
+    "packages/opencode/test/local/capacity.test.ts",
+    "packages/opencode/test/local/config-lock.test.ts",
+    "packages/opencode/test/local/discovery.integration.test.ts",
+    "packages/opencode/test/local/fixtures/fleet-model-gallery/family-version-cases.json",
+    "packages/opencode/test/local/fixtures/fleet-model-gallery/quant-cases.json",
+    "packages/opencode/test/local/fixtures/fleet-model-gallery/upgrade-fresh-cases.json",
+    "packages/opencode/test/local/mdns.test.ts",
+    "packages/opencode/test/local/model-catalog-adoption-manifest.test.ts",
+    "packages/opencode/test/local/model-catalog-cache.test.ts",
+    "packages/opencode/test/local/model-catalog-family.test.ts",
+    "packages/opencode/test/local/model-catalog-golden-parity.test.ts",
+    "packages/opencode/test/local/model-catalog-huggingface.test.ts",
+    "packages/opencode/test/local/model-catalog-llmfit.test.ts",
+    "packages/opencode/test/local/model-catalog-quant.test.ts",
+    "packages/opencode/test/local/model-catalog-seed.test.ts",
+    "packages/opencode/test/local/model-gallery-api.test.ts",
+    "packages/opencode/test/local/model-gallery-dataplane.test.ts",
+    "packages/opencode/test/local/model-gallery-ranking.test.ts",
+    "packages/opencode/test/local/placement-policy.test.ts",
+    "packages/opencode/test/local/placement.test.ts",
+    "packages/opencode/test/local/skein-independence.test.ts",
+    "packages/opencode/test/loop/completion.test.ts",
+    "packages/opencode/test/loop/continuation.test.ts",
+    "packages/opencode/test/loop/loop-args.test.ts",
+    "packages/opencode/test/loop/loop.test.ts",
+    "packages/opencode/test/loop/personas.test.ts",
+    "packages/opencode/test/loop/queue-authority.test.ts",
+    "packages/opencode/test/loop/queue-mode.test.ts",
+    "packages/opencode/test/loop/similarity.test.ts",
+    "packages/opencode/test/loop/spec-queue.test.ts",
+    "packages/opencode/test/mcp/fixtures.test.ts",
+    "packages/opencode/test/mcp/protocol-mode.test.ts",
+    "packages/opencode/test/provider/merge-discovered-model.test.ts",
+    "packages/opencode/test/provider/skein-loading.test.ts",
+    "packages/opencode/test/server/local-ctx-size-guard.test.ts",
+    "packages/opencode/test/server/local-sdk-contract.test.ts",
+    "packages/opencode/test/session/host-paced-deadline.test.ts",
+    "packages/opencode/test/session/peers.test.ts",
+    "packages/opencode/test/session/tool-activity.test.ts",
+    "packages/opencode/test/tui/jsx-component-contract.test.ts",
+    "packages/tui/src/component/dialog-loop-list.tsx",
+    "packages/tui/src/component/dialog-model-ctx.tsx",
+    "packages/tui/src/component/dialog-tuning.tsx",
+    "packages/tui/src/local/llama-skein/gen/client.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/client/client.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/client/index.ts",
+    "packages/tui/src/local/llama-skein/gen/client/types.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/client/utils.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/core/auth.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/core/bodySerializer.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/core/params.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/core/pathSerializer.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/core/queryKeySerializer.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/core/serverSentEvents.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/core/types.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/core/utils.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/sdk.gen.ts",
+    "packages/tui/src/local/llama-skein/gen/types.gen.ts",
+    "packages/tui/src/local/model-fit.ts",
+    "packages/tui/src/theme/assets/knight-rider.json",
+    "packages/tui/src/theme/assets/pip-boy.json",
+    "packages/tui/test/loop-command-match.test.ts",
+    "packages/tui/test/model-fit.test.ts",
+    "packages/tui/test/ui/dialog-select-footer.test.ts"
+  ],
+  "_ownedRemoved_2026-08-14": {
+    "note": "packages/opencode/src/util/sync-log.ts was deleted in the origin/dev merge — confirmed intentional, not a merge regression. It was added by 21c1ac9dd6 to give non-Effect call sites (provider.ts, local/placement.ts) a TUI-safe logger after the core/util/log shim was deleted. The dev-side design solved the same problem differently: those helpers now return outcomes (PickOutcome, DiscoveryResult.warnings) and the Effect caller logs (tool/task.ts, provider.ts). That left zero call sites, so the file was removed rather than carried as dead code.",
+    "commits": [
+      "21c1ac9dd6"
+    ]
+  },
+  "_ownedRemoved_2026-08-13": {
+    "note": "packages/core/src/util/log.ts (the legacy-logger compatibility shim, upstream's own module removed in #31310) was deleted 2026-08-12 — confirmed intentional, not a merge regression: upstream now has its own logger, making the shim genuinely obsolete."
+  },
+  "_ownedRemoved_2026-08-12": {
+    "note": "auto-reply.ts, automation-features.ts, pattern-detection.ts (+ its two CLI commands), scheduler.ts, and hook.ts were deliberately deleted 2026-08-07 (commits 88731dfc6f, 0530944759) for being dead/broken code, not lost in a merge. fork:verify was reporting all 7 as regressions because this manifest was never updated at deletion time. Removed here, not re-added.",
+    "commits": [
+      "88731dfc6f",
+      "0530944759"
+    ]
+  },
+  "patched": [
+    {
+      "file": "packages/opencode/src/index.ts",
+      "marker": "ForkCommands",
+      "note": "Registers all fork CLI commands via a single .command(ForkCommands). The upstream command block must stay byte-identical to upstream."
+    },
+    {
+      "file": "packages/opencode/src/installation/index.ts",
+      "marker": "ForkDistribution",
+      "note": "In-app updater points at the fork (releaseRepo/installUrl/npm/brew), never upstream, so an update prompt cannot clobber our binary."
+    },
+    {
+      "file": "packages/opencode/src/provider/provider.ts",
+      "marker": "mergeDiscoveredModel",
+      "note": "mergeDiscoveredModel + openAICompatibleDiscoveryEnabled; keep ModelV2.ID (not ProviderV2.ModelID)."
+    },
+    {
+      "file": "packages/tui/src/component/dialog-provider.tsx",
+      "marker": "LOCAL_PROVIDER_OPTION_VALUE",
+      "note": "Multi-select discovered local providers; graceful mDNS failure."
+    },
+    {
+      "file": "packages/tui/src/feature-plugins/sidebar/context.tsx",
+      "marker": "freeMb",
+      "note": "Unified context bar, % inline, breakdown below; Context label; cost for cloud providers."
+    },
+    {
+      "file": "packages/tui/src/config/keybind.ts",
+      "marker": "dialog.local",
+      "note": "dialog.local.toggle + dialog.local.connect keybinds."
+    },
+    {
+      "file": "packages/tui/src/context/theme.tsx",
+      "marker": "ThemeState.set",
+      "note": "createEffect writing ThemeState.set(store.active) — the writer half of the local-backend themed-loading-screen feature (reader is provider.ts ThemeState.get). theme-state.ts now lives in packages/core/src/local so both the TUI (writer) and the opencode provider (reader) can share the singleton across the package boundary."
+    },
+    {
+      "file": "packages/opencode/src/effect/app-runtime.ts",
+      "marker": "LocalProviderSync",
+      "note": "Fork services joined to upstream's LayerNode graph: BeadsSync, AutoMode, LocalProviderSync, Loop, SideQuestion. Loop/SideQuestion own HTTP routes and publish events, so they must be in the graph."
+    },
+    {
+      "file": "packages/opencode/src/event-manifest.ts",
+      "marker": "SideQuestion.Event.Response",
+      "note": "Appends fork-owned event definitions (loop.updated, side-question.response) to the shared schema manifest. Their schemas live in packages/opencode and cannot be declared in packages/schema, and without this they are absent from the generated Event union so no client can subscribe."
+    },
+    {
+      "file": "packages/opencode/src/session/compaction.ts",
+      "marker": "self-healing compaction",
+      "note": "Compaction that itself overflows retries with only the most recent user turn, then falls back to a minimal summary, instead of returning \"stop\" and stranding the session. Silently lost in the 0d927ba03f merge and only noticed because a fork-only test still asserted it."
+    },
+    {
+      "file": "packages/core/src/git.ts",
+      "marker": "LC_ALL",
+      "note": "Pins LC_ALL=C on git spawns. This code matches git's human-readable output by text (forceRequired), and git localises it — on a non-English machine those checks silently read false."
+    },
+    {
+      "file": "packages/opencode/test/fixture/fixture.ts",
+      "marker": "disposeDirectory",
+      "note": "Disposes each test's instance when the test ends. InstanceStore otherwise holds every instance the suite creates — each with its own :memory: SQLite and slice of the app graph — until the process exits, which measured as the bulk of the suite's memory (provider dir: 3004 -> 2577 MB)."
+    },
+    {
+      "file": "packages/core/src/npm.ts",
+      "marker": "basePackage",
+      "note": "Splits a package specifier from its export subpath. `@ai-sdk/amazon-bedrock/mantle` is not an installable npm spec — npa cannot parse it, so npm treats it as a local folder and arborist reads <cwd>/@ai-sdk/... Install the base package, resolve the full specifier for the entrypoint."
+    },
+    {
+      "file": "packages/core/src/config.ts",
+      "marker": "ConfigEventJournal",
+      "note": "Fork edit to an upstream file (+4/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/database/database.ts",
+      "marker": "fork: 5s was not enough headroom on a mu",
+      "note": "Fork edit to an upstream file (+11/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/database/sqlite.bun.ts",
+      "marker": "fork: this DB file is shared by every co",
+      "note": "Fork edit to an upstream file (+9/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/v1/config/agent.ts",
+      "marker": "authorization",
+      "note": "Fork edit to an upstream file (+11/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/v1/config/config.ts",
+      "marker": "auto_queue",
+      "note": "Fork edit to an upstream file (+57/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify. Was \"Independent\", invalidated 2026-08-15 by a doc-comment rewrite that dropped that word; auto_queue is a field name rather than prose, so it's stable across future wording changes to the same block."
+    },
+    {
+      "file": "packages/core/src/v1/config/mcp.ts",
+      "marker": "ProtocolMode",
+      "note": "Fork edit to an upstream file (+26/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/v1/config/provider.ts",
+      "marker": "discoverModels",
+      "note": "Fork edit to an upstream file (+4/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/agent/agent.ts",
+      "marker": "authorizes",
+      "note": "Fork edit to an upstream file (+6/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/github.ts",
+      "marker": "SessionPart",
+      "note": "Fork edit to an upstream file (+1629/-18 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/mcp.ts",
+      "marker": "negotiated",
+      "note": "Fork edit to an upstream file (+15/-5 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/models.ts",
+      "marker": "formatSize",
+      "note": "Fork edit to an upstream file (+9/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run.ts",
+      "marker": "fork: auto-mode — `--auto` (or OPENCODE_",
+      "note": "Fork edit to an upstream file (+7/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/stream.transport.ts",
+      "marker": "sideQuestion",
+      "note": "Fork edit to an upstream file (+87/-48 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/tui.ts",
+      "marker": "fork: a worker that dies (module-eval cr",
+      "note": "Fork edit to an upstream file (+10/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/upgrade.ts",
+      "marker": "InstallationLocal",
+      "note": "Fork edit to an upstream file (+8/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/command/index.ts",
+      "marker": "conversation",
+      "note": "Fork edit to an upstream file (+10/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "marker": "structural",
+      "note": "Fork edit to an upstream file (+69/-9 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/effect/runner.ts",
+      "marker": "Cancellation",
+      "note": "Fork edit to an upstream file (+99/-42 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/effect/runtime-flags.ts",
+      "marker": "OPENCODE_AUTO_MODE",
+      "note": "Fork edit to an upstream file (+1/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/ide/index.ts",
+      "marker": "TaggedErrorClass",
+      "note": "Fork edit to an upstream file (+11/-4 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/mcp/catalog.ts",
+      "marker": "fork: @modelcontextprotocol/core re-expo",
+      "note": "Fork edit to an upstream file (+8/-8 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/mcp/index.ts",
+      "marker": "fork: capability discovery failing is a",
+      "note": "Fork edit to an upstream file (+306/-137 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/api.ts",
+      "marker": "GalleryApi",
+      "note": "Fork edit to an upstream file (+8/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/groups/provider.ts",
+      "marker": "ProviderBalance",
+      "note": "Fork edit to an upstream file (+16/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/groups/session.ts",
+      "marker": "SideQuestionPayload",
+      "note": "Fork edit to an upstream file (+25/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/global.ts",
+      "marker": "fork: name the binary location — the com",
+      "note": "Fork edit to an upstream file (+7/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/provider.ts",
+      "marker": "BALANCE_PROBES",
+      "note": "Fork edit to an upstream file (+23/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts",
+      "marker": "SideQuestionPayload",
+      "note": "Fork edit to an upstream file (+21/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/server.ts",
+      "marker": "@/loop/loop",
+      "note": "Fork edit to an upstream file (+14/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/llm.ts",
+      "marker": "@/local/skein-loading",
+      "note": "Fork edit to an upstream file (+70/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/message-v2.ts",
+      "marker": "StreamStalledError",
+      "note": "Fork edit to an upstream file (+16/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/overflow.ts",
+      "marker": "inputLimit",
+      "note": "Fork edit to an upstream file (+6/-4 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/prompt.ts",
+      "marker": "fork: loop detection — if consecutive as",
+      "note": "Fork edit to an upstream file (+287/-121 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/summary.ts",
+      "marker": "fork: processor.ts calls summarize() on",
+      "note": "Fork edit to an upstream file (+55/-22 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/tools.ts",
+      "marker": "fork: the stream watchdog must not count",
+      "note": "Fork edit to an upstream file (+116/-83 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/tool/code-mode.ts",
+      "marker": "fork: the result shape comes from the 2.",
+      "note": "Fork edit to an upstream file (+5/-2 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/tool/registry.ts",
+      "marker": "fork: PeersTool reads session status and",
+      "note": "Fork edit to an upstream file (+7/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/tool/shell.ts",
+      "marker": "fork: human-readable title for the permi",
+      "note": "Fork edit to an upstream file (+32/-3 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/tool/task.ts",
+      "marker": "fork: total-duration backstop for a fore",
+      "note": "Fork edit to an upstream file (+216/-17 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/config/config.test.ts",
+      "marker": "staleProvider",
+      "note": "Fork edit to an upstream file (+92/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/effect/runner.test.ts",
+      "marker": "cancellation",
+      "note": "Fork edit to an upstream file (+111/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/event-manifest.test.ts",
+      "marker": "fork: the opencode manifest is the share",
+      "note": "Fork edit to an upstream file (+7/-3 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/fake/provider.ts",
+      "marker": "setModelContextLimit",
+      "note": "Fork edit to an upstream file (+1/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/installation/installation.test.ts",
+      "marker": "fork: the updater resolves against the f",
+      "note": "Fork edit to an upstream file (+20/-6 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/catalog.test.ts",
+      "marker": "Parameters",
+      "note": "Fork edit to an upstream file (+4/-2 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/headers.test.ts",
+      "marker": "AppNodeBuilder",
+      "note": "Fork edit to an upstream file (+110/-70 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/lifecycle.test.ts",
+      "marker": "AppNodeBuilder",
+      "note": "Fork edit to an upstream file (+1136/-467 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/oauth-auto-connect.test.ts",
+      "marker": "AppNodeBuilder",
+      "note": "Fork edit to an upstream file (+240/-251 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/oauth-browser.test.ts",
+      "marker": "AppNodeBuilder",
+      "note": "Fork edit to an upstream file (+220/-193 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/session-recovery.test.ts",
+      "marker": "modelcontextprotocol",
+      "note": "Fork edit to an upstream file (+10/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/preload.ts",
+      "marker": "AppNodeBuilder",
+      "note": "Fork edit to an upstream file (+7/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/provider/provider.test.ts",
+      "marker": "fork: fit has its own (more generous) ab",
+      "note": "Fork edit to an upstream file (+581/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/session/compaction.test.ts",
+      "marker": "aggressive",
+      "note": "Fork edit to an upstream file (+42/-4 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/session/llm.test.ts",
+      "marker": "fork: openai-compatible discovery also p",
+      "note": "Fork edit to an upstream file (+20/-2 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/session/prompt.test.ts",
+      "marker": "fork: a prompt submitted mid-run is deli",
+      "note": "Fork edit to an upstream file (+67/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/app.tsx",
+      "marker": "fork: surface the server's actual error",
+      "note": "Fork edit to an upstream file (+127/-77 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/component/dialog-model.tsx",
+      "marker": "DialogModelCtx",
+      "note": "Fork edit to an upstream file (+104/-4 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/component/prompt/index.tsx",
+      "marker": "interactions",
+      "note": "Fork edit to an upstream file (+285/-15 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/context/sync.tsx",
+      "marker": "refreshProviders",
+      "note": "Fork edit to an upstream file (+14/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/routes/session/index.tsx",
+      "marker": "fork: the footer advertises this keybind",
+      "note": "Fork edit to an upstream file (+88/-10 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/routes/session/permission.tsx",
+      "marker": "independent",
+      "note": "Fork edit to an upstream file (+11/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/theme/index.ts",
+      "marker": "knightRider",
+      "note": "Fork edit to an upstream file (+6/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/ui/dialog-select.tsx",
+      "marker": "displacing",
+      "note": "Fork edit to an upstream file (+17/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/test/cli/cmd/tui/provider-options.test.ts",
+      "marker": "fork: LAN discovery for llama-skein host",
+      "note": "Fork edit to an upstream file (+18/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/agent.ts",
+      "marker": "if (!maybeCtx) return yield* Effect.die(new Error(\"InstanceRef not pro",
+      "note": "Fork edit to an upstream file (+1/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/import.ts",
+      "marker": "if (!ctx) return yield* Effect.die(new Error(\"InstanceRef not provided",
+      "note": "Fork edit to an upstream file (+1/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/demo.ts",
+      "marker": "import type { ToolPart } from \"@opencode-ai/sdk/v2\"",
+      "note": "Fork edit to an upstream file (+24/-18 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/session-data.ts",
+      "marker": "import type { Part, PermissionRequest, QuestionRequest, ToolPart } fro",
+      "note": "Fork edit to an upstream file (+2/-2 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/subagent-data.ts",
+      "marker": "import type { Message, Part, PermissionRequest, QuestionRequest, ToolP",
+      "note": "Fork edit to an upstream file (+3/-3 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/effect/instance-state.ts",
+      "marker": "if (!ctx) return yield* Effect.die(new Error(\"InstanceRef not provided",
+      "note": "Fork edit to an upstream file (+1/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/id/id.ts",
+      "marker": "loop: \"loop\",",
+      "note": "Fork edit to an upstream file (+1/-0 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/mcp/oauth-provider.ts",
+      "marker": "OAuthClientProvider,",
+      "note": "Fork edit to an upstream file (+2/-2 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/provider/transform.ts",
+      "marker": "if (model.limit.output > 0) return Math.min(model.limit.output, output",
+      "note": "Fork edit to an upstream file (+3/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/cli/run/stream.transport.test.ts",
+      "marker": "} as unknown as SdkEvent",
+      "note": "Fork edit to an upstream file (+4/-4 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/fixture/mcp-session-recovery.ts",
+      "marker": "import { Client, StreamableHTTPClientTransport, LATEST_PROTOCOL_VERSIO",
+      "note": "Fork edit to an upstream file (+1/-3 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/server/httpapi-exercise/index.ts",
+      "marker": "http.protected.get(\"/local/capacity\", \"local.capacity\").json(200, arra",
+      "note": "Fork edit to an upstream file (+12/-0 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/tool/__snapshots__/parameters.test.ts.snap",
+      "marker": "\"provider\": {",
+      "note": "Fork edit to an upstream file (+4/-0 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/tool/code-mode-integration.test.ts",
+      "marker": "const listed = (await client.listTools()).tools as unknown as MCPToolD",
+      "note": "Fork edit to an upstream file (+5/-2 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/tool/code-mode.test.ts",
+      "marker": "import type { MCPToolDef } from \"@/mcp/catalog\"",
+      "note": "Fork edit to an upstream file (+1/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/tool/registry.test.ts",
+      "marker": "import type { MCPToolDef } from \"@/mcp/catalog\"",
+      "note": "Fork edit to an upstream file (+1/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/tui/test/cli/cmd/tui/sync-fixture.tsx",
+      "marker": "// Recorded rather than acted on: a bootstrap that decides to exit sho",
+      "note": "Fork edit to an upstream file (+17/-12 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/tui/test/theme.test.ts",
+      "marker": "test(\"includes local custom themes\", () => {",
+      "note": "Fork edit to an upstream file (+7/-0 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    }
+  ],
+  "divergence": {
+    "note": "Ratchet for the failure this fork keeps hitting: a merge silently deleting a fork feature (see the self-healing compaction entry). Any file under `scope` that differs from baseline.upstreamRef and is neither owned/patched nor listed in `accepted` fails fork:verify. `accepted` is the divergence that already existed when the gate was added — classify those as feature or drift over time; new files must be classified immediately. The single remaining accepted entry is packages/core/src/effect/dfdf, which upstream committed by accident — its contents are an editor's \"File to save in:\" prompt. It is deleted here on purpose; it stays accepted rather than registered because there is no file left to carry a marker. Re-baseline deliberately with `bun run fork:verify --accept-divergence`.",
+    "scope": [
+      "^packages/[^/]+/(src|test)/"
+    ],
+    "accepted": [
+      "packages/core/src/background-job.ts",
+      "packages/core/src/control-plane/move-session.ts",
+      "packages/core/src/credential.ts",
+      "packages/core/src/cross-spawn-spawner.ts",
+      "packages/core/src/effect/dfdf",
+      "packages/core/src/event.ts",
+      "packages/core/src/fs-util.ts",
+      "packages/core/src/global.ts",
+      "packages/core/src/models-dev.ts",
+      "packages/core/src/observability.ts",
+      "packages/core/src/permission/saved.ts",
+      "packages/core/src/process.ts",
+      "packages/core/src/project.ts",
+      "packages/core/src/project/directories.ts",
+      "packages/core/src/pty/ticket.ts",
+      "packages/core/src/repository-cache.ts",
+      "packages/core/src/ripgrep.ts",
+      "packages/core/src/ripgrep/binary.ts",
+      "packages/core/src/session/execution/local.ts",
+      "packages/core/src/session/projector.ts",
+      "packages/core/src/session/store.ts",
+      "packages/core/src/skill/discovery.ts",
+      "packages/core/src/tool/application-tools.ts",
+      "packages/core/src/util/effect-flock.ts",
+      "packages/opencode/src/account/account.ts",
+      "packages/opencode/src/account/repo.ts",
+      "packages/opencode/src/acp/session.ts",
+      "packages/opencode/src/auth/index.ts",
+      "packages/opencode/src/background/job.ts",
+      "packages/opencode/src/cli/cmd/attach.ts",
+      "packages/opencode/src/config/tui.ts",
+      "packages/opencode/src/control-plane/workspace.ts",
+      "packages/opencode/src/env/index.ts",
+      "packages/opencode/src/event-v2-bridge.ts",
+      "packages/opencode/src/format/index.ts",
+      "packages/opencode/src/git/index.ts",
+      "packages/opencode/src/image/image.ts",
+      "packages/opencode/src/lsp/lsp.ts",
+      "packages/opencode/src/mcp/auth.ts",
+      "packages/opencode/src/mcp/browser.ts",
+      "packages/opencode/src/permission/index.ts",
+      "packages/opencode/src/plugin/index.ts",
+      "packages/opencode/src/project/bootstrap.ts",
+      "packages/opencode/src/project/project.ts",
+      "packages/opencode/src/project/vcs.ts",
+      "packages/opencode/src/provider/auth.ts",
+      "packages/opencode/src/question/index.ts",
+      "packages/opencode/src/server/routes/instance/httpapi/websocket-tracker.ts",
+      "packages/opencode/src/session/instruction.ts",
+      "packages/opencode/src/session/processor.ts",
+      "packages/opencode/src/session/revert.ts",
+      "packages/opencode/src/session/run-state.ts",
+      "packages/opencode/src/session/session.ts",
+      "packages/opencode/src/session/status.ts",
+      "packages/opencode/src/session/system.ts",
+      "packages/opencode/src/session/todo.ts",
+      "packages/opencode/src/share/session.ts",
+      "packages/opencode/src/share/share-next.ts",
+      "packages/opencode/src/skill/discovery.ts",
+      "packages/opencode/src/skill/index.ts",
+      "packages/opencode/src/snapshot/index.ts",
+      "packages/opencode/src/storage/storage.ts",
+      "packages/opencode/src/tool/shell/prompt.ts",
+      "packages/opencode/src/tool/truncate.ts",
+      "packages/opencode/test/mcp/oauth-provider.test.ts",
+      "packages/opencode/test/session/snapshot-tool-race.test.ts",
+      "packages/tui/src/component/dialog-move-session.tsx"
+    ]
+  }
+}

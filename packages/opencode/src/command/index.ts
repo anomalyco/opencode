@@ -46,6 +46,7 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  BTW: "btw",
 } as const
 
 export interface Interface {
@@ -85,6 +86,15 @@ const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.BTW] = {
+        name: Default.BTW,
+        description: "ask a quick side question without adding to conversation history",
+        source: "command",
+        get template() {
+          return "Answer this question based on the current conversation context. Do NOT add this question to the conversation history. Do NOT use any tools — answer only from what is already in context. Provide a concise, direct answer."
+        },
+        hints: [],
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
@@ -173,5 +183,7 @@ const layer = Layer.effect(
 )
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [Config.node, MCP.node, Skill.node] })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(MCP.defaultLayer), Layer.provide(Skill.defaultLayer)))
 
 export * as Command from "."

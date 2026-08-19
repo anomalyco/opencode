@@ -26,7 +26,6 @@ import { Image } from "../../src/image/image"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
 import { Session } from "@/session/session"
-import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -39,8 +38,6 @@ import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { Skill } from "../../src/skill"
 import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "@opencode-ai/core/shell"
@@ -57,6 +54,9 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -1464,7 +1464,12 @@ it.instance("prompt submitted during an active run is included in the next LLM i
     expect(inputs).toHaveLength(2)
     const messages = inputs.at(-1)?.messages
     if (!Array.isArray(messages)) throw new Error("expected LLM messages")
-    expect(messages.at(-1)).toEqual({ role: "user", content: "second" })
+    const steered = messages.at(-1)
+    expect(steered?.role).toBe("user")
+    // fork: a prompt submitted mid-run is delivered wrapped in a <system-reminder>
+    // so the model can tell it apart from the turn it is already answering.
+    // Upstream has no equivalent, so assert containment rather than equality.
+    expect(String(steered?.content)).toContain("second")
   }),
 )
 
@@ -2439,4 +2444,65 @@ noLLMServer.instance(
       }
     }),
   30_000,
+)
+
+const watchdogCfg =
+  (seconds: number) =>
+  (url: string): Partial<ConfigV1.Info> => ({
+    ...providerCfg(url),
+    experimental: { stream_inactivity_seconds: seconds },
+  })
+
+// fork: stream watchdog — a half-open stream must fail as stalled, and a slow
+// but live stream must be left alone.
+it.instance("watchdog fails a half-open stream with a stalled error, not a generic abort", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(watchdogCfg(1))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    // Headers and one delta arrive, then the connection goes silent forever —
+    // the observed 18h wedge shape.
+    yield* llm.push(reply().text("partial response").hang())
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    const error = result.info.role === "assistant" ? result.info.error : undefined
+    expect(error?.name).toBe("APIError")
+    expect(JSON.stringify(error)).toContain("STREAM_STALLED")
+    expect(error?.name).not.toBe("MessageAbortedError")
+  }),
+)
+
+it.instance("watchdog leaves a slow-but-live stream alone", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(watchdogCfg(3))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    // A 1s gap before the body — well under the 3s deadline.
+    const gap = new Promise((resolve) => setTimeout(resolve, 1000))
+    yield* llm.push(reply().wait(gap).text("slow but alive").stop())
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    const error = result.info.role === "assistant" ? result.info.error : undefined
+    expect(error).toBeUndefined()
+    const text = result.parts.filter((p) => p.type === "text").map((p) => p.text)
+    expect(text).toContain("slow but alive")
+  }),
 )

@@ -5,6 +5,7 @@ import os from "os"
 import { Context, Effect, Layer } from "effect"
 import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
+import { LayerNode } from "./effect/layer-node"
 import { makeGlobalNode } from "./effect/app-node"
 
 const app = "opencode"
@@ -77,6 +78,8 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })
+
+export const defaultLayer = Layer.suspend(() => layer)
 
 export const layerWith = (input: Partial<Interface>) =>
   Layer.effect(

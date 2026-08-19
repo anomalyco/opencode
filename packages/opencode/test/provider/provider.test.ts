@@ -8,7 +8,7 @@ import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
-import { disposeAllInstances, provideInstanceEffect, tmpdirScoped, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstanceEffect, tmpdir, tmpdirScoped, TestInstance } from "../fixture/fixture"
 import { markPluginDependenciesReady } from "../fixture/plugin"
 import { Auth } from "@/auth"
 import { Config } from "@/config/config"
@@ -75,6 +75,13 @@ const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   )
 
 const list = Provider.use.list()
+
+const runList = (directory: string) =>
+  Effect.runPromise(
+    Provider.use.list()
+      .pipe(provideInstanceEffect(directory))
+      .pipe(Effect.provide(Layer.mergeAll(providerLayer(), instanceStoreLayer, AppNodeBuilder.build(CrossSpawnSpawner.node)))),
+  )
 
 const paid = (providers: Record<string, { models: Record<string, { cost: { input: number } }> }>) => {
   const item = providers[ProviderV2.ID.make("opencode")]
@@ -2090,3 +2097,576 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
     expect(keyedCount).toBeGreaterThan(0)
   }).pipe(provideMultiInstance),
 )
+
+// ── OpenAI-compatible model discovery ────────────────────────────────────────
+
+test("openai-compatible: discovers models from /v1/models", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      if (new URL(req.url).pathname === "/v1/models") {
+        return Response.json({
+          object: "list",
+          data: [
+            {
+              id: "llama-3.2-8b",
+              object: "model",
+              name: "Llama 3.2 8B",
+              context_length: 131072,
+              max_output_tokens: 4096,
+            },
+            { id: "phi-4", object: "model" },
+            { id: "bad-limits", object: "model", context_length: -1, max_output_tokens: "-2" },
+          ],
+        })
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": {
+                name: "Local LLM",
+                npm: "@ai-sdk/openai-compatible",
+                options: { apiKey: "test", baseURL },
+              },
+            },
+          }),
+        )
+      },
+    })
+    const providers = await runList(tmp.path)
+    const provider = providers[ProviderV2.ID.make("local-llm")]
+    expect(provider).toBeDefined()
+    expect(provider.models["llama-3.2-8b"]).toBeDefined()
+    expect(provider.models["llama-3.2-8b"].name).toBe("Llama 3.2 8B")
+    expect(provider.models["llama-3.2-8b"].limit.context).toBe(131072)
+    expect(provider.models["llama-3.2-8b"].limit.output).toBe(4096)
+    expect(provider.models["phi-4"]).toBeDefined()
+    expect(provider.models["phi-4"].name).toBe("phi-4")
+    expect(provider.models["phi-4"].limit.context).toBe(0)
+    expect(provider.models["phi-4"].limit.output).toBe(0)
+    expect(provider.models["bad-limits"].limit.context).toBe(0)
+    expect(provider.models["bad-limits"].limit.output).toBe(0)
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discovery completes when /api/fit hangs forever", async () => {
+  // fork: fit has its own (more generous) abort budget than /models, but it
+  // is still bounded — a host that accepts TCP but never answers /api/fit
+  // must not stall discovery indefinitely.
+  const server = Bun.serve({
+    port: 0,
+    idleTimeout: 30,
+    async fetch(req) {
+      const pathname = new URL(req.url).pathname
+      if (pathname === "/v1/models") {
+        return Response.json({
+          object: "list",
+          data: [{ id: "hung-fit-model", name: "Hung Fit Model", context_length: 65536 }],
+        })
+      }
+      if (pathname === "/api/fit") {
+        await new Promise(() => {}) // never resolves
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "hung-fit": {
+                name: "Hung Fit",
+                npm: "@ai-sdk/openai-compatible",
+                options: { apiKey: "test", baseURL },
+              },
+            },
+          }),
+        )
+      },
+    })
+    const started = Date.now()
+    const providers = await runList(tmp.path)
+    const elapsed = Date.now() - started
+    const provider = providers[ProviderV2.ID.make("hung-fit")]
+    expect(provider).toBeDefined()
+    expect(provider.models["hung-fit-model"]).toBeDefined()
+    // fit unavailable -> fall back to the model-reported context
+    expect(provider.models["hung-fit-model"].limit.context).toBe(65536)
+    expect(elapsed).toBeLessThan(5000)
+  } finally {
+    await server.stop(true)
+  }
+})
+
+function fakeModel(overrides: { providerID: ProviderV2.ID; id: ModelV2.ID; context: number }): Provider.Model {
+  return {
+    id: overrides.id,
+    providerID: overrides.providerID,
+    name: overrides.id,
+    api: { id: overrides.id, url: "", npm: "@ai-sdk/openai-compatible" },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: overrides.context, input: undefined, output: 0 },
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    family: "",
+    release_date: "",
+    variants: {},
+  }
+}
+
+function fakeState(model: Provider.Model): Provider.State {
+  return {
+    models: new Map(),
+    providers: {
+      [model.providerID]: {
+        id: model.providerID,
+        name: model.providerID,
+        env: [],
+        npm: "@ai-sdk/openai-compatible",
+        api: "",
+        source: "config",
+        models: { [model.id]: model },
+      } as unknown as Provider.Info,
+    } as unknown as Record<ProviderV2.ID, Provider.Info>,
+    catalog: {} as Record<ProviderV2.ID, Provider.Info>,
+    sdk: new Map(),
+    modelLoaders: {},
+    varsLoaders: {},
+  }
+}
+
+test("adjustLocalContextOnOverflow: prompt-overflow 413 self-heals limit.context from X-Skein-Max-Safe-Ctx and does not retry inline", async () => {
+  // Real llama-skein contract from internal/server/promptguard.go — the
+  // handler used to gate on `type === "context_too_large"`, which this body
+  // never sends, so recovery never fired (that is the bug this locks in).
+  const providerID = ProviderV2.ID.make("local-llm")
+  const modelID = ModelV2.ID.make("qwopus3.6-27b-v2-mtp-q8-0")
+  const model = fakeModel({ providerID, id: modelID, context: 90112 })
+  const state = fakeState(model)
+  const res = new Response(
+    JSON.stringify({
+      error: {
+        message:
+          'prompt (~106692 tokens) exceeds the safe context for model "qwopus3.6-27b-v2-mtp-q8-0" on this host (max_safe_ctx 74711); trim the prompt and retry',
+        type: "exceed_context_size_error",
+        code: "prompt_over_max_safe_ctx",
+      },
+    }),
+    { status: 413, headers: { "X-Skein-Max-Safe-Ctx": "74711" } },
+  )
+  const shouldRetryInline = await Provider.adjustLocalContextOnOverflow(
+    state,
+    model,
+    "http://localhost:1/v1",
+    JSON.stringify({ model: modelID }),
+    res,
+  )
+  // The same oversized body would just 413 again — recovery is self-healing
+  // the cached limit and letting the reactive needsCompaction path
+  // (session/processor.ts) compact against the corrected budget, not a
+  // blind immediate retry.
+  expect(shouldRetryInline).toBe(false)
+  expect(state.providers[providerID].models[modelID].limit.context).toBe(74711)
+})
+
+test("adjustLocalContextOnOverflow: prompt-overflow 413 falls back to /api/fit when the header is missing", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      if (new URL(req.url).pathname === "/api/fit/qwopus") {
+        return Response.json({ model: "qwopus", fit_level: "tight", max_safe_ctx: 74711, backend: "llamacpp" })
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const providerID = ProviderV2.ID.make("local-llm")
+    const modelID = ModelV2.ID.make("qwopus")
+    const model = fakeModel({ providerID, id: modelID, context: 90112 })
+    const state = fakeState(model)
+    const res = new Response(
+      JSON.stringify({
+        error: { message: "prompt too large", type: "exceed_context_size_error", code: "prompt_over_max_safe_ctx" },
+      }),
+      { status: 413 }, // no X-Skein-Max-Safe-Ctx header
+    )
+    const shouldRetryInline = await Provider.adjustLocalContextOnOverflow(
+      state,
+      model,
+      `http://localhost:${server.port}/v1`,
+      JSON.stringify({ model: modelID }),
+      res,
+    )
+    expect(shouldRetryInline).toBe(false)
+    expect(state.providers[providerID].models[modelID].limit.context).toBe(74711)
+  } finally {
+    await server.stop()
+  }
+})
+
+test("adjustLocalContextOnOverflow: context_too_large (failed model load) still patches ctx and retries", async () => {
+  // Distinct from the prompt-overflow class above: proxy/proxymanager.go
+  // sends this when the model fails to LOAD because its configured ctx
+  // doesn't fit available memory — patching ctx_size and retrying the same
+  // request is the correct remedy here, unlike the prompt-overflow class.
+  let patched: unknown
+  const server = Bun.serve({
+    port: 0,
+    async fetch(req) {
+      const url = new URL(req.url)
+      if (url.pathname === "/api/fit/qwen3") {
+        return Response.json({
+          model: "qwen3",
+          fit_level: "good",
+          max_fit_ctx: 131072,
+          max_safe_ctx: 131072,
+          backend: "llamacpp",
+        })
+      }
+      if (url.pathname === "/api/models/config/qwen3" && req.method === "PATCH") {
+        patched = await req.json()
+        return Response.json({})
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const providerID = ProviderV2.ID.make("local-llm")
+    const modelID = ModelV2.ID.make("qwen3")
+    const model = fakeModel({ providerID, id: modelID, context: 393216 })
+    const state = fakeState(model)
+    const res = new Response(
+      JSON.stringify({ error: { type: "context_too_large", max_ctx: 393216 } }),
+      { status: 413 },
+    )
+    const shouldRetryInline = await Provider.adjustLocalContextOnOverflow(
+      state,
+      model,
+      `http://localhost:${server.port}/v1`,
+      JSON.stringify({ model: modelID }),
+      res,
+    )
+    expect(shouldRetryInline).toBe(true)
+    expect(patched).toMatchObject({ ctx_size: 131072 })
+    // this class does not touch the cached prompt budget
+    expect(state.providers[providerID].models[modelID].limit.context).toBe(393216)
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discoverModels:true merges discovered models without overriding manual models", async () => {
+  let called = false
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      called = true
+      if (new URL(req.url).pathname === "/v1/models") {
+        return Response.json({
+          object: "list",
+          data: [
+            { id: "my-model", name: "Discovered Name", context_length: 8192 },
+            { id: "new-model", name: "New Model", context_length: 32768 },
+          ],
+        })
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": {
+                npm: "@ai-sdk/openai-compatible",
+                discoverModels: true,
+                options: { baseURL },
+                models: {
+                  "my-model": { name: "Manual Name", limit: { context: 4096, output: 1024 } },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+    const providers = await runList(tmp.path)
+    const provider = providers[ProviderV2.ID.make("local-llm")]
+    const manual = provider?.models["my-model"]
+    const discovered = provider?.models["new-model"]
+    expect(called).toBe(true)
+    expect(manual?.name).toBe("Manual Name")
+    expect(manual?.limit.context).toBe(4096)
+    expect(discovered?.name).toBe("New Model")
+    expect(discovered?.limit.context).toBe(32768)
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discoverModels:true fills limits for existing model stubs", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      if (new URL(req.url).pathname === "/v1/models") {
+        return Response.json({
+          object: "list",
+          data: [{ id: "qwen3", name: "Qwen 3", context_length: 131072, max_output_tokens: 8192 }],
+        })
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": {
+                npm: "@ai-sdk/openai-compatible",
+                discoverModels: true,
+                options: { baseURL },
+                models: {
+                  qwen3: { name: "Qwen Local" },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+    const providers = await runList(tmp.path)
+    const model = providers[ProviderV2.ID.make("local-llm")]?.models.qwen3
+    expect(model?.name).toBe("Qwen Local")
+    expect(model?.limit.context).toBe(131072)
+    expect(model?.limit.output).toBe(8192)
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discoverModels:false disables discovery", async () => {
+  let called = false
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      called = true
+      return Response.json({ object: "list", data: [{ id: "model-a" }] })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": {
+                npm: "@ai-sdk/openai-compatible",
+                discoverModels: false,
+                options: { baseURL },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await runList(tmp.path)
+    expect(called).toBe(false)
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discovery silently fails when server unreachable", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "offline-llm": {
+              npm: "@ai-sdk/openai-compatible",
+              // port 19999 has nothing listening
+              options: { baseURL: "http://127.0.0.1:19999/v1" },
+            },
+          },
+        }),
+      )
+    },
+  })
+  const providers = await runList(tmp.path)
+  expect(providers[ProviderV2.ID.make("offline-llm")]).toBeUndefined()
+})
+
+test("openai-compatible: discovery skipped for non-openai-compatible npm", async () => {
+  let called = false
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      called = true
+      return Response.json({ object: "list", data: [{ id: "model-a" }] })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "custom-provider": {
+                npm: "@ai-sdk/anthropic",
+                options: { baseURL, apiKey: "test" },
+                models: { "claude-3": { name: "Claude 3", limit: { context: 200000, output: 4096 } } },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await runList(tmp.path)
+    expect(called).toBe(false)
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discovery URL is baseURL + /models (no /v1 forced)", async () => {
+  // fork: discovery also probes the llama-skein control plane at /api/fit,
+  // concurrently with the model list. Recording only the last request made this
+  // a race — collect every path and assert on the model-list one, which is what
+  // the test is actually about (no /v1 forced onto the configured baseURL).
+  const requestPaths: string[] = []
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      requestPaths.push(new URL(req.url).pathname)
+      return Response.json({ object: "list", data: [{ id: "model-a" }] })
+    },
+  })
+  try {
+    // baseURL without /v1 — the request should go to /models, not /v1/models
+    const baseURL = `http://localhost:${server.port}`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": { npm: "@ai-sdk/openai-compatible", options: { baseURL } },
+            },
+          }),
+        )
+      },
+    })
+    const providers = await runList(tmp.path)
+    expect(requestPaths).toContain("/models")
+    expect(requestPaths).not.toContain("/v1/models")
+    expect(providers[ProviderV2.ID.make("local-llm")]?.models["model-a"]).toBeDefined()
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discovery handles non-200 response silently", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      return new Response("Unauthorized", { status: 401 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": { npm: "@ai-sdk/openai-compatible", options: { baseURL } },
+            },
+          }),
+        )
+      },
+    })
+    const providers = await runList(tmp.path)
+    expect(providers[ProviderV2.ID.make("local-llm")]).toBeUndefined()
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discovery handles missing data field silently", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      if (new URL(req.url).pathname.endsWith("/models")) {
+        return Response.json({ object: "list" }) // no data field
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": { npm: "@ai-sdk/openai-compatible", options: { baseURL } },
+            },
+          }),
+        )
+      },
+    })
+    const providers = await runList(tmp.path)
+    expect(providers[ProviderV2.ID.make("local-llm")]).toBeUndefined()
+  } finally {
+    await server.stop()
+  }
+})

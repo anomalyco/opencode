@@ -93,6 +93,8 @@ export type Event =
   | EventWorktreeFailed
   | EventServerConnected
   | EventGlobalDisposed
+  | EventLoopUpdated
+  | EventSideQuestionResponse
   | EventServerInstanceDisposed
 
 export type QuestionReplied = {
@@ -726,6 +728,38 @@ export type QuestionTool = {
 }
 
 export type QuestionAnswer = Array<string>
+
+export type Loop = {
+  id: string
+  directory: string
+  sessionID: string
+  parentSessionID?: string
+  prompt: string
+  status: "running" | "paused" | "completed" | "stalled" | "cancelled" | "max_reached" | "error"
+  maxIterations: number
+  interval?: number
+  noProgressLimit: number
+  completionToken: string
+  iteration: number
+  iterations: Array<{
+    iteration: number
+    sessionID: string
+    toolCalls: number
+    outputLength: number
+    complete: boolean
+    skipped?: boolean
+    startedAt: number
+    finishedAt: number
+  }>
+  iterationSessionID?: string
+  mode?: "prompt" | "queue"
+  currentChange?: string
+  currentGate?: string
+  report?: string
+  startedAt: number
+  lastRunAt?: number
+  finishedAt?: number
+}
 
 export type GlobalEvent = {
   directory: string
@@ -1600,6 +1634,22 @@ export type GlobalEvent = {
           [key: string]: unknown
         }
       }
+    | {
+        id: string
+        type: "loop.updated"
+        properties: {
+          loop: Loop
+        }
+      }
+    | {
+        id: string
+        type: "side-question.response"
+        properties: {
+          sessionID: string
+          messageID: string
+          text: string
+        }
+      }
     | EventServerInstanceDisposed
     | SyncEventSessionCreated
     | SyncEventSessionUpdated
@@ -1695,6 +1745,10 @@ export type AgentConfig = {
   disable?: boolean
   description?: string
   mode?: "subagent" | "primary" | "all"
+  /**
+   * Where this role wants to run. 'inherit' (default) places subagents only when the parent is local. 'local' places on any eligible local host even when the parent is a cloud model — declaring it is the authorization that stops that being a silent downgrade. A list of provider ids prefers those hosts in order, then any eligible local host. Never fails a run: an unusable preference falls through to ordinary placement and then to the parent's model.
+   */
+  placement?: "inherit" | "local" | Array<string>
   hidden?: boolean
   options?: {
     [key: string]: unknown
@@ -1717,6 +1771,9 @@ export type AgentConfig = {
     | "subagent"
     | "primary"
     | "all"
+    | "inherit"
+    | "local"
+    | Array<string>
     | {
         [key: string]: unknown
       }
@@ -1741,6 +1798,7 @@ export type ProviderConfig = {
   npm?: string
   whitelist?: Array<string>
   blacklist?: Array<string>
+  discoverModels?: boolean
   options?: {
     apiKey?: string
     baseURL?: string
@@ -1822,6 +1880,8 @@ export type ProviderConfig = {
   }
 }
 
+export type McpProtocolMode = "legacy" | "auto" | "modern"
+
 export type McpLocalConfig = {
   /**
    * Type of MCP server connection
@@ -1837,6 +1897,8 @@ export type McpLocalConfig = {
   }
   enabled?: boolean
   timeout?: number
+  protocolMode?: McpProtocolMode
+  toolProfile?: string
 }
 
 export type McpOAuthConfig = {
@@ -1865,6 +1927,8 @@ export type McpRemoteConfig = {
    */
   oauth?: McpOAuthConfig | false
   timeout?: number
+  protocolMode?: McpProtocolMode
+  toolProfile?: string
 }
 
 /**
@@ -1912,6 +1976,9 @@ export type Config = {
     ignore?: Array<string>
   }
   snapshot?: boolean
+  auto_mode?: boolean
+  auto_continue?: boolean
+  auto_queue?: boolean
   plugin?: Array<
     | string
     | [
@@ -1959,6 +2026,9 @@ export type Config = {
       | {
           enabled: boolean
         }
+  }
+  mcpToolProfiles?: {
+    [key: string]: Array<string>
   }
   /**
    * Enable or configure formatters. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.
@@ -2025,6 +2095,19 @@ export type Config = {
     primary_tools?: Array<string>
     continue_loop_on_deny?: boolean
     mcp_timeout?: number
+    mcp_protocol_mode?: McpProtocolMode
+    local_subagent_placement?: boolean
+    local_subagent_placement_models?: Array<string>
+    queue_gate?: {
+      cwd?: string
+      test_command?: string
+      verify_command?: string
+      default_branch?: string
+    }
+    queue_personas?: {
+      [key: string]: string | false
+    }
+    stream_inactivity_seconds?: number
     policies?: Array<ConfigV2ExperimentalPolicy>
   }
 }
@@ -2039,6 +2122,7 @@ export type Model = {
   }
   name: string
   family?: string
+  sizeBytes?: number
   capabilities: {
     temperature: boolean
     reasoning: boolean
@@ -2096,6 +2180,7 @@ export type Model = {
     context: number
     input?: number
     output: number
+    contextMax?: number
   }
   status: "alpha" | "beta" | "deprecated" | "active"
   options: {
@@ -2124,6 +2209,25 @@ export type Provider = {
   models: {
     [key: string]: Model
   }
+}
+
+export type AgentPresence = {
+  owner: "opencode-skein"
+  instanceID: string
+  sessionID: string
+  loopID?: string
+  directory: string
+  agent?: string
+  provider?: string
+  model?: string
+  status: "idle" | "busy" | "awaiting-permission" | "cancelling" | "stalled" | "unreachable"
+  loopStatus?: "running" | "paused" | "completed" | "stalled" | "cancelled" | "max_reached" | "error"
+  loopIteration?: number
+  lastEventAt: number
+  heartbeatAt: number
+  canPrompt: boolean
+  canBtw: boolean
+  canAbort: boolean
 }
 
 export type ExperimentalCapabilities = {
@@ -2351,6 +2455,7 @@ export type Agent = {
   name: string
   description?: string
   mode: "subagent" | "primary" | "all"
+  placement?: "inherit" | "local" | Array<string>
   native?: boolean
   hidden?: boolean
   topP?: number
@@ -2382,8 +2487,129 @@ export type FormatterStatus = {
   enabled: boolean
 }
 
+export type LocalInstance = {
+  id: string
+  name: string
+  host: string
+  port: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  baseURL: string
+  online: boolean
+  models: Array<string>
+  configuredProviderID?: string
+}
+
+export type LocalConnectPayload = {
+  id: string
+  name: string
+  baseURL: string
+}
+
+export type LocalCtxSizePayload = {
+  ctx_size: number
+}
+
+export type LocalOffloadPayload = {
+  n_cpu_moe?: number
+  cpu_moe?: boolean
+  cpu_offload_gb?: number
+  override_tensor?: string
+}
+
+export type LocalOffloadRecommendation = {
+  applicable: boolean
+  backend: string
+  n_cpu_moe?: number
+  reason?: string
+  expert_bytes_total?: number
+  vram_free_mb?: number
+  fits_fully_on_gpu?: boolean
+  ctx_size?: number
+}
+
+export type LocalCapacitySnapshot = {
+  provider: string
+  baseURL: string
+  reachable: boolean
+  signal?: "exact" | "inferred"
+  slotsTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  inFlight?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  freeSlots?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  busy?: boolean
+  loadedModel?: string
+  probedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  ageMs: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  stale: boolean
+}
+
+export type GalleryHostInfo = {
+  id: string
+  name: string
+  baseURL: string
+  source: "mdns" | "localhost" | "lan"
+  online: boolean
+  installedModelIDs: Array<string>
+  defaultModel: string
+}
+
+export type GalleryEvaluatePayload = {
+  candidateIds: Array<string>
+  hostIds?: Array<string>
+  desiredContext?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  requiredCapabilities?: Array<string>
+  includeIncompatible?: boolean
+}
+
+export type GalleryScoreComponent = {
+  kind: string
+  points: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  detail: string
+  measured: boolean
+}
+
+export type GalleryVariantFit = {
+  variantName: string
+  fitLevel: string
+  maxFitCtx: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  vramRequiredMB: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  modelMB: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  reason: string
+}
+
+export type GalleryEntry = {
+  candidateId: string
+  hostId: string
+  hostName: string
+  online: boolean
+  installed: boolean
+  busy?: boolean
+  fitKnown: boolean
+  state: string
+  stateDetail: string
+  replaces?: string
+  compatible: boolean
+  incompatibleReasons: Array<string>
+  score: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  components: Array<GalleryScoreComponent>
+  bestVariant: GalleryVariantFit
+  recommendedVariant: string
+  variants: Array<GalleryVariantFit>
+  vramFreeMB: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  vramTotalMB: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
+  }
+}
+
 export type McpStatusConnected = {
   status: "connected"
+  era?: "legacy" | "modern"
+  protocolVersion?: string
+  transport?: string
+  capabilities?: Array<string>
 }
 
 export type McpStatusDisabled = {
@@ -2519,6 +2745,13 @@ export type ProviderAuthMethod = {
   >
 }
 
+export type ProviderBalance = {
+  remaining?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  limit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  used?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  currency?: string
+}
+
 export type ProviderAuthAuthorization = {
   url: string
   method: "auto" | "code"
@@ -2537,13 +2770,6 @@ export type ProviderAuthError1 = {
     field?: string
     message?: string
     kind?: string
-  }
-}
-
-export type NotFoundError = {
-  name: "NotFoundError"
-  data: {
-    message: string
   }
 }
 
@@ -2941,6 +3167,8 @@ export type V2Event =
   | WorktreeFailed
   | ServerConnected
   | GlobalDisposed
+  | LoopUpdated
+  | SideQuestionResponse
 
 export type V2EventStream = string
 
@@ -6105,6 +6333,42 @@ export type GlobalDisposed = {
   }
 }
 
+export type LoopUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "loop.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    loop: Loop
+  }
+}
+
+export type SideQuestionResponse = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "side-question.response"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    messageID: string
+    text: string
+  }
+}
+
 export type QuestionV2Request = {
   id: string
   sessionID: string
@@ -7052,6 +7316,24 @@ export type EventGlobalDisposed = {
   }
 }
 
+export type EventLoopUpdated = {
+  id: string
+  type: "loop.updated"
+  properties: {
+    loop: Loop
+  }
+}
+
+export type EventSideQuestionResponse = {
+  id: string
+  type: "side-question.response"
+  properties: {
+    sessionID: string
+    messageID: string
+    text: string
+  }
+}
+
 export type CredentialOAuth = {
   type: "oauth"
   methodID: string
@@ -7493,6 +7775,34 @@ export type ConfigProvidersResponses = {
 }
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+
+export type AgentsListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/agents"
+}
+
+export type AgentsListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AgentsListError = AgentsListErrors[keyof AgentsListErrors]
+
+export type AgentsListResponses = {
+  /**
+   * Metadata-only Agent presence records
+   */
+  200: Array<AgentPresence>
+}
+
+export type AgentsListResponse = AgentsListResponses[keyof AgentsListResponses]
 
 export type ExperimentalCapabilitiesGetData = {
   body?: never
@@ -8428,6 +8738,517 @@ export type FormatterStatusResponses = {
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
 
+export type LocalScanData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/scan"
+}
+
+export type LocalScanErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalScanError = LocalScanErrors[keyof LocalScanErrors]
+
+export type LocalScanResponses = {
+  /**
+   * Discovered local llama-swap instances
+   */
+  200: Array<LocalInstance>
+}
+
+export type LocalScanResponse = LocalScanResponses[keyof LocalScanResponses]
+
+export type LocalConnectData = {
+  body?: LocalConnectPayload
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/connect"
+}
+
+export type LocalConnectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalConnectError = LocalConnectErrors[keyof LocalConnectErrors]
+
+export type LocalConnectResponses = {
+  /**
+   * Provider ID written to global config
+   */
+  200: string
+}
+
+export type LocalConnectResponse = LocalConnectResponses[keyof LocalConnectResponses]
+
+export type LocalDisconnectData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/connect/{providerID}"
+}
+
+export type LocalDisconnectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalDisconnectError = LocalDisconnectErrors[keyof LocalDisconnectErrors]
+
+export type LocalDisconnectResponses = {
+  /**
+   * Removed provider ID
+   */
+  200: string
+}
+
+export type LocalDisconnectResponse = LocalDisconnectResponses[keyof LocalDisconnectResponses]
+
+export type LocalModelSetCtxSizeData = {
+  body?: LocalCtxSizePayload
+  path: {
+    providerID: string
+    modelID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/model/{providerID}/{modelID}/ctx-size"
+}
+
+export type LocalModelSetCtxSizeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalModelSetCtxSizeError = LocalModelSetCtxSizeErrors[keyof LocalModelSetCtxSizeErrors]
+
+export type LocalModelSetCtxSizeResponses = {
+  /**
+   * Context size updated
+   */
+  200: boolean
+}
+
+export type LocalModelSetCtxSizeResponse = LocalModelSetCtxSizeResponses[keyof LocalModelSetCtxSizeResponses]
+
+export type LocalModelSetOffloadData = {
+  body?: LocalOffloadPayload
+  path: {
+    providerID: string
+    modelID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/model/{providerID}/{modelID}/offload"
+}
+
+export type LocalModelSetOffloadErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalModelSetOffloadError = LocalModelSetOffloadErrors[keyof LocalModelSetOffloadErrors]
+
+export type LocalModelSetOffloadResponses = {
+  /**
+   * Offload settings updated
+   */
+  200: boolean
+}
+
+export type LocalModelSetOffloadResponse = LocalModelSetOffloadResponses[keyof LocalModelSetOffloadResponses]
+
+export type LocalModelOffloadRecommendationData = {
+  body?: never
+  path: {
+    providerID: string
+    modelID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/model/{providerID}/{modelID}/offload-recommendation"
+}
+
+export type LocalModelOffloadRecommendationErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalModelOffloadRecommendationError =
+  LocalModelOffloadRecommendationErrors[keyof LocalModelOffloadRecommendationErrors]
+
+export type LocalModelOffloadRecommendationResponses = {
+  /**
+   * Recommended offload settings
+   */
+  200: LocalOffloadRecommendation
+}
+
+export type LocalModelOffloadRecommendationResponse =
+  LocalModelOffloadRecommendationResponses[keyof LocalModelOffloadRecommendationResponses]
+
+export type LocalCapacityData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/capacity"
+}
+
+export type LocalCapacityErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalCapacityError = LocalCapacityErrors[keyof LocalCapacityErrors]
+
+export type LocalCapacityResponses = {
+  /**
+   * Capacity snapshots for all known local providers
+   */
+  200: Array<LocalCapacitySnapshot>
+}
+
+export type LocalCapacityResponse = LocalCapacityResponses[keyof LocalCapacityResponses]
+
+export type GalleryHostsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/gallery/hosts"
+}
+
+export type GalleryHostsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GalleryHostsError = GalleryHostsErrors[keyof GalleryHostsErrors]
+
+export type GalleryHostsResponses = {
+  /**
+   * llama-skein hosts the gallery can offer
+   */
+  200: Array<GalleryHostInfo>
+}
+
+export type GalleryHostsResponse = GalleryHostsResponses[keyof GalleryHostsResponses]
+
+export type GalleryEvaluateData = {
+  body?: GalleryEvaluatePayload
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/gallery/evaluate"
+}
+
+export type GalleryEvaluateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GalleryEvaluateError = GalleryEvaluateErrors[keyof GalleryEvaluateErrors]
+
+export type GalleryEvaluateResponses = {
+  /**
+   * One ranked, classified entry per candidate/host pair
+   */
+  200: Array<GalleryEntry>
+}
+
+export type GalleryEvaluateResponse = GalleryEvaluateResponses[keyof GalleryEvaluateResponses]
+
+export type LoopListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop"
+}
+
+export type LoopListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LoopListError = LoopListErrors[keyof LoopListErrors]
+
+export type LoopListResponses = {
+  /**
+   * List of loops
+   */
+  200: Array<Loop>
+}
+
+export type LoopListResponse = LoopListResponses[keyof LoopListResponses]
+
+export type LoopCreateData = {
+  body?: {
+    prompt: string
+    sessionID?: string
+    maxIterations?: number
+    interval?: number
+    noProgressLimit?: number
+    completionToken?: string
+    mode?: "prompt" | "queue"
+    queue?: Array<string>
+    queueGuidance?: string
+    queueSync?: boolean
+    queuePush?: boolean
+    queueOptions?: {
+      testCommand?: string
+      verifyCommand?: string
+      defaultBranch?: string
+      cwd?: string
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop"
+}
+
+export type LoopCreateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type LoopCreateError = LoopCreateErrors[keyof LoopCreateErrors]
+
+export type LoopCreateResponses = {
+  /**
+   * Successfully created loop
+   */
+  200: Loop
+}
+
+export type LoopCreateResponse = LoopCreateResponses[keyof LoopCreateResponses]
+
+export type LoopGetData = {
+  body?: never
+  path: {
+    loopID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop/{loopID}"
+}
+
+export type LoopGetErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type LoopGetError = LoopGetErrors[keyof LoopGetErrors]
+
+export type LoopGetResponses = {
+  /**
+   * Get loop
+   */
+  200: Loop
+}
+
+export type LoopGetResponse = LoopGetResponses[keyof LoopGetResponses]
+
+export type LoopPauseData = {
+  body?: never
+  path: {
+    loopID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop/{loopID}/pause"
+}
+
+export type LoopPauseErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type LoopPauseError = LoopPauseErrors[keyof LoopPauseErrors]
+
+export type LoopPauseResponses = {
+  /**
+   * Loop paused
+   */
+  200: boolean
+}
+
+export type LoopPauseResponse = LoopPauseResponses[keyof LoopPauseResponses]
+
+export type LoopResumeData = {
+  body?: never
+  path: {
+    loopID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop/{loopID}/resume"
+}
+
+export type LoopResumeErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type LoopResumeError = LoopResumeErrors[keyof LoopResumeErrors]
+
+export type LoopResumeResponses = {
+  /**
+   * Loop resumed
+   */
+  200: boolean
+}
+
+export type LoopResumeResponse = LoopResumeResponses[keyof LoopResumeResponses]
+
+export type LoopNudgeData = {
+  body?: {
+    text: string
+  }
+  path: {
+    loopID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop/{loopID}/nudge"
+}
+
+export type LoopNudgeErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type LoopNudgeError = LoopNudgeErrors[keyof LoopNudgeErrors]
+
+export type LoopNudgeResponses = {
+  /**
+   * Correction accepted
+   */
+  200: boolean
+}
+
+export type LoopNudgeResponse = LoopNudgeResponses[keyof LoopNudgeResponses]
+
+export type LoopCancelData = {
+  body?: never
+  path: {
+    loopID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop/{loopID}/cancel"
+}
+
+export type LoopCancelErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type LoopCancelError = LoopCancelErrors[keyof LoopCancelErrors]
+
+export type LoopCancelResponses = {
+  /**
+   * Loop cancelled
+   */
+  200: boolean
+}
+
+export type LoopCancelResponse = LoopCancelResponses[keyof LoopCancelResponses]
+
 export type McpStatusData = {
   body?: never
   path?: never
@@ -9362,6 +10183,36 @@ export type ProviderAuthResponses = {
 
 export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
 
+export type ProviderBalanceData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/{providerID}/balance"
+}
+
+export type ProviderBalanceErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBalanceError = ProviderBalanceErrors[keyof ProviderBalanceErrors]
+
+export type ProviderBalanceResponses = {
+  /**
+   * Account balance/credits for the provider, or undefined if unsupported
+   */
+  200: ProviderBalance
+}
+
+export type ProviderBalanceResponse = ProviderBalanceResponses[keyof ProviderBalanceResponses]
+
 export type ProviderOauthAuthorizeData = {
   body?: {
     /**
@@ -10238,6 +11089,50 @@ export type SessionCommandResponses = {
 }
 
 export type SessionCommandResponse = SessionCommandResponses[keyof SessionCommandResponses]
+
+export type SessionSideQuestionData = {
+  body?: {
+    question: string
+    agent?: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/side_question"
+}
+
+export type SessionSideQuestionErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionSideQuestionError = SessionSideQuestionErrors[keyof SessionSideQuestionErrors]
+
+export type SessionSideQuestionResponses = {
+  /**
+   * Side question response
+   */
+  200: {
+    info: Message
+    parts: Array<Part>
+  }
+}
+
+export type SessionSideQuestionResponse = SessionSideQuestionResponses[keyof SessionSideQuestionResponses]
 
 export type SessionShellData = {
   body?: {

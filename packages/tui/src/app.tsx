@@ -1,5 +1,4 @@
 import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
@@ -9,7 +8,8 @@ import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import * as Selection from "./util/selection"
-import { createCliRenderer, MouseButton } from "@opentui/core"
+import { Locale } from "./util/locale"
+import { createCliRenderer, MouseButton, type CliRenderer } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
 import {
   Switch,
@@ -36,18 +36,19 @@ import { SDKProvider, useSDK } from "./context/sdk"
 import { StartupLoading } from "./component/startup-loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { DataProvider } from "./context/data"
-import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
+import { LocationProvider } from "./context/location"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
-import { DialogDebug } from "./component/dialog-debug"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
+import { DialogLoopList } from "./component/dialog-loop-list"
+import { DialogTuning } from "./component/dialog-tuning"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
@@ -87,8 +88,6 @@ import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-wi
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
-registerOpencodeSpinner()
-
 const appGlobalBindingCommands = [
   "session.list",
   "session.new",
@@ -119,13 +118,11 @@ const appBindingCommands = [
   "provider.connect",
   "console.org.switch",
   "opencode.status",
-  "opencode.debug",
   "theme.switch",
   "theme.switch_mode",
   "theme.mode.lock",
   "help.show",
   "docs.open",
-  "diff.open",
   "workspace.list",
   "app.debug",
   "app.console",
@@ -137,6 +134,7 @@ const appBindingCommands = [
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
   "app.toggle.session_directory_filter",
+  "permission.mode",
 ] as const
 
 export type TuiInput = {
@@ -189,23 +187,21 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
       const renderer = yield* Effect.acquireRelease(
-        Effect.tryPromise({
-          try: () =>
-            createCliRenderer({
-              externalOutputMode: "passthrough",
-              targetFps: 60,
-              gatherStats: false,
-              exitOnCtrlC: false,
-              useKittyKeyboard: {},
-              autoFocus: false,
-              openConsoleOnError: false,
-              useMouse: !Flag.OPENCODE_DISABLE_MOUSE && input.config.mouse,
-              consoleOptions: {
-                keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
-              },
-            }),
-          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-        }),
+        Effect.tryPromise(() =>
+          createCliRenderer({
+            externalOutputMode: "passthrough",
+            targetFps: 60,
+            gatherStats: false,
+            exitOnCtrlC: false,
+            useKittyKeyboard: {},
+            autoFocus: false,
+            openConsoleOnError: false,
+            useMouse: !Flag.OPENCODE_DISABLE_MOUSE && input.config.mouse,
+            consoleOptions: {
+              keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+            },
+          }),
+        ),
         (renderer) =>
           Effect.sync(() => {
             destroyRenderer(renderer)
@@ -281,6 +277,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                         <ClipboardProvider>
                           <OpencodeKeymapProvider keymap={keymap}>
                             <ArgsProvider {...input.args}>
+                              <PermissionProvider>
+                              <LocationProvider>
                               <KVProvider>
                                 <ToastProvider>
                                   <RouteProvider
@@ -302,42 +300,40 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                           headers={input.headers}
                                           events={input.events}
                                         >
-                                          <PermissionProvider>
-                                            <ProjectProvider>
-                                              <SyncProvider>
-                                                <DataProvider>
-                                                  <ThemeProvider mode={mode}>
-                                                    <LocalProvider>
-                                                      <PromptStashProvider>
-                                                        <DialogProvider>
-                                                          <FrecencyProvider>
-                                                            <PromptHistoryProvider>
-                                                              <PromptRefProvider>
-                                                                <EditorContextProvider>
-                                                                  <LocationProvider>
-                                                                    <App
-                                                                      onSnapshot={input.onSnapshot}
-                                                                      pluginHost={input.pluginHost}
-                                                                    />
-                                                                  </LocationProvider>
-                                                                </EditorContextProvider>
-                                                              </PromptRefProvider>
-                                                            </PromptHistoryProvider>
-                                                          </FrecencyProvider>
-                                                        </DialogProvider>
-                                                      </PromptStashProvider>
-                                                    </LocalProvider>
-                                                  </ThemeProvider>
-                                                </DataProvider>
-                                              </SyncProvider>
-                                            </ProjectProvider>
-                                          </PermissionProvider>
+                                          <ProjectProvider>
+                                            <SyncProvider>
+                                              <DataProvider>
+                                                <ThemeProvider mode={mode}>
+                                                  <LocalProvider>
+                                                    <PromptStashProvider>
+                                                      <DialogProvider>
+                                                        <FrecencyProvider>
+                                                          <PromptHistoryProvider>
+                                                            <PromptRefProvider>
+                                                              <EditorContextProvider>
+                                                                <App
+                                                                  onSnapshot={input.onSnapshot}
+                                                                  pluginHost={input.pluginHost}
+                                                                />
+                                                              </EditorContextProvider>
+                                                            </PromptRefProvider>
+                                                          </PromptHistoryProvider>
+                                                        </FrecencyProvider>
+                                                      </DialogProvider>
+                                                    </PromptStashProvider>
+                                                  </LocalProvider>
+                                                </ThemeProvider>
+                                              </DataProvider>
+                                            </SyncProvider>
+                                          </ProjectProvider>
                                         </SDKProvider>
                                       </PluginRuntimeProvider>
                                     </TuiConfigProvider>
                                   </RouteProvider>
                                 </ToastProvider>
                               </KVProvider>
+                              </LocationProvider>
+                              </PermissionProvider>
                             </ArgsProvider>
                           </OpencodeKeymapProvider>
                         </ClipboardProvider>
@@ -373,6 +369,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const kv = useKV()
   const keymap = useOpencodeKeymap()
   const event = useEvent()
+  const notifiedLoops = new Set<string>()
   const sdk = useSDK()
   const toast = useToast()
   const themeState = useTheme()
@@ -617,6 +614,74 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.replace(() => <DialogWorkspaceList />)
         },
       },
+      {
+        // Relentless openspec queue run: implement -> test -> verify -> commit
+        // per change, quarantining stuck changes rather than idling. Runs
+        // under the no-push authority ceiling.
+        //
+        // fork: named /auto until now. Upstream's docs use "Auto mode" for
+        // permission auto-approve (permission.mode above) — a real, currently
+        // shipping feature, not something this fork invented — so /auto was a
+        // genuine collision, not just an internal naming preference. Renamed
+        // to /backlog: names what it works on, and doesn't re-litigate the
+        // original "queue is an implementation detail" complaint that /auto
+        // was trying to fix in the first place.
+        name: "loop.backlog.start",
+        title: "Backlog — work all planned tasks until none are left (never pushes)",
+        category: "Loop",
+        // Selecting it here runs everything; typing arguments after it
+        // (`/backlog <change> --sync`) is handled by the prompt's own
+        // intercept, the same way `/loop` works. `/queue` stays as an alias.
+        slashName: "backlog",
+        slashAliases: ["queue"],
+        run: async () => {
+          dialog.clear()
+          try {
+            // fork: run in the visible session, matching /backlog's prompt intercept
+            const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+            const result = await sdk.client.loop.create({ prompt: "", mode: "queue", sessionID }, { throwOnError: true })
+            const info = result.data!
+            if (!sessionID) route.navigate({ type: "session", sessionID: info.sessionID })
+            toast.show({
+              variant: "success",
+              message:
+                `Backlog started (${info.id}) — works planned tasks until none are left, and never pushes. ` +
+                `Watch /loop for what it is on.`,
+            })
+          } catch (error) {
+            toast.show({ title: "Failed to start queue run", message: errorMessage(error), variant: "error" })
+          }
+        },
+      },
+      {
+        // One entry, not two: `loop.start` and `loop.list` both opened this
+        // exact dialog, so `/loop` and `/loops` differed by one character and
+        // did the same thing. Starting a run needs argument text the palette
+        // cannot supply, so the palette's job is only to open the dialog —
+        // `/loop <prompt>` and `/queue …` are intercepted in the prompt.
+        name: "loop.list",
+        title: "Loops — running and past runs",
+        category: "Loop",
+        slashName: "loop",
+        run: () => {
+          dialog.replace(() => <DialogLoopList />)
+        },
+      },
+      {
+        name: "tuning.show",
+        title: "GPU tuning",
+        category: "Local",
+        slashName: "tuning",
+        run: () => {
+          const providerID = local.model.current()?.providerID
+          const provider = providerID ? sync.data.provider.find((p) => p.id === providerID) : undefined
+          if (!provider || !provider.options?.["baseURL"]) {
+            toast.show({ variant: "info", message: "GPU tuning is only available for local llama-skein providers" })
+            return
+          }
+          dialog.replace(() => <DialogTuning providerID={provider.id} />)
+        },
+      },
       ...Array.from({ length: 9 }, (_, i) => ({
         name: `session.quick_switch.${i + 1}`,
         title: `Switch to session in quick slot ${i + 1}`,
@@ -770,15 +835,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "System",
       },
       {
-        name: "opencode.debug",
-        title: "View debug info",
-        slashName: "debug",
-        run: () => {
-          dialog.replace(() => <DialogDebug />)
-        },
-        category: "System",
-      },
-      {
         name: "theme.switch",
         title: "Switch theme",
         slashName: "themes",
@@ -919,6 +975,24 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
+        // fork: restores parity with upstream's permission.mode command, deleted
+        // 2026-08-06 in ae9cc413d1 as collateral damage of tearing out a
+        // fork-authored 4-state autonomy ladder (manual/skip-ask/continue/auto)
+        // that this toggle had been folded into. The ladder's "continue" and
+        // "auto" states really were dead duplicates of /loop and the queue
+        // command (then named /auto, since renamed to /backlog below because
+        // this command is the real owner of that word) — this one wasn't;
+        // it's the same permission.toggle() upstream still ships.
+        name: "permission.mode",
+        title:
+          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
+        category: "System",
+        run: () => {
+          local.permission.toggle()
+          dialog.clear()
+        },
+      },
+      {
         name: "app.toggle.paste_summary",
         title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
         category: "System",
@@ -940,16 +1014,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: async () => {
           kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
           await sync.session.refresh()
-          dialog.clear()
-        },
-      },
-      {
-        name: "permission.mode",
-        title:
-          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
-        category: "System",
-        run: () => {
-          local.permission.toggle()
           dialog.clear()
         },
       },
@@ -1028,6 +1092,22 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
+  // loop.updated fires on every iteration, not just terminal transitions —
+  // notifiedLoops keeps the toast to a single fire per loop.
+  event.on("loop.updated", (evt, { workspace }) => {
+    if (workspace !== project.workspace.current()) return
+    const info = evt.properties.loop
+    if (info.status !== "completed" && info.status !== "stalled" && info.status !== "max_reached") return
+    if (notifiedLoops.has(info.id)) return
+    notifiedLoops.add(info.id)
+    toast.show({
+      variant: info.status === "stalled" ? "warning" : info.status === "completed" ? "success" : "info",
+      title: `Loop ${info.status.replace("_", " ")}`,
+      message: `"${Locale.truncate(info.prompt, 50)}" (${info.iteration} iteration${info.iteration === 1 ? "" : "s"})`,
+      duration: 6000,
+    })
+  })
+
   event.on("installation.update-available", async (evt) => {
     console.log("installation.update-available", evt)
     const version = evt.properties.version
@@ -1058,11 +1138,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     const result = await sdk.client.global.upgrade({ target: version })
 
     if (result.error || !result.data?.success) {
+      // fork: surface the server's actual error — a bare "Update failed"
+      // hides actionable causes (dev build, script exit code, network).
+      const data = result.data as { success?: boolean; error?: string } | undefined
+      const detail = data?.error ?? (result.error ? String(result.error) : "no error detail from server")
       toast.show({
         variant: "error",
         title: "Update Failed",
-        message: "Update failed",
-        duration: 10000,
+        message: detail,
+        duration: 15000,
       })
       return
     }

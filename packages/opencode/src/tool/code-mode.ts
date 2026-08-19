@@ -1,5 +1,4 @@
 import * as Tool from "./tool"
-import { CallToolResultSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Schema } from "effect"
 import { CodeMode, Tool as SandboxTool, toolError } from "@opencode-ai/codemode"
 import { MCP } from "@/mcp"
@@ -10,6 +9,10 @@ import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 
 export const CODE_MODE_TOOL = "execute"
+
+// fork: the result shape comes from the 2.0 client this fork uses, not the 1.x
+// SDK's CallToolResult — deriving it keeps the two eras from drifting apart.
+type CallToolResult = Awaited<ReturnType<MCP.McpTool["client"]["callTool"]>>
 
 const DESCRIPTION = "Run a confined orchestration script with access to connected MCP tools."
 
@@ -147,9 +150,10 @@ const invokeChildTool = Effect.fn("CodeMode.invokeChildTool")(function* (input: 
     yield* input.ctx.ask({ permission: input.entry.key, metadata: {}, patterns: ["*"], always: ["*"] })
     // Deliberately mirrors McpCatalog.convertTool's transport call so the MCP service stays free of tool-loop concerns.
     return yield* Effect.promise(async () => {
+      // fork: the 2.0 client's callTool is (params, options) — the result schema
+      // argument only exists on the 1.x SDK. Mirrors McpCatalog.convertTool.
       const raw = await input.entry.tool.client.callTool(
         { name: input.entry.tool.def.name, arguments: input.args },
-        CallToolResultSchema,
         {
           resetTimeoutOnProgress: true,
           signal: input.ctx.abort,

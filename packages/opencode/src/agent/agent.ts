@@ -36,6 +36,11 @@ export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
   mode: Schema.Literals(["subagent", "primary", "all"]),
+  // Where this role wants to run. Absent behaves as "inherit" — placement only
+  // from a local parent. Declaring "local" (or hosts) is what authorizes
+  // placement from a CLOUD parent, which is otherwise refused so a user's
+  // deliberate model choice is never silently downgraded for its subagents.
+  placement: Schema.optional(Schema.Union([Schema.Literals(["inherit", "local"]), Schema.Array(Schema.String)])),
   native: Schema.optional(Schema.Boolean),
   hidden: Schema.optional(Schema.Boolean),
   topP: Schema.optional(Schema.Finite),
@@ -285,6 +290,7 @@ const layer = Layer.effect(
           item.temperature = value.temperature ?? item.temperature
           item.topP = value.top_p ?? item.topP
           item.mode = value.mode ?? item.mode
+          item.placement = value.placement ?? item.placement
           item.color = value.color ?? item.color
           item.hidden = value.hidden ?? item.hidden
           item.name = value.name ?? item.name
@@ -449,5 +455,7 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [Config.node, Auth.node, Plugin.node, Skill.node, Provider.node, locationServiceMapNode],
 })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer), Layer.provide(Skill.defaultLayer), Layer.provide(Provider.defaultLayer), Layer.provide(LayerNode.compile(locationServiceMapNode))))
 
 export * as Agent from "./agent"

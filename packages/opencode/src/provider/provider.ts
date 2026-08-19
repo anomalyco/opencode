@@ -1,6 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import os from "os"
-import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -15,6 +14,16 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { iife } from "@/util/iife"
+import { ThemeState } from "@opencode-ai/core/local/theme-state"
+import { SkeinLoading } from "@/local/skein-loading"
+import { LocalProviderSync } from "@/local/sync"
+// fork: control-plane client used to auto-lower ctx on a local "context too large" 413.
+import { createClient as createLocalClient, createConfig as createLocalConfig } from "@/local/llama-skein/gen/client"
+import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
+
+// Tracks baseURL::modelId combos that have already had a loading-theme header sent.
+// The header is only useful on the first request (model cold-start); skip it after.
+const _loadingThemeSent = new Set<string>()
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -33,8 +42,28 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
+// fork: local/llama-skein providers (@ai-sdk/openai-compatible) got NO
+// default header timeout at all, so a backend that accepted a request and
+// then silently died (e.g. a model load crash) left the fetch waiting for
+// response headers forever — no error, no timeout, nothing for the caller
+// (including a Task subagent) to react to. 180s covered a cold model load,
+// but a multi-day /loop or /backlog session's context only grows, and
+// prefill on that much context genuinely exceeds 180s on real local
+// hardware without the backend being dead — observed killing an otherwise-
+// healthy generation mid-run. 600s keeps that margin while still turning a
+// truly-dead connection into a clear timeout instead of an indefinite hang.
+// A user-configured headerTimeout for that provider always wins — this is
+// only the fallback.
+const LOCAL_PROVIDER_HEADER_TIMEOUT_DEFAULT = 600_000
+// fork: SSE stream chunk timeout for local providers — if no chunk arrives
+// within this window, the stream is aborted. Catches a model that accepted
+// the request and started streaming but then hung (e.g. endlessly generating
+// "Thinking..." tokens with no actual output). 120s is generous for a slow
+// local model but catches truly stuck streams. User-configured chunkTimeout
+// always wins.
+const LOCAL_PROVIDER_CHUNK_TIMEOUT_DEFAULT = 120_000
 
-function wrapSSE(res: Response, ms: number, ctl: AbortController) {
+export function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
@@ -82,6 +111,81 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 }
 
+// fork (skein-duey): llama-skein streams model-load "loading theme" flavor as
+// reasoning_content SSE deltas tagged with a top-level `skein_loading: true`.
+// opencode persisted those as reasoning, ballooning the session DB to GBs and
+// filling the disk. They are pure UI flavor — show live, never store.
+//
+// The Vercel ai-sdk discards unknown TOP-LEVEL fields, so `skein_loading` is only
+// visible on the RAW SSE chunk. We strip those events HERE, before the ai-sdk, so
+// they never enter the reasoning/message/persistence path at all. `onLoading`
+// receives the flavor text for transient live display (which never persists).
+export function stripSkeinLoading(res: Response, onLoading?: (text: string) => void): Response {
+  if (!res.body) return res
+  if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
+
+  const decoder = new TextDecoder()
+  const encoder = new TextEncoder()
+  let buffer = ""
+
+  // Returns the flavor text when `line` is a `data:` event carrying
+  // skein_loading:true, else null (= pass the line through untouched).
+  const loadingText = (line: string): string | null => {
+    const trimmed = line.trimStart()
+    if (!trimmed.startsWith("data:")) return null
+    const payload = trimmed.slice(trimmed.indexOf("data:") + "data:".length).trim()
+    if (payload === "" || payload === "[DONE]") return null
+    if (!payload.includes("skein_loading")) return null // cheap pre-filter before JSON.parse
+    try {
+      const obj = JSON.parse(payload) as {
+        skein_loading?: boolean
+        choices?: Array<{ delta?: { reasoning_content?: string; content?: string } }>
+      }
+      if (obj?.skein_loading !== true) return null
+      const delta = obj.choices?.[0]?.delta
+      const text = delta?.reasoning_content ?? delta?.content ?? ""
+      return typeof text === "string" ? text : ""
+    } catch {
+      return null // unparseable — never drop content we don't understand
+    }
+  }
+
+  const transform = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, ctrl) {
+      buffer += decoder.decode(chunk, { stream: true })
+      let out = ""
+      let nl: number
+      while ((nl = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, nl + 1) // keep the newline for byte-exact passthrough
+        buffer = buffer.slice(nl + 1)
+        const text = loadingText(line)
+        if (text !== null) {
+          if (text && onLoading) onLoading(text)
+          continue // DROP: never reaches the ai-sdk / persistence
+        }
+        out += line
+      }
+      if (out) ctrl.enqueue(encoder.encode(out))
+    },
+    flush(ctrl) {
+      if (!buffer) return
+      const text = loadingText(buffer)
+      if (text !== null) {
+        if (text && onLoading) onLoading(text)
+      } else {
+        ctrl.enqueue(encoder.encode(buffer))
+      }
+      buffer = ""
+    },
+  })
+
+  return new Response(res.body.pipeThrough(transform), {
+    headers: new Headers(res.headers),
+    status: res.status,
+    statusText: res.statusText,
+  })
+}
+
 function timeoutController(ms: number) {
   const ctl = new AbortController()
   const id = setTimeout(() => ctl.abort(new ProviderError.HeaderTimeoutError(ms)), ms)
@@ -106,7 +210,6 @@ type BundledSDK = {
 
 const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>> = {
   "@ai-sdk/amazon-bedrock": () => import("@ai-sdk/amazon-bedrock").then((m) => m.createAmazonBedrock),
-  "@ai-sdk/amazon-bedrock/mantle": () => import("@ai-sdk/amazon-bedrock/mantle").then((m) => m.createBedrockMantle),
   "@ai-sdk/anthropic": () => import("@ai-sdk/anthropic").then((m) => m.createAnthropic),
   "@ai-sdk/azure": () => import("@ai-sdk/azure").then((m) => m.createAzure),
   "@ai-sdk/google": () => import("@ai-sdk/google").then((m) => m.createGoogleGenerativeAI),
@@ -146,7 +249,7 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
 
 type CustomDep = {
   auth: (id: string) => Effect.Effect<Auth.Info | undefined>
-  config: () => Effect.Effect<ConfigV1.Info>
+  config: () => Effect.Effect<Config.Info>
   env: () => Effect.Effect<Record<string, string | undefined>>
   get: (key: string) => Effect.Effect<string | undefined>
 }
@@ -207,13 +310,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
       }),
-    meta: () =>
-      Effect.succeed({
-        autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.responses(modelID)
-        },
-      }),
     xai: () =>
       Effect.succeed({
         autoload: false,
@@ -225,12 +321,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
     "github-copilot": () =>
       Effect.succeed({
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>, model?: Model) {
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
-          if (model && "endpoint" in model.api) {
-            if (model.api.endpoint === "responses" && sdk.responses) return sdk.responses(modelID)
-            if (model.api.endpoint === "chat" && sdk.chat) return sdk.chat(modelID)
-          }
           const match = /^gpt-(\d+)/.exec(modelID)
           if (match && Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")) return sdk.responses(modelID)
           return sdk.chat(modelID)
@@ -277,7 +369,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
       }
     }),
-    "azure-cognitive-services": Effect.fnUntraced(function* (provider: Info) {
+    "azure-cognitive-services": Effect.fnUntraced(function* () {
       const resourceName = yield* dep.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
       return {
         autoload: false,
@@ -285,9 +377,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
         options: {
-          baseURL: resourceName
-            ? `https://${resourceName}.cognitiveservices.azure.com/openai${provider.options?.useDeploymentBasedUrls ? "" : "/v1"}`
-            : undefined,
+          baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
         },
       }
     }),
@@ -302,12 +392,15 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
 
       // Profile: config file takes precedence over env var
+      // An API key configured in opencode.json is a valid Bedrock credential on
+      // its own — without it in the guard below the provider stays disabled no
+      // matter what the user configured.
+      const configApiKey = providerConfig?.options?.apiKey
       const configProfile = providerConfig?.options?.profile
       const envProfile = env["AWS_PROFILE"]
       const profile = configProfile ?? envProfile
 
       const awsAccessKeyId = env["AWS_ACCESS_KEY_ID"]
-      const configApiKey = providerConfig?.options?.apiKey
 
       // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
       // until the scope of the Env API is clarified (test only or runtime?)
@@ -361,10 +454,16 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: true,
         options: providerOptions,
+        // The mantle endpoint builds its URL from AWS_REGION, so the configured
+        // region has to be exported as a var — without this the host comes out
+        // as "bedrock-mantle..api.aws".
         vars(options: Record<string, any>) {
           return { AWS_REGION: options.region ?? defaultRegion }
         },
         async getModel(sdk: any, modelID: string, options?: Record<string, any>, model?: Model) {
+          // The mantle endpoint speaks the OpenAI Responses API for most models
+          // and Chat Completions for the gpt-oss safeguard pair — it is not a
+          // region-prefixed Bedrock model id, so it short-circuits below.
           if (model?.api.npm === "@ai-sdk/amazon-bedrock/mantle") return selectBedrockMantleLanguageModel(sdk, modelID)
 
           // Skip region prefixing if model already has a cross-region inference profile prefix
@@ -1040,9 +1139,14 @@ const ProviderCost = Schema.Struct({
 })
 
 const ProviderLimit = Schema.Struct({
+  // For llama-skein local models `context` carries the backend's `max_safe_ctx`
+  // (the prompt budget to trim to), NOT the raw n_ctx — see discoverOpenAICompatibleModels.
   context: Schema.Finite,
   input: optional(Schema.Finite),
   output: Schema.Finite,
+  // fork: hard n_ctx (`configured_ctx`) when the value above is a safe budget below it.
+  // Optional + only set for local fit-aware providers; for display ("safe X of N").
+  contextMax: optional(Schema.Finite),
 })
 
 export const Model = Schema.Struct({
@@ -1051,6 +1155,9 @@ export const Model = Schema.Struct({
   api: ProviderApiInfo,
   name: Schema.String,
   family: optional(Schema.String),
+  // fork: on-disk weight size in bytes (llama-skein size_bytes), for showing a
+  // GB figure in the model picker to disambiguate quantizations. Local only.
+  sizeBytes: optional(Schema.Finite),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
@@ -1128,20 +1235,12 @@ export class InitError extends Schema.TaggedErrorClass<InitError>()("ProviderIni
   providerID: ProviderV2.ID,
   cause: Schema.optional(Schema.Defect()),
 }) {
-  override get message() {
-    return `Failed to initialize provider: ${this.providerID}`
-  }
-
   static isInstance(input: unknown): input is InitError {
     return input instanceof InitError
   }
 }
 
 export class NoProvidersError extends Schema.TaggedErrorClass<NoProvidersError>()("ProviderNoProvidersError", {}) {
-  override get message() {
-    return "No providers are available"
-  }
-
   static isInstance(input: unknown): input is NoProvidersError {
     return input instanceof NoProvidersError
   }
@@ -1150,10 +1249,6 @@ export class NoProvidersError extends Schema.TaggedErrorClass<NoProvidersError>(
 export class NoModelsError extends Schema.TaggedErrorClass<NoModelsError>()("ProviderNoModelsError", {
   providerID: ProviderV2.ID,
 }) {
-  override get message() {
-    return `No models are available for provider: ${this.providerID}`
-  }
-
   static isInstance(input: unknown): input is NoModelsError {
     return input instanceof NoModelsError
   }
@@ -1173,9 +1268,19 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
+  /**
+   * fork: update a model's cached context limit after a deliberate ctx-size
+   * change (local providers). Keeps the sidebar's context window in sync
+   * without a full re-discovery.
+   */
+  readonly setModelContextLimit: (
+    providerID: ProviderV2.ID,
+    modelID: ModelV2.ID,
+    context: number,
+  ) => Effect.Effect<boolean>
 }
 
-interface State {
+export interface State {
   models: Map<string, LanguageModelV3>
   providers: Record<ProviderV2.ID, Info>
   catalog: Record<ProviderV2.ID, Info>
@@ -1258,7 +1363,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     },
     capabilities: {
       temperature: model.temperature ?? false,
-      reasoning: model.reasoning ?? false,
+      reasoning: Boolean(model.reasoning ?? false),
       attachment: model.attachment ?? false,
       toolcall: model.tool_call ?? true,
       input: {
@@ -1281,6 +1386,8 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     variants: {},
   }
 
+  // models.dev-declared reasoning variants REPLACE the generated set; only fall
+  // back to generating them when the model declares none.
   const variants = ProviderTransform.reasoningVariants(model, base) ?? ProviderTransform.variants(base)
 
   return {
@@ -1316,6 +1423,412 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
+function openAICompatibleDiscoveryEnabled(provider: NonNullable<Config.Info["provider"]>[string]) {
+  if (provider.npm && provider.npm !== "@ai-sdk/openai-compatible") return false
+  if (!provider.options?.baseURL) return false
+  return provider.discoverModels ?? provider.models === undefined
+}
+
+// fork: llama-skein's prompt-overflow contract (internal/server/promptguard.go
+// in the llama-skein repo). Single-sourced here so the two repos' error
+// strings can only drift in one place — see the contract-drift guard test.
+const LLAMA_SKEIN_PROMPT_OVERFLOW_TYPE = "exceed_context_size_error"
+const LLAMA_SKEIN_PROMPT_OVERFLOW_CODE = "prompt_over_max_safe_ctx"
+const LLAMA_SKEIN_MAX_SAFE_CTX_HEADER = "X-Skein-Max-Safe-Ctx"
+
+/**
+ * fork: recover from a local backend rejecting a request with HTTP 413. Two
+ * distinct llama-skein failure classes share this status code:
+ *
+ *  - `type: "context_too_large"` (proxy/proxymanager.go, on a failed model
+ *    LOAD: the configured ctx doesn't fit available memory). The request
+ *    itself is fine — the model just needs to reload smaller. Patch the
+ *    backend's ctx_size down and retry once.
+ *  - `type: "exceed_context_size_error"`, `code: "prompt_over_max_safe_ctx"`
+ *    (internal/server/promptguard.go, on an already-loaded, correctly
+ *    configured model: THIS prompt is too big). Patching ctx_size would not
+ *    help — and can OOM a VRAM-tight host that has no headroom to grow into.
+ *    Trimming the prompt is a session-level concern this function cannot
+ *    perform, so it only self-heals the model's cached `limit.context` to
+ *    the authoritative ceiling and returns false; the 413 propagates as a
+ *    normal ContextOverflowError, and the existing reactive `needsCompaction`
+ *    path (session/processor.ts) compacts against the now-correct budget on
+ *    the next turn instead of repeating the same oversized request forever.
+ *
+ * Returns true only when the caller should retry the SAME request
+ * immediately (the model-misconfigured class). Never throws.
+ */
+export async function adjustLocalContextOnOverflow(
+  s: State,
+  model: Model,
+  baseURL: string,
+  requestBody: string,
+  res: Response,
+): Promise<boolean> {
+  try {
+    const peek = (await res.clone().json()) as {
+      error?: { type?: string; code?: string; max_ctx?: number }
+    }
+    let modelID: string | undefined
+    try {
+      modelID = JSON.parse(requestBody)?.model
+    } catch {
+      return false
+    }
+    if (!modelID) return false
+    const ctrlBase = baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")
+
+    if (
+      peek?.error?.type === LLAMA_SKEIN_PROMPT_OVERFLOW_TYPE &&
+      peek?.error?.code === LLAMA_SKEIN_PROMPT_OVERFLOW_CODE
+    ) {
+      // Ceiling comes from the machine-readable header first — never the
+      // human-readable message — falling back to a live /api/fit probe.
+      // Never gated on max_fit_ctx: that field is legitimately absent for a
+      // VRAM-tight model whose KV budget is negative, and absence there says
+      // nothing about whether max_safe_ctx (a different computation) exists.
+      const headerCtx = Number(res.headers.get(LLAMA_SKEIN_MAX_SAFE_CTX_HEADER))
+      let safeCtx = Number.isFinite(headerCtx) && headerCtx > 0 ? headerCtx : undefined
+      if (safeCtx === undefined) {
+        const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: ctrlBase })) })
+        const probe = await client.getModelFit({ path: { model: modelID } }).catch(() => null)
+        const fromFit = numberFrom(probe?.data?.max_safe_ctx)
+        if (fromFit) safeCtx = fromFit
+      }
+      if (safeCtx === undefined) return false // can't determine a ceiling — surface the overflow
+      const live = s.providers[model.providerID]?.models[model.id]
+      if (live) live.limit = { ...live.limit, context: safeCtx }
+      return false
+    }
+
+    if (peek?.error?.type === "context_too_large") {
+      const maxCtx = Number(peek.error.max_ctx)
+      if (!Number.isFinite(maxCtx) || maxCtx <= 0) return false
+      const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: ctrlBase })) })
+      // The 413's max_ctx is often the model's NATIVE ceiling, which on a
+      // VRAM-constrained host does not load (this is what set z4 to 393216 >
+      // trained 262144 and OOM'd on reload). Cap the new ctx at max_fit_ctx — the
+      // largest hard n_ctx that fits this host's VRAM, capped at the trained
+      // context. (fit_level can't gate this: fit trusts any configured/hypothetical
+      // ctx and reports "perfect"/"marginal", never "no", so it would always pass.)
+      const probe = await client.getModelFit({ path: { model: modelID } }).catch(() => null)
+      const maxFit = probe?.data?.max_fit_ctx ?? 0
+      if (maxFit <= 0) return false // can't determine a safe ceiling — surface the overflow
+      const target = Math.min(maxCtx, maxFit)
+      if (target <= 0) return false
+      const patch = await client.patchModelConfig({ path: { id: modelID }, body: { ctx_size: target } })
+      return !patch.error
+    }
+
+    return false
+  } catch {
+    return false
+  }
+}
+
+/**
+ * fork: pull each local llama-skein backend's `/api/fit` report so we can size a
+ * model's context window to its `max_safe_ctx` — the prompt budget that already
+ * reserves output + a tokenizer-mismatch margin below the hard n_ctx. Using this
+ * instead of the raw `context_length` is what stops the "context exceeded" 413s
+ * (the model's own /models endpoint reports n_ctx, with no headroom).
+ *
+ * `controlBase` is the control-plane root (baseURL minus the `/v1` suffix). For a
+ * non-llama-skein backend `/api/fit` simply errors → empty map → callers fall
+ * back to the existing context_length behaviour. Never throws.
+ */
+// Local models whose llama-skein placement is paced by host memory bandwidth
+// (hybrid GPU + system RAM), keyed "providerID/modelID". Such a model can
+// legitimately emit nothing for minutes — faulting expert weights in, then
+// generating at well under 1 tok/s — which a flat inactivity deadline reads
+// as a dead connection. Kept out of the model record itself because
+// ModelV2.options is forwarded to the provider SDK and must not carry our
+// own metadata.
+const hostPacedModels = new Set<string>()
+
+/** Reports whether a model's placement is host-bandwidth-paced. */
+export function isHostPaced(providerID: string, modelID: string): boolean {
+  return hostPacedModels.has(`${providerID}/${modelID}`)
+}
+
+// Inactivity floor for host-bandwidth-paced models, shared by the LLM-event
+// watchdog (llm.ts) and the raw chunk timer below. Sized off the measured
+// worst case (254s to first token on a small prompt, z4 hybrid DeepSeek) with
+// room for a large agent prompt and a long hidden reasoning phase on top.
+export const HOST_PACED_STREAM_DEADLINE_SECONDS = 1800
+
+/**
+ * Updates the host-paced registry from a discovery pass. Fresh fit data is
+ * authoritative in both directions (a re-placement to GPU-resident clears the
+ * flag). A missing fit report — the probe raced its abort budget or the host
+ * was busy — keeps the previous verdict: wiping it would re-arm the short
+ * stall deadline for exactly the model that needs the long one.
+ */
+export function noteHostPaced(providerID: string, modelID: string, fit?: { hostPaced?: boolean }): void {
+  if (!fit) return
+  const key = `${providerID}/${modelID}`
+  if (fit.hostPaced) hostPacedModels.add(key)
+  else hostPacedModels.delete(key)
+}
+
+async function fetchLocalModelFit(
+  controlBase: string,
+  signal?: AbortSignal,
+): Promise<Map<string, { maxSafeCtx: number; configuredCtx?: number; modelMb?: number; hostPaced?: boolean }>> {
+  const out = new Map<string, { maxSafeCtx: number; configuredCtx?: number; modelMb?: number; hostPaced?: boolean }>()
+  try {
+    const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: controlBase })) })
+    // fork: bounded by the caller's discovery abort budget — a host that
+    // accepts TCP but never answers /api/fit (z4 mid rootfs-swap) must not
+    // stall model discovery; fit data is an enhancement, never worth waiting
+    // for longer than the model list itself.
+    const res = await client.getFitReport({ signal })
+    if (res.error || !res.data?.models) return out
+    for (const fit of res.data.models) {
+      // `max_safe_ctx` is the authoritative prompt ceiling whenever the engine
+      // could compute it (>0) — independent of `fit_level`. fit_level is a
+      // VRAM/placement verdict: "no" means the model won't fully fit VRAM (it
+      // still runs via CPU offload), NOT that the safe ctx is invalid. Honoring
+      // it only when fit_level≠"no" wrongly discarded a real ceiling and let the
+      // 413 through (qwopus-MTP: fit_level "no", max_safe_ctx 70942 < n_ctx
+      // 86016 — exactly the value that prevents the overflow). A genuine
+      // can't-compute yields max_safe_ctx 0, caught below → fall back.
+      const safe = numberFrom(fit.max_safe_ctx)
+      if (!safe) continue
+      // Host-bandwidth-paced placements (hybrid GPU + system RAM) generate
+      // orders of magnitude slower — measured 0.8 tok/s vs 70 tok/s on the
+      // same host — and can emit nothing at all for minutes while faulting
+      // expert weights in. Carry that forward so the stream watchdog can tell
+      // "slow" from "dead".
+      const perf = fit.placement?.perf_class
+      out.set(fit.model, {
+        maxSafeCtx: safe,
+        configuredCtx: numberFrom(fit.configured_ctx),
+        modelMb: numberFrom(fit.model_mb),
+        hostPaced: perf === "cpu-bound-hybrid" || perf === "cpu-only",
+      })
+    }
+  } catch {
+    // not a llama-skein backend, or unreachable — fall back silently.
+  }
+  return out
+}
+
+export function mergeDiscoveredModel(existing: Model | undefined, discovered: Model): Model {
+  if (!existing) return discovered
+  return {
+    ...discovered,
+    ...existing,
+    // fork: `...existing` above wins on every key, including one present but
+    // explicitly `undefined` — which would silently erase a freshly
+    // discovered size. Prefer whichever side actually has a value.
+    sizeBytes: existing.sizeBytes ?? discovered.sizeBytes,
+    api: {
+      ...discovered.api,
+      ...existing.api,
+    },
+    limit: {
+      // fork: for openai-compatible/local providers the backend is authoritative
+      // about its *current* context (e.g. after a ctx-size change + reload), so
+      // prefer the freshly-discovered value. `discovered` already falls back to
+      // the existing context when the backend reports nothing, so this never
+      // regresses to 0.
+      context: discovered.limit.context || existing.limit.context,
+      input: existing.limit.input ?? discovered.limit.input,
+      output: existing.limit.output || discovered.limit.output,
+      // fork: prefer the freshly-discovered hard n_ctx; only fall back to the
+      // existing one. Cleared to undefined if neither side knows it.
+      contextMax: discovered.limit.contextMax ?? existing.limit.contextMax,
+    },
+  }
+}
+
+type DiscoveryResult = {
+  models: Record<string, Model>
+  warnings: { message: string; fields: Record<string, unknown> }[]
+}
+
+async function discoverOpenAICompatibleModels(input: {
+  providerID: ProviderV2.ID
+  provider: NonNullable<Config.Info["provider"]>[string]
+  existing: Info | undefined
+}): Promise<DiscoveryResult> {
+  // fork: warnings are returned, not logged here — this helper is a plain
+  // promise chain, and the Effect caller does the logging.
+  const warnings: DiscoveryResult["warnings"] = []
+  const base = String(input.provider.options?.baseURL ?? "").replace(/\/+$/, "")
+  if (!base) return { models: {}, warnings }
+  const url = `${base}/models`
+  // fork: control-plane root for /api/fit lives one level up from the openai-compatible
+  // `/v1` path. Fetched in parallel with, but under its own abort budget from,
+  // the /models fetch — sharing one controller meant a fit that would have
+  // succeeded a little after /models resolved was killed anyway, silently
+  // discarding a valid (smaller, safer) ceiling in favor of the raw reported
+  // context_length. Fit's own budget is a little more generous since it does
+  // real VRAM/quant math per model instead of returning a static listing;
+  // still bounded so a host that accepts TCP but never answers /api/fit
+  // cannot stall model discovery. Empty for non-llama-skein backends or on
+  // timeout — /models discovery always proceeds regardless of fit's outcome.
+  const controlBase = base.replace(/\/v1$/, "")
+  const modelsController = new AbortController()
+  const modelsTimer = setTimeout(() => modelsController.abort(), 2000)
+  const fitController = new AbortController()
+  const fitTimer = setTimeout(() => fitController.abort(), 3000)
+  const fitPromise = fetchLocalModelFit(controlBase, fitController.signal)
+  const apiKey = typeof input.provider.options?.apiKey === "string" ? input.provider.options.apiKey : undefined
+  return fetch(url, {
+    signal: modelsController.signal,
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+  })
+    .then((response) => {
+      if (!response.ok) return null
+      return response.json() as Promise<{ data?: Array<Record<string, unknown>> }>
+    })
+    .then(async (body) => {
+      if (!body) return { models: {}, warnings }
+      const fitByModel = await fitPromise
+      const discovered: Record<string, Model> = {}
+      for (const item of body.data ?? []) {
+        const rawID = item.id
+        if (typeof rawID !== "string" || !rawID.trim()) continue
+        const modelID = rawID.trim()
+        const existingModel = input.existing?.models[modelID]
+        const name =
+          typeof item.name === "string" && item.name.trim() ? item.name.trim() : (existingModel?.name ?? modelID)
+        // fork: a llama-skein /api/fit `max_safe_ctx` is the authoritative trim
+        // target — prefer it over the model's self-reported raw n_ctx. When fit
+        // is unavailable (non-llama-skein, fit_level "no", unreachable) fall back
+        // to the reported context_length chain so a model is never blocked.
+        const fit = fitByModel.get(modelID)
+        const reportedContext =
+          numberFrom(item.context_length) ?? numberFrom(item.max_context_length) ?? existingModel?.limit.context ?? 0
+        // fork: when fit is unavailable (probe lost the race, non-llama-skein,
+        // fit_level "no"), do NOT blindly adopt the raw reported context if a
+        // previously-known (smaller) max_safe_ctx exists — a too-large budget
+        // silently wedges every request behind a 413 the client never
+        // recovers from (see adjustLocalContextOnOverflow), while a too-small
+        // one merely under-uses headroom. Prefer the conservative value and
+        // say so, rather than silently regressing to the larger number.
+        const previouslyKnownContext = existingModel?.limit.context
+        let context: number
+        if (fit?.maxSafeCtx) {
+          context = fit.maxSafeCtx
+        } else if (previouslyKnownContext && reportedContext > previouslyKnownContext) {
+          warnings.push({
+            message:
+              "openai-compatible model discovery: fit probe unavailable and reported context_length exceeds the previously-known context — keeping the conservative value",
+            fields: { providerID: input.providerID, modelID, reportedContext, previouslyKnownContext },
+          })
+          context = previouslyKnownContext
+        } else {
+          context = reportedContext
+        }
+        // contextMax is the enforced hard n_ctx used as the display ceiling.
+        // Prefer fit's configured_ctx; when fit is unavailable fall back to the
+        // backend's self-reported context_length (the fork emits this straight
+        // from --ctx-size) — NOT existingModel.limit.context, which may carry a
+        // models.dev catalog native (the ~467k that masked the real 3072 wall).
+        const contextMax =
+          fit?.configuredCtx ?? numberFrom(item.context_length) ?? numberFrom(item.max_context_length) ?? undefined
+        const output = numberFrom(item.max_output_tokens) ?? existingModel?.limit.output ?? 0
+        // fork: size_bytes from /v1/models is the primary source; fall back to
+        // model_mb from the fit report (in MB → bytes) when the models endpoint
+        // omits it (peer models, un-resolvable path). existingModel?.sizeBytes
+        // is the last resort — a value persisted from a prior discovery.
+        const sizeBytes =
+          numberFrom(item.size_bytes) ??
+          (fit?.modelMb ? fit.modelMb * 1024 * 1024 : undefined) ??
+          existingModel?.sizeBytes
+        noteHostPaced(input.providerID, modelID, fit)
+
+        discovered[modelID] = {
+          id: ModelV2.ID.make(modelID),
+          providerID: input.providerID,
+          name,
+          sizeBytes,
+          api: {
+            id: existingModel?.api.id ?? modelID,
+            url: input.provider.api ?? existingModel?.api.url ?? "",
+            npm: input.provider.npm ?? existingModel?.api.npm ?? "@ai-sdk/openai-compatible",
+          },
+          status: existingModel?.status ?? "active",
+          headers: existingModel?.headers ?? {},
+          options: existingModel?.options ?? {},
+          cost: existingModel?.cost ?? { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: {
+            context,
+            input: existingModel?.limit.input,
+            output,
+            ...(contextMax ? { contextMax } : {}),
+          },
+          capabilities: {
+            temperature: existingModel?.capabilities.temperature ?? true,
+            // fork: honor a llama-skein-advertised `reasoning` flag from
+            // /v1/models so reasoning models (which stream reasoning_content
+            // first) render their thinking instead of appearing frozen. A
+            // hand-configured capability still wins over discovery.
+            reasoning:
+              existingModel?.capabilities.reasoning ?? (typeof item.reasoning === "boolean" ? item.reasoning : false),
+            attachment: existingModel?.capabilities.attachment ?? false,
+            toolcall: existingModel?.capabilities.toolcall ?? true,
+            input: existingModel?.capabilities.input ?? {
+              text: true,
+              audio: false,
+              image: false,
+              video: false,
+              pdf: false,
+            },
+            output: existingModel?.capabilities.output ?? {
+              text: true,
+              audio: false,
+              image: false,
+              video: false,
+              pdf: false,
+            },
+            interleaved: existingModel?.capabilities.interleaved ?? false,
+          },
+          family: existingModel?.family ?? "",
+          release_date: existingModel?.release_date ?? "",
+          variants: existingModel?.variants ?? {},
+        }
+      }
+      return { models: discovered, warnings }
+    })
+    .catch((e: unknown) => ({
+      models: {} as Record<string, Model>,
+      warnings: [
+        ...warnings,
+        {
+          message: "openai-compatible model discovery failed",
+          fields: { providerID: input.providerID, url, error: e },
+        },
+      ],
+    }))
+    .finally(() => {
+      clearTimeout(modelsTimer)
+      clearTimeout(fitTimer)
+    })
+}
+
+function numberFrom(input: unknown) {
+  if (typeof input === "number" && Number.isFinite(input) && input >= 0) return input
+  if (typeof input === "string") {
+    const parsed = Number(input)
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed
+  }
+  return undefined
+}
+
+function suggestionModelIDs(provider: Info | undefined, enableExperimentalModels: boolean) {
+  if (!provider) return []
+  return Object.keys(provider.models).filter((id) => {
+    const model = provider.models[id]
+    if (model.status === "deprecated") return false
+    if (model.status === "alpha" && !enableExperimentalModels) return false
+    return true
+  })
+}
+
 function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
   if (!body) return model.options
   const options = Object.fromEntries(
@@ -1328,14 +1841,7 @@ function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
 }
 
 function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enableExperimentalModels: boolean) {
-  const available = provider
-    ? Object.keys(provider.models).filter((id) => {
-        const model = provider.models[id]
-        if (model.status === "deprecated") return false
-        if (model.status === "alpha" && !enableExperimentalModels) return false
-        return true
-      })
-    : []
+  const available = suggestionModelIDs(provider, enableExperimentalModels)
   const fuzzy = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 }).map((m) => m.target)
   if (fuzzy.length) return fuzzy
   const query = modelID
@@ -1356,7 +1862,7 @@ function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enabl
     .map((item) => item.id)
 }
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -1434,7 +1940,11 @@ const layer = Layer.effect(
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
 
           provider.models = yield* Effect.promise(async () => {
-            const next = await models(toPublicInfo(provider), { auth: pluginAuth })
+            // The generated plugin SDK's `interleaved.field` is narrower
+            // (3 literals) than the real values providers report (e.g.
+            // "vendor_reasoning"); the SDK types are stale relative to the
+            // spec's sibling schema, which already allows an open string.
+            const next = await models(toPublicInfo(provider) as Parameters<typeof models>[0], { auth: pluginAuth })
             return Object.fromEntries(
               Object.entries(next).map(([id, model]) => [
                 id,
@@ -1486,10 +1996,11 @@ const layer = Layer.effect(
               },
               status: model.status ?? existingModel?.status ?? "active",
               name,
+              sizeBytes: existingModel?.sizeBytes,
               providerID: ProviderV2.ID.make(providerID),
               capabilities: {
                 temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
-                reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
+                reasoning: Boolean(model.reasoning ?? existingModel?.capabilities.reasoning ?? false),
                 attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
                 toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
                 input: {
@@ -1535,11 +2046,7 @@ const layer = Layer.effect(
               release_date: model.release_date ?? existingModel?.release_date ?? "",
               variants: {},
             }
-            const variants =
-              existingModel?.api.npm === parsedModel.api.npm
-                ? (existingModel.variants ?? ProviderTransform.variants(parsedModel))
-                : ProviderTransform.variants(parsedModel)
-            const merged = mergeDeep(variants, model.variants ?? {})
+            const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
             parsedModel.variants = mapValues(
               pickBy(merged, (v) => !v.disabled),
               (v) => omit(v, ["disabled"]),
@@ -1624,6 +2131,31 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
+        const toDiscover = configProviders.flatMap(([id, provider]) => {
+          const providerID = ProviderV2.ID.make(id)
+          if (!isProviderAllowed(providerID)) return []
+          if (!openAICompatibleDiscoveryEnabled(provider)) return []
+          const target = providers[providerID]
+          if (!target) return []
+          return [{ providerID, provider, target }]
+        })
+        if (toDiscover.length > 0) {
+          const results = yield* Effect.promise(() =>
+            Promise.all(
+              toDiscover.map(({ providerID, provider, target }) =>
+                discoverOpenAICompatibleModels({ providerID, provider, existing: target }),
+              ),
+            ),
+          )
+          for (const result of results)
+            for (const w of result.warnings) yield* Effect.logWarning(w.message, w.fields)
+          toDiscover.forEach(({ target }, i) => {
+            for (const [modelID, model] of Object.entries(results[i].models)) {
+              target.models[modelID] = mergeDiscoveredModel(target.models[modelID], model)
+            }
+          })
+        }
+
         const gitlab = ProviderV2.ID.make("gitlab")
         if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
           yield* Effect.promise(async () => {
@@ -1668,7 +2200,7 @@ const layer = Layer.effect(
             )
               delete provider.models[modelID]
 
-            if (model.variants === undefined) {
+            if (!model.variants || Object.keys(model.variants).length === 0) {
               model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
             }
 
@@ -1766,15 +2298,61 @@ const layer = Layer.effect(
         if (existing) return existing
 
         const customFetch = options["fetch"]
-        const chunkTimeout = options["chunkTimeout"]
-        const headerTimeout = options["headerTimeout"]
+        // fork: default chunk timeout for local providers — catches a model
+        // that started streaming but then hung (e.g. endlessly "Thinking...")
+        const chunkTimeout =
+          options["chunkTimeout"] ??
+          (model.api.npm === "@ai-sdk/openai-compatible" ? LOCAL_PROVIDER_CHUNK_TIMEOUT_DEFAULT : undefined)
+        // fork: default local/llama-skein providers to a header timeout when
+        // the user hasn't set one (?? only falls through on null/undefined,
+        // so an explicit `headerTimeout: false` opt-out is preserved).
+        const headerTimeout =
+          options["headerTimeout"] ??
+          (model.api.npm === "@ai-sdk/openai-compatible" ? LOCAL_PROVIDER_HEADER_TIMEOUT_DEFAULT : undefined)
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
-          const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+
+          // Model identity for this request. The SDK (and this closure's `model`)
+          // is shared by every model of the provider, so per-model decisions must
+          // parse the id from the request body.
+          let requestModelID: string | undefined
+          if (model.api.npm === "@ai-sdk/openai-compatible" && opts.method === "POST" && typeof opts.body === "string") {
+            try {
+              requestModelID = JSON.parse(opts.body)?.model
+            } catch {
+              // malformed body — leave undefined
+            }
+          }
+
+          // Inject X-Loading-Theme on the first request per model (cold-start only),
+          // keyed per baseURL::modelId.
+          if (requestModelID !== undefined && typeof options["baseURL"] === "string") {
+            const loadingTheme = ThemeState.get()
+            if (loadingTheme) {
+              const modelKey = `${options["baseURL"]}::${requestModelID}`
+              if (!_loadingThemeSent.has(modelKey)) {
+                opts.headers = { ...opts.headers, "X-Loading-Theme": loadingTheme }
+                _loadingThemeSent.add(modelKey)
+              }
+            }
+          }
+
+          // fork: a host-paced placement is legitimately raw-silent for minutes —
+          // weight faulting and prefill emit no SSE bytes at all — so the raw
+          // chunk timer gets the same floor the LLM-event watchdog uses. Without
+          // this, the 1800s watchdog floor is dead code: the 120s chunk timer
+          // kills the stream first.
+          const effectiveChunkTimeout =
+            typeof chunkTimeout === "number" && requestModelID !== undefined && isHostPaced(model.providerID, requestModelID)
+              ? Math.max(chunkTimeout, HOST_PACED_STREAM_DEADLINE_SECONDS * 1000)
+              : chunkTimeout
+
+          const chunkAbortCtl =
+            typeof effectiveChunkTimeout === "number" && effectiveChunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
           const signals: AbortSignal[] = []
@@ -1788,14 +2366,48 @@ const layer = Layer.effect(
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
 
-          const res = await fetchFn(input, {
+          let res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
           }).finally(() => headerTimeoutCtl?.clear())
 
-          if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          // fork: if a local backend rejected the request because the configured
+          // context is too large to load, lower ctx to the safe max it reported
+          // and retry once — instead of stalling the conversation.
+          if (
+            res.status === 413 &&
+            model.api.npm === "@ai-sdk/openai-compatible" &&
+            typeof options["baseURL"] === "string" &&
+            opts.method === "POST" &&
+            typeof opts.body === "string" &&
+            (await adjustLocalContextOnOverflow(s, model, options["baseURL"] as string, opts.body, res))
+          ) {
+            res = await fetchFn(input, {
+              ...opts,
+              // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+              timeout: false,
+            }).finally(() => headerTimeoutCtl?.clear())
+          }
+
+          // Order matters: the chunk timer must watch the RAW stream, before
+          // stripSkeinLoading. During a cold load the server sends only
+          // skein_loading flavor chunks; with the timer downstream of the strip
+          // those chunks are invisible to it and a healthy multi-minute load
+          // reads as total silence → false "SSE read timed out" kill.
+          if (chunkAbortCtl && typeof effectiveChunkTimeout === "number") {
+            res = wrapSSE(res, effectiveChunkTimeout, chunkAbortCtl)
+          }
+
+          // fork (skein-duey): for llama-skein local providers, strip the
+          // skein_loading flavor deltas from the stream before the ai-sdk so
+          // they are never persisted as reasoning. Surface their text for live
+          // display via the transient loading channel (never stored).
+          if (model.api.npm === "@ai-sdk/openai-compatible") {
+            res = stripSkeinLoading(res, (text) => SkeinLoading.emit(text))
+          }
+
+          return res
         }
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
@@ -1861,6 +2473,23 @@ const layer = Layer.effect(
         return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
       }
       return info
+    })
+
+    const setModelContextLimit = Effect.fn("Provider.setModelContextLimit")(function* (
+      providerID: ProviderV2.ID,
+      modelID: ModelV2.ID,
+      context: number,
+    ) {
+      return yield* InstanceState.use(state, (s) => {
+        const model = s.providers[providerID]?.models[modelID]
+        if (!model || !Number.isFinite(context) || context <= 0) return false
+        // Update contextMax too: it's the enforced hard n_ctx the sidebar shows.
+        // The user just set --ctx-size to this value, so it's the new ceiling.
+        // The next discovery re-reads it from the (now patched) backend, so it
+        // does not revert to a capacity number.
+        model.limit = { ...model.limit, context, contextMax: context }
+        return true
+      })
     })
 
     const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
@@ -1999,6 +2628,8 @@ const layer = Layer.effect(
         return { providerID: entry.providerID, modelID: entry.modelID }
       }
 
+      // An empty `provider: {}` is no allowlist, not an allowlist of nothing —
+      // `!cfg.provider` misses that case because {} is truthy.
       const configured = Object.keys(cfg.provider ?? {})
       const provider = Object.values(s.providers).find((p) => configured.length === 0 || configured.includes(p.id))
       if (!provider) return yield* new NoProvidersError()
@@ -2010,7 +2641,16 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    return Service.of({
+      list,
+      getProvider,
+      getModel,
+      getLanguage,
+      closest,
+      getSmallModel,
+      defaultModel,
+      setModelContextLimit,
+    })
   }),
 )
 
@@ -2035,8 +2675,20 @@ export function parseModel(model: string) {
 
 export const node = LayerNode.make({
   service: Service,
-  layer: layer,
+  layer,
   deps: [FSUtil.node, Config.node, Auth.node, Env.node, Plugin.node, ModelsDev.node, RuntimeFlags.node],
 })
+
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(
+    Layer.provide(FSUtil.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Env.defaultLayer),
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(ModelsDev.defaultLayer),
+    Layer.provide(RuntimeFlags.defaultLayer),
+  ),
+)
 
 export * as Provider from "./provider"

@@ -1,0 +1,10 @@
+{
+  "github:androidand/opencode-skein": {
+    "provider": "github:androidand/opencode-skein",
+    "id": "34",
+    "url": "https://github.com/androidand/opencode-skein/issues/34",
+    "base_sha": "573a75374c0c2d5a54a85242eb2864247c6d48a984a80a5cb1d3a6c412185b4a",
+    "base": "# Tasks: map-reasoning-capability\n\n- [x] 1. discoverOpenAICompatibleModels: map item.reasoning →\n       capabilities.reasoning (existing config wins). provider.ts.\n       Validation: cd packages/opencode \u0026\u0026 bun run typecheck\n- [ ] 2. Repo validation: typecheck opencode + tui.\n",
+    "base_closed": false
+  }
+}

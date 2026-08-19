@@ -87,6 +87,10 @@ export const Info = Schema.Struct({
   npm: Schema.optional(Schema.String),
   whitelist: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
   blacklist: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  discoverModels: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Discover models from the provider's OpenAI-compatible /models endpoint. Defaults to true for OpenAI-compatible providers with baseURL and no configured models.",
+  }),
   options: Schema.optional(
     Schema.StructWithRest(
       Schema.Struct({

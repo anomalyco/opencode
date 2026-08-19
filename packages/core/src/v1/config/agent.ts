@@ -24,6 +24,16 @@ const AgentSchema = Schema.StructWithRest(
     disable: Schema.optional(Schema.Boolean),
     description: Schema.optional(Schema.String).annotate({ description: "Description of when to use the agent" }),
     mode: Schema.optional(Schema.Literals(["subagent", "primary", "all"])),
+    placement: Schema.optional(
+      Schema.Union([Schema.Literals(["inherit", "local"]), Schema.mutable(Schema.Array(Schema.String))]),
+    ).annotate({
+      description:
+        "Where this role wants to run. 'inherit' (default) places subagents only when the parent is local. " +
+        "'local' places on any eligible local host even when the parent is a cloud model — declaring it is the " +
+        "authorization that stops that being a silent downgrade. A list of provider ids prefers those hosts in " +
+        "order, then any eligible local host. Never fails a run: an unusable preference falls through to ordinary " +
+        "placement and then to the parent's model.",
+    }),
     hidden: Schema.optional(Schema.Boolean).annotate({
       description: "Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)",
     }),
@@ -57,6 +67,7 @@ const KNOWN_KEYS = new Set([
   "permission",
   "disable",
   "tools",
+  "placement",
 ])
 
 const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema.Type<typeof AgentSchema> => {
