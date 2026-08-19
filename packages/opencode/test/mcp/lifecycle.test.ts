@@ -16,6 +16,7 @@ import {
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
+import { McpCatalog } from "@/mcp/catalog"
 import { MCP } from "../../src/mcp/index"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
 import { TestInstance } from "../fixture/fixture"
@@ -557,4 +558,19 @@ it.live("McpOAuthCallback.cancelPending rejects the pending callback", () =>
       }),
     () => Effect.promise(() => McpOAuthCallback.stop()).pipe(Effect.ignore),
   ),
+)
+
+it.instance("MCP tools expose a reconnect hook for failed calls (#40015)", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("reconnect-hook-server", remote(server.url))
+    expect((yield* mcp.status())["reconnect-hook-server"]?.status).toBe("connected")
+
+    const entry = (yield* mcp.tools())["reconnect-hook-server_test_tool"]
+    expect(entry).toBeDefined()
+    // The hook must exist so consumers (session tool execution) can re-establish
+    // a dead server's session and refresh the cached tool set.
+    expect(typeof entry.reconnect).toBe("function")
+  }),
 )

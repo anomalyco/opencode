@@ -416,6 +416,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
                 "message.id": input.processor.message.id,
               },
             }),
+            // A failed call may mean the MCP server restarted. Kick off a
+            // reconnect so the next tools() snapshot carries a fresh client and
+            // the agent's retry can succeed (issue #40015).
+            Effect.tapError(() => (entry.reconnect ? entry.reconnect().pipe(Effect.ignore) : Effect.void)),
           )
           yield* plugin.trigger(
             "tool.execute.after",
