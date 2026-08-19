@@ -127,6 +127,10 @@ describe("Open Responses-compatible route", () => {
           openresponses: {
             reasoningEffort: "low",
             store: true,
+            metadata: { environment: "test" },
+            safetyIdentifier: "user_123",
+            streamOptions: { includeObfuscation: false },
+            topLogprobs: 3,
             truncation: "auto",
             allowedTools: { toolNames: ["lookup"] },
             maxToolCalls: 2,
@@ -138,6 +142,7 @@ describe("Open Responses-compatible route", () => {
         LLM.request({
           model,
           prompt: "Think.",
+          generation: { presencePenalty: 0.2, frequencyPenalty: -0.1 },
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       )
@@ -145,6 +150,12 @@ describe("Open Responses-compatible route", () => {
       expect(prepared.body).toMatchObject({
         reasoning: { effort: "low" },
         store: true,
+        metadata: { environment: "test" },
+        safety_identifier: "user_123",
+        stream_options: { include_obfuscation: false },
+        top_logprobs: 3,
+        presence_penalty: 0.2,
+        frequency_penalty: -0.1,
         truncation: "auto",
         tool_choice: {
           type: "allowed_tools",

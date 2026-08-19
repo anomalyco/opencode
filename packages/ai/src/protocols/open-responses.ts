@@ -159,6 +159,14 @@ export const coreFields = {
   tools: optionalArray(Tool),
   tool_choice: Schema.optional(ToolChoice),
   store: Schema.optional(Schema.Boolean),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  safety_identifier: Schema.optional(Schema.String),
+  stream_options: Schema.optional(
+    Schema.Struct({
+      include_obfuscation: Schema.optional(Schema.Boolean),
+    }),
+  ),
+  top_logprobs: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 20 }))),
   truncation: Schema.optional(OpenResponsesOptions.TruncationSchema),
   service_tier: Schema.optional(OpenResponsesOptions.ServiceTierSchema),
   prompt_cache_key: Schema.optional(Schema.String),
@@ -179,6 +187,8 @@ export const coreFields = {
   parallel_tool_calls: Schema.optional(Schema.Boolean),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
+  presence_penalty: Schema.optional(Schema.Number),
+  frequency_penalty: Schema.optional(Schema.Number),
 }
 
 const OpenResponsesBody = Schema.Struct({
@@ -578,6 +588,12 @@ const lowerOptions = (request: LLMRequest) => {
   return {
     ...(options.instructions ? { instructions: options.instructions } : {}),
     ...(options.store !== undefined ? { store: options.store } : {}),
+    ...(options.metadata ? { metadata: options.metadata } : {}),
+    ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
+    ...(options.streamOptions?.includeObfuscation !== undefined
+      ? { stream_options: { include_obfuscation: options.streamOptions.includeObfuscation } }
+      : {}),
+    ...(options.topLogprobs !== undefined ? { top_logprobs: options.topLogprobs } : {}),
     ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
     ...(options.include ? { include: options.include } : {}),
     ...(options.reasoningEffort || options.reasoningSummary
@@ -627,6 +643,8 @@ export const fromRequestWithExtension = Effect.fn("OpenResponses.fromRequestWith
     max_output_tokens: generation?.maxTokens,
     temperature: generation?.temperature,
     top_p: generation?.topP,
+    presence_penalty: generation?.presencePenalty,
+    frequency_penalty: generation?.frequencyPenalty,
     ...lowerOptions(request),
   }
 })
