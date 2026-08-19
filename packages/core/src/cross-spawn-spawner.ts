@@ -116,7 +116,7 @@ export const make = Effect.gen(function* () {
     Sink.isSink(x) ? "pipe" : x
 
   const stdin = (opts: ChildProcess.CommandOptions): ChildProcess.StdinConfig => {
-    const cfg: ChildProcess.StdinConfig = { stream: "pipe", encoding: "utf-8", endOnDone: true }
+    const cfg: ChildProcess.StdinConfig = { stream: "ignore", encoding: "utf-8", endOnDone: true }
     if (Predicate.isUndefined(opts.stdin)) return cfg
     if (typeof opts.stdin === "string") return { ...cfg, stream: opts.stdin }
     if (Stream.isStream(opts.stdin)) return { ...cfg, stream: opts.stdin }
