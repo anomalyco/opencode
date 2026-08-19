@@ -414,9 +414,7 @@ If tool calls aren't working well, pick a loaded model with strong tool-calling 
 If you encounter "I'm sorry, but I cannot assist with that request" errors, try changing the content filter from **DefaultV2** to **Default** in your Azure resource.
 :::
 
-1. Head over to the [Azure portal](https://portal.azure.com/) and create an **Azure OpenAI** resource. You'll need:
-   - **Resource name**: This becomes part of your API endpoint (`https://RESOURCE_NAME.openai.azure.com/`)
-   - **API key**: Either `KEY 1` or `KEY 2` from your resource
+1. Head over to the [Azure portal](https://portal.azure.com/) and create an **Azure OpenAI** resource. You'll need the **Resource name**; this becomes part of your API endpoint (`https://RESOURCE_NAME.openai.azure.com/`).
 
 2. Go to [Azure AI Foundry](https://ai.azure.com/) and deploy a model.
 
@@ -430,7 +428,19 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    /connect
    ```
 
-4. Enter your API key.
+4. Choose an auth method.
+   - **API key**: Paste either `KEY 1` or `KEY 2` from your resource.
+   - **Microsoft Entra ID (OAuth via az cli)**: Run `az login` first. The signed-in Azure identity must have the `Cognitive Services OpenAI User` role for the resource.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ API key
+   │ Microsoft Entra ID (OAuth via az cli)
+   └
+   ```
+
+5. If you chose API key, enter your API key.
 
    ```txt
    ┌ API key
@@ -439,7 +449,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    └ enter
    ```
 
-5. Set your resource name as an environment variable:
+6. Optional: set your resource name as an environment variable to skip the resource name prompt during `/connect`.
 
    ```bash
    AZURE_RESOURCE_NAME=XXX opencode
@@ -451,7 +461,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    export AZURE_RESOURCE_NAME=XXX
    ```
 
-6. Run the `/models` command to select your deployed model.
+7. Run the `/models` command to select your deployed model.
 
    ```txt
    /models
@@ -461,9 +471,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 
 ### Azure Cognitive Services
 
-1. Head over to the [Azure portal](https://portal.azure.com/) and create an **Azure OpenAI** resource. You'll need:
-   - **Resource name**: This becomes part of your API endpoint (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`)
-   - **API key**: Either `KEY 1` or `KEY 2` from your resource
+1. Head over to the [Azure portal](https://portal.azure.com/) and create an **Azure OpenAI** resource. You'll need the **Resource name**; this becomes part of your API endpoint (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`).
 
 2. Go to [Azure AI Foundry](https://ai.azure.com/) and deploy a model.
 
@@ -477,7 +485,19 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    /connect
    ```
 
-4. Enter your API key.
+4. Choose an auth method.
+   - **API key**: Paste either `KEY 1` or `KEY 2` from your resource.
+   - **Microsoft Entra ID (OAuth via az cli)**: Run `az login` first. The signed-in Azure identity must have the `Cognitive Services User` or `Foundry User` role for the resource.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ API key
+   │ Microsoft Entra ID (OAuth via az cli)
+   └
+   ```
+
+5. If you chose API key, enter your API key.
 
    ```txt
    ┌ API key
@@ -486,7 +506,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    └ enter
    ```
 
-5. Set your resource name as an environment variable:
+6. Optional: set your resource name as an environment variable to skip the resource name prompt during `/connect`.
 
    ```bash
    AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
@@ -498,7 +518,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
    ```
 
-6. Run the `/models` command to select your deployed model.
+7. Run the `/models` command to select your deployed model.
 
    ```txt
    /models

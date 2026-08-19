@@ -244,6 +244,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         return [
           provider.options?.resourceName,
           auth?.type === "api" ? auth.metadata?.resourceName : undefined,
+          auth?.type === "oauth" ? auth.accountId : undefined,
           env["AZURE_RESOURCE_NAME"],
         ].find((name) => typeof name === "string" && name.trim() !== "")
       })
@@ -278,16 +279,34 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }
     }),
     "azure-cognitive-services": Effect.fnUntraced(function* (provider: Info) {
-      const resourceName = yield* dep.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
+      const env = yield* dep.env()
+      const auth = yield* dep.auth(provider.id)
+      const resourceName = [
+        provider.options?.resourceName,
+        auth?.type === "api" ? auth.metadata?.resourceName : undefined,
+        auth?.type === "oauth" ? auth.accountId : undefined,
+        env["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME"],
+      ].find((name) => typeof name === "string" && name.trim() !== "")
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
         options: {
-          baseURL: resourceName
+          // Used only when a Cognitive model relies on the default @ai-sdk/azure endpoint.
+          azureOpenAICompatibleBaseURL: resourceName
             ? `https://${resourceName}.cognitiveservices.azure.com/openai${provider.options?.useDeploymentBasedUrls ? "" : "/v1"}`
             : undefined,
+        },
+        vars(_options): Record<string, string> {
+          if (resourceName) {
+            return {
+              // Some Cognitive Services catalog entries use the generic Azure placeholder.
+              AZURE_RESOURCE_NAME: resourceName,
+              AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: resourceName,
+            }
+          }
+          return {}
         },
       }
     }),
@@ -1722,6 +1741,19 @@ const layer = Layer.effect(
           delete options.fetch
         }
 
+        if (
+          model.providerID === "azure-cognitive-services" &&
+          model.api.npm === "@ai-sdk/azure" &&
+          !model.api.url &&
+          typeof options["baseURL"] !== "string" &&
+          typeof options["azureOpenAICompatibleBaseURL"] === "string" &&
+          options["azureOpenAICompatibleBaseURL"] !== ""
+        ) {
+          // Azure Cognitive Services hosts multiple protocol shapes under one provider.
+          // Only default @ai-sdk/azure models use this Azure OpenAI-compatible URL.
+          options["baseURL"] = options["azureOpenAICompatibleBaseURL"]
+        }
+
         if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
           options["includeUsage"] = true
         }
@@ -1748,6 +1780,7 @@ const layer = Layer.effect(
         })
 
         if (baseURL !== undefined) options["baseURL"] = baseURL
+        delete options["azureOpenAICompatibleBaseURL"]
         if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
         if (model.headers)
           options["headers"] = {

@@ -83,6 +83,8 @@ const paid = (providers: Record<string, { models: Record<string, { cost: { input
 }
 
 const languageBaseURL = (language: unknown) => (language as { config: { baseURL: string } }).config.baseURL
+const languageURL = (language: unknown, path: string) =>
+  (language as { config: { url: (options: { path: string }) => string } }).config.url({ path })
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Provider.node, Env.node, Plugin.node])))
 const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
@@ -806,6 +808,42 @@ it.instance("getSmallModel skips inferred models for Azure Cognitive Services", 
     yield* set("AZURE_COGNITIVE_SERVICES_API_KEY", "test-key")
     const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("azure-cognitive-services"))
     expect(model).toBeUndefined()
+  }),
+)
+
+it.instance("Azure Cognitive Services resolves OAuth resource endpoints by model shape", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv(
+      "OPENCODE_AUTH_CONTENT",
+      JSON.stringify({
+        "azure-cognitive-services": {
+          type: "oauth",
+          refresh: "refresh-token",
+          access: "access-token",
+          expires: Date.now() + 60_000,
+          accountId: "oauth-resource",
+        },
+      }),
+    )
+    const provider = yield* Provider.Service
+
+    const opus = yield* provider.getModel(
+      ProviderV2.ID.make("azure-cognitive-services"),
+      ModelV2.ID.make("claude-opus-4-5"),
+    )
+    expect(languageBaseURL(yield* provider.getLanguage(opus))).toBe(
+      "https://oauth-resource.services.ai.azure.com/anthropic/v1",
+    )
+
+    const kimi = yield* provider.getModel(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("kimi-k2.6"))
+    expect(languageURL(yield* provider.getLanguage(kimi), "/chat/completions")).toBe(
+      "https://oauth-resource.services.ai.azure.com/models/chat/completions",
+    )
+
+    const gpt = yield* provider.getModel(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("gpt-5.1"))
+    expect(languageURL(yield* provider.getLanguage(gpt), "/responses")).toBe(
+      "https://oauth-resource.cognitiveservices.azure.com/openai/v1/responses",
+    )
   }),
 )
 
