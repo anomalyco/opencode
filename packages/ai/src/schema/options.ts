@@ -272,10 +272,9 @@ export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
 // Auto-placement policy for prompt caching. The protocol-neutral lowering step
 // reads this and injects `CacheHint`s at the configured boundaries; the
 // per-protocol body builders then translate those hints into wire markers as
-// usual. `"auto"` is the recommended default for agent loops — it places
+// usual. `"auto"` is the default for agent loops — it places
 // breakpoints at the last tool definition, the first and last distinct system
-// parts, and the conversation tail. The rolling message breakpoint keeps a
-// prior cache entry within Anthropic/Bedrock's 20-block lookback during long
+// parts, and the conversation tail so recent prefixes remain reusable during
 // tool loops.
 //
 // Pass `"none"` to opt out entirely (the legacy behavior). Pass the granular

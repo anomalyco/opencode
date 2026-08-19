@@ -13,8 +13,8 @@ import type { AIError } from "../schema/index.js"
  * - AWS event stream — length-prefixed binary frames with CRC checksums.
  *   Each emitted frame is one parsed binary event record.
  *
- * The frame type is opaque to this layer; the protocol's `decode` step turns
- * a frame into a typed chunk.
+ * The frame type is opaque to this layer; the protocol's event schema decodes
+ * each frame before its state machine handles it.
  */
 export interface Definition<Frame> {
   readonly id: string

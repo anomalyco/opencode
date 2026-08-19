@@ -1015,8 +1015,8 @@ const step = (state: ParserState, event: AnthropicEvent) => {
 // =============================================================================
 /**
  * The Anthropic Messages protocol — request body construction, body schema,
- * and the streaming-event state machine. Used by native Anthropic Cloud and
- * (once registered) Vertex Anthropic / Bedrock-hosted Anthropic passthrough.
+ * and the streaming-event state machine shared by Anthropic-compatible and
+ * Vertex-hosted Messages routes.
  */
 export const protocol = Protocol.make({
   id: ADAPTER,

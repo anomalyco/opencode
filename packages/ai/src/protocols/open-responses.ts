@@ -340,7 +340,7 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (
     name: tool.name,
     description: tool.description,
     parameters: ToolSchemaProjection.responses(inputSchema),
-    // TODO: Read this from Responses tool options so direct LLM callers can opt into strict schemas.
+    // The common tool definition does not currently express Responses strict-schema policy.
     strict: false,
   }
 })

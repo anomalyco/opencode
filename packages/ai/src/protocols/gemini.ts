@@ -630,8 +630,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
 // =============================================================================
 /**
  * The Gemini protocol — request body construction, body schema, and the
- * streaming-event state machine. Used by Google AI Studio Gemini and (once
- * registered) Vertex Gemini.
+ * streaming-event state machine shared by Google AI Studio and Vertex Gemini.
  */
 export const protocol = Protocol.make({
   id: ADAPTER,
