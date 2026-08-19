@@ -86,6 +86,62 @@ describe("BackgroundJob", () => {
     }).pipe(Effect.provide(jobsLayer)),
   )
 
+  it.live("cancels the observed run while it is still the one filed under its id", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_lifetime_current"
+      const latch = yield* Deferred.make<void>()
+      yield* jobs.start({ id, type: "test", run: Deferred.await(latch).pipe(Effect.as("done")) })
+
+      const observed = (yield* jobs.listExact()).filter((entry) => entry.info.id === id)[0]
+      expect(observed.info).toMatchObject({ id, type: "test", status: "running" })
+
+      expect(yield* jobs.cancelExact(observed.lifetime)).toMatchObject({ status: "cancelled" })
+      expect((yield* jobs.get(id))?.status).toBe("cancelled")
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("leaves the successor alone when the observed run has already been replaced", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_lifetime_replaced"
+      const first = yield* Deferred.make<void>()
+      yield* jobs.start({ id, type: "test", run: Deferred.await(first).pipe(Effect.as("first")) })
+
+      // What a caller sees before it acts.
+      const observed = (yield* jobs.listExact()).filter((entry) => entry.info.id === id)[0]
+
+      // That run settles and a second one takes the same id, as a resumed session does.
+      yield* Deferred.succeed(first, undefined)
+      expect(yield* jobs.wait({ id })).toMatchObject({ info: { status: "completed", output: "first" } })
+      const second = yield* Deferred.make<void>()
+      yield* jobs.start({ id, type: "test", run: Deferred.await(second).pipe(Effect.as("second")) })
+
+      expect(yield* jobs.cancelExact(observed.lifetime)).toBeUndefined()
+      expect((yield* jobs.get(id))?.status).toBe("running")
+
+      yield* Deferred.succeed(second, undefined)
+      expect(yield* jobs.wait({ id })).toMatchObject({ info: { status: "completed", output: "second" } })
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("cancels by id whichever run is current, which is why callers that observed one use cancelExact", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const id = "job_lifetime_by_id"
+      const first = yield* Deferred.make<void>()
+      yield* jobs.start({ id, type: "test", run: Deferred.await(first).pipe(Effect.as("first")) })
+
+      yield* Deferred.succeed(first, undefined)
+      expect(yield* jobs.wait({ id })).toMatchObject({ info: { status: "completed", output: "first" } })
+      const second = yield* Deferred.make<void>()
+      yield* jobs.start({ id, type: "test", run: Deferred.await(second).pipe(Effect.as("second")) })
+
+      expect((yield* jobs.cancel(id))?.status).toBe("cancelled")
+      expect((yield* jobs.get(id))?.status).toBe("cancelled")
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
   it.live("interrupts live work without promising settlement after the owning process-local scope closes", () =>
     Effect.gen(function* () {
       const scope = yield* Scope.make()

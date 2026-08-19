@@ -18,6 +18,23 @@ export type Info = {
   metadata?: Record<string, unknown>
 }
 
+/**
+ * Names one whole cancellable run of a job rather than the public id it is filed
+ * under. `start` reuses an id whose previous run has already settled, so between
+ * observing a job and acting on it the id can come to name a different run.
+ * Carrying the token lets a caller act on the run it actually saw.
+ */
+export type Lifetime = {
+  readonly id: string
+  readonly token: object
+}
+
+/** A snapshot paired with the exact run it describes. */
+export type ExactEntry = {
+  readonly info: Info
+  readonly lifetime: Lifetime
+}
+
 type Active = {
   info: Info
   done: Deferred.Deferred<Info>
@@ -87,6 +104,8 @@ export type WaitResult = {
 
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
+  /** Like `list`, but each snapshot carries the run it came from, for use with `cancelExact`. */
+  readonly listExact: () => Effect.Effect<ExactEntry[]>
   readonly get: (id: string) => Effect.Effect<Info | undefined>
   readonly start: (input: StartInput) => Effect.Effect<Info>
   readonly extend: (input: ExtendInput) => Effect.Effect<boolean>
@@ -94,6 +113,12 @@ export interface Interface {
   readonly waitForPromotion: (id: string) => Effect.Effect<Info>
   readonly promote: (id: string) => Effect.Effect<Info | undefined>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
+  /**
+   * Cancels a run only while it is still the one filed under its id. Returns
+   * `undefined` when that run has already been replaced, leaving its successor
+   * alone.
+   */
+  readonly cancelExact: (lifetime: Lifetime) => Effect.Effect<Info | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/BackgroundJob") {}
@@ -191,6 +216,12 @@ export const make = Effect.gen(function* () {
     return Array.from((yield* SynchronizedRef.get(state.jobs)).values())
       .map(snapshot)
       .toSorted((a, b) => a.started_at - b.started_at)
+  })
+
+  const listExact: Interface["listExact"] = Effect.fn("BackgroundJob.listExact")(function* () {
+    return Array.from((yield* SynchronizedRef.get(state.jobs)).values())
+      .map((job) => ({ info: snapshot(job), lifetime: { id: job.info.id, token: job.token } }))
+      .toSorted((a, b) => a.info.started_at - b.info.started_at)
   })
 
   const get: Interface["get"] = Effect.fn("BackgroundJob.get")(function* (id) {
@@ -334,11 +365,12 @@ export const make = Effect.gen(function* () {
     return result.info
   })
 
-  const cancel: Interface["cancel"] = Effect.fn("BackgroundJob.cancel")(function* (id) {
+  const stop = Effect.fn("BackgroundJob.stop")(function* (id: string, token: object | undefined) {
     const completed_at = yield* Clock.currentTimeMillis
     const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [FinishResult, Map<string, Active>] => {
       const job = jobs.get(id)
       if (!job) return [{}, jobs]
+      if (token !== undefined && job.token !== token) return [{}, jobs]
       if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
       const next = {
         ...job,
@@ -357,7 +389,15 @@ export const make = Effect.gen(function* () {
     return result.info
   })
 
-  return Service.of({ list, get, start, extend, wait, waitForPromotion, promote, cancel })
+  const cancel: Interface["cancel"] = Effect.fn("BackgroundJob.cancel")(function* (id) {
+    return yield* stop(id, undefined)
+  })
+
+  const cancelExact: Interface["cancelExact"] = Effect.fn("BackgroundJob.cancelExact")(function* (lifetime) {
+    return yield* stop(lifetime.id, lifetime.token)
+  })
+
+  return Service.of({ list, listExact, get, start, extend, wait, waitForPromotion, promote, cancel, cancelExact })
 })
 
 const layer = Layer.effect(Service, make)

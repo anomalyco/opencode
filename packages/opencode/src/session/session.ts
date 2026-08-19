@@ -939,15 +939,18 @@ const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function*
   background: BackgroundJob.Interface,
   sessionID: SessionID,
 ) {
-  const jobs = yield* background.list()
+  // Cancel the exact runs this scan matched. A task job is filed under its session id, which is
+  // reused when that session is resumed, so a job can settle and be replaced between the scan and
+  // the cancellation.
+  const jobs = yield* background.listExact()
   yield* Effect.forEach(
-    jobs.filter((job) => {
-      if (job.status !== "running") return false
-      if (job.id === sessionID) return true
-      if (job.metadata?.sessionId === sessionID) return true
-      return job.metadata?.parentSessionId === sessionID
+    jobs.filter((entry) => {
+      if (entry.info.status !== "running") return false
+      if (entry.info.id === sessionID) return true
+      if (entry.info.metadata?.sessionId === sessionID) return true
+      return entry.info.metadata?.parentSessionId === sessionID
     }),
-    (job) => background.cancel(job.id),
+    (entry) => background.cancelExact(entry.lifetime),
     { concurrency: "unbounded", discard: true },
   )
 })

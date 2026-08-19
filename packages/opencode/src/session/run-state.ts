@@ -112,7 +112,12 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
   background: BackgroundJob.Interface,
   sessionID: SessionID,
 ) {
-  const jobs = yield* background.list()
+  // Listing and cancelling are two operations, and a task job is filed under its session id, which
+  // is reused when that session is resumed. Between the two a matched job can settle and a new one
+  // can start under the same id, so cancelling by id would interrupt a run this sweep never matched.
+  // It would also widen the walk incorrectly: `pending` grows from the metadata of what was
+  // cancelled, so a replacement's metadata would pull in jobs from outside the requested branch.
+  const jobs = yield* background.listExact()
   const pending = new Set<string>([sessionID])
   const cancelled = new Set<string>()
   const matches = (job: BackgroundJob.Info) => {
@@ -122,23 +127,23 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
     if (typeof job.metadata?.sessionId === "string" && pending.has(job.metadata.sessionId)) return true
     return typeof job.metadata?.parentSessionId === "string" && pending.has(job.metadata.parentSessionId)
   }
-  let batch = jobs.filter(matches)
+  let batch = jobs.filter((entry) => matches(entry.info))
   while (batch.length > 0) {
     yield* Effect.forEach(
       batch,
-      (job) =>
-        background.cancel(job.id).pipe(
+      (entry) =>
+        background.cancelExact(entry.lifetime).pipe(
           Effect.tap(() =>
             Effect.sync(() => {
-              cancelled.add(job.id)
-              pending.add(job.id)
-              if (typeof job.metadata?.sessionId === "string") pending.add(job.metadata.sessionId)
+              cancelled.add(entry.info.id)
+              pending.add(entry.info.id)
+              if (typeof entry.info.metadata?.sessionId === "string") pending.add(entry.info.metadata.sessionId)
             }),
           ),
         ),
       { concurrency: "unbounded", discard: true },
     )
-    batch = jobs.filter(matches)
+    batch = jobs.filter((entry) => matches(entry.info))
   }
 })
 

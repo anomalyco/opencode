@@ -5,9 +5,11 @@ import { Effect, Layer } from "effect"
 
 export {
   Service,
+  type ExactEntry,
   type ExtendInput,
   type Info,
   type Interface,
+  type Lifetime,
   type StartInput,
   type Status,
   type WaitInput,
@@ -21,6 +23,7 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make(() => CoreBackgroundJob.make)
     return CoreBackgroundJob.Service.of({
       list: () => InstanceState.useEffect(state, (jobs) => jobs.list()),
+      listExact: () => InstanceState.useEffect(state, (jobs) => jobs.listExact()),
       get: (id) => InstanceState.useEffect(state, (jobs) => jobs.get(id)),
       start: (input) => InstanceState.useEffect(state, (jobs) => jobs.start(input)),
       extend: (input) => InstanceState.useEffect(state, (jobs) => jobs.extend(input)),
@@ -28,6 +31,7 @@ const layer = Layer.effect(
       waitForPromotion: (id) => InstanceState.useEffect(state, (jobs) => jobs.waitForPromotion(id)),
       promote: (id) => InstanceState.useEffect(state, (jobs) => jobs.promote(id)),
       cancel: (id) => InstanceState.useEffect(state, (jobs) => jobs.cancel(id)),
+      cancelExact: (lifetime) => InstanceState.useEffect(state, (jobs) => jobs.cancelExact(lifetime)),
     })
   }),
 )
