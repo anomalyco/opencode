@@ -31,6 +31,7 @@ export class UnsupportedOAuthError extends Schema.ErrorClass<UnsupportedOAuthErr
 
 export const McpPaths = {
   status: "/mcp",
+  remove: "/mcp/:name",
   auth: "/mcp/:name/auth",
   authCallback: "/mcp/:name/auth/callback",
   authAuthenticate: "/mcp/:name/auth/authenticate",
@@ -62,6 +63,18 @@ export const McpApi = HttpApi.make("mcp")
             identifier: "mcp.add",
             summary: "Add MCP server",
             description: "Dynamically add a new Model Context Protocol (MCP) server to the system.",
+          }),
+        ),
+        HttpApiEndpoint.delete("remove", McpPaths.remove, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "MCP server removed successfully"),
+          error: McpServerNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.remove",
+            summary: "Remove MCP server",
+            description: "Remove a Model Context Protocol (MCP) server from the system.",
           }),
         ),
         HttpApiEndpoint.post("authStart", McpPaths.auth, {
