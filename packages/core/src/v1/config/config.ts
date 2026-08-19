@@ -74,6 +74,10 @@ export const Info = Schema.Struct({
   model: Schema.optional(Schema.String).annotate({
     description: "Model to use in the format of provider/model, eg anthropic/claude-2",
   }),
+  title_max_words: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).annotate({
+    description:
+      "Maximum number of words in a generated session title. Omit for the default title style, which targets 50 characters instead of a word count.",
+  }),
   small_model: Schema.optional(Schema.String).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
   }),
