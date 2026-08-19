@@ -205,7 +205,12 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
 })
 
-function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user">) {
+function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user" | "model">) {
+  // Some providers reject a request that carries tool definitions at all when the
+  // model cannot call tools, rather than ignoring them — Vertex Gemini image
+  // models answer "Unable to submit request because the model does not support
+  // function calling". Sending them is never useful, so drop the whole set.
+  if (!input.model.capabilities.toolcall) return {}
   const disabled = Permission.disabled(
     Object.keys(input.tools),
     Permission.merge(input.agent.permission, input.permission ?? []),
