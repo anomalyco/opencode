@@ -6,6 +6,7 @@ import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { Plugin } from "@/plugin"
 
 export const Event = PermissionV1.Event
 
@@ -43,6 +44,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    const plugin = yield* Plugin.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
@@ -94,6 +96,24 @@ const layer = Layer.effect(
         tool: request.tool,
       }
       yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
+
+      const output: { status: "ask" | "allow" | "deny" } = { status: "ask" }
+      yield* plugin
+        .trigger(
+          "permission.ask",
+          { ...info, patterns: [...info.patterns], metadata: { ...info.metadata }, always: [...info.always] },
+          output,
+        )
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() => {
+              output.status = "ask"
+            }).pipe(Effect.tap(() => Effect.logError("permission ask plugin failed", { cause }))),
+          ),
+        )
+
+      if (output.status === "allow") return
+      if (output.status === "deny") return yield* new PermissionV1.DeniedError({ ruleset: [] })
 
       const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
       pending.set(id, { info, deferred })
@@ -218,6 +238,6 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
   return Object.fromEntries(Object.entries(tools).filter(([name]) => !hidden.has(name)))
 }
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node, Plugin.node] })
 
 export * as Permission from "."

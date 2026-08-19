@@ -12,11 +12,36 @@ import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Plugin } from "../../src/plugin"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+const pluginLayer = Layer.mock(Plugin.Service)({
+  trigger: <Input, Output>(name: string, input: Input, output: Output) =>
+    Effect.sync(() => {
+      if (name !== "permission.ask") return output
+      const request = input as PermissionV1.Request
+      const result = output as { status: "ask" | "allow" | "deny" }
+      if (request.metadata.plugin === "throw") throw new Error("plugin failed")
+      if (request.metadata.plugin === "mutate") {
+        ;(request.patterns as string[]).push("changed")
+        ;(request.metadata as Record<string, unknown>).changed = true
+        ;(request.always as string[]).push("changed")
+        return output
+      }
+      if (request.metadata.plugin === "allow" || request.metadata.plugin === "deny") {
+        result.status = request.metadata.plugin
+      }
+      return output
+    }),
+  list: () => Effect.succeed([]),
+  init: () => Effect.void,
+})
 const env = AppNodeBuilder.build(
-  LayerNode.group([Permission.node, EventV2Bridge.node, CrossSpawnSpawner.node, InstanceStore.node]),
-  [[InstanceStore.bootstrapNode, noopBootstrap]],
+  LayerNode.group([Permission.node, EventV2Bridge.node, CrossSpawnSpawner.node, InstanceStore.node, Plugin.node]),
+  [
+    [InstanceStore.bootstrapNode, noopBootstrap],
+    [Plugin.node, pluginLayer],
+  ],
 )
 const it = testEffect(env)
 
@@ -554,6 +579,87 @@ test("disabled - specific allow overrides wildcard deny", () => {
 })
 
 // ask tests
+
+it.instance(
+  "ask - resolves immediately when plugin allows",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { plugin: "allow" },
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      })
+      expect(result).toBeUndefined()
+      expect(yield* list()).toHaveLength(0)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - throws DeniedError when plugin denies",
+  () =>
+    Effect.gen(function* () {
+      const err = yield* fail(
+        ask({
+          sessionID: SessionID.make("session_test"),
+          permission: "bash",
+          patterns: ["ls"],
+          metadata: { plugin: "deny" },
+          always: [],
+          ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+        }),
+      )
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
+      expect((err as PermissionV1.DeniedError).ruleset).toEqual([])
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - falls back to pending when plugin fails",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { plugin: "throw" },
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - protects pending request from plugin mutation",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { plugin: "mutate" },
+        always: ["ls"],
+        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      }).pipe(Effect.forkScoped)
+
+      const pending = yield* waitForPending(1)
+      expect(pending[0].patterns).toEqual(["ls"])
+      expect(pending[0].metadata).toEqual({ plugin: "mutate" })
+      expect(pending[0].always).toEqual(["ls"])
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
+)
 
 it.instance(
   "ask - resolves immediately when action is allow",
