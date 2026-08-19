@@ -455,4 +455,51 @@ describe("RequestExecutor", () => {
       expect(yield* Ref.get(attempts)).toBe(1)
     }),
   )
+
+  it.effect("preserves HTTP diagnostics for midstream body failures", () =>
+    Effect.gen(function* () {
+      const chunk = sseRaw(`data: ${JSON.stringify(deltaChunk({ role: "assistant", content: "Hello" }))}`)
+      const cause = Object.assign(new Error("socket reset secret-token"), { code: "ECONNRESET" })
+      const state = { sent: false }
+      const body = new ReadableStream({
+        pull(controller) {
+          if (state.sent) {
+            controller.error(cause)
+            return
+          }
+          state.sent = true
+          controller.enqueue(new TextEncoder().encode(chunk))
+        },
+      })
+      const model = OpenAIChat.route
+        .with({ endpoint: { baseURL: "https://api.openai.test/v1" } })
+        .model({ id: "gpt-4o-mini" })
+      const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.succeed(
+              input.respond(body, {
+                status: 200,
+                headers: { "content-type": "text/event-stream", "x-request-id": "req_mid" },
+              }),
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        kind: "DecodeError:ECONNRESET",
+        http: {
+          requestId: "req_mid",
+          response: { status: 200 },
+          bytesRead: Buffer.byteLength(chunk),
+          chunksRead: 1,
+        },
+      })
+      expect(JSON.stringify(error.reason)).not.toContain("secret-token")
+    }),
+  )
 })

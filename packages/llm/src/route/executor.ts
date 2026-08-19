@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Random } from "effect"
+import { Cause, Context, Effect, Layer, Random, Stream } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -213,11 +213,15 @@ const responseHttp = (input: {
   readonly body: ReturnType<typeof responseBody>
   readonly requestId?: string | undefined
   readonly rateLimit?: HttpRateLimitDetails | undefined
+  readonly bytesRead?: number | undefined
+  readonly chunksRead?: number | undefined
 }) =>
   new HttpContext({
     request: requestDetails(input.request, input.redactedNames),
     response: responseDetails(input.response, input.redactedNames),
     ...input.body,
+    bytesRead: input.bytesRead,
+    chunksRead: input.chunksRead,
     requestId: input.requestId,
     rateLimit: input.rateLimit,
   })
@@ -342,6 +346,89 @@ const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: u
   })
 }
 
+const errorCode = (error: unknown) =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  (typeof error.code === "string" || typeof error.code === "number")
+    ? String(error.code)
+    : undefined
+
+const errorKind = (error: unknown) => {
+  const cause = HttpClientError.isHttpClientError(error) && "cause" in error.reason ? error.reason.cause : error
+  const tags = [
+    HttpClientError.isHttpClientError(error) ? error.reason._tag : undefined,
+    // A plain `Error` contributes nothing but noise here ("DecodeError:Error:ECONNRESET"),
+    // so only keep a subclass name that actually identifies the failure.
+    cause instanceof Error && cause.name !== "Error" ? cause.name : undefined,
+    errorCode(cause),
+  ].filter((tag): tag is string => tag !== undefined)
+  return tags.length ? tags.join(":") : "Unknown"
+}
+
+const responseStreamError =
+  (input: {
+    readonly request: HttpClientRequest.HttpClientRequest
+    readonly response: HttpClientResponse.HttpClientResponse
+    readonly redactedNames: ReadonlyArray<string | RegExp>
+    readonly bytesRead: () => number
+    readonly chunksRead: () => number
+  }) =>
+  (error: unknown) => {
+    const headers = normalizedHeaders(input.response.headers)
+    const retryAfter = retryAfterMs(headers)
+    const rateLimit = rateLimitDetails(headers, retryAfter)
+    const kind = errorKind(error)
+    return new LLMError({
+      module: "RequestExecutor",
+      method: "execute",
+      reason: new TransportReason({
+        message: `HTTP response stream failed: ${kind}`,
+        kind,
+        url: redactUrl(input.request.url),
+        http: responseHttp({
+          request: input.request,
+          response: input.response,
+          redactedNames: input.redactedNames,
+          body: {},
+          requestId: requestId(headers),
+          rateLimit,
+          bytesRead: input.bytesRead(),
+          chunksRead: input.chunksRead(),
+        }),
+      }),
+    })
+  }
+
+function withStreamDiagnostics(
+  response: HttpClientResponse.HttpClientResponse,
+  request: HttpClientRequest.HttpClientRequest,
+  redactedNames: ReadonlyArray<string | RegExp>,
+) {
+  const progress = { bytesRead: 0, chunksRead: 0 }
+  const stream = response.stream.pipe(
+    Stream.tap((chunk) =>
+      Effect.sync(() => {
+        progress.bytesRead += chunk.byteLength
+        progress.chunksRead += 1
+      }),
+    ),
+    Stream.mapError(
+      responseStreamError({
+        request,
+        response,
+        redactedNames,
+        bytesRead: () => progress.bytesRead,
+        chunksRead: () => progress.chunksRead,
+      }),
+    ),
+  )
+  const next = Object.create(Object.getPrototypeOf(response))
+  Object.defineProperties(next, Object.getOwnPropertyDescriptors(response))
+  Object.defineProperty(next, "stream", { value: stream, configurable: true })
+  return next as HttpClientResponse.HttpClientResponse
+}
+
 const retryDelay = (error: LLMError, attempt: number) => {
   if (error.retryAfterMs !== undefined) return Effect.succeed(Math.min(error.retryAfterMs, MAX_DELAY_MS))
   return Random.nextBetween(
@@ -372,7 +459,11 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
         const redactedNames = yield* Headers.CurrentRedactedNames
         return yield* http
           .execute(request)
-          .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
+          .pipe(
+            Effect.mapError(toHttpError(redactedNames)),
+            Effect.flatMap(statusError(request, redactedNames)),
+            Effect.map((response) => withStreamDiagnostics(response, request, redactedNames)),
+          )
       })
     return Service.of({
       execute: (request) => retryStatusFailures(executeOnce(request)),
