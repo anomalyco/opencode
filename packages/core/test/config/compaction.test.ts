@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LanguageModel, LLMClient } from "@opencode-ai/ai"
+import { LanguageModel, LLMClient, LLMEvent } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Bus } from "@opencode-ai/core/bus"
 import { Config } from "@opencode-ai/core/config"
@@ -7,6 +7,7 @@ import { ConfigCompactionPlugin } from "@opencode-ai/core/config/plugin/compacti
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { Session } from "@opencode-ai/core/session"
@@ -18,7 +19,7 @@ import { ConfigCompaction } from "@opencode-ai/schema/config/compaction"
 import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { DateTime, Effect, Layer, Schema } from "effect"
+import { DateTime, Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
 
@@ -32,8 +33,24 @@ const it = testEffect(
   Layer.merge(
     config,
     AppNodeBuilder.build(LayerNode.group([SessionCompaction.node, Config.node, Bus.node]), [
-      [llmClient, Layer.mock(LLMClient.Service)({})],
-      [SessionRunnerModel.node, Layer.mock(SessionRunnerModel.Service)({})],
+      [
+        llmClient,
+        Layer.mock(LLMClient.Service)({
+          stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "summary" })),
+        }),
+      ],
+      [
+        SessionRunnerModel.node,
+        Layer.mock(SessionRunnerModel.Service)({
+          resolve: () =>
+            Effect.succeed(
+              SessionRunnerModel.resolved(model, {
+                capabilities: { tools: true, input: ["text"], output: ["text"] },
+                cost: [],
+              }),
+            ),
+        }),
+      ],
       [Config.node, config],
     ]),
   ),
@@ -48,6 +65,49 @@ describe("ConfigCompactionPlugin.Plugin", () => {
       yield* config.setEntries([
         new Document({
           type: "document",
+          info: new Info({ compaction: new ConfigCompaction.Info({ auto: false, buffer: 20_000 }) }),
+        }),
+        new Document({
+          type: "document",
+          info: new Info({
+            compaction: new ConfigCompaction.Info({
+              buffer: 10_000,
+              keep: new ConfigCompaction.Keep({ tokens: 0 }),
+            }),
+          }),
+        }),
+      ])
+      yield* ConfigCompactionPlugin.Plugin.effect(host({ event: { subscribe: () => bus.subscribe(Event.Updated) } }))
+
+      expect(compaction.required(nearInput)).toBe(false)
+      const started = yield* bus
+        .subscribe(SessionEvent.Compaction.Started)
+        .pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
+      expect(
+        yield* compaction.compactManual({
+          session,
+          messages: [
+            {
+              id: SessionMessage.ID.create(),
+              type: "user",
+              text: "Older context",
+              time: { created: DateTime.makeUnsafe(0) },
+            },
+            {
+              id: SessionMessage.ID.create(),
+              type: "user",
+              text: "Recent context",
+              time: { created: DateTime.makeUnsafe(1) },
+            },
+          ],
+          inputID: SessionMessage.ID.make("msg_compaction_manual"),
+        }),
+      ).toEqual({ status: "completed" })
+      expect(Option.getOrThrow(yield* Fiber.join(started)).data.recent).toContain("Recent context")
+
+      yield* config.setEntries([
+        new Document({
+          type: "document",
           info: new Info({ compaction: new ConfigCompaction.Info({ auto: true, buffer: 20_000 }) }),
         }),
         new Document({
@@ -55,9 +115,15 @@ describe("ConfigCompactionPlugin.Plugin", () => {
           info: new Info({ compaction: new ConfigCompaction.Info({ buffer: 10_000 }) }),
         }),
       ])
-      yield* ConfigCompactionPlugin.Plugin.effect(host({ event: { subscribe: () => bus.subscribe(Event.Updated) } }))
-
-      expect(compaction.required(input)).toBe(false)
+      yield* bus.publish(Event.Updated, {})
+      yield* Effect.gen(function* () {
+        for (let attempt = 0; attempt < 200; attempt++) {
+          if (compaction.required(nearInput)) return
+          yield* Effect.sleep("10 millis")
+        }
+        yield* Effect.die(new Error("Timed out waiting for compaction config reload"))
+      })
+      expect(compaction.required(bufferedInput)).toBe(false)
 
       yield* config.setEntries([
         new Document({
@@ -67,7 +133,7 @@ describe("ConfigCompactionPlugin.Plugin", () => {
       ])
       yield* bus.publish(Event.Updated, {})
       for (let attempt = 0; attempt < 200; attempt++) {
-        if (compaction.required(input)) return
+        if (compaction.required(bufferedInput)) return
         yield* Effect.sleep("10 millis")
       }
       yield* Effect.die(new Error("Timed out waiting for compaction config reload"))
@@ -75,15 +141,16 @@ describe("ConfigCompactionPlugin.Plugin", () => {
   )
 })
 
-const input = {
-  session: Session.Info.make({
-    id: Session.ID.make("ses_compaction_config"),
-    projectID: Project.ID.global,
-    cost: Money.USD.zero,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
-    location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
-  }),
+const session = Session.Info.make({
+  id: Session.ID.make("ses_compaction_config"),
+  projectID: Project.ID.global,
+  cost: Money.USD.zero,
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+  location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
+})
+const input = (tokens: number) => ({
+  session,
   model,
   cost: [],
   messages: [
@@ -93,8 +160,10 @@ const input = {
       agent: Agent.defaultID,
       model: { id: "test-model", providerID: "test-provider" },
       content: [],
-      tokens: { input: 85_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: 0, completed: 0 },
     }),
   ],
-}
+})
+const bufferedInput = input(85_000)
+const nearInput = input(95_000)
