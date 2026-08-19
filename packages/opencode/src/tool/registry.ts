@@ -102,6 +102,7 @@ const layer = Layer.effect(
     const task = yield* TaskTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
+    const questionService = yield* Question.Service
     const todo = yield* TodoWriteTool
     const lsptool = yield* LspTool
     const plan = yield* PlanExitTool
@@ -148,6 +149,21 @@ const layer = Layer.effect(
                 const pluginCtx: PluginToolContext = {
                   ...toolCtx,
                   ask: (req) => bridge.promise(toolCtx.ask(req)),
+                  question: (input) =>
+                    bridge.promise(
+                      questionService.ask({
+                        sessionID: toolCtx.sessionID,
+                        questions: input.questions.map((q) => ({
+                          question: q.question,
+                          header: q.header,
+                          options: q.options.map((o) => ({ label: o.label, description: o.description })),
+                          multiple: q.multiple,
+                          custom: q.custom,
+                          default: q.default,
+                        })),
+                        tool: toolCtx.callID ? { messageID: toolCtx.messageID, callID: toolCtx.callID } : undefined,
+                      }),
+                    ),
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
