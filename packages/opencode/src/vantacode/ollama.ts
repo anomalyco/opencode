@@ -210,7 +210,10 @@ export class OllamaClient {
         sizeBytes: typeof m.size === "number" ? m.size : undefined,
         family: typeof m.details?.family === "string" ? m.details.family : undefined,
       }))
-      .filter((m): m is { name: string; sizeBytes?: number; family?: string } => typeof m.name === "string")
+      .filter(
+        (m): m is { name: string; sizeBytes: number | undefined; family: string | undefined } =>
+          typeof m.name === "string",
+      )
 
     return Promise.all(
       names.map(async (entry) => {

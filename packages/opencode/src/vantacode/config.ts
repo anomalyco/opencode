@@ -141,7 +141,7 @@ export function resolveKeys(apiKeyEnv: string | undefined, env: NodeJS.ProcessEn
 
 export interface MergeInput {
   /** Partial config from a config file (already parsed). */
-  readonly file?: Partial<VantaConfig> & { providers?: Partial<VantaProviderConfig>[] }
+  readonly file?: Omit<Partial<VantaConfig>, "providers"> & { providers?: Partial<VantaProviderConfig>[] }
   readonly env: NodeJS.ProcessEnv
 }
 
