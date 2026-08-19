@@ -81,6 +81,14 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+const SIDE = [
+  "This is a side question from the user. The main agent is not interrupted.",
+  "Answer using only what is already in the conversation context. You have no tools.",
+  "Keep the answer concise and return a single response with no follow-up turn.",
+  "Do not suggest running commands or re-asking in the main conversation.",
+  "If the answer is not in the conversation context, say so briefly.",
+].join("\n")
+
 function mcpResourceBase64Size(value: string) {
   const trimmed = value.replace(/\s/g, "")
   const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
@@ -105,6 +113,7 @@ export interface Interface {
   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
   readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly sideQuestion: (input: SideQuestionInput) => Effect.Effect<string, unknown>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -1078,6 +1087,26 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
+    const context = Effect.fnUntraced(function* (input: {
+      agent: Agent.Info
+      session: Session.Info
+      model: Provider.Model
+      messages: SessionV1.WithParts[]
+    }) {
+      yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: input.messages })
+      const [skills, env, instructions, mcpInstructions, messages] = yield* Effect.all([
+        sys.skills(input.agent),
+        sys.environment(input.model),
+        instruction.system().pipe(Effect.orDie),
+        sys.mcp(input.agent, input.session.permission),
+        MessageV2.toModelMessagesEffect(input.messages, input.model),
+      ])
+      return {
+        system: [...env, ...instructions, ...(mcpInstructions ? [mcpInstructions] : []), ...(skills ? [skills] : [])],
+        messages,
+      }
+    })
+
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
@@ -1252,32 +1281,18 @@ const layer = Layer.effect(
             if (step === 1)
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
 
-            yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-
-            const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
-              sys.skills(agent),
-              sys.environment(model),
-              instruction.system().pipe(Effect.orDie),
-              sys.mcp(agent, session.permission),
-              MessageV2.toModelMessagesEffect(msgs, model),
-            ])
-            const system = [
-              ...env,
-              ...instructions,
-              ...(mcpInstructions ? [mcpInstructions] : []),
-              ...(skills ? [skills] : []),
-            ]
+            const base = yield* context({ agent, session, model, messages: msgs })
             const format = lastUser.format ?? { type: "text" as const }
-            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            if (format.type === "json_schema") base.system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
               user: lastUser,
               agent,
               permission: session.permission,
               sessionID,
               parentSessionID: session.parentID,
-              system,
+              system: base.system,
               messages: [
-                ...modelMsgs,
+                ...base.messages,
                 ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
               ],
               tools,
@@ -1480,12 +1495,70 @@ const layer = Layer.effect(
       return result
     })
 
+    const sideQuestion = Effect.fn("SessionPrompt.sideQuestion")(function* (input: SideQuestionInput) {
+      const session = yield* sessions.get(input.sessionID)
+      const history = yield* MessageV2.filterCompactedEffect(input.sessionID).pipe(
+        Effect.provideService(Database.Service, database),
+      )
+      const last = history.findLast((message) => message.info.role === "user")?.info
+      const ref = last?.role === "user" ? last.model : yield* currentModel(input.sessionID)
+      const model = yield* getModel(ref.providerID, ref.modelID, input.sessionID)
+      const agent =
+        last?.role === "user"
+          ? yield* agents.get(last.agent)
+          : session.agent
+            ? yield* agents.get(session.agent)
+            : yield* agents.defaultInfo()
+      const user: SessionV1.User =
+        last?.role === "user"
+          ? last
+          : {
+              id: MessageID.ascending(),
+              sessionID: input.sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: agent.name,
+              model: ref,
+            }
+      const messages = yield* SessionReminders.apply({ messages: history, agent, session }).pipe(
+        Effect.provideService(RuntimeFlags.Service, flags),
+        Effect.provideService(FSUtil.Service, fsys),
+        Effect.provideService(Session.Service, sessions),
+      )
+      const base = yield* context({ agent, session, model, messages })
+      const question = ["<side-question>", SIDE, "", `Question: ${input.question.trim()}`, "</side-question>"].join(
+        "\n",
+      )
+      const text = yield* llm
+        .stream({
+          user,
+          agent,
+          permission: session.permission,
+          sessionID: input.sessionID,
+          parentSessionID: session.parentID,
+          system: base.system,
+          messages: [...base.messages, { role: "user", content: question }],
+          tools: {},
+          model,
+          retries: 2,
+          toolChoice: "none",
+        })
+        .pipe(
+          Stream.runFold(
+            () => "",
+            (text, event) => (LLMEvent.is.textDelta(event) ? text + event.text : text),
+          ),
+        )
+      return text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim()
+    })
+
     return Service.of({
       cancel,
       prompt,
       loop,
       shell,
       command,
+      sideQuestion,
       resolvePromptParts,
     })
   }),
@@ -1560,6 +1633,12 @@ export const CommandInput = Schema.Struct({
   ),
 })
 export type CommandInput = Schema.Schema.Type<typeof CommandInput>
+
+export const SideQuestionInput = Schema.Struct({
+  sessionID: SessionID,
+  question: Schema.String,
+})
+export type SideQuestionInput = Schema.Schema.Type<typeof SideQuestionInput>
 
 /** @internal Exported for testing */
 export function createStructuredOutputTool(input: {
