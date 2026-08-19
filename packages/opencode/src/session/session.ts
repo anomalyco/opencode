@@ -168,8 +168,14 @@ function getForkedTitle(title: string): string {
   return `${title} (fork #1)`
 }
 
-function sessionPath(worktree: string, cwd: string) {
-  return path.relative(path.resolve(worktree), cwd).replaceAll("\\", "/")
+export function sessionPath(worktree: string, cwd: string) {
+  // Non-git projects synthesize a worktree of "/". On Windows path.resolve("/")
+  // anchors to the launch drive's root, so the same directory would get a
+  // different relative path depending on which drive opencode was started from.
+  // Anchor "/" to the directory's own drive to keep paths stable and
+  // launch-independent (a no-op on POSIX where the root is always "/").
+  const root = worktree === "/" ? path.parse(cwd).root : path.resolve(worktree)
+  return path.relative(root, cwd).replaceAll("\\", "/")
 }
 
 const Summary = Schema.Struct({
