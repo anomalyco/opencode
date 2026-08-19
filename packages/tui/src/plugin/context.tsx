@@ -239,6 +239,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   // Package resolution failures would otherwise retry a full npm install on
   // every watch event; remember them until the configuration changes.
   const npmFailures = new Map<string, string>()
+  // A source that imports but fails setup must not tear down and restore its
+  // last-good generation again for every event in the same filesystem burst.
+  const setupFailures = new Map<string, { version: string; options: Desired["options"]; error: string }>()
   const reconcile = async () => {
     await Promise.all(props.directories.map(watcher.wait))
     const entries = [
@@ -303,6 +306,29 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
           })
         continue
       }
+      const setupFailure = setupFailures.get(target)
+      if (
+        previous &&
+        setupFailure?.version === resolved.version &&
+        sameOptions(setupFailure.options, options)
+      ) {
+        failures.push({
+          target,
+          id: previous.plugin.id,
+          status: "failed",
+          error: previous.active ? `${setupFailure.error} (previous version still active)` : setupFailure.error,
+        })
+        desired.set(previous.plugin.id, {
+          plugin: previous.plugin,
+          source: previous.source,
+          target,
+          version: previous.version,
+          options: previous.options,
+          enabled: previous.active,
+        })
+        continue
+      }
+      setupFailures.delete(target)
       desired.set(resolved.plugin.id, {
         plugin: resolved.plugin,
         source: "external",
@@ -377,6 +403,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       const error = await activate(id).then(() => undefined, errorMessage)
       if (!error) continue
       errors.set(id, error)
+      if (item.target)
+        setupFailures.set(item.target, { version: item.version, options: item.options, error })
       if (!fallback) continue
       setStore("registrations", id, toRegistration(fallback))
       if (!fallback.enabled) continue
