@@ -1122,6 +1122,10 @@ export const dict = {
   "session.delete.confirm": 'Delete session "{{name}}"?',
   "session.delete.button": "Delete session",
 
+  "session.archive.title": "Archive session",
+  "session.archive.confirm": 'Archive session "{{name}}"?',
+  "session.archive.button": "Archive session",
+
   "workspace.new": "New workspace",
   "workspace.type.local": "local",
   "workspace.type.sandbox": "sandbox",
