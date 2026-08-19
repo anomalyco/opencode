@@ -108,13 +108,13 @@ import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/midd
 import { workspaceHandlers } from "./handlers/workspace"
 import { instanceContextLayer } from "./middleware/instance-context"
 import { workspaceRoutingLayer } from "./middleware/workspace-routing"
-import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { compressionLayer } from "./middleware/compression"
 import { corsVaryFix } from "./middleware/cors-vary"
 import { errorLayer } from "./middleware/error"
 import { fenceLayer } from "./middleware/fence"
 import { schemaErrorLayer } from "./middleware/schema-error"
+import { InstanceEviction } from "@/server/instance-eviction"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -279,6 +279,7 @@ export function createRoutes(
     ptyConnectApiRoutes,
     instanceRoutes,
     serverRoutes,
+    InstanceEviction.layer,
     docRoute,
     uiRoute,
   ).pipe(
@@ -318,7 +319,6 @@ export const webHandler = lazy(() =>
   HttpRouter.toWebHandler(routes, {
     disableLogger: true,
     memoMap,
-    middleware: disposeMiddleware,
   }),
 )
 
