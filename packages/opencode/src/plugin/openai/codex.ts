@@ -243,6 +243,26 @@ function stopOAuthServer() {
   }
 }
 
+function sanitizeCodexRequestBody(body: RequestInit["body"]) {
+  if (typeof body !== "string") return body
+  try {
+    const payload = JSON.parse(body)
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return body
+    if (typeof payload.model !== "string") return body
+    const match = payload.model.match(/^gpt-(\d+)\.(\d+)/)
+    if (!match) return body
+    const major = Number(match[1])
+    const minor = Number(match[2])
+    if (major < 5 || (major === 5 && minor < 6)) return body
+    // The ChatGPT Codex endpoint currently rejects both the legacy retention field and GPT-5.6's public API TTL field.
+    delete payload.prompt_cache_retention
+    delete payload.prompt_cache_options
+    return JSON.stringify(payload)
+  } catch {
+    return body
+  }
+}
+
 function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResponse> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(
@@ -425,7 +445,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
 
             const requestInit = {
               ...init,
-              body: init?.body,
+              body: rewrite ? sanitizeCodexRequestBody(init?.body) : init?.body,
               headers,
             }
             if (websocketFetch && parsed.pathname.endsWith("/responses")) return websocketFetch(url, requestInit)
