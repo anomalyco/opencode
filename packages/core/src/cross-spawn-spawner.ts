@@ -273,13 +273,17 @@ export const make = Effect.gen(function* () {
       proc.on("error", (err) => {
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
-      proc.on("exit", (...args) => {
-        exit = args
-      })
-      proc.on("close", (...args) => {
+      const finish = (...args: readonly [code: number | null, signal: NodeJS.Signals | null]) => {
         if (end) return
         end = true
-        Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
+        Deferred.doneUnsafe(signal, Exit.succeed(args))
+      }
+      proc.on("exit", (...args) => {
+        exit = args
+        finish(...args)
+      })
+      proc.on("close", (...args) => {
+        finish(...(exit ?? args))
       })
       proc.on("spawn", () => {
         resume(Effect.succeed([proc, signal]))
