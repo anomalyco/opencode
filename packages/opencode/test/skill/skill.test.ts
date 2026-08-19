@@ -24,6 +24,13 @@ const itWithoutClaudeCodeSkills = testEffect(
     testInstanceStoreLayer,
   ),
 )
+const itWithoutAgentsSkills = testEffect(
+  Layer.mergeAll(
+    LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableAgentsSkills: true })]]),
+    node,
+    testInstanceStoreLayer,
+  ),
+)
 const itWithoutExternalSkills = testEffect(
   Layer.mergeAll(
     LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableExternalSkills: true })]]),
@@ -475,6 +482,43 @@ description: A skill in the .agents/skills directory.
           const skill = yield* Skill.Service
           const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
           expect(list.map((s) => s.name)).toEqual(["agent-skill"])
+        }),
+      { git: true },
+    ),
+  )
+
+  itWithoutAgentsSkills.live("skips .agents skills when disabled", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, ".claude", "skills", "claude-skill", "SKILL.md"),
+                `---
+name: claude-skill
+description: A skill in the .claude/skills directory.
+---
+
+# Claude Skill
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".agents", "skills", "agent-skill", "SKILL.md"),
+                `---
+name: agent-skill
+description: A skill in the .agents/skills directory.
+---
+
+# Agent Skill
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.map((s) => s.name)).toEqual(["claude-skill"])
         }),
       { git: true },
     ),
