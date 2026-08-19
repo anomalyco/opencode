@@ -82,6 +82,9 @@ export async function spawnLocalServer(
     options.onExit?.(code)
     exit.resolve(code)
   })
+  child.on("message", (message: SidecarMessage) => {
+    if (message.type === "stopped") child.kill()
+  })
   child.on("error", (error) => options.onStderr?.(`utility process error: ${serializeError(error).message}`))
 
   child.stdout?.on("data", (chunk: Buffer) => options.onStdout?.(chunk.toString("utf8").trimEnd()))

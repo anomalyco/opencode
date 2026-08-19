@@ -168,6 +168,7 @@ const main = Effect.gen(function* () {
     await killSidecar()
     wslServers.stopAll()
   }
+  let stoppingForQuit = false
   const relaunch = () => {
     setAppQuitting()
     void stopSidecars().finally(() => {
@@ -221,9 +222,16 @@ const main = Effect.gen(function* () {
     emitDeepLinks([url])
   })
 
-  app.on("before-quit", () => {
+  app.on("before-quit", (event) => {
     setAppQuitting()
-    void stopSidecars()
+    if (!server && !stoppingForQuit) return
+    event.preventDefault()
+    if (stoppingForQuit) return
+    stoppingForQuit = true
+    void stopSidecars().finally(() => {
+      stoppingForQuit = false
+      app.quit()
+    })
   })
 
   app.on("will-quit", () => {
