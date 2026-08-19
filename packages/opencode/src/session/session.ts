@@ -25,8 +25,9 @@ import { sql } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
+import { notExists } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
-import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
@@ -305,6 +306,7 @@ export type ListInput = {
   path?: string
   workspaceID?: WorkspaceV2.ID
   roots?: boolean
+  excludeActive?: boolean
   start?: number
   search?: string
   limit?: number
@@ -984,6 +986,22 @@ function listByProject(
   }
   if (input.roots) {
     conditions.push(isNull(SessionTable.parent_id))
+  }
+  if (input.excludeActive) {
+    conditions.push(
+      notExists(
+        db
+          .select({ id: MessageTable.id })
+          .from(MessageTable)
+          .where(
+            and(
+              eq(MessageTable.session_id, SessionTable.id),
+              eq(sql`json_extract(${MessageTable.data}, '$.role')`, "assistant"),
+              isNull(sql`json_extract(${MessageTable.data}, '$.time.completed')`),
+            ),
+          ),
+      ),
+    )
   }
   if (input.start) {
     conditions.push(gte(SessionTable.time_updated, input.start))

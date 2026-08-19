@@ -64,6 +64,7 @@ const QueryParameterSchemas: Record<string, OpenApiSchema> = {
   "GET /experimental/session limit": { type: "number" },
   "GET /session start": { type: "number" },
   "GET /session roots": QueryBooleanOpenApi,
+  "GET /session excludeActive": QueryBooleanOpenApi,
   "GET /session limit": { type: "number" },
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
   "GET /vcs/diff context": { type: "integer", minimum: 0 },
