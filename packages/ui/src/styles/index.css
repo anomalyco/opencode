@@ -10,6 +10,7 @@
 @import "../components/animated-number.css" layer(components);
 @import "../components/app-icon.css" layer(components);
 @import "../components/avatar.css" layer(components);
+@import "../components/busy-wave.css" layer(components);
 @import "../components/button.css" layer(components);
 @import "../components/card.css" layer(components);
 @import "../components/checkbox.css" layer(components);

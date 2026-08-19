@@ -56,6 +56,7 @@ describe("current session timeline rows", () => {
       "turn-gap:msg_3",
       "user-message:msg_3",
       "assistant-part:msg_3:msg_4:reasoning:0",
+      "thinking:msg_3",
     ])
   })
 
@@ -202,6 +203,6 @@ describe("current session timeline rows", () => {
       normalized.messages.filter((message) => message.role === "user"),
     )
 
-    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart", "Thinking"])
   })
 })

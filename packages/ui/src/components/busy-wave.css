@@ -1,0 +1,5 @@
+[data-component="busy-wave"] {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}

@@ -18,6 +18,7 @@ import { useMutation } from "@tanstack/solid-query"
 import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
+import { BusyWave } from "@opencode-ai/ui/busy-wave"
 import { Card } from "@opencode-ai/ui/card"
 import {
   ContextToolGroup,
@@ -44,7 +45,6 @@ import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@openc
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import type {
   AssistantMessage,
   Message as MessageType,
@@ -67,6 +67,7 @@ import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useTabs } from "@/context/tabs"
+import { messageAgentColor } from "@/utils/agent"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -129,12 +130,12 @@ const markBoundaryGesture = (input: {
   }
 }
 
-function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSummaries: boolean }) {
+function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSummaries: boolean; color?: string }) {
   const language = useLanguage()
 
   return (
     <div data-slot="session-turn-thinking">
-      <TextShimmer text={language.t("ui.sessionTurn.status.thinking")} />
+      <BusyWave color={props.color} label={language.t("ui.sessionTurn.status.thinking")} />
       <Show when={!props.showReasoningSummaries}>
         <TextReveal text={props.reasoningHeading} class="session-turn-thinking-heading" travel={25} duration={700} />
       </Show>
@@ -281,6 +282,7 @@ export function MessageTimeline(props: {
     return sync().data.session_status[id] ?? idle
   })
   const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
+  const thinkingColor = createMemo(() => messageAgentColor(sessionMessages(), sync().data.agent))
   const projectedMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return []
@@ -1234,6 +1236,7 @@ export function MessageTimeline(props: {
               <TimelineThinkingRow
                 reasoningHeading={thinkingRow().reasoningHeading}
                 showReasoningSummaries={settings.general.showReasoningSummaries()}
+                color={thinkingColor()}
               />
             </div>
           </TimelineRowFrame>
