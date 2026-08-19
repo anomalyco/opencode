@@ -7,6 +7,7 @@ export function make(overrides: Partial<Config.Interface> = {}) {
     get: () => Effect.succeed({}),
     getGlobal: () => Effect.succeed({}),
     getConsoleState: () => Effect.succeed(emptyConsoleState),
+    getLoadReport: () => Effect.succeed({ profile: "default", loaded: [], skipped: [], startup: ["internal-plugins"] }),
     update: () => Effect.void,
     updateGlobal: (config) => Effect.succeed({ info: config, changed: false }),
     invalidate: () => Effect.void,

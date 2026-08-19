@@ -34,7 +34,7 @@ const setBootstrap = (run: Effect.Effect<void>) =>
 
 const registerDisposerScoped = (disposer: (directory: string) => Promise<void>) =>
   Effect.acquireRelease(
-    Effect.sync(() => registerDisposer(disposer)),
+    Effect.sync(() => registerDisposer((ctx) => disposer(ctx.directory))),
     (off) => Effect.sync(off),
   )
 
@@ -83,6 +83,43 @@ describe("InstanceStore", () => {
 
       expect(second).toBe(first)
       expect(initialized).toBe(1)
+    }),
+  )
+
+  it.live("keeps default and bare contexts separate for the same directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+
+      const normal = yield* store.load({ directory: dir })
+      const bare = yield* store.load({ directory: dir, profile: "bare" })
+
+      expect(normal).not.toBe(bare)
+      expect(normal.profile).toBe("default")
+      expect(bare.profile).toBe("bare")
+      expect(yield* store.load({ directory: dir })).toBe(normal)
+      expect(yield* store.load({ directory: dir, profile: "bare" })).toBe(bare)
+    }),
+  )
+
+  it.live("disposeDirectory removes every profile for a directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      let initialized = 0
+
+      yield* setBootstrap(
+        Effect.sync(() => {
+          initialized++
+        }),
+      )
+      yield* store.load({ directory: dir })
+      yield* store.load({ directory: dir, profile: "bare" })
+      yield* store.disposeDirectory(dir)
+      yield* store.load({ directory: dir })
+      yield* store.load({ directory: dir, profile: "bare" })
+
+      expect(initialized).toBe(4)
     }),
   )
 

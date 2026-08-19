@@ -13,6 +13,7 @@ import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
+import { InstanceOptions } from "@/project/instance-options"
 
 function extract(messages: SessionV1.WithParts[]) {
   const paths = new Set<string>()
@@ -78,6 +79,11 @@ const layer: Layer.Layer<
 
     const relative = Effect.fnUntraced(function* (instruction: string) {
       const ctx = yield* InstanceState.context
+      if (!InstanceOptions.resolve(ctx.profile).discovery.automaticInstructions) {
+        return yield* fs
+          .glob(instruction, { cwd: ctx.directory, absolute: true, include: "file" })
+          .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+      }
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
         return yield* fs
           .globUp(instruction, ctx.directory, ctx.worktree)
@@ -111,16 +117,19 @@ const layer: Layer.Layer<
       const config = yield* cfg.get()
       const ctx = yield* InstanceState.context
       const paths = new Set<string>()
+      const automatic = InstanceOptions.resolve(ctx.profile).discovery.automaticInstructions
 
-      for (const file of globalFiles) {
-        if (yield* fs.existsSafe(file)) {
-          paths.add(path.resolve(file))
-          break
+      if (automatic) {
+        for (const file of globalFiles) {
+          if (yield* fs.existsSafe(file)) {
+            paths.add(path.resolve(file))
+            break
+          }
         }
       }
 
       // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
-      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      if (automatic && !Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
         for (const file of instructionFiles) {
           const matches = yield* fs
             .findUp(file, ctx.directory, ctx.worktree)
@@ -186,6 +195,9 @@ const layer: Layer.Layer<
       const results: { filepath: string; content: string }[] = []
       const s = yield* InstanceState.get(state)
       const root = path.resolve(yield* InstanceState.directory)
+      const ctx = yield* InstanceState.context
+
+      if (!InstanceOptions.resolve(ctx.profile).discovery.automaticInstructions) return results
 
       const target = path.resolve(filepath)
       let current = path.dirname(target)

@@ -24,6 +24,55 @@ describe("opencode run (non-interactive subprocess)", () => {
   )
 
   cliIt.concurrent(
+    "--bare completes a prompt using explicit config",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("bare response")
+        const result = yield* opencode.run("say hi", { bare: true })
+
+        opencode.expectExit(result, 0)
+        expect(result.stdout).toBe("bare response\n")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "--bare keeps JSON stdout parseable",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("bare json")
+        const result = yield* opencode.run("say hi", { bare: true, format: "json" })
+
+        opencode.expectExit(result, 0)
+        expect(opencode.parseJsonEvents(result.stdout).map((event) => event.type)).toEqual([
+          "step_start",
+          "text",
+          "step_finish",
+        ])
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "--bare rejects incompatible run modes before execution",
+    ({ opencode }) =>
+      Effect.gen(function* () {
+        for (const args of [
+          ["--attach", "http://127.0.0.1:1"],
+          ["--continue"],
+          ["--session", "ses_test"],
+          ["--fork", "--session", "ses_test"],
+          ["--interactive"],
+        ]) {
+          const result = yield* opencode.run("say hi", { bare: true, extraArgs: args })
+          expect(result.exitCode).not.toBe(0)
+          expect(result.stderr.toLowerCase()).toContain("bare")
+        }
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
     "prints each completed text part in order around a tool continuation",
     ({ llm, opencode }) =>
       Effect.gen(function* () {

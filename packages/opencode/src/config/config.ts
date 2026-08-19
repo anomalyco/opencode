@@ -35,6 +35,7 @@ import { ConfigPlugin } from "./plugin"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
+import { InstanceOptions } from "@/project/instance-options"
 
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
@@ -119,6 +120,14 @@ type State = {
   directories: string[]
   deps: Fiber.Fiber<void>[]
   consoleState: ConsoleState
+  loadReport: LoadReport
+}
+
+export type LoadReport = {
+  profile: InstanceOptions.Profile
+  loaded: string[]
+  skipped: string[]
+  startup: string[]
 }
 
 export interface Interface {
@@ -130,6 +139,7 @@ export interface Interface {
   readonly invalidate: () => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
+  readonly getLoadReport: () => Effect.Effect<LoadReport>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
@@ -212,7 +222,7 @@ const layer = Layer.effect(
 
     const loadConfig = Effect.fnUntraced(function* (
       text: string,
-      options: { path: string } | { dir: string; source: string },
+      options: { path: string; writeSchema?: boolean } | { dir: string; source: string },
       env?: Record<string, string>,
     ) {
       const source = "path" in options ? options.path : options.source
@@ -230,17 +240,18 @@ const layer = Layer.effect(
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
       if (!data.$schema) {
         data.$schema = "https://opencode.ai/config.json"
+        if (options.writeSchema === false) return data
         const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
         yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
       }
       return data
     })
 
-    const loadFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>) {
+    const loadFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>, writeSchema = true) {
       yield* Effect.logInfo("loading", { path: filepath })
       const text = yield* readConfigFile(filepath)
       if (!text) return {} as Info
-      return yield* loadConfig(text, { path: filepath }, env)
+      return yield* loadConfig(text, { path: filepath, writeSchema }, env)
     })
 
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
@@ -314,6 +325,8 @@ const layer = Layer.effect(
     const loadInstanceState = Effect.fn("Config.loadInstanceState")(
       function* (ctx: InstanceContext) {
         const auth = yield* authSvc.all().pipe(Effect.orDie)
+        const policy = InstanceOptions.resolve(ctx.profile)
+        const loadedSources = new Set<string>()
 
         let result: Info = {}
         const authEnv: Record<string, string> = {}
@@ -355,8 +368,9 @@ const layer = Layer.effect(
 
         for (const [key, value] of Object.entries(auth)) {
           if (value.type === "wellknown") {
-            const url = key.replace(/\/+$/, "")
             authEnv[value.key] = value.token
+            if (!policy.config.wellKnown) continue
+            const url = key.replace(/\/+$/, "")
             const wellknownURL = `${url}/.well-known/opencode`
             yield* Effect.logDebug("fetching remote config", { url: wellknownURL })
             const wellknown = yield* fetchRemoteJson(wellknownURL, undefined, ConfigV1.WellKnown, url)
@@ -391,21 +405,27 @@ const layer = Layer.effect(
               authEnv,
             )
             yield* merge(source, next, "global")
+            loadedSources.add("well-known")
             yield* Effect.logDebug("loaded remote config from well-known", { url })
           }
         }
 
-        const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
-        yield* merge(Global.Path.config, global, "global")
+        if (policy.config.global) {
+          const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
+          yield* merge(Global.Path.config, global, "global")
+          loadedSources.add("global")
+        }
 
         if (Flag.OPENCODE_CONFIG) {
-          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
+          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv, policy.profile !== "bare"))
+          loadedSources.add("explicit")
           yield* Effect.logDebug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
         }
 
-        if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+        if (policy.config.project && !Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
             yield* merge(file, yield* loadFile(file, authEnv), "local")
+            loadedSources.add("project")
           }
         }
 
@@ -413,15 +433,20 @@ const layer = Layer.effect(
         result.mode = result.mode || {}
         result.plugin = result.plugin || []
 
-        const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
+        const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree, {
+          global: policy.config.global,
+          project: policy.config.project,
+          configDirectory: policy.config.configDirectory,
+        })
 
-        if (Flag.OPENCODE_CONFIG_DIR) {
+        if (policy.config.configDirectory && Flag.OPENCODE_CONFIG_DIR) {
           yield* Effect.logDebug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
         }
 
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
+          loadedSources.add("config-dir")
           if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
@@ -435,26 +460,28 @@ const layer = Layer.effect(
 
           yield* ensureGitignore(dir).pipe(Effect.orDie)
 
-          const dep = yield* npmSvc
-            .install(dir, {
-              add: [
-                {
-                  name: "@opencode-ai/plugin",
-                  version: InstallationLocal ? undefined : InstallationVersion,
-                },
-              ],
-            })
-            .pipe(
-              Effect.exit,
-              Effect.tap((exit) =>
-                Exit.isFailure(exit)
-                  ? Effect.logWarning("background dependency install failed", { dir, error: String(exit.cause) })
-                  : Effect.void,
-              ),
-              Effect.asVoid,
-              Effect.forkDetach,
-            )
-          deps.push(dep)
+          if (policy.startup.installConfigDependencies) {
+            const dep = yield* npmSvc
+              .install(dir, {
+                add: [
+                  {
+                    name: "@opencode-ai/plugin",
+                    version: InstallationLocal ? undefined : InstallationVersion,
+                  },
+                ],
+              })
+              .pipe(
+                Effect.exit,
+                Effect.tap((exit) =>
+                  Exit.isFailure(exit)
+                    ? Effect.logWarning("background dependency install failed", { dir, error: String(exit.cause) })
+                    : Effect.void,
+                ),
+                Effect.asVoid,
+                Effect.forkDetach,
+              )
+            deps.push(dep)
+          }
 
           result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
           result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
@@ -472,6 +499,7 @@ const layer = Layer.effect(
             source,
           })
           yield* merge(source, next, "local")
+          loadedSources.add("explicit")
           yield* Effect.logDebug("loaded custom config from OPENCODE_CONFIG_CONTENT")
         }
 
@@ -502,6 +530,7 @@ const layer = Layer.effect(
                 consoleManagedProviders.add(providerID)
               }
               yield* merge(source, next, "global")
+              loadedSources.add("console-managed")
             }
           }).pipe(
             Effect.withSpan("Config.loadActiveOrgConfig"),
@@ -517,7 +546,8 @@ const layer = Layer.effect(
         if (existsSync(managedDir)) {
           for (const file of ["opencode.json", "opencode.jsonc"]) {
             const source = path.join(managedDir, file)
-            yield* merge(source, yield* loadFile(source), "global")
+            yield* merge(source, yield* loadFile(source, undefined, policy.profile !== "bare"), "global")
+            loadedSources.add("managed")
           }
         }
 
@@ -531,6 +561,7 @@ const layer = Layer.effect(
               source: managed.source,
             }),
           )
+          loadedSources.add("managed")
         }
 
         for (const [name, mode] of Object.entries(result.mode ?? {})) {
@@ -592,6 +623,25 @@ const layer = Layer.effect(
             activeOrgName,
             switchableOrgCount: 0,
           },
+          loadReport: {
+            profile: policy.profile,
+            loaded: ["well-known", "global", "project", "config-dir", "explicit", "console-managed", "managed"].filter(
+              (source) => loadedSources.has(source),
+            ),
+            skipped: [
+              ...(!policy.config.wellKnown ? ["well-known"] : []),
+              ...(!policy.config.global ? ["global"] : []),
+              ...(!policy.config.project ? ["project"] : []),
+              ...(!policy.config.configDirectory ? ["config-dir"] : []),
+            ],
+            startup: [
+              "internal-plugins",
+              ...(policy.discovery.externalPlugins ? ["external-plugins"] : []),
+              ...(policy.discovery.externalSkills ? ["external-skills"] : []),
+              ...(policy.startup.installConfigDependencies ? ["config-dependencies"] : []),
+              ...(policy.startup.lsp ? ["lsp"] : []),
+            ],
+          },
         }
       },
       Effect.provideService(FSUtil.Service, fs),
@@ -599,7 +649,9 @@ const layer = Layer.effect(
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Config.state")(function* (ctx) {
-        return yield* loadInstanceState(ctx).pipe(Effect.orDie)
+        const result = yield* loadInstanceState(ctx).pipe(Effect.orDie)
+        yield* Effect.logDebug("config load profile", result.loadReport)
+        return result
       }),
     )
 
@@ -613,6 +665,10 @@ const layer = Layer.effect(
 
     const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
       return yield* InstanceState.use(state, (s) => s.consoleState)
+    })
+
+    const getLoadReport = Effect.fn("Config.getLoadReport")(function* () {
+      return yield* InstanceState.use(state, (s) => s.loadReport)
     })
 
     const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
@@ -663,6 +719,7 @@ const layer = Layer.effect(
       get,
       getGlobal,
       getConsoleState,
+      getLoadReport,
       update,
       updateGlobal,
       invalidate,

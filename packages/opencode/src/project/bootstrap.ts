@@ -10,6 +10,7 @@ import { ShareNext } from "@/share/share-next"
 import { Effect, Layer } from "effect"
 import { Config } from "@/config/config"
 import { Service } from "./bootstrap-service"
+import { InstanceOptions } from "./instance-options"
 
 export { Service } from "./bootstrap-service"
 export type { Interface } from "./bootstrap-service"
@@ -38,8 +39,11 @@ const layer = Layer.effect(
       yield* plugin.init()
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
+      const services = InstanceOptions.resolve(ctx.profile).startup.lsp
+        ? [lsp, shareNext, format, vcs, snapshot, project]
+        : [shareNext, format, vcs, snapshot, project]
       yield* Effect.forEach(
-        [lsp, shareNext, format, vcs, snapshot, project],
+        services,
         (s) => s.init().pipe(Effect.catchCause((cause) => Effect.logWarning("init failed", { cause }))),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
