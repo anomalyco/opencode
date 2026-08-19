@@ -34,6 +34,11 @@ inputs:
     description: "Model variant for provider-specific reasoning effort (e.g., high, max, minimal)"
     required: false
 
+  review_mode:
+    description: "How to post PR reviews. Defaults to a single long comment. Set to 'inline' to create GitHub review comments."
+    required: false
+    default: "comment"
+
   oidc_base_url:
     description: "Base URL for OIDC token exchange API. Only required when running a custom GitHub App install. Defaults to https://api.opencode.ai"
     required: false
@@ -76,4 +81,5 @@ runs:
         USE_GITHUB_TOKEN: ${{ inputs.use_github_token }}
         MENTIONS: ${{ inputs.mentions }}
         VARIANT: ${{ inputs.variant }}
+        REVIEW_MODE: ${{ inputs.review_mode }}
         OIDC_BASE_URL: ${{ inputs.oidc_base_url }}

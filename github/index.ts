@@ -9,6 +9,7 @@ import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { spawn } from "node:child_process"
 import { setTimeout as sleep } from "node:timers/promises"
+import { parseInlineReviewResponse, type InlineReviewResponse } from "./review"
 
 type GitHubAuthor = {
   login: string
@@ -121,6 +122,7 @@ let commentId: number
 let gitConfig: string
 let session: { id: string; title: string; version: string }
 let shareId: string | undefined
+let reviewMode: "comment" | "inline"
 let exitCode = 0
 type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
 
@@ -134,6 +136,7 @@ try {
   octoGraph = graphql.defaults({
     headers: { authorization: `token ${accessToken}` },
   })
+  reviewMode = useEnvReviewMode()
 
   const { userPrompt, promptFiles } = await getUserPrompt()
   await configureGit(accessToken)
@@ -167,25 +170,43 @@ try {
     if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
       await checkoutLocalBranch(prData)
       const dataPrompt = buildPromptDataForPR(prData)
-      const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
-      if (await branchIsDirty()) {
-        const summary = await summarize(response)
-        await pushToLocalBranch(summary)
+      const response =
+        reviewMode === "inline"
+          ? await reviewInline(prData, userPrompt, dataPrompt, promptFiles)
+          : await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
+      if (reviewMode === "inline") {
+        const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
+        await createReview(prData, response)
+        await updateComment(`${response.summary}${footer({ image: !hasShared })}`)
+      } else {
+        if (await branchIsDirty()) {
+          const summary = await summarize(response)
+          await pushToLocalBranch(summary)
+        }
+        const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
+        await updateComment(`${response}${footer({ image: !hasShared })}`)
       }
-      const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
-      await updateComment(`${response}${footer({ image: !hasShared })}`)
     }
     // Fork PR
     else {
       await checkoutForkBranch(prData)
       const dataPrompt = buildPromptDataForPR(prData)
-      const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
-      if (await branchIsDirty()) {
-        const summary = await summarize(response)
-        await pushToForkBranch(summary, prData)
+      const response =
+        reviewMode === "inline"
+          ? await reviewInline(prData, userPrompt, dataPrompt, promptFiles)
+          : await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
+      if (reviewMode === "inline") {
+        const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
+        await createReview(prData, response)
+        await updateComment(`${response.summary}${footer({ image: !hasShared })}`)
+      } else {
+        if (await branchIsDirty()) {
+          const summary = await summarize(response)
+          await pushToForkBranch(summary, prData)
+        }
+        const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
+        await updateComment(`${response}${footer({ image: !hasShared })}`)
       }
-      const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
-      await updateComment(`${response}${footer({ image: !hasShared })}`)
     }
   }
   // Issue
@@ -331,6 +352,13 @@ function useEnvShare() {
   throw new Error(`Invalid share value: ${value}. Share must be a boolean.`)
 }
 
+function useEnvReviewMode() {
+  const value = process.env["REVIEW_MODE"]?.trim().toLowerCase()
+  if (!value || value === "comment") return "comment"
+  if (value === "inline") return "inline"
+  throw new Error(`Invalid review mode: ${value}. Review mode must be either "comment" or "inline".`)
+}
+
 function useEnvMock() {
   return {
     mockEvent: process.env["MOCK_EVENT"],
@@ -411,6 +439,26 @@ async function createComment() {
   })
 }
 
+async function createReview(pr: GitHubPullRequest, review: InlineReviewResponse) {
+  const { repo } = useContext()
+  console.log("Creating pull request review...")
+  const response = await octoRest.rest.pulls.createReview({
+    owner: repo.owner,
+    repo: repo.repo,
+    pull_number: useIssueId(),
+    commit_id: pr.headRefOid,
+    event: "COMMENT",
+    body: review.summary.trim() || "lgtm",
+    comments: review.comments.map((comment) => ({
+      path: comment.path,
+      line: comment.line,
+      side: "RIGHT" as const,
+      body: comment.body,
+    })),
+  })
+  return response.data.html_url
+}
+
 async function getUserPrompt() {
   const context = useContext()
   const payload = context.payload as IssueCommentEvent | PullRequestReviewCommentEvent
@@ -489,6 +537,142 @@ async function getUserPrompt() {
     })
   }
   return { userPrompt: prompt, promptFiles: imgData }
+}
+
+function buildInlineReviewPrompt(userPrompt: string, dataPrompt: string) {
+  return [
+    userPrompt,
+    "",
+    dataPrompt,
+    "",
+    "You are writing a GitHub code review.",
+    "Do not modify files or suggest implementation changes outside the review output.",
+    "Return only valid JSON with this shape:",
+    '{"summary":"short review summary","comments":[{"path":"relative/file.ts","line":123,"body":"review comment"}]}',
+    "Use only files and line numbers from the pull request context.",
+    'If there are no findings, return {"summary":"lgtm","comments":[]}.',
+  ].join("\n")
+}
+
+async function reviewInline(pr: GitHubPullRequest, userPrompt: string, dataPrompt: string, files: PromptFiles) {
+  const structured = await reviewInlineStructured(pr, userPrompt, dataPrompt, files)
+  if (structured) return structured
+
+  const legacy = await chat(buildInlineReviewPrompt(userPrompt, dataPrompt), files)
+  return parseInlineReviewResponse(legacy)
+}
+
+async function reviewInlineStructured(
+  pr: GitHubPullRequest,
+  userPrompt: string,
+  dataPrompt: string,
+  files: PromptFiles,
+) {
+  const { providerID, modelID } = useEnvModel()
+  const agent = await resolveAgent()
+
+  const result = await client.session.prompt<true>({
+    path: { id: session.id },
+    body: {
+      model: { providerID, modelID },
+      agent,
+      variant: process.env["VARIANT"] || undefined,
+      format: {
+        type: "json_schema",
+        schema: {
+          type: "object",
+          properties: {
+            summary: { type: "string" },
+            comments: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  path: { type: "string" },
+                  line: { type: "number" },
+                  body: { type: "string" },
+                },
+                required: ["path", "line", "body"],
+              },
+            },
+          },
+          required: ["summary", "comments"],
+        },
+        retryCount: 2,
+      },
+      parts: [
+        {
+          type: "text" as const,
+          text: buildReviewPrompt(userPrompt, dataPrompt, pr),
+        },
+        ...files.flatMap((f) => [
+          {
+            type: "file" as const,
+            mime: f.mime,
+            url: `data:${f.mime};base64,${f.content}`,
+            filename: f.filename,
+            source: {
+              type: "file" as const,
+              text: {
+                value: f.replacement,
+                start: f.start,
+                end: f.end,
+              },
+              path: f.filename,
+            },
+          },
+        ]),
+      ],
+    },
+  })
+
+  if (result.error) {
+    if (isStructuredOutputError(result.error)) return undefined
+    throw result.error
+  }
+
+  const structured = result.data.info.structured
+  if (!structured || typeof structured !== "object") return undefined
+
+  const value = structured as { summary?: unknown; comments?: unknown }
+  const summary = typeof value.summary === "string" ? value.summary.trim() : ""
+  const comments = Array.isArray(value.comments)
+    ? value.comments
+        .map((comment: unknown) => {
+          const item = comment as { path?: unknown; line?: unknown; body?: unknown }
+          return {
+            path: typeof item.path === "string" ? item.path.trim() : "",
+            line: typeof item.line === "number" ? item.line : Number.NaN,
+            body: typeof item.body === "string" ? item.body.trim() : "",
+          }
+        })
+        .filter(
+          (comment) =>
+            comment.path.length > 0 && Number.isInteger(comment.line) && comment.line > 0 && comment.body.length > 0,
+        )
+    : []
+
+  return {
+    summary: summary || "lgtm",
+    comments,
+  }
+}
+
+function isStructuredOutputError(error: unknown) {
+  return Boolean(error && typeof error === "object" && (error as { name?: string }).name === "StructuredOutputError")
+}
+
+function buildReviewPrompt(userPrompt: string, dataPrompt: string, pr: GitHubPullRequest) {
+  return [
+    userPrompt,
+    "",
+    dataPrompt,
+    "",
+    "Write a GitHub code review for this pull request.",
+    `Pull request head commit: ${pr.headRefOid}`,
+    "Keep the summary short and put each finding in the comments array with path, line, and body.",
+    "If there are no findings, return lgtm with an empty comments array.",
+  ].join("\n")
 }
 
 async function subscribeSessionEvents() {
