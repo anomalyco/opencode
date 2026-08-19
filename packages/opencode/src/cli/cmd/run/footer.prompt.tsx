@@ -21,6 +21,9 @@ import {
   mentionTriggerIndex,
   isNewCommand,
   movePromptHistory,
+  promptOffsetWidth,
+  promptOnFirstRow,
+  promptOnLastRow,
   pushPromptHistory,
 } from "./prompt.shared"
 import { OPENCODE_BASE_MODE, useBindings } from "@opencode-ai/tui/keymap"
@@ -591,7 +594,7 @@ export function createPromptState(input: PromptInput): PromptState {
     })
   }
 
-  const restore = (value: RunPrompt, cursor = Bun.stringWidth(value.text)) => {
+  const restore = (value: RunPrompt, cursor = promptOffsetWidth(value.text)) => {
     draft = clonePrompt(value)
     setShell(value.mode === "shell")
     if (!area || area.isDestroyed) {
@@ -601,7 +604,7 @@ export function createPromptState(input: PromptInput): PromptState {
     hide()
     area.setText(value.text)
     restoreParts(value.parts)
-    area.cursorOffset = Math.min(cursor, Bun.stringWidth(area.plainText))
+    area.cursorOffset = Math.min(cursor, promptOffsetWidth(area.plainText))
     scheduleRows()
     area.focus()
   }
@@ -632,7 +635,7 @@ export function createPromptState(input: PromptInput): PromptState {
     area.setText(text)
     clearParts()
     draft = shell() ? { text: area.plainText, parts: [], mode: "shell" } : { text: area.plainText, parts: [] }
-    area.cursorOffset = Math.min(Bun.stringWidth(text), Bun.stringWidth(area.plainText))
+    area.cursorOffset = Math.min(promptOffsetWidth(text), promptOffsetWidth(area.plainText))
     scheduleRows()
     area.focus()
   }
@@ -766,19 +769,15 @@ export function createPromptState(input: PromptInput): PromptState {
     if (move(dir, event)) return
     if (!area || area.isDestroyed) return false
 
-    const endOffset = Bun.stringWidth(area.plainText)
-    if (dir === -1 && area.visualCursor.visualRow === 0) {
-      area.cursorOffset = 0
+    if (dir === -1 && promptOnFirstRow(area)) {
+      area.gotoBufferHome()
     }
 
-    const end =
-      typeof area.height === "number" && Number.isFinite(area.height) && area.height > 0
-        ? area.height - 1
-        : Math.max(0, (area.virtualLineCount ?? 1) - 1)
-    if (dir === 1 && area.visualCursor.visualRow === end) {
-      area.cursorOffset = endOffset
+    if (dir === 1 && promptOnLastRow(area)) {
+      area.gotoBufferEnd()
     }
 
+    // Reject so the textarea layer still moves the cursor one row.
     return false
   }
 
@@ -871,13 +870,13 @@ export function createPromptState(input: PromptInput): PromptState {
         shell() || !head
           ? cursor
           : local
-            ? Bun.stringWidth(area.plainText)
-            : Bun.stringWidth(area.plainText.slice(0, head.end))
+            ? promptOffsetWidth(area.plainText)
+            : promptOffsetWidth(area.plainText.slice(0, head.end))
       const end = area.logicalCursor
 
       area.deleteRange(start.row, start.col, end.row, end.col)
       area.insertText(text)
-      area.cursorOffset = Bun.stringWidth(text)
+      area.cursorOffset = promptOffsetWidth(text)
       hide()
       syncDraft()
       if (!shell()) {
@@ -902,7 +901,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
     const text = "@" + next.value
     const startOffset = at()
-    const endOffset = startOffset + Bun.stringWidth(text)
+    const endOffset = startOffset + promptOffsetWidth(text)
     const part = structuredClone(next.part)
     if (part.type === "agent") {
       part.source = {

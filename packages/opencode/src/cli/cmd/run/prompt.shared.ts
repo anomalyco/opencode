@@ -7,7 +7,15 @@
 // the current browse position. When the user arrows up at cursor offset 0,
 // the current draft is saved and history begins. Arrowing past the end
 // restores the draft.
-export { displayCharAt, displaySlice, mentionTriggerIndex } from "../prompt-display"
+export {
+  displayCharAt,
+  displaySlice,
+  mentionTriggerIndex,
+  promptOffsetWidth,
+  promptOnFirstRow,
+  promptOnLastRow,
+} from "../prompt-display"
+import { promptOffsetWidth } from "../prompt-display"
 import type { RunPrompt } from "./types"
 
 const HISTORY_LIMIT = 200
@@ -102,7 +110,7 @@ export function movePromptHistory(state: PromptHistoryState, dir: -1 | 1, text: 
     return { state, apply: false }
   }
 
-  if (dir === 1 && cursor !== Bun.stringWidth(text)) {
+  if (dir === 1 && cursor !== promptOffsetWidth(text)) {
     return { state, apply: false }
   }
 
@@ -136,7 +144,7 @@ export function movePromptHistory(state: PromptHistoryState, dir: -1 | 1, text: 
         index: null,
       },
       text: state.draft,
-      cursor: Bun.stringWidth(state.draft),
+      cursor: promptOffsetWidth(state.draft),
       apply: true,
     }
   }
@@ -147,7 +155,7 @@ export function movePromptHistory(state: PromptHistoryState, dir: -1 | 1, text: 
       index: idx,
     },
     text: state.items[idx].text,
-    cursor: dir === -1 ? 0 : Bun.stringWidth(state.items[idx].text),
+    cursor: dir === -1 ? 0 : promptOffsetWidth(state.items[idx].text),
     apply: true,
   }
 }

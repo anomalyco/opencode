@@ -28,7 +28,7 @@ import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
-import { promptOffsetWidth } from "../../prompt/display"
+import { promptOffsetWidth, promptOnFirstRow, promptOnLastRow } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
@@ -509,7 +509,7 @@ export function Prompt(props: PromptProps) {
             parts: updatedNonTextParts,
           })
           restoreExtmarksFromParts(updatedNonTextParts)
-          input.cursorOffset = Bun.stringWidth(normalized)
+          input.gotoBufferEnd()
         },
       },
       {
@@ -873,7 +873,7 @@ export function Prompt(props: PromptProps) {
           category: "Prompt",
           run() {
             if (input.cursorOffset !== 0) {
-              if (input.scrollY + input.visualCursor.visualRow === 0) input.cursorOffset = 0
+              if (promptOnFirstRow(input)) input.gotoBufferHome()
               return false
             }
 
@@ -904,12 +904,8 @@ export function Prompt(props: PromptProps) {
           title: "Next prompt history",
           category: "Prompt",
           run() {
-            if (input.cursorOffset !== input.plainText.length) {
-              if (
-                input.scrollY + input.visualCursor.visualRow ===
-                Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
-              )
-                input.cursorOffset = input.plainText.length
+            if (input.cursorOffset !== promptOffsetWidth(input.plainText)) {
+              if (promptOnLastRow(input)) input.gotoBufferEnd()
               return false
             }
 
@@ -919,7 +915,7 @@ export function Prompt(props: PromptProps) {
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
             restoreExtmarksFromParts(item.parts)
-            input.cursorOffset = input.plainText.length
+            input.gotoBufferEnd()
           },
         },
       ],
