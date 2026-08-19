@@ -628,7 +628,11 @@ const layer = Layer.effect(
       }),
       command: Effect.fn("Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const commands = yield* Command.Service.pipe(Effect.provide(locations.get(session.location)))
+        const commands = yield* Effect.gen(function* () {
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush
+          return yield* Command.Service
+        }).pipe(Effect.provide(locations.get(session.location)))
         const command = yield* commands.get(input.command)
         if (!command)
           return yield* new Command.NotFoundError({
@@ -667,6 +671,8 @@ const layer = Layer.effect(
             activeShells.add(input.sessionID)
             yield* execution.awaitIdle(input.sessionID)
             const started = yield* Effect.gen(function* () {
+              const plugins = yield* PluginSupervisor.Service
+              yield* plugins.flush
               const shell = yield* Shell.Service
               return yield* shell
                 .create({
