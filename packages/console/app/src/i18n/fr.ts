@@ -258,6 +258,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "exceptions suivantes",
 
   "go.title": "OpenCode Go | Modèles de code à faible coût pour tous",
+  "go.banner.text": "Hy3 bénéficie de limites d’utilisation 8x supérieures pour une durée limitée",
   "go.meta.description":
     "Go commence à $5 pour le premier mois, puis 10 $/mois, avec des limites d'utilisation généreuses et un accès fiable aux principaux modèles de codage.",
   "go.hero.title": "Modèles de code à faible coût pour tous",
