@@ -1281,7 +1281,14 @@ const layer = Layer.effect(
               messages: modelMsgs.messages,
               messageSuffix: [
                 ...modelMsgs.tail,
-                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
+                ...(isLastStep
+                  ? [
+                      {
+                        role: "assistant" as const,
+                        content: [{ type: "text" as const, text: MAX_STEPS_PROMPT }],
+                      },
+                    ]
+                  : []),
               ],
               tools,
               model,

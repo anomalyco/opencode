@@ -655,7 +655,14 @@ requestOnlyPrompt.instance(
       expect(suffix).toContain("request-only status")
       expect(suffix).toContain("request-only policy")
       expect(suffixText).toEqual(["request-only status", "request-only policy", MAX_STEPS_PROMPT])
-      expect(input.messages).not.toContainEqual({ role: "assistant", content: MAX_STEPS_PROMPT })
+      expect(input.messageSuffix?.at(-1)).toEqual({
+        role: "assistant",
+        content: [{ type: "text", text: MAX_STEPS_PROMPT }],
+      })
+      expect(input.messages).not.toContainEqual({
+        role: "assistant",
+        content: [{ type: "text", text: MAX_STEPS_PROMPT }],
+      })
       expect(suffix.indexOf("request-only status")).toBeLessThan(suffix.indexOf("request-only policy"))
     }),
   { config: { agent: { build: { steps: 1 } } } },
