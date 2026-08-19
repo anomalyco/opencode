@@ -24,9 +24,15 @@ export const CloudflareAIGatewayPlugin = define({
           apiKey: config.apiKey,
           options: gatewayOptions(evt.options, metadata),
         } as any)
-        const unified = createUnified({ apiKey: config.apiKey })
         evt.sdk = {
           languageModel(modelID: string) {
+            // Workers AI is the only first-party provider whose upstream is Cloudflare itself, so it is
+            // the only one that should receive the Cloudflare token as its upstream Authorization header.
+            // The Unified API addresses Workers AI both with the explicit "workers-ai/" prefix and as
+            // bare "@cf/..." ids. Third-party providers must not receive the token; they rely on the
+            // gateway's stored/BYOK keys instead.
+            const isWorkersAi = modelID.startsWith("workers-ai/") || modelID.startsWith("@cf/")
+            const unified = createUnified(isWorkersAi ? { apiKey: config.apiKey } : {})
             return gateway(unified(modelID))
           },
         }

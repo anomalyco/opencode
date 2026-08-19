@@ -254,7 +254,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "følgende unntak",
 
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
-  "go.banner.text": "DeepSeek V4 Flash får 2x bruksgrense i en begrenset periode",
   "go.meta.description":
     "Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse bruksgrenser og pålitelig tilgang til ledende kodemodeller.",
   "go.hero.title": "Rimelige kodemodeller for alle",
@@ -346,6 +345,7 @@ export const dict = {
   "go.faq.a5.used": "Brukes",
   "go.faq.a5.notUsed": "Brukes ikke",
   "go.faq.a5.noAgreement": "Ingen avtale",
+  "go.faq.a5.notZdr": "Ikke ZDR",
   "go.faq.a5.grokRetention":
     "ZDR deaktiverer viktige API-funksjoner som er avhengige av lagrede data, inkludert den tilstandsbaserte Responses API, Files and Collections og Batch API.",
   "go.faq.a5.gptRetention":
@@ -353,6 +353,8 @@ export const dict = {
   "go.faq.a5.learnMore": "Les mer",
   "go.faq.a5.deepseekRetention":
     "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 31. august 2026.",
+  "go.faq.a5.museRetention":
+    "Kraftig rabatterte tokenpriser i bytte mot tillatelse til å bruke ledetekstene og fullføringene dine til å trene fremtidige Meta-modeller.",
 
   "go.faq.a5.beforeExceptions":
     "Go-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
@@ -393,6 +395,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Modellen er deaktivert",
   "zen.api.error.regionNotAllowed":
     "Den nyeste versjonen av denne modellen er bare tilgjengelig som en tjeneste driftet i Kina og krever at du uttrykkelig samtykker: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Denne modellen er ikke tilgjengelig i landet ditt.",
+  "zen.api.error.trainingNotAllowed":
+    "Denne modellen samler inn data som brukes til å forbedre modellens kvalitet, og krever at du uttrykkelig samtykker: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Den gratis kampanjen for {{model}} er avsluttet. Du kan fortsette å bruke modellen ved å abonnere på OpenCode Go - {{link}}",
 
