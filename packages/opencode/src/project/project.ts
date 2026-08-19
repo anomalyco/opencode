@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, or, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
@@ -87,6 +87,7 @@ export interface Interface {
    * fires. Subscription lifetime is tied to the per-instance state scope.
    */
   readonly init: () => Effect.Effect<void>
+  readonly resolveDirectory: (directory: string) => Effect.Effect<string>
   readonly fromDirectory: (directory: string) => Effect.Effect<{ project: Info; sandbox: string }>
   readonly discover: (input: Info) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
@@ -113,6 +114,7 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const { db } = yield* Database.Service
+    const directoryAliases = new Map<string, AbsolutePath>()
 
     const git = Effect.fnUntraced(
       function* (args: string[], opts?: { cwd?: string }) {
@@ -210,10 +212,41 @@ const layer = Layer.effect(
         )
     })
 
+    const resolveDirectory = Effect.fn("Project.resolveDirectory")(function* (directory: string) {
+      const requested = AbsolutePath.make(FSUtil.resolve(directory))
+      if (yield* fs.isDir(requested)) return requested
+      const alias = directoryAliases.get(requested)
+      if (alias && (yield* fs.isDir(alias))) return alias
+      directoryAliases.delete(requested)
+
+      const row = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(eq(ProjectTable.worktree, requested))
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return requested
+
+      const candidates = yield* Effect.forEach(
+        row.sandboxes,
+        (sandbox) => fs.isDir(sandbox).pipe(Effect.map((exists) => (exists ? sandbox : undefined))),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.map((items) => items.filter((item): item is AbsolutePath => item !== undefined)))
+      if (candidates.length !== 1) return requested
+
+      yield* Effect.logInfo("recovering moved project directory", {
+        projectID: row.id,
+        previous: requested,
+        directory: candidates[0],
+      })
+      directoryAliases.set(requested, candidates[0])
+      return candidates[0]
+    })
+
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
       yield* Effect.logInfo("fromDirectory", { directory })
 
-      const data = yield* projectV2.resolve(AbsolutePath.make(directory))
+      const data = yield* projectV2.resolve(yield* resolveDirectory(directory))
       const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : data.directory
 
       // Phase 2: upsert
@@ -229,12 +262,14 @@ const layer = Layer.effect(
             sandboxes: [] as string[],
             time: { created: Date.now(), updated: Date.now() },
           }
+      const replaceWorktree =
+        projectID !== ProjectV2.ID.global && row !== undefined && !(yield* fs.isDir(existing.worktree))
 
       if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
       const result: Info = {
         ...existing,
-        worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
+        worktree: projectID === ProjectV2.ID.global || replaceWorktree ? worktree : existing.worktree,
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
       }
@@ -249,7 +284,7 @@ const layer = Layer.effect(
         (s) =>
           fs.exists(s).pipe(
             Effect.orDie,
-            Effect.map((exists) => (exists ? s : undefined)),
+            Effect.map((exists) => (exists && s !== result.worktree ? s : undefined)),
           ),
         { concurrency: "unbounded" },
       ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
@@ -287,6 +322,31 @@ const layer = Layer.effect(
         })
         .run()
         .pipe(Effect.orDie)
+
+      if (replaceWorktree) {
+        yield* db
+          .update(SessionTable)
+          .set({
+            project_id: projectID,
+            directory: data.directory,
+            path: "",
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
+          .where(
+            and(
+              or(eq(SessionTable.project_id, ProjectV2.ID.global), eq(SessionTable.project_id, projectID)),
+              eq(SessionTable.directory, existing.worktree),
+            ),
+          )
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .update(WorkspaceTable)
+          .set({ directory: data.directory })
+          .where(and(eq(WorkspaceTable.project_id, projectID), eq(WorkspaceTable.directory, existing.worktree)))
+          .run()
+          .pipe(Effect.orDie)
+      }
 
       if (projectID !== ProjectV2.ID.global) {
         yield* db
@@ -449,6 +509,7 @@ const layer = Layer.effect(
 
     return Service.of({
       init,
+      resolveDirectory,
       fromDirectory,
       discover,
       list,

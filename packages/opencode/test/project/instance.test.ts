@@ -6,8 +6,14 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
+import { Project } from "../../src/project/project"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Database } from "@opencode-ai/core/database/database"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { eq } from "drizzle-orm"
+import { rename, rm } from "fs/promises"
 
 let bootstrapRun: Effect.Effect<void> = Effect.void
 const noopBootstrap = Layer.succeed(
@@ -16,7 +22,7 @@ const noopBootstrap = Layer.succeed(
 )
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([InstanceStore.node, CrossSpawnSpawner.node]), [
+  LayerNode.compile(LayerNode.group([InstanceStore.node, CrossSpawnSpawner.node, Project.node, Database.node]), [
     [InstanceStore.bootstrapNode, noopBootstrap],
   ]),
 )
@@ -47,6 +53,31 @@ describe("InstanceStore", () => {
 
       expect(ctx.directory).toBe(dir)
       expect(ctx.worktree).toBe(dir)
+    }),
+  )
+
+  it.live("loads a moved project through its stale directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const project = yield* Project.Service
+      const { db } = yield* Database.Service
+      const initial = yield* project.fromDirectory(dir)
+      const moved = dir + "-moved"
+      yield* Effect.addFinalizer(() => Effect.promise(() => rm(moved, { recursive: true, force: true })))
+      yield* Effect.promise(() => rename(dir, moved))
+      yield* db
+        .update(ProjectTable)
+        .set({ sandboxes: [AbsolutePath.make(moved)] })
+        .where(eq(ProjectTable.id, initial.project.id))
+        .run()
+        .pipe(Effect.orDie)
+
+      const ctx = yield* store.load({ directory: dir })
+
+      expect(ctx.directory).toBe(moved)
+      expect(ctx.worktree).toBe(moved)
+      expect(yield* store.load({ directory: moved })).toBe(ctx)
     }),
   )
 

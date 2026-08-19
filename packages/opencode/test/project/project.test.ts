@@ -20,6 +20,8 @@ import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { rename, rm } from "fs/promises"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const encoder = new TextEncoder()
 
@@ -394,6 +396,97 @@ describe("Project.fromDirectory with worktrees", () => {
       expect(result.project.worktree).toBe(worktree1)
       expect(result.project.sandboxes).toContain(worktree2)
       expect(result.project.sandboxes).not.toContain(tmp)
+    }),
+  )
+
+  it.live("promotes a moved repository when the stored worktree is missing", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const { db } = yield* Database.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      const initial = yield* project.fromDirectory(tmp)
+      const projectSessionID = crypto.randomUUID() as SessionID
+      const globalSessionID = crypto.randomUUID() as SessionID
+      const workspaceID = WorkspaceV2.ID.ascending()
+      const now = Date.now()
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id: ProjectV2.ID.global,
+          worktree: AbsolutePath.make("/"),
+          time_created: now,
+          time_updated: now,
+          sandboxes: [],
+        })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values([
+          {
+            id: projectSessionID,
+            project_id: initial.project.id,
+            slug: projectSessionID,
+            directory: tmp,
+            title: "project session",
+            version: "0.0.0-test",
+            time_created: now,
+            time_updated: now,
+          },
+          {
+            id: globalSessionID,
+            project_id: ProjectV2.ID.global,
+            slug: globalSessionID,
+            directory: tmp,
+            title: "global session",
+            version: "0.0.0-test",
+            time_created: now,
+            time_updated: now,
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(WorkspaceTable)
+        .values({
+          id: workspaceID,
+          type: "local",
+          project_id: initial.project.id,
+          directory: tmp,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const moved = tmp + "-moved"
+      yield* Effect.addFinalizer(() => Effect.promise(() => rm(moved, { recursive: true, force: true })))
+      yield* Effect.promise(() => rename(tmp, moved))
+      yield* db
+        .update(ProjectTable)
+        .set({ sandboxes: [AbsolutePath.make(moved)] })
+        .where(eq(ProjectTable.id, initial.project.id))
+        .run()
+        .pipe(Effect.orDie)
+
+      expect(yield* project.resolveDirectory(tmp)).toBe(moved)
+      const result = yield* project.fromDirectory(tmp)
+
+      expect(result.project.id).toBe(initial.project.id)
+      expect(result.project.worktree).toBe(moved)
+      expect(result.project.sandboxes).not.toContain(tmp)
+      expect(result.project.sandboxes).not.toContain(moved)
+      expect(yield* project.resolveDirectory(tmp)).toBe(moved)
+      expect((yield* project.get(result.project.id))?.worktree).toBe(moved)
+      for (const id of [projectSessionID, globalSessionID]) {
+        const session = yield* db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie)
+        expect(session?.project_id).toBe(result.project.id)
+        expect(session?.directory).toBe(moved)
+        expect(session?.path).toBe("")
+        expect(session?.time_updated).toBe(now)
+      }
+      expect(
+        (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
+          ?.directory,
+      ).toBe(moved)
     }),
   )
 })
