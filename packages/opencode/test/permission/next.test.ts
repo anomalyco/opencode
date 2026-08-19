@@ -1,14 +1,25 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { test, expect } from "bun:test"
 import os from "os"
+import path from "path"
+import { pathToFileURL } from "url"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import * as TestConsole from "effect/testing/TestConsole"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Npm } from "@opencode-ai/core/npm"
 import { Permission } from "../../src/permission"
+import { Plugin } from "../../src/plugin"
+import { Auth } from "../../src/auth"
+import { Account } from "../../src/account/account"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { AccountTest } from "../fake/account"
+import { AuthTest } from "../fake/auth"
+import { NpmTest } from "../fake/npm"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -16,7 +27,13 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const env = AppNodeBuilder.build(
   LayerNode.group([Permission.node, EventV2Bridge.node, CrossSpawnSpawner.node, InstanceStore.node]),
-  [[InstanceStore.bootstrapNode, noopBootstrap]],
+  [
+    [InstanceStore.bootstrapNode, noopBootstrap],
+    [Auth.node, AuthTest.empty],
+    [Account.node, AccountTest.empty],
+    [Npm.node, NpmTest.noop],
+    [RuntimeFlags.node, RuntimeFlags.layer({ disableDefaultPlugins: true })],
+  ],
 )
 const it = testEffect(env)
 
@@ -43,7 +60,7 @@ const waitForPending = (count: number) =>
       }
     }).pipe(
       Effect.timeoutOrElse({
-        duration: "1 second",
+        duration: "10 seconds",
         orElse: () => Effect.fail(new Error(`timed out waiting for ${count} pending permission request(s)`)),
       }),
     )
@@ -73,6 +90,27 @@ const list = () =>
     const permission = yield* Permission.Service
     return yield* permission.list()
   })
+
+const permissionHook = (body: string) =>
+  ["export default async () => ({", '  "permission.ask": async (input, output) => {', body, "  },", "})", ""].join("\n")
+
+const withPlugins = (...sources: string[]) => ({
+  git: true,
+  init: (directory: string) =>
+    Effect.promise(async () => {
+      const plugins = await Promise.all(
+        sources.map(async (source, index) => {
+          const file = path.join(directory, `plugin-${index}.ts`)
+          await Bun.write(file, source)
+          return pathToFileURL(file).href
+        }),
+      )
+      await Bun.write(
+        path.join(directory, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: plugins }),
+      )
+    }),
+})
 
 // fromConfig tests
 
@@ -692,6 +730,177 @@ it.instance(
       yield* Fiber.await(fiber)
     }),
   { git: true },
+)
+
+it.instance(
+  "ask - fully static allow bypasses permission hook",
+  () =>
+    Effect.gen(function* () {
+      yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
+      })
+      expect(yield* list()).toHaveLength(0)
+    }),
+  withPlugins(permissionHook('    throw new Error("hook should not run")')),
+)
+
+it.instance(
+  "ask - static deny cannot be overridden by permission hook",
+  () =>
+    Effect.gen(function* () {
+      const err = yield* fail(
+        ask({
+          sessionID: SessionID.make("session_test"),
+          permission: "bash",
+          patterns: ["rm -rf /"],
+          metadata: {},
+          always: [],
+          ruleset: [{ permission: "bash", pattern: "*", action: "deny" }],
+        }),
+      )
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
+    }),
+  withPlugins(permissionHook('    output.status = "allow"')),
+)
+
+it.instance(
+  "ask - permission hook deny returns DeniedError",
+  () =>
+    Effect.gen(function* () {
+      const err = yield* fail(
+        ask({
+          sessionID: SessionID.make("session_test"),
+          permission: "bash",
+          patterns: ["ls"],
+          metadata: {},
+          always: [],
+          ruleset: [],
+        }),
+      )
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
+      expect(yield* list()).toHaveLength(0)
+      expect(JSON.stringify(yield* TestConsole.logLines)).not.toContain("asking")
+    }),
+  withPlugins(permissionHook('    output.status = "deny"')),
+)
+
+it.instance(
+  "ask - later permission hook overrides earlier decision",
+  () =>
+    Effect.gen(function* () {
+      yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+      expect(yield* list()).toHaveLength(0)
+      expect(JSON.stringify(yield* TestConsole.logLines)).not.toContain("asking")
+    }),
+  withPlugins(permissionHook('    output.status = "deny"'), permissionHook('    output.status = "allow"')),
+)
+
+it.instance(
+  "ask - later permission hook failure falls back to ask and logs",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      const logs = JSON.stringify(yield* TestConsole.logLines)
+      expect(logs).toContain("permission ask plugin failed")
+      expect(logs).toContain("asking")
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  withPlugins(
+    permissionHook('    output.status = "allow"'),
+    permissionHook('    throw new Error("later hook failed")'),
+  ),
+)
+
+it.instance(
+  "ask - permission hook cannot mutate nested pending request metadata",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { nested: { value: "original" } },
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const pending = yield* waitForPending(1)
+      expect(pending[0]?.metadata).toEqual({ nested: { value: "original" } })
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  withPlugins(permissionHook('    input.metadata.nested.value = "mutated"')),
+)
+
+it.instance(
+  "ask - interruption during permission hook leaves no request or asked event",
+  () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const marker = path.join(test.directory, "hook-started")
+      let asked = 0
+      const events = yield* EventV2Bridge.Service
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === Permission.Event.Asked.type) asked++
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* Effect.gen(function* () {
+        while (!(yield* Effect.promise(() => Bun.file(marker).exists()))) yield* Effect.sleep("10 millis")
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: "1 second",
+          orElse: () => Effect.fail(new Error("timed out waiting for permission hook")),
+        }),
+      )
+      yield* Fiber.interrupt(fiber)
+      const exit = yield* Fiber.await(fiber)
+
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true)
+      expect(yield* list()).toHaveLength(0)
+      expect(asked).toBe(0)
+    }),
+  withPlugins(
+    permissionHook(
+      [
+        '    await Bun.write(new URL("hook-started", import.meta.url), "started")',
+        "    return new Promise(() => {})",
+      ].join("\n"),
+    ),
+  ),
 )
 
 // reply tests
