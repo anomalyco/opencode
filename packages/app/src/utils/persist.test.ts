@@ -1,4 +1,5 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import { beforeAll, beforeEach, describe, expect, mock, test, vi } from "bun:test"
+import { createRoot } from "solid-js"
 import { ServerScope } from "./server-scope"
 
 type PersistTestingType = typeof import("./persist").PersistTesting
@@ -207,5 +208,67 @@ describe("persist localStorage resilience", () => {
 
   test("server global target cannot collide when scope and key contain colons", () => {
     expect(Persist.serverGlobal("a:b" as ServerScope, "c")).not.toEqual(Persist.serverGlobal("a" as ServerScope, "b:c"))
+  })
+
+  test("debounceWrites coalesces rapid setItem calls into one flush", () => {
+    vi.useFakeTimers()
+    try {
+      createRoot((dispose) => {
+        const api = persistTesting.debounceWrites(persistTesting.localStorageDirect(), 20)
+        api.setItem("draft", '{"v":1}')
+        api.setItem("draft", '{"v":2}')
+        api.setItem("draft", '{"v":3}')
+        expect(storage.calls.set).toBe(0)
+
+        vi.advanceTimersByTime(19)
+        expect(storage.calls.set).toBe(0)
+
+        vi.advanceTimersByTime(1)
+        expect(storage.calls.set).toBe(1)
+        expect(storage.getItem("draft")).toBe('{"v":3}')
+        dispose()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("debounceWrites flushes pending writes on dispose", () => {
+    vi.useFakeTimers()
+    try {
+      createRoot((dispose) => {
+        const api = persistTesting.debounceWrites(persistTesting.localStorageDirect(), 50)
+        api.setItem("draft", '{"v":1}')
+        expect(storage.calls.set).toBe(0)
+        dispose()
+        expect(storage.calls.set).toBe(1)
+        expect(storage.getItem("draft")).toBe('{"v":1}')
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("debounceWrites preserves live storage length getters", () => {
+    createRoot((dispose) => {
+      const values = new Map<string, string>()
+      const base = {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          values.set(key, value)
+        },
+        removeItem: (key: string) => {
+          values.delete(key)
+        },
+        get length() {
+          return values.size
+        },
+      }
+      const api = persistTesting.debounceWrites(base, 20)
+      expect(api.length).toBe(0)
+      base.setItem("a", "1")
+      expect(api.length).toBe(1)
+      dispose()
+    })
   })
 })

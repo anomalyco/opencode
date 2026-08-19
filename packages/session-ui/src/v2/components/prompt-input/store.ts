@@ -1,4 +1,4 @@
-import { batch, type Accessor } from "solid-js"
+import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 import type {
   PromptInputV2AgentPart,
@@ -30,35 +30,33 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
       return store()
     },
     setPrompt(prompt: PromptInputV2Prompt, cursor?: number) {
-      batch(() => {
+      if (cursor === undefined) {
         setStore()("prompt", prompt)
-        if (cursor !== undefined) setStore()("cursor", cursor)
-      })
+        return
+      }
+      setStore()({ prompt, cursor })
     },
     setCursor(cursor: number) {
       setStore()("cursor", cursor)
     },
     setText(content: string) {
-      batch(() => {
-        setStore()("prompt", (prompt) => [
+      setStore()({
+        prompt: [
           { type: "text", content, start: 0, end: content.length },
-          ...prompt.filter((part) => part.type !== "text"),
-        ])
-        setStore()("cursor", content.length)
+          ...store().prompt.filter((part) => part.type !== "text"),
+        ],
+        cursor: content.length,
       })
     },
     addText(content: string) {
       const cursor = store().cursor ?? promptLength(store().prompt)
-      batch(() => {
-        setStore()("prompt", (prompt) => insertText(prompt, cursor, content))
-        setStore()("cursor", cursor + content.length)
+      setStore()({
+        prompt: insertText(store().prompt, cursor, content),
+        cursor: cursor + content.length,
       })
     },
     reset() {
-      batch(() => {
-        setStore()("prompt", [{ type: "text", content: "", start: 0, end: 0 }])
-        setStore()("cursor", 0)
-      })
+      setStore()({ prompt: [{ type: "text", content: "", start: 0, end: 0 }], cursor: 0 })
     },
     setModel(model: PromptInputV2Model | undefined) {
       setStore()("model", model)
@@ -79,8 +77,11 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
         .join("")
       const end = store().cursor ?? text.length
       const start = text.slice(0, end).lastIndexOf("@")
-      setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
-      setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
+      const at = start < 0 ? end : start
+      setStore()({
+        prompt: insertMention(store().prompt, at, end, mention),
+        cursor: at + mention.content.length + 1,
+      })
     },
     addAttachment(attachment: PromptInputV2Attachment) {
       setStore()("prompt", (prompt) => [...prompt, attachment])

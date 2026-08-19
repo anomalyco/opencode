@@ -1,7 +1,7 @@
 import { Platform, usePlatform } from "@/context/platform"
 import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode-ai/core/util/encode"
-import { createResource, type Accessor } from "solid-js"
+import { createResource, getOwner, onCleanup, type Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 import { pathKey } from "@/utils/path-key"
 import { ScopedKey, ServerScope, type ServerScope as ServerScopeValue } from "@/utils/server-scope"
@@ -22,6 +22,8 @@ type PersistTarget = {
   key: string
   legacy?: string[]
   migrate?: (value: unknown) => unknown
+  /** Delay storage writes so high-frequency updates (e.g. prompt typing) do not hit disk/IPC every keystroke. */
+  debounceMs?: number
 }
 
 const LEGACY_STORAGE = "default.dat"
@@ -478,6 +480,71 @@ export function draftPersistedKeys() {
   return DRAFT_PERSISTED_KEYS
 }
 
+function debounceWrites<T extends SyncStorage | AsyncStorage>(storage: T, debounceMs: number): T {
+  type Pending = { value: string; timer: ReturnType<typeof setTimeout> }
+  const pending = new Map<string, Pending>()
+  const last = new Map<string, string>()
+
+  const flush = (key: string) => {
+    const item = pending.get(key)
+    if (!item) return
+    pending.delete(key)
+    clearTimeout(item.timer)
+    if (last.get(key) === item.value) return
+    last.set(key, item.value)
+    void storage.setItem(key, item.value)
+  }
+
+  const flushAll = () => {
+    for (const key of Array.from(pending.keys())) flush(key)
+  }
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("pagehide", flushAll)
+    window.addEventListener("beforeunload", flushAll)
+  }
+
+  if (getOwner()) {
+    onCleanup(() => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("pagehide", flushAll)
+        window.removeEventListener("beforeunload", flushAll)
+      }
+      flushAll()
+    })
+  }
+
+  const setItem = (key: string, value: string) => {
+    const prev = pending.get(key)
+    if (prev) clearTimeout(prev.timer)
+    pending.set(key, {
+      value,
+      timer: setTimeout(() => flush(key), debounceMs),
+    })
+  }
+
+  const removeItem = (key: string) => {
+    const prev = pending.get(key)
+    if (prev) {
+      clearTimeout(prev.timer)
+      pending.delete(key)
+    }
+    last.delete(key)
+    return storage.removeItem(key)
+  }
+
+  // Proxy instead of object spread so getter-based fields like AsyncStorage.length stay live.
+  return new Proxy(storage, {
+    get(target, prop) {
+      if (prop === "setItem") return setItem
+      if (prop === "removeItem") return removeItem
+      const value = Reflect.get(target, prop, target)
+      if (typeof value === "function") return value.bind(target)
+      return value
+    },
+  })
+}
+
 export const PersistTesting = {
   localStorageDirect,
   localStorageWithPrefix,
@@ -486,6 +553,7 @@ export const PersistTesting = {
   resolveTarget,
   windowStorage,
   workspaceStorage,
+  debounceWrites,
 }
 
 export const Persist = {
@@ -681,7 +749,9 @@ export function persisted<T>(
     return api
   })()
 
-  const [state, setState, init] = makePersisted(store, { name: config.key, storage })
+  const writeStorage = config.debounceMs && config.debounceMs > 0 ? debounceWrites(storage, config.debounceMs) : storage
+
+  const [state, setState, init] = makePersisted(store, { name: config.key, storage: writeStorage })
 
   const isAsync = init instanceof Promise
   const [ready] = createResource(
