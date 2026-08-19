@@ -1534,18 +1534,84 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   }
 
   if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
-    const sanitizeMoonshot = (obj: unknown): unknown => {
+    const moonshotCombinators = ["anyOf", "oneOf", "allOf", "not", "if", "then", "else", "$ref"]
+    const moonshotObjectKeywords = [
+      "properties",
+      "additionalProperties",
+      "patternProperties",
+      "propertyNames",
+      "required",
+      "minProperties",
+      "maxProperties",
+    ]
+    const moonshotArrayKeywords = ["items", "prefixItems", "minItems", "maxItems", "uniqueItems", "contains"]
+    const moonshotStringKeywords = ["minLength", "maxLength", "pattern", "format"]
+    const moonshotNumericKeywords = ["minimum", "maximum", "multipleOf", "exclusiveMinimum", "exclusiveMaximum"]
+
+    const typeOfMoonshotValue = (value: unknown) => {
+      if (value === null) return "null"
+      if (Array.isArray(value)) return "array"
+      if (typeof value === "number") return Number.isInteger(value) ? "integer" : "number"
+      if (["string", "boolean"].includes(typeof value)) return typeof value
+      if (isPlainObject(value)) return "object"
+      return "string"
+    }
+
+    const inferMoonshotType = (node: JsonRecord) => {
+      const values = Array.isArray(node.enum) && node.enum.length > 0 ? node.enum : "const" in node ? [node.const] : []
+      if (values.length > 0) {
+        const types = [...new Set(values.map(typeOfMoonshotValue))]
+        if (types.length === 1) return types[0]
+        if (types.length === 2 && types.includes("integer") && types.includes("number")) return "number"
+        return
+      }
+      if (moonshotObjectKeywords.some((key) => key in node)) return "object"
+      if (moonshotArrayKeywords.some((key) => key in node)) return "array"
+      if (moonshotStringKeywords.some((key) => key in node)) return "string"
+      if (moonshotNumericKeywords.some((key) => key in node)) return "number"
+    }
+
+    const sanitizeMoonshot = (obj: unknown, schemaNode = false): unknown => {
       if (obj === null || typeof obj !== "object") return obj
-      if (Array.isArray(obj)) return obj.map(sanitizeMoonshot)
+      if (Array.isArray(obj)) return obj.map((item) => sanitizeMoonshot(item, schemaNode))
       // Moonshot expands $ref before validation and rejects sibling keywords like description on the same node.
-      if ("$ref" in obj && typeof obj.$ref === "string") return { $ref: obj.$ref }
-      const result = Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, sanitizeMoonshot(value)]))
+      if (schemaNode && "$ref" in obj && typeof obj.$ref === "string") return { $ref: obj.$ref }
+
+      const result: JsonRecord = {}
+      for (const [key, value] of Object.entries(obj)) {
+        if (["properties", "patternProperties", "$defs", "definitions"].includes(key) && isPlainObject(value)) {
+          result[key] = Object.fromEntries(
+            Object.entries(value).map(([name, item]) => [name, sanitizeMoonshot(item, true)]),
+          )
+          continue
+        }
+        if (["anyOf", "oneOf", "allOf", "prefixItems"].includes(key) && Array.isArray(value)) {
+          result[key] = value.map((item) => sanitizeMoonshot(item, true))
+          continue
+        }
+        if (["items", "additionalProperties", "not", "if", "then", "else", "contains", "propertyNames"].includes(key)) {
+          if (key === "items" && Array.isArray(value)) {
+            result.items = sanitizeMoonshot(value[0] ?? {}, true)
+          } else {
+            result[key] = isPlainObject(value) ? sanitizeMoonshot(value, true) : value
+          }
+          continue
+        }
+        result[key] = sanitizeMoonshot(value)
+      }
+
       // MFJS does not support tuple-style `items` arrays; it requires one schema object for all array items.
       if (Array.isArray(result.items)) result.items = result.items[0] ?? {}
+      // Moonshot rejects otherwise valid property schemas when `type` is omitted.
+      // Infer only unambiguous enum/const and structural shapes.
+      if (schemaNode && !("type" in result) && !moonshotCombinators.some((key) => key in result)) {
+        const type = inferMoonshotType(result)
+        if (type) result.type = type
+      }
       return result
     }
 
-    const sanitized = sanitizeMoonshot(schema)
+    const sanitized = sanitizeMoonshot(schema, true)
     if (typeof sanitized === "object" && sanitized !== null && !Array.isArray(sanitized)) {
       schema = sanitized
     }

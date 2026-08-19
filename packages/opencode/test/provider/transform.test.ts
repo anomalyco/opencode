@@ -1657,6 +1657,66 @@ describe("ProviderTransform.schema - moonshot $ref siblings", () => {
     },
   } as any
 
+  test("adds explicit types to Moonshot tool properties that omit them", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        view: {
+          enum: ["text", "raw"],
+          default: "text",
+        },
+        confirmed: {
+          const: true,
+        },
+        opaque: {},
+        nested: {
+          properties: {
+            count: { minimum: 0 },
+          },
+          required: ["count"],
+        },
+        formats: {
+          items: { enum: ["docx", "pdf"] },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(moonshotModel, schema) as any
+
+    expect(result.properties.view).toEqual({
+      type: "string",
+      enum: ["text", "raw"],
+      default: "text",
+    })
+    expect(result.properties.confirmed).toEqual({ type: "boolean", const: true })
+    expect(result.properties.opaque).toEqual({})
+    expect(result.properties.nested.type).toBe("object")
+    expect(result.properties.nested.properties.count.type).toBe("number")
+    expect(result.properties.formats.type).toBe("array")
+    expect(result.properties.formats.items.type).toBe("string")
+    expect(result.properties.type).toBeUndefined()
+  })
+
+  test("preserves the source schema and valid type-less combinators", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        choice: {
+          anyOf: [{ enum: [1, 2] }, { const: null }],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(moonshotModel, schema) as any
+
+    expect(result.properties.choice.type).toBeUndefined()
+    expect(result.properties.choice.anyOf).toEqual([
+      { enum: [1, 2], type: "integer" },
+      { const: null, type: "null" },
+    ])
+    expect(schema.properties.choice.anyOf).toEqual([{ enum: [1, 2] }, { const: null }])
+  })
+
   test("removes sibling descriptions from referenced tool parameter schemas", () => {
     const schema = {
       type: "object",
