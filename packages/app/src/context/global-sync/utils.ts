@@ -79,7 +79,10 @@ export function normalizeProviderList(
       name: provider.name,
       source: "custom",
       env: [],
-      options: provider.settings ?? {},
+      options: {
+        ...(provider as any).api?.settings,
+        ...(provider as any).request?.body,
+      },
       models: {},
     })
   }
