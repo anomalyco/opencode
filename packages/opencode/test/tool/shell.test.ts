@@ -16,9 +16,12 @@ import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Database } from "@opencode-ai/core/database/database"
+import { BackgroundJob } from "../../src/background/job"
 import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
+import type { TaskPromptOps } from "@/tool/task"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceStore } from "@/project/instance-store"
 
@@ -32,6 +35,8 @@ const shellLayer = Layer.mergeAll(
       Config.node,
       Agent.node,
       RuntimeFlags.node,
+      Database.node,
+      BackgroundJob.node,
     ]),
   ),
   testInstanceStoreLayer,
@@ -1195,5 +1200,155 @@ describe("tool.shell truncation", () => {
         expect(lines[lineCount - 1]).toBe(String(lineCount))
       }),
     ),
+  )
+
+  it.live(
+    "background task survives the tool-call abort signal and reports its real output",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const controller = new AbortController()
+          const ops: TaskPromptOps = {
+            cancel: () => Effect.void,
+            resolvePromptParts: (template) => Effect.succeed([{ type: "text", text: template }] as any),
+            prompt: (input) => Effect.succeed({} as any),
+          }
+          const res = yield* run(
+            {
+              command: `echo background-survives-abort && sleep 2 && echo background-done`,
+              background: true,
+            },
+            {
+              ...ctx,
+              abort: controller.signal,
+              extra: { promptOps: ops },
+            },
+          )
+          expect(res.output).toContain("running in the background")
+
+          controller.abort()
+
+          const jobs = yield* BackgroundJob.Service
+          const job = yield* jobs.wait({ id: (res.metadata as unknown as { jobId: string }).jobId, timeout: 15_000 })
+          expect(job.timedOut).toBe(false)
+          expect(job.info?.status).toBe("completed")
+          expect(job.info?.output).toContain("background-survives-abort")
+          expect(job.info?.output).toContain("background-done")
+          expect(job.info?.output).not.toContain("User aborted the command")
+        }).pipe(Effect.provide(RuntimeFlags.layer({ experimentalBackgroundShell: true }))),
+      ),
+    25_000,
+  )
+
+  it.live(
+    "background network command is not force-killed by the foreground network short timeout",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const ops: TaskPromptOps = {
+            cancel: () => Effect.void,
+            resolvePromptParts: (template) => Effect.succeed([{ type: "text", text: template }] as any),
+            prompt: (input) => Effect.succeed({} as any),
+          }
+          const res = yield* run(
+            {
+              command: process.platform === "win32" ? `ping -n 18 127.0.0.1` : `ping -c 18 127.0.0.1`,
+              background: true,
+            },
+            {
+              ...ctx,
+              extra: { promptOps: ops },
+            },
+          )
+          expect(res.output).toContain("running in the background")
+
+          const jobs = yield* BackgroundJob.Service
+          const job = yield* jobs.wait({ id: (res.metadata as unknown as { jobId: string }).jobId, timeout: 30_000 })
+          expect(job.timedOut).toBe(false)
+          expect(job.info?.status).toBe("completed")
+          expect(job.info?.output).not.toContain("terminated command after exceeding timeout")
+          expect(job.info?.output).toMatch(/TTL=/)
+        }).pipe(Effect.provide(RuntimeFlags.layer({ experimentalBackgroundShell: true, bashDefaultTimeoutMs: 30_000 }))),
+      ),
+    45_000,
+  )
+
+  it.live(
+    "background shell jobs are not scoped to a session (session removal leaves them running)",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const ops: TaskPromptOps = {
+            cancel: () => Effect.void,
+            resolvePromptParts: (template) => Effect.succeed([{ type: "text", text: template }] as any),
+            prompt: (input) => Effect.succeed({} as any),
+          }
+          const res = yield* run(
+            {
+              command: `echo session-independent-background && sleep 1 && echo still-running`,
+              background: true,
+            },
+            {
+              ...ctx,
+              extra: { promptOps: ops },
+            },
+          )
+          expect(res.output).toContain("running in the background")
+
+          const jobs = yield* BackgroundJob.Service
+          const job = yield* jobs.wait({ id: (res.metadata as unknown as { jobId: string }).jobId, timeout: 15_000 })
+          expect(job.timedOut).toBe(false)
+          expect(job.info?.status).toBe("completed")
+          expect(job.info?.output).toContain("still-running")
+
+          // Unlike task subagents (whose metadata carries sessionId/parentSessionId),
+          // background shell jobs deliberately carry no session linkage, so
+          // Session.cancelBackgroundJobs never selects them on session removal.
+          expect(job.info?.metadata).toEqual({
+            command: "echo session-independent-background && sleep 1 && echo still-running",
+            cwd: projectRoot,
+            background: true,
+          })
+        }).pipe(Effect.provide(RuntimeFlags.layer({ experimentalBackgroundShell: true }))),
+      ),
+    25_000,
+  )
+
+  it.live(
+    "background shell job reports a failing command as error state",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const ops: TaskPromptOps = {
+            cancel: () => Effect.void,
+            resolvePromptParts: (template) => Effect.succeed([{ type: "text", text: template }] as any),
+            prompt: (input) => Effect.succeed({} as any),
+          }
+          const res = yield* run(
+            {
+              command: `echo before-failure; exit 3`,
+              background: true,
+            },
+            {
+              ...ctx,
+              extra: { promptOps: ops },
+            },
+          )
+          expect(res.output).toContain("running in the background")
+
+          const jobs = yield* BackgroundJob.Service
+          const job = yield* jobs.wait({ id: (res.metadata as unknown as { jobId: string }).jobId, timeout: 15_000 })
+          expect(job.timedOut).toBe(false)
+          expect(job.info?.status).toBe("completed")
+          expect(job.info?.output).toContain('state="error"')
+          expect(job.info?.output).toContain('exit="3"')
+          expect(job.info?.output).toContain("before-failure")
+        }).pipe(Effect.provide(RuntimeFlags.layer({ experimentalBackgroundShell: true }))),
+      ),
+    25_000,
   )
 })

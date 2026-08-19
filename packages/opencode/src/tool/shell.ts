@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Scope, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -21,8 +21,19 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import { BackgroundJob } from "@/background/job"
+import { Identifier } from "@/id/id"
+import { Database } from "@opencode-ai/core/database/database"
+import { MessageV2 } from "@/session/message-v2"
+import type { TaskPromptOps } from "./task"
 
 export { Parameters } from "./shell/prompt"
+
+const BACKGROUND_STARTED = [
+  "The command is running in the background. You will be notified automatically when it finishes.",
+  "DO NOT sleep, poll for progress, or duplicate this command's work.",
+  "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
+].join("\n")
 
 const MAX_METADATA_LENGTH = 30_000
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
@@ -254,6 +265,17 @@ function tail(text: string, maxLines: number, maxBytes: number) {
   }
 }
 
+const NETWORK_COMMAND = /^(curl|wget|ping|tracert|tracepath|ssh|gh)\b/i
+const NETWORK_GIT = /^git (fetch|pull|clone|push|ls-remote)\b/i
+const BUILD_COMMAND = /^(bun |npm |yarn |pnpm |mvn |gradle |cargo |make )?(build|test|typecheck|check|lint|install|ci)\b/i
+
+function defaultTimeoutFor(command: string, fallback: number) {
+  if (NETWORK_COMMAND.test(command)) return Math.min(fallback, 15_000)
+  if (NETWORK_GIT.test(command)) return Math.min(fallback, 15_000)
+  if (BUILD_COMMAND.test(command)) return Math.max(fallback, 300_000)
+  return fallback
+}
+
 const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boolean) {
   const tree = yield* Effect.promise(() => parser().then((p) => (ps ? p.ps : p.bash).parse(command)))
   if (!tree) throw new Error("Failed to parse command")
@@ -344,6 +366,9 @@ export const ShellTool = Tool.define(
     const trunc = yield* Truncate.Service
     const plugin = yield* Plugin.Service
     const flags = yield* RuntimeFlags.Service
+    const background = yield* BackgroundJob.Service
+    const scope = yield* Scope.Scope
+    const database = yield* Database.Service
     const defaultTimeoutMs = flags.bashDefaultTimeoutMs ?? 2 * 60 * 1000
 
     const cygpath = Effect.fn("ShellTool.cygpath")(function* (shell: string, text: string) {
@@ -446,6 +471,7 @@ export const ShellTool = Tool.define(
       let cut = false
       let expired = false
       let aborted = false
+      let exited = false
 
       const closeSink = Effect.fnUntraced(function* () {
         const stream = sink
@@ -482,6 +508,9 @@ export const ShellTool = Tool.define(
         Effect.gen(function* () {
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
+          yield* Effect.addFinalizer(() =>
+            exited ? Effect.void : handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie),
+          )
 
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
@@ -545,6 +574,8 @@ export const ShellTool = Tool.define(
             timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
           ])
 
+          if (exit.kind === "exit") exited = true
+
           if (exit.kind === "abort") {
             aborted = true
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
@@ -603,42 +634,132 @@ export const ShellTool = Tool.define(
         const prompt = ShellPrompt.render(name, process.platform, limits, defaultTimeoutMs)
         yield* Effect.logInfo("shell tool using shell", { shell })
 
+        const renderBackgroundOutput = (
+          jobID: string,
+          state: "running" | "completed" | "error",
+          exit?: number | null,
+          text?: string,
+        ) => {
+          const header = `<shell job="${jobID}" state="${state}" exit="${exit ?? "null"}">`
+          const tag = state === "error" ? "shell_error" : "shell_result"
+          return [header, `<${tag}>`, text ?? "", `</${tag}>`, "</shell>"].join("\n")
+        }
+
+        const injectBackgroundResult = Effect.fn("ShellTool.injectBackgroundResult")(function* (
+          ctx: Tool.Context,
+          ops: TaskPromptOps,
+          jobID: string,
+          info: BackgroundJob.Info | undefined,
+        ) {
+          const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
+            Effect.provideService(Database.Service, database),
+            Effect.orDie,
+          )
+          const variant = msg.info.role !== "assistant" ? undefined : msg.info.variant
+          const state =
+            info?.status === "error"
+              ? "error"
+              : /state="error"/.test(info?.output ?? "") ? "error" : "completed"
+          const text = info?.status === "error" ? (info.error ?? "") : (info?.output ?? "")
+          yield* ops
+            .prompt({
+              sessionID: ctx.sessionID,
+              agent: ctx.agent,
+              variant,
+              parts: [{ type: "text", synthetic: true, text: renderBackgroundOutput(jobID, state, null, text) }],
+            })
+            .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
+        })
+
+        const executeShell = Effect.fn("ShellTool.execute")(function* (params: Parameters, ctx: Tool.Context) {
+          const instanceCtx = yield* InstanceState.context
+          const cwd = params.workdir
+            ? yield* resolvePath(params.workdir, instanceCtx.directory, shell)
+            : instanceCtx.directory
+          if (params.timeout !== undefined && params.timeout < 0) {
+            throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
+          }
+          const ps = Shell.ps(shell)
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const tree = yield* Effect.acquireRelease(parse(params.command, ps), (tree) =>
+                Effect.sync(() => tree.delete()),
+              )
+              const scan = yield* collect(tree.rootNode, cwd, ps, shell, instanceCtx)
+              if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
+              yield* ask(ctx, scan, params)
+            }),
+          )
+
+          const runInBackground = params.background === true
+          const timeout =
+            params.timeout ?? (runInBackground ? defaultTimeoutMs : defaultTimeoutFor(params.command, defaultTimeoutMs))
+
+          if (!runInBackground) {
+            return yield* run(
+              { shell, command: params.command, cwd, env: yield* shellEnv(ctx, cwd), timeout },
+              ctx,
+            )
+          }
+
+          if (!flags.experimentalBackgroundShell) {
+            return yield* Effect.fail(
+              new Error("Background shell requires OPENCODE_EXPERIMENTAL_BACKGROUND_SHELL=true"),
+            )
+          }
+
+          const ops = ctx.extra?.promptOps as TaskPromptOps | undefined
+          if (!ops) {
+            return yield* Effect.fail(new Error("ShellTool background requires promptOps in ctx.extra"))
+          }
+
+          const jobID = Identifier.ascending("job")
+          const metadata = { command: params.command, cwd, background: true }
+
+          // The background run must outlive the originating tool call: the AI SDK
+          // aborts the tool-call signal when the call's lifecycle ends, which would
+          // kill a child process still listening on `ctx.abort`. Give the background
+          // task its own signal so only an explicit `background.cancel` interrupts it.
+          const bgAbort = new AbortController()
+          const bgCtx = { ...ctx, abort: bgAbort.signal }
+
+          yield* background.start({
+            id: jobID,
+            type: ShellID.ToolID,
+            title: params.command,
+            metadata,
+            onPromote: Effect.all([
+              ctx.metadata({ title: params.command, metadata: { ...metadata, jobId: jobID } }),
+              background.wait({ id: jobID }).pipe(
+                Effect.flatMap((waited) => injectBackgroundResult(ctx, ops, jobID, waited.info)),
+                Effect.forkIn(scope, { startImmediately: true }),
+              ),
+            ]),
+            run: run({ shell, command: params.command, cwd, env: yield* shellEnv(ctx, cwd), timeout }, bgCtx).pipe(
+              Effect.map((result) =>
+                renderBackgroundOutput(
+                  jobID,
+                  result.metadata.exit === 0 ? "completed" : "error",
+                  result.metadata.exit,
+                  result.output,
+                ),
+              ),
+              Effect.onInterrupt(() => background.cancel(jobID)),
+            ),
+          })
+
+          return {
+            title: params.command,
+            metadata: { ...metadata, jobId: jobID, output: "", exit: null, truncated: false },
+            output: renderBackgroundOutput(jobID, "running", null, BACKGROUND_STARTED),
+          }
+        })
+
         return {
           description: prompt.description,
           parameters: prompt.parameters,
           execute: (params: Parameters, ctx: Tool.Context) =>
-            Effect.gen(function* () {
-              const instanceCtx = yield* InstanceState.context
-              const cwd = params.workdir
-                ? yield* resolvePath(params.workdir, instanceCtx.directory, shell)
-                : instanceCtx.directory
-              if (params.timeout !== undefined && params.timeout < 0) {
-                throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
-              }
-              const timeout = params.timeout ?? defaultTimeoutMs
-              const ps = Shell.ps(shell)
-              yield* Effect.scoped(
-                Effect.gen(function* () {
-                  const tree = yield* Effect.acquireRelease(parse(params.command, ps), (tree) =>
-                    Effect.sync(() => tree.delete()),
-                  )
-                  const scan = yield* collect(tree.rootNode, cwd, ps, shell, instanceCtx)
-                  if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
-                  yield* ask(ctx, scan, params)
-                }),
-              )
-
-              return yield* run(
-                {
-                  shell,
-                  command: params.command,
-                  cwd,
-                  env: yield* shellEnv(ctx, cwd),
-                  timeout,
-                },
-                ctx,
-              )
-            }),
+            executeShell(params, ctx).pipe(Effect.orDie),
         }
       })
   }),
