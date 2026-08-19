@@ -255,6 +255,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "następującymi wyjątkami",
 
   "go.title": "OpenCode Go | Niskokosztowe modele do kodowania dla każdego",
+  "go.banner.text": "Hy3 oferuje 8x wyższe limity użycia przez ograniczony czas",
   "go.meta.description":
     "Go kosztuje $5 za pierwszy miesiąc, a następnie $10/miesiąc, oferując hojne limity użycia i niezawodny dostęp do wiodących modeli do kodowania.",
   "go.hero.title": "Niskokosztowe modele do kodowania dla każdego",
