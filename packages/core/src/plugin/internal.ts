@@ -17,6 +17,7 @@ import { ConfigCompactionPlugin } from "../config/plugin/compaction.js"
 import { ConfigFormatterPlugin } from "../config/plugin/formatter.js"
 import { ConfigImagePlugin } from "../config/plugin/image.js"
 import { ConfigInstructionPlugin } from "../config/plugin/instruction.js"
+import { ConfigLocationWatcherPlugin } from "../config/plugin/location-watcher.js"
 import { ConfigMCPPlugin } from "../config/plugin/mcp.js"
 import { ConfigProviderPlugin } from "../config/plugin/provider.js"
 import { ConfigPolicyPlugin } from "../config/plugin/policy.js"
@@ -33,6 +34,7 @@ import { FileMutation } from "../file-mutation.js"
 import { Formatter } from "../formatter.js"
 import { Form } from "../form.js"
 import { FileSystem } from "../filesystem.js"
+import { LocationWatcherPolicy } from "../filesystem/location-watcher-policy.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Image } from "../image.js"
@@ -98,6 +100,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const environment = yield* Environment.Service
   const mutation = yield* FileMutation.Service
   const formatter = yield* Formatter.Service
+  const locationWatcherPolicy = yield* LocationWatcherPolicy.Service
   const filesystem = yield* FileSystem.Service
   const fs = yield* FSUtil.Service
   const global = yield* Global.Service
@@ -141,6 +144,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Environment.Service, environment),
     Context.make(FileMutation.Service, mutation),
     Context.make(Formatter.Service, formatter),
+    Context.make(LocationWatcherPolicy.Service, locationWatcherPolicy),
     Context.make(FileSystem.Service, filesystem),
     Context.make(FSUtil.Service, fs),
     Context.make(Global.Service, global),
@@ -191,6 +195,7 @@ export const requirements = LayerNode.group([
   Environment.node,
   FileMutation.node,
   Formatter.node,
+  LocationWatcherPolicy.node,
   FileSystem.node,
   FSUtil.node,
   Global.node,
@@ -261,6 +266,7 @@ const post = [
   ConfigCompactionPlugin.Plugin,
   ConfigFormatterPlugin.Plugin,
   ConfigImagePlugin.Plugin,
+  ConfigLocationWatcherPlugin.Plugin,
   ConfigShellPlugin.Plugin,
   ConfigSnapshotPlugin.Plugin,
   ConfigToolOutputPlugin.Plugin,
