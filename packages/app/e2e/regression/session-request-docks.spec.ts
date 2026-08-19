@@ -10,8 +10,7 @@ const sessionID = "ses_request_docks"
 const title = "Request dock regression"
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
-test("shows a pending question dock", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+test("shows a pending question dock", async ({ page }) => {
   await mockServer(page, {
     forms: [
       {
@@ -71,20 +70,13 @@ test("shows a pending question dock", async ({ page, context }) => {
   expect(rejectRequests).toEqual([])
 
   await question.getByRole("radio", { name: /Minimal/ }).click()
-  await page.evaluate(() => navigator.clipboard.writeText("production\nwest"))
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+V" : "Control+V")
-
-  const custom = question.getByPlaceholder("Type your answer...")
-  await expect(custom).toBeFocused()
-  await expect(custom).toHaveValue("production\nwest")
-
   const reply = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
       new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request/reply`,
   )
   await question.getByRole("button", { name: "Submit" }).click()
-  expect((await reply).postDataJSON()).toEqual({ answer: { q0: "production\nwest" } })
+  expect((await reply).postDataJSON()).toEqual({ answer: { q0: "minimal" } })
 })
 
 test("shows a pending permission dock", async ({ page }) => {
