@@ -34,7 +34,22 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
         synthetic: true,
       })
     }
-    const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
+    // Use the immediately preceding assistant message's agent, not "was this
+    // session ever in plan mode" (input.messages.some(...) over the full
+    // uncompacted history). With only the built-in plan/build toggle these
+    // are nearly equivalent, but as soon as a third primary agent is in
+    // rotation (e.g. a custom read-only "ask" agent switched to via config,
+    // per https://opencode.ai/docs/agents), `.some()` keeps matching on
+    // every subsequent build turn for the rest of the session (or until
+    // compaction drops the old plan message from the window) even though
+    // the actual previous turn was a completely unrelated agent. That both
+    // mislabels the transition in the reminder text ("changed from plan to
+    // build" when it didn't) and, worse, can re-fire the same reminder on
+    // every build turn indefinitely, which trains the model to discount an
+    // otherwise high-signal reminder. Mirrors the findLast-based check the
+    // experimentalPlanMode branch below already uses.
+    const lastAssistant = input.messages.findLast((msg) => msg.info.role === "assistant")
+    const wasPlan = lastAssistant?.info.agent === "plan"
     if (wasPlan && input.agent.name === "build") {
       userMessage.parts.push({
         id: PartID.ascending(),
