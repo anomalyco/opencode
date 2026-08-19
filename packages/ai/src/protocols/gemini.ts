@@ -289,7 +289,9 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Gemini", message)
       const previous = contents.at(-1)
-      if (previous?.role === "user")
+      // Gemini rejects a continuation whose function-response turn carries extra
+      // parts, so an update after a tool result starts its own user turn.
+      if (previous?.role === "user" && !previous.parts.some((item) => "functionResponse" in item))
         contents[contents.length - 1] = { role: "user", parts: [...previous.parts, { text: part.text }] }
       else contents.push({ role: "user", parts: [{ text: part.text }] })
       continue
