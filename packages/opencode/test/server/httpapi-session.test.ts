@@ -4,7 +4,7 @@ import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Cause, Config, Effect, Exit, Layer } from "effect"
+import { Cause, Config, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -24,6 +24,7 @@ import * as HttpSessionError from "../../src/server/routes/instance/httpapi/hand
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
+import { SessionRunState } from "@/session/run-state"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
@@ -44,7 +45,15 @@ const noopBootstrapLayer = Layer.succeed(
   InstanceBootstrapService.Service.of({ run: Effect.void }),
 )
 const appLayer = AppNodeBuilder.build(
-  LayerNode.group([InstanceStore.node, Project.node, Session.node, Workspace.node, Database.node, Ripgrep.node]),
+  LayerNode.group([
+    InstanceStore.node,
+    Project.node,
+    Session.node,
+    SessionRunState.node,
+    Workspace.node,
+    Database.node,
+    Ripgrep.node,
+  ]),
   [[InstanceStore.bootstrapNode, noopBootstrapLayer]],
 )
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
@@ -88,6 +97,63 @@ function createTextMessage(sessionID: SessionIDType, text: string) {
       text,
     })
     return { info, part }
+  })
+}
+
+function createAssistantWithTask(sessionID: SessionIDType, directory: string, status: "pending" | "running" = "running") {
+  return Effect.gen(function* () {
+    const svc = yield* Session.Service
+    const user = yield* createTextMessage(sessionID, "hello")
+    const assistant = yield* svc.updateMessage({
+      id: MessageID.ascending(),
+      parentID: user.info.id,
+      role: "assistant",
+      sessionID,
+      mode: "build",
+      agent: "build",
+      path: { cwd: directory, root: directory },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: ModelV2.ID.make("test"),
+      providerID: ProviderV2.ID.make("test"),
+      time: { created: Date.now() },
+    })
+    const taskState =
+      status === "running"
+        ? ({
+            status: "running",
+            input: { description: "stale task", prompt: "do work", subagent_type: "general" },
+            metadata: { sessionId: "ses_stale" },
+            time: { start: Date.now() },
+          } satisfies SessionV1.ToolStateRunning)
+        : ({
+            status: "pending",
+            input: { description: "stale task", prompt: "do work", subagent_type: "general" },
+            raw: "",
+          } satisfies SessionV1.ToolStatePending)
+    const task = yield* svc.updatePart({
+      id: PartID.ascending(),
+      sessionID,
+      messageID: assistant.id,
+      type: "tool",
+      callID: "call_orphaned_task",
+      tool: "task",
+      state: taskState,
+    } satisfies SessionV1.ToolPart)
+    const unrelated = yield* svc.updatePart({
+      id: PartID.ascending(),
+      sessionID,
+      messageID: assistant.id,
+      type: "tool",
+      callID: "call_active_bash",
+      tool: "bash",
+      state: {
+        status: "running",
+        input: { command: "sleep 1" },
+        time: { start: Date.now() },
+      },
+    } satisfies SessionV1.ToolPart)
+    return { assistant, task, unrelated }
   })
 }
 
@@ -790,6 +856,130 @@ describe("session HttpApi", () => {
         ).toBe(true)
       }),
     { git: true, config: { formatter: false, lsp: false, share: "disabled" } },
+  )
+
+  it.instance(
+    "settles orphaned task parts when aborting an idle session",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "orphaned task" })
+        const svc = yield* Session.Service
+        const { assistant, task, unrelated } = yield* createAssistantWithTask(session.id, test.directory)
+
+        expect(
+          yield* requestJson<boolean>(pathFor(SessionPaths.abort, { sessionID: session.id }), {
+            method: "POST",
+            headers,
+          }),
+        ).toBe(true)
+
+        const restored = (yield* svc.messages({ sessionID: session.id })).find(
+          (message) => message.info.id === assistant.id,
+        )
+        expect(restored?.info.role).toBe("assistant")
+        if (!restored || restored.info.role !== "assistant") return
+
+        expect(restored.info.time.completed).toBeDefined()
+        expect(restored.info.error?.name).toBe("MessageAbortedError")
+
+        const restoredTask = restored.parts.find((part) => part.id === task.id)
+        expect(restoredTask?.type).toBe("tool")
+        if (restoredTask?.type === "tool") {
+          expect(restoredTask.state.status).toBe("error")
+          if (restoredTask.state.status === "error") {
+            expect(restoredTask.state.error).toBe("Tool execution aborted")
+            expect(restoredTask.state.metadata?.interrupted).toBe(true)
+            expect(restoredTask.state.time.end).toBeDefined()
+          }
+        }
+
+        const restoredUnrelated = restored.parts.find((part) => part.id === unrelated.id)
+        expect(restoredUnrelated?.type).toBe("tool")
+        if (restoredUnrelated?.type === "tool") expect(restoredUnrelated.state.status).toBe("running")
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "settles orphaned task parts after aborting an active unrelated run",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "active task" })
+        const svc = yield* Session.Service
+        const { assistant, task, unrelated } = yield* createAssistantWithTask(session.id, test.directory)
+        const result = { info: assistant, parts: [] } satisfies SessionV1.WithParts
+        const started = yield* Deferred.make<void>()
+        const runState = yield* SessionRunState.Service
+        const fiber = yield* runState
+          .ensureRunning(
+            session.id,
+            Effect.succeed(result),
+            Effect.gen(function* () {
+              yield* Deferred.succeed(started, undefined)
+              return yield* Effect.never
+            }),
+          )
+          .pipe(Effect.forkChild)
+
+        yield* Deferred.await(started)
+        expect(
+          yield* requestJson<boolean>(pathFor(SessionPaths.abort, { sessionID: session.id }), {
+            method: "POST",
+            headers,
+          }),
+        ).toBe(true)
+        expect(Exit.isSuccess(yield* Fiber.await(fiber))).toBe(true)
+
+        const restored = (yield* svc.messages({ sessionID: session.id })).find(
+          (message) => message.info.id === assistant.id,
+        )
+        expect(restored?.info.role).toBe("assistant")
+        if (!restored || restored.info.role !== "assistant") return
+
+        const restoredTask = restored?.parts.find((part) => part.id === task.id)
+        expect(restored.info.time.completed).toBeDefined()
+        expect(restoredTask?.type).toBe("tool")
+        if (restoredTask?.type === "tool") expect(restoredTask.state.status).toBe("error")
+        const restoredUnrelated = restored?.parts.find((part) => part.id === unrelated.id)
+        expect(restoredUnrelated?.type).toBe("tool")
+        if (restoredUnrelated?.type === "tool") expect(restoredUnrelated.state.status).toBe("running")
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "settles pending orphaned task parts when aborting an idle session",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* createSession({ title: "pending orphaned task" })
+        const svc = yield* Session.Service
+        const { assistant, task } = yield* createAssistantWithTask(session.id, test.directory, "pending")
+
+        yield* requestJson<boolean>(pathFor(SessionPaths.abort, { sessionID: session.id }), {
+          method: "POST",
+          headers: { "x-opencode-directory": test.directory },
+        })
+
+        const restored = (yield* svc.messages({ sessionID: session.id })).find(
+          (message) => message.info.id === assistant.id,
+        )
+        expect(restored?.info.role).toBe("assistant")
+        if (!restored || restored.info.role !== "assistant") return
+
+        const restoredTask = restored.parts.find((part) => part.id === task.id)
+        expect(restored.info.time.completed).toBeDefined()
+        expect(restoredTask?.type).toBe("tool")
+        if (restoredTask?.type === "tool") {
+          expect(restoredTask.state.status).toBe("error")
+          if (restoredTask.state.status === "error") expect(restoredTask.state.metadata?.interrupted).toBe(true)
+        }
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
   )
 
   it.instance(

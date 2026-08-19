@@ -285,12 +285,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                 <ToastProvider>
                                   <RouteProvider
                                     initialRoute={
-                                      input.args.continue
-                                        ? {
-                                            type: "session",
-                                            sessionID: "dummy",
-                                          }
-                                        : undefined
+                                      input.args.fork && (input.args.continue || input.args.sessionID)
+                                        ? { type: "loading" }
+                                        : input.args.continue
+                                          ? {
+                                              type: "session",
+                                              sessionID: "dummy",
+                                            }
+                                          : undefined
                                     }
                                   >
                                     <TuiConfigProvider config={input.config}>
@@ -476,6 +478,14 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   })
 
   const args = useArgs()
+  const forkFailed = (message: string) => {
+    route.navigate({
+      type: "home",
+      prompt: args.prompt ? { input: args.prompt, parts: [] } : undefined,
+      skipInitialPrompt: true,
+    })
+    toast.show({ message, variant: "error" })
+  }
   onMount(() => {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
@@ -501,24 +511,31 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   let continued = false
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
-    if (continued || sync.status === "loading" || !args.continue) return
+    if (continued || sync.status === "loading" || !args.continue || args.sessionID) return
     const match = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id
-    if (match) {
+    if (!match) {
+      if (!args.fork) return
       continued = true
-      if (args.fork) {
-        void sdk.client.session.fork({ sessionID: match }).then((result) => {
+      forkFailed("No session to fork")
+      return
+    }
+    continued = true
+    if (args.fork) {
+      void sdk.client.session
+        .fork({ sessionID: match })
+        .then((result) => {
           if (result.data?.id) {
             route.navigate({ type: "session", sessionID: result.data.id })
-          } else {
-            toast.show({ message: "Failed to fork session", variant: "error" })
+            return
           }
+          forkFailed("Failed to fork session")
         })
-      } else {
-        route.navigate({ type: "session", sessionID: match })
-      }
+        .catch(() => forkFailed("Failed to fork session"))
+      return
     }
+    route.navigate({ type: "session", sessionID: match })
   })
 
   // Handle --session with --fork: wait for sync to be fully complete before forking
@@ -528,13 +545,16 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   createEffect(() => {
     if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
     forked = true
-    void sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
-      if (result.data?.id) {
-        route.navigate({ type: "session", sessionID: result.data.id })
-      } else {
-        toast.show({ message: "Failed to fork session", variant: "error" })
-      }
-    })
+    void sdk.client.session
+      .fork({ sessionID: args.sessionID })
+      .then((result) => {
+        if (result.data?.id) {
+          route.navigate({ type: "session", sessionID: result.data.id })
+          return
+        }
+        forkFailed("Failed to fork session")
+      })
+      .catch(() => forkFailed("Failed to fork session"))
   })
 
   createEffect(
@@ -1110,6 +1130,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       <Show when={ready()}>
         <box flexGrow={1} minHeight={0} flexDirection="column">
           <Switch>
+            <Match when={route.data.type === "loading"}>
+              <box flexGrow={1} alignItems="center" justifyContent="center">
+                <text fg={theme.textMuted}>Forking session...</text>
+              </box>
+            </Match>
             <Match when={route.data.type === "home"}>
               <Home />
             </Match>
