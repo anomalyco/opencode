@@ -2,22 +2,41 @@ import { describe, expect, test } from "bun:test"
 import type { AssistantMessage, Message, UserMessage } from "@opencode-ai/sdk/v2"
 import { isTimelineReady, loadOlderTimeline, selectUserMessages, selectVisibleUserMessages } from "./model"
 
-const user = (id: string) => ({ id, role: "user" }) as UserMessage
-const assistant = (id: string) => ({ id, role: "assistant" }) as AssistantMessage
+const user = (id: string, created: number) => ({ id, role: "user", time: { created } }) as UserMessage
+const assistant = (id: string, created: number) => ({ id, role: "assistant", time: { created } }) as AssistantMessage
 
 describe("timeline model", () => {
   test("selects users and applies the revert boundary", () => {
-    const messages: Message[] = [user("msg_z"), assistant("msg_a"), user("msg_b"), user("msg_c")]
+    const messages: Message[] = [user("msg_1", 1), assistant("msg_2", 2), user("msg_3", 3), user("msg_5", 5)]
     const users = selectUserMessages(messages)
 
-    expect(users.map((message) => message.id)).toEqual(["msg_z", "msg_b", "msg_c"])
-    expect(selectVisibleUserMessages(users, "msg_b").map((message) => message.id)).toEqual(["msg_z"])
-    expect(selectVisibleUserMessages(users)).toBe(users)
+    expect(users.map((message) => message.id)).toEqual(["msg_1", "msg_3", "msg_5"])
+    expect(selectVisibleUserMessages(messages, { messageID: "msg_5" }).map((message) => message.id)).toEqual([
+      "msg_1",
+      "msg_3",
+    ])
+    expect(selectVisibleUserMessages(messages).map((message) => message.id)).toEqual(["msg_1", "msg_3", "msg_5"])
+  })
+
+  test("uses message ordering, not ID ordering, for revert boundaries", () => {
+    const messages: Message[] = [user("msg_9", 1), assistant("msg_2", 2), user("msg_1", 3)]
+
+    expect(selectVisibleUserMessages(messages, { messageID: "msg_2" }).map((message) => message.id)).toEqual(["msg_9"])
+  })
+
+  test("keeps the boundary user visible for part-level revert boundaries", () => {
+    const messages: Message[] = [user("msg_1", 1), user("msg_2", 2), assistant("msg_3", 3)]
+
+    expect(
+      selectVisibleUserMessages(messages, { messageID: "msg_2", partID: "prt_2" }).map((message) => message.id),
+    ).toEqual(["msg_1", "msg_2"])
   })
 
   test("waits for an assistant-only load to hydrate its user root", () => {
-    expect(isTimelineReady([assistant("msg_2")], true)).toBe(false)
-    expect(isTimelineReady([user("msg_1"), assistant("msg_2")], true)).toBe(true)
+    expect(isTimelineReady([assistant("msg_2", 2)], true)).toBe(false)
+    expect(isTimelineReady([user("msg_1", 1), assistant("msg_2", 2)], true)).toBe(true)
+    expect(isTimelineReady([user("msg_2", 2)], true, { messageID: "msg_2" })).toBe(false)
+    expect(isTimelineReady([user("msg_1", 1), user("msg_2", 2)], true, { messageID: "msg_2" })).toBe(true)
     expect(isTimelineReady([], false)).toBe(true)
   })
 

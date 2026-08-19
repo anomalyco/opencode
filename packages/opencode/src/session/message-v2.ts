@@ -21,9 +21,11 @@ import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessag
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { NotFoundError } from "@/storage/storage"
+import { asc } from "drizzle-orm"
 import { and } from "drizzle-orm"
 import { desc } from "drizzle-orm"
 import { eq } from "drizzle-orm"
+import { gt } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
@@ -95,6 +97,9 @@ const part = (row: typeof PartTable.$inferSelect) =>
 const older = (row: Cursor) =>
   or(lt(MessageTable.time_created, row.time), and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)))
 
+const newer = (row: Cursor) =>
+  or(gt(MessageTable.time_created, row.time), and(eq(MessageTable.time_created, row.time), gt(MessageTable.id, row.id)))
+
 function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$inferSelect)[]) {
   const ids = rows.map((row) => row.id)
   const partByMessage = new Map<string, Part[]>()
@@ -118,6 +123,7 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
     return rows.map((row) => ({
       info: info(row),
       parts: partByMessage.get(row.id) ?? [],
+      cursor: cursor.encode({ id: row.id, time: row.time_created }),
     }))
   })
 }
@@ -426,17 +432,36 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
   sessionID: SessionID
   limit: number
   before?: string
+  after?: string
+  oldest?: boolean
 }) {
   const { db } = yield* Database.Service
-  const before = input.before ? cursor.decode(input.before) : undefined
-  const where = before
-    ? and(eq(MessageTable.session_id, input.sessionID), older(before))
-    : eq(MessageTable.session_id, input.sessionID)
+  if (input.limit < 1) throw new Error("Page limit must be at least 1")
+  if (input.before && input.after) throw new Error("Cannot specify both 'before' and 'after' cursors")
+  if (input.oldest && (input.before || input.after)) throw new Error("Cannot use 'oldest' with cursors")
+  const anchor = input.oldest
+    ? ({ type: "oldest" } as const)
+    : input.after
+      ? ({ type: "after", cursor: cursor.decode(input.after) } as const)
+      : input.before
+        ? ({ type: "before", cursor: cursor.decode(input.before) } as const)
+        : ({ type: "latest" } as const)
+  const ascending = anchor.type === "oldest" || anchor.type === "after"
+  const scope = eq(MessageTable.session_id, input.sessionID)
+  const where =
+    anchor.type === "before"
+      ? and(scope, older(anchor.cursor))
+      : anchor.type === "after"
+        ? and(scope, newer(anchor.cursor))
+        : scope
+  const order = ascending
+    ? [asc(MessageTable.time_created), asc(MessageTable.id)]
+    : [desc(MessageTable.time_created), desc(MessageTable.id)]
   const rows = yield* db
     .select()
     .from(MessageTable)
     .where(where)
-    .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+    .orderBy(...order)
     .limit(input.limit + 1)
     .all()
     .pipe(Effect.orDie)
@@ -448,21 +473,56 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
       .get()
       .pipe(Effect.orDie)
     if (!row) return yield* new NotFoundError({ message: `Session not found: ${input.sessionID}` })
-    return {
-      items: [] as WithParts[],
-      more: false,
-    }
   }
 
-  const more = rows.length > input.limit
-  const slice = more ? rows.slice(0, input.limit) : rows
+  const overflow = rows.length > input.limit
+  const slice = overflow ? rows.slice(0, input.limit) : rows
   const items = yield* hydrate(db, slice)
-  items.reverse()
-  const tail = slice.at(-1)
+  if (!ascending) items.reverse()
+  const oldestRow = ascending ? slice.at(0) : slice.at(-1)
+  const newestRow = ascending ? slice.at(-1) : slice.at(0)
+  const oldestEdge = oldestRow
+    ? { id: oldestRow.id, time: oldestRow.time_created }
+    : anchor.type === "before" || anchor.type === "after"
+      ? anchor.cursor
+      : undefined
+  const newestEdge = newestRow
+    ? { id: newestRow.id, time: newestRow.time_created }
+    : anchor.type === "before" || anchor.type === "after"
+      ? anchor.cursor
+      : undefined
+  const exists = (condition: ReturnType<typeof older> | ReturnType<typeof newer>) =>
+    db
+      .select({ id: MessageTable.id })
+      .from(MessageTable)
+      .where(and(scope, condition))
+      .limit(1)
+      .get()
+      .pipe(
+        Effect.orDie,
+        Effect.map((row) => row !== undefined),
+      )
+  const hasOlder =
+    anchor.type === "oldest"
+      ? false
+      : anchor.type === "after"
+        ? oldestEdge
+          ? yield* exists(older(oldestEdge))
+          : false
+        : overflow
+  const hasNewer =
+    anchor.type === "latest"
+      ? false
+      : anchor.type === "before"
+        ? newestEdge
+          ? yield* exists(newer(newestEdge))
+          : false
+        : overflow
+  const encode = (row: typeof MessageTable.$inferSelect) => cursor.encode({ id: row.id, time: row.time_created })
   return {
     items,
-    more,
-    cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
+    before: hasOlder && oldestEdge ? (oldestRow ? encode(oldestRow) : cursor.encode(oldestEdge)) : undefined,
+    after: hasNewer && newestEdge ? (newestRow ? encode(newestRow) : cursor.encode(newestEdge)) : undefined,
   }
 })
 
@@ -474,7 +534,11 @@ export function stream(sessionID: SessionID) {
     while (true) {
       const next = yield* page({ sessionID, limit: size, before }).pipe(
         Effect.catchIf(NotFoundError.isInstance, () =>
-          Effect.succeed({ items: [] as WithParts[], more: false, cursor: undefined }),
+          Effect.succeed({
+            items: [] as WithParts[],
+            before: undefined,
+            after: undefined,
+          }),
         ),
       )
       if (next.items.length === 0) break
@@ -482,8 +546,8 @@ export function stream(sessionID: SessionID) {
         const item = next.items[i]
         if (item) result.push(item)
       }
-      if (!next.more || !next.cursor) break
-      before = next.cursor
+      if (!next.before) break
+      before = next.before
     }
     return result
   })
@@ -515,7 +579,30 @@ export const get = Effect.fn("MessageV2.get")(function* (input: { sessionID: Ses
   return {
     info: info(row),
     parts: yield* parts(input.messageID),
+    cursor: cursor.encode({ id: row.id, time: row.time_created }),
   }
+})
+
+export const getMany = Effect.fn("MessageV2.getMany")(function* (input: {
+  sessionID: SessionID
+  messageIDs: readonly MessageID[]
+}) {
+  if (input.messageIDs.length === 0) return []
+  const { db } = yield* Database.Service
+  const rows = yield* db
+    .select()
+    .from(MessageTable)
+    .where(and(eq(MessageTable.session_id, input.sessionID), inArray(MessageTable.id, input.messageIDs)))
+    .all()
+    .pipe(Effect.orDie)
+  const messages = new Map((yield* hydrate(db, rows)).map((message) => [message.info.id, message]))
+  return yield* Effect.forEach(input.messageIDs, (messageID) =>
+    Effect.gen(function* () {
+      const message = messages.get(messageID)
+      if (!message) return yield* new NotFoundError({ message: `Message not found: ${messageID}` })
+      return message
+    }),
+  )
 })
 
 export function filterCompacted(msgs: Iterable<WithParts>) {

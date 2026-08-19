@@ -118,6 +118,27 @@ describe("normalizeSessionMessages", () => {
     expect(normalizeSessionMessages("ses_1", source).messages).toEqual([])
   })
 
+  test("uses current synthetic text as the assistant turn root", () => {
+    const source = [
+      { id: "msg_synthetic", type: "synthetic", text: "Synthetic context", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "Result" }],
+        time: { created: 2, completed: 3 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = normalizeSessionMessages("ses_1", source)
+
+    expect(result.messages.map((message) => message.id)).toEqual(["msg_synthetic", "msg_assistant"])
+    expect(result.parts.get("msg_synthetic")).toEqual([
+      expect.objectContaining({ type: "text", text: "Synthetic context", synthetic: true }),
+    ])
+  })
+
   test("projects a current shell message into a renderable standalone turn", () => {
     const source = [
       {
@@ -149,6 +170,59 @@ describe("normalizeSessionMessages", () => {
           output: "hello",
           title: "Shell",
         }),
+      }),
+    ])
+  })
+
+  test("adapts the canonical current shell wire shape", () => {
+    const source = [
+      {
+        id: "msg_shell",
+        type: "shell",
+        callID: "shell_1",
+        command: "printf hello",
+        output: "hello",
+        time: { created: 1, completed: 2 },
+      },
+    ] as unknown as SessionMessageInfo[]
+
+    const result = normalizeSessionMessages("ses_1", source)
+
+    expect(result.parts.get("msg_shell:assistant")).toEqual([
+      expect.objectContaining({
+        callID: "shell_1",
+        state: expect.objectContaining({ status: "completed", output: "hello" }),
+      }),
+    ])
+  })
+
+  test("adapts canonical pending tool state without reading completed content", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "read it", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "call_read",
+            name: "read",
+            state: { status: "pending", input: '{"filePath":"README.md"}' },
+            time: { created: 2 },
+          },
+        ],
+        time: { created: 2 },
+      },
+    ] as unknown as SessionMessageInfo[]
+
+    const result = normalizeSessionMessages("ses_1", source)
+
+    expect(result.parts.get("msg_assistant")).toEqual([
+      expect.objectContaining({
+        type: "tool",
+        state: expect.objectContaining({ status: "pending", input: { filePath: "README.md" } }),
       }),
     ])
   })

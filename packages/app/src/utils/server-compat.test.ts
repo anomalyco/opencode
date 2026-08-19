@@ -4,7 +4,10 @@ import { createCompatibleApi } from "./server-compat"
 
 function setup(
   protocol: "v1" | "v2" | Promise<"v1" | "v2">,
-  responses?: { vcs?: { branch: string; default_branch: string } },
+  responses?: {
+    vcs?: { branch: string; default_branch: string }
+    revert?: { messageID: string; partID?: string; snapshot?: string }
+  },
 ) {
   const requests: Request[] = []
   const fetcher = Object.assign(
@@ -35,6 +38,17 @@ function setup(
           delivery: "steer",
         })
       }
+      if (request.method === "POST" && request.url.endsWith("/revert"))
+        return Response.json({
+          id: "ses_1",
+          slug: "ses_1",
+          projectID: "project",
+          directory: "/repo",
+          title: "Session",
+          version: "1",
+          time: { created: 1, updated: 1 },
+          revert: responses?.revert,
+        })
       if (request.method === "GET" && new URL(request.url).pathname === "/vcs")
         return Response.json(responses?.vcs ?? {})
       if (request.method === "GET") return Response.json([])
@@ -127,6 +141,13 @@ describe("createCompatibleApi", () => {
       { id: "prt_text", type: "text", text: "look" },
       { id: "prt_image", type: "file", mime: "image/png", url: "data:image/png;base64,AAAA", filename: "image.png" },
     ])
+  })
+
+  test("returns the canonical V1 revert boundary", async () => {
+    const revert = { messageID: "msg_user", partID: "prt_2", snapshot: "snapshot" }
+    const { api } = setup("v1", { revert })
+
+    expect(await api.session.revert.stage({ sessionID: "ses_1", messageID: "msg_assistant" })).toEqual(revert)
   })
 
   test("resolves protocol detection once across implementation methods", async () => {

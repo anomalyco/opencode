@@ -3,7 +3,6 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
-  batch,
   ErrorBoundary,
   onCleanup,
   Suspense,
@@ -76,6 +75,7 @@ import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { restorePromptModel, syncPromptModel, syncSessionModel } from "@/pages/session/session-model-helpers"
+import { runPromptRollbackMutation } from "@/pages/session/session-prompt-rollback"
 import {
   clampSessionPanelWidth,
   SESSION_PANEL_WIDTH_MIN,
@@ -100,12 +100,21 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { normalizeSessionMessages } from "@/utils/session-message"
+import { restoreTarget, type RevertPreviewState } from "@/pages/session/timeline/revert"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
+type RevertPreview = {
+  userCount: number
+  nextMessageID?: string
+  hasMore?: boolean
+  continuationMessageID?: string
+  items: { id: string; text: string }[]
+}
 const emptyFollowups: FollowupItem[] = []
 
 type ChangeMode = "git" | "branch" | "turn"
@@ -119,29 +128,6 @@ const sessionViewState = () => ({
 function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undefined) {
   if (!sessionID) return false
   return isSessionNotFoundError(error, sessionID) || isLocalSessionNotFoundError(error, sessionID)
-}
-
-async function runPromptRollbackMutation<T, R>(input: {
-  capturePrompt: () => { current: () => T[]; set: (value: T[]) => void; reset: () => void }
-  optimistic: (prompt: { set: (value: T[]) => void; reset: () => void }) => void
-  request: () => Promise<R>
-  complete: (result: R) => void
-  rollback: () => void
-  fail: (error: unknown) => void
-}) {
-  const prompt = input.capturePrompt()
-  const previous = prompt.current().slice()
-  batch(() => input.optimistic(prompt))
-  await input
-    .request()
-    .then(input.complete)
-    .catch((error) => {
-      batch(() => {
-        input.rollback()
-        prompt.set(previous)
-      })
-      input.fail(error)
-    })
 }
 
 export function SessionPage() {
@@ -544,8 +530,9 @@ export default function Page() {
   })
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
-  const revertMessageID = createMemo(() => info()?.revert?.messageID)
-  const timeline = createTimelineModel({ sessionID: () => params.id, revertMessageID })
+  const revertInfo = createMemo(() => info()?.revert)
+  const revertMessageID = createMemo(() => revertInfo()?.messageID)
+  const timeline = createTimelineModel({ sessionID: () => params.id, revert: revertInfo })
   const historyLoading = timeline.history.loading
   const historyMore = timeline.history.more
   const lastUserMessage = timeline.lastUserMessage
@@ -554,6 +541,11 @@ export default function Page() {
   const sessionSync = timeline.resource
   const userMessages = timeline.userMessages
   const visibleUserMessages = timeline.visibleUserMessages
+  const currentRevertPreview = createMemo(() => {
+    const id = params.id
+    if (!id) return
+    return sync().data.revert_preview[id]
+  })
 
   createEffect(() => {
     const tab = activeFileTab()
@@ -891,6 +883,34 @@ export default function Page() {
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
+  const [revertPreview, setRevertPreview] = createSignal<RevertPreview>()
+  let revertPreviewEpoch = 0
+  const loadV1RevertPreview = async (sessionID: string) => {
+    if (!info()?.revert) return
+    const preview = await sdk().client.session.revertPreview({ sessionID }, { throwOnError: false })
+    if (preview.response.status === 404 || preview.response.status === 405) return
+    if (preview.error) throw preview.error
+    return preview.data ?? undefined
+  }
+  createEffect(
+    on(
+      () => [params.id, revertMessageID(), serverSDK().protocolKind()] as const,
+      ([sessionID, revert, protocol]) => {
+        const epoch = ++revertPreviewEpoch
+        setRevertPreview(undefined)
+        if (!sessionID || !revert || protocol !== "v1") return
+        void loadV1RevertPreview(sessionID)
+          .then((result) => {
+            if (epoch !== revertPreviewEpoch) return
+            setRevertPreview(result)
+          })
+          .catch(() => {
+            if (epoch !== revertPreviewEpoch) return
+            setRevertPreview(undefined)
+          })
+      },
+    ),
+  )
   createEffect(
     on(
       () => {
@@ -1137,12 +1157,26 @@ export default function Page() {
   }
 
   useComposerCommands()
+  const redoPreview = createMemo<RevertPreviewState>(() => {
+    const protocol = serverSDK().protocolKind()
+    if (!protocol) return { ready: false }
+    if (protocol === "v1") {
+      const preview = revertPreview()
+      if (!preview) return { ready: false }
+      return { ready: true, nextMessageID: preview.nextMessageID }
+    }
+    const preview = currentRevertPreview()
+    if (!preview) return { ready: false }
+    return { ready: true, nextMessageID: preview.nextMessageID }
+  })
+
   useSessionCommands({
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
     review: reviewTab,
     fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
+    revertPreview: redoPreview,
   })
   command.register("session-palette", () => [
     {
@@ -1668,22 +1702,6 @@ export default function Page() {
     ),
   )
 
-  const draft = (id: string) =>
-    extractPromptFromParts(sync().data.part[id] ?? [], {
-      directory: sdk().directory,
-      attachmentName: language.t("common.attachment"),
-    })
-
-  const line = (id: string) => {
-    const text = draft(id)
-      .map((part) => (part.type === "image" ? `[image:${part.filename}]` : part.content))
-      .join("")
-      .replace(/\s+/g, " ")
-      .trim()
-    if (text) return text
-    return `[${language.t("common.attachment")}]`
-  }
-
   const fail = (err: unknown) => {
     showToast({
       variant: "error",
@@ -1692,15 +1710,15 @@ export default function Page() {
     })
   }
 
-  const merge = (next: NonNullable<ReturnType<typeof info>>, target = sync()) => target.session.remember(next)
-
-  const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"], target = sync()) => {
-    const session = target.session.get(sessionID)
-    if (!session) return
-    target.session.remember({ ...session, revert: next })
-  }
-
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
+  const rememberRevert = (
+    state: ReturnType<typeof sync>,
+    sessionID: string,
+    revert: NonNullable<ReturnType<typeof info>>["revert"],
+  ) => {
+    const current = state.session.get(sessionID)
+    if (current) state.session.remember({ ...current, revert })
+  }
 
   const queuedFollowups = createMemo(() => {
     const id = params.id
@@ -1817,87 +1835,144 @@ export default function Page() {
     setFollowup("edit", id, undefined)
   }
 
-  const halt = (sessionID: string) =>
-    busy(sessionID)
-      ? sdk()
-          .api.session.interrupt({ sessionID })
-          .catch(() => {})
-      : Promise.resolve()
+  const captureRollbackPrompt = () => {
+    const target = prompt.capture()
+    return {
+      current: target.current,
+      cursor: target.cursor,
+      set: target.set,
+      reset: target.reset,
+      setCursor: (cursor: number | undefined) => target.store[1]("cursor", cursor),
+    }
+  }
+
+  const captureRevert = (input: { sessionID: string; messageID: string }) => {
+    const client = sdk()
+    const state = sync()
+    return {
+      ...input,
+      state,
+      session: client.api.session,
+      prompt: captureRollbackPrompt(),
+      draft: extractPromptFromParts(state.data.part[input.messageID] ?? [], {
+        directory: client.directory,
+        attachmentName: language.t("common.attachment"),
+      }),
+    }
+  }
+
+  const captureRestore = (sessionID: string, id: string) => {
+    const client = sdk()
+    return {
+      id,
+      sessionID,
+      client,
+      currentApi: serverSDK().currentApi,
+      state: sync(),
+      session: client.api.session,
+      legacyPreview: revertPreview(),
+      currentPreview: currentRevertPreview(),
+      directory: client.directory,
+      attachmentName: language.t("common.attachment"),
+      prompt: captureRollbackPrompt(),
+    }
+  }
 
   const revertMutation = useMutation(() => ({
-    mutationFn: async (input: { sessionID: string; messageID: string }) => {
-      const session = sdk().api.session
-      const target = sync()
-      const last = target.session.get(input.sessionID)?.revert
-      const value = draft(input.messageID)
+    mutationFn: async (input: ReturnType<typeof captureRevert>) => {
       await runPromptRollbackMutation({
-        capturePrompt: prompt.capture,
-        optimistic: (prompt) => {
-          roll(input.sessionID, { messageID: input.messageID }, target)
-          prompt.set(value)
+        prompt: input.prompt,
+        prepare: () => input.draft,
+        optimistic: (prompt, value) => prompt.set(value),
+        request: async () => {
+          if (input.state.data.session_working(input.sessionID)) {
+            await input.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+          }
+          return input.session.revert.stage({ sessionID: input.sessionID, messageID: input.messageID })
         },
-        request: () => halt(input.sessionID).then(() => session.revert.stage(input)),
-        complete: () => undefined,
-        rollback: () => roll(input.sessionID, last, target),
+        complete: (revert) => rememberRevert(input.state, input.sessionID, revert),
+        rollback: () => {},
         fail,
       })
     },
   }))
 
   const restoreMutation = useMutation(() => ({
-    mutationFn: async (id: string) => {
-      const sessionID = params.id
-      if (!sessionID) return
-
-      const session = sdk().api.session
-      const target = sync()
-      const index = userMessages().findIndex((item) => item.id === id)
-      if (index < 0) return
-      const next = userMessages()[index + 1]
-      const last = target.session.get(sessionID)?.revert
-
+    mutationFn: async (input: ReturnType<typeof captureRestore>) => {
       await runPromptRollbackMutation({
-        capturePrompt: prompt.capture,
-        optimistic: (promptSession) => {
-          roll(sessionID, next ? { messageID: next.id } : undefined, target)
-          if (next) {
-            promptSession.set(draft(next.id))
-            return
-          }
-          promptSession.reset()
+        prompt: input.prompt,
+        prepare: async () => {
+          const protocol = await input.client.protocol
+          const preview = protocol === "v1" ? input.legacyPreview : input.currentPreview
+          if (!preview?.items.length) throw new Error("Failed to load revert preview")
+          const next = restoreTarget(preview, input.id)
+          if (next === undefined) throw new Error("Restore target missing from revert preview")
+          if (!next) return { next, draft: undefined }
+          const draft = await (async () => {
+            const parts = input.state.data.part[next]
+            if (parts)
+              return extractPromptFromParts(parts, {
+                directory: input.directory,
+                attachmentName: input.attachmentName,
+              })
+            if (protocol !== "v1") {
+              const message = await input.currentApi.session.message({
+                sessionID: input.sessionID,
+                messageID: next,
+              })
+              const normalized = normalizeSessionMessages(input.sessionID, [message])
+              return extractPromptFromParts(normalized.parts.get(next) ?? [], {
+                directory: input.directory,
+                attachmentName: input.attachmentName,
+              })
+            }
+            const result = await input.client.client.session.message({ sessionID: input.sessionID, messageID: next })
+            return extractPromptFromParts(result.data?.parts ?? [], {
+              directory: input.directory,
+              attachmentName: input.attachmentName,
+            })
+          })().catch(() => undefined)
+          if (!draft) throw new Error("Failed to load next restore draft")
+          return { next, draft }
         },
-        request: () =>
-          !next
-            ? halt(sessionID).then(() => session.revert.clear({ sessionID }))
-            : halt(sessionID).then(() => session.revert.stage({ sessionID, messageID: next.id }).then(() => undefined)),
-        complete: () => undefined,
-        rollback: () => roll(sessionID, last, target),
+        optimistic: (promptSession, prepared) => {
+          if (prepared.next) promptSession.set(prepared.draft ?? [])
+          else promptSession.reset()
+        },
+        request: async (prepared) => {
+          if (input.state.data.session_working(input.sessionID)) {
+            await input.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+          }
+          if (!prepared.next) {
+            await input.session.revert.clear({ sessionID: input.sessionID })
+            return undefined
+          }
+          return input.session.revert.stage({ sessionID: input.sessionID, messageID: prepared.next })
+        },
+        complete: (revert) => rememberRevert(input.state, input.sessionID, revert),
+        rollback: () => {},
         fail,
       })
     },
   }))
 
   const reverting = createMemo(() => revertMutation.isPending || restoreMutation.isPending)
-  const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables : undefined))
+  const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables?.id : undefined))
 
   const revert = (input: { sessionID: string; messageID: string }) => {
     if (reverting()) return
-    return revertMutation.mutateAsync(input)
+    return revertMutation.mutateAsync(captureRevert(input))
   }
 
   const restore = (id: string) => {
-    if (!params.id || reverting()) return
-    return restoreMutation.mutateAsync(id)
+    const sessionID = params.id
+    if (!sessionID || reverting()) return
+    return restoreMutation.mutateAsync(captureRestore(sessionID, id))
   }
 
   const rolled = createMemo(() => {
-    const id = revertMessageID()
-    if (!id) return []
-    const index = userMessages().findIndex((item) => item.id === id)
-    if (index < 0) return []
-    return userMessages()
-      .slice(index)
-      .map((item) => ({ id: item.id, text: line(item.id) }))
+    if (serverSDK().protocolKind() === "v1") return revertPreview()?.items ?? []
+    return currentRevertPreview()?.items ?? []
   })
 
   // attachment bytes are embedded as a data URL, so downloading always works;

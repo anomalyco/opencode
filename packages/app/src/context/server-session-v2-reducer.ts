@@ -105,7 +105,9 @@ export function createV2SessionReducer() {
       case "session.shell.ended":
         return updateMessage<Shell>(
           source,
-          (item): item is Shell => item.type === "shell" && item.shellID === event.data.shell.id,
+          (item): item is Shell =>
+            item.type === "shell" &&
+            (("callID" in item && item.callID === event.data.shell.id) || item.shellID === event.data.shell.id),
           (item) => ({
             ...item,
             status: event.data.shell.status,
@@ -255,15 +257,15 @@ export function createV2SessionReducer() {
               ],
         }))
       case "session.tool.input.delta":
-        return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) =>
-          tool.state.status === "streaming"
-            ? { ...tool, state: { ...tool.state, input: tool.state.input + event.data.delta } }
-            : tool,
-        )
+        return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) => {
+          if (!["streaming", "pending"].includes(tool.state.status) || typeof tool.state.input !== "string") return tool
+          return { ...tool, state: { status: "streaming", input: tool.state.input + event.data.delta } }
+        })
       case "session.tool.input.ended":
-        return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) =>
-          tool.state.status === "streaming" ? { ...tool, state: { ...tool.state, input: event.data.text } } : tool,
-        )
+        return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) => {
+          if (!["streaming", "pending"].includes(tool.state.status) || typeof tool.state.input !== "string") return tool
+          return { ...tool, state: { status: "streaming", input: event.data.text } }
+        })
       case "session.tool.called":
         return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) => ({
           ...tool,
@@ -303,7 +305,7 @@ export function createV2SessionReducer() {
         })
       case "session.tool.failed":
         return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) => {
-          if (tool.state.status !== "streaming" && tool.state.status !== "running") return tool
+          if (typeof tool.state.input !== "string" && tool.state.status !== "running") return tool
           return {
             ...tool,
             executed: event.data.executed || tool.executed === true,

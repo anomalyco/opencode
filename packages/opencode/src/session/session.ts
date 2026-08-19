@@ -628,7 +628,11 @@ const layer: Layer.Layer<
 
     const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
-        yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg })
+        yield* events.publish(SessionV1.Event.MessageUpdated, {
+          sessionID: msg.sessionID,
+          info: msg,
+          cursor: MessageV2.cursor.encode({ id: msg.id, time: msg.time.created }),
+        })
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
@@ -826,6 +830,7 @@ const layer: Layer.Layer<
     })
 
     const messages: Interface["messages"] = Effect.fn("Session.messages")(function* (input) {
+      // limit=0 means "no limit" and walks the full history below.
       if (input.limit) {
         return (yield* MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).pipe(
           Effect.provideService(Database.Service, database),
@@ -844,8 +849,8 @@ const layer: Layer.Layer<
           const item = page.items[i]
           if (item) result.push(item)
         }
-        if (!page.more || !page.cursor) break
-        before = page.cursor
+        if (!page.before) break
+        before = page.before
       }
       return result.reverse()
     })
@@ -897,8 +902,8 @@ const layer: Layer.Layer<
           const item = page.items[i]
           if (item && predicate(item)) return Option.some(item)
         }
-        if (!page.more || !page.cursor) break
-        before = page.cursor
+        if (!page.before) break
+        before = page.before
       }
       return Option.none<SessionV1.WithParts>()
     })

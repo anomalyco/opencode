@@ -31,18 +31,23 @@ const created = DateTime.makeUnsafe(0)
 const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") }
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 
+const messageRow = (message: SessionMessage.Message, seq: number) => {
+  const { id: _, type, ...data } = encodeMessage(message)
+  return {
+    id: message.id,
+    session_id: sessionID,
+    type,
+    seq,
+    time_created: DateTime.toEpochMillis(message.time.created),
+    data,
+  }
+}
+
 const assistantRow = (
   id: SessionMessage.ID,
   seq: number,
   time: { created: DateTime.Utc; completed?: DateTime.Utc } = { created },
-) => {
-  const {
-    id: _,
-    type,
-    ...data
-  } = encodeMessage(SessionMessage.Assistant.make({ id, type: "assistant", agent: "build", model, content: [], time }))
-  return { id, session_id: sessionID, type, seq, time_created: DateTime.toEpochMillis(time.created), data }
-}
+) => messageRow(SessionMessage.Assistant.make({ id, type: "assistant", agent: "build", model, content: [], time }), seq)
 
 describe("SessionProjector", () => {
   it.effect("projects moved sessions without the transitional context epoch table", () =>
@@ -196,6 +201,288 @@ describe("SessionProjector", () => {
       expect(
         (yield* sessions.context(sessionID)).map((message) => (message.type === "user" ? message.text : message.type)),
       ).toEqual(["first", "second"])
+    }).pipe(Effect.provide(sessionsLayer)),
+  )
+
+  it.effect("checks page availability against returned edges when a sequence cursor row is gone", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+      const first = SessionMessage.ID.make("msg_first")
+      const second = SessionMessage.ID.make("msg_second")
+      const third = SessionMessage.ID.make("msg_third")
+      yield* db
+        .insert(SessionMessageTable)
+        .values([assistantRow(first, 1), assistantRow(second, 2), assistantRow(third, 3)])
+        .run()
+
+      const sessions = yield* SessionV2.Service
+      yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.id, third)).run()
+      const next = yield* sessions.messagePage({
+        sessionID,
+        limit: 1,
+        order: "desc",
+        cursor: { seq: 3, direction: "next" },
+      })
+      expect(next.data.map((message) => message.id)).toEqual([second])
+      expect(next.cursor).toEqual({ next: 2 })
+
+      yield* db.insert(SessionMessageTable).values(assistantRow(third, 3)).run()
+      yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.id, first)).run()
+      const previous = yield* sessions.messagePage({
+        sessionID,
+        limit: 1,
+        order: "desc",
+        cursor: { seq: 1, direction: "previous" },
+      })
+      expect(previous.data.map((message) => message.id)).toEqual([second])
+      expect(previous.cursor).toEqual({ previous: 2 })
+    }).pipe(Effect.provide(sessionsLayer)),
+  )
+
+  it.effect("preserves reverse navigation when a deleted sequence anchor returns an empty page", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+      const survivor = SessionMessage.ID.make("msg_survivor")
+      yield* db.insert(SessionMessageTable).values(assistantRow(survivor, 2)).run()
+
+      const sessions = yield* SessionV2.Service
+      const cases = [
+        { order: "asc" as const, direction: "next" as const, seq: 3, cursor: { previous: 3 } },
+        { order: "asc" as const, direction: "previous" as const, seq: 1, cursor: { next: 1 } },
+        { order: "desc" as const, direction: "next" as const, seq: 1, cursor: { previous: 1 } },
+        { order: "desc" as const, direction: "previous" as const, seq: 3, cursor: { next: 3 } },
+      ]
+
+      yield* Effect.forEach(cases, (input) =>
+        Effect.gen(function* () {
+          const empty = yield* sessions.messagePage({
+            sessionID,
+            limit: 1,
+            order: input.order,
+            cursor: { seq: input.seq, direction: input.direction },
+          })
+          expect(empty.data).toEqual([])
+          expect(empty.cursor).toEqual(input.cursor)
+          const direction = empty.cursor.previous === undefined ? "next" : "previous"
+          const seq = empty.cursor.previous ?? empty.cursor.next
+          const recovered = yield* sessions.messagePage({
+            sessionID,
+            limit: 1,
+            order: input.order,
+            cursor: { seq: seq!, direction },
+          })
+          expect(recovered.data.map((message) => message.id)).toEqual([survivor])
+        }),
+      )
+    }).pipe(Effect.provide(sessionsLayer)),
+  )
+
+  it.effect("returns bounded page context and revert preview in durable sequence order", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+      const first = SessionMessage.ID.make("msg_z_first")
+      const assistant = SessionMessage.ID.make("msg_a_assistant")
+      const second = SessionMessage.ID.make("msg_0_second")
+      const later = Array.from({ length: 100 }, (_, index) =>
+        SessionMessage.ID.make(`msg_later_${index.toString().padStart(3, "0")}`),
+      )
+
+      yield* events.publish(SessionEvent.Prompted, {
+        sessionID,
+        messageID: first,
+        timestamp: created,
+        prompt: Prompt.make({ text: "first" }),
+        delivery: "steer",
+      })
+      yield* events.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: assistant,
+        timestamp: created,
+        agent: "build",
+        model,
+      })
+      yield* events.publish(SessionEvent.Prompted, {
+        sessionID,
+        messageID: second,
+        timestamp: created,
+        prompt: Prompt.make({ text: "second" }),
+        delivery: "steer",
+      })
+      yield* Effect.forEach(later, (messageID, index) =>
+        events.publish(SessionEvent.Prompted, {
+          sessionID,
+          messageID,
+          timestamp: created,
+          prompt: Prompt.make({ text: `later ${index}` }),
+          delivery: "steer",
+        }),
+      )
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: created,
+        revert: { messageID: first, files: [] },
+      })
+
+      const sessions = yield* SessionV2.Service
+      const page = yield* sessions.messagePage({ sessionID, limit: 1, order: "desc", includeRevert: true })
+
+      expect(page.data.map((message) => message.id)).toEqual([later.at(-1)!])
+      expect(page.context.map((message) => message.id)).toEqual([first])
+      expect(page.revert).toMatchObject({
+        messageID: first,
+        userCount: 102,
+        nextMessageID: second,
+        continuationMessageID: later[98],
+        hasMore: true,
+      })
+      expect(page.revert?.items.map((item) => item.id)).toEqual([first, second, ...later.slice(0, 98)])
+
+      yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.id, first)).run().pipe(Effect.orDie)
+      const error = yield* sessions
+        .messagePage({ sessionID, limit: 1, order: "desc", includeRevert: true })
+        .pipe(Effect.flip)
+      expect(error).toMatchObject({
+        _tag: "Session.MessageNotFoundError",
+        sessionID,
+        messageID: first,
+      })
+    }).pipe(Effect.provide(sessionsLayer)),
+  )
+
+  it.effect("uses projected user turn roots for revert previews", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+      const first = SessionMessage.ID.make("msg_first")
+      const blank = SessionMessage.ID.make("msg_blank_synthetic")
+      const synthetic = SessionMessage.ID.make("msg_visible_synthetic")
+      const shell = SessionMessage.ID.make("msg_shell")
+      const last = SessionMessage.ID.make("msg_last")
+      yield* db
+        .insert(SessionMessageTable)
+        .values([
+          messageRow(SessionMessage.User.make({ id: first, type: "user", text: "first", time: { created } }), 1),
+          messageRow(
+            SessionMessage.Synthetic.make({
+              id: blank,
+              sessionID,
+              type: "synthetic",
+              text: " \u00A0 ",
+              time: { created },
+            }),
+            2,
+          ),
+          messageRow(
+            SessionMessage.Synthetic.make({
+              id: synthetic,
+              sessionID,
+              type: "synthetic",
+              text: "  generated context  ",
+              time: { created },
+            }),
+            3,
+          ),
+          messageRow(
+            SessionMessage.Shell.make({
+              id: shell,
+              type: "shell",
+              callID: "call_1",
+              command: "  pwd  ",
+              output: "/project",
+              time: { created },
+            }),
+            4,
+          ),
+          messageRow(SessionMessage.User.make({ id: last, type: "user", text: "last", time: { created } }), 5),
+        ])
+        .run()
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: created,
+        revert: { messageID: first, files: [] },
+      })
+
+      const sessions = yield* SessionV2.Service
+      const page = yield* sessions.messagePage({
+        sessionID,
+        limit: 1,
+        order: "desc",
+        includeRevert: true,
+      })
+      expect(page.revert).toMatchObject({
+        userCount: 4,
+        nextMessageID: synthetic,
+        hasMore: false,
+        items: [
+          { id: first, text: "first" },
+          { id: synthetic, text: "generated context" },
+          { id: shell, text: "pwd" },
+          { id: last, text: "last" },
+        ],
+      })
     }).pipe(Effect.provide(sessionsLayer)),
   )
 

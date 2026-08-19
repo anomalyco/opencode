@@ -16,10 +16,19 @@ import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Database } from "@opencode-ai/core/database/database"
+import { sql } from "drizzle-orm"
 
 const it = testEffect(
   LayerNode.compile(
-    LayerNode.group([Session.node, SessionRevert.node, Snapshot.node, SessionProjector.node, CrossSpawnSpawner.node]),
+    LayerNode.group([
+      Session.node,
+      SessionRevert.node,
+      Snapshot.node,
+      SessionProjector.node,
+      CrossSpawnSpawner.node,
+      Database.node,
+    ]),
   ),
 )
 
@@ -392,6 +401,115 @@ describe("revert + compact workflow", () => {
 
           const cleared = yield* session.get(sid)
           expect(cleared.revert).toBeUndefined()
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
+    "preview for partID includes the next user restore boundary",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+
+          const info = yield* session.create({})
+          const sid = info.id
+
+          const u1 = yield* user(sid)
+          const a1 = yield* assistant(sid, u1.id, dir)
+          yield* text(sid, a1.id, "kept answer")
+          const p2 = yield* tool(sid, a1.id)
+          const u2 = yield* user(sid)
+          yield* text(sid, u2.id, "second question")
+          const u3 = yield* user(sid)
+          yield* text(sid, u3.id, "third question")
+
+          yield* session.setRevert({
+            sessionID: sid,
+            revert: { messageID: a1.id, partID: p2.id },
+            summary: { additions: 0, deletions: 0, files: 0 },
+          })
+
+          const preview = yield* revert.preview({ sessionID: sid })
+          expect(preview?.partID).toBe(p2.id)
+          expect(preview?.userCount).toBe(2)
+          expect(preview?.nextMessageID).toBe(u2.id)
+          expect(preview?.hasMore).toBe(false)
+          expect(preview?.continuationMessageID).toBeUndefined()
+          expect(preview?.items.map((item) => item.id)).toEqual([a1.id, u2.id, u3.id])
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
+    "preview after an assistant boundary restores the first following user",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+
+          const info = yield* session.create({})
+          const first = yield* user(info.id)
+          const boundary = yield* assistant(info.id, first.id, dir)
+          const second = yield* user(info.id)
+          const third = yield* user(info.id)
+
+          yield* session.setRevert({
+            sessionID: info.id,
+            revert: { messageID: boundary.id },
+            summary: { additions: 0, deletions: 0, files: 0 },
+          })
+
+          const preview = yield* revert.preview({ sessionID: info.id })
+          expect(preview?.nextMessageID).toBe(second.id)
+          expect(preview?.items.map((item) => item.id)).toEqual([second.id, third.id])
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
+    "bounds revert previews and exposes a continuation message",
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const info = yield* session.create({})
+          const records = yield* Effect.forEach(Array.from({ length: 102 }), (_, index) =>
+            Effect.gen(function* () {
+              const message = yield* user(info.id)
+              const part = yield* text(info.id, message.id, `question ${index}`)
+              return { message, part }
+            }),
+          )
+          const first = records.at(0)
+          const overflow = records.at(100)
+          expect(first).toBeDefined()
+          expect(overflow).toBeDefined()
+          if (!first || !overflow) return
+
+          yield* session.setRevert({
+            sessionID: info.id,
+            revert: { messageID: first.message.id },
+            summary: { additions: 0, deletions: 0, files: 0 },
+          })
+          const database = yield* Database.Service
+          yield* database.db.run(
+            sql`UPDATE part SET data = ${JSON.stringify({ type: "text" })} WHERE id = ${overflow.part.id}`,
+          )
+
+          const preview = yield* revert.preview({ sessionID: info.id })
+          expect(preview?.userCount).toBe(102)
+          expect(preview?.items).toHaveLength(100)
+          expect(preview?.items.at(0)?.id).toBe(first.message.id)
+          expect(preview?.items.at(-1)?.id).toBe(records[99]?.message.id)
+          expect(preview?.hasMore).toBe(true)
+          expect(preview?.continuationMessageID).toBe(overflow.message.id)
         }),
       { git: true },
     ),

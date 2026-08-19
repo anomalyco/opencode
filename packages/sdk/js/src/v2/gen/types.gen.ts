@@ -790,6 +790,7 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           info: Message
+          cursor?: string
         }
       }
     | {
@@ -2775,6 +2776,9 @@ export type SessionDurableEventStream = string
 
 export type SessionMessagesResponse = {
   data: Array<SessionMessage>
+  context: Array<SessionMessage>
+  contextCursor?: string
+  revert?: RevertPreview
   cursor: {
     previous?: string
     next?: string
@@ -3247,6 +3251,7 @@ export type SyncEventMessageUpdated = {
     data: {
       sessionID: string
       info: Message
+      cursor?: string
     }
   }
 }
@@ -4771,6 +4776,20 @@ export type SessionNextRevertCommitted = {
   }
 }
 
+export type RevertPreviewItem = {
+  id: string
+  text: string
+}
+
+export type RevertPreview = {
+  messageID: string
+  userCount: number
+  hasMore: boolean
+  nextMessageID?: string
+  continuationMessageID?: string
+  items: Array<RevertPreviewItem>
+}
+
 export type ModelApi =
   | {
       id: string
@@ -5158,6 +5177,7 @@ export type MessageUpdated = {
   data: {
     sessionID: string
     info: Message
+    cursor?: string
   }
 }
 
@@ -6216,6 +6236,7 @@ export type EventMessageUpdated = {
   properties: {
     sessionID: string
     info: Message
+    cursor?: string
   }
 }
 
@@ -9762,6 +9783,8 @@ export type SessionMessagesData = {
     workspace?: string
     limit?: number
     before?: string
+    after?: string
+    oldest?: boolean | "true" | "false"
   }
   url: "/session/{sessionID}/message"
 }
@@ -9786,6 +9809,7 @@ export type SessionMessagesResponses = {
   200: Array<{
     info: Message
     parts: Array<Part>
+    cursor?: string
   }>
 }
 
@@ -9915,6 +9939,7 @@ export type SessionMessageResponses = {
   200: {
     info: Message
     parts: Array<Part>
+    cursor?: string
   }
 }
 
@@ -10283,10 +10308,55 @@ export type SessionShellResponses = {
   200: {
     info: Message
     parts: Array<Part>
+    cursor?: string
   }
 }
 
 export type SessionShellResponse = SessionShellResponses[keyof SessionShellResponses]
+
+export type SessionRevertPreviewData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/revert"
+}
+
+export type SessionRevertPreviewErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionRevertPreviewError = SessionRevertPreviewErrors[keyof SessionRevertPreviewErrors]
+
+export type SessionRevertPreviewResponses = {
+  /**
+   * Revert preview
+   */
+  200: {
+    userCount: number
+    hasMore: boolean
+    nextMessageID?: string
+    continuationMessageID?: string
+    partID?: string
+    items: Array<{
+      id: string
+      text: string
+    }>
+  } | null
+}
+
+export type SessionRevertPreviewResponse = SessionRevertPreviewResponses[keyof SessionRevertPreviewResponses]
 
 export type SessionRevertData = {
   body?: {
@@ -12011,9 +12081,9 @@ export type V2SessionMessagesErrors = {
    */
   401: UnauthorizedError
   /**
-   * SessionNotFoundError
+   * MessageNotFoundError | SessionNotFoundError
    */
-  404: SessionNotFoundError
+  404: MessageNotFoundError | SessionNotFoundError
   /**
    * UnknownError
    */

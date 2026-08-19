@@ -43,7 +43,9 @@ export const DiffQuery = Schema.Struct({
 export const MessagesQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   limit: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
-  before: Schema.optional(Schema.String),
+  before: Schema.optional(Schema.NonEmptyString),
+  after: Schema.optional(Schema.NonEmptyString),
+  oldest: Schema.optional(QueryBoolean),
 })
 export const StatusMap = Schema.Record(Schema.String, SessionStatus.Info)
 export const UpdatePayload = Schema.Struct({
@@ -185,7 +187,11 @@ export const SessionApi = HttpApi.make("session")
           OpenApi.annotations({
             identifier: "session.messages",
             summary: "Get session messages",
-            description: "Retrieve all messages in a session, including user prompts and AI responses.",
+            description:
+              "Retrieve messages in a session, including user prompts and AI responses. " +
+              "Without pagination parameters (or with limit=0) the full history is returned. " +
+              "With `limit`, a page is returned anchored at the latest messages, or at the opaque `before`/`after` cursors, or at the `oldest` messages. " +
+              'Link headers use a fixed chronological convention: `rel="next"` always continues into older history (`before` cursor, also exposed as `X-Next-Cursor`), and `rel="prev"` continues into newer history (`after` cursor).',
           }),
         ),
         HttpApiEndpoint.get("message", SessionPaths.message, {
@@ -364,6 +370,18 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.shell",
             summary: "Run shell command",
             description: "Execute a shell command within the session context and return the AI's response.",
+          }),
+        ),
+        HttpApiEndpoint.get("revertPreview", SessionPaths.revert, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.NullOr(SessionRevert.Preview), "Revert preview"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.revertPreview",
+            summary: "Get revert preview",
+            description: "Return the reverted user messages and next restore boundary for a reverted session.",
           }),
         ),
         HttpApiEndpoint.post("revert", SessionPaths.revert, {

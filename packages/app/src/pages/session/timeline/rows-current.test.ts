@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { Part } from "@opencode-ai/sdk/v2"
+import { createCommentMetadata } from "@/utils/comment-note"
 import { normalizeSessionMessages } from "@/utils/session-message"
 
 mock.module("@opencode-ai/session-ui/message-part", () => ({
@@ -12,9 +14,45 @@ mock.module("@opencode-ai/session-ui/message-part", () => ({
     })),
 }))
 
-const { Timeline, TimelineRow } = await import("./rows")
+const { Timeline, TimelineRow, visibleUserMessageContent } = await import("./rows")
 
 describe("current session timeline rows", () => {
+  test("trims user parts and comments at a part-level revert boundary", () => {
+    const part = (id: string, text: string): Part => ({
+      id,
+      sessionID: "ses_1",
+      messageID: "msg_user",
+      type: "text",
+      text,
+    })
+    const parts = [
+      part("text_before", "before"),
+      {
+        ...part("comment_before", "before comment"),
+        synthetic: true,
+        metadata: createCommentMetadata({ path: "src/before.ts", comment: "before" }),
+      },
+      part("boundary", "boundary"),
+      {
+        ...part("comment_after", "after comment"),
+        synthetic: true,
+        metadata: createCommentMetadata({ path: "src/after.ts", comment: "after" }),
+      },
+      part("text_after", "after"),
+    ]
+
+    const content = visibleUserMessageContent("msg_user", parts, {
+      messageID: "msg_user",
+      partID: "boundary",
+    })
+
+    expect(content.parts.map((item) => item.id)).toEqual(["text_before", "comment_before"])
+    expect(content.comments).toEqual([{ path: "src/before.ts", comment: "before", selection: undefined }])
+    expect(visibleUserMessageContent("msg_other", parts, { messageID: "msg_user", partID: "boundary" }).parts).toBe(
+      parts,
+    )
+  })
+
   test("derives turns and tagged rows from chronological current messages", () => {
     const source = [
       { id: "msg_1", type: "user", text: "first", time: { created: 1 } },

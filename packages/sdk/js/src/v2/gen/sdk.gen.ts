@@ -206,6 +206,8 @@ import type {
   SessionPromptErrors,
   SessionPromptResponses,
   SessionRevertErrors,
+  SessionRevertPreviewErrors,
+  SessionRevertPreviewResponses,
   SessionRevertResponses,
   SessionShareErrors,
   SessionShareResponses,
@@ -3701,7 +3703,7 @@ export class Session2 extends HeyApiClient {
   /**
    * Get session messages
    *
-   * Retrieve all messages in a session, including user prompts and AI responses.
+   * Retrieve messages in a session, including user prompts and AI responses. Without pagination parameters (or with limit=0) the full history is returned. With `limit`, a page is returned anchored at the latest messages, or at the opaque `before`/`after` cursors, or at the `oldest` messages. Link headers use a fixed chronological convention: `rel="next"` always continues into older history (`before` cursor, also exposed as `X-Next-Cursor`), and `rel="prev"` continues into newer history (`after` cursor).
    */
   public messages<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3710,6 +3712,8 @@ export class Session2 extends HeyApiClient {
       workspace?: string
       limit?: number
       before?: string
+      after?: string
+      oldest?: boolean | "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3723,6 +3727,8 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "limit" },
             { in: "query", key: "before" },
+            { in: "query", key: "after" },
+            { in: "query", key: "oldest" },
           ],
         },
       ],
@@ -4250,6 +4256,42 @@ export class Session2 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Get revert preview
+   *
+   * Return the reverted user messages and next restore boundary for a reverted session.
+   */
+  public revertPreview<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionRevertPreviewResponses,
+      SessionRevertPreviewErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/revert",
+      ...options,
+      ...params,
     })
   }
 
@@ -5826,7 +5868,7 @@ export class Session3 extends HeyApiClient {
   /**
    * Get session messages
    *
-   * Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.
+   * Retrieve projected messages for a session. Items keep the requested order across pages; context contains bounded earlier messages needed to project the page, and revert is included on unanchored requests. Use cursor.next or cursor.previous to move through the ordered timeline.
    */
   public messages<ThrowOnError extends boolean = false>(
     parameters: {

@@ -5,6 +5,7 @@ import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
 import { uniqueSummaryDiffs } from "./summary-diffs"
 import { compareMessages } from "@/utils/session-message"
+import { visiblePartsForMessage, type RevertBoundary } from "./revert"
 
 export { TimelineRow, type SummaryDiff } from "./timeline-row"
 
@@ -30,6 +31,14 @@ export type TimelineRowMap = {
   Retry: { userMessageID: string }
   DiffSummary: { userMessageID: string; diffs: SummaryDiff[] }
   Error: { userMessageID: string; text: string }
+}
+
+export function visibleUserMessageContent(messageID: string, parts: Part[], revert?: RevertBoundary) {
+  const visible = visiblePartsForMessage(messageID, parts, revert)
+  return {
+    parts: visible,
+    comments: visible.flatMap((part) => MessageComment.fromPart(part) ?? []),
+  }
 }
 
 export namespace Timeline {

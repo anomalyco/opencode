@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { Message, Part, PermissionRequest, QuestionRequest, SessionStatus, Todo } from "@opencode-ai/sdk/v2/client"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { dropSessionCaches, pickSessionCacheEvictions } from "./session-cache"
+import type { RevertPreview } from "./types"
 
 const msg = (id: string, sessionID: string) =>
   ({
@@ -30,6 +31,7 @@ describe("app session cache", () => {
       todo: Record<string, Todo[] | undefined>
       message: Record<string, Message[] | undefined>
       session_message: Record<string, never[] | undefined>
+      revert_preview: Record<string, RevertPreview | undefined>
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
       question: Record<string, QuestionRequest[] | undefined>
@@ -40,6 +42,7 @@ describe("app session cache", () => {
       todo: { ses_1: [] as Todo[] },
       message: {},
       session_message: {},
+      revert_preview: { ses_1: { messageID: "msg_1", userCount: 0, hasMore: false, items: [] } },
       part: { msg_1: [part("prt_1", "ses_1", "msg_1")] },
       permission: { ses_1: [] as PermissionRequest[] },
       question: { ses_1: [] as QuestionRequest[] },
@@ -56,6 +59,7 @@ describe("app session cache", () => {
     expect(store.session_status.ses_1).toBeUndefined()
     expect(store.permission.ses_1).toBeUndefined()
     expect(store.question.ses_1).toBeUndefined()
+    expect(store.revert_preview.ses_1).toBeUndefined()
   })
 
   test("dropSessionCaches clears message-backed parts", () => {
@@ -66,6 +70,7 @@ describe("app session cache", () => {
       todo: Record<string, Todo[] | undefined>
       message: Record<string, Message[] | undefined>
       session_message: Record<string, never[] | undefined>
+      revert_preview: Record<string, RevertPreview | undefined>
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
       question: Record<string, QuestionRequest[] | undefined>
@@ -76,6 +81,7 @@ describe("app session cache", () => {
       todo: {},
       message: { ses_1: [m] },
       session_message: {},
+      revert_preview: {},
       part: { [m.id]: [part("prt_1", "ses_1", m.id)] },
       permission: {},
       question: {},

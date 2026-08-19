@@ -66,6 +66,7 @@ const QueryParameterSchemas: Record<string, OpenApiSchema> = {
   "GET /session roots": QueryBooleanOpenApi,
   "GET /session limit": { type: "number" },
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+  "GET /session/{sessionID}/message oldest": QueryBooleanOpenApi,
   "GET /vcs/diff context": { type: "integer", minimum: 0 },
   "GET /api/session limit": { type: "number" },
   "GET /api/session start": { type: "number" },
@@ -374,6 +375,10 @@ function referencesComponent(input: unknown, name: string): boolean {
 
 function normalizeLegacyOperation(operation: OpenApiOperation, path: string, method: string) {
   if (path === "/experimental/console/switch" && method === "post") delete operation.responses?.["400"]
+  if (path === "/session/{sessionID}/revert" && method === "get") {
+    const response = operation.responses?.["200"]?.content?.["application/json"]
+    if (response?.schema) response.schema = nullable(response.schema)
+  }
   if ((path !== "/session/{sessionID}/message" && path !== "/session/{sessionID}/command") || method !== "post") return
   const response = operation.responses?.["200"]?.content?.["application/json"]
   if (!response) return

@@ -81,6 +81,7 @@ const baseState = (input: Partial<State> = {}) =>
     limit: 10,
     message: {},
     session_message: {},
+    revert_preview: {},
     part: {},
     part_text_accum_delta: {},
     ...input,

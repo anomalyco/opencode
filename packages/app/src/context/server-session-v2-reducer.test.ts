@@ -153,4 +153,66 @@ describe("v2 session reducer", () => {
 
     expect(result).toMatchObject({ sessionID: "ses_1", missing: "msg_user", touched: [] })
   })
+
+  test("continues canonical hydrated shell and pending tool messages", () => {
+    const reducer = createV2SessionReducer()
+    let messages = [
+      {
+        id: "msg_shell",
+        type: "shell",
+        callID: "shell_1",
+        command: "pwd",
+        output: "",
+        time: { created: 1 },
+      },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "call_1",
+            name: "read",
+            state: { status: "pending", input: '{"filePath":"REA' },
+            time: { created: 1 },
+          },
+        ],
+        time: { created: 1 },
+      },
+    ] as unknown as SessionMessageInfo[]
+    const apply = (input: object) => {
+      const result = reducer.reduce(messages, event(input))
+      if (result) messages = result.messages
+    }
+
+    apply({
+      ...base,
+      id: "evt_shell_end",
+      type: "session.shell.ended",
+      data: {
+        sessionID: "ses_1",
+        shell: { id: "shell_1", status: "exited", exit: 0 },
+        output: { output: "/repo", cursor: 5, size: 5, truncated: false },
+      },
+    })
+    apply({
+      ...base,
+      id: "evt_tool_delta",
+      type: "session.tool.input.delta",
+      data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", callID: "call_1", delta: 'DME.md"}' },
+    })
+
+    expect(messages[0]).toMatchObject({
+      type: "shell",
+      status: "exited",
+      output: { output: "/repo" },
+      time: { completed: 1 },
+    })
+    expect(messages[1]).toMatchObject({
+      type: "assistant",
+      content: [{ type: "tool", state: { input: '{"filePath":"README.md"}' } }],
+    })
+  })
 })

@@ -3,6 +3,7 @@ import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from
 import { createMemo, type Accessor } from "solid-js"
 import { reuseTimelineRows } from "./row-reconciliation"
 import { Timeline, TimelineRow } from "./rows"
+import { selectVisibleMessages, visiblePartsForMessage, type RevertBoundary } from "./revert"
 
 export { reuseTimelineRows } from "./row-reconciliation"
 
@@ -14,11 +15,14 @@ export function createTimelineProjection(input: {
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
   inlineComments: Accessor<boolean>
+  revert?: Accessor<RevertBoundary | undefined>
 }) {
-  const messageByID = createMemo(() => new Map(input.messages().map((message) => [message.id, message] as const)))
+  const visibleMessages = createMemo(() => selectVisibleMessages(input.messages(), input.revert?.()))
+  const messageByID = createMemo(() => new Map(visibleMessages().map((message) => [message.id, message] as const)))
+  const parts = (messageID: string) => visiblePartsForMessage(messageID, input.parts(messageID), input.revert?.())
   const assistantMessagesByParent = createMemo(() => {
     const result = new Map<string, AssistantMessage[]>()
-    input.messages().forEach((message) => {
+    visibleMessages().forEach((message) => {
       if (message.role !== "assistant") return
       const messages = result.get(message.parentID)
       if (messages) {
@@ -29,15 +33,16 @@ export function createTimelineProjection(input: {
     })
     return result
   })
+  const visibleUserMessages = createMemo(() => input.userMessages().filter((message) => messageByID().has(message.id)))
   const projection = createMemo(() =>
     Timeline.constructSessionMessageRows(
       input.sessionMessages(),
       (messageID) => messageByID().get(messageID) as UserMessage | AssistantMessage | undefined,
-      input.parts,
+      parts,
       input.showReasoningSummaries(),
       input.status().type,
       input.inlineComments(),
-      input.userMessages(),
+      visibleUserMessages(),
     ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)

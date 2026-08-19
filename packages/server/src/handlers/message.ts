@@ -3,21 +3,35 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { InvalidCursorError, SessionNotFoundError, UnknownError } from "@opencode-ai/protocol/errors"
+import {
+  InvalidCursorError,
+  MessageNotFoundError,
+  SessionNotFoundError,
+  UnknownError,
+} from "@opencode-ai/protocol/errors"
 
 const DefaultMessagesLimit = 50
 
-const Cursor = Schema.Struct({
+const LegacyCursor = Schema.Struct({
   id: SessionMessage.ID,
   order: Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")]),
   direction: Schema.Union([Schema.Literal("previous"), Schema.Literal("next")]),
 })
 
+const SequenceCursor = Schema.Struct({
+  v: Schema.Literal(1),
+  sessionID: SessionV2.ID,
+  seq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  order: Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")]),
+  direction: Schema.Union([Schema.Literal("previous"), Schema.Literal("next")]),
+})
+
+const Cursor = Schema.Union([SequenceCursor, LegacyCursor])
 const decodeCursor = Schema.decodeUnknownSync(Cursor)
 
 const cursor = {
-  encode(message: SessionMessage.Message, order: "asc" | "desc", direction: "previous" | "next") {
-    return Buffer.from(JSON.stringify({ id: message.id, order, direction })).toString("base64url")
+  encode(sessionID: SessionV2.ID, seq: number, order: "asc" | "desc", direction: "previous" | "next") {
+    return Buffer.from(JSON.stringify({ v: 1, sessionID, seq, order, direction })).toString("base64url")
   },
   decode(input: string) {
     return decodeCursor(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
@@ -37,13 +51,18 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
           try: () => (ctx.query.cursor ? cursor.decode(ctx.query.cursor) : undefined),
           catch: () => new InvalidCursorError({ message: "Invalid cursor" }),
         })
+        if (decoded && "seq" in decoded && decoded.sessionID !== ctx.params.sessionID)
+          return yield* new InvalidCursorError({ message: "Cursor belongs to another session" })
         const order = decoded?.order ?? ctx.query.order ?? "desc"
-        const messages = yield* session
-          .messages({
+        const page = yield* session
+          .messagePage({
             sessionID: ctx.params.sessionID,
             limit: ctx.query.limit ?? DefaultMessagesLimit,
             order,
-            cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
+            cursor: decoded
+              ? { ...("seq" in decoded ? { seq: decoded.seq } : { id: decoded.id }), direction: decoded.direction }
+              : undefined,
+            includeRevert: !decoded,
           })
           .pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
@@ -51,6 +70,15 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
                 new SessionNotFoundError({
                   sessionID: error.sessionID,
                   message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.catchTag("Session.MessageNotFoundError", (error) =>
+              Effect.fail(
+                new MessageNotFoundError({
+                  sessionID: error.sessionID,
+                  messageID: error.messageID,
+                  message: `Message not found: ${error.messageID}`,
                 }),
               ),
             ),
@@ -66,13 +94,34 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
               )
             }),
           )
-        const first = messages[0]
-        const last = messages.at(-1)
+        const revertBoundary = page.revert
+          ? [...page.context, ...page.data].find((message) => message.id === page.revert?.messageID)
+          : undefined
+        const revertSeq = revertBoundary ? page.sequence.get(revertBoundary.id) : undefined
+        if (revertBoundary && revertSeq === undefined) {
+          const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+          yield* Effect.logError("missing session message sequence for pagination cursor").pipe(
+            Effect.annotateLogs({ ref, sessionID: ctx.params.sessionID }),
+          )
+          return yield* new UnknownError({ message: "Unexpected server error. Check server logs for details.", ref })
+        }
         return {
-          data: messages,
+          data: page.data,
+          context: page.context,
+          contextCursor:
+            order === "desc" && revertSeq !== undefined
+              ? cursor.encode(ctx.params.sessionID, revertSeq, order, "next")
+              : undefined,
+          revert: page.revert,
           cursor: {
-            previous: first ? cursor.encode(first, order, "previous") : undefined,
-            next: last ? cursor.encode(last, order, "next") : undefined,
+            previous:
+              page.cursor.previous === undefined
+                ? undefined
+                : cursor.encode(ctx.params.sessionID, page.cursor.previous, order, "previous"),
+            next:
+              page.cursor.next === undefined
+                ? undefined
+                : cursor.encode(ctx.params.sessionID, page.cursor.next, order, "next"),
           },
         }
       }),

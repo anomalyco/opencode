@@ -19,7 +19,7 @@ import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { useProject } from "../../context/project"
-import { useSync } from "../../context/sync"
+import { MAX_LOADED_MESSAGES, MESSAGE_PAGE_SIZE, useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -30,12 +30,12 @@ import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
   Part,
-  Provider,
   ToolPart,
   UserMessage,
   TextPart,
   ReasoningPart,
   SessionStatus,
+  Provider,
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
@@ -67,12 +67,12 @@ import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
-import * as Model from "../../util/model"
-import { formatTranscript } from "../../util/transcript"
+import { formatTranscript, type MessageWithParts } from "../../util/transcript"
 import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
+import { index as modelIndex, name as modelName } from "../../util/model"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
@@ -82,6 +82,17 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import {
+  edgeHints,
+  lastValidUser,
+  messageBefore,
+  olderScrollTarget,
+  olderSearchCanContinue,
+  queueBoundaryLoad,
+  revertMessageState,
+  visibleBeforeBoundary,
+  visiblePartsBeforeBoundary,
+} from "../../util/pagination"
 
 addDefaultParsers(parsers.parsers)
 
@@ -211,12 +222,6 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
-  const messagesBeforeRevert = () => {
-    const messageID = session()?.revert?.messageID
-    if (!messageID) return messages()
-    const index = messages().findIndex((message) => message.id === messageID)
-    return index === -1 ? messages() : messages().slice(0, index)
-  }
   const foregroundTasks = createMemo(() =>
     sync.data.capabilities.experimentalBackgroundSubagents
       ? messages().flatMap((message) =>
@@ -230,6 +235,8 @@ export function Session() {
         )
       : [],
   )
+  const paging = createMemo(() => sync.data.message_page[route.sessionID])
+  const providers = createMemo(() => modelIndex(sync.data.provider))
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
@@ -241,16 +248,73 @@ export function Session() {
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
+  const LOAD_MORE_THRESHOLD = 5
+
+  const loadOlder = () => {
+    const page = paging()
+    if (!page?.hasOlder || page.loading || !scroll || scroll.isDestroyed) return
+    if (scroll.scrollTop > LOAD_MORE_THRESHOLD) return
+
+    const anchor = (() => {
+      const scrollTop = scroll.scrollTop
+      const children = scroll.getChildren()
+      for (const child of children) {
+        if (!child.id) continue
+        if (child.y + child.height > scrollTop) {
+          return { id: child.id, offset: scrollTop - child.y }
+        }
+      }
+      return undefined
+    })()
+
+    const height = scroll.scrollHeight
+    const scrollTop = scroll.scrollTop
+    sync.session.loadOlder(route.sessionID).then(() => {
+      queueMicrotask(() => {
+        requestAnimationFrame(() => {
+          if (!scroll || scroll.isDestroyed) return
+          const nextTop = olderScrollTarget(scroll.getChildren(), scroll.scrollHeight, height, scrollTop, anchor)
+          if (nextTop !== undefined) scroll.scrollTo(nextTop)
+          refreshEdges()
+        })
+      })
+    })
+  }
+
+  const loadNewer = () => {
+    const page = paging()
+    if (!page?.hasNewer || page.loading || !scroll || scroll.isDestroyed) return
+    const bottomDistance = scroll.scrollHeight - scroll.scrollTop - scroll.viewport.height
+    if (bottomDistance > LOAD_MORE_THRESHOLD) return
+    sync.session.loadNewer(route.sessionID).then(() => {
+      queueMicrotask(() => {
+        requestAnimationFrame(() => {
+          refreshEdges()
+        })
+      })
+    })
+  }
+
+  const refreshEdges = () => {
+    if (!scroll || scroll.isDestroyed) return
+    const edges = edgeHints(scroll.scrollTop, scroll.scrollHeight, scroll.viewport.height, HINT_THRESHOLD)
+    setNearTop(edges.nearTop)
+    setNearBottom(edges.nearBottom)
+  }
+
+  const scrollMove = (delta: number) => {
+    if (!scroll || scroll.isDestroyed) return
+    scroll.scrollBy(delta)
+    refreshEdges()
+    queueBoundaryLoad(delta, loadOlder, loadNewer)
+  }
+
   const pending = createMemo(() => {
     const completed = messages().findLastIndex((message) => message.role === "assistant" && message.time.completed)
     const pending = messages().findLastIndex(
       (message, index) => index > completed && message.role === "assistant" && !message.time.completed,
     )
     return pending === -1 ? undefined : pending
-  })
-
-  const lastAssistant = createMemo(() => {
-    return messages().findLast((x) => x.role === "assistant")
   })
 
   const dimensions = useTerminalDimensions()
@@ -267,6 +331,10 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [nearTop, setNearTop] = createSignal(false)
+  const [nearBottom, setNearBottom] = createSignal(false)
+  const [revertPreview, setRevertPreview] = createSignal<{ userCount: number; nextMessageID?: string }>()
+  const HINT_THRESHOLD = 20
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -277,12 +345,19 @@ export function Session() {
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
-  const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
   const toast = useToast()
   const sdk = useSDK()
   const editor = useEditorContext()
+
+  const loadRevertPreview = async (sessionID: string) => {
+    if (!session()?.revert) return
+    const preview = await sdk.client.session.revertPreview({ sessionID }, { throwOnError: false })
+    if (preview.response.status === 404 || preview.response.status === 405) return
+    if (preview.error) throw preview.error
+    return preview.data ?? undefined
+  }
 
   createEffect(() => {
     const sessionID = route.sessionID
@@ -312,7 +387,9 @@ export function Session() {
       }
       editor.reconnect(result.data.directory)
       await sync.session.sync(sessionID)
-      if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
+      if (route.sessionID !== sessionID || !scroll || scroll.isDestroyed) return
+      scroll.scrollBy(100_000)
+      refreshEdges()
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
       toast.show({
@@ -321,6 +398,16 @@ export function Session() {
         duration: 5000,
       })
       navigate({ type: "home" })
+    })
+  })
+
+  createEffect(() => {
+    if (!scroll || scroll.isDestroyed) return
+    messages()
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        refreshEdges()
+      })
     })
   })
 
@@ -379,7 +466,7 @@ export function Session() {
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
     const children = scroll.getChildren()
     const messagesList = messages()
-    const scrollTop = scroll.y
+    const scrollTop = scroll.scrollTop
 
     // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
     const visibleMessages = children
@@ -411,13 +498,16 @@ export function Session() {
     const targetID = findNextVisibleMessage(direction)
 
     if (!targetID) {
-      scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height)
+      scrollMove(direction === "next" ? scroll.height : -scroll.height)
       dialog.clear()
       return
     }
 
     const child = scroll.getChildren().find((c) => c.id === targetID)
-    if (child) scroll.scrollBy(child.y - scroll.y - 1)
+    if (child) {
+      scroll.scrollBy(child.y - scroll.scrollTop - 1)
+      refreshEdges()
+    }
     dialog.clear()
   }
 
@@ -425,7 +515,16 @@ export function Session() {
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
+      requestAnimationFrame(() => {
+        refreshEdges()
+      })
     }, 50)
+  }
+
+  function afterSubmit() {
+    const detached = paging()?.hasNewer
+    toBottom()
+    if (detached) void sync.session.jumpToLatest(route.sessionID, { force: true })
   }
 
   const local = useLocal()
@@ -529,7 +628,10 @@ export function Session() {
               const child = scroll.getChildren().find((child) => {
                 return child.id === messageID
               })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+              if (child) {
+                scroll.scrollBy(child.y - scroll.scrollTop - 1)
+                refreshEdges()
+              }
             }}
             sessionID={route.sessionID}
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
@@ -552,7 +654,10 @@ export function Session() {
               const child = scroll.getChildren().find((child) => {
                 return child.id === messageID
               })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+              if (child) {
+                scroll.scrollBy(child.y - scroll.scrollTop - 1)
+                refreshEdges()
+              }
             }}
             sessionID={route.sessionID}
           />
@@ -618,7 +723,29 @@ export function Session() {
       run: async () => {
         const status = sync.data.session_status?.[route.sessionID]
         if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
-        const message = messagesBeforeRevert().findLast((item) => item.role === "user")
+        const page = paging()
+        if (page?.hasNewer && page.loading) return
+        if (page?.hasNewer) {
+          await sync.session.jumpToLatest(route.sessionID)
+          const next = paging()
+          if (next?.hasNewer || next?.loading) return
+        }
+        const boundary = revertBoundary()
+        const findTarget = () =>
+          (sync.data.message[route.sessionID] ?? []).findLast(
+            (x) => x.role === "user" && (!boundary || messageBefore(x, boundary)),
+          )
+        let message = findTarget()
+        // A window of trailing assistant output can hide the undo target (#28257); walk older pages.
+        while (!message) {
+          const page = paging()
+          if (!page?.hasOlder || page.loading) break
+          const cursor = page.olderCursor
+          if (!cursor) break
+          await sync.session.loadOlder(route.sessionID)
+          message = findTarget()
+          if (!message && !olderSearchCanContinue(cursor, paging())) break
+        }
         if (!message) return
         void sdk.client.session
           .revert({
@@ -648,16 +775,16 @@ export function Session() {
       title: "Redo",
       value: "session.redo",
       category: "Session",
-      enabled: !!session()?.revert?.messageID,
+      enabled: !!session()?.revert?.messageID && !!revertPreview(),
       slash: {
         name: "redo",
       },
-      run: () => {
+      run: async () => {
         dialog.clear()
-        const messageID = session()?.revert?.messageID
-        if (!messageID) return
-        const message = messages().find((x) => x.role === "user" && x.id > messageID)
-        if (!message) {
+        const preview = revertPreview() ?? (await loadRevertPreview(route.sessionID))
+        const nextMessageID = preview?.nextMessageID
+        if (!preview && session()?.revert?.messageID) return
+        if (!nextMessageID) {
           void sdk.client.session.unrevert({
             sessionID: route.sessionID,
           })
@@ -666,7 +793,7 @@ export function Session() {
         }
         void sdk.client.session.revert({
           sessionID: route.sessionID,
-          messageID: message.id,
+          messageID: nextMessageID,
         })
       },
     },
@@ -755,7 +882,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-scroll.height / 2)
+        scrollMove(-scroll.height / 2)
         dialog.clear()
       },
     },
@@ -765,7 +892,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(scroll.height / 2)
+        scrollMove(scroll.height / 2)
         dialog.clear()
       },
     },
@@ -775,7 +902,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-1)
+        scrollMove(-1)
         dialog.clear()
       },
     },
@@ -785,7 +912,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(1)
+        scrollMove(1)
         dialog.clear()
       },
     },
@@ -795,7 +922,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-scroll.height / 4)
+        scrollMove(-scroll.height / 4)
         dialog.clear()
       },
     },
@@ -805,7 +932,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(scroll.height / 4)
+        scrollMove(scroll.height / 4)
         dialog.clear()
       },
     },
@@ -815,7 +942,23 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollTo(0)
+        const page = paging()
+        if (page?.hasOlder && !page.loading) {
+          sync.session.jumpToOldest(route.sessionID).then(() => {
+            requestAnimationFrame(() => {
+              if (!scroll || scroll.isDestroyed) return
+              scroll.scrollTo(0)
+              refreshEdges()
+            })
+          })
+        } else {
+          if (!scroll || scroll.isDestroyed) {
+            dialog.clear()
+            return
+          }
+          scroll.scrollTo(0)
+          refreshEdges()
+        }
         dialog.clear()
       },
     },
@@ -825,7 +968,23 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollTo(scroll.scrollHeight)
+        const page = paging()
+        if (page?.hasNewer && !page.loading) {
+          sync.session.jumpToLatest(route.sessionID).then(() => {
+            requestAnimationFrame(() => {
+              if (!scroll || scroll.isDestroyed) return
+              scroll.scrollTo(scroll.scrollHeight)
+              refreshEdges()
+            })
+          })
+        } else {
+          if (!scroll || scroll.isDestroyed) {
+            dialog.clear()
+            return
+          }
+          scroll.scrollTo(scroll.scrollHeight)
+          refreshEdges()
+        }
         dialog.clear()
       },
     },
@@ -834,29 +993,42 @@ export function Session() {
       value: "session.messages_last_user",
       category: "Session",
       hidden: true,
-      run: () => {
-        const messages = sync.data.message[route.sessionID]
-        if (!messages || !messages.length) return
+      run: async () => {
+        const settle = () =>
+          new Promise<void>((resolve) => queueMicrotask(() => requestAnimationFrame(() => resolve())))
 
-        // Find the most recent user message with non-ignored, non-synthetic text parts
-        for (let i = messages.length - 1; i >= 0; i--) {
-          const message = messages[i]
-          if (!message || message.role !== "user") continue
-
-          const parts = sync.data.part[message.id]
-          if (!parts || !Array.isArray(parts)) continue
-
-          const hasValidTextPart = parts.some(
-            (part) => part && part.type === "text" && !part.synthetic && !part.ignored,
-          )
-
-          if (hasValidTextPart) {
-            const child = scroll.getChildren().find((child) => {
-              return child.id === message.id
-            })
-            if (child) scroll.scrollBy(child.y - scroll.y - 1)
-            break
+        const scrollToLastUser = () => {
+          const loaded = sync.data.message[route.sessionID]
+          if (!loaded || !loaded.length) return false
+          const target = lastValidUser(loaded, (id) => sync.data.part[id])
+          if (!target) return false
+          if (scroll && !scroll.isDestroyed) {
+            const child = scroll.getChildren().find((c) => c.id === target.id)
+            if (child) {
+              scroll.scrollBy(child.y - scroll.scrollTop - 1)
+              refreshEdges()
+            }
           }
+          return true
+        }
+
+        // Detached windows need the newest page before searching for the last user prompt.
+        if (paging()?.hasNewer) {
+          await sync.session.jumpToLatest(route.sessionID)
+          await settle()
+        }
+        if (scrollToLastUser()) return
+
+        // Rare: a full window of trailing assistant output can hide the latest user prompt.
+        while (true) {
+          const page = paging()
+          if (!page?.hasOlder || page.loading) break
+          const cursor = page.olderCursor
+          if (!cursor) break
+          await sync.session.loadOlder(route.sessionID)
+          await settle()
+          if (scrollToLastUser()) return
+          if (!olderSearchCanContinue(cursor, paging())) break
         }
       },
     },
@@ -878,15 +1050,43 @@ export function Session() {
       title: "Copy last assistant message",
       value: "messages.copy",
       category: "Session",
-      run: () => {
-        const lastAssistantMessage = messagesBeforeRevert().findLast((message) => message.role === "assistant")
+      run: async () => {
+        if (paging()?.loading || paging()?.error) {
+          toast.show({ message: "Unable to load the latest assistant message", variant: "error" })
+          dialog.clear()
+          return
+        }
+        if (paging()?.hasNewer) {
+          await sync.session.jumpToLatest(route.sessionID, { force: true })
+          const page = paging()
+          if (page?.loading || page?.error || page?.hasNewer) {
+            toast.show({ message: "Unable to load the latest assistant message", variant: "error" })
+            dialog.clear()
+            return
+          }
+        }
+        const findLastAssistant = () =>
+          visibleSessionMessages(messages().map((info) => ({ info, parts: sync.data.part[info.id] ?? [] }))).findLast(
+            (message) => message.info.role === "assistant",
+          )
+        let lastAssistantMessage = findLastAssistant()
+        const cursors = new Set<string>()
+        let remainingPages = Math.max(0, Math.ceil((MAX_LOADED_MESSAGES - messages().length) / MESSAGE_PAGE_SIZE))
+        while (!lastAssistantMessage && remainingPages > 0) {
+          const page = paging()
+          if (!page?.hasOlder || page.loading || !page.olderCursor || cursors.has(page.olderCursor)) break
+          cursors.add(page.olderCursor)
+          remainingPages -= 1
+          await sync.session.loadOlder(route.sessionID)
+          lastAssistantMessage = findLastAssistant()
+        }
         if (!lastAssistantMessage) {
           toast.show({ message: "No assistant messages found", variant: "error" })
           dialog.clear()
           return
         }
 
-        const parts = sync.data.part[lastAssistantMessage.id] ?? []
+        const parts = lastAssistantMessage.parts
         const textParts = parts.filter((part) => part.type === "text")
         if (textParts.length === 0) {
           toast.show({ message: "No text parts found in last assistant message", variant: "error" })
@@ -925,10 +1125,10 @@ export function Session() {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const sessionMessages = messages()
+          const sessionMessages = visibleSessionMessages(await sync.session.allMessages(route.sessionID))
           const transcript = formatTranscript(
             sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+            sessionMessages.map((msg) => ({ info: msg.info, parts: msg.parts })),
             {
               thinking: showThinking(),
               toolDetails: showDetails(),
@@ -955,7 +1155,7 @@ export function Session() {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const sessionMessages = messages()
+          const sessionMessages = visibleSessionMessages(await sync.session.allMessages(route.sessionID))
 
           const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
 
@@ -972,7 +1172,7 @@ export function Session() {
 
           const transcript = formatTranscript(
             sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+            sessionMessages.map((msg) => ({ info: msg.info, parts: msg.parts })),
             {
               thinking: options.thinking,
               toolDetails: options.toolDetails,
@@ -1122,22 +1322,71 @@ export function Session() {
 
   const revertInfo = createMemo(() => session()?.revert)
   const revertMessageID = createMemo(() => revertInfo()?.messageID)
-  const revertMessageIndex = createMemo(() => {
-    const messageID = revertMessageID()
-    if (!messageID) return -1
-    return messages().findIndex((message) => message.id === messageID)
-  })
+  let revertPreviewEpoch = 0
+
+  createEffect(
+    on(
+      () => [route.sessionID, revertMessageID()] as const,
+      ([sessionID, revert]) => {
+        const epoch = ++revertPreviewEpoch
+        setRevertPreview(undefined)
+        if (!revert) {
+          return
+        }
+        void loadRevertPreview(sessionID)
+          .then((result) => {
+            if (epoch !== revertPreviewEpoch) return
+            setRevertPreview(result)
+          })
+          .catch(() => {
+            if (epoch !== revertPreviewEpoch) return
+            setRevertPreview(undefined)
+          })
+      },
+    ),
+  )
 
   const revertDiffFiles = createMemo(() => getRevertDiffFiles(revertInfo()?.diff ?? ""))
 
   const revertRevertedMessages = createMemo(() => {
     const messageID = revertMessageID()
     if (!messageID) return []
-    const index = revertMessageIndex()
-    if (index === -1) return []
-    return messages()
-      .slice(index)
-      .filter((message) => message.role === "user")
+    const boundary = messages().find((x) => x.id === messageID)
+    if (!boundary) return []
+    return messages().filter((x) => x.role === "user" && !messageBefore(x, boundary))
+  })
+  const revertUserCount = createMemo(() => revertPreview()?.userCount ?? revertRevertedMessages().length)
+
+  const revertBoundary = createMemo(() => {
+    const messageID = revertMessageID()
+    if (!messageID) return undefined
+    return messages().find((x) => x.id === messageID)
+  })
+
+  const visibleMessageParts = (messageID: string, parts: Part[]) => {
+    const info = revertInfo()
+    if (info?.messageID !== messageID) return parts
+    return visiblePartsBeforeBoundary(parts, info.partID)
+  }
+
+  const visibleSessionMessages = (items: MessageWithParts[]) => {
+    const info = revertInfo()
+    const visible = visibleBeforeBoundary(items, info?.messageID, revertBoundary(), { includeBoundary: !!info?.partID })
+    if (!info?.partID) return visible
+    return visible.map((item) =>
+      item.info.id === info.messageID ? { ...item, parts: visiblePartsBeforeBoundary(item.parts, info.partID) } : item,
+    )
+  }
+
+  const lastAssistant = createMemo(() => {
+    return visibleBeforeBoundary(
+      messages().map((info) => ({ info, parts: [] as Part[] })),
+      revertMessageID(),
+      revertBoundary(),
+      { includeBoundary: !!revertInfo()?.partID },
+    )
+      .map((item) => item.info)
+      .findLast((x) => x.role === "assistant")
   })
 
   const revert = createMemo(() => {
@@ -1146,7 +1395,7 @@ export function Session() {
     if (!info.messageID) return
     return {
       messageID: info.messageID,
-      reverted: revertRevertedMessages(),
+      revertedCount: revertUserCount(),
       diff: info.diff,
       diffFiles: revertDiffFiles(),
     }
@@ -1178,8 +1427,44 @@ export function Session() {
         <box flexDirection="row" flexGrow={1} minHeight={0}>
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
+              <Show when={paging()?.loading && paging()?.loadingDirection === "older"}>
+                <box flexShrink={0} paddingLeft={1}>
+                  <text fg={theme.textMuted}>Loading older messages...</text>
+                </box>
+              </Show>
+              <Show when={!paging()?.loading && paging()?.hasOlder && nearTop()}>
+                <box flexShrink={0} paddingLeft={1}>
+                  <text fg={theme.textMuted}>(scroll up for more)</text>
+                </box>
+              </Show>
+              <Show when={paging()?.error}>
+                <box flexShrink={0} paddingLeft={1}>
+                  <text fg={theme.error}>Failed to load: {paging()?.error}</text>
+                  <text fg={theme.textMuted}> (scroll to retry)</text>
+                </box>
+              </Show>
               <scrollbox
                 ref={(r) => (scroll = r)}
+                onMouseScroll={() => {
+                  refreshEdges()
+                  loadOlder()
+                  loadNewer()
+                }}
+                onKeyDown={(e) => {
+                  if (["up", "pageup", "home"].includes(e.name)) {
+                    setTimeout(() => {
+                      refreshEdges()
+                      loadOlder()
+                    }, 0)
+                  }
+                  if (["down", "pagedown", "end"].includes(e.name)) {
+                    setTimeout(() => {
+                      refreshEdges()
+                      loadNewer()
+                    }, 0)
+                  }
+                }}
+                viewportCulling={true}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
                 }}
@@ -1196,11 +1481,15 @@ export function Session() {
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
               >
-                <box height={1} />
                 <For each={messages()}>
                   {(message, index) => (
-                    <Switch>
-                      <Match when={message.id === revert()?.messageID}>
+                    <>
+                      <Show
+                        when={
+                          revertMessageState(message, revertMessageID(), revertBoundary(), revertInfo()?.partID)
+                            .showBanner
+                        }
+                      >
                         {(function () {
                           const redoShortcut = useCommandShortcut("session.redo")
                           const [hover, setHover] = createSignal(false)
@@ -1234,7 +1523,7 @@ export function Session() {
                                 paddingLeft={2}
                                 backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
                               >
-                                <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                                <text fg={theme.textMuted}>{revert()!.revertedCount} message reverted</text>
                                 <text fg={theme.textMuted}>
                                   <span style={{ fg: theme.text }}>{redoShortcut()}</span> or /redo to restore
                                 </text>
@@ -1259,41 +1548,55 @@ export function Session() {
                             </box>
                           )
                         })()}
-                      </Match>
-                      <Match
-                        when={revert()?.messageID && revertMessageIndex() !== -1 && index() >= revertMessageIndex()}
+                      </Show>
+                      <Show
+                        when={
+                          revertMessageState(message, revertMessageID(), revertBoundary(), revertInfo()?.partID)
+                            .showMessage
+                        }
                       >
-                        <></>
-                      </Match>
-                      <Match when={message.role === "user"}>
-                        <UserMessage
-                          index={index()}
-                          onMouseUp={() => {
-                            if (renderer.getSelection()?.getSelectedText()) return
-                            dialog.replace(() => (
-                              <DialogMessage
-                                messageID={message.id}
-                                sessionID={route.sessionID}
-                                setPrompt={(promptInfo) => prompt?.set(promptInfo)}
-                              />
-                            ))
-                          }}
-                          message={message as UserMessage}
-                          parts={sync.data.part[message.id] ?? []}
-                          pending={pending()}
-                        />
-                      </Match>
-                      <Match when={message.role === "assistant"}>
-                        <AssistantMessage
-                          last={lastAssistant()?.id === message.id}
-                          message={message as AssistantMessage}
-                          parts={sync.data.part[message.id] ?? []}
-                        />
-                      </Match>
-                    </Switch>
+                        <Switch>
+                          <Match when={message.role === "user"}>
+                            <UserMessage
+                              index={index()}
+                              onMouseUp={() => {
+                                if (renderer.getSelection()?.getSelectedText()) return
+                                dialog.replace(() => (
+                                  <DialogMessage
+                                    messageID={message.id}
+                                    sessionID={route.sessionID}
+                                    setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+                                  />
+                                ))
+                              }}
+                              message={message as UserMessage}
+                              parts={visibleMessageParts(message.id, sync.data.part[message.id] ?? [])}
+                              pending={pending()}
+                            />
+                          </Match>
+                          <Match when={message.role === "assistant"}>
+                            <AssistantMessage
+                              last={lastAssistant()?.id === message.id}
+                              message={message as AssistantMessage}
+                              parts={visibleMessageParts(message.id, sync.data.part[message.id] ?? [])}
+                            />
+                          </Match>
+                        </Switch>
+                      </Show>
+                    </>
                   )}
                 </For>
               </scrollbox>
+              <Show when={paging()?.loading && paging()?.loadingDirection === "newer"}>
+                <box flexShrink={0} paddingLeft={1}>
+                  <text fg={theme.textMuted}>Loading newer messages...</text>
+                </box>
+              </Show>
+              <Show when={!paging()?.loading && paging()?.hasNewer && nearBottom()}>
+                <box flexShrink={0} paddingLeft={1}>
+                  <text fg={theme.textMuted}>(scroll down for more)</text>
+                </box>
+              </Show>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
                   <PermissionPrompt
@@ -1324,9 +1627,7 @@ export function Session() {
                       visible={visible()}
                       ref={bind}
                       disabled={disabled()}
-                      onSubmit={() => {
-                        toBottom()
-                      }}
+                      onSubmit={afterSubmit}
                       sessionID={route.sessionID}
                       right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
                     />
@@ -1473,7 +1774,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const { theme } = useTheme()
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
-  const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const model = createMemo(() => modelName(ctx.providers(), props.message.providerID, props.message.modelID))
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)

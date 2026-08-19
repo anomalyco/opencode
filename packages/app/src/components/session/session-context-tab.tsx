@@ -18,6 +18,7 @@ import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { selectVisibleUserMessages } from "@/pages/session/timeline/model"
 import { getSessionContext } from "./session-context-metrics"
 import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
 import { createSessionContextFormatter } from "./session-context-format"
@@ -113,19 +114,8 @@ export function SessionContextTab() {
     { equals: same },
   )
 
-  const userMessages = createMemo(
-    () => messages().filter((m) => m.role === "user") as UserMessage[],
-    emptyUserMessages,
-    { equals: same },
-  )
-
   const visibleUserMessages = createMemo(
-    () => {
-      const revert = info()?.revert?.messageID
-      if (!revert) return userMessages()
-      const boundary = userMessages().findIndex((message) => message.id === revert)
-      return boundary < 0 ? userMessages() : userMessages().slice(0, boundary)
-    },
+    () => selectVisibleUserMessages(messages(), info()?.revert),
     emptyUserMessages,
     { equals: same },
   )

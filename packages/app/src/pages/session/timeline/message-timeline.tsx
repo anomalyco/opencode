@@ -75,7 +75,8 @@ import { sessionTitle } from "@/utils/session-title"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
-import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
+import { visiblePartsForMessage } from "./revert"
+import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap, visibleUserMessageContent } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
 
 const emptyMessages: MessageType[] = []
@@ -287,9 +288,8 @@ export function MessageTimeline(props: {
     const visible = new Set(props.userMessages.map((message) => message.id))
     const boundary = sessionMessages().find((message) => message.role === "user" && !visible.has(message.id))?.id
     const messages = sync().data.session_message[id] ?? []
-    if (!boundary) return messages
-    const index = messages.findIndex((message) => message.id === boundary)
-    return index < 0 ? messages : messages.slice(0, index)
+    const index = boundary ? messages.findIndex((message) => message.id === boundary) : -1
+    return index === -1 ? messages : messages.slice(0, index)
   })
   const info = createMemo(() => {
     const id = sessionID()
@@ -313,6 +313,8 @@ export function MessageTimeline(props: {
   })
   const parentTitle = createMemo(() => sessionTitle(parent()?.title) ?? language.t("command.session.new"))
   const getMsgParts = (msgId: string) => sync().data.part[msgId] ?? emptyParts
+  const getVisibleMsgParts = (messageID: string) =>
+    visiblePartsForMessage(messageID, getMsgParts(messageID), info()?.revert)
   const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
   const childTaskDescription = createMemo(() => {
     const id = sessionID()
@@ -338,6 +340,7 @@ export function MessageTimeline(props: {
     status: sessionStatus,
     showReasoningSummaries: settings.general.showReasoningSummaries,
     inlineComments: settings.general.newLayoutDesigns,
+    revert: () => info()?.revert,
   })
   const activeMessageID = projection.activeMessageID
   const assistantMessagesByParent = projection.assistantMessagesByParent
@@ -1011,7 +1014,7 @@ export function MessageTimeline(props: {
       const message = messages[i]
       if (!message) continue
 
-      const parts = getMsgParts(message.id)
+      const parts = getVisibleMsgParts(message.id)
       for (let j = parts.length - 1; j >= 0; j--) {
         const part = parts[j]
         if (!part || part.type !== "text" || !part.text?.trim()) continue
@@ -1123,8 +1126,13 @@ export function MessageTimeline(props: {
         return <div data-timeline-row="TurnGap" aria-hidden="true" class="h-6" />
       case "CommentStrip": {
         const commentStripRow = row as Accessor<TimelineRowByTag<"CommentStrip">>
-        const comments = createMemo(() =>
-          getMsgParts(commentStripRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? []),
+        const comments = createMemo(
+          () =>
+            visibleUserMessageContent(
+              commentStripRow().userMessageID,
+              getMsgParts(commentStripRow().userMessageID),
+              info()?.revert,
+            ).comments,
         )
         return (
           <TimelineRowFrame row={commentStripRow}>
@@ -1173,7 +1181,11 @@ export function MessageTimeline(props: {
         })
         const messageComments = createMemo(() => {
           if (!settings.general.newLayoutDesigns()) return []
-          return getMsgParts(userMessageRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? [])
+          return visibleUserMessageContent(
+            userMessageRow().userMessageID,
+            getMsgParts(userMessageRow().userMessageID),
+            info()?.revert,
+          ).comments
         })
         return (
           <TimelineRowFrame row={userMessageRow}>
@@ -1183,7 +1195,13 @@ export function MessageTimeline(props: {
                   <div data-slot="session-turn-message-content" aria-live="off">
                     <Message
                       message={message()}
-                      parts={getMsgParts(userMessageRow().userMessageID)}
+                      parts={
+                        visibleUserMessageContent(
+                          userMessageRow().userMessageID,
+                          getMsgParts(userMessageRow().userMessageID),
+                          info()?.revert,
+                        ).parts
+                      }
                       actions={props.actions}
                       useV2Actions={settings.general.newLayoutDesigns()}
                       comments={messageComments()}

@@ -359,11 +359,14 @@ describe("session HttpApi", () => {
         expect(nextCursor).toBeTruthy()
         expect(messagePage[0]?.parts[0]).toMatchObject({ type: "text" })
 
-        expect(
-          (yield* request(`${pathFor(SessionPaths.messages, { sessionID: parent.id })}?before=${nextCursor}`, {
-            headers,
-          })).status,
-        ).toBe(400)
+        const previousMessages = yield* request(
+          `${pathFor(SessionPaths.messages, { sessionID: parent.id })}?before=${nextCursor}`,
+          { headers },
+        )
+        expect(previousMessages.status).toBe(200)
+        expect((yield* json<SessionV1.WithParts[]>(previousMessages)).map((item) => item.info.id)).toEqual([
+          message.info.id,
+        ])
         expect(
           (yield* request(`${pathFor(SessionPaths.messages, { sessionID: parent.id })}?limit=1&before=invalid`, {
             headers,
@@ -474,12 +477,21 @@ describe("session HttpApi", () => {
         })
 
         const messagePage = yield* request(`/api/session/${session.id}/message?limit=1`, { headers })
-        const messageBody = yield* json<{ data: SessionMessage.Message[]; cursor: { next?: string } }>(messagePage)
+        const messageBody = yield* json<{
+          data: SessionMessage.Message[]
+          context: SessionMessage.Message[]
+          revert?: unknown
+          cursor: { next?: string }
+        }>(messagePage)
         const messageCursor = messageBody.cursor.next
         expect(messageCursor).toBeTruthy()
         expect(messageBody.data.map((message) => message.id)).toEqual([secondMessage.id])
-        expect(JSON.parse(Buffer.from(messageCursor!, "base64url").toString("utf8"))).toEqual({
-          id: secondMessage.id,
+        expect(messageBody.context).toEqual([])
+        expect(messageBody).not.toHaveProperty("revert")
+        expect(JSON.parse(Buffer.from(messageCursor!, "base64url").toString("utf8"))).toMatchObject({
+          v: 1,
+          sessionID: session.id,
+          seq: expect.any(Number),
           order: "desc",
           direction: "next",
         })
@@ -487,9 +499,86 @@ describe("session HttpApi", () => {
         const nextMessagePage = yield* request(`/api/session/${session.id}/message?cursor=${messageCursor}`, {
           headers,
         })
+        const nextMessageBody = yield* json<{
+          data: SessionMessage.Message[]
+          cursor: { previous?: string; next?: string }
+        }>(nextMessagePage)
+        expect(nextMessageBody.data.map((message) => message.id)).toEqual([firstMessage.id])
+        expect(nextMessageBody.cursor.previous).toBeTruthy()
+        expect(nextMessageBody.cursor).not.toHaveProperty("next")
+
+        const previousMessagePage = yield* request(
+          `/api/session/${session.id}/message?cursor=${nextMessageBody.cursor.previous}`,
+          { headers },
+        )
+        const previousMessageBody = yield* json<{
+          data: SessionMessage.Message[]
+          cursor: { previous?: string; next?: string }
+        }>(previousMessagePage)
+        expect(previousMessageBody.data.map((message) => message.id)).toEqual([secondMessage.id])
+        expect(previousMessageBody.cursor).not.toHaveProperty("previous")
+        expect(previousMessageBody.cursor.next).toBeTruthy()
+
+        const completeMessagePage = yield* request(`/api/session/${session.id}/message?limit=10`, { headers })
+        expect((yield* json<{ cursor: { previous?: string; next?: string } }>(completeMessagePage)).cursor).toEqual({})
+
+        const mutationHeaders = { ...headers, "content-type": "application/json" }
+        const staged = yield* request(`/api/session/${session.id}/revert/stage`, {
+          method: "POST",
+          headers: mutationHeaders,
+          body: JSON.stringify({ messageID: firstMessage.id }),
+        })
+        expect(staged.status).toBe(200)
+        const committed = yield* request(`/api/session/${session.id}/revert/commit`, {
+          method: "POST",
+          headers: mutationHeaders,
+        })
+        expect(committed.status).toBe(204)
+
+        const stableCursorPage = yield* request(`/api/session/${session.id}/message?cursor=${messageCursor}`, {
+          headers,
+        })
+        const stableBody = yield* json<{
+          data: SessionMessage.Message[]
+          cursor: { previous?: string; next?: string }
+        }>(stableCursorPage)
+        expect(stableBody.data.map((message) => message.id)).toEqual([firstMessage.id])
+        expect(stableBody.cursor.previous).toBeUndefined()
+
+        const emptyCursor = Buffer.from(
+          JSON.stringify({ v: 1, sessionID: session.id, seq: 0, order: "desc", direction: "next" }),
+        ).toString("base64url")
+        const emptyPage = yield* request(`/api/session/${session.id}/message?cursor=${emptyCursor}`, { headers })
+        const emptyBody = yield* json<{
+          data: SessionMessage.Message[]
+          cursor: { previous?: string; next?: string }
+        }>(emptyPage)
+        expect(emptyBody.data).toEqual([])
+        expect(emptyBody.cursor.previous).toBeTruthy()
+        expect(emptyBody.cursor.next).toBeUndefined()
+        const recoveredPage = yield* request(`/api/session/${session.id}/message?cursor=${emptyBody.cursor.previous}`, {
+          headers,
+        })
         expect(
-          (yield* json<{ data: SessionMessage.Message[] }>(nextMessagePage)).data.map((message) => message.id),
+          (yield* json<{ data: SessionMessage.Message[] }>(recoveredPage)).data.map((message) => message.id),
         ).toEqual([firstMessage.id])
+
+        const foreignCursor = Buffer.from(
+          JSON.stringify({ v: 1, sessionID: "ses_other", seq: 1, order: "desc", direction: "next" }),
+        ).toString("base64url")
+        const foreignPage = yield* request(`/api/session/${session.id}/message?cursor=${foreignCursor}`, { headers })
+        expect(foreignPage.status).toBe(400)
+        expect(yield* responseJson(foreignPage)).toMatchObject({
+          _tag: "InvalidCursorError",
+          message: "Cursor belongs to another session",
+        })
+
+        const negativeCursor = Buffer.from(
+          JSON.stringify({ v: 1, sessionID: session.id, seq: -1, order: "desc", direction: "next" }),
+        ).toString("base64url")
+        const negativePage = yield* request(`/api/session/${session.id}/message?cursor=${negativeCursor}`, { headers })
+        expect(negativePage.status).toBe(400)
+        expect(yield* responseJson(negativePage)).toMatchObject({ _tag: "InvalidCursorError" })
 
         const legacyMessageCursor = Buffer.from(
           JSON.stringify({ id: secondMessage.id, time: 1, order: "desc", direction: "next" }),
@@ -497,9 +586,11 @@ describe("session HttpApi", () => {
         const legacyMessagePage = yield* request(`/api/session/${session.id}/message?cursor=${legacyMessageCursor}`, {
           headers,
         })
-        expect(
-          (yield* json<{ data: SessionMessage.Message[] }>(legacyMessagePage)).data.map((message) => message.id),
-        ).toEqual([firstMessage.id])
+        expect(legacyMessagePage.status).toBe(404)
+        expect(yield* responseJson(legacyMessagePage)).toMatchObject({
+          _tag: "MessageNotFoundError",
+          messageID: secondMessage.id,
+        })
 
         const messageCursorWithOrder = yield* request(
           `/api/session/${session.id}/message?cursor=${messageCursor}&order=asc`,
@@ -517,6 +608,9 @@ describe("session HttpApi", () => {
           _tag: "InvalidCursorError",
           message: "Invalid cursor",
         })
+
+        const emptyMessageCursor = yield* request(`/api/session/${session.id}/message?cursor=`, { headers })
+        expect(emptyMessageCursor.status).toBe(400)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
@@ -557,6 +651,38 @@ describe("session HttpApi", () => {
         })
         expect(prompt.status).toBe(404)
         expect(yield* responseJson(prompt)).toEqual(expected)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "returns a typed error for a stale v2 revert boundary",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* createSession({ title: "stale revert boundary" })
+        const messageID = SessionMessage.ID.create()
+        const { db } = yield* Database.Service
+
+        // Persist an invalid boundary to exercise the public recovery/error path independently of staging.
+        yield* db
+          .update(SessionTable)
+          .set({ revert: { messageID, files: [] } })
+          .where(eq(SessionTable.id, session.id))
+          .run()
+          .pipe(Effect.orDie)
+
+        const response = yield* request(`/api/session/${session.id}/message`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+
+        expect(response.status).toBe(404)
+        expect(yield* responseJson(response)).toEqual({
+          _tag: "MessageNotFoundError",
+          sessionID: session.id,
+          messageID,
+          message: `Message not found: ${messageID}`,
+        })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

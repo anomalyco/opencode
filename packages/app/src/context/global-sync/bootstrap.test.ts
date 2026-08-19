@@ -70,6 +70,7 @@ function directoryState() {
     limit: 5,
     message: {},
     session_message: {},
+    revert_preview: {},
     part: {},
     part_text_accum_delta: {},
   })

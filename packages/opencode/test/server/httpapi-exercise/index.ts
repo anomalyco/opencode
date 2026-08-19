@@ -1051,7 +1051,7 @@ const scenarios: Scenario[] = [
       path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
         limit: "2",
         directory: ctx.directory ?? "",
-        cursor: cursor({ id: "msg_httpapi_missing", time: 0, order: "desc", direction: "next" }),
+        cursor: cursor({ seq: 0, order: "desc", direction: "next" }),
       })}`,
       headers: ctx.headers(),
     }))
@@ -1061,7 +1061,7 @@ const scenarios: Scenario[] = [
     .seeded((ctx) => ctx.session({ title: "Invalid message cursor owner" }))
     .at((ctx) => ({
       path: `${route("/api/session/{sessionID}/message", { sessionID: ctx.state.id })}?${new URLSearchParams({
-        cursor: cursor({ id: "msg_httpapi_missing", time: 0, order: "desc", direction: "next" }),
+        cursor: cursor({ seq: 0, order: "desc", direction: "next" }),
         order: "asc",
       })}`,
       headers: ctx.headers(),

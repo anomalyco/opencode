@@ -5,8 +5,16 @@ import type {
   SessionMessageShell,
   SessionMessageUser,
 } from "@opencode-ai/client/promise"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { AssistantMessage, FilePart, Message, Part, ToolPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Option, Schema } from "effect"
+
+type CurrentMessage = Schema.Codec.Encoded<typeof SessionMessage.Message>
+type SourceMessage = SessionMessageInfo | CurrentMessage
+type SourceAssistant = SessionMessageAssistant | Extract<CurrentMessage, { type: "assistant" }>
+type SourceAssistantTool = SessionMessageAssistantTool | Extract<SourceAssistant["content"][number], { type: "tool" }>
+type SourceShell = SessionMessageShell | Extract<CurrentMessage, { type: "shell" }>
+type SourceUser = SessionMessageUser | Extract<CurrentMessage, { type: "user" }>
 
 const emptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 const emptyModel: { id: string; providerID: string; variant?: string } = { id: "", providerID: "" }
@@ -45,7 +53,7 @@ function normalizeToolMetadata(name: string, metadata: Record<string, unknown>) 
   }
 }
 
-export function normalizeSessionMessages(sessionID: string, source: readonly SessionMessageInfo[]) {
+export function normalizeSessionMessages(sessionID: string, source: readonly SourceMessage[]) {
   const messages: Message[] = []
   const parts = new Map<string, Part[]>()
   let agent = ""
@@ -67,7 +75,11 @@ export function normalizeSessionMessages(sessionID: string, source: readonly Ses
       parts.set(message.id, userParts(sessionID, message))
       return
     }
-    if (message.type === "synthetic" && message.description?.trim()) {
+    const synthetic =
+      message.type === "synthetic"
+        ? ("description" in message ? message.description?.trim() : undefined) || message.text.trim()
+        : undefined
+    if (message.type === "synthetic" && synthetic) {
       parentID = message.id
       messages.push({
         id: message.id,
@@ -77,7 +89,7 @@ export function normalizeSessionMessages(sessionID: string, source: readonly Ses
         agent,
         model: { providerID: model.providerID, modelID: model.id, variant: model.variant },
       })
-      parts.set(message.id, [textPart(sessionID, message.id, 0, message.description, true)])
+      parts.set(message.id, [textPart(sessionID, message.id, 0, synthetic, true)])
       return
     }
     if (message.type === "shell") {
@@ -122,7 +134,7 @@ export function normalizeSessionMessages(sessionID: string, source: readonly Ses
 
 function shellMessages(
   sessionID: string,
-  message: SessionMessageShell,
+  message: SourceShell,
   agent: string,
   model: { id: string; providerID: string; variant?: string },
 ): [UserMessage, AssistantMessage] {
@@ -153,30 +165,29 @@ function shellMessages(
   ]
 }
 
-function shellPart(sessionID: string, message: SessionMessageShell): ToolPart {
+function shellPart(sessionID: string, message: SourceShell): ToolPart {
   const input = { command: message.command }
   const start = message.time.created
-  const state: ToolPart["state"] =
-    message.status === "running"
-      ? { status: "running", input, time: { start } }
-      : {
-          status: "completed",
-          input,
-          output: message.output?.output ?? "",
-          title: "Shell",
-          metadata: {
-            status: message.status,
-            exit: message.exit,
-            truncated: message.output?.truncated,
-          },
-          time: { start, end: message.time.completed ?? start },
-        }
+  const running = "status" in message ? message.status === "running" : message.time.completed === undefined
+  const state: ToolPart["state"] = running
+    ? { status: "running", input, time: { start } }
+    : {
+        status: "completed",
+        input,
+        output: typeof message.output === "string" ? message.output : (message.output?.output ?? ""),
+        title: "Shell",
+        metadata:
+          "status" in message
+            ? { status: message.status, exit: message.exit, truncated: message.output?.truncated }
+            : {},
+        time: { start, end: message.time.completed ?? start },
+      }
   return {
     id: `${message.id}:tool`,
     sessionID,
     messageID: `${message.id}:assistant`,
     type: "tool",
-    callID: message.shellID,
+    callID: "callID" in message ? message.callID : message.shellID,
     tool: "bash",
     state,
   }
@@ -188,7 +199,7 @@ export function sessionMessagePartID(messageID: string, type: "text" | "reasonin
 
 function userMessage(
   sessionID: string,
-  message: SessionMessageUser,
+  message: SourceUser,
   agent: string,
   model: { id: string; providerID: string; variant?: string },
 ): UserMessage {
@@ -202,43 +213,48 @@ function userMessage(
   }
 }
 
-function userParts(sessionID: string, message: SessionMessageUser): Part[] {
+function userParts(sessionID: string, message: SourceUser): Part[] {
   return [
     textPart(sessionID, message.id, 0, message.text),
-    ...(message.files ?? []).map(
-      (file, index): FilePart => ({
+    ...(message.files ?? []).map((file, index): FilePart => {
+      const source = "uri" in file ? file.source : file.mention
+      return {
         id: `${message.id}:file:${index}`,
         sessionID,
         messageID: message.id,
         type: "file",
         mime: file.mime,
         filename: file.name,
-        url: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
-        source: file.mention
+        url:
+          "uri" in file
+            ? file.uri
+            : file.source.type === "uri"
+              ? file.source.uri
+              : `data:${file.mime};base64,${file.data}`,
+        source: source
           ? {
               type: "file",
-              text: { value: file.mention.text, start: file.mention.start, end: file.mention.end },
-              path: file.mention.text.startsWith("@") ? file.mention.text.slice(1) : (file.name ?? file.mention.text),
+              text: { value: source.text, start: source.start, end: source.end },
+              path: source.text.startsWith("@") ? source.text.slice(1) : (file.name ?? source.text),
             }
           : undefined,
-      }),
-    ),
-    ...(message.agents ?? []).map(
-      (item, index): Part => ({
+      }
+    }),
+    ...(message.agents ?? []).map((item, index): Part => {
+      const source = "source" in item ? item.source : "mention" in item ? item.mention : undefined
+      return {
         id: `${message.id}:agent:${index}`,
         sessionID,
         messageID: message.id,
         type: "agent",
         name: item.name,
-        source: item.mention
-          ? { value: item.mention.text, start: item.mention.start, end: item.mention.end }
-          : undefined,
-      }),
-    ),
+        source: source ? { value: source.text, start: source.start, end: source.end } : undefined,
+      }
+    }),
   ]
 }
 
-function assistantMessage(sessionID: string, parentID: string, message: SessionMessageAssistant): AssistantMessage {
+function assistantMessage(sessionID: string, parentID: string, message: SourceAssistant): AssistantMessage {
   const error = message.error
     ? message.error.type.toLowerCase().includes("abort") || message.error.type.toLowerCase().includes("interrupt")
       ? { name: "MessageAbortedError" as const, data: { message: message.error.message } }
@@ -263,7 +279,7 @@ function assistantMessage(sessionID: string, parentID: string, message: SessionM
   }
 }
 
-function assistantParts(sessionID: string, message: SessionMessageAssistant): Part[] {
+function assistantParts(sessionID: string, message: SourceAssistant): Part[] {
   const ordinals = { text: 0, reasoning: 0 }
   return message.content.flatMap((content): Part[] => {
     if (content.type === "text") {
@@ -277,7 +293,8 @@ function assistantParts(sessionID: string, message: SessionMessageAssistant): Pa
         messageID: message.id,
         type: "reasoning",
         text: content.text,
-        metadata: content.state,
+        metadata:
+          "state" in content ? content.state : "providerMetadata" in content ? content.providerMetadata : undefined,
         time: {
           start: content.time?.created ?? message.time.created,
           end: content.time?.completed,
@@ -300,10 +317,16 @@ function textPart(sessionID: string, messageID: string, ordinal: number, text: s
   }
 }
 
-function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssistantTool): ToolPart {
+function toolStateMetadata(state: SourceAssistantTool["state"]) {
+  if ("metadata" in state && record(state.metadata)) return state.metadata
+  if ("structured" in state && record(state.structured)) return state.structured
+  return {}
+}
+
+function toolPart(sessionID: string, messageID: string, tool: SourceAssistantTool): ToolPart {
   const start = tool.time.ran ?? tool.time.created
   const state = (() => {
-    if (tool.state.status === "streaming") {
+    if (tool.state.status === "streaming" || tool.state.status === "pending") {
       const value = Option.getOrUndefined(decodeToolInput(tool.state.input))
       const input = normalizeToolInput(tool.name, record(value) ? value : {})
       return { status: "pending" as const, input, raw: tool.state.input }
@@ -313,7 +336,7 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
         status: "running" as const,
         input: normalizeToolInput(tool.name, tool.state.input),
         // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
-        metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
+        metadata: normalizeToolMetadata(tool.name, toolStateMetadata(tool.state)),
         time: { start },
       }
     }
@@ -323,7 +346,7 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
         input: normalizeToolInput(tool.name, tool.state.input),
         error: tool.state.error.message,
         // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
-        metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
+        metadata: normalizeToolMetadata(tool.name, toolStateMetadata(tool.state)),
         time: { start, end: tool.time.completed ?? start },
       }
     }
@@ -348,7 +371,7 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
       output: tool.state.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n"),
       title: tool.name,
       // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
-      metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
+      metadata: normalizeToolMetadata(tool.name, toolStateMetadata(tool.state)),
       time: { start, end: tool.time.completed ?? start },
       attachments: attachments.length ? attachments : undefined,
     }
@@ -361,6 +384,15 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
     callID: tool.id,
     tool: tool.name,
     state,
-    metadata: { providerState: tool.providerState, providerResultState: tool.providerResultState },
+    metadata: {
+      providerState:
+        "providerState" in tool ? tool.providerState : "provider" in tool ? tool.provider?.metadata : undefined,
+      providerResultState:
+        "providerResultState" in tool
+          ? tool.providerResultState
+          : "provider" in tool
+            ? tool.provider?.resultMetadata
+            : undefined,
+    },
   }
 }

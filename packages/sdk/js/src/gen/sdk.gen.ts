@@ -103,6 +103,9 @@ import type {
   SessionShellData,
   SessionShellResponses,
   SessionShellErrors,
+  SessionRevertPreviewData,
+  SessionRevertPreviewResponses,
+  SessionRevertPreviewErrors,
   SessionRevertData,
   SessionRevertResponses,
   SessionRevertErrors,
@@ -672,6 +675,20 @@ class Session extends _HeyApiClient {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * Get revert preview
+   */
+  public revertPreview<ThrowOnError extends boolean = false>(options: Options<SessionRevertPreviewData, ThrowOnError>) {
+    return (options.client ?? this._client).get<
+      SessionRevertPreviewResponses,
+      SessionRevertPreviewErrors,
+      ThrowOnError
+    >({
+      url: "/session/{id}/revert",
+      ...options,
     })
   }
 

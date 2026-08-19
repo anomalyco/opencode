@@ -1,6 +1,6 @@
 export * as SessionRevert from "./revert"
 
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, asc, count, eq, gt, gte, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -10,6 +10,7 @@ import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { SessionMessageTable } from "./sql"
+import { Revert } from "@opencode-ai/schema/revert"
 
 export class MessageNotFoundError extends Schema.TaggedErrorClass<MessageNotFoundError>()(
   "Session.MessageNotFoundError",
@@ -23,6 +24,10 @@ interface BoundaryInput {
   readonly sessionID: SessionSchema.ID
   readonly messageID: SessionMessage.ID
 }
+
+const PreviewItemLimit = 100
+const EcmaScriptWhitespace =
+  "\u0009\u000A\u000B\u000C\u000D\u0020\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF"
 
 const plan = Effect.fn("SessionRevert.plan")(function* (input: BoundaryInput) {
   const db = (yield* Database.Service).db
@@ -55,6 +60,62 @@ const plan = Effect.fn("SessionRevert.plan")(function* (input: BoundaryInput) {
       if (!files.has(file)) files.set(file, Snapshot.ID.make(message.snapshot.start))
   }
   return files
+})
+
+export const preview = Effect.fn("SessionRevert.preview")(function* (session: SessionSchema.Info) {
+  if (!session.revert) return
+  const db = (yield* Database.Service).db
+  const boundary = yield* db
+    .select({ seq: SessionMessageTable.seq })
+    .from(SessionMessageTable)
+    .where(and(eq(SessionMessageTable.session_id, session.id), eq(SessionMessageTable.id, session.revert.messageID)))
+    .get()
+    .pipe(Effect.orDie)
+  if (!boundary) return yield* new MessageNotFoundError({ sessionID: session.id, messageID: session.revert.messageID })
+  const visibleSynthetic = sql<boolean>`trim(coalesce(json_extract(${SessionMessageTable.data}, '$.text'), ''), ${EcmaScriptWhitespace}) <> ''`
+  const root = or(
+    eq(SessionMessageTable.type, "user"),
+    eq(SessionMessageTable.type, "shell"),
+    and(eq(SessionMessageTable.type, "synthetic"), visibleSynthetic),
+  )!
+  const where = and(eq(SessionMessageTable.session_id, session.id), root, gte(SessionMessageTable.seq, boundary.seq))
+  const userCount =
+    (yield* db.select({ value: count() }).from(SessionMessageTable).where(where).get().pipe(Effect.orDie))?.value ?? 0
+  const rows = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(where)
+    .orderBy(asc(SessionMessageTable.seq))
+    .limit(PreviewItemLimit + 1)
+    .all()
+    .pipe(Effect.orDie)
+  const decode = Schema.decodeUnknownEffect(SessionMessage.Message)
+  const messages = yield* Effect.forEach(rows, (row) =>
+    decode({ ...row.data, id: row.id, type: row.type }).pipe(Effect.orDie),
+  )
+  const preview = messages.flatMap((message): Revert.PreviewItem[] => {
+    if (message.type === "synthetic") return [{ id: message.id, text: message.text.trim() }]
+    if (message.type === "shell") return [{ id: message.id, text: message.command.trim() }]
+    if (message.type !== "user") return []
+    const text = message.text.trim()
+    return [
+      {
+        id: message.id,
+        text:
+          text || (message.files ?? []).flatMap((file) => (file.name ? [`[attachment:${file.name}]`] : [])).join(" "),
+      },
+    ]
+  })
+  const items = preview.slice(0, PreviewItemLimit)
+  const boundaryIndex = preview.findIndex((item) => item.id === session.revert?.messageID)
+  return Revert.Preview.make({
+    messageID: session.revert.messageID,
+    userCount,
+    hasMore: userCount > items.length,
+    nextMessageID: preview[boundaryIndex === -1 ? 0 : boundaryIndex + 1]?.id,
+    continuationMessageID: preview[PreviewItemLimit]?.id,
+    items,
+  })
 })
 
 export const stage = Effect.fn("SessionRevert.stage")(function* (input: {

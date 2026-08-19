@@ -6129,7 +6129,33 @@
             "name": "before",
             "in": "query",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
+            },
+            "required": false
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": false
+          },
+          {
+            "name": "oldest",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
             },
             "required": false
           }
@@ -6152,6 +6178,9 @@
                         "items": {
                           "$ref": "#/components/schemas/Part"
                         }
+                      },
+                      "cursor": {
+                        "type": "string"
                       }
                     },
                     "required": ["info", "parts"],
@@ -6190,7 +6219,7 @@
             }
           }
         },
-        "description": "Retrieve all messages in a session, including user prompts and AI responses.",
+        "description": "Retrieve messages in a session, including user prompts and AI responses. Without pagination parameters (or with limit=0) the full history is returned. With `limit`, a page is returned anchored at the latest messages, or at the opaque `before`/`after` cursors, or at the `oldest` messages. Link headers use a fixed chronological convention: `rel=\"next\"` always continues into older history (`before` cursor, also exposed as `X-Next-Cursor`), and `rel=\"prev\"` continues into newer history (`after` cursor).",
         "summary": "Get session messages",
         "x-codeSamples": [
           {
@@ -6416,6 +6445,9 @@
                       "items": {
                         "$ref": "#/components/schemas/Part"
                       }
+                    },
+                    "cursor": {
+                      "type": "string"
                     }
                   },
                   "required": ["info", "parts"],
@@ -7443,6 +7475,9 @@
                       "items": {
                         "$ref": "#/components/schemas/Part"
                       }
+                    },
+                    "cursor": {
+                      "type": "string"
                     }
                   },
                   "required": ["info", "parts"],
@@ -7537,6 +7572,130 @@
       }
     },
     "/session/{sessionID}/revert": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "session.revertPreview",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revert preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "userCount": {
+                          "type": "number"
+                        },
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextMessageID": {
+                          "type": "string",
+                          "pattern": "^msg"
+                        },
+                        "continuationMessageID": {
+                          "type": "string",
+                          "pattern": "^msg"
+                        },
+                        "partID": {
+                          "type": "string",
+                          "pattern": "^prt"
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "text"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["userCount", "hasMore", "items"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return the reverted user messages and next restore boundary for a reverted session.",
+        "summary": "Get revert preview",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.revertPreview({\n  ...\n})"
+          }
+        ]
+      },
       "post": {
         "tags": ["session"],
         "operationId": "session.revert",
@@ -11576,6 +11735,7 @@
             "in": "query",
             "schema": {
               "type": "string",
+              "minLength": 1,
               "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order."
             },
             "required": false
@@ -11621,11 +11781,14 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError",
+            "description": "MessageNotFoundError | SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MessageNotFoundError"
+                    },
                     {
                       "$ref": "#/components/schemas/SessionNotFoundError"
                     },
@@ -11648,7 +11811,7 @@
             }
           }
         },
-        "description": "Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",
+        "description": "Retrieve projected messages for a session. Items keep the requested order across pages; context contains bounded earlier messages needed to project the page, and revert is included on unanchored requests. Use cursor.next or cursor.previous to move through the ordered timeline.",
         "summary": "Get session messages",
         "x-codeSamples": [
           {
@@ -17602,6 +17765,9 @@
                       },
                       "info": {
                         "$ref": "#/components/schemas/Message"
+                      },
+                      "cursor": {
+                        "type": "string"
                       }
                     },
                     "required": ["sessionID", "info"],
@@ -23773,6 +23939,19 @@
               "$ref": "#/components/schemas/SessionMessage"
             }
           },
+          "context": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionMessage"
+            }
+          },
+          "contextCursor": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revert": {
+            "$ref": "#/components/schemas/RevertPreview"
+          },
           "cursor": {
             "type": "object",
             "properties": {
@@ -23786,7 +23965,7 @@
             "additionalProperties": false
           }
         },
-        "required": ["data", "cursor"],
+        "required": ["data", "context", "cursor"],
         "additionalProperties": false
       },
       "ProviderNotFoundError": {
@@ -25096,6 +25275,9 @@
                   },
                   "info": {
                     "$ref": "#/components/schemas/Message"
+                  },
+                  "cursor": {
+                    "type": "string"
                   }
                 },
                 "required": ["sessionID", "info"],
@@ -29739,6 +29921,52 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
+      "RevertPreviewItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "text"],
+        "additionalProperties": false
+      },
+      "RevertPreview": {
+        "type": "object",
+        "properties": {
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "userCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextMessageID": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "continuationMessageID": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RevertPreviewItem"
+            }
+          }
+        },
+        "required": ["messageID", "userCount", "hasMore", "items"],
+        "additionalProperties": false
+      },
       "ModelApi": {
         "anyOf": [
           {
@@ -31061,6 +31289,9 @@
               },
               "info": {
                 "$ref": "#/components/schemas/Message"
+              },
+              "cursor": {
+                "type": "string"
               }
             },
             "required": ["sessionID", "info"],
@@ -34013,6 +34244,9 @@
               },
               "info": {
                 "$ref": "#/components/schemas/Message"
+              },
+              "cursor": {
+                "type": "string"
               }
             },
             "required": ["sessionID", "info"],

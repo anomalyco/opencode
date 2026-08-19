@@ -1,8 +1,10 @@
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { Revert } from "@opencode-ai/schema/revert"
+import { optional } from "@opencode-ai/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../errors"
+import { InvalidCursorError, MessageNotFoundError, SessionNotFoundError, UnknownError } from "../errors"
 
 export const SessionMessagesQuery = Schema.Struct({
   limit: Schema.optional(
@@ -14,7 +16,7 @@ export const SessionMessagesQuery = Schema.Struct({
     description: "Message order for the first page. Use desc for newest first or asc for oldest first.",
   }),
   cursor: Schema.optional(
-    Schema.String.annotate({
+    Schema.NonEmptyString.annotate({
       description:
         "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.",
     }),
@@ -28,18 +30,21 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       query: SessionMessagesQuery,
       success: Schema.Struct({
         data: Schema.Array(SessionMessage.Message),
+        context: Schema.Array(SessionMessage.Message),
+        contextCursor: Schema.NonEmptyString.pipe(optional),
+        revert: Revert.Preview.pipe(optional),
         cursor: Schema.Struct({
-          previous: Schema.String.pipe(Schema.optional),
-          next: Schema.String.pipe(Schema.optional),
+          previous: Schema.String.pipe(optional),
+          next: Schema.String.pipe(optional),
         }),
       }).annotate({ identifier: "SessionMessagesResponse" }),
-      error: [InvalidCursorError, SessionNotFoundError, UnknownError],
+      error: [InvalidCursorError, MessageNotFoundError, SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.messages",
         summary: "Get session messages",
         description:
-          "Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",
+          "Retrieve projected messages for a session. Items keep the requested order across pages; context contains bounded earlier messages needed to project the page, and revert is included on unanchored requests. Use cursor.next or cursor.previous to move through the ordered timeline.",
       }),
     ),
   )

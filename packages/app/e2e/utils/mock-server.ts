@@ -261,6 +261,15 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const projectMatch = path.match(/^\/project\/([^/]+)$/)
     if (projectMatch) return json(route, config.project)
 
+    const currentMessageMatch = path.match(/^\/api\/session\/([^/]+)\/message\/([^/]+)$/)
+    if (currentMessageMatch) {
+      config.onMessage?.({ sessionID: currentMessageMatch[1]!, messageID: currentMessageMatch[2]! })
+      if (config.messageDelay !== undefined) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
+      const message = config.message?.(currentMessageMatch[1]!, currentMessageMatch[2]!)
+      if (message === undefined) return json(route, { error: "Message not found" }, undefined, 404)
+      return json(route, { data: currentMessage(message) })
+    }
+
     const messageMatch = path.match(/^\/session\/([^/]+)\/message\/([^/]+)$/)
     if (messageMatch) {
       config.onMessage?.({ sessionID: messageMatch[1]!, messageID: messageMatch[2]! })
@@ -288,6 +297,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       if (cursor) cursors.set(cursor, pageData.cursor!)
       return json(route, {
         data: pageData.items.map(currentMessage).reverse(),
+        context: [],
         cursor: { next: cursor },
       })
     }
@@ -306,7 +316,12 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       if (!pageData.cursor) return json(route, pageData.items)
       const cursor = `cursor_${++nextCursor}`
       cursors.set(cursor, pageData.cursor)
-      return json(route, pageData.items, { "x-next-cursor": cursor })
+      const next = new URL(url)
+      next.searchParams.delete("after")
+      next.searchParams.delete("oldest")
+      next.searchParams.set("limit", limit.toString())
+      next.searchParams.set("before", cursor)
+      return json(route, pageData.items, { "x-next-cursor": cursor, Link: `<${next.toString()}>; rel="next"` })
     }
 
     if (url.port === targetPort && targetPort !== appPort) return json(route, {})
@@ -429,7 +444,7 @@ function json(route: Route, body: unknown, headers?: Record<string, string>, sta
     contentType: "application/json",
     headers: {
       "access-control-allow-origin": "*",
-      "access-control-expose-headers": "x-next-cursor",
+      "access-control-expose-headers": "Link, X-Next-Cursor",
       ...headers,
     },
     body: JSON.stringify(body ?? null),

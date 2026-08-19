@@ -1,4 +1,5 @@
 import { Binary } from "@opencode-ai/core/util/binary"
+import { linkParam, parseLinkHeader } from "@opencode-ai/core/util/link-header"
 import { retry } from "@opencode-ai/core/util/retry"
 import type { OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type {
@@ -19,11 +20,26 @@ import { sessionNotFoundError } from "@/utils/server-errors"
 import { rootSession } from "@/utils/session-route"
 import { normalizeSessionInfo } from "@/utils/session"
 import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/session-message"
+import { boundaryFromMessageResponse } from "@opencode-ai/core/util/revert-boundary"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
+import { hasVisibleUserBeforeRevert, loadRevertAwareLatestPage } from "./revert-page"
+import type { RevertPreview } from "./global-sync/types"
 
-type MessageApi = ServerApi["message"]
+// The vendored client snapshot predates the pagination fields on SessionMessagesResponse
+// (context, contextCursor, revert). This widens the pinned types to the current wire
+// contract; delete it when the vendor snapshot is refreshed.
+type MessageList = ServerApi["message"]["list"]
+type MessageApi = {
+  list: (...input: Parameters<MessageList>) => Promise<
+    Awaited<ReturnType<MessageList>> & {
+      context?: SessionMessageInfo[]
+      contextCursor?: string
+      revert?: RevertPreview
+    }
+  >
+}
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
@@ -38,9 +54,23 @@ function needsOlderTurnRoot(source: readonly SessionMessageInfo[]) {
       message.type === "user" ||
       message.type === "shell" ||
       message.type === "assistant" ||
-      (message.type === "synthetic" && message.description?.trim()),
+      (message.type === "synthetic" && (message.description?.trim() || message.text.trim())),
   )
   return boundary?.type === "assistant"
+}
+
+function nextBefore(link: string | null, fallback?: string | null) {
+  const links = parseLinkHeader(link ?? "")
+  return linkParam(links.next, "before") ?? linkParam(links.prev, "before") ?? fallback ?? undefined
+}
+
+function messageIndex(messages: readonly Message[] | undefined, id: string) {
+  return messages?.findIndex((message) => message.id === id) ?? -1
+}
+
+function insertMessage(messages: Message[], message: Message) {
+  const result = Binary.search(messages, messageKey(message), messageKey)
+  if (!result.found) messages.splice(result.index, 0, message)
 }
 
 type OptimisticItem = {
@@ -48,6 +78,11 @@ type OptimisticItem = {
   parts: Part[]
   confirmedParts?: Part[]
   confirmedMessage?: boolean
+}
+
+type OptimisticStore = {
+  message: Record<string, Message[] | undefined>
+  part: Record<string, Part[] | undefined>
 }
 
 type MessagePage = {
@@ -58,6 +93,8 @@ type MessagePage = {
   projectSource?: boolean
   cursor?: string
   complete: boolean
+  clearedRevert?: boolean
+  revertPreview?: RevertPreview
 }
 
 function legacyMessageSource(items: { info: Message; parts: Part[] }[]): SessionMessageInfo[] {
@@ -104,23 +141,35 @@ type MessageLoadBaseline = Pick<
   "touchedMessages" | "retainedMessages" | "touchedParts" | "clearedMessageParts"
 >
 
-function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) {
-  if (items.length === 0) return { ...page, observed: [] as { messageID: string; parts: Part[] }[] }
+const hasParts = (parts: Part[] | undefined, want: Part[]) => {
+  if (!parts) return want.length === 0
+  return want.every((part) => Binary.search(parts, part.id, (item) => item.id).found)
+}
+
+export function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) {
+  if (items.length === 0)
+    return { ...page, observed: [] as { messageID: string; parts: Part[] }[], confirmed: [] as string[] }
   const session = [...page.session]
   const part = new Map(page.part.map((item) => [item.id, item.part]))
   const observed: { messageID: string; parts: Part[] }[] = []
+  const confirmed: string[] = []
   for (const item of items) {
-    const result = Binary.search(session, messageKey(item.message), messageKey)
-    const found = result.found
-    if (!found) session.splice(result.index, 0, item.message)
+    const found = messageIndex(session, item.message.id) !== -1
+    if (!found) {
+      if (page.projectSource) session.push(item.message)
+      if (!page.projectSource) insertMessage(session, item.message)
+    }
     const current = part.get(item.message.id)
-    const confirmed = found ? item.parts.filter((part) => current?.some((value) => value.id === part.id)) : []
-    if (found) observed.push({ messageID: item.message.id, parts: confirmed })
+    if (found && hasParts(current, item.parts)) confirmed.push(item.message.id)
+    const confirmedParts = found
+      ? item.parts.filter((part) => Binary.search(current ?? [], part.id, (value) => value.id).found)
+      : []
+    if (found) observed.push({ messageID: item.message.id, parts: confirmedParts })
     part.set(
       item.message.id,
       merge(
         found ? (current ?? []) : merge(item.confirmedParts ?? [], current ?? []),
-        item.parts.filter((part) => !confirmed.includes(part)),
+        item.parts.filter((part) => !confirmedParts.includes(part)),
       ),
     )
   }
@@ -129,7 +178,27 @@ function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) {
     session,
     part: [...part.entries()].sort((a, b) => cmp(a[0], b[0])).map(([id, parts]) => ({ id, part: parts })),
     observed,
+    confirmed,
   }
+}
+
+export function applyOptimisticAdd(draft: OptimisticStore, input: OptimisticItem & { sessionID: string }) {
+  const messages = draft.message[input.sessionID]
+  if (messages) {
+    if (messageIndex(messages, input.message.id) === -1) insertMessage(messages, input.message)
+  } else {
+    draft.message[input.sessionID] = [input.message]
+  }
+  draft.part[input.message.id] = input.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id))
+}
+
+export function applyOptimisticRemove(draft: OptimisticStore, input: { sessionID: string; messageID: string }) {
+  const messages = draft.message[input.sessionID]
+  if (messages) {
+    const index = messageIndex(messages, input.messageID)
+    if (index !== -1) messages.splice(index, 1)
+  }
+  delete draft.part[input.messageID]
 }
 
 function runInflight(map: Map<string, Promise<void>>, key: string, task: () => Promise<void>) {
@@ -148,6 +217,32 @@ function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
   return [...items.values()].sort((x, y) => cmp(x.id, y.id))
 }
 
+function mergeMessages(a: readonly Message[], b: readonly Message[]) {
+  const items = new Map(a.map((item) => [item.id, item] as const))
+  for (const item of b) items.set(item.id, item)
+  return [...items.values()].sort(compareMessages)
+}
+
+function mergeProjectedMessages(
+  current: readonly Message[],
+  updated: readonly Message[],
+  source?: SessionMessageInfo[],
+) {
+  if (!source) return mergeMessages(current, updated)
+  const items = new Map(current.map((message) => [message.id, message] as const))
+  updated.forEach((message) => items.set(message.id, message))
+  const order = normalizeSessionMessages(updated[0]?.sessionID ?? current[0]?.sessionID ?? "", source).messages
+  return [
+    ...order.flatMap((message) => {
+      const item = items.get(message.id)
+      if (!item) return []
+      items.delete(message.id)
+      return [item]
+    }),
+    ...items.values(),
+  ]
+}
+
 function reconcileFetched<T extends { id: string }>(
   fetched: T[],
   current: readonly T[],
@@ -157,6 +252,7 @@ function reconcileFetched<T extends { id: string }>(
     removed?: ReadonlySet<string>
     preserveUnfetched?: boolean | ((item: T) => boolean)
     compare?: (a: T, b: T) => number
+    preserveOrder?: boolean
   } = {},
 ) {
   const result = new Map(fetched.map((item) => [item.id, item]))
@@ -179,8 +275,8 @@ function reconcileFetched<T extends { id: string }>(
     if (!item) result.delete(id)
   }
   for (const id of options.removed ?? emptyIDs) result.delete(id)
-  const items = [...result.values()]
-  return options.compare ? items.sort(options.compare) : items
+  const values = [...result.values()]
+  return options.preserveOrder ? values : values.sort(options.compare ?? ((a, b) => cmp(a.id, b.id)))
 }
 
 type ServerSessionOptions = { retry?: typeof retry; protocol?: Promise<"v1" | "v2"> }
@@ -202,6 +298,7 @@ export function createServerSession(
     question: {} as Record<string, QuestionRequest[]>,
     message: {} as Record<string, Message[]>,
     session_message: {} as Record<string, SessionMessageInfo[]>,
+    revert_preview: {} as Record<string, RevertPreview | undefined>,
     part: {} as Record<string, Part[]>,
     part_text_accum_delta: {} as Record<string, string>,
     session_working(id: string) {
@@ -253,12 +350,20 @@ export function createServerSession(
     setData(
       "session_message",
       message.sessionID,
-      reconcile([...current, ...legacyMessageSource([{ info: message, parts: [] }])]),
+      reconcile([...current, ...legacyMessageSource([{ info: message, parts: [] }])].sort(compareMessages)),
     )
   }
 
   const remember = (session: Session) => {
+    const previous = data.info[session.id]
+    const reloadMessages =
+      !!previous &&
+      data.message[session.id] !== undefined &&
+      !session.time.archived &&
+      (previous?.revert?.messageID !== session.revert?.messageID || previous?.revert?.partID !== session.revert?.partID)
     setData("info", session.id, reconcile(session))
+    if (data.revert_preview[session.id]?.messageID !== session.revert?.messageID)
+      setData("revert_preview", session.id, undefined)
     infoSeen.delete(session.id)
     infoSeen.add(session.id)
     if (infoSeen.size > sessionInfoLimit) {
@@ -297,6 +402,21 @@ export function createServerSession(
         "info",
         produce((draft) => stale.forEach((sessionID) => delete draft[sessionID])),
       )
+    }
+    if (reloadMessages) {
+      generations.set(session.id, {})
+      inflight.delete(session.id)
+      setMeta("loading", session.id, false)
+      const limit = meta.limit[session.id] ?? initialMessagePageSize
+      // Fire-and-forget reload: on failure the cached window stays visible and the next
+      // sync() detects the unrepaired revert boundary and retries.
+      void loadMessages(
+        session.id,
+        limit === 0 ? initialMessagePageSize : limit,
+        undefined,
+        undefined,
+        session.revert,
+      ).catch(() => {})
     }
     return session
   }
@@ -534,7 +654,13 @@ export function createServerSession(
       pickSessionCacheEvictions({ seen, keep: sessionID, limit: SESSION_CACHE_LIMIT, preserve: protectedSessions() }),
     )
 
-  const fetchMessages = async (sessionID: string, limit: number, before?: string, onAttempt?: () => void) => {
+  const fetchMessages = async (
+    sessionID: string,
+    limit: number,
+    before?: string,
+    onAttempt?: () => void,
+    revert?: Session["revert"],
+  ) => {
     if (messageApi && (await options?.protocol) !== "v1") {
       const request = (cursor?: string) =>
         (options?.retry ?? retry)(() => {
@@ -543,41 +669,115 @@ export function createServerSession(
         })
       const first = await request(before)
       const pages = [first]
-      while (pages.at(-1)?.cursor.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
-        const response = await request(pages.at(-1)!.cursor.next ?? undefined)
+      const project = () => {
+        const seen = new Set<string>()
+        const source = pages.toReversed().flatMap((page) =>
+          [...(page.context ?? []), ...page.data.toReversed()].filter((message) => {
+            if (seen.has(message.id)) return false
+            seen.add(message.id)
+            return true
+          }),
+        )
+        return { source, normalized: normalizeSessionMessages(sessionID, source) }
+      }
+      const cursors = new Set<string>()
+      const seen = new Set(first.data.map((message) => message.id))
+      let progressed = true
+      while (pages.at(-1)?.cursor.next) {
+        const current = project()
+        const hasContext = "context" in first
+        const hasPreview = "revert" in first
+        if (
+          (hasContext || !needsOlderTurnRoot(current.source)) &&
+          (hasPreview || hasVisibleUserBeforeRevert(current.normalized.messages, revert))
+        )
+          break
+        if (!progressed) throw new Error("Message pagination returned no new messages")
+        const cursor = pages.at(-1)!.cursor.next!
+        if (cursors.has(cursor)) throw new Error("Message pagination cursor did not advance")
+        cursors.add(cursor)
+        const response = await request(cursor)
+        const unseen = response.data.filter((message) => !seen.has(message.id))
+        unseen.forEach((message) => seen.add(message.id))
+        progressed = unseen.length > 0
         pages.push(response)
         if (!response.data.length) break
       }
       const response = pages.at(-1)!
-      const source = pages.flatMap((page) => page.data).toReversed()
-      const normalized = normalizeSessionMessages(sessionID, source)
+      const current = project()
+      const complete = !response.cursor.next
       return {
-        session: normalized.messages.sort(compareMessages),
-        part: [...normalized.parts.entries()]
+        session: current.normalized.messages,
+        part: [...current.normalized.parts.entries()]
           .map(([id, part]) => ({ id, part: part.sort((a, b) => cmp(a.id, b.id)) }))
           .sort((a, b) => cmp(a.id, b.id)),
-        source,
+        source: current.source,
         sourceMode: before ? ("older" as const) : ("latest" as const),
         projectSource: true,
-        cursor: response.cursor.next ?? undefined,
-        complete: response.data.length === 0,
+        cursor: first.contextCursor ?? response.cursor.next ?? undefined,
+        complete,
+        revertPreview: "revert" in first ? first.revert : undefined,
+        clearedRevert:
+          !!revert?.messageID &&
+          !("revert" in first) &&
+          complete &&
+          !current.normalized.messages.some((message) => message.id === revert.messageID)
+            ? true
+            : undefined,
       }
     }
+    const toPage = (response: Awaited<ReturnType<typeof client.session.messages>>) => {
+      const items = (response.data ?? []).filter((item) => !!item?.info?.id)
+      const cursor = nextBefore(
+        response.response.headers.get("Link"),
+        response.response.headers.get("X-Next-Cursor") ?? response.response.headers.get("x-next-cursor"),
+      )
+      return {
+        session: items.map((item) => cleanMessage(item.info)).sort(compareMessages),
+        part: items.map((item) => ({
+          id: item.info.id,
+          part: item.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id)),
+        })),
+        cursor,
+        complete: !cursor,
+      }
+    }
+
     const response = await (options?.retry ?? retry)(() => {
       onAttempt?.()
       return client.session.messages({ sessionID, limit, before })
     })
-    const items = (response.data ?? []).filter((item) => !!item?.info?.id)
+    const page = toPage(response)
+    const result = before
+      ? page
+      : await loadRevertAwareLatestPage({
+          current: page,
+          revert,
+          fetchMessage: (messageID) =>
+            (options?.retry ?? retry)(() =>
+              client.session.message({ sessionID, messageID }, { throwOnError: false }),
+            ).then((result) => {
+              const boundary = boundaryFromMessageResponse(result)
+              if (!boundary) return undefined
+              const cursor = "cursor" in boundary ? boundary.cursor : undefined
+              return {
+                info: cleanMessage(boundary.info),
+                parts: boundary.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id)),
+                cursor: typeof cursor === "string" ? cursor : undefined,
+              }
+            }),
+          // Boundary repair walks assistant-heavy stretches; the sync limit (often the tiny
+          // initial page size) would turn that walk into dozens of sequential requests.
+          fetchPage: (cursor) =>
+            (options?.retry ?? retry)(() =>
+              client.session.messages({ sessionID, limit: Math.max(limit, historyMessagePageSize), before: cursor }),
+            ).then(toPage),
+        })
+    const parts = new Map(result.part.map((item) => [item.id, item.part]))
     return {
-      session: items.map((item) => cleanMessage(item.info)).sort(compareMessages),
-      part: items.map((item) => ({
-        id: item.info.id,
-        part: item.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id)),
-      })),
-      source: legacyMessageSource(items),
+      ...result,
+      source: legacyMessageSource(result.session.map((info) => ({ info, parts: parts.get(info.id) ?? [] }))),
       sourceMode: before ? ("older" as const) : ("latest" as const),
-      cursor: response.response.headers.get("x-next-cursor") ?? undefined,
-      complete: !response.response.headers.get("x-next-cursor"),
     }
   }
 
@@ -682,8 +882,14 @@ export function createServerSession(
           const existing = data.session_message[sessionID] ?? []
           const current = existing.filter((message) => !incoming.has(message.id))
           const live = new Map(existing.map((message) => [message.id, message]))
-          return (page.sourceMode === "older" ? [...page.source, ...current] : [...current, ...page.source]).map(
-            (message) => (load?.touchedSource.has(message.id) ? (live.get(message.id) ?? message) : message),
+          const messages = (() => {
+            if (page.sourceMode === "older") return [...page.source, ...current]
+            const before = current.filter((message) => !load?.touchedSource.has(message.id))
+            const after = current.filter((message) => load?.touchedSource.has(message.id))
+            return [...before, ...page.source, ...after]
+          })()
+          return messages.map((message) =>
+            load?.touchedSource.has(message.id) ? (live.get(message.id) ?? message) : message,
           )
         })()
       : undefined
@@ -693,7 +899,7 @@ export function createServerSession(
             const normalized = normalizeSessionMessages(sessionID, source)
             return {
               ...page,
-              session: normalized.messages.sort(compareMessages),
+              session: normalized.messages,
               part: [...normalized.parts.entries()]
                 .map(([id, part]) => ({ id, part: part.sort((a, b) => cmp(a.id, b.id)) }))
                 .sort((a, b) => cmp(a.id, b.id)),
@@ -710,12 +916,15 @@ export function createServerSession(
       retained: load?.retainedMessages,
       removed: load?.removedMessages,
       preserveUnfetched,
-      compare: compareMessages,
+      compare: page.projectSource ? undefined : compareMessages,
+      preserveOrder: page.projectSource,
     })
     batch(() => {
       if (source) setData("session_message", sessionID, reconcile(source))
+      if (merged.revertPreview !== undefined) setData("revert_preview", sessionID, merged.revertPreview)
       const messageIDs = replaceMessages(sessionID, messages)
       replaceParts(sessionID, merged.part, messageIDs, load)
+      if (merged.clearedRevert) setData("info", sessionID, (info) => (info ? { ...info, revert: undefined } : info))
       const orphans = orphanParts.get(sessionID)
       if (cleanupOrphans && page.complete && orphans) {
         for (const messageID of orphans) {
@@ -730,7 +939,13 @@ export function createServerSession(
     })
   }
 
-  const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
+  const loadMessages = async (
+    sessionID: string,
+    limit: number,
+    before?: string,
+    mode?: "replace" | "prepend",
+    revert?: Session["revert"],
+  ) => {
     if (meta.loading[sessionID]) return
     const active = generation(sessionID)
     const load: MessageLoadState = {
@@ -750,11 +965,25 @@ export function createServerSession(
     setMeta("loading", sessionID, true)
     let applied = false
     try {
-      const page = await fetchMessages(sessionID, limit, before, () => resetMessageLoad(sessionID, load))
-      const first = page.session.reduce<Message | undefined>(
-        (oldest, message) => (!oldest || compareMessages(message, oldest) < 0 ? message : oldest),
-        undefined,
+      const fetched = await fetchMessages(sessionID, limit, before, () => resetMessageLoad(sessionID, load), revert)
+      const incoming = fetched.projectSource ? (fetched.source ?? []) : fetched.session
+      const existing = new Set(
+        (fetched.projectSource ? (data.session_message[sessionID] ?? []) : (data.message[sessionID] ?? [])).map(
+          (message) => message.id,
+        ),
       )
+      const page =
+        mode === "prepend" &&
+        before &&
+        (fetched.cursor === before || (!!fetched.cursor && !incoming.some((message) => !existing.has(message.id))))
+          ? { ...fetched, cursor: undefined, complete: true }
+          : fetched
+      const first = page.projectSource
+        ? page.session[0]
+        : page.session.reduce<Message | undefined>(
+            (oldest, message) => (!oldest || compareMessages(message, oldest) < 0 ? message : oldest),
+            undefined,
+          )
       if (generations.get(sessionID) !== active) return
 
       const parents = [] as Awaited<ReturnType<typeof fetchMessage>>[]
@@ -799,10 +1028,10 @@ export function createServerSession(
           ? page
           : {
               ...page,
-              session: merge(
+              session: mergeMessages(
                 page.session,
                 parents.map((parent) => parent.message),
-              ).sort(compareMessages),
+              ),
               part: merge(
                 page.part,
                 parents.map((parent) => ({ id: parent.message.id, part: parent.parts })),
@@ -836,14 +1065,38 @@ export function createServerSession(
   const sync = (sessionID: string, options?: { force?: boolean; messageLimit?: number }) => {
     touch(sessionID)
     return runInflight(inflight, sessionID, async () => {
+      const sessionInfo = data.info[sessionID]
       const cached = data.message[sessionID] !== undefined && meta.limit[sessionID] !== undefined
-      if (cached && data.info[sessionID] && !options?.force) return
-      await Promise.all([
-        resolve(sessionID, options),
-        cached && !options?.force
+      const needsRevertRepair = (revert?: Session["revert"]) => {
+        if (!revert?.messageID || data.message[sessionID] === undefined || meta.limit[sessionID] === undefined)
+          return false
+        const messages = data.message[sessionID] ?? []
+        const boundaryLoaded = messages.some((message) => message.id === revert.messageID)
+        return !hasVisibleUserBeforeRevert(messages, revert) && !(meta.complete[sessionID] && boundaryLoaded)
+      }
+      const needsExistingRevertRepair = needsRevertRepair(sessionInfo?.revert)
+      const canReuseCached = !!(cached && sessionInfo && !needsExistingRevertRepair)
+      const messageLimit = () => options?.messageLimit ?? meta.limit[sessionID] ?? initialMessagePageSize
+      const repairMessageLimit = () => {
+        const limit = messageLimit()
+        return limit === 0 ? initialMessagePageSize : limit
+      }
+      if (canReuseCached && !options?.force) return
+      const resolving = sessionInfo && !options?.force ? Promise.resolve(sessionInfo) : resolve(sessionID, options)
+      const loading =
+        cached && !options?.force && !needsExistingRevertRepair
           ? Promise.resolve()
-          : loadMessages(sessionID, options?.messageLimit ?? meta.limit[sessionID] ?? initialMessagePageSize),
-      ])
+          : loadMessages(
+              sessionID,
+              needsExistingRevertRepair ? repairMessageLimit() : messageLimit(),
+              undefined,
+              undefined,
+              sessionInfo?.revert,
+            )
+      const nextSession = await resolving
+      await loading
+      if (!sessionInfo?.revert?.messageID && nextSession.revert?.messageID && needsRevertRepair(nextSession.revert))
+        await loadMessages(sessionID, repairMessageLimit(), undefined, undefined, nextSession.revert)
     })
   }
 
@@ -855,7 +1108,9 @@ export function createServerSession(
       (meta.complete[sessionID] || (data.message[sessionID]?.length ?? 0) >= limit)
     )
       return
-    await runInflight(inflight, sessionID, () => loadMessages(sessionID, limit))
+    await runInflight(inflight, sessionID, () =>
+      loadMessages(sessionID, limit, undefined, undefined, data.info[sessionID]?.revert),
+    )
   }
 
   const eventSessionID = (event: { type: string; properties?: unknown }) => {
@@ -888,7 +1143,10 @@ export function createServerSession(
     const touched = new Set(reduction.touched)
     let parentID: string | undefined
     for (const message of reduction.messages) {
-      if (message.type === "user" || (message.type === "synthetic" && message.description?.trim()))
+      if (
+        message.type === "user" ||
+        (message.type === "synthetic" && (message.description?.trim() || message.text.trim()))
+      )
         parentID = message.id
       if (message.type === "shell") {
         if (touched.has(message.id)) touched.add(`${message.id}:assistant`)
@@ -921,16 +1179,15 @@ export function createServerSession(
     })
   }
 
-  const hydrateV2Message = (sessionID: string, messageID: string) => {
-    if (!sessionApi) return
-    void sessionApi
-      .message({ sessionID, messageID })
-      .then((message) => {
-        const current = data.session_message[sessionID] ?? []
-        const messages = [...current.filter((item) => item.id !== message.id), message].sort(compareMessages)
-        projectV2({ sessionID, messages, touched: [message.id] })
-      })
-      .catch(() => {})
+  const hydrateV2Message = (sessionID: string, _messageID: string) => {
+    if (!sessionApi || !messageApi) return
+    const refresh = () => sync(sessionID, { force: true })
+    const pending = inflight.get(sessionID)
+    if (pending) {
+      void pending.finally(refresh).catch(() => {})
+      return
+    }
+    void refresh().catch(() => {})
   }
 
   const applyV2 = (event: OpenCodeEvent) => {
@@ -975,11 +1232,45 @@ export function createServerSession(
         next: event.data.at,
       })
     if (event.type === "session.forked") void resolve(sessionID, { force: true }).catch(() => {})
-    if (
-      event.type === "session.revert.staged" ||
-      event.type === "session.revert.cleared" ||
-      event.type === "session.revert.committed"
-    )
+    const eventType: string = event.type
+    if (eventType === "session.next.revert.committed") {
+      const messageID =
+        "messageID" in event.data && typeof event.data.messageID === "string" ? event.data.messageID : undefined
+      const source = data.session_message[sessionID] ?? []
+      const boundary = messageID ? source.findIndex((message) => message.id === messageID) : -1
+      if (boundary !== -1) {
+        const committed = source.slice(0, boundary + 1)
+        const normalized = normalizeSessionMessages(sessionID, committed)
+        const messageIDs = new Set(normalized.messages.map((message) => message.id))
+        const dropped = (data.message[sessionID] ?? []).filter((message) => !messageIDs.has(message.id))
+        batch(() => {
+          setData(
+            "session_message",
+            sessionID,
+            produce((draft) => draft.splice(0, draft.length, ...committed)),
+          )
+          setData(
+            "message",
+            sessionID,
+            produce((draft) => draft.splice(0, draft.length, ...normalized.messages)),
+          )
+          setData(produce((draft) => dropped.forEach((message) => deleteMessageParts(draft, message.id))))
+          replaceParts(
+            sessionID,
+            [...normalized.parts].map(([id, part]) => ({ id, part })),
+            messageIDs,
+          )
+        })
+      }
+      setData("revert_preview", sessionID, undefined)
+      setData("info", sessionID, (info) => (info ? { ...info, revert: undefined } : info))
+      setMeta("limit", sessionID, undefined)
+      setMeta("cursor", sessionID, undefined)
+      setMeta("complete", sessionID, undefined)
+      setMeta("at", sessionID, undefined)
+    }
+    if (eventType === "session.next.revert.committed") void sync(sessionID, { force: true }).catch(() => {})
+    if (eventType === "session.next.revert.staged" || eventType === "session.next.revert.cleared")
       void resolve(sessionID, { force: true }).catch(() => {})
   }
 
@@ -1050,14 +1341,13 @@ export function createServerSession(
           setData("message", info.sessionID, [info])
           return
         }
-        const result = Binary.search(messages, messageKey(info), messageKey)
-        if (result.found) setData("message", info.sessionID, result.index, reconcile(info))
-        if (!result.found)
-          setData("message", info.sessionID, (value = []) => {
-            const next = value.slice()
-            next.splice(result.index, 0, info)
-            return next
-          })
+        setData("message", info.sessionID, (value = []) =>
+          mergeProjectedMessages(
+            value.filter((message) => message.id !== info.id),
+            [info],
+            data.session_message[info.sessionID],
+          ),
+        )
         return
       }
       case "message.removed": {
@@ -1340,7 +1630,9 @@ export function createServerSession(
         if (items) items.set(input.message.id, { ...input, parts, confirmedParts: [] })
         if (!items)
           optimistic.set(input.sessionID, new Map([[input.message.id, { ...input, parts, confirmedParts: [] }]]))
-        setData("message", input.sessionID, (messages = []) => merge(messages, [input.message]).sort(compareMessages))
+        setData("message", input.sessionID, (messages = []) =>
+          mergeProjectedMessages(messages, [input.message], data.session_message[input.sessionID]),
+        )
         setData(
           "part_text_accum_delta",
           produce((draft) => {

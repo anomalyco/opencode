@@ -51,7 +51,14 @@ import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
+import {
+  OPENCODE_BASE_MODE,
+  useBindings,
+  useCommandShortcut,
+  useLeaderActive,
+  useOpencodeKeymap,
+  useOpencodeModeStack,
+} from "../../keymap"
 import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
@@ -144,6 +151,7 @@ export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable | undefined>()
+  const [submitting, setSubmitting] = createSignal(false)
 
   const leader = useLeaderActive()
   const local = useLocal()
@@ -164,6 +172,7 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
+  const modeStack = useOpencodeModeStack()
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
   const renderer = useRenderer()
@@ -340,6 +349,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         hidden: true,
         run: () => {
+          if (submitting()) return
           clearPrompt()
           dialog.clear()
         },
@@ -375,6 +385,7 @@ export function Prompt(props: PromptProps) {
         run: async (ctx: CommandContext<Renderable, KeyEvent>) => {
           ctx.event.preventDefault()
           ctx.event.stopPropagation()
+          if (submitting()) return
           const content = await clipboard.read?.()
           if (content?.mime.startsWith("image/")) {
             await pasteAttachment({
@@ -800,7 +811,7 @@ export function Prompt(props: PromptProps) {
   useBindings(() => {
     return {
       target: inputTarget,
-      enabled: inputTarget() !== undefined && !props.disabled,
+      enabled: inputTarget() !== undefined && !props.disabled && !submitting(),
       bindings: tuiConfig.keybinds.get("prompt.paste"),
     }
   })
@@ -808,7 +819,7 @@ export function Prompt(props: PromptProps) {
   useBindings(() => {
     return {
       target: inputTarget,
-      enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
+      enabled: inputTarget() !== undefined && !props.disabled && !submitting() && store.prompt.input !== "",
       bindings: tuiConfig.keybinds.get("prompt.clear"),
     }
   })
@@ -821,6 +832,7 @@ export function Prompt(props: PromptProps) {
         return (
           inputTarget() !== undefined &&
           !props.disabled &&
+          !submitting() &&
           store.mode === "normal" &&
           !auto()?.visible &&
           input?.visualCursor.offset === 0
@@ -843,7 +855,7 @@ export function Prompt(props: PromptProps) {
   useBindings(() => {
     return {
       target: inputTarget,
-      enabled: inputTarget() !== undefined && store.mode === "shell",
+      enabled: inputTarget() !== undefined && !submitting() && store.mode === "shell",
       bindings: [{ key: "escape", desc: "Exit shell mode", group: "Prompt", cmd: () => setStore("mode", "normal") }],
     }
   })
@@ -853,7 +865,9 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return inputTarget() !== undefined && store.mode === "shell" && input?.visualCursor.offset === 0
+        return (
+          inputTarget() !== undefined && !submitting() && store.mode === "shell" && input?.visualCursor.offset === 0
+        )
       })(),
       bindings: [{ key: "backspace", desc: "Exit shell mode", group: "Prompt", cmd: () => setStore("mode", "normal") }],
     }
@@ -864,7 +878,9 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+        return (
+          inputTarget() !== undefined && !props.disabled && !submitting() && !auto()?.visible && input !== undefined
+        )
       })(),
       commands: [
         {
@@ -896,7 +912,9 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+        return (
+          inputTarget() !== undefined && !props.disabled && !submitting() && !auto()?.visible && input !== undefined
+        )
       })(),
       commands: [
         {
@@ -927,7 +945,6 @@ export function Prompt(props: PromptProps) {
     }
   })
 
-  let submitting = false
   async function submit() {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
@@ -935,12 +952,17 @@ export function Prompt(props: PromptProps) {
     // clears `store.prompt.input`, then awaits its own `session.create` and
     // ultimately reads the now-empty store — sending a phantom empty prompt
     // to a freshly created session.
-    if (submitting) return false
-    submitting = true
+    if (submitting()) return false
+    setSubmitting(true)
+    const unlock = modeStack.push("prompt-submitting")
+    const focused = input.focused
+    if (focused) input.blur()
     try {
       return await submitInner()
     } finally {
-      submitting = false
+      unlock()
+      setSubmitting(false)
+      if (focused && !input.isDestroyed) input.focus()
     }
   }
 
@@ -1023,40 +1045,40 @@ export function Prompt(props: PromptProps) {
       sessionID = res.data.id
     }
 
-    const inputText = expandTrackedPastedText(
-      store.prompt.input,
-      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
-        const partIndex = store.extmarkToPartIndex.get(extmark.id)
-        const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
-        if (part?.type !== "text") return []
-        return [{ start: extmark.start, end: extmark.end, text: part.text }]
-      }),
-    )
-
-    // Filter out text parts (pasted content) since they're now expanded inline
-    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
-
-    // Capture mode before it gets reset
-    const currentMode = store.mode
     const editorSelection = editorContext()
-    const editorParts =
-      editorSelection && editor.labelState() === "pending"
-        ? [
-            {
-              type: "text" as const,
-              text: formatEditorContext(editorSelection),
-              synthetic: true,
-              metadata: {
-                kind: "editor_context",
-                source: editorSelection.source ?? "editor",
-                filePath: editorSelection.filePath,
-                ranges: editorSelection.ranges,
+    const submission = {
+      prompt: { input: store.prompt.input, parts: [...store.prompt.parts] },
+      inputText: expandTrackedPastedText(
+        store.prompt.input,
+        input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
+          const partIndex = store.extmarkToPartIndex.get(extmark.id)
+          const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
+          if (part?.type !== "text") return []
+          return [{ start: extmark.start, end: extmark.end, text: part.text }]
+        }),
+      ),
+      nonTextParts: store.prompt.parts.filter((part) => part.type !== "text"),
+      currentMode: store.mode,
+      editorParts:
+        editorSelection && editor.labelState() === "pending"
+          ? [
+              {
+                type: "text" as const,
+                text: formatEditorContext(editorSelection),
+                synthetic: true,
+                metadata: {
+                  kind: "editor_context",
+                  source: editorSelection.source ?? "editor",
+                  filePath: editorSelection.filePath,
+                  ranges: editorSelection.ranges,
+                },
               },
-            },
-          ]
-        : []
+            ]
+          : [],
+    }
+    if (!submission.inputText) return false
 
-    if (store.mode === "shell") {
+    if (submission.currentMode === "shell") {
       move.startSubmit()
       void sdk.client.session.shell({
         sessionID,
@@ -1065,19 +1087,19 @@ export function Prompt(props: PromptProps) {
           providerID: selectedModel.providerID,
           modelID: selectedModel.modelID,
         },
-        command: inputText,
+        command: submission.inputText,
       })
       setStore("mode", "normal")
     } else if (
-      inputText.startsWith("/") &&
-      sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
+      submission.inputText.startsWith("/") &&
+      sync.data.command.some((x) => x.name === submission.inputText.split("\n")[0].split(" ")[0].slice(1))
     ) {
       move.startSubmit()
       // Parse command from first line, preserve multi-line content in arguments
-      const firstLineEnd = inputText.indexOf("\n")
-      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
+      const firstLineEnd = submission.inputText.indexOf("\n")
+      const firstLine = firstLineEnd === -1 ? submission.inputText : submission.inputText.slice(0, firstLineEnd)
       const [command, ...firstLineArgs] = firstLine.split(" ")
-      const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
+      const restOfInput = firstLineEnd === -1 ? "" : submission.inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
       void sdk.client.session.command({
@@ -1087,7 +1109,7 @@ export function Prompt(props: PromptProps) {
         agent: agent.name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         variant,
-        parts: nonTextParts.filter((x) => x.type === "file"),
+        parts: submission.nonTextParts.filter((x) => x.type === "file"),
       })
     } else {
       move.startSubmit()
@@ -1100,12 +1122,12 @@ export function Prompt(props: PromptProps) {
             model: selectedModel,
             variant,
             parts: [
-              ...editorParts,
+              ...submission.editorParts,
               {
                 type: "text",
-                text: inputText,
+                text: submission.inputText,
               },
-              ...nonTextParts,
+              ...submission.nonTextParts,
             ],
           },
           { throwOnError: true },
@@ -1117,11 +1139,11 @@ export function Prompt(props: PromptProps) {
             variant: "error",
           })
         })
-      if (editorParts.length > 0) editor.markSelectionSent()
+      if (submission.editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({
-      ...store.prompt,
-      mode: currentMode,
+      ...submission.prompt,
+      mode: submission.currentMode,
     })
     input.extmarks.clear()
     setStore("prompt", {
@@ -1133,7 +1155,7 @@ export function Prompt(props: PromptProps) {
 
     // temporary hack to make sure the message is sent
     if (!props.sessionID) {
-      if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
+      if (submission.editorParts.length > 0) editor.preserveSelectionFromNewSession()
       setTimeout(() => {
         route.navigate({
           type: "session",
@@ -1383,7 +1405,7 @@ export function Prompt(props: PromptProps) {
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
               onKeyDown={(e: { preventDefault(): void }) => {
-                if (props.disabled) {
+                if (props.disabled || submitting()) {
                   e.preventDefault()
                   return
                 }
@@ -1394,7 +1416,7 @@ export function Prompt(props: PromptProps) {
                 setTimeout(() => setTimeout(() => submit(), 0), 0)
               }}
               onPaste={async (event: PasteEvent) => {
-                if (props.disabled) {
+                if (props.disabled || submitting()) {
                   event.preventDefault()
                   return
                 }

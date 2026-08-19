@@ -30,6 +30,15 @@ export type ProjectMeta = {
   }
 }
 
+export type RevertPreview = {
+  messageID: string
+  userCount: number
+  hasMore: boolean
+  nextMessageID?: string
+  continuationMessageID?: string
+  items: { id: string; text: string }[]
+}
+
 export type State = {
   status: "loading" | "partial" | "complete"
   agent: Agent[]
@@ -76,6 +85,9 @@ export type State = {
   }
   session_message: {
     [sessionID: string]: SessionMessageInfo[]
+  }
+  revert_preview: {
+    [sessionID: string]: RevertPreview | undefined
   }
   part: {
     [messageID: string]: Part[]

@@ -15,6 +15,7 @@ import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { redoTarget, selectVisibleMessages, type RevertPreviewState } from "@/pages/session/timeline/revert"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { Message, Part, UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -27,6 +28,7 @@ export type SessionCommandContext = {
   focusInput: () => void
   review?: () => boolean
   fileBrowser?: () => boolean
+  revertPreview: () => RevertPreviewState
 }
 
 const withCategory = (category: string) => {
@@ -97,11 +99,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     return sync().data.message[id] ?? []
   }
   const userMessages = () => messages().filter((m) => m.role === "user") as UserMessage[]
+  const beforeMessage = (message: UserMessage, boundaryID: string) => {
+    const source = messages()
+    const index = source.findIndex((item) => item.id === message.id)
+    const boundary = source.findIndex((item) => item.id === boundaryID)
+    return index !== -1 && boundary !== -1 && index < boundary
+  }
   const visibleUserMessages = () => {
-    const revert = info()?.revert?.messageID
-    if (!revert) return userMessages()
-    const boundary = userMessages().findIndex((message) => message.id === revert)
-    return boundary < 0 ? userMessages() : userMessages().slice(0, boundary)
+    return selectVisibleMessages(messages(), info()?.revert).filter((m): m is UserMessage => m.role === "user")
   }
 
   const showAllFiles = () => {
@@ -338,9 +343,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const promptSession = prompt.capture()
     const revert = info()?.revert?.messageID
     const messages = userMessages()
-    const boundary = revert ? messages.findIndex((message) => message.id === revert) : messages.length
-    if (boundary < 0) return
-    const message = messages[boundary - 1]
+    const message = findLast(messages, (x) => !revert || beforeMessage(x, revert))
     if (!message) return
     const parts = sync().data.part[message.id]
 
@@ -351,11 +354,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     await runCommand({
       owner,
       prompt: promptSession,
-      request: () => session.revert.stage({ sessionID, messageID: message.id }),
+      request: async () => {
+        const revert = await session.revert.stage({ sessionID, messageID: message.id })
+        const current = sync().session.get(sessionID)
+        if (current) sync().session.remember({ ...current, revert })
+      },
       updatePrompt: (promptSession) => {
         if (parts) promptSession.set(extractPromptFromParts(parts, { directory }))
       },
-      updateViewport: () => setActiveMessage(messages[boundary - 2]),
+      updateViewport: () => setActiveMessage(findLast(messages, (x) => beforeMessage(x, message.id))),
     })
   }
 
@@ -370,16 +377,19 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const revertMessageID = info()?.revert?.messageID
     if (!revertMessageID) return
 
-    const boundary = messages.findIndex((message) => message.id === revertMessageID)
-    if (boundary < 0) return
-    const next = messages[boundary + 1]
-    if (!next) {
+    const target = redoTarget(actions.revertPreview())
+    if (target === undefined) return
+    if (target === null) {
       await runCommand({
         owner,
         prompt: promptSession,
-        request: () => session.revert.clear({ sessionID }),
+        request: async () => {
+          await session.revert.clear({ sessionID })
+          const current = sync().session.get(sessionID)
+          if (current) sync().session.remember({ ...current, revert: undefined })
+        },
         updatePrompt: (promptSession) => promptSession.reset(),
-        updateViewport: () => setActiveMessage(messages.at(-1)),
+        updateViewport: () => setActiveMessage(findLast(messages, (x) => !beforeMessage(x, revertMessageID))),
       })
       return
     }
@@ -387,9 +397,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     await runCommand({
       owner,
       prompt: promptSession,
-      request: () => session.revert.stage({ sessionID, messageID: next.id }),
+      request: async () => {
+        const revert = await session.revert.stage({ sessionID, messageID: target })
+        const current = sync().session.get(sessionID)
+        if (current) sync().session.remember({ ...current, revert })
+      },
       updatePrompt: () => undefined,
-      updateViewport: () => setActiveMessage(messages[boundary]),
+      updateViewport: () => setActiveMessage(findLast(messages, (x) => beforeMessage(x, target))),
     })
   }
 
@@ -470,7 +484,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.redo"),
       description: language.t("command.session.redo.description"),
       slash: "redo",
-      disabled: !params.id || !info()?.revert?.messageID,
+      disabled: !params.id || !info()?.revert?.messageID || !actions.revertPreview().ready,
       onSelect: redo,
     }),
     sessionCommand({

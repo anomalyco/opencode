@@ -148,18 +148,52 @@ describe("MessageV2.page", () => {
         const a = yield* MessageV2.page({ sessionID, limit: 2 })
         expect(a.items.map((item) => item.info.id)).toEqual(ids.slice(-2))
         expect(a.items.every((item) => item.parts.length === 1)).toBe(true)
-        expect(a.more).toBe(true)
-        expect(a.cursor).toBeTruthy()
+        expect(a.before).toBeTruthy()
 
-        const b = yield* MessageV2.page({ sessionID, limit: 2, before: a.cursor! })
+        const b = yield* MessageV2.page({ sessionID, limit: 2, before: a.before! })
         expect(b.items.map((item) => item.info.id)).toEqual(ids.slice(-4, -2))
-        expect(b.more).toBe(true)
-        expect(b.cursor).toBeTruthy()
+        expect(b.before).toBeTruthy()
 
-        const c = yield* MessageV2.page({ sessionID, limit: 2, before: b.cursor! })
+        const c = yield* MessageV2.page({ sessionID, limit: 2, before: b.before! })
         expect(c.items.map((item) => item.info.id)).toEqual(ids.slice(0, 2))
-        expect(c.more).toBe(false)
-        expect(c.cursor).toBeUndefined()
+        expect(c.before).toBeUndefined()
+        expect(c.after).toBeTruthy()
+      }),
+    ),
+  )
+
+  it.instance("pages forward from an older page", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 6)
+
+        const latest = yield* MessageV2.page({ sessionID, limit: 2 })
+        const older = yield* MessageV2.page({ sessionID, limit: 2, before: latest.before! })
+        expect(older.items.map((item) => item.info.id)).toEqual(ids.slice(-4, -2))
+        expect(older.after).toBeTruthy()
+
+        const newer = yield* MessageV2.page({ sessionID, limit: 2, after: older.after! })
+        expect(newer.items.map((item) => item.info.id)).toEqual(ids.slice(-2))
+        expect(newer.before).toBeTruthy()
+        expect(newer.after).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.instance("pages from the oldest edge", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 5)
+
+        const oldest = yield* MessageV2.page({ sessionID, limit: 2, oldest: true })
+        expect(oldest.items.map((item) => item.info.id)).toEqual(ids.slice(0, 2))
+        expect(oldest.before).toBeUndefined()
+        expect(oldest.after).toBeTruthy()
+
+        const next = yield* MessageV2.page({ sessionID, limit: 2, after: oldest.after! })
+        expect(next.items.map((item) => item.info.id)).toEqual(ids.slice(2, 4))
+        expect(next.before).toBeTruthy()
+        expect(next.after).toBeTruthy()
       }),
     ),
   )
@@ -180,8 +214,8 @@ describe("MessageV2.page", () => {
       Effect.gen(function* () {
         const result = yield* MessageV2.page({ sessionID, limit: 10 })
         expect(result.items).toEqual([])
-        expect(result.more).toBe(false)
-        expect(result.cursor).toBeUndefined()
+        expect(result.before).toBeUndefined()
+        expect(result.after).toBeUndefined()
       }),
     ),
   )
@@ -202,8 +236,41 @@ describe("MessageV2.page", () => {
 
         const result = yield* MessageV2.page({ sessionID, limit: 3 })
         expect(result.items.map((item) => item.info.id)).toEqual(ids)
-        expect(result.more).toBe(false)
-        expect(result.cursor).toBeUndefined()
+        expect(result.before).toBeUndefined()
+        expect(result.after).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.instance("preserves reverse navigation around deleted cursor anchors", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 4, (index: number) => 1_000 + index)
+        const oldest = yield* MessageV2.page({ sessionID, limit: 1, oldest: true })
+        const oldestCursor = oldest.after!
+        yield* session.removeMessage({ sessionID, messageID: ids[0]! })
+
+        const beforeOldest = yield* MessageV2.page({ sessionID, limit: 1, before: oldestCursor })
+        expect(beforeOldest.items).toEqual([])
+        expect(beforeOldest.before).toBeUndefined()
+        expect(beforeOldest.after).toBe(oldestCursor)
+        expect(
+          (yield* MessageV2.page({ sessionID, limit: 1, after: beforeOldest.after })).items.map((item) => item.info.id),
+        ).toEqual([ids[1]])
+
+        const latest = yield* MessageV2.page({ sessionID, limit: 1 })
+        const newestCursor = latest.before!
+        yield* session.removeMessage({ sessionID, messageID: ids.at(-1)! })
+
+        const afterNewest = yield* MessageV2.page({ sessionID, limit: 1, after: newestCursor })
+        expect(afterNewest.items).toEqual([])
+        expect(afterNewest.before).toBe(newestCursor)
+        expect(afterNewest.after).toBeUndefined()
+        expect(
+          (yield* MessageV2.page({ sessionID, limit: 1, before: afterNewest.before })).items.map(
+            (item) => item.info.id,
+          ),
+        ).toEqual([ids[2]])
       }),
     ),
   )
@@ -216,7 +283,7 @@ describe("MessageV2.page", () => {
         const result = yield* MessageV2.page({ sessionID, limit: 1 })
         expect(result.items).toHaveLength(1)
         expect(result.items[0].info.id).toBe(ids[ids.length - 1])
-        expect(result.more).toBe(true)
+        expect(result.before).toBeTruthy()
       }),
     ),
   )
@@ -247,7 +314,7 @@ describe("MessageV2.page", () => {
         const ids = yield* fill(sessionID, 4, (i: number) => 1000.5 + i)
 
         const a = yield* MessageV2.page({ sessionID, limit: 2 })
-        const b = yield* MessageV2.page({ sessionID, limit: 2, before: a.cursor! })
+        const b = yield* MessageV2.page({ sessionID, limit: 2, before: a.before! })
 
         expect(a.items.map((item) => item.info.id)).toEqual(ids.slice(-2))
         expect(b.items.map((item) => item.info.id)).toEqual(ids.slice(0, 2))
@@ -262,11 +329,11 @@ describe("MessageV2.page", () => {
 
         const a = yield* MessageV2.page({ sessionID, limit: 2 })
         expect(a.items.map((item) => item.info.id)).toEqual(ids.slice(-2))
-        expect(a.more).toBe(true)
+        expect(a.before).toBeTruthy()
 
-        const b = yield* MessageV2.page({ sessionID, limit: 2, before: a.cursor! })
+        const b = yield* MessageV2.page({ sessionID, limit: 2, before: a.before! })
         expect(b.items.map((item) => item.info.id)).toEqual(ids.slice(0, 2))
-        expect(b.more).toBe(false)
+        expect(b.before).toBeUndefined()
       }),
     ),
   )
@@ -299,8 +366,8 @@ describe("MessageV2.page", () => {
         const result = yield* MessageV2.page({ sessionID, limit: 100 })
         expect(result.items).toHaveLength(10)
         expect(result.items.map((item) => item.info.id)).toEqual(ids)
-        expect(result.more).toBe(false)
-        expect(result.cursor).toBeUndefined()
+        expect(result.before).toBeUndefined()
+        expect(result.after).toBeUndefined()
       }),
     ),
   )
@@ -549,6 +616,44 @@ describe("MessageV2.get", () => {
         expect(result.parts).toEqual([])
       }),
     ),
+  )
+
+  it.instance("returns requested messages with hydrated parts in input order", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 3)
+        const first = ids.at(0)
+        const third = ids.at(2)
+        expect(first).toBeDefined()
+        expect(third).toBeDefined()
+        if (!first || !third) return
+        const messages = yield* MessageV2.getMany({
+          sessionID,
+          messageIDs: [third, first],
+        })
+
+        expect(messages.map((message) => message.info.id)).toEqual([third, first])
+        expect(messages.map((message) => (message.parts[0] as SessionV1.TextPart).text)).toEqual(["m2", "m0"])
+      }),
+    ),
+  )
+
+  it.instance("fails when a requested message is missing from the session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const source = yield* session.create({})
+      const target = yield* session.create({})
+      const [messageID] = yield* fill(source.id, 1)
+      const missingID = MessageID.ascending()
+
+      const crossSession = yield* Effect.flip(MessageV2.getMany({ sessionID: target.id, messageIDs: [messageID] }))
+      expect(crossSession).toBeInstanceOf(NotFoundError)
+      const missing = yield* Effect.flip(MessageV2.getMany({ sessionID: source.id, messageIDs: [missingID] }))
+      expect(missing).toBeInstanceOf(NotFoundError)
+
+      yield* session.remove(source.id)
+      yield* session.remove(target.id)
+    }),
   )
 })
 
@@ -1032,8 +1137,8 @@ describe("MessageV2 consistency", () => {
           for (let i = result.items.length - 1; i >= 0; i--) {
             paged.push(result.items[i])
           }
-          if (!result.more || !result.cursor) break
-          cursor = result.cursor
+          if (!result.before) break
+          cursor = result.before
         }
 
         expect(streamed.map((m) => m.info.id)).toEqual(paged.map((m) => m.info.id))

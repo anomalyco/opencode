@@ -1,6 +1,7 @@
 import type { Message, Part, PermissionRequest, QuestionRequest, SessionStatus, Todo } from "@opencode-ai/sdk/v2/client"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { RevertPreview } from "./types"
 
 export const SESSION_CACHE_LIMIT = 40
 
@@ -10,6 +11,7 @@ type SessionCache = {
   todo: Record<string, Todo[] | undefined>
   message: Record<string, Message[] | undefined>
   session_message: Record<string, SessionMessageInfo[] | undefined>
+  revert_preview: Record<string, RevertPreview | undefined>
   part: Record<string, Part[] | undefined>
   permission: Record<string, PermissionRequest[] | undefined>
   question: Record<string, QuestionRequest[] | undefined>
@@ -33,6 +35,7 @@ export function dropSessionCaches(store: SessionCache, sessionIDs: Iterable<stri
     delete store.message[sessionID]
     delete store.todo[sessionID]
     delete store.session_message[sessionID]
+    delete store.revert_preview[sessionID]
     delete store.session_diff[sessionID]
     delete store.session_status[sessionID]
     delete store.permission[sessionID]

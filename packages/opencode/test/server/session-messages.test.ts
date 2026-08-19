@@ -85,9 +85,15 @@ function json<T>(response: HttpClientResponse.HttpClientResponse) {
   return response.json.pipe(Effect.map((body) => body as T))
 }
 
+function linkParam(link: string | undefined, rel: "prev" | "next", name: string) {
+  const match = new RegExp(`<([^>]+)>;\\s*rel="${rel}"`).exec(link ?? "")
+  if (!match) return undefined
+  return new URL(match[1]).searchParams.get(name) ?? undefined
+}
+
 describe("session messages endpoint", () => {
   it.instance(
-    "returns cursor headers for older pages",
+    "returns bidirectional cursor headers",
     withoutWatcher(
       Effect.gen(function* () {
         const session = yield* sessionScoped
@@ -105,6 +111,21 @@ describe("session messages endpoint", () => {
         expect(b.status).toBe(200)
         const bBody = yield* json<SessionV1.WithParts[]>(b)
         expect(bBody.map((item) => item.info.id)).toEqual(ids.slice(-4, -2))
+        expect(b.headers["link"]).toContain('rel="next"')
+        expect(b.headers["link"]).toContain('rel="prev"')
+
+        const after = linkParam(b.headers["link"], "prev", "after")
+        expect(after).toBeTruthy()
+        const c = yield* request(`/session/${session.id}/message?limit=2&after=${encodeURIComponent(after!)}`)
+        expect(c.status).toBe(200)
+        const cBody = yield* json<SessionV1.WithParts[]>(c)
+        expect(cBody.map((item) => item.info.id)).toEqual(ids.slice(-2))
+
+        const oldest = yield* request(`/session/${session.id}/message?limit=2&oldest=true`)
+        expect(oldest.status).toBe(200)
+        const oldestBody = yield* json<SessionV1.WithParts[]>(oldest)
+        expect(oldestBody.map((item) => item.info.id)).toEqual(ids.slice(0, 2))
+        expect(oldest.headers["link"]).toContain('rel="prev"')
       }),
     ),
     { git: true },
@@ -127,6 +148,31 @@ describe("session messages endpoint", () => {
   )
 
   it.instance(
+    "keeps the legacy limit=0 full-history contract and rejects limit=0 pages",
+    withoutWatcher(
+      Effect.gen(function* () {
+        const session = yield* sessionScoped
+        const ids = yield* fill(session.id, 3)
+
+        const res = yield* request(`/session/${session.id}/message?limit=0`)
+        expect(res.status).toBe(200)
+        const body = yield* json<SessionV1.WithParts[]>(res)
+        expect(body.map((item) => item.info.id)).toEqual(ids)
+
+        const page = yield* request(`/session/${session.id}/message?limit=2`)
+        const cursor = page.headers["x-next-cursor"]
+        expect(cursor).toBeTruthy()
+        const paged = yield* request(`/session/${session.id}/message?limit=0&before=${encodeURIComponent(cursor!)}`)
+        expect(paged.status).toBe(400)
+
+        const oldest = yield* request(`/session/${session.id}/message?limit=0&oldest=true`)
+        expect(oldest.status).toBe(400)
+      }),
+    ),
+    { git: true },
+  )
+
+  it.instance(
     "rejects invalid cursors and missing sessions",
     withoutWatcher(
       Effect.gen(function* () {
@@ -134,6 +180,12 @@ describe("session messages endpoint", () => {
 
         const bad = yield* request(`/session/${session.id}/message?limit=2&before=bad`)
         expect(bad.status).toBe(400)
+
+        const emptyBefore = yield* request(`/session/${session.id}/message?limit=2&before=`)
+        expect(emptyBefore.status).toBe(400)
+
+        const emptyAfter = yield* request(`/session/${session.id}/message?limit=2&after=`)
+        expect(emptyAfter.status).toBe(400)
 
         const miss = yield* request(`/session/ses_missing/message?limit=2`)
         expect(miss.status).toBe(404)

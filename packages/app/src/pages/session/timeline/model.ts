@@ -3,13 +3,14 @@ import { createMemo, createResource, onCleanup, untrack, type Accessor } from "s
 import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { same } from "@/utils/same"
+import { selectVisibleMessages, type RevertBoundary } from "./revert"
 
 const emptyUserMessages: UserMessage[] = []
 const sessionFreshness = 15_000
 
 export function createTimelineModel(input: {
   sessionID: Accessor<string | undefined>
-  revertMessageID: Accessor<string | undefined>
+  revert: Accessor<RevertBoundary | undefined>
 }) {
   const serverSync = useServerSync()
   const sync = useSync()
@@ -45,12 +46,12 @@ export function createTimelineModel(input: {
   })
   const ready = createMemo(() => {
     const id = input.sessionID()
-    return !id || isTimelineReady(sync().data.message[id], serverSync().session.history.loading(id))
+    return !id || isTimelineReady(sync().data.message[id], serverSync().session.history.loading(id), input.revert())
   })
   const userMessages = createMemo(() => selectUserMessages(messages()), emptyUserMessages, { equals: same })
   const visibleUserMessages = createMemo(
     () => {
-      return selectVisibleUserMessages(userMessages(), input.revertMessageID())
+      return selectVisibleUserMessages(messages(), input.revert())
     },
     emptyUserMessages,
     { equals: same },
@@ -98,14 +99,12 @@ export function selectUserMessages(messages: Message[]) {
   return messages.filter((message): message is UserMessage => message.role === "user")
 }
 
-export function isTimelineReady(messages: Message[] | undefined, loading: boolean) {
-  return messages !== undefined && (messages.some((message) => message.role === "user") || !loading)
+export function isTimelineReady(messages: Message[] | undefined, loading: boolean, revert?: RevertBoundary) {
+  return messages !== undefined && (selectVisibleUserMessages(messages, revert).length > 0 || !loading)
 }
 
-export function selectVisibleUserMessages(messages: UserMessage[], revertMessageID?: string) {
-  if (!revertMessageID) return messages
-  const boundary = messages.findIndex((message) => message.id === revertMessageID)
-  return boundary < 0 ? messages : messages.slice(0, boundary)
+export function selectVisibleUserMessages(messages: Message[], revert?: RevertBoundary) {
+  return selectUserMessages(selectVisibleMessages(messages, revert))
 }
 
 export async function loadOlderTimeline(input: {

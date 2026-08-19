@@ -140,9 +140,12 @@ const retryImmediately: typeof retry = async (task, options = {}) => {
   }
 }
 
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
 function setup(sessions: Record<string, Session>) {
   const get: unknown[] = []
   const messages: unknown[] = []
+  const message: unknown[] = []
   const client = {
     session: {
       get: async (input: unknown) => {
@@ -154,11 +157,39 @@ function setup(sessions: Record<string, Session>) {
         messages.push(input)
         return response()
       },
+      message: async (input: unknown) => {
+        message.push(input)
+        return { data: { info: userMessage("boundary", { sessionID: "root", time: { created: 2 } }), parts: [] } }
+      },
       diff: async () => ({ data: [] }),
       todo: async () => ({ data: [] }),
     },
   } as unknown as OpencodeClient
-  return { get, messages, store: createServerSession(client) }
+  return { get, message, messages, store: createServerSession(client) }
+}
+
+function revertClient(
+  pages: MessageResponse[],
+  boundary = userMessage("boundary", { sessionID: "root", time: { created: 2 } }),
+  info: Session = session("root"),
+) {
+  let index = 0
+  const messages: unknown[] = []
+  const message: unknown[] = []
+  const client = {
+    session: {
+      get: async () => ({ data: info }),
+      messages: async (input: unknown) => {
+        messages.push(input)
+        return pages[index++] ?? response()
+      },
+      message: async (input: unknown) => {
+        message.push(input)
+        return { data: { info: boundary, parts: [] } }
+      },
+    },
+  } as unknown as OpencodeClient
+  return { client, message, messages }
 }
 
 describe("server session", () => {
@@ -242,7 +273,7 @@ describe("server session", () => {
       agent: "build",
       model: { id: "model", providerID: "provider" },
       content: [{ type: "text", text: "hi" }],
-      time: { created: 2, completed: 3 },
+      time: { created: 1, completed: 3 },
     }
     const client = {
       session: {
@@ -263,6 +294,16 @@ describe("server session", () => {
     await store.sync("root")
 
     expect(requests).toEqual([{ sessionID: "root", limit: 20, order: "desc" }])
+    expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
+
+    store.applyV2({
+      id: "evt_text_delta",
+      created: 4,
+      type: "session.text.delta",
+      location: { directory: "/repo" },
+      data: { sessionID: "root", assistantMessageID: assistant.id, ordinal: 0, delta: " again" },
+    })
+
     expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
     expect(store.data.message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
   })
@@ -309,9 +350,225 @@ describe("server session", () => {
     expect(assistants.map((item) => store.data.part[item.id]?.[0]?.type)).toEqual(["text", "text", "text"])
   })
 
+  test("walks current pages until a whole-message revert has a visible user", async () => {
+    const older = { id: "msg_1_user", type: "user", text: "older", time: { created: 1 } } as const
+    const boundary = { id: "msg_2_user", type: "user", text: "boundary", time: { created: 2 } } as const
+    const pages = [
+      { data: [boundary], cursor: { previous: null, next: "older" } },
+      { data: [older], cursor: { previous: null, next: null } },
+    ]
+    const requests: unknown[] = []
+    const messageApi = {
+      list: async (input: unknown) => {
+        requests.push(input)
+        return pages.shift()!
+      },
+    } as unknown as MessageApi
+    const store = createServerSession({} as OpencodeClient, {} as SessionApi, messageApi)
+    store.remember({ ...session("root"), revert: { messageID: boundary.id } })
+
+    await store.sync("root")
+
+    expect(requests).toEqual([
+      { sessionID: "root", limit: 20, order: "desc" },
+      { sessionID: "root", limit: 20, cursor: "older" },
+    ])
+    expect(store.data.message.root.map((message) => message.id)).toEqual([older.id, boundary.id])
+    expect(store.data.info.root?.revert).toEqual({ messageID: boundary.id })
+  })
+
+  test("rejects repeated current pages during revert repair", async () => {
+    const boundary = { id: "msg_boundary", type: "user", text: "boundary", time: { created: 2 } } as const
+    let requests = 0
+    const messageApi = {
+      list: async () => {
+        requests += 1
+        if (requests > 2) throw new Error("pagination did not stop")
+        return { data: [boundary], cursor: { previous: null, next: "repeat" } }
+      },
+    } as unknown as MessageApi
+    const store = createServerSession({} as OpencodeClient, {} as SessionApi, messageApi)
+    store.remember({ ...session("root"), revert: { messageID: boundary.id } })
+
+    await expect(store.sync("root")).rejects.toThrow("Message pagination returned no new messages")
+    expect(requests).toBe(2)
+  })
+
+  test("rejects current revert pages that contain no unseen messages", async () => {
+    const boundary = { id: "msg_boundary", type: "user", text: "boundary", time: { created: 2 } } as const
+    let requests = 0
+    const messageApi = {
+      list: async () => {
+        requests += 1
+        return { data: [boundary], cursor: { previous: null, next: `older-${requests}` } }
+      },
+    } as unknown as MessageApi
+    const store = createServerSession({} as OpencodeClient, {} as SessionApi, messageApi)
+    store.remember({ ...session("root"), revert: { messageID: boundary.id } })
+
+    await expect(store.sync("root")).rejects.toThrow("Message pagination returned no new messages")
+    expect(requests).toBe(2)
+  })
+
+  test("keeps an unseen current page that completes revert repair when its cursor repeats", async () => {
+    const older = { id: "msg_older", type: "user", text: "older", time: { created: 1 } } as const
+    const boundary = { id: "msg_boundary", type: "user", text: "boundary", time: { created: 2 } } as const
+    const pages = [
+      { data: [boundary], cursor: { previous: null, next: "repeat" } },
+      { data: [older], cursor: { previous: null, next: "repeat" } },
+    ]
+    const store = createServerSession(
+      {} as OpencodeClient,
+      {} as SessionApi,
+      {
+        list: async () => pages.shift()!,
+      } as unknown as MessageApi,
+    )
+    store.remember({ ...session("root"), revert: { messageID: boundary.id } })
+
+    await store.sync("root")
+
+    expect(store.data.message.root.map((message) => message.id)).toEqual([older.id, boundary.id])
+  })
+
+  test("uses current page context and revert preview without walking older pages", async () => {
+    const older = { id: "msg_z_older", type: "user", text: "older", time: { created: 1 } } as const
+    const boundary = { id: "msg_a_boundary", type: "user", text: "boundary", time: { created: 1 } } as const
+    const requests: unknown[] = []
+    const messageApi = {
+      list: async (input: unknown) => {
+        requests.push(input)
+        return {
+          data: [boundary],
+          context: [older],
+          contextCursor: "visible-older",
+          revert: {
+            messageID: boundary.id,
+            userCount: 1,
+            hasMore: false,
+            items: [{ id: boundary.id, text: boundary.text }],
+          },
+          cursor: { previous: null, next: "raw-older" },
+        }
+      },
+    } as unknown as MessageApi
+    const store = createServerSession({} as OpencodeClient, {} as SessionApi, messageApi)
+    store.remember({ ...session("root"), revert: { messageID: boundary.id } })
+
+    await store.sync("root")
+
+    expect(requests).toEqual([{ sessionID: "root", limit: 20, order: "desc" }])
+    expect(store.data.message.root.map((message) => message.id)).toEqual([older.id, boundary.id])
+    expect(store.data.revert_preview.root).toEqual({
+      messageID: boundary.id,
+      userCount: 1,
+      hasMore: false,
+      items: [{ id: boundary.id, text: boundary.text }],
+    })
+    expect(store.history.more("root")).toBe(true)
+
+    await store.history.loadMore("root")
+    expect(requests[1]).toEqual({ sessionID: "root", limit: 200, cursor: "visible-older" })
+  })
+
+  test("clears a cached current preview when the revert boundary changes", () => {
+    const store = createServerSession({} as OpencodeClient)
+    store.remember({ ...session("root"), revert: { messageID: "msg_a" } })
+    store.set("revert_preview", "root", {
+      messageID: "msg_a",
+      userCount: 1,
+      hasMore: false,
+      items: [{ id: "msg_a", text: "a" }],
+    })
+
+    store.remember({ ...session("root"), revert: { messageID: "msg_b" } })
+
+    expect(store.data.revert_preview.root).toBeUndefined()
+  })
+
+  test("keeps the committed current prefix when refresh fails", async () => {
+    const boundary = { id: "msg_boundary", type: "user", text: "keep", time: { created: 1 } } as const
+    const removed = { id: "msg_removed", type: "user", text: "remove", time: { created: 2 } } as const
+    const gets: unknown[] = []
+    const requests: unknown[] = []
+    const sessionApi = {
+      get: async (input: unknown) => {
+        gets.push(input)
+        return session("root")
+      },
+    } as unknown as SessionApi
+    const messageApi = {
+      list: async (input: unknown) => {
+        requests.push(input)
+        throw new Error("refresh failed")
+      },
+    } as unknown as MessageApi
+    const store = createServerSession({} as OpencodeClient, sessionApi, messageApi)
+    store.remember({ ...session("root"), revert: { messageID: boundary.id } })
+    store.set("message", "root", [
+      userMessage(boundary.id, { sessionID: "root", time: boundary.time }),
+      userMessage(removed.id, { sessionID: "root", time: removed.time }),
+    ])
+    store.set("session_message", "root", [boundary, removed])
+
+    store.applyV2({
+      id: "evt_commit",
+      created: 3,
+      type: "session.next.revert.committed",
+      durable: { aggregateID: "root", seq: 3, version: 1 },
+      data: { sessionID: "root", messageID: boundary.id, timestamp: 3 },
+    } as unknown as OpenCodeEvent)
+    await tick()
+    await tick()
+
+    expect(gets).toEqual([{ sessionID: "root" }])
+    expect(requests).toEqual([{ sessionID: "root", limit: 20, order: "desc" }])
+    expect(store.data.session_message.root.map((message) => message.id)).toEqual([boundary.id])
+    expect(store.data.message.root.map((message) => message.id)).toEqual([boundary.id])
+  })
+
+  test("clears committed revert state when the session refresh fails", async () => {
+    const boundary = { id: "msg_boundary", type: "user", text: "keep", time: { created: 1 } } as const
+    const removed = { id: "msg_removed", type: "user", text: "remove", time: { created: 2 } } as const
+    const requests: unknown[] = []
+    const sessionApi = {
+      get: async () => {
+        throw new Error("session refresh failed")
+      },
+    } as unknown as SessionApi
+    const messageApi = {
+      list: async (input: unknown) => {
+        requests.push(input)
+        return { data: [boundary], context: [], cursor: { previous: null, next: null } }
+      },
+    } as unknown as MessageApi
+    const store = createServerSession({} as OpencodeClient, sessionApi, messageApi)
+    store.remember({ ...session("root"), revert: { messageID: boundary.id } })
+    store.set("message", "root", [
+      userMessage(boundary.id, { sessionID: "root", time: boundary.time }),
+      userMessage(removed.id, { sessionID: "root", time: removed.time }),
+    ])
+    store.set("session_message", "root", [boundary, removed])
+
+    store.applyV2({
+      id: "evt_commit",
+      created: 3,
+      type: "session.next.revert.committed",
+      durable: { aggregateID: "root", seq: 3, version: 1 },
+      data: { sessionID: "root", messageID: boundary.id, timestamp: 3 },
+    } as unknown as OpenCodeEvent)
+    await tick()
+
+    expect(store.data.info.root?.revert).toBeUndefined()
+    expect(store.data.message.root.map((message) => message.id)).toEqual([boundary.id])
+
+    await store.sync("root")
+    expect(requests).toEqual([{ sessionID: "root", limit: 20, order: "desc" }])
+  })
+
   test("indexes V1 messages for the current timeline projection", async () => {
-    const user = userMessage("message-1", { sessionID: "root" })
-    const assistant = assistantMessage("message-2", user.id, { sessionID: "root" })
+    const user = userMessage("message-z", { sessionID: "root", time: { created: 1 } })
+    const assistant = assistantMessage("message-a", user.id, { sessionID: "root", time: { created: 2, completed: 2 } })
     const client = messageClient(
       response([
         { info: user, parts: [textPart(user.id, { sessionID: "root" })] },
@@ -336,9 +593,9 @@ describe("server session", () => {
       { id: assistant.id, type: "assistant" },
     ])
 
-    const next = userMessage("message-3", { sessionID: "root" })
+    const next = userMessage("message-0", { sessionID: "root", time: { created: 0 } })
     store.apply({ type: "message.updated", properties: { info: next } })
-    expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id, next.id])
+    expect(store.data.session_message.root.map((message) => message.id)).toEqual([next.id, user.id, assistant.id])
 
     store.apply({ type: "message.removed", properties: { sessionID: "root", messageID: next.id } })
     expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
@@ -619,6 +876,149 @@ describe("server session", () => {
     expect(store.data.part[assistant.id]).toEqual([live])
   })
 
+  test("keeps fetched messages in chronological order", async () => {
+    const first = userMessage("msg_9", { time: { created: 1 } })
+    const second = userMessage("msg_2", { time: { created: 2 } })
+    const third = userMessage("msg_1", { time: { created: 3 } })
+    const store = createServerSession(
+      messageClient(
+        response([
+          { info: third, parts: [] },
+          { info: first, parts: [] },
+          { info: second, parts: [] },
+        ]),
+      ),
+    )
+
+    await store.sync("child")
+
+    expect(store.data.message.child.map((message) => message.id)).toEqual(["msg_9", "msg_2", "msg_1"])
+  })
+
+  test("reloads cached messages when remembered revert boundary changes", async () => {
+    const ctx = setup({})
+    ctx.store.remember(session("root"))
+    ctx.store.optimistic.add({ sessionID: "root", message: userMessage("cached", { sessionID: "root" }), parts: [] })
+
+    ctx.store.remember({ ...session("root"), revert: { messageID: "boundary", partID: "part" } })
+    await tick()
+
+    expect(ctx.messages).toEqual([{ sessionID: "root", limit: 20, before: undefined }])
+    expect(ctx.message).toEqual([{ sessionID: "root", messageID: "boundary" }])
+  })
+
+  test("repairs cached revert sessions that do not contain a visible user before the boundary", async () => {
+    const cached = userMessage("cached", { sessionID: "root", time: { created: 3 } })
+    const older = userMessage("older", { sessionID: "root", time: { created: 1 } })
+    const { client, message, messages } = revertClient([
+      response([{ info: cached, parts: [] }]),
+      response([{ info: older, parts: [] }]),
+    ])
+    const store = createServerSession(client)
+    await store.sync("root")
+
+    store.set("info", "root", { ...session("root"), revert: { messageID: "boundary", partID: "part" } })
+    await store.sync("root")
+
+    expect(messages).toEqual([
+      { sessionID: "root", limit: 20, before: undefined },
+      { sessionID: "root", limit: 1, before: undefined },
+    ])
+    expect(message).toEqual([{ sessionID: "root", messageID: "boundary" }])
+  })
+
+  test("does not repair a complete part-level revert cache when the boundary user is visible", async () => {
+    const boundary = userMessage("boundary", { sessionID: "root", time: { created: 2 } })
+    const { client, message, messages } = revertClient([response([{ info: boundary, parts: [] }])], boundary)
+    const store = createServerSession(client)
+    await store.sync("root")
+
+    store.set("info", "root", { ...session("root"), revert: { messageID: "boundary", partID: "part" } })
+    await store.sync("root")
+
+    expect(messages).toEqual([{ sessionID: "root", limit: 20, before: undefined }])
+    expect(message).toEqual([])
+  })
+
+  test("does not repeatedly repair a complete whole-message revert at the first user", async () => {
+    const boundary = userMessage("boundary", { sessionID: "root", time: { created: 2 } })
+    const { client, message, messages } = revertClient([response([{ info: boundary, parts: [] }])], boundary)
+    const store = createServerSession(client)
+    await store.sync("root")
+
+    store.set("info", "root", { ...session("root"), revert: { messageID: "boundary" } })
+    await store.sync("root")
+
+    expect(messages).toEqual([{ sessionID: "root", limit: 20, before: undefined }])
+    expect(message).toEqual([])
+  })
+
+  test("repairs uncached sessions when resolve discovers a revert boundary after the first load", async () => {
+    const cached = userMessage("cached", { sessionID: "root", time: { created: 3 } })
+    const older = userMessage("older", { sessionID: "root", time: { created: 1 } })
+    const { client, message, messages } = revertClient(
+      [response([{ info: cached, parts: [] }]), response([{ info: older, parts: [] }])],
+      undefined,
+      { ...session("root"), revert: { messageID: "boundary" } },
+    )
+    const store = createServerSession(client)
+
+    await store.sync("root")
+
+    expect(messages).toEqual([
+      { sessionID: "root", limit: 20, before: undefined },
+      { sessionID: "root", limit: 1, before: undefined },
+    ])
+    expect(message).toEqual([{ sessionID: "root", messageID: "boundary" }])
+  })
+
+  test("does not expose raw hidden cursors after terminal revert repair", async () => {
+    const newer = userMessage("newer", { sessionID: "root", time: { created: 3 } })
+    const { client, message, messages } = revertClient(
+      [response([{ info: newer, parts: [] }], "raw-hidden-older")],
+      undefined,
+      { ...session("root"), revert: { messageID: "boundary" } },
+    )
+    const store = createServerSession(client)
+
+    await store.sync("root")
+
+    expect(messages).toEqual([
+      { sessionID: "root", limit: 20, before: undefined },
+      { sessionID: "root", limit: 1, before: undefined },
+    ])
+    expect(message).toEqual([{ sessionID: "root", messageID: "boundary" }])
+    expect(store.history.more("root")).toBe(false)
+  })
+
+  test("uses a nonzero page size when repairing an empty cached revert session", async () => {
+    const ctx = setup({ root: session("root") })
+    await ctx.store.sync("root")
+
+    ctx.store.set("info", "root", { ...session("root"), revert: { messageID: "boundary" } })
+    await ctx.store.sync("root")
+
+    expect(ctx.messages).toEqual([
+      { sessionID: "root", limit: 20, before: undefined },
+      { sessionID: "root", limit: 20, before: undefined },
+    ])
+    expect(ctx.message).toEqual([{ sessionID: "root", messageID: "boundary" }])
+  })
+
+  test("uses a nonzero page size when remember reloads an empty cached revert session", async () => {
+    const ctx = setup({ root: session("root") })
+    await ctx.store.sync("root")
+
+    ctx.store.remember({ ...session("root"), revert: { messageID: "boundary" } })
+    await tick()
+
+    expect(ctx.messages).toEqual([
+      { sessionID: "root", limit: 20, before: undefined },
+      { sessionID: "root", limit: 20, before: undefined },
+    ])
+    expect(ctx.message).toEqual([{ sessionID: "root", messageID: "boundary" }])
+  })
+
   test("merges live events into the initial page", async () => {
     const pending = deferredResponse()
     const user = userMessage("message-1")
@@ -634,6 +1034,26 @@ describe("server session", () => {
 
     expect(store.data.message.child).toEqual([user, live])
     expect(store.data.part[live.id]).toEqual([livePart])
+  })
+
+  test("merges live events by chronology, not ID", async () => {
+    const pending = deferredResponse()
+    const first = userMessage("msg_9", { time: { created: 1 } })
+    const live = userMessage("msg_2", { time: { created: 2 } })
+    const third = userMessage("msg_1", { time: { created: 3 } })
+    const store = createServerSession(messageClient(pending.promise))
+    const loading = store.sync("child")
+
+    store.apply({ type: "message.updated", properties: { info: live } })
+    pending.resolve(
+      response([
+        { info: first, parts: [] },
+        { info: third, parts: [] },
+      ]),
+    )
+    await loading
+
+    expect(store.data.message.child.map((message) => message.id)).toEqual(["msg_9", "msg_2", "msg_1"])
   })
 
   test("preserves same-ID live updates over the initial page", async () => {
@@ -1418,6 +1838,22 @@ describe("server session", () => {
     await store.history.loadMore("child")
 
     expect(store.data.message.child).toEqual([older, latest])
+  })
+
+  test("stops history pagination when a page makes no progress", async () => {
+    const latest = userMessage("message-2", { time: { created: 2 } })
+    const store = createServerSession(
+      messageClient(
+        response([{ info: latest, parts: [] }], "repeat"),
+        response([{ info: latest, parts: [] }], "repeat"),
+      ),
+    )
+    await store.sync("child")
+
+    await store.history.loadMore("child")
+
+    expect(store.data.message.child).toEqual([latest])
+    expect(store.history.more("child")).toBe(false)
   })
 
   test("preserves loaded history during an incomplete refresh", async () => {

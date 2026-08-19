@@ -289,8 +289,10 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
       revert: {
         stage: async (value: Parameters<ServerApi["session"]["revert"]["stage"]>[0]) => {
-          await legacy().session.revert(value)
-          return { messageID: value.messageID }
+          const result = await legacy().session.revert(value)
+          const revert = result.data?.revert
+          if (!revert) throw new Error("V1 revert did not return a revert boundary")
+          return revert
         },
         clear: async (value: Parameters<ServerApi["session"]["revert"]["clear"]>[0]) => {
           await legacy().session.unrevert(value)

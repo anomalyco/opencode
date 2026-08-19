@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
-import { applyOptimisticAdd, applyOptimisticRemove, mergeOptimisticPage } from "./sync"
+import { applyOptimisticAdd, applyOptimisticRemove, mergeOptimisticPage } from "./server-session"
 
 type Text = Extract<Part, { type: "text" }>
 
@@ -85,6 +85,24 @@ describe("sync optimistic reducers", () => {
     )
 
     expect(page.session.map((message) => message.id)).toEqual(["msg_a", "msg_z"])
+  })
+
+  test("mergeOptimisticPage appends pending messages after current protocol source order", () => {
+    const sessionID = "ses_1"
+    const durable = userMessage("msg_z_durable", sessionID)
+    const optimistic = userMessage("msg_a_optimistic", sessionID)
+    const page = mergeOptimisticPage(
+      {
+        session: [durable],
+        part: [{ id: durable.id, part: [] }],
+        source: [{ id: durable.id, type: "user", text: "durable", time: { created: 1 } }],
+        projectSource: true,
+        complete: true,
+      },
+      [{ message: optimistic, parts: [] }],
+    )
+
+    expect(page.session.map((message) => message.id)).toEqual([durable.id, optimistic.id])
   })
 
   test("mergeOptimisticPage keeps missing optimistic parts until the server has them", () => {

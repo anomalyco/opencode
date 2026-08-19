@@ -493,10 +493,12 @@ export type Info = User | Assistant
 export const WithParts = Schema.Struct({
   info: Info,
   parts: Schema.Array(Part),
+  cursor: optional(Schema.String),
 })
 export type WithParts = {
   info: Info
   parts: Part[]
+  cursor?: string
 }
 
 const options = {
@@ -599,6 +601,7 @@ const events = {
     schema: {
       sessionID: SessionID,
       info: Info,
+      cursor: optional(Schema.String),
     },
   }),
   MessageRemoved: define({
