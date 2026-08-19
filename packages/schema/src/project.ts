@@ -37,6 +37,12 @@ export const Info = Schema.Struct({
   commands: optional(Commands),
   time: Time,
   sandboxes: Schema.Array(Schema.String),
+  repoHash: optional(
+    Schema.String.annotate({
+      description:
+        "Repo-level grouping key shared by all clones of the same repository (legacy identity derivation: normalized remote hash, falling back to root commit). Informational only — never used as identity.",
+    }),
+  ),
 }).annotate({ identifier: "Project" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
