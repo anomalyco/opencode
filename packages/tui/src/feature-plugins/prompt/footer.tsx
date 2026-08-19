@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
 import { contextUsage, formatContextUsage } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
 
@@ -10,6 +10,11 @@ const money = new Intl.NumberFormat("en-US", {
 
 export function PromptFooter(props: { context: Plugin.Context; sessionID?: string; mode: "normal" | "shell" }) {
   const dimensions = useTerminalDimensions()
+  const [shellRevision, updateShellRevision] = createSignal(0)
+  const shellChanged = () => updateShellRevision((revision) => revision + 1)
+  onCleanup(props.context.data.on("shell.created", shellChanged))
+  onCleanup(props.context.data.on("shell.exited", shellChanged))
+  onCleanup(props.context.data.on("shell.deleted", shellChanged))
   const subagents = createMemo(() => {
     if (!props.sessionID) return 0
     const count = props.context.data.session
@@ -18,10 +23,26 @@ export function PromptFooter(props: { context: Plugin.Context; sessionID?: strin
     return count ? `${count} subagent${count === 1 ? "" : "s"}` : undefined
   })
   const shells = createMemo(() => {
+    shellRevision()
     if (!props.sessionID) return 0
+    const messages = props.context.data.session.message.list(props.sessionID)
     const count = props.context.data.shell
       .list(props.context.location)
-      .filter((shell) => shell.metadata.sessionID === props.sessionID).length
+      .filter((shell) => {
+        if (shell.metadata.sessionID !== props.sessionID) return false
+        if (typeof shell.metadata.callID !== "string") return false
+        return messages.some(
+          (message) =>
+            message.type === "assistant" &&
+            message.content.some(
+              (part) =>
+                part.type === "tool" &&
+                part.id === shell.metadata.callID &&
+                part.state.status === "completed" &&
+                part.state.metadata?.status === "running",
+            ),
+        )
+      }).length
     return count ? `${count} shell${count === 1 ? "" : "s"}` : undefined
   })
   const status = createMemo(() => {

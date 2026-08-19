@@ -745,6 +745,39 @@ describe("ShellTool", () => {
   )
 
   it.live(
+    "publishes shell exit before resolving waiters",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, () =>
+            Effect.gen(function* () {
+              const bus = yield* Bus.Service
+              const shell = yield* Shell.Service
+              const publishing = yield* Deferred.make<void>()
+              const release = yield* Deferred.make<void>()
+              const unsubscribe = yield* bus.listen((event) => {
+                if (event.type !== ShellSchema.Event.Exited.type) return Effect.void
+                return Deferred.succeed(publishing, undefined).pipe(Effect.andThen(Deferred.await(release)))
+              })
+              yield* Effect.addFinalizer(() => unsubscribe)
+
+              const info = yield* shell.create({ command: "exit 0", timeout: 0 })
+              yield* Deferred.await(publishing)
+              expect((yield* shell.wait(info.id).pipe(Effect.timeoutOption(Duration.millis(20))))._tag).toBe("None")
+
+              yield* Deferred.succeed(release, undefined)
+              expect((yield* shell.wait(info.id)).status).toBe("exited")
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
+  it.live(
     "returns a useful timeout outcome",
     () =>
       Effect.acquireUseRelease(
