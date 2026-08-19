@@ -390,6 +390,18 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Paste as text",
+        name: "prompt.paste_plain",
+        category: "Prompt",
+        hidden: true,
+        run: async (ctx: CommandContext<Renderable, KeyEvent>) => {
+          ctx.event.preventDefault()
+          ctx.event.stopPropagation()
+          const text = await clipboard.readText?.()
+          if (text) insertInputText(text)
+        },
+      },
+      {
         title: "Interrupt session",
         name: "session.interrupt",
         category: "Session",
@@ -808,6 +820,14 @@ export function Prompt(props: PromptProps) {
   useBindings(() => {
     return {
       target: inputTarget,
+      enabled: inputTarget() !== undefined && !props.disabled,
+      bindings: tuiConfig.keybinds.get("prompt.paste_plain"),
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
       bindings: tuiConfig.keybinds.get("prompt.clear"),
     }
@@ -1212,8 +1232,11 @@ export function Prompt(props: PromptProps) {
       return
     }
 
-    input.insertText(normalizedText)
+    insertInputText(normalizedText)
+  }
 
+  function insertInputText(text: string) {
+    input.insertText(text.replace(/\r\n/g, "\n").replace(/\r/g, "\n"))
     setTimeout(() => {
       if (!input || input.isDestroyed) return
       input.getLayoutNode().markDirty()
