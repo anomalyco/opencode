@@ -499,7 +499,7 @@ export const RunCommand = effectCmd({
             if (cfg?.data?.session?.auto_resume) {
               const active = await Effect.runPromise(ActiveManifest.read()).catch(() => [])
               if (active.length > 0) {
-                const candidate = active[0]
+                const candidate = active[active.length - 1]
                 const existing = await sdk.session.get({ sessionID: candidate.id }).catch(() => undefined)
                 if (existing?.data) {
                   UI.println(UI.Style.TEXT_WARNING_BOLD + "!" + UI.Style.TEXT_NORMAL + ` crash detected — resuming last active session`)

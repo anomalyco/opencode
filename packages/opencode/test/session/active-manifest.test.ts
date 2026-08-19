@@ -110,3 +110,47 @@ test("read returns empty array when manifest does not exist", async () => {
     expect(sessions).toHaveLength(0)
   })
 })
+
+test("read returns empty array for valid-but-wrong-shape JSON", async () => {
+  await withTmpDir(async (dir) => {
+    setManifestDir(dir)
+    const manifestPath = path.join(dir, "active-sessions.json")
+    await fs.writeFile(manifestPath, JSON.stringify({}))
+    const sessions = await Effect.runPromise(ActiveManifest.read())
+    expect(sessions).toHaveLength(0)
+  })
+})
+
+test("read returns empty array for valid array JSON", async () => {
+  await withTmpDir(async (dir) => {
+    setManifestDir(dir)
+    const manifestPath = path.join(dir, "active-sessions.json")
+    await fs.writeFile(manifestPath, JSON.stringify([]))
+    const sessions = await Effect.runPromise(ActiveManifest.read())
+    expect(sessions).toHaveLength(0)
+  })
+})
+
+test("write after corrupt-shape manifest recovers gracefully", async () => {
+  await withTmpDir(async (dir) => {
+    setManifestDir(dir)
+    const manifestPath = path.join(dir, "active-sessions.json")
+    await fs.writeFile(manifestPath, JSON.stringify({ sessions: "not-an-array" }))
+    await Effect.runPromise(ActiveManifest.write(sampleEntry))
+    const sessions = await Effect.runPromise(ActiveManifest.read())
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].id).toBe("session-001")
+  })
+})
+
+test("multi-session manifest preserves write order", async () => {
+  await withTmpDir(async (dir) => {
+    setManifestDir(dir)
+    await Effect.runPromise(ActiveManifest.write({ id: "s1", timestamp: 1000 }))
+    await Effect.runPromise(ActiveManifest.write({ id: "s2", timestamp: 2000 }))
+    const sessions = await Effect.runPromise(ActiveManifest.read())
+    expect(sessions).toHaveLength(2)
+    expect(sessions[0].id).toBe("s1")
+    expect(sessions[sessions.length - 1].id).toBe("s2")
+  })
+})

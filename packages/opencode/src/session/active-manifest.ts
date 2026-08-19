@@ -1,5 +1,6 @@
 import path from "node:path"
 import fs from "node:fs/promises"
+import fsSync from "node:fs"
 import { Global } from "@opencode-ai/core/global"
 import { Effect } from "effect"
 
@@ -16,15 +17,17 @@ export function setManifestDir(dir: string) {
   manifestDir = dir
 }
 
-function manifestPath() {
+export function manifestPath() {
   return path.join(manifestDir, "active-sessions.json")
 }
 
+// Best-effort: manifest errors must never crash the session lifecycle
 async function readRaw(): Promise<Manifest> {
   const file = Bun.file(manifestPath())
-  const exists = await file.exists()
-  if (!exists) return { sessions: [] }
-  return file.json().catch(() => ({ sessions: [] }))
+  if (!(await file.exists())) return { sessions: [] }
+  const parsed = await file.json().catch(() => null)
+  if (!parsed || !Array.isArray(parsed.sessions)) return { sessions: [] }
+  return { sessions: parsed.sessions }
 }
 
 async function writeRaw(manifest: Manifest): Promise<void> {
@@ -78,3 +81,11 @@ export const ActiveManifest = {
   clear: () => clear().pipe(Effect.catch(() => Effect.void)),
   hasCrashed: () => hasCrashed().pipe(Effect.catch(() => Effect.succeed(false))),
 }
+
+// Synchronous cleanup on process.exit() — runs for clean exits but not for
+// SIGKILL/crashes, which is exactly the desired crash-detection behavior.
+process.on("exit", () => {
+  try {
+    fsSync.unlinkSync(manifestPath())
+  } catch {}
+})
