@@ -757,6 +757,13 @@ describe("HttpApi SDK", () => {
         )
         const messages = yield* capture(() => sdk.session.messages({ sessionID }))
 
+        expect(asyncPrompt.status).toBe(204)
+        expect(
+          array(messages.data)
+            .flatMap((item) => array(record(item).parts))
+            .map((part) => record(part).text),
+        ).toContain("async hello")
+
         return {
           statuses: statuses({ session, prompt, asyncPrompt, messages }),
           promptRole: record(record(prompt.data).info).role,
