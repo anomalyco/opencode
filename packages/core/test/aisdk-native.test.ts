@@ -273,6 +273,29 @@ describe("AISDKNative", () => {
     })
   })
 
+  test("maps Vertex Gemini settings to the native Gemini route", () => {
+    expect(
+      map("@ai-sdk/google-vertex", {
+        accessToken: "vertex-token",
+        baseURL: "https://vertex.example/v1",
+        headers: { "x-test": "value" },
+        location: "eu",
+        project: "vertex-project",
+        thinkingConfig: { thinkingLevel: "high" },
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/google-vertex",
+      settings: {
+        accessToken: "vertex-token",
+        baseURL: "https://vertex.example/v1",
+        location: "eu",
+        project: "vertex-project",
+        providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
+      },
+      headers: { "x-test": "value" },
+    })
+  })
+
   test("maps Vertex Anthropic settings to native Messages", () => {
     expect(
       map("@ai-sdk/google-vertex/anthropic", {

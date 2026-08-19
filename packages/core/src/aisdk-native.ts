@@ -51,6 +51,19 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapGoogleOptions(input.settings),
         },
       }
+    case "@ai-sdk/google-vertex":
+      return {
+        package: "@opencode-ai/ai/providers/google-vertex",
+        settings: {
+          ...baseSettings,
+          ...(typeof input.settings.accessToken === "string" ? { accessToken: input.settings.accessToken } : {}),
+          ...mapAPIKey(input.settings),
+          ...(typeof input.settings.location === "string" ? { location: input.settings.location } : {}),
+          ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
+          ...mapGoogleOptions(input.settings),
+        },
+        ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+      }
     case "@ai-sdk/google-vertex/anthropic":
       return {
         package: "@opencode-ai/ai/providers/google-vertex/messages",
