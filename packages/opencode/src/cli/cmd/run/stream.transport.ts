@@ -42,6 +42,7 @@ import {
   SUBAGENT_CALL_BOOTSTRAP_LIMIT,
   type SubagentData,
 } from "./subagent-data"
+import { DescendantFetchError, fetchDescendants } from "./tree"
 import { traceFooterOutput, writeSessionOutput } from "./stream"
 import type {
   FooterApi,
@@ -674,7 +675,7 @@ function createLayer(input: StreamInput) {
         })
 
         const bootstrap = Effect.fn("RunStreamTransport.bootstrap")(function* () {
-          const [messagesList, children, permissions, questions] = yield* Effect.all(
+          const [messagesList, descendants, permissions, questions] = yield* Effect.all(
             [
               messages(
                 input.sessionID,
@@ -684,13 +685,26 @@ function createLayer(input: StreamInput) {
                     : Math.max(input.replayLimit, SUBAGENT_BOOTSTRAP_LIMIT)
                   : SUBAGENT_BOOTSTRAP_LIMIT,
               ),
-              Effect.promise(() =>
-                input.sdk.session.children({
-                  sessionID: input.sessionID,
+              // Bootstrap with the full descendant tree, not just direct
+              // children. `bootstrapSubagentData` only registers blocker
+              // tabs for sessions in the `children` set, so a one-level
+              // fetch silently drops grandchild prompts that were already
+              // pending when the transport started.
+              Effect.tryPromise({
+                try: () => fetchDescendants(input.sdk, input.sessionID, { signal: abort.signal }),
+                catch: (error) => ({ error }),
+              }).pipe(
+                Effect.catch((failure) => {
+                  const error = failure.error
+                  if (!(error instanceof DescendantFetchError)) return Effect.fail(error)
+                  input.trace?.write("bootstrap.descendants.partial", {
+                    failures: error.failures.map((item) => item.sessionID),
+                    descendants: error.partial.map((item) => item.id),
+                  })
+                  return Effect.logWarning("using partial descendant data after bootstrap lookup failure", {
+                    failures: error.failures.map((item) => item.sessionID),
+                  }).pipe(Effect.as(error.partial))
                 }),
-              ).pipe(
-                Effect.map((item) => item.data ?? []),
-                Effect.orElseSucceed(() => []),
               ),
               Effect.promise(() => input.sdk.permission.list()).pipe(
                 Effect.map((item) => item.data ?? []),
@@ -750,7 +764,7 @@ function createLayer(input: StreamInput) {
           bootstrapSubagentData({
             data: state.subagent,
             messages: messagesList,
-            children,
+            children: descendants,
             permissions,
             questions,
           })
