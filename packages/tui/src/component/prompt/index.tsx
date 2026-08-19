@@ -268,17 +268,19 @@ export function Prompt(props: PromptProps) {
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return
 
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    if (tokens <= 0) return
+    const cached = last.tokens.cache.read + last.tokens.cache.write
+     const tokens =
+       last.tokens.input + last.tokens.output + last.tokens.reasoning + cached
+     if (tokens <= 0) return
 
-    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
-    const cost = session?.cost ?? 0
-    return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
-      cost: cost > 0 ? money.format(cost) : undefined,
-    }
+     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
+     const cost = session?.cost ?? 0
+     const tokenText = cached > 0 ? `${Locale.number(tokens)} (${Locale.number(cached)} cached)` : Locale.number(tokens)
+     return {
+       context: pct ? `${tokenText} (${pct})` : tokenText,
+       cost: cost > 0 ? money.format(cost) : undefined,
+     }
   })
 
   const [store, setStore] = createStore<{
