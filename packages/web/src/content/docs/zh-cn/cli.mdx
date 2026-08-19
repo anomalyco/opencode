@@ -36,7 +36,7 @@ opencode [project]
 | <nobr><code>{"--fork"}</code></nobr>     |      | 继续时分叉会话（与 `--continue` 或 `--session` 配合使用） |
 | <nobr><code>{"--prompt"}</code></nobr>   |      | 要使用的提示词                                            |
 | <nobr><code>{"--model"}</code></nobr>    | `-m` | 要使用的模型，格式为 provider/model                       |
-| <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的代理                                              |
+| <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的智能体                                              |
 | <nobr><code>{"--port"}</code></nobr>     |      | 监听端口                                                  |
 | <nobr><code>{"--hostname"}</code></nobr> |      | 监听主机名                                                |
 
@@ -50,7 +50,7 @@ OpenCode CLI 还提供以下命令。
 
 ### agent
 
-管理 OpenCode 的代理。
+管理 OpenCode 的智能体。
 
 ```bash
 opencode agent [command]
@@ -91,19 +91,19 @@ opencode attach http://10.20.30.40:4096
 
 #### create
 
-使用自定义配置创建新的代理。
+使用自定义配置创建新的智能体。
 
 ```bash
 opencode agent create
 ```
 
-此命令将引导您使用自定义系统提示词和工具配置来创建新的代理。
+此命令将引导您使用自定义系统提示词和工具配置来创建新的智能体。
 
 ---
 
 #### list
 
-列出所有可用的代理。
+列出所有可用的智能体。
 
 ```bash
 opencode agent list
@@ -161,7 +161,7 @@ opencode auth logout
 
 ### github
 
-管理用于仓库自动化的 GitHub 代理。
+管理用于仓库自动化的 GitHub 智能体。
 
 ```bash
 opencode github [command]
@@ -171,7 +171,7 @@ opencode github [command]
 
 #### install
 
-在您的仓库中安装 GitHub 代理。
+在您的仓库中安装 GitHub 智能体。
 
 ```bash
 opencode github install
@@ -183,7 +183,7 @@ opencode github install
 
 #### run
 
-运行 GitHub 代理。通常在 GitHub Actions 中使用。
+运行 GitHub 智能体。通常在 GitHub Actions 中使用。
 
 ```bash
 opencode github run
@@ -193,7 +193,7 @@ opencode github run
 
 | 标志                                  | 描述                           |
 | ------------------------------------- | ------------------------------ |
-| <nobr><code>{"--event"}</code></nobr> | 用于运行代理的 GitHub 模拟事件 |
+| <nobr><code>{"--event"}</code></nobr> | 用于运行智能体的 GitHub 模拟事件 |
 | <nobr><code>{"--token"}</code></nobr> | GitHub 个人访问令牌            |
 
 ---
@@ -347,7 +347,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--fork"}</code></nobr>     |      | 继续时分叉会话（与 `--continue` 或 `--session` 配合使用）           |
 | <nobr><code>{"--share"}</code></nobr>    |      | 分享会话                                                            |
 | <nobr><code>{"--model"}</code></nobr>    | `-m` | 要使用的模型，格式为 provider/model                                 |
-| <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的代理                                                        |
+| <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的智能体                                                        |
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | 附加到消息的文件                                                    |
 | <nobr><code>{"--format"}</code></nobr>   |      | 格式：default（格式化输出）或 json（原始 JSON 事件）                |
 | <nobr><code>{"--title"}</code></nobr>    |      | 会话标题（未提供值时使用截断的提示词）                              |
@@ -609,9 +609,9 @@ OpenCode 可以通过环境变量进行配置。
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 启用实验性 Exa 功能             |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 为 python 文件启用 TY LSP       |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | 启用计划模式                    |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | 启用后台子代理任务              |
+| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | 启用后台子智能体任务              |
 | `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | 启用实验性事件系统              |
 | `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | 启用原生 LLM 请求路径           |
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | 启用并行 Web 搜索执行           |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | 启用 Scout 子代理               |
+| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | 启用 Scout 子智能体               |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | 启用工作区支持                  |
