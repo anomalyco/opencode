@@ -91,6 +91,24 @@ describe("Patch namespace", () => {
 
       expect(() => Patch.parsePatch(invalidPatch)).toThrow("Invalid patch format")
     })
+
+    test("should parse End of File anchor", () => {
+      const patchText = `*** Begin Patch
+*** Update File: test.txt
+@@
+-old line
++new line
+*** End of File
+*** End Patch`
+
+      const result = Patch.parsePatch(patchText)
+      expect(result.hunks).toHaveLength(1)
+      const hunk = result.hunks[0]
+      expect(hunk.type).toBe("update")
+      if (hunk.type === "update") {
+        expect(hunk.chunks[0].is_end_of_file).toBe(true)
+      }
+    })
   })
 
   describe("maybeParseApplyPatch", () => {
@@ -378,6 +396,29 @@ PATCH`
 
         const content = yield* Effect.promise(() => fs.readFile(filePath, "utf-8"))
         expect(content).toBe("line 1\nLINE 2\nline 3\nLINE 4\n")
+      }),
+    )
+
+    it.live("should apply End of File anchored updates to the last occurrence", () =>
+      Effect.gen(function* () {
+        const filePath = path.join(tempDir, "eof-anchor.txt")
+        yield* Effect.promise(() => fs.writeFile(filePath, "marker\nend\nmiddle\nmarker\nend"))
+
+        const patchText = `*** Begin Patch
+*** Update File: ${filePath}
+@@
+-marker
+-end
++marker-changed
++end
+*** End of File
+*** End Patch`
+
+        const result = yield* Patch.applyPatch(patchText)
+        expect(result.modified).toHaveLength(1)
+
+        const content = yield* Effect.promise(() => fs.readFile(filePath, "utf-8"))
+        expect(content).toBe("marker\nend\nmiddle\nmarker-changed\nend\n")
       }),
     )
   })
