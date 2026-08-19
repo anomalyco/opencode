@@ -8,10 +8,10 @@ import {
   toAnthropicResponse,
 } from "./anthropic"
 import {
+  createToOpenaiChunk,
   fromOpenaiChunk,
   fromOpenaiRequest,
   fromOpenaiResponse,
-  toOpenaiChunk,
   toOpenaiRequest,
   toOpenaiResponse,
 } from "./openai"
@@ -195,6 +195,7 @@ export function createBodyConverter(from: ZenData.Format, to: ZenData.Format) {
 }
 
 export function createStreamPartConverter(from: ZenData.Format, to: ZenData.Format) {
+  const toOpenaiChunk = to === "openai" ? createToOpenaiChunk() : undefined
   return (part: any): any => {
     if (from === to) return part
 
@@ -207,7 +208,7 @@ export function createStreamPartConverter(from: ZenData.Format, to: ZenData.Form
     if (typeof raw === "string") return raw
 
     if (to === "anthropic") return toAnthropicChunk(raw)
-    if (to === "openai") return toOpenaiChunk(raw)
+    if (to === "openai") return toOpenaiChunk!(raw)
     if (to === "oa-compat") return toOaCompatibleChunk(raw)
   }
 }

@@ -1,4 +1,4 @@
-import { ProviderHelper, CommonRequest, CommonResponse, CommonChunk } from "./provider"
+import type { ProviderHelper, CommonRequest, CommonResponse, CommonChunk } from "./provider"
 
 type Usage = {
   input_tokens?: number
@@ -556,75 +556,160 @@ export function fromOpenaiChunk(chunk: string): CommonChunk | string {
   return out
 }
 
-export function toOpenaiChunk(chunk: CommonChunk): string {
-  if (!chunk.choices || !Array.isArray(chunk.choices) || chunk.choices.length === 0) {
-    return ""
-  }
+export function createToOpenaiChunk() {
+  let responseId = ""
+  let itemId = ""
+  let started = false
+  let text = ""
+  let itemAdded = false
+  let partAdded = false
+  let itemDone = false
+  let toolCallId = ""
+  let toolName = ""
+  let toolArguments = ""
 
-  const choice = chunk.choices[0]
-  const d = choice.delta
-  if (!d) return ""
+  const messageItem = (status: string) => ({
+    id: itemId,
+    type: "message",
+    status,
+    role: "assistant",
+    content: partAdded ? [{ type: "output_text", text, annotations: [] }] : [],
+  })
 
-  const id = chunk.id
-  const model = chunk.model
+  const toolCallItem = () => ({
+    id: toolCallId,
+    type: "function_call",
+    call_id: toolCallId,
+    name: toolName,
+    arguments: toolArguments,
+  })
 
-  if (d.content) {
-    const data = {
-      id,
-      type: "response.output_text.delta",
-      delta: d.content,
-      response: { id, model },
+  return (chunk: CommonChunk): string => {
+    if (!chunk.choices || !Array.isArray(chunk.choices) || chunk.choices.length === 0) {
+      return ""
     }
-    return `event: response.output_text.delta\ndata: ${JSON.stringify(data)}`
-  }
 
-  if (d.tool_calls) {
-    for (const tc of d.tool_calls) {
-      if (tc.function?.name) {
-        const data = {
+    const choice = chunk.choices[0]
+    const d = choice.delta
+    if (!d) return ""
+
+    const events: string[] = []
+    const emit = (event: string, data: Record<string, unknown>) => {
+      events.push(`event: ${event}\ndata: ${JSON.stringify(data)}`)
+    }
+
+    if (!started) {
+      started = true
+      responseId = chunk.id || `resp_${Math.random().toString(36).slice(2)}`
+      itemId = `msg_${Math.random().toString(36).slice(2)}`
+      const response = { id: responseId, object: "response", status: "in_progress", model: chunk.model, output: [] }
+      emit("response.created", { type: "response.created", response })
+      emit("response.in_progress", { type: "response.in_progress", response })
+    }
+
+    if (d.content) {
+      if (!itemAdded) {
+        itemAdded = true
+        emit("response.output_item.added", {
           type: "response.output_item.added",
           output_index: 0,
-          item: {
-            id: tc.id,
-            type: "function_call",
-            name: tc.function.name,
-            call_id: tc.id,
-            arguments: "",
-          },
-        }
-        return `event: response.output_item.added\ndata: ${JSON.stringify(data)}`
+          item: messageItem("in_progress"),
+        })
       }
-      if (tc.function?.arguments) {
-        const data = {
-          type: "response.function_call_arguments.delta",
+      if (!partAdded) {
+        partAdded = true
+        emit("response.content_part.added", {
+          type: "response.content_part.added",
           output_index: 0,
-          delta: tc.function.arguments,
+          item_id: itemId,
+          part: { type: "output_text", text: "", annotations: [] },
+        })
+      }
+      text += d.content
+      emit("response.output_text.delta", {
+        id: responseId,
+        type: "response.output_text.delta",
+        delta: d.content,
+        response: { id: responseId, model: chunk.model },
+      })
+    }
+
+    if (d.tool_calls) {
+      for (const tc of d.tool_calls) {
+        if (!tc || tc.type !== "function") continue
+        if (tc.function?.name) {
+          toolCallId = tc.id || `call_${Math.random().toString(36).slice(2)}`
+          toolName = tc.function.name
+          itemAdded = true
+          emit("response.output_item.added", {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: toolCallItem(),
+          })
         }
-        return `event: response.function_call_arguments.delta\ndata: ${JSON.stringify(data)}`
+        if (tc.function?.arguments) {
+          toolArguments += tc.function.arguments
+          emit("response.function_call_arguments.delta", {
+            type: "response.function_call_arguments.delta",
+            output_index: 0,
+            item_id: toolCallId,
+            delta: tc.function.arguments,
+          })
+        }
       }
     }
-  }
 
-  if (choice.finish_reason) {
-    const u = chunk.usage
-    const usage = u
-      ? {
-          input_tokens: u.prompt_tokens,
-          output_tokens: u.completion_tokens,
-          total_tokens: u.total_tokens,
-          ...(u.prompt_tokens_details?.cached_tokens
-            ? { input_tokens_details: { cached_tokens: u.prompt_tokens_details.cached_tokens } }
-            : {}),
+    if (choice.finish_reason) {
+      if (itemAdded && !itemDone) {
+        itemDone = true
+        if (toolCallId) {
+          emit("response.function_call_arguments.done", {
+            type: "response.function_call_arguments.done",
+            output_index: 0,
+            item_id: toolCallId,
+            arguments: toolArguments,
+          })
+          emit("response.output_item.done", {
+            type: "response.output_item.done",
+            output_index: 0,
+            item: toolCallItem(),
+          })
+        } else {
+          emit("response.output_item.done", {
+            type: "response.output_item.done",
+            output_index: 0,
+            item: messageItem("completed"),
+          })
         }
-      : undefined
+      }
 
-    const data: any = {
-      id,
-      type: "response.completed",
-      response: { id, model, ...(usage ? { usage } : {}) },
+      const u = chunk.usage
+      const usage = u
+        ? {
+            input_tokens: u.prompt_tokens,
+            output_tokens: u.completion_tokens,
+            total_tokens: u.total_tokens,
+            ...(u.prompt_tokens_details?.cached_tokens
+              ? { input_tokens_details: { cached_tokens: u.prompt_tokens_details.cached_tokens } }
+              : {}),
+          }
+        : undefined
+
+      const stop_reason = (() => {
+        const r = choice.finish_reason
+        if (r === "stop") return "stop"
+        if (r === "tool_calls") return "tool_call"
+        if (r === "length") return "max_output_tokens"
+        if (r === "content_filter") return "content_filter"
+        return null
+      })()
+
+      const output = toolCallId ? [toolCallItem()] : itemAdded ? [messageItem("completed")] : []
+      const response: any = { id: responseId, model: chunk.model, output, stop_reason }
+      if (usage) response.usage = usage
+      emit("response.completed", { id: responseId, type: "response.completed", response })
     }
-    return `event: response.completed\ndata: ${JSON.stringify(data)}`
-  }
 
-  return ""
+    return events.join("\n\n")
+  }
 }

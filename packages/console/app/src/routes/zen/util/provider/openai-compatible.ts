@@ -1,4 +1,4 @@
-import { ProviderHelper, CommonRequest, CommonResponse, CommonChunk } from "./provider"
+import type { ProviderHelper, CommonRequest, CommonResponse, CommonChunk } from "./provider"
 
 type Usage = {
   prompt_tokens?: number
@@ -195,15 +195,21 @@ export function toOaCompatibleRequest(body: CommonRequest) {
     }
   }
 
+  // Chat-completions upstreams only accept function tools. Responses-API
+  // requests carry extra tool types (e.g. web_search) that have no chat
+  // equivalent; mapping them into a function tool yields an undefined name
+  // and a 400 from the upstream, so drop them instead.
   const tools = Array.isArray(body.tools)
-    ? body.tools.map((tool: any) => ({
-        type: "function",
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters,
-        },
-      }))
+    ? body.tools
+        .filter((tool: any) => tool && typeof tool === "object" && tool.type === "function")
+        .map((tool: any) => ({
+          type: "function",
+          function: {
+            name: tool.function?.name,
+            description: tool.function?.description,
+            parameters: tool.function?.parameters,
+          },
+        }))
     : undefined
 
   return {
