@@ -11,6 +11,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { NotFoundError } from "@/storage/storage"
 import { EOL } from "os"
+import { writeStdout } from "../../util/stdout"
 import path from "path"
 import { which } from "@opencode-ai/core/util/which"
 
@@ -101,7 +102,7 @@ export const SessionListCommand = effectCmd({
         })
 
         if (!proc.stdin) {
-          console.log(output)
+          await writeStdout(output + EOL)
           return
         }
 
@@ -110,7 +111,7 @@ export const SessionListCommand = effectCmd({
         await proc.exited
       })
     } else {
-      console.log(output)
+      yield* Effect.promise(() => writeStdout(output + EOL))
     }
   }),
 })

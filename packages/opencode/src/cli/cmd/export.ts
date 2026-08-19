@@ -6,6 +6,7 @@ import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
+import { writeStdout } from "../../util/stdout"
 import { Effect } from "effect"
 
 function redact(kind: string, id: string, value: string) {
@@ -286,7 +287,8 @@ const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; 
 
     const exportData = { info: sessionInfo, messages }
 
-    process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
-    process.stdout.write(EOL)
+    yield* Effect.promise(() =>
+      writeStdout(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2) + EOL),
+    )
   }).pipe(Effect.catchCause(() => fail(`Session not found: ${sessionID!}`)))
 })
