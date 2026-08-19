@@ -650,6 +650,9 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Dosya yüklenemedi",
   "toast.file.listFailed.title": "Dosyalar listelenemedi",
+  "toast.file.uploadFailed.title": "Dosya yüklenemedi",
+  "toast.file.downloadFailed.title": "Dosya indirilemedi",
+  "toast.file.deleteFailed.title": "Dosya silinemedi",
 
   "toast.context.noLineSelection.title": "Satır seçimi yok",
   "toast.context.noLineSelection.description": "Önce bir dosya sekmesinde satır aralığı seçin.",
@@ -776,6 +779,16 @@ export const dict = {
   "session.files.all": "Tüm dosyalar",
   "session.files.empty": "Dosya yok",
   "session.files.binaryContent": "İkili dosya (içerik görüntülenemiyor)",
+  "session.files.uploadFile": "Dosya yükle",
+  "session.files.uploading": "Yükleniyor…",
+  "session.files.downloadFile": "İndir",
+  "session.files.refresh": "Yenile",
+  "session.files.dropFiles": "Dosyaları buraya bırakın veya yüklemek için +'a tıklayın",
+  "session.files.deleteConfirm": "\"{{path}}\" silinsin mi?",
+  "session.files.uploadTooLarge": "Dosya çok büyük (maks. {{size}})",
+  "session.header.reveal.finder": "Finder'da göster",
+  "session.header.reveal.fileExplorer": "Dosya Gezgini'nde göster",
+  "session.header.reveal.containingFolder": "İçeren klasörü aç",
 
   "session.messages.renderEarlier": "Önceki mesajları göster",
   "session.messages.loadingEarlier": "Önceki mesajlar yükleniyor...",
@@ -824,9 +837,6 @@ export const dict = {
   "session.header.open.ariaLabel": "{{app}} ile aç",
   "session.header.open.menu": "Açma seçenekleri",
   "session.header.open.copyPath": "Yolu kopyala",
-  "session.header.reveal.finder": "Finder'da göster",
-  "session.header.reveal.fileExplorer": "Dosya Gezgini'nde göster",
-  "session.header.reveal.containingFolder": "İçeren klasörü aç",
 
   "status.popover.trigger": "Durum",
   "status.popover.ariaLabel": "Sunucu yapılandırmaları",

@@ -34,7 +34,7 @@ test("exposes every standard HTTP API group", () => {
     "attemptComplete",
     "attemptCancel",
   ])
-  expect(Object.keys(client.files)).toEqual(["list", "find"])
+  expect(Object.keys(client.files)).toEqual(["list", "find", "upload", "delete"])
   expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove"])
 })
 

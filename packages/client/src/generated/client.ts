@@ -81,6 +81,10 @@ import type {
   FilesListOutput,
   FilesFindInput,
   FilesFindOutput,
+  FilesUploadInput,
+  FilesUploadOutput,
+  FilesDeleteInput,
+  FilesDeleteOutput,
   CommandsListInput,
   CommandsListOutput,
   SkillsListInput,
@@ -776,6 +780,30 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
+          },
+          requestOptions,
+        ),
+      upload: (input: FilesUploadInput, requestOptions?: RequestOptions) =>
+        request<FilesUploadOutput>(
+          {
+            method: "POST",
+            path: `/api/fs/upload`,
+            query: { location: input["location"], path: input["path"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      delete: (input: FilesDeleteInput, requestOptions?: RequestOptions) =>
+        request<FilesDeleteOutput>(
+          {
+            method: "POST",
+            path: `/api/fs/delete`,
+            query: { location: input["location"], path: input["path"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
           },
           requestOptions,
         ),

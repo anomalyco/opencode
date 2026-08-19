@@ -660,6 +660,9 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Не вдалося завантажити файл",
   "toast.file.listFailed.title": "Не вдалося отримати список файлів",
+  "toast.file.uploadFailed.title": "Не вдалося завантажити файл",
+  "toast.file.downloadFailed.title": "Не вдалося скачати файл",
+  "toast.file.deleteFailed.title": "Не вдалося видалити файл",
 
   "toast.context.noLineSelection.title": "Не вибрано рядків",
   "toast.context.noLineSelection.description": "Спочатку виберіть діапазон рядків у вкладці файлу.",
@@ -798,6 +801,13 @@ export const dict = {
   "session.files.all": "Усі файли",
   "session.files.empty": "Немає файлів",
   "session.files.binaryContent": "Двійковий файл (вміст неможливо відобразити)",
+  "session.files.uploadFile": "Завантажити файл",
+  "session.files.uploading": "Завантаження…",
+  "session.files.downloadFile": "Завантажити",
+  "session.files.refresh": "Оновити",
+  "session.files.dropFiles": "Перетягніть файли сюди або натисніть +, щоб завантажити",
+  "session.files.deleteConfirm": "Видалити \"{{path}}\"?",
+  "session.files.uploadTooLarge": "Файл занадто великий (макс. {{size}})",
 
   "session.messages.renderEarlier": "Відобразити раніші повідомлення",
   "session.messages.loadingEarlier": "Завантаження раніших повідомлень...",

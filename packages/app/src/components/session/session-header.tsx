@@ -20,6 +20,7 @@ import { useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
+import { useFileActions } from "@/hooks/use-file-actions"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
@@ -146,6 +147,7 @@ export function SessionHeader() {
   const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
+  const actions = useFileActions()
   const { params, view } = useSessionLayout()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
@@ -154,6 +156,22 @@ export function SessionHeader() {
     if (!directory) return
     return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
   })
+
+  const [uploadProgress, setUploadProgress] = createSignal<number | null>(null)
+  const uploading = createMemo(() => uploadProgress() !== null)
+
+  async function uploadFromInput(event: Event) {
+    const input = event.target as HTMLInputElement
+    const files = Array.from(input.files ?? [])
+    input.value = ""
+    if (files.length === 0) return
+    setUploadProgress(0)
+    try {
+      for (const file of files) await actions.upload(file, setUploadProgress)
+    } finally {
+      setUploadProgress(null)
+    }
+  }
   const name = createMemo(() => {
     const current = project()
     if (current) return current.name || getFilename(current.worktree)
@@ -242,6 +260,8 @@ export function SessionHeader() {
     reviewVisible: isDesktop(),
     reviewOpened: view().reviewPanel.opened(),
     onReviewToggle: () => view().reviewPanel.toggle(),
+    fileManagerOpened: view().fileManager.opened(),
+    onFileManagerToggle: () => view().fileManager.toggle(),
   }))
 
   const selectApp = (app: OpenApp) => {
@@ -461,6 +481,59 @@ export function SessionHeader() {
                       </Button>
                     </TooltipKeybind>
 
+                    <Tooltip value={language.t("session.header.open.fileManager")}>
+                      <Button
+                        variant="ghost"
+                        class="group/filemanager-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                        onClick={() => view().fileManager.toggle()}
+                        aria-label={language.t("session.header.open.fileManager")}
+                        aria-expanded={view().fileManager.opened()}
+                        aria-controls="file-manager-panel"
+                      >
+                        <Icon
+                          size="small"
+                          name="cloud-upload"
+                          classList={{
+                            "text-icon-strong": view().fileManager.opened(),
+                            "text-icon-weak": !view().fileManager.opened(),
+                          }}
+                        />
+                      </Button>
+                    </Tooltip>
+
+                    <Tooltip value={language.t("session.files.uploadFile")}>
+                      <Button
+                        variant="ghost"
+                        class="group/filemanager-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                        disabled={uploading()}
+                        onClick={() => document.getElementById("session-header-upload-input")?.click()}
+                        aria-label={language.t("session.files.uploadFile")}
+                      >
+                        <Icon size="small" name="arrow-up" />
+                      </Button>
+                      <input id="session-header-upload-input" type="file" multiple class="hidden" onChange={uploadFromInput} />
+                    </Tooltip>
+                    <Show when={uploading()}>
+                      <div
+                        role="progressbar"
+                        aria-label={language.t("session.files.uploading")}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.round((uploadProgress() ?? 0) * 100)}
+                        class="flex h-6 items-center gap-1.5 shrink-0"
+                      >
+                        <div class="h-1 w-16 overflow-hidden rounded bg-surface-raised-base">
+                          <div
+                            class="h-full rounded bg-accent-base transition-[width] duration-150 ease-out"
+                            style={{ width: `${(uploadProgress() ?? 0) * 100}%` }}
+                          />
+                        </div>
+                        <span class="text-10-regular tabular-nums text-text-weak">
+                          {Math.round((uploadProgress() ?? 0) * 100)}%
+                        </span>
+                      </div>
+                    </Show>
+
                     <div class="hidden md:flex items-center gap-1 shrink-0">
                       <TooltipKeybind
                         title={language.t("command.review.toggle")}
@@ -524,6 +597,8 @@ type SessionHeaderV2ActionsState = {
   reviewVisible: boolean
   reviewOpened: boolean
   onReviewToggle: () => void
+  fileManagerOpened: boolean
+  onFileManagerToggle: () => void
 }
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
@@ -536,6 +611,24 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
           <StatusPopoverV2 />
         </Tooltip>
       </Show>
+      <TooltipV2
+        class="shrink-0"
+        placement="bottom"
+        value={language.t("session.header.open.fileManager")}
+      >
+        <IconButtonV2
+          type="button"
+          variant="ghost-muted"
+          size="large"
+          class="!w-9 shrink-0"
+          state={props.state.fileManagerOpened ? "pressed" : undefined}
+          onClick={props.state.onFileManagerToggle}
+          aria-label={language.t("session.header.open.fileManager")}
+          aria-expanded={props.state.fileManagerOpened}
+          aria-controls="file-manager-panel"
+          icon={<IconV2 name="cloud-upload" />}
+        />
+      </TooltipV2>
       <Show when={props.state.reviewVisible}>
         <TooltipV2
           class="shrink-0"

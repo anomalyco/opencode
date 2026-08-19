@@ -91,6 +91,7 @@ import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-sta
 import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "@/pages/session/v2/review-diff-kinds"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
+import { FileManagerPanel } from "@/pages/session/file-manager-panel"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
@@ -450,6 +451,7 @@ export default function Page() {
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopV2ReviewOpen = createMemo(() => newSessionDesign() && desktopReviewOpen() && !!params.id)
   const terminalOpen = createMemo(() => view().terminal.opened())
+  const fileManagerOpen = createMemo(() => view().fileManager.opened())
   const desktopTerminalOpen = createMemo(() => isDesktop() && terminalOpen())
   const desktopInlineTerminalOnlyOpen = createMemo(
     () => newSessionDesign() && desktopTerminalOpen() && !desktopV2ReviewOpen(),
@@ -2378,6 +2380,11 @@ export default function Page() {
                   <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />
                 </div>
               </Show>
+              <Show when={fileManagerOpen()}>
+                <div class="min-h-0 shrink-0">
+                  <FileManagerPanel />
+                </div>
+              </Show>
             </div>
           </Show>
         </Show>
@@ -2385,6 +2392,9 @@ export default function Page() {
 
       <Show when={!newSessionDesign()}>
         <TerminalPanel />
+        <Show when={fileManagerOpen()}>
+          <FileManagerPanel />
+        </Show>
       </Show>
     </SessionRouteFrame>
   )

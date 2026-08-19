@@ -1,10 +1,13 @@
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Icon } from "@opencode-ai/ui/icon"
 import "@opencode-ai/ui/v2/file-tree-v2.css"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { kindChange, kindLabel, type Kind } from "@/components/file-tree-v2"
 import { normalizePath } from "@/pages/session/v2/review-diff-kinds"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
+import { useLanguage } from "@/context/language"
+import { useFileActions } from "@/hooks/use-file-actions"
 import { virtualScrollElement } from "@/components/virtual-scroll-element"
 
 // Drives the highlight/selection of the flat search-result list from the filter
@@ -49,6 +52,10 @@ export function SessionFileListV2(props: {
   onFileClick: (path: string) => void
   onFileDoubleClick?: (path: string) => void
 }) {
+  const language = useLanguage()
+  const actions = useFileActions()
+  const handleDownload = (path: string) => void actions.download(path)
+  const handleDelete = (path: string) => void actions.remove(path)
   const active = () => normalizePath(props.active ?? "")
   const highlighted = () => normalizePath(props.highlighted ?? "")
   const normalized = createMemo(() => props.files.map(normalizePath))
@@ -129,6 +136,7 @@ export function SessionFileListV2(props: {
                     data-path={path}
                     data-selected={selected() ? "" : undefined}
                     data-highlighted={highlightedRow() ? "" : undefined}
+                    class="group/file-tree-v2-row"
                     style="padding-left: 8px"
                     onFocus={() => setFocused(path)}
                     onBlur={() => setFocused(undefined)}
@@ -146,6 +154,42 @@ export function SessionFileListV2(props: {
                         )}
                       </Show>
                       <span class="text-12-medium text-text-base truncate min-w-0 shrink-0">{filename()}</span>
+                    </span>
+                    <span
+                      role="button"
+                      tabindex={0}
+                      class="opacity-0 group-hover/file-tree-v2-row:opacity-100 focus-visible:opacity-100 transition-opacity ml-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDownload(path)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.stopPropagation()
+                          handleDownload(path)
+                        }
+                      }}
+                      aria-label={language.t("session.files.downloadFile")}
+                    >
+                      <Icon name="download" size="small" class="text-icon-weak" />
+                    </span>
+                    <span
+                      role="button"
+                      tabindex={0}
+                      class="opacity-0 group-hover/file-tree-v2-row:opacity-100 focus-visible:opacity-100 transition-opacity ml-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(path)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.stopPropagation()
+                          handleDelete(path)
+                        }
+                      }}
+                      aria-label={language.t("common.delete")}
+                    >
+                      <Icon name="trash" size="small" class="text-icon-weak" />
                     </span>
                     <Show when={kind()}>
                       {(value) => (

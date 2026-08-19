@@ -649,6 +649,9 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Fallo al cargar archivo",
   "toast.file.listFailed.title": "Fallo al listar archivos",
+  "toast.file.uploadFailed.title": "Fallo al subir el archivo",
+  "toast.file.downloadFailed.title": "Fallo al descargar el archivo",
+  "toast.file.deleteFailed.title": "Fallo al eliminar el archivo",
 
   "toast.context.noLineSelection.title": "Sin selección de líneas",
   "toast.context.noLineSelection.description": "Primero selecciona un rango de líneas en una pestaña de archivo.",
@@ -775,6 +778,13 @@ export const dict = {
   "session.files.all": "Todos los archivos",
   "session.files.empty": "Sin archivos",
   "session.files.binaryContent": "Archivo binario (no se puede mostrar el contenido)",
+  "session.files.uploadFile": "Subir archivo",
+  "session.files.uploading": "Subiendo…",
+  "session.files.downloadFile": "Descargar",
+  "session.files.refresh": "Actualizar",
+  "session.files.dropFiles": "Suelta los archivos aquí o haz clic en + para subir",
+  "session.files.deleteConfirm": "Eliminar \"{{path}}\"?",
+  "session.files.uploadTooLarge": "El archivo es demasiado grande (máx. {{size}})",
 
   "session.messages.renderEarlier": "Mostrar mensajes anteriores",
   "session.messages.loadingEarlier": "Cargando mensajes anteriores...",

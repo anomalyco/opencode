@@ -19,6 +19,7 @@ import { ServerAuth } from "./auth"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
 import { schemaErrorLayer } from "./middleware/schema-error"
+import { contentLengthLimitMiddleware } from "./middleware/content-length"
 import { PtyEnvironment } from "./pty-environment"
 import { layer as locationLayer } from "./location"
 import { sessionLocationLayer } from "./middleware/session-location"
@@ -57,6 +58,7 @@ function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config
     Layer.provide(locationLayer),
     Layer.provide(authorizationLayer),
     Layer.provide(schemaErrorLayer),
+    Layer.provide(HttpRouter.use((router) => router.addGlobalMiddleware(contentLengthLimitMiddleware))),
     Layer.provide(auth),
     Layer.provide(serviceLayer),
   )

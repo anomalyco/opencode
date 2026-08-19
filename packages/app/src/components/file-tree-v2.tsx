@@ -1,5 +1,6 @@
 import { useFile } from "@/context/file"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Icon } from "@opencode-ai/ui/icon"
 import "@opencode-ai/ui/v2/file-tree-v2.css"
 import {
   createEffect,
@@ -13,9 +14,11 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
-import { Icon } from "@opencode-ai/ui/v2/icon"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { pathToFileUrl, withFileDragImage, type Kind } from "@/components/file-tree"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
+import { useLanguage } from "@/context/language"
+import { useFileActions } from "@/hooks/use-file-actions"
 import {
   buildFileTreeV2Model,
   flattenFileTreeV2,
@@ -61,6 +64,10 @@ const FileTreeNodeV2 = (
       draggable: boolean
       kinds?: ReadonlyMap<string, Kind>
       as?: "div" | "button"
+      onDownload?: (path: string) => void
+      onDelete?: (path: string) => void
+      downloadLabel?: string
+      deleteLabel?: string
     },
 ) => {
   const [local, rest] = splitProps(p, [
@@ -73,6 +80,10 @@ const FileTreeNodeV2 = (
     "children",
     "class",
     "classList",
+    "onDownload",
+    "onDelete",
+    "downloadLabel",
+    "deleteLabel",
   ])
   const kind = () => local.kinds?.get(normalizeFileTreeV2Path(local.node.path))
 
@@ -84,6 +95,7 @@ const FileTreeNodeV2 = (
       data-selected={local.node.path === local.active ? "" : undefined}
       data-ignored={local.node.ignored ? "" : undefined}
       classList={{
+        "group/file-tree-v2-row": true,
         ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
@@ -102,6 +114,44 @@ const FileTreeNodeV2 = (
       <span class="flex-1 min-w-0 text-start text-12-medium whitespace-nowrap truncate">
         <bdi dir="auto">{local.node.name}</bdi>
       </span>
+      <Show when={local.node.type === "file"}>
+        <span
+          role="button"
+          tabindex={0}
+          class="opacity-0 group-hover/file-tree-v2-row:opacity-100 focus-visible:opacity-100 transition-opacity ml-1"
+          onClick={(e) => {
+            e.stopPropagation()
+            local.onDownload?.(local.node.path)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation()
+              local.onDownload?.(local.node.path)
+            }
+          }}
+          aria-label={local.downloadLabel}
+        >
+          <Icon name="download" size="small" class="text-icon-weak" />
+        </span>
+        <span
+          role="button"
+          tabindex={0}
+          class="opacity-0 group-hover/file-tree-v2-row:opacity-100 focus-visible:opacity-100 transition-opacity ml-1"
+          onClick={(e) => {
+            e.stopPropagation()
+            local.onDelete?.(local.node.path)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation()
+              local.onDelete?.(local.node.path)
+            }
+          }}
+          aria-label={local.deleteLabel}
+        >
+          <Icon name="trash" size="small" class="text-icon-weak" />
+        </span>
+      </Show>
       {(() => {
         const value = kind()
         if (!value || local.node.type !== "file") return null
@@ -132,12 +182,17 @@ export default function FileTreeV2(props: {
   onFileDoubleClick?: (file: FileNode) => void
 }) {
   const file = useFile()
+  const language = useLanguage()
+  const actions = useFileActions()
   const live = () => props.allowed === undefined
   const draggable = () => props.draggable ?? true
   const active = () => normalizeFileTreeV2Path(props.active ?? "")
+  const handleDownload = (path: string) => void actions.download(path)
+  const handleDelete = (path: string) => void actions.remove(path)
   const model = createMemo(() => (live() ? undefined : buildFileTreeV2Model(props.allowed ?? [])))
   const expanded = (path: string) => file.tree.state(path)?.expanded ?? !live()
   const rows = createMemo(() => {
+    file.tree.version()
     if (live()) return flattenLiveFileTreeV2((path) => file.tree.children(path), expanded)
     return flattenFileTreeV2(model()!, expanded)
   })
@@ -246,6 +301,10 @@ export default function FileTreeV2(props: {
                           active={active()}
                           draggable={draggable()}
                           kinds={props.kinds}
+                          onDownload={handleDownload}
+                          onDelete={handleDelete}
+                          downloadLabel={language.t("session.files.downloadFile")}
+                          deleteLabel={language.t("common.delete")}
                           as="button"
                           type="button"
                           class="relative"
@@ -285,7 +344,7 @@ export default function FileTreeV2(props: {
                           data-expanded={expanded(row().node.path) ? "" : undefined}
                           class="size-4 flex items-center justify-center"
                         >
-                          <Icon name="chevron-down" />
+                          <IconV2 name="chevron-down" />
                         </div>
                       </FileTreeNodeV2>
                     </Show>

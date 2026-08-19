@@ -290,6 +290,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           width: DEFAULT_FILE_TREE_WIDTH,
           tab: "changes" as "changes" | "all",
         },
+        fileManager: {
+          opened: false,
+        },
         session: {
           width: DEFAULT_SESSION_WIDTH,
         },
@@ -820,6 +823,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
         const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
+        const fileManagerOpened = createMemo(() => store.fileManager?.opened ?? false)
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -853,6 +857,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             setStore("review", "panelOpened", next)
             setEphemeral("reviewPanelSource", nextSource)
           })
+        }
+
+        function setFileManagerOpened(next: boolean) {
+          const current = store.fileManager
+          if (!current) {
+            setStore("fileManager", { opened: next })
+            return
+          }
+          if ((current.opened ?? false) === next) return
+          setStore("fileManager", "opened", next)
         }
 
         return {
@@ -897,6 +911,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setReviewPanelOpened(!reviewPanelOpened(), "other")
+            },
+          },
+          fileManager: {
+            opened: fileManagerOpened,
+            open() {
+              setFileManagerOpened(true)
+            },
+            close() {
+              setFileManagerOpened(false)
+            },
+            toggle() {
+              setFileManagerOpened(!fileManagerOpened())
             },
           },
           review: {
