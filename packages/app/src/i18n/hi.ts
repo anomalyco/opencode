@@ -1,4 +1,5 @@
 export const dict = {
+  ...STORAGE_FALLBACK,
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "फ़ाइल",
   "desktop.menu.edit": "संपादित करें",
@@ -1161,3 +1162,4 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} सेशन संग्रहित किए जाएँगे।",
   "workspace.reset.note": "यह डिफ़ॉल्ट शाखा से मिलान करने के लिए वर्कस्पेस को रीसेट कर देगा।",
 }
+import { STORAGE_FALLBACK } from "./storage"

@@ -1,4 +1,5 @@
 export const dict = {
+  ...STORAGE_FALLBACK,
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "ဖိုင်",
   "desktop.menu.edit": "တည်းဖြတ်ပါ။",
@@ -1174,3 +1175,4 @@ export const dict = {
   "workspace.reset.note": "၎င်းသည် မူရင်းဌာနခွဲနှင့် ကိုက်ညီစေရန် အလုပ်ခွင်ကို ပြန်လည်သတ်မှတ်ပါမည်။",
   "dialog.usageExceeded.dontShowAgain": "ထပ်မပြပါနှင့်",
 }
+import { STORAGE_FALLBACK } from "./storage"
