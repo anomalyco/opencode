@@ -77,12 +77,16 @@ export const Info = Schema.Struct({
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
   linux_clipboard_selection: Schema.optional(LinuxClipboardSelection).annotate({
-    description: "Linux clipboard selection: 'clipboard' (Ctrl+C), 'primary' (middle-click), or 'both' (default: 'both')",
+    description:
+      "Linux clipboard selection: 'clipboard' (Ctrl+C), 'primary' (middle-click), or 'both' (default: 'both')",
   }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor" | "linux_clipboard_selection"> & {
+export type Resolved = Omit<
+  Info,
+  "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor" | "linux_clipboard_selection"
+> & {
   attention: {
     enabled: boolean
     notifications: boolean

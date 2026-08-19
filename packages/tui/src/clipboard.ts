@@ -88,7 +88,8 @@ export function copyCommand(
       ? ["wl-copy", "-p", "--type", "text/plain;charset=utf-8"]
       : ["wl-copy", "--type", "text/plain;charset=utf-8"]
   if (os === "linux" && has("xclip")) return ["xclip", "-selection", selection]
-  if (os === "linux" && has("xsel")) return selection === "primary" ? ["xsel", "--primary", "--input"] : ["xsel", "--clipboard", "--input"]
+  if (os === "linux" && has("xsel"))
+    return selection === "primary" ? ["xsel", "--primary", "--input"] : ["xsel", "--clipboard", "--input"]
   if (os === "win32" && has("powershell.exe")) {
     return [
       "powershell.exe",

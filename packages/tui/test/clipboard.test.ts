@@ -39,6 +39,14 @@ test("supports clipboard selection (default)", () => {
     "--type",
     "text/plain;charset=utf-8",
   ])
-  expect(copyCommand("linux", false, (name) => name === "xclip", "clipboard")).toEqual(["xclip", "-selection", "clipboard"])
-  expect(copyCommand("linux", false, (name) => name === "xsel", "clipboard")).toEqual(["xsel", "--clipboard", "--input"])
+  expect(copyCommand("linux", false, (name) => name === "xclip", "clipboard")).toEqual([
+    "xclip",
+    "-selection",
+    "clipboard",
+  ])
+  expect(copyCommand("linux", false, (name) => name === "xsel", "clipboard")).toEqual([
+    "xsel",
+    "--clipboard",
+    "--input",
+  ])
 })
