@@ -342,10 +342,13 @@ export const dict = {
   "go.faq.a5.used": "นำไปใช้",
   "go.faq.a5.notUsed": "ไม่นำไปใช้",
   "go.faq.a5.noAgreement": "ไม่มีข้อตกลง",
+  "go.faq.a5.notZdr": "ไม่ใช่ ZDR",
   "go.faq.a5.grokRetention":
     "ZDR ปิดใช้งานฟีเจอร์ API สำคัญที่ต้องอาศัยข้อมูลที่จัดเก็บไว้ ซึ่งรวมถึง Responses API แบบมีสถานะ, Files and Collections และ Batch API",
   "go.faq.a5.gptRetention":
     "ระบบจะสร้างบันทึกการตรวจสอบการใช้งานในทางที่ผิดสำหรับการใช้งานฟีเจอร์ API ทั้งหมด และเก็บรักษาไว้นานสูงสุด 30 วัน",
+  "go.faq.a5.museRetention":
+    "ราคาของ token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำพรอมต์และผลลัพธ์ที่สร้างขึ้นของคุณไปใช้ฝึกโมเดล Meta ในอนาคต",
   "go.faq.a5.learnMore": "ดูข้อมูลเพิ่มเติม",
   "go.faq.a5.deepseekRetention": "ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 31 สิงหาคม 2026",
 
@@ -387,6 +390,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "โมเดลถูกปิดใช้งาน",
   "zen.api.error.regionNotAllowed":
     "โมเดลเวอร์ชันล่าสุดนี้ให้บริการเฉพาะผ่านระบบที่โฮสต์ในประเทศจีน และต้องให้ความยินยอมอย่างชัดแจ้งก่อนใช้งาน: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "โมเดลนี้ไม่พร้อมให้บริการในประเทศของคุณ",
+  "zen.api.error.trainingNotAllowed":
+    "โมเดลนี้เก็บรวบรวมข้อมูลที่ใช้เพื่อปรับปรุงคุณภาพของโมเดล และต้องได้รับความยินยอมอย่างชัดแจ้งก่อนใช้งาน: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "โปรโมชันฟรีสำหรับ {{model}} สิ้นสุดแล้ว คุณสามารถใช้โมเดลต่อได้โดยสมัครสมาชิก OpenCode Go - {{link}}",
 

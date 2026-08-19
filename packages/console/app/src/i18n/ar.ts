@@ -341,10 +341,13 @@ export const dict = {
   "go.faq.a5.used": "مستخدَمة",
   "go.faq.a5.notUsed": "غير مستخدَمة",
   "go.faq.a5.noAgreement": "لا توجد اتفاقية",
+  "go.faq.a5.notZdr": "ليست ZDR",
   "go.faq.a5.grokRetention":
     "تعطّل ZDR ميزات API مهمة تعتمد على البيانات المخزنة، بما في ذلك Responses API ذات الحالة، وFiles and Collections، وBatch API.",
   "go.faq.a5.gptRetention":
     "تُنشأ سجلات مراقبة إساءة الاستخدام لكل استخدام لميزات API، ويُحتفظ بها لمدة تصل إلى 30 يومًا.",
+  "go.faq.a5.museRetention":
+    "أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية.",
   "go.faq.a5.learnMore": "اعرف المزيد",
   "go.faq.a5.deepseekRetention": "تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 أغسطس 2026.",
   "go.faq.a5.beforeExceptions":
@@ -385,6 +388,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "النموذج معطل",
   "zen.api.error.regionNotAllowed":
     "لا يتوفر أحدث إصدار من هذا النموذج إلا مستضافًا في الصين، ويتطلب تفعيلًا صريحًا: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "هذا النموذج غير متاح في بلدك.",
+  "zen.api.error.trainingNotAllowed":
+    "يجمع هذا النموذج بيانات تُستخدم لتحسين جودته، ويتطلب موافقتك الصريحة: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "انتهى العرض المجاني لـ {{model}}. يمكنك مواصلة استخدام النموذج بالاشتراك في OpenCode Go - {{link}}",
 

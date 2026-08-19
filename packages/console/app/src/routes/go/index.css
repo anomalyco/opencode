@@ -597,18 +597,6 @@ body {
           font-weight: 600;
           white-space: nowrap;
         }
-
-        [data-bonus] {
-          color: var(--color-text-weak);
-          font-size: 12px;
-          font-weight: 400;
-          line-height: 1;
-          white-space: nowrap;
-
-          @media (max-width: 40rem) {
-            display: none;
-          }
-        }
       }
 
       [data-slot="plot-labels"] {
@@ -682,10 +670,6 @@ body {
         transform: scaleX(0.02);
         fill: var(--bar-go);
         stroke: none;
-      }
-
-      [data-bar][data-kind="promo"] {
-        fill: color-mix(in srgb, var(--bar-go) 50%, transparent);
       }
 
       [data-val] {

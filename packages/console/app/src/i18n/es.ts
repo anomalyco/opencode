@@ -348,10 +348,13 @@ export const dict = {
   "go.faq.a5.used": "Utilizado",
   "go.faq.a5.notUsed": "No utilizado",
   "go.faq.a5.noAgreement": "Sin acuerdo",
+  "go.faq.a5.notZdr": "Sin ZDR",
   "go.faq.a5.grokRetention":
     "ZDR deshabilita funciones importantes de la API que dependen de datos almacenados, incluidas la Responses API con estado, Files and Collections y la Batch API.",
   "go.faq.a5.gptRetention":
     "Se generan registros de supervisión de abusos para todo el uso de funciones de la API y se conservan durante un máximo de 30 días.",
+  "go.faq.a5.museRetention":
+    "Precios de tokens muy reducidos a cambio de permitir que tus prompts y las respuestas generadas se utilicen para entrenar futuros modelos de Meta.",
   "go.faq.a5.learnMore": "Más información",
   "go.faq.a5.deepseekRetention":
     "El acuerdo de ZDR se renueva mensualmente. El acuerdo actual es válido hasta el 31 de agosto de 2026.",
@@ -394,6 +397,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "El modelo está deshabilitado",
   "zen.api.error.regionNotAllowed":
     "La versión más reciente de este modelo solo está disponible alojada en China y requiere una aceptación explícita: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Este modelo no está disponible en tu país.",
+  "zen.api.error.trainingNotAllowed":
+    "Este modelo recopila datos que se utilizan para mejorar su calidad y requiere tu consentimiento explícito: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "La promoción gratuita de {{model}} ha finalizado. Puedes seguir usando el modelo suscribiéndote a OpenCode Go - {{link}}",
 
