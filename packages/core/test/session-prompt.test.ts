@@ -61,7 +61,7 @@ const locations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
     () =>
-      // Attachment admission only needs image normalization and plugin readiness.
+      // These operations resolve Location services lazily and must wait for plugin-projected state.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       Layer.unwrap(
         Effect.sync(() => {
@@ -76,6 +76,8 @@ const locations = Layer.effect(
             Layer.mock(Snapshot.Service, {
               capture: () =>
                 ready ? Effect.succeed(undefined) : Effect.die(new Error("Snapshot used before plugins were ready")),
+              restore: () =>
+                ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
             }),
             Layer.succeed(
               PluginSupervisor.Service,
@@ -1064,6 +1066,19 @@ describe("Session.revert", () => {
       const session = yield* Session.Service
       yield* db.insert(SessionMessageTable).values(assistantRow(messageID, 0)).run().pipe(Effect.orDie)
       yield* session.revert.stage({ sessionID, messageID })
+    }),
+  )
+
+  it.effect("waits for location plugins before clearing", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID, snapshot: Snapshot.ID.make("tree"), files: [] },
+      })
+      yield* session.revert.clear(sessionID)
     }),
   )
 })
