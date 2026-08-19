@@ -389,6 +389,28 @@ export const ShellTool = Tool.define(
       }
       const shellKind = ShellID.toKind(Shell.name(shell))
 
+      // Redirection targets (`>`, `>>`, `2>`, `<`) are filesystem paths even
+      // when the command name itself is not in the FILES allowlist. Without
+      // this scan `echo x > /tmp/out` and `printf x | tee /etc/x` write
+      // outside the workspace without triggering external_directory — the
+      // same operation `cp x /tmp/out` denies. Scan every file_redirect
+      // destination regardless of the command name. The grammar nests these
+      // under redirected_statement (a sibling of the command node), so walk
+      // the whole tree once.
+      for (const redirect of root.descendantsOfType("file_redirect")) {
+        // A file_redirect is `[descriptor] op destination`. The destination
+        // is the LAST named child — reading it positionally skips the
+        // optional file_descriptor ("2>..." has descriptor=2, ">..." has
+        // none) and picks up the word that names the file.
+        const named = redirect.namedChildren
+        const target = named[named.length - 1]
+        if (!target) continue
+        const resolved = yield* argPath(target.text, cwd, ps, shell)
+        if (!resolved || containsPath(resolved, instance)) continue
+        const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
+        scan.dirs.add(dir)
+      }
+
       for (const node of commands(root)) {
         const command = parts(node)
         const tokens = command.map((item) => item.text)

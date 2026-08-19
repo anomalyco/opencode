@@ -263,6 +263,50 @@ describe("tool.shell permissions", () => {
     }),
   )
 
+  it.live("asks for external_directory permission for redirection targets", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(
+            yield* fail(
+              { command: "echo BYPASS > /tmp/oc-redirect-test.txt" },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          expect(extDirReq).toBeDefined()
+          expect(extDirReq!.patterns).toContain("/tmp/*")
+        }),
+      )
+    }),
+  )
+
+  it.live("asks for external_directory permission for stderr redirection targets", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(
+            yield* fail(
+              { command: "ls 2>/etc/opencode-stderr-test" },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          expect(extDirReq).toBeDefined()
+          expect(extDirReq!.patterns).toContain("/etc/*")
+        }),
+      )
+    }),
+  )
+
   for (const item of ps) {
     it.live(`parses PowerShell conditionals for permission prompts [${item.label}]`, () =>
       withShell(
