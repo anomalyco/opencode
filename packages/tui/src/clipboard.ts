@@ -74,13 +74,13 @@ export async function read() {
   if (text) return { data: text, mime: "text/plain" }
 }
 
-export type ClipboardSelection = "clipboard" | "primary"
+export type ClipboardSelection = "clipboard" | "primary" | "both"
 
 export function copyCommand(
   os: NodeJS.Platform,
   wayland: boolean,
   has: (name: string) => boolean,
-  selection: "clipboard" | "primary" = "clipboard",
+  selection: ClipboardSelection = "clipboard",
 ): string[] | undefined {
   if (os === "darwin" && has("osascript")) return ["osascript"]
   if (os === "linux" && wayland && has("wl-copy"))
@@ -100,7 +100,7 @@ export function copyCommand(
   }
 }
 
-let copyMethod: Promise<((text: string, selection?: "clipboard" | "primary" | "both") => Promise<void>)> | undefined
+let copyMethod: Promise<(text: string, selection?: ClipboardSelection) => Promise<void>> | undefined
 
 function getCopyMethod() {
   return (copyMethod ??= (async () => {
@@ -114,13 +114,13 @@ function getCopyMethod() {
     const native = clipboardCmd
 
     if (native?.[0] === "osascript") {
-      return async (text: string, selection?: "clipboard" | "primary" | "both") => {
+      return async (text: string, selection?: ClipboardSelection) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
         await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
       }
     }
     if (native) {
-      return async (text: string, selection?: "clipboard" | "primary" | "both") => {
+      return async (text: string, selection?: ClipboardSelection) => {
         if (selection === "both" && primaryCmd) {
           await Promise.allSettled([
             command(native[0], native.slice(1), text),
@@ -133,18 +133,18 @@ function getCopyMethod() {
         }
       }
     }
-    return async (text: string, selection?: "clipboard" | "primary" | "both") => {
+    return async (text: string, selection?: ClipboardSelection) => {
       const { default: clipboardy } = await import("clipboardy")
-      // clipboardy only supports the clipboard (not primary) selection
       if (selection === "primary") return
-      // For "clipboard" or "both", write to clipboard (primary is not supported without native tools)
       await clipboardy.write(text).catch(() => undefined)
     }
   })())
 }
 
-export async function write(text: string, selection?: "clipboard" | "primary" | "both") {
-  writeOsc52(text)
+export async function write(text: string, selection?: ClipboardSelection) {
+  if (selection !== "primary") {
+    writeOsc52(text)
+  }
   const method = await getCopyMethod()
   await method(text, selection)
 }
