@@ -1373,25 +1373,45 @@ const layer = Layer.effect(
       const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
       const templateCommand = yield* Effect.promise(async () => cmd.template)
 
-      const placeholders = templateCommand.match(placeholderRegex) ?? []
-      let last = 0
-      for (const item of placeholders) {
-        const value = Number(item.slice(1))
-        if (value > last) last = value
-      }
+      let template: string
+      if (cmd.source === "skill") {
+        // Skills are free-form markdown, not command templates. Never run
+        // $ARGUMENTS / $N substitution against the skill body — docs often
+        // mention those tokens as examples and would swallow the real request.
+        // Keep the user request in a dedicated trailing section instead.
+        const request = input.arguments.trim()
+        template = [
+          `Follow the skill instructions below for skill "${cmd.name}".`,
+          "",
+          `<skill_content name="${cmd.name}">`,
+          templateCommand.trim(),
+          `</skill_content>`,
+          "",
+          "## User request",
+          request ||
+            "(No additional user request was provided. Follow the skill instructions and ask if anything is unclear.)",
+        ].join("\n")
+      } else {
+        const placeholders = templateCommand.match(placeholderRegex) ?? []
+        let last = 0
+        for (const item of placeholders) {
+          const value = Number(item.slice(1))
+          if (value > last) last = value
+        }
 
-      const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
-        const position = Number(index)
-        const argIndex = position - 1
-        if (argIndex >= args.length) return ""
-        if (position === last) return args.slice(argIndex).join(" ")
-        return args[argIndex]
-      })
-      const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
-      let template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
+        const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
+          const position = Number(index)
+          const argIndex = position - 1
+          if (argIndex >= args.length) return ""
+          if (position === last) return args.slice(argIndex).join(" ")
+          return args[argIndex]
+        })
+        const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
+        template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
 
-      if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
-        template = template + "\n\n" + input.arguments
+        if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
+          template = template + "\n\n" + input.arguments
+        }
       }
 
       const shellMatches = ConfigMarkdown.shell(template)

@@ -1816,6 +1816,56 @@ unix(
   30_000,
 )
 
+it.instance(
+  "skill slash command preserves user request and does not substitute skill body placeholders",
+  () =>
+    Effect.gen(function* () {
+      const { dir, llm } = yield* useServerConfig(providerCfg)
+      const skillDir = path.join(dir, ".opencode", "skill", "arg-skill")
+      yield* writeText(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: arg-skill
+description: Skill that documents $ARGUMENTS without consuming them.
+---
+
+# Arg Skill
+
+Example docs mention Input: $ARGUMENTS and also $1.
+
+Do the real work from the user request section only.
+`,
+      )
+
+      const { prompt, chat } = yield* boot()
+      yield* llm.text("done")
+
+      const result = yield* prompt.command({
+        sessionID: chat.id,
+        command: "arg-skill",
+        arguments: "please fix the login bug in src/auth.ts",
+      })
+
+      expect(result.info.role).toBe("assistant")
+      const sessions = yield* Session.Service
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const user = messages.find((message) => message.info.role === "user")
+      const text = user?.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n")
+
+      expect(text).toContain('<skill_content name="arg-skill">')
+      expect(text).toContain("Example docs mention Input: $ARGUMENTS and also $1.")
+      expect(text).toContain("## User request")
+      expect(text).toContain("please fix the login bug in src/auth.ts")
+      // Placeholder tokens inside the skill body must remain literal.
+      expect(text).not.toMatch(/Example docs mention Input: please fix the login bug/)
+      expect(text).not.toMatch(/Example docs mention Input: please/)
+    }),
+  30_000,
+)
+
 unixNoLLMServer(
   "cancel interrupts shell and resolves cleanly",
   () =>
