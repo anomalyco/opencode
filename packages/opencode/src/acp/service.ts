@@ -50,7 +50,7 @@ export const AuthMethodID = "opencode-login"
 
 export type Error = ACPError.Error
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
-  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile" | "unstable_createElicitation">>
 
 export type Interface = {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse, Error>
@@ -107,6 +107,10 @@ export function make(input: {
           label: "OpenCode Login",
         },
       }
+    }
+
+    if (params.clientCapabilities?.elicitation) {
+      events?.enableElicitation()
     }
 
     const response = {
