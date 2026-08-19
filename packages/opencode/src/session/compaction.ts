@@ -20,7 +20,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { buildPrompt } from "@opencode-ai/core/session/compaction"
+import { buildPrompt, buildReplayPrompt } from "@opencode-ai/core/session/compaction"
 import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
 
 export const Event = SessionCompactionEvent
@@ -162,6 +162,15 @@ function splitTurn(input: {
   })
 }
 
+export type Run = (input: {
+  user: SessionV1.User
+  agent: Agent.Info
+  model: Provider.Model
+  processor: SessionProcessor.Handle
+  messages: SessionV1.WithParts[]
+  prompt: string
+}) => Effect.Effect<SessionProcessor.Result>
+
 export interface Interface {
   readonly isOverflow: (input: {
     tokens: SessionV1.Assistant["tokens"]
@@ -174,6 +183,7 @@ export interface Interface {
     sessionID: SessionID
     auto: boolean
     overflow?: boolean
+    run?: Run
   }) => Effect.Effect<"continue" | "stop">
   readonly create: (input: {
     sessionID: SessionID
@@ -322,6 +332,7 @@ const layer = Layer.effect(
       sessionID: SessionID
       auto: boolean
       overflow?: boolean
+      run?: Run
     }) {
       const parent = input.messages.findLast((m) => m.info.id === input.parentID)
       if (!parent || parent.info.role !== "user") {
@@ -355,11 +366,13 @@ const layer = Layer.effect(
         }
       }
 
-      const agent = yield* agents.get("compaction")
-      const model = agent.model
-        ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
-        : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
       const cfg = yield* config.get()
+      const configured = cfg.agent?.compaction !== undefined
+      const agent = yield* agents.get(configured ? "compaction" : userMessage.agent)
+      const model =
+        configured && agent.model
+          ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
+          : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
@@ -377,18 +390,16 @@ const layer = Layer.effect(
       )
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-      const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
-      const nextPrompt =
+      // A configured compaction agent keeps the legacy serialized-transcript path.
+      const run = configured ? undefined : input.run
+      const conversation = run ? "" : msgs.map(serialize).filter(Boolean).join("\n\n")
+      const nextPrompt = [
         compacting.prompt ??
-        [
-          buildPrompt({
-            previousSummary,
-            context: [conversation],
-          }),
-          ...compacting.context,
-        ]
-          .filter(Boolean)
-          .join("\n\n")
+          (run ? buildReplayPrompt(previousSummary) : buildPrompt({ previousSummary, context: [conversation] })),
+        ...compacting.context,
+      ]
+        .filter(Boolean)
+        .join("\n\n")
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
@@ -422,30 +433,43 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         model,
       })
-      const result = yield* processor.process({
-        user: userMessage,
-        agent,
-        sessionID: input.sessionID,
-        tools: {},
-        system: [],
-        messages: [
-          {
-            role: "user",
-            content: [
+      // The synthetic compaction marker carries no per-turn system/tools settings.
+      const active = msgs.findLast(
+        (message) => message.info.role === "user" && !message.parts.some((part) => part.type === "compaction"),
+      )
+      const result = run
+        ? yield* run({
+            user: active?.info.role === "user" ? active.info : userMessage,
+            agent,
+            model,
+            processor,
+            messages: msgs,
+            prompt: nextPrompt,
+          })
+        : yield* processor.process({
+            user: userMessage,
+            agent,
+            sessionID: input.sessionID,
+            tools: {},
+            system: [],
+            messages: [
               {
-                type: "text",
-                text: [
-                  nextPrompt,
-                  ...(compacting.prompt ? ["The following is the conversation history:", conversation] : []),
-                ]
-                  .filter(Boolean)
-                  .join("\n\n"),
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: [
+                      nextPrompt,
+                      ...(compacting.prompt ? ["The following is the conversation history:", conversation] : []),
+                    ]
+                      .filter(Boolean)
+                      .join("\n\n"),
+                  },
+                ],
               },
             ],
-          },
-        ],
-        model,
-      })
+            model,
+          })
 
       if (result === "compact") {
         processor.message.error = new SessionV1.ContextOverflowError({

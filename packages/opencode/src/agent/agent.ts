@@ -216,21 +216,6 @@ const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
-          compaction: {
-            name: "compaction",
-            mode: "primary",
-            native: true,
-            hidden: true,
-            prompt: PROMPT_COMPACTION,
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                "*": "deny",
-              }),
-              user,
-            ),
-            options: {},
-          },
           title: {
             name: "title",
             mode: "primary",
@@ -270,6 +255,26 @@ const layer = Layer.effect(
             continue
           }
           let item = agents[key]
+          // The compaction agent is not registered by default: compaction inherits
+          // the session's active agent so its request stays prefix-identical for
+          // prompt caching. An explicit `agent.compaction` config opts into the
+          // legacy dedicated agent, seeded here so overrides merge as before.
+          if (!item && key === "compaction")
+            item = agents[key] = {
+              name: "compaction",
+              mode: "primary",
+              native: true,
+              hidden: true,
+              prompt: PROMPT_COMPACTION,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                }),
+                user,
+              ),
+              options: {},
+            }
           if (!item)
             item = agents[key] = {
               name: key,

@@ -222,6 +222,11 @@ function cfg(compaction?: ConfigV1.Info["compaction"]) {
   return Layer.succeed(Config.Service, TestConfig.make({ get: () => Effect.succeed({ ...base, compaction }) }))
 }
 
+function cfgAgent(agent: NonNullable<ConfigV1.Info["agent"]>) {
+  const config = Schema.decodeUnknownSync(ConfigV1.Info)({ agent }) as ConfigV1.Info
+  return Layer.succeed(Config.Service, TestConfig.make({ get: () => Effect.succeed(config) }))
+}
+
 const defaultProvider = wide()
 const compactionTestNode = LayerNode.group([
   SessionCompaction.node,
@@ -812,6 +817,75 @@ describe("session.compaction.prune", () => {
 })
 
 describe("session.compaction.process", () => {
+  itCompaction.instance(
+    "inherits the last agent when compaction is not configured",
+    () => {
+      const stub = llm()
+      let captured: LLM.StreamInput | undefined
+      stub.push(reply("summary", (input) => (captured = input)))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const msg = yield* createUserMessage(session.id, "hello")
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+
+        yield* SessionCompaction.use.process({
+          parentID: msg.id,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        expect(captured?.agent.name).toBe("build")
+        expect(captured?.agent.prompt).toBe("custom build prompt")
+        expect(captured?.agent.temperature).toBe(0.37)
+        expect(String(captured?.model.providerID)).toBe("test")
+        expect(String(captured?.model.id)).toBe("test-model")
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          config: cfgAgent({
+            build: { prompt: "custom build prompt", temperature: 0.37, model: "missing/missing" },
+          }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "preserves an explicitly configured compaction agent",
+    () => {
+      const stub = llm()
+      let captured: LLM.StreamInput | undefined
+      stub.push(reply("summary", (input) => (captured = input)))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const msg = yield* createUserMessage(session.id, "hello")
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+
+        yield* SessionCompaction.use.process({
+          parentID: msg.id,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        expect(captured?.agent.name).toBe("compaction")
+        expect(captured?.agent.prompt).toBe("custom compaction prompt")
+        expect(captured?.agent.temperature).toBe(0.81)
+        expect(captured?.agent.hidden).toBe(true)
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          config: cfgAgent({ compaction: { prompt: "custom compaction prompt", temperature: 0.81 } }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
   it.instance(
     "throws when parent is not a user message",
     Effect.gen(function* () {
