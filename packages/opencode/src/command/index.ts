@@ -165,7 +165,7 @@ const layer = Layer.effect(
 
     const list = Effect.fn("Command.list")(function* () {
       const s = yield* InstanceState.get(state)
-      return Object.values(s.commands)
+      return Object.values(s.commands).toSorted((a, b) => a.name.localeCompare(b.name))
     })
 
     return Service.of({ get, list })
