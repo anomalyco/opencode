@@ -134,6 +134,39 @@ export function useCheckServerHealth() {
   }
 }
 
+export interface WaitForServerReadyOptions {
+  timeoutMs?: number
+  pollMs?: number
+  signal?: AbortSignal
+}
+
+/**
+ * Bounded startup precheck: poll the server health endpoint until it reports
+ * healthy or the timeout elapses. This prevents the bootstrap fan-out of
+ * `get`/`list` requests from racing a not-yet-listening local sidecar server,
+ * which would otherwise throw an unhandled `TypeError: Failed to fetch` in the
+ * render process. Resolves immediately when the server is already reachable.
+ */
+export async function waitForServerReady(
+  server: ServerConnection.HttpBase,
+  fetch: typeof globalThis.fetch,
+  opts?: WaitForServerReadyOptions,
+): Promise<boolean> {
+  const timeoutMs = opts?.timeoutMs ?? 10_000
+  const pollMs = opts?.pollMs ?? 250
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (opts?.signal?.aborted) return false
+    const healthy = await checkServerHealth(server, fetch, {
+      timeoutMs: Math.min(pollMs * 4, 1_000),
+      retryCount: 0,
+    }).catch(() => ({ healthy: false }) as ServerHealth)
+    if (healthy.healthy) return true
+    await wait(pollMs, opts?.signal).catch(() => undefined)
+  }
+  return false
+}
+
 export const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
   const checkServerHealth = useCheckServerHealth()
   const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)

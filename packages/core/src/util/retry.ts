@@ -19,6 +19,12 @@ const TRANSIENT_MESSAGES = [
 
 function isTransientError(error: unknown): boolean {
   if (!error) return false
+  // A `TypeError` thrown by `fetch` (e.g. "Failed to fetch", "NetworkError",
+  // localized messages) is the network-layer signal that the server is not
+  // reachable yet. These must be retried regardless of the (locale-dependent)
+  // message text, otherwise a cold-starting local server surfaces an unhandled
+  // `TypeError` instead of recovering on the next attempt.
+  if (error instanceof TypeError) return true
   // oxlint-disable-next-line no-base-to-string -- error is unknown, intentional coercion for message matching
   const message = String(error instanceof Error ? error.message : error).toLowerCase()
   return TRANSIENT_MESSAGES.some((m) => message.includes(m))
