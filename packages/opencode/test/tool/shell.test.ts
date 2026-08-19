@@ -263,6 +263,58 @@ describe("tool.shell permissions", () => {
     }),
   )
 
+  each("widens the always pattern for a single command", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(
+            yield* fail(
+              {
+                command: "git status",
+              },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.always).toContain("git status *")
+        }),
+      )
+    }),
+  )
+
+  each("does not widen always patterns for compound commands", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(
+            yield* fail(
+              {
+                command: "git status && rm -rf tmp",
+              },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          // Approving the prompt once must not install a rule that matches `rm -rf /`.
+          expect(bashReq!.always).not.toContain("rm *")
+          expect(bashReq!.always).not.toContain("git status *")
+          expect(bashReq!.always).toContain("git status")
+          expect(bashReq!.always).toContain("rm -rf tmp")
+        }),
+      )
+    }),
+  )
+
   for (const item of ps) {
     it.live(`parses PowerShell conditionals for permission prompts [${item.label}]`, () =>
       withShell(
