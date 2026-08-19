@@ -81,13 +81,33 @@ export const locationServices = LayerNode.group([
 export type LocationServices = LayerNode.Output<typeof locationServices>
 export type LocationError = LayerNode.Error<typeof locationServices>
 
+// Every built map registers here with the refs it has served, so instance
+// reloads (hot reload, git init) can drop cached location layers across all
+// maps and workspace-scoped refs, not just one they happen to hold.
+const registry = new Set<{ map: LayerMap.LayerMap<Location.Ref, LocationServices, LocationError>; refs: Set<Location.Ref> }>()
+
+export function invalidateLocationDirectory(directory: string) {
+  return Effect.forEach(
+    [...registry],
+    (entry) =>
+      Effect.forEach(
+        [...entry.refs].filter((ref) => ref.directory === directory),
+        (ref) => entry.map.invalidate(ref).pipe(Effect.ignore),
+        { discard: true },
+      ),
+    { discard: true },
+  )
+}
+
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {
+  const refs = new Set<Location.Ref>()
   return Layer.effect(
     LocationServiceMap.Service,
     LayerMap.make(
       (ref: Location.Ref) => {
+        refs.add(ref)
         const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
         // Apply replacements during hoist, not afterward: replacements can
         // introduce new tagged dependencies (Location.boundNode depends on
@@ -107,7 +127,7 @@ export function buildLocationServiceMap(
         )
       },
       { idleTimeToLive: "60 minutes" },
-    ),
+    ).pipe(Effect.tap((map) => Effect.sync(() => registry.add({ map, refs })))),
   )
 }
 

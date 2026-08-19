@@ -103,7 +103,8 @@ const layer = Layer.effect(
       )
     }
 
-    const entries = yield* (yield* Config.Service).entries()
+    const configService = yield* Config.Service
+    const entries = yield* configService.entries()
     const config = entries
       .filter((entry): entry is Config.Document => entry.type === "document")
       .flatMap((item) => item.info.watcher?.ignore ?? [])
@@ -120,10 +121,10 @@ const layer = Layer.effect(
       for (const entry of entries) {
         if (entry.type !== "directory") continue
         const relative = path.relative(location.directory, entry.path)
-        const insideProject = relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+        const insideProject = !relative.startsWith("..") && !path.isAbsolute(relative)
         if (projectWatched && insideProject) continue
         if (!(yield* fs.isDir(entry.path))) continue
-        yield* Effect.forkScoped(subscribe(entry.path, [...Ignore.PATTERNS]))
+        yield* Effect.forkScoped(subscribe(entry.path, [...Ignore.PATTERNS, ...config]))
       }
     }
 

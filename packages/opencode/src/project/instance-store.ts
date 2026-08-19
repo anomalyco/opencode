@@ -62,12 +62,15 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
                 })),
               )
         yield* bootstrap.run.pipe(Effect.provideService(InstanceRef, ctx))
-        yield* hotReload
-          .init(reload({ directory: ctx.directory, worktree: ctx.worktree, project: ctx.project }))
-          .pipe(
-            Effect.provideService(InstanceRef, ctx),
-            Effect.catchCause((cause) => Effect.logWarning("hot reload init failed", { cause })),
-          )
+        // Pass only the directory so reload re-derives worktree and project,
+        // and skip when the instance was disposed while the reload waited.
+        const hotReloadRun = Effect.suspend(() =>
+          cache.has(ctx.directory) ? reload({ directory: ctx.directory }).pipe(Effect.asVoid) : Effect.void,
+        )
+        yield* hotReload.init(hotReloadRun).pipe(
+          Effect.provideService(InstanceRef, ctx),
+          Effect.catchCause((cause) => Effect.logWarning("hot reload init failed", { cause })),
+        )
         return ctx
       }).pipe(Effect.withSpan("InstanceStore.boot"))
 

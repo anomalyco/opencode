@@ -127,9 +127,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       // state, so refetch the location data that depends on it.
       if ((event.type as string) === "server.instance.disposed") {
         void Promise.allSettled([
-          result.location.agent.refresh(),
-          result.location.command.refresh(),
-          result.location.skill.refresh(),
+          result.location.agent.refresh(event.location),
+          result.location.command.refresh(event.location),
+          result.location.skill.refresh(event.location),
+          result.location.model.refresh(event.location),
+          result.location.provider.refresh(event.location),
+          result.location.integration.refresh(event.location),
+          result.location.reference.refresh(event.location),
         ])
         return
       }
