@@ -271,12 +271,17 @@ test("a save whose setup throws restores the previous version", async () => {
   const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
   await mkdir(directory, { recursive: true })
   const marker = path.join(tmp.path, "a.txt")
+  const markerB = path.join(tmp.path, "b.txt")
   const source = path.join(directory, "a.ts")
+  const sourceB = path.join(directory, "b.ts")
   await writeFile(source, lifecycleSource(marker, "test.a", "a1"))
+  await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b1"))
 
   await using app = await bootApp(tmp.path)
   const read = () => readFile(marker, "utf8")
+  const readB = () => readFile(markerB, "utf8")
   expect(await until(read, (value) => value === "a1:setup\n")).toBe("a1:setup\n")
+  expect(await until(readB, (value) => value === "b1:setup\n")).toBe("b1:setup\n")
 
   // The module imports fine but its setup throws — unlike an import failure,
   // the swap has already torn down a1, so keep-last-good means restoring it.
@@ -294,6 +299,13 @@ export default {
   expect(await until(read, (value) => value === "a1:setup\na1:cleanup\na1:setup\n")).toBe(
     "a1:setup\na1:cleanup\na1:setup\n",
   )
+
+  // A later reconcile must not retry the same broken generation.
+  await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b2"))
+  expect(await until(readB, (value) => value?.includes("b2:setup") ?? false)).toBe(
+    "b1:setup\nb1:cleanup\nb2:setup\n",
+  )
+  expect(await read()).toBe("a1:setup\na1:cleanup\na1:setup\n")
 
   // Fixing the file swaps out the restored version normally.
   await writeFile(source, lifecycleSource(marker, "test.a", "a2"))
