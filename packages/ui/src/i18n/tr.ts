@@ -50,10 +50,8 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "{{path}} ikili dosyadır.",
   "ui.fileMedia.binary.description.default": "İkili içerik",
 
-  "ui.lineComment.label.prefix": "Yorum: ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Yorum yapılıyor: ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Yorum: {{selection}}",
+  "ui.lineComment.editorLabel": "Yorum yapılıyor: {{selection}}",
   "ui.lineComment.placeholder": "Yorum ekle",
   "ui.lineComment.contextPlaceholder": "Bu değişiklik için bağlam ekle",
   "ui.lineComment.submit": "Yorum yap",
@@ -116,8 +114,7 @@ export const dict = {
   "ui.list.loading": "Yükleniyor",
   "ui.list.empty": "Sonuç bulunamadı",
   "ui.list.clearFilter": "Filtreyi temizle",
-  "ui.list.emptyWithFilter.prefix": "Sonuç bulunamadı:",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Sonuç bulunamadı:{{query}}",
 
   "ui.messageNav.newMessage": "Yeni mesaj",
 

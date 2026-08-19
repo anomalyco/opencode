@@ -44,10 +44,8 @@ export const dict = {
   "ui.fileMedia.binary.title": "Binær fil",
   "ui.fileMedia.binary.description.path": "{{path}} kan ikke vises, fordi det er en binær fil.",
   "ui.fileMedia.binary.description.default": "Denne fil kan ikke vises, fordi det er en binær fil.",
-  "ui.lineComment.label.prefix": "Skriv en kommentar til ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Skriver en kommentar til ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Skriv en kommentar til {{selection}}",
+  "ui.lineComment.editorLabel": "Skriver en kommentar til {{selection}}",
   "ui.lineComment.placeholder": "Tilføj kommentar",
   "ui.lineComment.submit": "Kommenter",
   "ui.lineComment.cancel": "Annuller",
@@ -108,8 +106,7 @@ export const dict = {
   "ui.list.loading": "Indlæser",
   "ui.list.empty": "Ingen resultater",
   "ui.list.clearFilter": "Ryd filter",
-  "ui.list.emptyWithFilter.prefix": "Ingen resultater for",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Ingen resultater for{{query}}",
 
   "ui.messageNav.newMessage": "Ny besked",
 

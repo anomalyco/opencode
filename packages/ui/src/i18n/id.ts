@@ -45,10 +45,8 @@ export const dict: Record<string, string> = {
   "ui.fileMedia.binary.description.path": "Berkas {{path}} bersifat biner.",
   "ui.fileMedia.binary.description.default": "Konten biner",
 
-  "ui.lineComment.label.prefix": "Komentar pada ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Mengomentari ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Komentar pada {{selection}}",
+  "ui.lineComment.editorLabel": "Mengomentari {{selection}}",
   "ui.lineComment.placeholder": "Tambah komentar",
   "ui.lineComment.contextPlaceholder": "Tambahkan konteks untuk perubahan ini",
   "ui.lineComment.submit": "Komentar",
@@ -111,8 +109,7 @@ export const dict: Record<string, string> = {
   "ui.list.loading": "Memuat",
   "ui.list.empty": "Tidak ada hasil",
   "ui.list.clearFilter": "Hapus filter",
-  "ui.list.emptyWithFilter.prefix": "Tidak ada hasil untuk",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Tidak ada hasil untuk{{query}}",
 
   "ui.fileSearch.placeholder": "Cari",
   "ui.fileSearch.previousMatch": "Kecocokan sebelumnya",

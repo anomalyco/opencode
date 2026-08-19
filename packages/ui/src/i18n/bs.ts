@@ -48,10 +48,8 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "{{path}} je binarna datoteka.",
   "ui.fileMedia.binary.description.default": "Binarni sadržaj",
 
-  "ui.lineComment.label.prefix": "Komentar na ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Komentarišeš ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Komentar na {{selection}}",
+  "ui.lineComment.editorLabel": "Komentarišeš {{selection}}",
   "ui.lineComment.placeholder": "Dodaj komentar",
   "ui.lineComment.contextPlaceholder": "Dodaj kontekst za ovu izmjenu",
   "ui.lineComment.submit": "Komentariši",
@@ -118,8 +116,7 @@ export const dict = {
   "ui.list.loading": "Učitavanje",
   "ui.list.empty": "Nema rezultata",
   "ui.list.clearFilter": "Očisti filter",
-  "ui.list.emptyWithFilter.prefix": "Nema rezultata za",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Nema rezultata za{{query}}",
 
   "ui.messageNav.newMessage": "Nova poruka",
 

@@ -46,10 +46,8 @@ export const dict: Record<string, string> = {
   "ui.fileMedia.binary.description.path": "Неможливо відобразити {{path}}, оскільки це двійковий файл.",
   "ui.fileMedia.binary.description.default": "Неможливо відобразити цей файл, оскільки він двійковий.",
 
-  "ui.lineComment.label.prefix": "Коментар до ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Коментування: ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Коментар до {{selection}}",
+  "ui.lineComment.editorLabel": "Коментування: {{selection}}",
   "ui.lineComment.placeholder": "Додати коментар",
   "ui.lineComment.contextPlaceholder": "Додати контекст для цієї зміни",
   "ui.lineComment.submit": "Коментувати",
@@ -120,8 +118,7 @@ export const dict: Record<string, string> = {
   "ui.list.loading": "Завантаження",
   "ui.list.empty": "Немає результатів",
   "ui.list.clearFilter": "Очистити фільтр",
-  "ui.list.emptyWithFilter.prefix": "Немає результатів для",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Немає результатів для{{query}}",
 
   "ui.fileSearch.placeholder": "Знайти",
   "ui.fileSearch.previousMatch": "Попередній збіг",

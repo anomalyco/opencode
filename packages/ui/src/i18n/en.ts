@@ -46,10 +46,8 @@ export const dict: Record<string, string> = {
   "ui.fileMedia.binary.description.path": "{{path}} is binary.",
   "ui.fileMedia.binary.description.default": "Binary content",
 
-  "ui.lineComment.label.prefix": "Comment on ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Commenting on ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Comment on {{selection}}",
+  "ui.lineComment.editorLabel": "Commenting on {{selection}}",
   "ui.lineComment.placeholder": "Add comment",
   "ui.lineComment.contextPlaceholder": "Add context for this change",
   "ui.lineComment.submit": "Comment",
@@ -112,8 +110,7 @@ export const dict: Record<string, string> = {
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",
   "ui.list.clearFilter": "Clear filter",
-  "ui.list.emptyWithFilter.prefix": "No results for",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "No results for{{query}}",
 
   "ui.fileSearch.placeholder": "Find",
   "ui.fileSearch.previousMatch": "Previous match",

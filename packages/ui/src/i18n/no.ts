@@ -29,10 +29,8 @@ export const dict: Record<Keys, string> = {
   "ui.fileMedia.binary.description.path": "{{path}} kan ikke vises fordi det er en binærfil.",
   "ui.fileMedia.binary.description.default": "Denne filen kan ikke vises fordi det er en binærfil.",
 
-  "ui.lineComment.label.prefix": "Legg inn kommentar til ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Kommentar til ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Legg inn kommentar til {{selection}}",
+  "ui.lineComment.editorLabel": "Kommentar til {{selection}}",
   "ui.lineComment.placeholder": "Legg til kommentar",
   "ui.lineComment.contextPlaceholder": "Legg til kontekst for denne endringen",
   "ui.lineComment.submit": "Kommenter",
@@ -89,8 +87,7 @@ export const dict: Record<Keys, string> = {
   "ui.list.loading": "Laster",
   "ui.list.empty": "Ingen resultater",
   "ui.list.clearFilter": "Tøm filter",
-  "ui.list.emptyWithFilter.prefix": "Ingen resultater for",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Ingen resultater for{{query}}",
 
   "ui.messageNav.newMessage": "Ny melding",
 

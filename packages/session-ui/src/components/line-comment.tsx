@@ -146,11 +146,7 @@ export const LineComment = (props: LineCommentProps) => {
             <div data-slot="line-comment-tools">{split.actions}</div>
           </Show>
         </div>
-        <div data-slot="line-comment-label">
-          {i18n.t("ui.lineComment.label.prefix")}
-          {split.selection}
-          {i18n.t("ui.lineComment.label.suffix")}
-        </div>
+        <div data-slot="line-comment-label">{i18n.parts("ui.lineComment.label", { selection: split.selection })}</div>
       </div>
     </LineCommentAnchor>
   )
@@ -395,9 +391,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
         </Show>
         <div data-slot="line-comment-actions">
           <div data-slot="line-comment-editor-label">
-            {i18n.t("ui.lineComment.editorLabel.prefix")}
-            {split.selection}
-            {i18n.t("ui.lineComment.editorLabel.suffix")}
+            {i18n.parts("ui.lineComment.editorLabel", { selection: split.selection })}
           </div>
           <Show
             when={!props.inline}

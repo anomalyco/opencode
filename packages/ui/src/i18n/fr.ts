@@ -45,10 +45,8 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "Impossible d'afficher {{path}} car il s'agit d'un fichier binaire.",
   "ui.fileMedia.binary.description.default": "Impossible d'afficher ce fichier car il s'agit d'un fichier binaire.",
 
-  "ui.lineComment.label.prefix": "Commenter ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Commentaire concernant ",
-  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Commenter {{selection}}",
+  "ui.lineComment.editorLabel": "Commentaire concernant {{selection}}",
   "ui.lineComment.placeholder": "Ajouter un commentaire",
   "ui.lineComment.contextPlaceholder": "Ajouter du contexte à cette modification",
   "ui.lineComment.submit": "Commenter",
@@ -115,8 +113,7 @@ export const dict = {
   "ui.list.loading": "Chargement",
   "ui.list.empty": "Aucun résultat",
   "ui.list.clearFilter": "Effacer le filtre",
-  "ui.list.emptyWithFilter.prefix": "Aucun résultat pour",
-  "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Aucun résultat pour{{query}}",
 
   "ui.messageNav.newMessage": "Nouveau message",
 
