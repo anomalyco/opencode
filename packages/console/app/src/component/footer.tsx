@@ -10,7 +10,7 @@ export function Footer() {
   const i18n = useI18n()
   const community = createMemo(() => {
     const locale = language.locale()
-    return locale === "zh" || locale === "zht"
+    return locale === "zh"
       ? ({ key: "footer.feishu", link: language.route("/feishu") } as const)
       : ({ key: "footer.discord", link: language.route("/discord") } as const)
   })
