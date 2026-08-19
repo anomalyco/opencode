@@ -1,10 +1,13 @@
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
 import { LanguageModel, LLMClient, LLMEvent } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Bus } from "@opencode-ai/core/bus"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigCompactionPlugin } from "@opencode-ai/core/config/plugin/compaction"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Database } from "@opencode-ai/core/database/database"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -13,14 +16,19 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { Session } from "@opencode-ai/core/session"
 import { Agent } from "@opencode-ai/core/agent"
 import { Location } from "@opencode-ai/core/location"
+import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ConfigCompaction } from "@opencode-ai/schema/config/compaction"
 import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Global } from "@opencode-ai/util/global"
 import { DateTime, Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { testEffect } from "../lib/effect"
+import { tempGlobalLayer } from "../fixture/global"
+import { tmpdir } from "../fixture/tmpdir"
 import { host } from "../plugin/host"
 
 const model = LanguageModel.make({
@@ -54,6 +62,11 @@ const it = testEffect(
       [Config.node, config],
     ]),
   ),
+)
+const integrationIt = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+    [Global.node, tempGlobalLayer],
+  ]),
 )
 
 describe("ConfigCompactionPlugin.Plugin", () => {
@@ -138,6 +151,39 @@ describe("ConfigCompactionPlugin.Plugin", () => {
       }
       yield* Effect.die(new Error("Timed out waiting for compaction config reload"))
     }),
+  )
+
+  integrationIt.live("reloads state after a real project config edit", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const file = path.join(tmp.path, "opencode.json")
+          yield* Effect.promise(() =>
+            fs.writeFile(file, JSON.stringify({ compaction: { auto: false, buffer: 1_000_000 } })),
+          )
+          const locations = yield* LocationServiceMap.Service
+          yield* Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush
+            const compaction = yield* SessionCompaction.Service
+            expect(compaction.required(nearInput)).toBe(false)
+
+            yield* Effect.promise(() =>
+              fs.writeFile(file, JSON.stringify({ compaction: { auto: true, buffer: 1_000_000 } })),
+            )
+            for (let attempt = 0; attempt < 500; attempt++) {
+              if (compaction.required(nearInput)) return
+              yield* Effect.sleep("10 millis")
+            }
+            yield* Effect.die(new Error("Timed out waiting for project compaction config reload"))
+          }).pipe(
+            Effect.scoped,
+            Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }))),
+          )
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
   )
 })
 
