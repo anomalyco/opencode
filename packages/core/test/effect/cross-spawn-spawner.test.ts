@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { exec } from "node:child_process"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -373,6 +374,96 @@ describe("cross-spawn spawner", () => {
         expect(out).toContain("stdout")
         expect(out).toContain("stderr")
       }),
+    )
+  })
+
+  describe("background processes", () => {
+    const collect = (handle: ChildProcessSpawner.ChildProcessHandle) =>
+      Effect.gen(function* () {
+        let text = ""
+        yield* Effect.forkScoped(
+          Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
+            Effect.sync(() => {
+              text += chunk
+            }),
+          ),
+        )
+        return () => text
+      })
+
+    fx.live(
+      "resolves exitCode when a background grandchild holds stdio open (powershell Start-Process)",
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+
+        const dir = os.tmpdir()
+        const pidFile = path.join(dir, `opencode-spawn-test-${process.pid}.pid`)
+        const command = [
+          `$p = Start-Process -FilePath "node" -ArgumentList '-e','setInterval(()=>{},60000)' -WindowStyle Hidden -RedirectStandardOutput '${path.join(dir, "opencode-spawn-test.out.log")}' -RedirectStandardError '${path.join(dir, "opencode-spawn-test.err.log")}' -PassThru`,
+          `$p.Id | Out-File -Encoding ascii '${pidFile}'`,
+          `Write-Output "started"`,
+        ].join("; ")
+
+        yield* Effect.gen(function* () {
+          const handle = yield* ChildProcess.make(
+            "powershell.exe",
+            ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
+            { stdin: "ignore" },
+          )
+          const output = yield* collect(handle)
+          const started = Date.now()
+          const code = yield* handle.exitCode
+          expect(Date.now() - started).toBeLessThan(10_000)
+          expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+          yield* Effect.sleep("200 millis")
+          expect(output()).toContain("started")
+        }).pipe(
+          Effect.ensuring(
+            Effect.promise(async () => {
+              try {
+                const pid = await fs.readFile(pidFile, "ascii").then((text) => text.trim())
+                if (pid) await new Promise<void>((resolve) => exec(`taskkill /F /PID ${pid}`, () => resolve()))
+              } catch {}
+              await fs.rm(pidFile, { force: true }).catch(() => {})
+              await fs.rm(path.join(dir, "opencode-spawn-test.out.log"), { force: true }).catch(() => {})
+              await fs.rm(path.join(dir, "opencode-spawn-test.err.log"), { force: true }).catch(() => {})
+            }),
+          ),
+        )
+      }),
+      { timeout: 20_000 },
+    )
+
+    fx.live(
+      "resolves exitCode when a background grandchild holds stdio open (sh &)",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const pidFile = path.join(os.tmpdir(), `opencode-spawn-test-${process.pid}.pid`)
+        yield* Effect.gen(function* () {
+          const handle = yield* ChildProcess.make("sh", ["-c", `sleep 60 & echo $! > '${pidFile}'; echo started`], {
+            stdin: "ignore",
+          })
+          const output = yield* collect(handle)
+          const started = Date.now()
+          const code = yield* handle.exitCode
+          expect(Date.now() - started).toBeLessThan(10_000)
+          expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+          yield* Effect.sleep("200 millis")
+          expect(output()).toContain("started")
+        }).pipe(
+          Effect.ensuring(
+            Effect.promise(async () => {
+              try {
+                const pid = await fs.readFile(pidFile, "utf8").then((text) => text.trim())
+                if (pid) process.kill(Number(pid), "SIGKILL")
+              } catch {}
+              await fs.rm(pidFile, { force: true }).catch(() => {})
+            }),
+          ),
+        )
+      }),
+      { timeout: 20_000 },
     )
   })
 

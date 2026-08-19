@@ -269,22 +269,34 @@ export const make = Effect.gen(function* () {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
       let end = false
+      let timer: NodeJS.Timeout | undefined
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
+      const done = (args: readonly [code: number | null, signal: NodeJS.Signals | null]) => {
+        if (end) return
+        end = true
+        if (timer) clearTimeout(timer)
+        Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
+      }
       proc.on("error", (err) => {
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
       proc.on("exit", (...args) => {
         exit = args
+        // "close" waits for stdio EOF, which never comes when a background
+        // grandchild inherited the pipes (e.g. Start-Process on Windows,
+        // `cmd &` on POSIX). Fall back to the exit result after a short grace
+        // so trailing output can still flush before the handle settles.
+        timer = setTimeout(() => done(args), 1_000)
+        timer.unref()
       })
       proc.on("close", (...args) => {
-        if (end) return
-        end = true
-        Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
+        done(args)
       })
       proc.on("spawn", () => {
         resume(Effect.succeed([proc, signal]))
       })
       return Effect.sync(() => {
+        if (timer) clearTimeout(timer)
         proc.kill("SIGTERM")
       })
     })
