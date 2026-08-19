@@ -550,6 +550,7 @@ export const SessionInfo = Schema.Struct({
   parentID: optional(SessionID),
   summary: optional(SessionSummary),
   cost: optional(Schema.Finite),
+  budget: optional(Schema.Finite),
   tokens: optional(SessionTokens),
   share: optional(SessionShare),
   title: Schema.String,

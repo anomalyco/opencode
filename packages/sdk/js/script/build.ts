@@ -82,7 +82,18 @@ const historyTypesPatched = generatedTypes.replace(
 if (historyTypesPatched === generatedTypes) {
   throw new Error("Session history numeric query patch did not apply")
 }
-await Bun.write("./src/v2/gen/types.gen.ts", historyTypesPatched)
+// The OpenAPI encoder drops the null arm of `Schema.NullOr` when it is wrapped
+// in `Schema.optional`, so the generated update data types lose `null`. The
+// runtime decoder still accepts null (it clears the session budget), so widen
+// the update-side budget types to match the wire contract.
+const budgetTypesPatched = historyTypesPatched.replace(
+  /(export type SessionUpdateData = \{[\s\S]*?budget\?: )number/,
+  "$1number | null",
+)
+if (budgetTypesPatched === historyTypesPatched) {
+  throw new Error("Session update budget nullable patch did not apply")
+}
+await Bun.write("./src/v2/gen/types.gen.ts", budgetTypesPatched)
 
 const generatedSdk = await Bun.file("./src/v2/gen/sdk.gen.ts").text()
 const historySdkPatched = generatedSdk.replace(
@@ -92,7 +103,14 @@ const historySdkPatched = generatedSdk.replace(
 if (historySdkPatched === generatedSdk) {
   throw new Error("Session history numeric SDK patch did not apply")
 }
-await Bun.write("./src/v2/gen/sdk.gen.ts", historySdkPatched)
+const budgetSdkPatched = historySdkPatched.replace(
+  /(budget\?: )number([;,]\s*time\?: \{\s*archived\?: number)/,
+  "$1number | null$2",
+)
+if (budgetSdkPatched === historySdkPatched) {
+  throw new Error("Session update budget nullable SDK patch did not apply")
+}
+await Bun.write("./src/v2/gen/sdk.gen.ts", budgetSdkPatched)
 
 // Patch a @hey-api/openapi-ts codegen bug: SseFn incorrectly passes the
 // endpoint's TError into the second generic of ServerSentEventsResult, which

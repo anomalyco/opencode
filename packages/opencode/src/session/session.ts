@@ -95,6 +95,7 @@ export function fromRow(row: SessionRow): Info {
     version: row.version,
     summary,
     cost: row.cost,
+    budget: row.budget ?? undefined,
     tokens: {
       input: row.tokens_input,
       output: row.tokens_output,
@@ -137,6 +138,7 @@ export function toRow(info: Info) {
     summary_diffs: info.summary?.diffs,
     metadata: info.metadata,
     cost: info.cost ?? 0,
+    budget: info.budget ?? null,
     tokens_input: (info.tokens ?? EmptyTokens).input,
     tokens_output: (info.tokens ?? EmptyTokens).output,
     tokens_reasoning: (info.tokens ?? EmptyTokens).reasoning,
@@ -231,6 +233,7 @@ export const Info = Schema.Struct({
   parentID: optional(SessionID),
   summary: optional(Summary),
   cost: optional(Schema.Finite),
+  budget: optional(Schema.Finite),
   tokens: optional(Tokens),
   share: optional(Share),
   title: Schema.String,
@@ -265,6 +268,7 @@ export const CreateInput = Schema.optional(
     model: Schema.optional(Model),
     metadata: Schema.optional(Metadata),
     permission: Schema.optional(PermissionV1.Ruleset),
+    budget: Schema.optional(Schema.Finite),
     workspaceID: Schema.optional(WorkspaceV2.ID),
   }),
 )
@@ -420,6 +424,7 @@ export interface Interface {
     model?: Schema.Schema.Type<typeof Model>
     metadata?: typeof Metadata.Type
     permission?: PermissionV1.Ruleset
+    budget?: number
     workspaceID?: WorkspaceV2.ID
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
@@ -428,6 +433,7 @@ export interface Interface {
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
+  readonly setBudget: (input: { sessionID: SessionID; budget?: number }) => Effect.Effect<void>
   readonly setAgentModel: (input: {
     sessionID: SessionID
     agent: string
@@ -507,6 +513,7 @@ const layer: Layer.Layer<
       path?: string
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
+      budget?: number
     }) {
       const ctx = yield* InstanceState.context
       const result: Info = {
@@ -524,6 +531,7 @@ const layer: Layer.Layer<
         metadata: input.metadata,
         permission: input.permission ? [...input.permission] : undefined,
         cost: 0,
+        budget: input.budget,
         tokens: EmptyTokens,
         time: {
           created: Date.now(),
@@ -671,6 +679,7 @@ const layer: Layer.Layer<
       model?: Schema.Schema.Type<typeof Model>
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
+      budget?: number
       workspaceID?: WorkspaceV2.ID
     }) {
       const ctx = yield* InstanceState.context
@@ -684,6 +693,7 @@ const layer: Layer.Layer<
         model: input?.model,
         metadata: input?.metadata,
         permission: input?.permission,
+        budget: input?.budget,
         workspaceID: input?.workspaceID ?? workspace,
       })
     })
@@ -760,6 +770,10 @@ const layer: Layer.Layer<
 
     const setMetadata = Effect.fn("Session.setMetadata")(function* (input: typeof SetMetadataInput.Type) {
       yield* patch(input.sessionID, { metadata: input.metadata, time: { updated: Date.now() } }).pipe(Effect.orDie)
+    })
+
+    const setBudget = Effect.fn("Session.setBudget")(function* (input: { sessionID: SessionID; budget?: number }) {
+      yield* patch(input.sessionID, { budget: input.budget, time: { updated: Date.now() } }).pipe(Effect.orDie)
     })
 
     const setAgentModel = Effect.fn("Session.setAgentModel")(function* (input: {
@@ -913,6 +927,7 @@ const layer: Layer.Layer<
       setTitle,
       setArchived,
       setMetadata,
+      setBudget,
       setAgentModel,
       setPermission,
       setRevert,
