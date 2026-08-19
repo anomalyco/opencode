@@ -15,6 +15,9 @@ export const ID = Schema.String.check(Schema.isStartsWith("que")).pipe(
 export const Option = Schema.Struct({
   label: Schema.String.annotate({ description: "Display text (1-5 words, concise)" }),
   description: Schema.String.annotate({ description: "Explanation of choice" }),
+  preview: Schema.optional(Schema.String).annotate({
+    description: "Plain monospace content shown beside this option (single-select only)",
+  }),
 }).annotate({ identifier: "QuestionOption" })
 
 const base = {
