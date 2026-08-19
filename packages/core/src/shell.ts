@@ -153,6 +153,14 @@ export function ps(file: string) {
   return meta(file)?.ps === true
 }
 
+export function powershellCommand(file: string, command: string) {
+  const ext = path.win32.extname(FSUtil.windowsPath(file)).toLowerCase()
+  if (ext === ".cmd" || ext === ".bat") {
+    return ["-EncodedCommand", Buffer.from(command, "utf-16le").toString("base64")]
+  }
+  return ["-Command", command]
+}
+
 function info(file: string): Item {
   const item = full(file)
   const n = name(item)
@@ -195,7 +203,7 @@ export function args(file: string, command: string, cwd: string) {
     ]
   }
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoProfile", "-Command", command]
+  if (ps(file)) return ["-NoProfile", ...powershellCommand(file, command)]
   return ["-c", command]
 }
 
