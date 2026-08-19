@@ -1,6 +1,7 @@
 import { FinishReason, LLMEvent, ProviderMetadata, ToolResultValue } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { type streamText } from "ai"
+import { ProviderError } from "@/provider/error"
 import { errorMessage } from "@/util/error"
 
 type Result = Awaited<ReturnType<typeof streamText>>
@@ -86,6 +87,9 @@ export function toLLMEvents(
 
     case "finish-step":
       return Effect.sync(() => {
+        if (event.finishReason === "other" && event.rawFinishReason === undefined) {
+          throw new ProviderError.ResponseStreamError("Provider stream ended without a finish reason")
+        }
         const original = providerMetadata(event.providerMetadata)
         const metadata =
           state.copilotTotalNanoAiu === undefined

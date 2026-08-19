@@ -210,6 +210,8 @@ export const TaskTool = Tool.define(
           agent: next.name,
           parts,
         })
+        if (result.info.role === "assistant" && result.info.error)
+          return yield* Effect.fail(new Error(result.info.error.name))
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
 

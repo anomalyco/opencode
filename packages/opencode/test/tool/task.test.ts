@@ -96,19 +96,27 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   return { chat, assistant }
 })
 
-function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string }): TaskPromptOps {
+function stubOps(opts?: {
+  onPrompt?: (input: SessionPrompt.PromptInput) => void
+  text?: string
+  error?: NonNullable<SessionV1.Assistant["error"]>
+}): TaskPromptOps {
   return {
     cancel: () => Effect.void,
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt: (input) =>
       Effect.sync(() => {
         opts?.onPrompt?.(input)
-        return reply(input, opts?.text ?? "done")
+        return reply(input, opts?.text ?? "done", opts?.error)
       }),
   }
 }
 
-function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithParts {
+function reply(
+  input: SessionPrompt.PromptInput,
+  text: string,
+  error?: NonNullable<SessionV1.Assistant["error"]>,
+): SessionV1.WithParts {
   const id = MessageID.ascending()
   return {
     info: {
@@ -125,6 +133,7 @@ function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithPa
       providerID: input.model?.providerID ?? ref.providerID,
       time: { created: Date.now() },
       finish: "stop",
+      error,
     },
     parts: [
       {
@@ -179,6 +188,40 @@ describe("tool.task", () => {
         },
       },
     },
+  )
+
+  it.instance("execute fails when the child session returns an error", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: {
+              promptOps: stubOps({
+                error: new SessionV1.APIError({ message: "Provider stream failed", isRetryable: true }).toObject(),
+              }),
+            },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+    }),
   )
 
   it.instance(

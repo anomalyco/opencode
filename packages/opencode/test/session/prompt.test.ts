@@ -2243,6 +2243,31 @@ it.instance("does not loop empty assistant turns for a simple reply", () =>
   }),
 )
 
+it.instance("retries a provider stream that ends without a finish reason", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Truncated stream" })
+
+    yield* llm.push(reply().reason("partial reasoning"), reply().text("recovered").stop())
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Respond after retrying" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("stop")
+      expect(result.info.error).toBeUndefined()
+    }
+    expect(result.parts.some((part) => part.type === "text" && part.text === "recovered")).toBe(true)
+    expect(yield* llm.calls).toBe(2)
+  }),
+)
+
 it.instance("records aborted errors when prompt is cancelled mid-stream", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

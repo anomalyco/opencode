@@ -385,6 +385,33 @@ describe("session.llm.ai-sdk adapter", () => {
     expect(stepFinish.usage).toBeUndefined()
   })
 
+  test("fails a synthesized finish without a provider finish reason", async () => {
+    const exit = await Effect.runPromise(
+      LLMAISDK.toLLMEvents(LLMAISDK.adapterState(), {
+        type: "finish-step",
+        response: { id: "response-1", timestamp: new Date(0), modelId: "gpt-test" },
+        finishReason: "other",
+        rawFinishReason: undefined,
+        providerMetadata: undefined,
+        usage: {
+          inputTokens: undefined,
+          outputTokens: undefined,
+          totalTokens: undefined,
+          inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+          outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
+        },
+      }).pipe(Effect.exit),
+    )
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isSuccess(exit)) throw new Error("expected provider stream error")
+    const error = Cause.squash(exit.cause)
+    expect(error).toMatchObject({
+      name: "ProviderResponseStreamError",
+      message: "Provider stream ended without a finish reason",
+    })
+  })
+
   test("reuses adapter state cleanly across streams once finish has fired", async () => {
     // adapterState() is meant to be per-stream, but the only thing finish currently clears
     // is toolNames — step, text counters, and the current text/reasoning IDs all leak
