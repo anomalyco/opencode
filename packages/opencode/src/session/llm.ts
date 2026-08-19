@@ -41,6 +41,7 @@ export type StreamInput = {
   permission?: PermissionV1.Ruleset
   system: string[]
   messages: ModelMessage[]
+  messageSuffix?: readonly ModelMessage[]
   small?: boolean
   tools: Record<string, Tool>
   retries?: number
@@ -230,6 +231,7 @@ const live: Layer.Layer<
           auth: info,
           llmClient,
           messages: prepared.messages,
+          messageSuffix: prepared.messageSuffix,
           tools: prepared.tools,
           toolChoice: input.toolChoice,
           temperature: prepared.params.temperature,
@@ -334,6 +336,7 @@ const live: Layer.Layer<
                       args.params.prompt,
                       input.model,
                       prepared.messageTransformOptions,
+                      prepared.messageSuffix,
                     )
                   }
                   return args.params
