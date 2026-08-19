@@ -105,6 +105,47 @@ describe("tool.assertExternalDirectory", () => {
     }),
   )
 
+  if (process.platform !== "win32") {
+    it.instance(
+      "prompts when an in-workspace symlink points outside and the leaf exists",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const outside = yield* tmpdirScoped()
+          const linkDir = path.join(test.directory, "outbox")
+          yield* Effect.promise(() => Bun.$`ln -s ${outside} ${linkDir}`.quiet())
+          const target = path.join(linkDir, "escaped.txt")
+          yield* Effect.promise(() => Bun.write(target, "ESCAPED"))
+
+          const { requests, ctx } = makeCtx()
+          yield* assertExternalDirectoryEffect(ctx, target)
+
+          const req = requests.find((r) => r.permission === "external_directory")
+          expect(req).toBeDefined()
+        }),
+      { git: true },
+    )
+
+    it.instance(
+      "prompts when an in-workspace symlink points outside and the leaf does not exist yet",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const outside = yield* tmpdirScoped()
+          const linkDir = path.join(test.directory, "outbox2")
+          yield* Effect.promise(() => Bun.$`ln -s ${outside} ${linkDir}`.quiet())
+          const target = path.join(linkDir, "newfile.txt")
+
+          const { requests, ctx } = makeCtx()
+          yield* assertExternalDirectoryEffect(ctx, target)
+
+          const req = requests.find((r) => r.permission === "external_directory")
+          expect(req).toBeDefined()
+        }),
+      { git: true },
+    )
+  }
+
   if (process.platform === "win32") {
     it.instance(
       "normalizes Windows path variants to one glob",

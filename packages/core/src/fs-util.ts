@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "path"
+import { basename, dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "path"
 import { realpathSync } from "fs"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
@@ -251,6 +251,30 @@ export namespace FSUtil {
     } catch (e: any) {
       if (e?.code === "ENOENT") return normalizePath(resolved)
       throw e
+    }
+  }
+
+  /**
+   * Resolve a path to its real (symlink-resolved) form even when the final
+   * component does not exist yet. `realpathSync` throws ENOENT as soon as any
+   * component is missing, so for a not-yet-created file we resolve the deepest
+   * existing ancestor and re-append the remaining suffix. Without this, a path
+   * whose parent is a symlink (e.g. an in-workspace symlink pointing outside the
+   * project) would be compared lexically and could escape the boundary.
+   */
+  export function resolveExisting(p: string): string {
+    let existing = pathResolve(windowsPath(p))
+    const suffix: string[] = []
+    for (;;) {
+      try {
+        return normalizePath(pathResolve(realpathSync(existing), ...suffix))
+      } catch (e: any) {
+        if (e?.code !== "ENOENT") throw e
+        const parent = dirname(existing)
+        if (parent === existing) return normalizePath(pathResolve(windowsPath(p)))
+        suffix.unshift(basename(existing))
+        existing = parent
+      }
     }
   }
 
