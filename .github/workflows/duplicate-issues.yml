@@ -119,7 +119,7 @@ jobs:
 
           [If not compliant:]
           <!-- issue-compliance -->
-          This issue doesn't fully meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md).
+          This issue doesn't fully meet our [contributing guidelines](../blob/${{ github.event.repository.default_branch || 'main' }}/CONTRIBUTING.md).
 
           **What needs to be fixed:**
           - [specific reasons]

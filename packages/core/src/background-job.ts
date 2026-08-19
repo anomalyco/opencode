@@ -106,8 +106,13 @@ function snapshot(job: Active): Info {
 }
 
 function errorText(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error)
+  if (error instanceof Error) {
+    const msg = error.message ?? ""
+    if (msg.trim()) return msg
+    return `${error.constructor.name}: ${String(error)}`
+  }
+  const s = String(error)
+  return s.trim() || "unknown error"
 }
 
 /**

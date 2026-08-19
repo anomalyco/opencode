@@ -30,6 +30,9 @@ const layer = Layer.effect(
     yield* db.run("PRAGMA cache_size = -64000")
     yield* db.run("PRAGMA foreign_keys = ON")
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    yield* db.run("PRAGMA auto_vacuum = INCREMENTAL")
+    yield* db.run("PRAGMA page_size = 4096")
+    yield* db.run("PRAGMA optimize")
     yield* DatabaseMigration.apply(db)
 
     return { db }

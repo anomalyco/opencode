@@ -7,6 +7,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { Global } from "@opencode-ai/core/global"
 import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
+import { SkillV2 } from "@opencode-ai/core/skill"
 import { Permission } from "@/permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@/config/config"
@@ -282,6 +283,20 @@ const layer = Layer.effect(
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), events)
+        // Merge skills registered via V2 plugins (ctx.skill.transform)
+        // These use EmbeddedSource and don't come from filesystem discovery
+        const v2Sources = yield* SkillV2.Service.sources()
+        for (const source of v2Sources) {
+          if (source.type !== "embedded") continue
+          const skill = source.skill
+          if (s.skills[skill.name]) continue // don't override discovered skills
+          s.skills[skill.name] = {
+            name: skill.name,
+            description: skill.description,
+            location: skill.location,
+            content: skill.content,
+          }
+        }
         return s
       }),
     )
