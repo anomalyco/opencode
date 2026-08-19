@@ -89,6 +89,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
                 ? "opencode.db"
                 : `opencode-${OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`),
+            wal: process.env.OPENCODE_DB_WAL === undefined ? undefined : truthy(process.env.OPENCODE_DB_WAL),
           },
           models: {
             url: process.env.OPENCODE_MODELS_URL,

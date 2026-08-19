@@ -99,6 +99,9 @@ The database normally lives at:
 
 `OPENCODE_DB` can override the database location.
 
+OpenCode disables SQLite WAL mode when it detects NFS or another shared network filesystem. Set
+`OPENCODE_DB_WAL=true` to force WAL mode or `OPENCODE_DB_WAL=false` to disable it explicitly.
+
 <Callout type="warning">
   Do not delete or edit service files or the database while troubleshooting. Use the service commands to manage the
   daemon, and make a backup before inspecting persistent data with external tools.
