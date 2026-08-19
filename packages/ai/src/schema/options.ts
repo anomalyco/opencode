@@ -36,22 +36,12 @@ const mergeStringRecords = (
   return Object.keys(result).length === 0 ? undefined : result
 }
 
-export const ProviderOptions = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))
+export const ProviderOptions = Schema.Record(Schema.String, Schema.Unknown)
 export type ProviderOptions = Schema.Schema.Type<typeof ProviderOptions>
 
 export const mergeProviderOptions = (
   ...items: ReadonlyArray<ProviderOptions | undefined>
-): ProviderOptions | undefined => {
-  const result: Record<string, Record<string, unknown>> = {}
-  for (const item of items) {
-    if (!item) continue
-    for (const [provider, options] of Object.entries(item)) {
-      const merged = mergeJsonRecords(result[provider], options)
-      if (merged) result[provider] = merged
-    }
-  }
-  return Object.keys(result).length === 0 ? undefined : result
-}
+): ProviderOptions | undefined => mergeJsonRecords(...items)
 
 export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   body: Schema.optional(JsonSchema),

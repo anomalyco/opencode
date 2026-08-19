@@ -12,7 +12,6 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderOptions,
   type ProviderMetadata,
   type TextPart,
   type ToolCallPart,
@@ -67,9 +66,7 @@ export interface OptionsInput {
   }
 }
 
-export type ProviderOptionsInput = ProviderOptions & {
-  readonly gemini?: OptionsInput
-}
+export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
 // Request Body Schema
@@ -387,7 +384,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 })
 
 const resolveOptions = (request: LLMRequest) => {
-  const input = request.providerOptions?.gemini
+  const input = request.providerOptions
   const value = input?.thinkingConfig
   const thinkingConfig = {
     thinkingBudget:

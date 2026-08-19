@@ -636,7 +636,7 @@ describe("LLMClient tools", () => {
             .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
             .model({ id: "gpt-5.5" }),
           prompt: "Use the tool.",
-          providerOptions: { openai: { store: false, include: ["reasoning.encrypted_content"] } },
+          providerOptions: { store: false, include: ["reasoning.encrypted_content"] },
         }),
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))

@@ -62,7 +62,7 @@ describe("Google Vertex providers", () => {
             accessToken: "vertex-token",
             project: "vertex-project",
             providerOptions: {
-              gemini: { labels: { component: "opencode", environment: "test" } },
+              labels: { component: "opencode", environment: "test" },
             },
           }).model("gemini-3.5-flash"),
           prompt: "Say hello.",

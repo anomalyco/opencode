@@ -22,7 +22,7 @@ const model = OpenAI.configure({
   apiKey,
   generation: { maxTokens: 160 },
   providerOptions: {
-    openai: { store: false },
+    store: false,
   },
 }).model("gpt-4o-mini")
 
@@ -34,7 +34,7 @@ const model = OpenAI.configure({
 //   - `generation`: common controls such as max tokens, temperature, topP/topK,
 //     penalties, seed, and stop sequences.
 //   - `promptCacheKey`: stable cache affinity for protocols that support it.
-//   - `providerOptions`: namespaced provider-native behavior. For example,
+//   - `providerOptions`: model-typed provider-native behavior. For example,
 //     OpenAI store behavior, Anthropic thinking, Gemini thinking config, or
 //     OpenRouter routing/reasoning.
 //   - `http`: last-resort serializable overlays for final request body, headers,

@@ -165,7 +165,7 @@ describe("OpenAI Chat route", () => {
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
           prompt: "think",
-          providerOptions: { openai: { reasoningEffort: "max" } },
+          providerOptions: { reasoningEffort: "max" },
         }),
       )
 
@@ -221,7 +221,7 @@ describe("OpenAI Chat route", () => {
         LLM.request({
           model,
           prompt: "think",
-          providerOptions: { openai: { reasoningEffort: "experimental" } },
+          providerOptions: { reasoningEffort: "experimental" },
         }),
       )
 

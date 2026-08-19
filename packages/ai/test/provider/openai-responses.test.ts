@@ -159,8 +159,8 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers semantic service tier options", () =>
     Effect.gen(function* () {
-      const input = LLMRequest.update(request, { providerOptions: { openai: { serviceTier: "priority" } } })
-      expect(input.providerOptions).toEqual({ openai: { serviceTier: "priority" } })
+      const input = LLMRequest.update(request, { providerOptions: { serviceTier: "priority" } })
+      expect(input.providerOptions).toEqual({ serviceTier: "priority" })
       const prepared = yield* compileRequest(input)
 
       expect(prepared.body).toMatchObject({ service_tier: "priority" })
@@ -171,7 +171,7 @@ describe("OpenAI Responses route", () => {
   it.effect("passes through custom OpenAI reasoning effort strings", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { openai: { reasoningEffort: "experimental" } } }),
+        LLMRequest.update(request, { providerOptions: { reasoningEffort: "experimental" } }),
       )
 
       expect(prepared.body.reasoning).toEqual({ effort: "experimental" })
@@ -181,7 +181,7 @@ describe("OpenAI Responses route", () => {
   it.effect("passes through custom OpenAI text verbosity strings", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { openai: { textVerbosity: "verbose" } } }),
+        LLMRequest.update(request, { providerOptions: { textVerbosity: "verbose" } }),
       )
 
       expect(prepared.body.text).toEqual({ verbosity: "verbose" })
@@ -191,7 +191,7 @@ describe("OpenAI Responses route", () => {
   it.effect("omits unsupported semantic service tiers", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { openai: { serviceTier: "unsupported" } } }),
+        LLMRequest.update(request, { providerOptions: { serviceTier: "unsupported" } }),
       )
 
       expect(prepared.body).not.toHaveProperty("service_tier")
@@ -1290,15 +1290,13 @@ describe("OpenAI Responses route", () => {
           ],
           toolChoice: "none",
           providerOptions: {
-            openai: {
-              reasoningEffort: "high",
-              reasoningSummary: "auto",
-              include: ["reasoning.encrypted_content"],
-              truncation: "disabled",
-              allowedTools: { toolNames: ["read", "grep"], mode: "required" },
-              maxToolCalls: 4,
-              parallelToolCalls: false,
-            },
+            reasoningEffort: "high",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"],
+            truncation: "disabled",
+            allowedTools: { toolNames: ["read", "grep"], mode: "required" },
+            maxToolCalls: 4,
+            parallelToolCalls: false,
           },
         }),
       )
@@ -1329,9 +1327,7 @@ describe("OpenAI Responses route", () => {
           model,
           prompt: "hi",
           providerOptions: {
-            openai: {
-              include: ["reasoning.encrypted_content", "code_interpreter_call.outputs", "web_search_call.results"],
-            },
+            include: ["reasoning.encrypted_content", "code_interpreter_call.outputs", "web_search_call.results"],
           },
         }),
       )
@@ -1350,7 +1346,7 @@ describe("OpenAI Responses route", () => {
         LLM.request({
           model,
           prompt: "hi",
-          providerOptions: { openai: { include: ["reasoning.encrypted_content", "bogus.thing"] } },
+          providerOptions: { include: ["reasoning.encrypted_content", "bogus.thing"] },
         }),
       )
 
@@ -1360,9 +1356,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("treats an explicit empty include as no include at all", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: [] } } }),
-      )
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "hi", providerOptions: { include: [] } }))
 
       expect(prepared.body.include).toBeUndefined()
     }),
@@ -1371,7 +1365,7 @@ describe("OpenAI Responses route", () => {
   it.effect("passes an unknown includable value through", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: ["bogus.thing"] } } }),
+        LLM.request({ model, prompt: "hi", providerOptions: { include: ["bogus.thing"] } }),
       )
 
       expect(prepared.body.include).toEqual(["bogus.thing"])
@@ -1380,9 +1374,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("omits include when no include is set", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLM.request({ model, prompt: "hi", providerOptions: { openai: { store: false } } }),
-      )
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "hi", providerOptions: { store: false } }))
 
       expect(prepared.body.include).toBeUndefined()
     }),
@@ -1413,7 +1405,7 @@ describe("OpenAI Responses route", () => {
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
           prompt: "hi",
-          providerOptions: { openai: { include: [] } },
+          providerOptions: { include: [] },
         }),
       )
 
@@ -1737,7 +1729,7 @@ describe("OpenAI Responses route", () => {
   it.effect("streams each reasoning summary part as a separate block", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { openai: { store: false } } }),
+        LLMRequest.update(request, { providerOptions: { store: false } }),
       ).pipe(
         Effect.provide(
           fixedResponse(
@@ -1791,9 +1783,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("closes reasoning summary parts when storage is not disabled", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { openai: { store: true } } }),
-      ).pipe(
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { providerOptions: { store: true } })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -1847,7 +1837,7 @@ describe("OpenAI Responses route", () => {
             ]),
             Message.user("Summarize it."),
           ],
-          providerOptions: { openai: { store: false } },
+          providerOptions: { store: false },
         }),
       ).pipe(
         Effect.provide(
@@ -1906,7 +1896,7 @@ describe("OpenAI Responses route", () => {
               { type: "text", text: "After." },
             ]),
           ],
-          providerOptions: { openai: { store: false } },
+          providerOptions: { store: false },
         }),
       )
 
@@ -1936,7 +1926,7 @@ describe("OpenAI Responses route", () => {
               },
             ]),
           ],
-          providerOptions: { openai: { store: true } },
+          providerOptions: { store: true },
         }),
       )
 
@@ -1969,7 +1959,7 @@ describe("OpenAI Responses route", () => {
             ]),
             Message.user("Continue."),
           ],
-          providerOptions: { openai: { store: true } },
+          providerOptions: { store: true },
         }),
       )
 
@@ -2042,7 +2032,7 @@ describe("OpenAI Responses route", () => {
               },
             ]),
           ],
-          providerOptions: { openai: { store: false } },
+          providerOptions: { store: false },
         }),
       )
 
@@ -2082,7 +2072,7 @@ describe("OpenAI Responses route", () => {
             ]),
             Message.user("Summarize it."),
           ],
-          providerOptions: { openai: { store: false } },
+          providerOptions: { store: false },
         }),
       )
 

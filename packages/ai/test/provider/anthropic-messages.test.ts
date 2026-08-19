@@ -63,7 +63,8 @@ describe("Anthropic Messages route", () => {
       const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: {
-            anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+            thinking: { type: "adaptive", display: "summarized" },
+            effort: "low",
           },
         }),
       )
@@ -79,17 +80,17 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 1_024 } } },
+          providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
         }),
       )
       const legacy = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "enabled", budget_tokens: 2_048 } } },
+          providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
         }),
       )
       const disabled = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "disabled" } } },
+          providerOptions: { thinking: { type: "disabled" } },
         }),
       )
 
@@ -103,7 +104,7 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const error = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "enabled" } } },
+          providerOptions: { thinking: { type: "enabled" } },
         }),
       ).pipe(Effect.flip)
 
@@ -1062,9 +1063,7 @@ describe("Anthropic Messages route", () => {
         ),
       )
 
-      expect(response.toolCalls).toMatchObject([
-        { id: "call_1", name: "lookup", input: { query: "weather" } },
-      ])
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { query: "weather" } }])
       expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_use" })
     }),
   )

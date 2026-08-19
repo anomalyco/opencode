@@ -16,7 +16,6 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderOptions,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
@@ -52,9 +51,7 @@ export interface OptionsInput {
   readonly effort?: string
 }
 
-export type ProviderOptionsInput = ProviderOptions & {
-  readonly anthropic?: OptionsInput
-}
+export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
 // Request Body Schema
@@ -593,7 +590,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 })
 
 const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (request: LLMRequest) {
-  const input = request.providerOptions?.anthropic
+  const input = request.providerOptions
   return {
     thinking: yield* resolveThinking(input?.thinking),
     effort: typeof input?.effort === "string" ? input.effort : undefined,

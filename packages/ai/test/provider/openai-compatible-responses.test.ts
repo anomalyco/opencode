@@ -118,20 +118,18 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
-  it.effect("reads standard options from the Open Responses namespace", () =>
+  it.effect("reads standard Open Responses options", () =>
     Effect.gen(function* () {
       const model = configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         providerOptions: {
-          openresponses: {
-            reasoningEffort: "low",
-            store: true,
-            truncation: "auto",
-            allowedTools: { toolNames: ["lookup"] },
-            maxToolCalls: 2,
-            parallelToolCalls: false,
-          },
+          reasoningEffort: "low",
+          store: true,
+          truncation: "auto",
+          allowedTools: { toolNames: ["lookup"] },
+          maxToolCalls: 2,
+          parallelToolCalls: false,
         },
       }).model("example-model")
       const prepared = yield* compileRequest(

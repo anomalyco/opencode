@@ -69,9 +69,7 @@ export type Resolved = Omit<Options, "allowedTools"> & {
 const decodeOptions = Schema.decodeUnknownOption(Options)
 
 export const resolve = (request: LLMRequest): Resolved => {
-  const input = Option.getOrUndefined(
-    decodeOptions(request.providerOptions?.[request.model.route.providerMetadataKey ?? "openresponses"]),
-  )
+  const input = Option.getOrUndefined(decodeOptions(request.providerOptions))
   if (!input) return {}
   return {
     ...input,

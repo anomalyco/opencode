@@ -27,7 +27,7 @@ export function map(input: MapInput): Mapping | undefined {
           ...baseSettings,
           ...mapAPIKey(input.settings),
           ...(typeof input.settings.authToken === "string" ? { authToken: input.settings.authToken } : {}),
-          ...mapAnthropicOptions(input.settings),
+          ...mapProviderOptions(input.settings, ["apiKey", "authToken", "baseURL"]),
         },
       }
     case "@ai-sdk/amazon-bedrock":
@@ -89,10 +89,8 @@ export function map(input: MapInput): Mapping | undefined {
           ...(isRecord(input.settings.thinking) || typeof input.settings.effort === "string"
             ? {
                 providerOptions: {
-                  anthropic: {
-                    ...(isRecord(input.settings.thinking) ? { thinking: input.settings.thinking } : {}),
-                    ...(typeof input.settings.effort === "string" ? { effort: input.settings.effort } : {}),
-                  },
+                  ...(isRecord(input.settings.thinking) ? { thinking: input.settings.thinking } : {}),
+                  ...(typeof input.settings.effort === "string" ? { effort: input.settings.effort } : {}),
                 },
               }
             : {}),
@@ -108,13 +106,7 @@ export function map(input: MapInput): Mapping | undefined {
           ...(typeof input.settings.organization === "string" ? { organization: input.settings.organization } : {}),
           ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
           ...(isStringRecord(input.settings.queryParams) ? { queryParams: input.settings.queryParams } : {}),
-          ...mapProviderOptions(input.settings, "openai", [
-            "apiKey",
-            "baseURL",
-            "organization",
-            "project",
-            "queryParams",
-          ]),
+          ...mapProviderOptions(input.settings, ["apiKey", "baseURL", "organization", "project", "queryParams"]),
         },
       }
     case "@ai-sdk/openai-compatible":
@@ -125,7 +117,7 @@ export function map(input: MapInput): Mapping | undefined {
           ...baseSettings,
           ...mapAPIKey(input.settings),
           provider: input.providerID,
-          ...mapProviderOptions(input.settings, "openai", ["apiKey", "baseURL"]),
+          ...mapProviderOptions(input.settings, ["apiKey", "baseURL"]),
         },
       }
     case "@openrouter/ai-sdk-provider":
@@ -142,18 +134,10 @@ export function map(input: MapInput): Mapping | undefined {
   }
 }
 
-function mapAnthropicOptions(settings: Readonly<Record<string, unknown>>) {
-  return mapProviderOptions(settings, "anthropic", ["apiKey", "authToken", "baseURL"])
-}
-
-function mapProviderOptions(
-  settings: Readonly<Record<string, unknown>>,
-  key: string,
-  excluded: ReadonlyArray<string>,
-) {
+function mapProviderOptions(settings: Readonly<Record<string, unknown>>, excluded: ReadonlyArray<string>) {
   const options = Object.fromEntries(Object.entries(settings).filter(([name]) => !excluded.includes(name)))
   if (Object.keys(options).length === 0) return {}
-  return { providerOptions: { [key]: options } }
+  return { providerOptions: options }
 }
 
 function mapBedrockMantle(input: MapInput, baseSettings: Readonly<Record<string, unknown>>): Mapping | undefined {
@@ -286,7 +270,7 @@ function mapOpenAIOptions(settings: Readonly<Record<string, unknown>>) {
     ...(typeof settings.serviceTier === "string" ? { serviceTier: settings.serviceTier } : {}),
   }
   if (Object.keys(options).length === 0) return {}
-  return { providerOptions: { openai: options } }
+  return { providerOptions: options }
 }
 
 function mapBaseSettings(settings: Readonly<Record<string, unknown>>) {
@@ -317,7 +301,7 @@ function mapGoogleOptions(settings: Readonly<Record<string, unknown>>, extra: Re
     ...extra,
   }
   if (Object.keys(options).length === 0) return {}
-  return { providerOptions: { gemini: options } }
+  return { providerOptions: options }
 }
 
 function mapOpenRouter(
@@ -369,7 +353,7 @@ function mapOpenRouterOptions(settings: Readonly<Record<string, unknown>>) {
     ),
   )
   if (Object.keys(options).length === 0) return {}
-  return { providerOptions: { openrouter: options } }
+  return { providerOptions: options }
 }
 
 function isStringRecord(value: unknown): value is Readonly<Record<string, string>> {
@@ -382,5 +366,5 @@ function mapXAIOptions(settings: Readonly<Record<string, unknown>>) {
     ...(typeof settings.store === "boolean" ? { store: settings.store } : {}),
   }
   if (Object.keys(options).length === 0) return {}
-  return { providerOptions: { xai: options } }
+  return { providerOptions: options }
 }

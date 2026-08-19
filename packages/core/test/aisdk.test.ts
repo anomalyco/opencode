@@ -94,10 +94,19 @@ it.effect("projects request settings, headers, and body overlays", () =>
       headers: { "x-test": "header" },
       body: { safety_setting: "strict" },
     })
-    const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        prompt: "Hello",
+        providerOptions: { safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }] },
+      }),
+    )
 
     expect(prepared.body.providerOptions).toEqual({
-      google: { thinkingConfig: { thinkingBudget: 1024 } },
+      google: {
+        thinkingConfig: { thinkingBudget: 1024 },
+        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
+      },
     })
     expect(prepared.body.headers).toEqual({ "x-test": "header" })
     expect(body).toEqual({ safety_setting: "strict" })

@@ -27,7 +27,7 @@ export interface Settings extends ProviderPackage.Settings {
 const route = OpenAICompatibleResponses.route.with({
   id: "google-vertex-responses",
   provider: id,
-  providerOptions: { openresponses: { store: false } },
+  providerOptions: { store: false },
 })
 
 export const routes = [route]

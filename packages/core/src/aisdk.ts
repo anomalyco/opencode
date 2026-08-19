@@ -307,12 +307,6 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
   const optionKey = providerOptionKey(packageName, info.providerID)
-  const providerOptions = (() => {
-    if (projected.settings === undefined) return
-    if (packageName === "@ai-sdk/gateway") return gatewayProviderOptions(info.modelID ?? info.id, projected.settings)
-    if (packageName === "@ai-sdk/azure") return { openai: projected.settings, azure: projected.settings }
-    return { [optionKey]: projected.settings }
-  })()
   const route: AnyRoute = {
     id: `ai-sdk:${packageName}`,
     provider: ProviderID.make(info.providerID),
@@ -335,11 +329,11 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
               headers: info.headers,
             },
       limits: { context: info.limit.context, input: info.limit.input, output: info.limit.output },
-      providerOptions,
+      providerOptions: projected.settings,
     },
     body: {
       schema: Schema.Unknown,
-      from: (request) => Effect.succeed(callOptions(request)),
+      from: (request) => Effect.succeed(callOptions(request, packageName, info.modelID ?? info.id, optionKey)),
     },
     with: () => route,
     model: (input) =>
@@ -414,7 +408,12 @@ function mapBodyToProviderOptions(model: Info, packageName: string) {
   }
 }
 
-function callOptions(request: LLMRequest): LanguageModelV3CallOptions {
+function callOptions(
+  request: LLMRequest,
+  packageName: string | undefined,
+  modelID: ID,
+  optionKey: string,
+): LanguageModelV3CallOptions {
   return {
     prompt: prompt(request),
     maxOutputTokens: request.generation?.maxTokens,
@@ -428,7 +427,7 @@ function callOptions(request: LLMRequest): LanguageModelV3CallOptions {
     tools: request.tools.map(tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.http?.headers,
-    providerOptions: providerOptions(request.providerOptions),
+    providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
   }
 }
 
@@ -526,7 +525,7 @@ function assistantPart(part: ContentPart): AssistantContent {
     case "media":
       return [{ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename }]
     case "reasoning":
-      return [{ type: "reasoning", text: part.text, providerOptions: providerOptions(part.providerMetadata) }]
+      return [{ type: "reasoning", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "tool-call":
       return [
         {
@@ -535,7 +534,7 @@ function assistantPart(part: ContentPart): AssistantContent {
           toolName: part.name,
           input: part.input,
           providerExecuted: part.providerExecuted,
-          providerOptions: providerOptions(part.providerMetadata),
+          providerOptions: metadataProviderOptions(part.providerMetadata),
         },
       ]
     case "tool-result":
@@ -551,7 +550,7 @@ function toolResultPart(part: ContentPart): ToolResultContent[] {
       toolCallId: part.id,
       toolName: part.name,
       output: toolOutput(part.result),
-      providerOptions: providerOptions(part.providerMetadata),
+      providerOptions: metadataProviderOptions(part.providerMetadata),
     },
   ]
 }
@@ -595,7 +594,20 @@ function toolChoice(input: LLMRequest["toolChoice"]): LanguageModelV3ToolChoice 
   return { type: input.type }
 }
 
-function providerOptions(input: LLMRequest["providerOptions"]): SharedV3ProviderOptions | undefined {
+function requestProviderOptions(
+  input: LLMRequest["providerOptions"],
+  packageName: string | undefined,
+  modelID: ID,
+  optionKey: string,
+): SharedV3ProviderOptions | undefined {
+  if (!input) return undefined
+  const options = jsonObject(input)
+  if (packageName === "@ai-sdk/gateway") return gatewayProviderOptions(modelID, options)
+  if (packageName === "@ai-sdk/azure") return { openai: options, azure: options }
+  return { [optionKey]: options }
+}
+
+function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3ProviderOptions | undefined {
   if (!input) return undefined
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
 }
