@@ -388,6 +388,18 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     focus(count() - 1)
   }
 
+  const paste = (event: ClipboardEvent) => {
+    if (sending() || store.editing || store.minimized) return
+    const value = event.clipboardData?.getData("text/plain")
+    if (!value) return
+
+    event.preventDefault()
+    setStore("focus", options().length)
+    setStore("customOn", store.tab, true)
+    setStore("editing", true)
+    customUpdate(input() + value.replace(/\r\n?/g, "\n"), true)
+  }
+
   const selectOption = (optIndex: number) => {
     if (sending()) return
 
@@ -474,7 +486,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   }
 
   return (
-    <div data-component="session-question-dock">
+    <div data-component="session-question-dock" onPaste={paste}>
       <DockPrompt
         kind="question"
         ref={(el) => (root = el)}
