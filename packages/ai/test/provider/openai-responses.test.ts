@@ -1492,6 +1492,108 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("preserves standard refusal content as ordinary assistant text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                output_index: 0,
+                item: { type: "message", id: "msg_refusal", content: [] },
+              },
+              {
+                type: "response.content_part.added",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                part: { type: "refusal", refusal: "" },
+              },
+              {
+                type: "response.refusal.delta",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                delta: "I can't",
+              },
+              {
+                type: "response.refusal.delta",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                delta: " help with that.",
+              },
+              {
+                type: "response.refusal.done",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                refusal: "I can't help with that.",
+              },
+              {
+                type: "response.content_part.done",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                part: { type: "refusal", refusal: "I can't help with that." },
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: {
+                  type: "message",
+                  id: "msg_refusal",
+                  phase: "final_answer",
+                  content: [{ type: "refusal", refusal: "I can't help with that." }],
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("I can't help with that.")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: undefined })
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "I can't help with that.",
+          providerMetadata: { openai: { phase: "final_answer" } },
+        },
+      ])
+
+      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(prepared.body.input).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "output_text", text: "I can't help with that." }],
+          phase: "final_answer",
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects refusal events without standard content coordinates", () =>
+    Effect.gen(function* () {
+      const events = [
+        { type: "response.refusal.delta", output_index: 0, content_index: 0, delta: "missing item" },
+        { type: "response.refusal.delta", item_id: "msg_1", content_index: 0, delta: "missing output" },
+        { type: "response.refusal.delta", item_id: "msg_1", output_index: 0, delta: "missing content" },
+        { type: "response.refusal.delta", item_id: "msg_1", output_index: 0, content_index: 0 },
+        { type: "response.refusal.done", item_id: "msg_1", output_index: 0, content_index: 0 },
+      ]
+      for (const event of events) {
+        const error = yield* LLMClient.generate(request).pipe(
+          Effect.provide(fixedResponse(sseEvents(event))),
+          Effect.flip,
+        )
+        expect(error.reason._tag).toBe("InvalidProviderOutput")
+      }
+    }),
+  )
+
   it.effect("preserves and replays assistant message phases", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

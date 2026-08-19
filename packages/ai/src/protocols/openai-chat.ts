@@ -28,7 +28,7 @@ import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "openai-chat"
-const RESERVED_REASONING_FIELDS = new Set(["role", "content", "tool_calls"])
+const RESERVED_REASONING_FIELDS = new Set(["role", "content", "refusal", "tool_calls"])
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/chat/completions"
 
@@ -194,6 +194,7 @@ type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta
 const OpenAIChatDelta = Schema.StructWithRest(
   Schema.Struct({
     content: optionalNull(Schema.String),
+    refusal: optionalNull(Schema.String),
     reasoning_content: optionalNull(Schema.String),
     reasoning: optionalNull(Schema.String),
     reasoning_text: optionalNull(Schema.String),
@@ -709,6 +710,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const reasoning = reasoningDelta(delta, state.reasoningField)
     const hasLateContent =
       Boolean(delta?.content) ||
+      Boolean(delta?.refusal) ||
       reasoning !== undefined ||
       (Array.isArray(delta?.reasoning_details) && delta.reasoning_details.length > 0) ||
       toolDeltas.some((tool) => Boolean(tool.id) || Boolean(tool.function?.name) || Boolean(tool.function?.arguments))
@@ -728,7 +730,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     else if (
       reasoningDetailsObserved &&
       !lifecycle.reasoning.has("reasoning-0") &&
-      (Boolean(delta?.content) || toolDeltas.length > 0)
+      (Boolean(delta?.content) || Boolean(delta?.refusal) || toolDeltas.length > 0)
     )
       lifecycle = Lifecycle.reasoningStart(lifecycle, events, "reasoning-0", deltaMetadata)
     const reasoningEmitted = state.reasoningEmitted || lifecycle.reasoning.has("reasoning-0")
@@ -741,6 +743,16 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         reasoningMetadata(reasoningField, reasoningDetailsObserved ? state.reasoningDetails : undefined),
       )
       lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    }
+
+    if (delta?.refusal) {
+      lifecycle = Lifecycle.reasoningEnd(
+        lifecycle,
+        events,
+        "reasoning-0",
+        reasoningMetadata(reasoningField, reasoningDetailsObserved ? state.reasoningDetails : undefined),
+      )
+      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.refusal)
     }
 
     // Compatible providers may omit indexes. Prefer durable identity, then use
