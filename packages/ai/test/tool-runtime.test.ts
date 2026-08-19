@@ -55,7 +55,7 @@ const schema_only_weather = Tool.make({
 })
 
 describe("LLMClient tools", () => {
-  it.effect("uses the registered model route when adding runtime tools", () =>
+  it.effect("uses the selected model route when adding runtime tools", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([
         sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),

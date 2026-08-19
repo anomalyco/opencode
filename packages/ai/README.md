@@ -237,11 +237,11 @@ Prompt caching is **on by default**. Every `LLMRequest` resolves to `cache: "aut
 
 ### Auto placement
 
-`"auto"` places up to four breakpoints — the last tool definition, the first system part, the last system part when distinct, and the final message boundary. These expose successively larger reusable prefixes for tools, the base agent, project instructions, and the active conversation. The rolling final-message boundary is the load-bearing detail in tool loops: it advances on every request so the previous cache entry stays within Anthropic's 20-block lookback.
+`"auto"` places up to four breakpoints — the last tool definition, the first system part, the last system part when distinct, and the final message boundary. These expose successively larger reusable prefixes for tools, the base agent, project instructions, and the active conversation. The rolling final-message boundary advances on every request so recent conversation prefixes remain reusable during tool loops.
 
 Tools precede every system and conversation block in the provider prefix, so tool definitions must remain byte-stable and deterministically ordered for downstream breakpoints to remain reusable.
 
-The math justifies the default: Anthropic's 5-minute cache write is 1.25× base, read is 0.1×, so a single reuse within 5 minutes already wins. One-shot completions below the per-model minimum-cacheable-token threshold silently no-op on the wire, so the worst case is harmless.
+Requests below a provider's minimum cacheable size simply do not produce a reusable cache entry.
 
 ### Opting out
 
@@ -285,6 +285,7 @@ LLM.request({
 | ----------------------- | ------------------------------------------------------------------------- |
 | Anthropic Messages      | emits up to 4 `cache_control` markers (4-breakpoint cap enforced)         |
 | Bedrock Converse        | emits up to 4 `cachePoint` blocks (4-breakpoint cap enforced)             |
+| OpenRouter              | emits up to 4 `cache_control` markers                                     |
 | OpenAI Chat / Responses | no-op (implicit caching above 1024 tokens)                                |
 | Gemini                  | no-op (implicit caching on 2.5+; explicit `CachedContent` is out-of-band) |
 

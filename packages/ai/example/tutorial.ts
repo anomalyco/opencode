@@ -188,7 +188,7 @@ const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
   },
 })
 
-// An route is the runnable binding for that protocol. It adds the deployment
+// A route is the runnable binding for that protocol. It adds the deployment
 // axes that the protocol deliberately does not know: URL, auth, and framing.
 const FakeAdapter = Route.make({
   id: "fake-echo",
