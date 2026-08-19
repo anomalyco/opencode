@@ -63,7 +63,8 @@
     "opentui-spinner": "catalog:",
     "remeda": "catalog:",
     "strip-ansi": "7.1.2",
-    "solid-js": "catalog:"
+    "solid-js": "catalog:",
+    "x11": "^3.9.1"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
