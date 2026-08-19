@@ -2,7 +2,17 @@ import { Effect } from "effect"
 import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
 
-function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
+function selectLanguage(
+  sdk: any,
+  model: { id: string; name: string; family?: string; api: { id: string } },
+  useChat: boolean,
+) {
+  const modelID = model.api.id
+  if (
+    sdk.deepseek &&
+    [modelID, model.id, model.name, model.family].some((value) => value?.toLowerCase().includes("deepseek"))
+  )
+    return sdk.deepseek(modelID)
   if (useChat && sdk.chat) return sdk.chat(modelID)
   if (sdk.responses) return sdk.responses(modelID)
   if (sdk.messages) return sdk.messages(modelID)
@@ -49,7 +59,7 @@ export const AzurePlugin = define({
     yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.azure) return
-        evt.language = selectLanguage(evt.sdk, evt.model.api.id, Boolean(evt.options.useCompletionUrls))
+        evt.language = selectLanguage(evt.sdk, evt.model, Boolean(evt.options.useCompletionUrls))
       }),
     )
   }),
@@ -75,7 +85,7 @@ export const AzureCognitiveServicesPlugin = define({
     yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("azure-cognitive-services")) return
-        evt.language = selectLanguage(evt.sdk, evt.model.api.id, Boolean(evt.options.useCompletionUrls))
+        evt.language = selectLanguage(evt.sdk, evt.model, Boolean(evt.options.useCompletionUrls))
       }),
     )
   }),
