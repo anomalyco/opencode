@@ -143,7 +143,8 @@ export const Typescript: Info = {
     // typescript@7+ (native Go port) dropped tsserver.js in favor of its own
     // `tsc --lsp` mode, so typescript-language-server can no longer attach.
     // Fall back to the native LSP directly.
-    const localTsc = path.join(root, "node_modules", ".bin", "tsc")
+    const tscExt = process.platform === "win32" ? ".cmd" : ""
+    const localTsc = path.join(root, "node_modules", ".bin", "tsc" + tscExt)
     const bin = (await Filesystem.exists(localTsc)) ? localTsc : which("tsc")
     if (!bin) return
     const proc = spawn(bin, ["--lsp", "-stdio"], {
