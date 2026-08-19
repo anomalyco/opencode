@@ -21,10 +21,13 @@ export async function load(dir: string) {
 
     const name = configEntryNameFromPath(path.relative(dir, item), ["agent/", "agents/"])
 
+    const interp = await ConfigMarkdown.interpolateFiles(md.content, path.dirname(item))
+    configMarkdownWarn(interp.errors)
+
     const config = {
       name,
       ...md.data,
-      prompt: md.content.trim(),
+      prompt: interp.content.trim(),
     }
     result[config.name] = ConfigParse.schema(ConfigAgentV1.Info, config, item)
   }
@@ -42,10 +45,15 @@ export async function loadMode(dir: string) {
     const md = await ConfigMarkdown.parse(item).catch(() => undefined)
     if (!md) continue
 
+    const name = configEntryNameFromPath(path.relative(dir, item), ["mode/", "modes/"])
+
+    const interp = await ConfigMarkdown.interpolateFiles(md.content, path.dirname(item))
+    configMarkdownWarn(interp.errors)
+
     const config = {
-      name: configEntryNameFromPath(path.relative(dir, item), ["mode/", "modes/"]),
+      name,
       ...md.data,
-      prompt: md.content.trim(),
+      prompt: interp.content.trim(),
     }
     const parsed = Schema.decodeUnknownExit(ConfigAgentV1.Info)(config, { errors: "all", propertyOrder: "original" })
     if (Exit.isSuccess(parsed)) {
@@ -56,4 +64,11 @@ export async function loadMode(dir: string) {
     }
   }
   return result
+}
+
+function configMarkdownWarn(errors: ConfigMarkdown.InterpolationError[]) {
+  if (errors.length === 0) return
+  for (const err of errors) {
+    console.warn(`[config] ${err.type}: ${err.refPath} -> ${err.resolvedPath}`)
+  }
 }
