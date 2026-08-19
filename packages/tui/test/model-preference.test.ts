@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
-import { createModelPreferenceRepository, decodeModelPreference } from "../src/model-preference"
+import { availableModelVariant, createModelPreferenceRepository, decodeModelPreference } from "../src/model-preference"
 import { tmpdir } from "./fixture/fixture"
 
 test("repairs known model preferences and preserves unrelated fields", () => {
@@ -17,6 +17,12 @@ test("repairs known model preferences and preserves unrelated fields", () => {
     favorite: [],
     variant: { "openai/gpt-5": "high" },
   })
+})
+
+test("drops a saved variant that is no longer available", () => {
+  expect(availableModelVariant("medium", [])).toBeUndefined()
+  expect(availableModelVariant("medium", ["low", "high"])).toBeUndefined()
+  expect(availableModelVariant("medium", ["low", "medium", "high"])).toBe("medium")
 })
 
 test("atomically serializes patches and variant updates", async () => {
