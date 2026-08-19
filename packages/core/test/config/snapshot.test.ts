@@ -41,9 +41,13 @@ describe("ConfigSnapshotPlugin.Plugin", () => {
 
             expect(yield* snapshot.capture()).toBeUndefined()
 
-            yield* config.setEntries([document(true)])
+            yield* config.setEntries([new Document({ type: "document", info: new Info({ snapshots: true }) })])
             yield* bus.publish(Event.Updated, {})
-            yield* waitUntil(snapshot.capture().pipe(Effect.map((value) => value !== undefined)))
+            for (let attempt = 0; attempt < 200; attempt++) {
+              if ((yield* snapshot.capture()) !== undefined) return
+              yield* Effect.sleep("10 millis")
+            }
+            yield* Effect.die(new Error("Timed out waiting for snapshot config reload"))
           }).pipe(
             Effect.provide(
               AppNodeBuilder.build(Snapshot.node, [
@@ -54,18 +58,9 @@ describe("ConfigSnapshotPlugin.Plugin", () => {
           )
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(Effect.provide(PluginTestLayer), Effect.provide(Config.testLayer([document(false)]))),
+    ).pipe(
+      Effect.provide(PluginTestLayer),
+      Effect.provide(Config.testLayer([new Document({ type: "document", info: new Info({ snapshots: false }) })])),
+    ),
   )
-})
-
-function document(snapshots: boolean) {
-  return new Document({ type: "document", info: new Info({ snapshots }) })
-}
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  yield* Effect.die(new Error("Timed out waiting for snapshot config reload"))
 })
