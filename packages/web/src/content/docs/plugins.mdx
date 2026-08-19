@@ -335,6 +335,39 @@ Levels: `debug`, `info`, `warn`, `error`. See [SDK documentation](https://openco
 
 ---
 
+### Model routing hooks
+
+Route the model used for an LLM request before provider/model/auth resolution:
+
+```ts title=".opencode/plugins/model-router.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ModelRouterPlugin: Plugin = async (ctx) => {
+  // Models come from what the user configured, not hardcoded names:
+  // e.g. OPENCODE_LOCAL_MODEL="ollama/qwen3:4b" in ~/.config/environment.d/
+  const localModel = process.env.OPENCODE_LOCAL_MODEL?.split("/") as
+    | [providerID: string, modelID: string]
+    | undefined
+
+  return {
+    "chat.model": async (input, output) => {
+      if (localModel && input.agent === "linux-helper") {
+        const [providerID, modelID] = localModel
+        output.model = { providerID, modelID }
+        output.reason = "small task, use the user-configured local model"
+      }
+    },
+  }
+}
+```
+
+The `chat.model` hook fires for every LLM request. Setting `output.model`
+replaces the model for this request only; the session's selected model is
+unchanged. `output.reason` is included in logs for observability. Setting no
+`output.model` leaves the request untouched. The `providerID`/`modelID` pair
+must exist in the user's provider configuration — read models from config or
+environment, never hardcode them in the plugin.
+
 ### Compaction hooks
 
 Customize the context included when a session is compacted:

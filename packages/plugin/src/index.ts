@@ -242,6 +242,26 @@ export interface Hooks {
     output: { message: UserMessage; parts: Part[] },
   ) => Promise<void>
   /**
+   * Route the model used for this LLM request before provider/model/auth resolution.
+   * This does not mutate the selected session model; later request hooks receive
+   * the routed model for this request.
+   */
+  "chat.model"?: (
+    input: {
+      sessionID: string
+      agent: string
+      model: { providerID: string; modelID: string }
+      message: {
+        id: string
+        text: string
+      }
+    },
+    output: {
+      model?: { providerID: string; modelID: string }
+      reason?: string
+    },
+  ) => Promise<void>
+  /**
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
