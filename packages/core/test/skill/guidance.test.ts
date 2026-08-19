@@ -27,6 +27,13 @@ const denied = SkillV2.Info.make({
   location: AbsolutePath.make(path.resolve("/skills/denied/SKILL.md")),
   content: "Denied guidance",
 })
+const manual = SkillV2.Info.make({
+  name: "manual",
+  description: "Only invoked by the user",
+  disableModelInvocation: true,
+  location: AbsolutePath.make(path.resolve("/skills/manual/SKILL.md")),
+  content: "Manual guidance",
+})
 
 const layer = (list: () => SkillV2.Info[]) =>
   AppNodeBuilder.build(SkillGuidance.node, [
@@ -69,6 +76,19 @@ describe("SkillGuidance", () => {
         text: expect.stringContaining("No skills are currently available."),
       })
     }).pipe(Effect.provide(layer(() => skills)))
+  })
+
+  it.effect("omits skills that disable model invocation", () => {
+    const agent = AgentV2.Info.make(AgentV2.Info.empty(build))
+    return Effect.gen(function* () {
+      const guidance = yield* SkillGuidance.Service
+      const baseline = (yield* guidance
+        .load({ id: agent.id, info: agent })
+        .pipe(Effect.flatMap(SystemContext.initialize))).baseline
+
+      expect(baseline).toContain("<name>effect</name>")
+      expect(baseline).not.toContain("<name>manual</name>")
+    }).pipe(Effect.provide(layer(() => [manual, effect])))
   })
 
   it.effect("omits guidance when the selected agent denies all skills", () => {

@@ -141,6 +141,14 @@ describe("SkillTool", () => {
                 call: { type: "tool-call", id: "call-flat-skill", name: "skill", input: { name: "public" } },
               }),
             ).toEqual({ type: "text", value: SkillTool.toModelOutput(flat, []) })
+            current = [{ ...info, disableModelInvocation: true }]
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: "call-manual-skill", name: "skill", input: { name: "effect" } },
+              }),
+            ).toEqual({ type: "error", value: "Unable to load skill effect" })
           }).pipe(Effect.provide(skillToolLayer))
         }),
       ),

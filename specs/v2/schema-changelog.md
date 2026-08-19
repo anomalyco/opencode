@@ -1,5 +1,11 @@
 # V2 Schema Changelog
 
+## 2026-08-05: Respect Skill Model Invocation Opt-Out
+
+- Add optional `disableModelInvocation` to the `SkillV2.Info` HTTP payload and generated SDK skill list, parsed from `disable-model-invocation` in `SKILL.md` frontmatter.
+- Omit flagged skills from agent skill guidance and reject them from the model-facing `skill` tool; they stay listed so users can still invoke them manually.
+- No durable data or migration is affected; the field is optional and unset for existing skills.
+
 ## 2026-06-26: Add Finite Session History
 
 - Add `GET /api/session/:sessionID/history` and generated Promise, Effect, and legacy JavaScript client methods.

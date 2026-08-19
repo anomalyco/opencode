@@ -2813,6 +2813,9 @@
                       "description": {
                         "type": "string"
                       },
+                      "disableModelInvocation": {
+                        "type": "boolean"
+                      },
                       "location": {
                         "type": "string"
                       },
@@ -30684,6 +30687,9 @@
             "type": "string"
           },
           "slash": {
+            "type": "boolean"
+          },
+          "disableModelInvocation": {
             "type": "boolean"
           },
           "location": {
