@@ -72,9 +72,10 @@ export const Plugin = define({
 
       for (const ref of configured) {
         yield* Effect.gen(function* () {
+          const pkg = Npm.normalizeRegistrySpec(ref.package)
           const entrypoint = path.isAbsolute(ref.package)
             ? pathToFileURL(ref.package).href
-            : (yield* npm.add(ref.package)).entrypoint
+            : (yield* npm.add(pkg)).entrypoint
           if (!entrypoint) return
 
           const mod = yield* Effect.promise(() => import(entrypoint))
