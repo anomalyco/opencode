@@ -3133,7 +3133,7 @@ test("admits prompts optimistically and reconciles with the durable echo", async
 
   try {
     await mounted
-    const promise = sync.session.prompt({ sessionID, text: "hello" })
+    const promise = sync.session.prompt({ sessionID, text: "hello" }, { optimistic: true })
     const settled = promise.then(
       () => undefined,
       (error) => error,
@@ -3241,7 +3241,7 @@ test("keeps the row when the response lands before the echo", async () => {
 
   try {
     await mounted
-    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+    await sync.session.prompt({ sessionID, id: messageID, text: "hello" }, { optimistic: true })
 
     // POST resolved but the echo has not arrived: racing pending and message
     // re-fetches still cannot wipe the row.
@@ -3292,7 +3292,7 @@ test("rolls back an optimistic prompt the server rejected", async () => {
 
   try {
     await mounted
-    const promise = sync.session.prompt({ sessionID, text: "rejected" })
+    const promise = sync.session.prompt({ sessionID, text: "rejected" }, { optimistic: true })
     expect(sync.session.message.list(sessionID)).toHaveLength(1)
 
     await expect(promise).rejects.toThrow()
@@ -3351,10 +3351,10 @@ test("a retry under the same client-minted ID cannot duplicate rows", async () =
 
   try {
     await mounted
-    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+    await sync.session.prompt({ sessionID, id: messageID, text: "hello" }, { optimistic: true })
     // Retry with the identical payload: server admission is idempotent per ID,
     // and the local dedupe keeps a single row.
-    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+    await sync.session.prompt({ sessionID, id: messageID, text: "hello" }, { optimistic: true })
 
     expect(posts).toEqual([messageID, messageID])
     expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
@@ -3375,7 +3375,73 @@ test("a retry under the same client-minted ID cannot duplicate rows", async () =
     await wait(() => received.includes("session.inbox.enqueued"))
     unsubscribe()
     fail = true
-    await expect(sync.session.prompt({ sessionID, id: messageID, text: "hello" })).rejects.toThrow()
+    await expect(sync.session.prompt({ sessionID, id: messageID, text: "hello" }, { optimistic: true })).rejects.toThrow()
+    expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("does not admit optimistically unless opted in", async () => {
+  const events = createEventStream()
+  const sessionID = "session-1"
+  const messageID = "msg_plain_1"
+  const admission = {
+    id: messageID,
+    sessionID,
+    timeCreated: 1,
+    type: "user",
+    payload: { text: "hello" },
+    delivery: "steer",
+  }
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/prompt`) return json({ data: admission })
+  }, events)
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    // Default path: the POST still carries the client-minted ID, but nothing
+    // renders until the durable echo.
+    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+    expect(sync.session.pending.list(sessionID)).toEqual([])
+    expect(sync.session.input.list(sessionID)).toEqual([])
+    expect(sync.session.message.list(sessionID)).toEqual([])
+
+    const received: string[] = []
+    const unsubscribe = sync.listen((event) => received.push(event.name))
+    emitEvent(events, {
+      id: "evt_plain_1",
+      created: 2,
+      type: "session.inbox.enqueued",
+      durable: durable(sessionID),
+      data: { sessionID, inboxID: messageID, item: { type: "user", payload: { text: "hello" }, delivery: "steer" } },
+    })
+    await wait(() => received.includes("session.inbox.enqueued"))
+    unsubscribe()
     expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
     expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
   } finally {

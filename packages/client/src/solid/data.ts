@@ -1100,17 +1100,18 @@ export function createData(config: CreateDataInput) {
           sync.invalidate(`session.pending:${sessionID}`)
         },
       },
-      // Optimistic prompt admission: render the prompt immediately under a
-      // client-minted ID, send it, and let the durable inbox.enqueued echo
-      // upsert that same ID with the server's payload. Server admission is
-      // idempotent per ID, so retrying with the identical payload cannot
-      // double-admit.
-      prompt(input: SessionPromptInput) {
+      // Prompt admission under a client-minted ID: the server is idempotent
+      // per ID, so retrying with the identical payload cannot double-admit.
+      // With `optimistic` enabled the prompt also renders immediately and the
+      // durable inbox.enqueued echo upserts that same ID with the server's
+      // payload; otherwise the visible row waits for the echo as before.
+      prompt(input: SessionPromptInput, options?: { optimistic?: boolean }) {
         const id = input.id ?? SessionMessage.ID.create()
         // A retry may reuse an ID that is already rendered — and possibly
         // already durable. Admit optimistically only for new IDs so a failed
         // retry cannot roll back acknowledged state.
         const fresh =
+          (options?.optimistic ?? false) &&
           !messageIndex.get(input.sessionID)?.has(id) &&
           !store.session.pending[input.sessionID]?.some((item) => item.id === id)
         if (fresh) {
