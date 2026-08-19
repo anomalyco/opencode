@@ -72,6 +72,9 @@ export const Info = Schema.Struct({
   diff_style: Schema.optional(DiffStyle),
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  share_plan_build_model: Schema.optional(Schema.Boolean).annotate({
+    description: "Share manually selected models between the Plan and Build agents (default: false)",
+  }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 

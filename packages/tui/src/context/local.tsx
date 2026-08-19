@@ -13,6 +13,7 @@ import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { usePermission } from "./permission"
+import { useTuiConfig } from "../config"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -48,6 +49,25 @@ export function recentModels(
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
 }
 
+export function selectModel<T extends Record<string, { providerID: string; modelID: string }>>(
+  models: T,
+  agent: string,
+  model: { providerID: string; modelID: string },
+  sharePlanBuild: boolean,
+) {
+  if (!sharePlanBuild || (agent !== "plan" && agent !== "build")) {
+    return {
+      ...models,
+      [agent]: model,
+    }
+  }
+  return {
+    ...models,
+    plan: model,
+    build: model,
+  }
+}
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
@@ -60,6 +80,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const args = useArgs()
     const event = useEvent()
     const permission = usePermission()
+    const tuiConfig = useTuiConfig()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((item) => item.id === model.providerID)
@@ -285,7 +306,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!val) return
           const a = agent.current()
           if (!a) return
-          setModelStore("model", a.name, { ...val })
+          setModelStore("model", (models) =>
+            selectModel(models, a.name, { ...val }, !!tuiConfig.share_plan_build_model),
+          )
         },
         cycleFavorite(direction: 1 | -1) {
           const favorites = modelStore.favorite.filter((item) => isModelValid(item))
@@ -313,7 +336,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!next) return
           const a = agent.current()
           if (!a) return
-          setModelStore("model", a.name, { ...next })
+          setModelStore("model", (models) =>
+            selectModel(models, a.name, { ...next }, !!tuiConfig.share_plan_build_model),
+          )
           setModelStore("recent", recentModels(next, modelStore.recent))
           save()
         },
@@ -329,7 +354,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             const a = agent.current()
             if (!a) return
-            setModelStore("model", a.name, model)
+            setModelStore("model", (models) => selectModel(models, a.name, model, !!tuiConfig.share_plan_build_model))
             if (options?.recent) {
               setModelStore("recent", recentModels(model, modelStore.recent))
               save()
