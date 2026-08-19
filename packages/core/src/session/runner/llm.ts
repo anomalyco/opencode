@@ -15,6 +15,9 @@ import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
 import { ModelV2 } from "../../model"
+import { NotebookEvidence } from "../../notebook/evidence"
+import { FSUtil } from "../../fs-util"
+import { NotebookAttach } from "../../notebook/attach"
 import { PermissionV2 } from "../../permission"
 import { ProviderV2 } from "../../provider"
 import { QuestionV2 } from "../../question"
@@ -90,6 +93,14 @@ import { llmClient } from "../../effect/app-node-platform"
  * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
  */
 
+const explorationTools = new Set(["read", "grep", "glob"])
+
+function isExploration(name: string, input: unknown): boolean {
+  if (explorationTools.has(name)) return true
+  if (input && typeof input === "object") return "filePath" in input || "path" in input
+  return false
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -105,6 +116,7 @@ const layer = Layer.effect(
     const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
+    const attach = yield* NotebookAttach.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
@@ -202,6 +214,11 @@ const layer = Layer.effect(
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
+      const systemParts: string[] = [agent.info?.system, system.baseline].filter(
+        (part): part is string => part !== undefined && part.length > 0,
+      )
+      const nudge = NotebookEvidence.nudgeFor(session.id)
+      if (nudge) systemParts.push(nudge)
       const request = LLM.request({
         model,
         http: {
@@ -212,9 +229,7 @@ const layer = Layer.effect(
           },
         },
         providerOptions: { openai: { promptCacheKey } },
-        system: [agent.info?.system, system.baseline]
-          .filter((part): part is string => part !== undefined && part.length > 0)
-          .map(SystemPart.make),
+        system: systemParts.map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
@@ -253,6 +268,7 @@ const layer = Layer.effect(
               return
             }
             needsContinuation = true
+            if (isExploration(event.name, event.input)) NotebookEvidence.markExplore(session.id)
             const assistantMessageID = yield* publisher.assistantMessageID(event.id)
             yield* Effect.uninterruptibleMask((restore) =>
               restore(
@@ -264,14 +280,20 @@ const layer = Layer.effect(
                 }),
               ).pipe(
                 Effect.flatMap((settlement) =>
-                  publish(
-                    LLMEvent.toolResult({
-                      id: event.id,
-                      name: event.name,
-                      result: settlement.result,
-                      output: settlement.output,
-                    }),
-                    settlement.outputPaths ?? [],
+                  // Surface the relevant per-file notebook memory with the tool
+                  // result so leaf notes reach the model as it starts a file.
+                  attach.noteFor(session.id, event.name, event.input).pipe(
+                    Effect.flatMap((note) =>
+                      publish(
+                        LLMEvent.toolResult({
+                          id: event.id,
+                          name: event.name,
+                          result: settlement.result,
+                          output: settlement.output ? NotebookAttach.prependNote(settlement.output, note) : settlement.output,
+                        }),
+                        settlement.outputPaths ?? [],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -435,5 +457,7 @@ export const node = makeLocationNode({
     Config.node,
     Snapshot.node,
     Database.node,
+    FSUtil.node,
+    NotebookAttach.node,
   ],
 })

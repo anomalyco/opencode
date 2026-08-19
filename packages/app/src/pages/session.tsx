@@ -2115,6 +2115,17 @@ export default function Page() {
                   setRevealMessage={(fn) => {
                     revealMessage = fn
                   }}
+                  onSaveLearnings={() => {
+                    const id = params.id
+                    if (!id) return
+                    const model = local.model.current()
+                    if (!model) return
+                    void sdk().api.session.prompt({
+                      sessionID: id,
+                      model: { providerID: model.provider.id, modelID: model.id },
+                      text: "Save the durable learnings from this session to the project notebook. Use `notes_commit` with rewritten, English, source-backed folder_summaries/entries/relations, and surface the review for my approval before saving.",
+                    })
+                  }}
                   setScrollToEnd={(fn) => {
                     scrollToEnd = fn
                   }}
