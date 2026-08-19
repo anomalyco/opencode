@@ -1044,7 +1044,6 @@ describe("ACP service sessions", () => {
     const result = await Effect.runPromise(
       service.prompt({
         sessionId: session.sessionId,
-        messageId: "00000000-0000-4000-8000-000000000001",
         prompt: [{ type: "text", text: "hello" }],
       }),
     )
@@ -1069,7 +1068,6 @@ describe("ACP service sessions", () => {
         cachedWriteTokens: 13,
         totalTokens: 171,
       },
-      userMessageId: "00000000-0000-4000-8000-000000000001",
       _meta: {},
     })
     expect(usageUpdates).toEqual([session.sessionId])

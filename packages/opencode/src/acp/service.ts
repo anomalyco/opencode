@@ -24,8 +24,6 @@ import {
   type SessionInfo,
   type SetSessionConfigOptionRequest,
   type SetSessionConfigOptionResponse,
-  type SetSessionModelRequest,
-  type SetSessionModelResponse,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
@@ -65,7 +63,6 @@ export type Interface = {
     input: SetSessionConfigOptionRequest,
   ) => Effect.Effect<SetSessionConfigOptionResponse, Error>
   readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, Error>
-  readonly setSessionModel: (input: SetSessionModelRequest) => Effect.Effect<SetSessionModelResponse, Error>
   readonly prompt: (input: PromptRequest) => Effect.Effect<PromptResponse, Error>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void, Error>
 }
@@ -464,21 +461,6 @@ export function make(input: {
     return {}
   })
 
-  const setSessionModel = Effect.fn("ACP.setSessionModel")(function* (params: SetSessionModelRequest) {
-    const current = yield* session.get(params.sessionId)
-    const snapshot = yield* configSnapshot(current)
-    const selected = yield* parseSelectedModel(snapshot, params.modelId)
-    yield* session
-      .setVariant(
-        params.sessionId,
-        Directory.variants(snapshot, selected.model)
-          ? (selected.variant ?? selectVariant(snapshot, selected.model))
-          : undefined,
-      )
-      .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
-    return {}
-  })
-
   return {
     initialize,
     authenticate,
@@ -490,7 +472,6 @@ export function make(input: {
     forkSession,
     setSessionConfigOption,
     setSessionMode,
-    setSessionModel,
     prompt: Effect.fn("ACP.prompt")(function* (params: PromptRequest) {
       const current = yield* session.get(params.sessionId)
       const snapshot = yield* directorySnapshot(current.cwd)
@@ -525,7 +506,7 @@ export function make(input: {
           "session",
         )
         yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        return yield* promptResponse(response.info, params.messageId)
+        return yield* promptResponse(response.info)
       }
 
       const known = snapshot.availableCommands.find((item) => item.name === command.name)
@@ -549,7 +530,7 @@ export function make(input: {
           "session",
         )
         yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        return yield* promptResponse(response.info, params.messageId)
+        return yield* promptResponse(response.info)
       }
 
       if (command.name === "compact") {
@@ -571,7 +552,7 @@ export function make(input: {
       }
 
       yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-      return yield* promptResponse(undefined, params.messageId)
+      return yield* promptResponse(undefined)
     }),
     cancel,
   }
@@ -821,22 +802,17 @@ function detectSlashCommand(parts: ReturnType<typeof promptContentToParts>) {
   return { name, args: rest.join(" ").trim() }
 }
 
-const promptResponse = Effect.fn("ACP.promptResponse")(function* (
-  info: AssistantInfo,
-  messageId: string | null | undefined,
-) {
+const promptResponse = Effect.fn("ACP.promptResponse")(function* (info: AssistantInfo) {
   if (!info?.error) {
     return {
       stopReason: "end_turn" as const,
       ...(info ? { usage: UsageService.buildUsage(info) } : {}),
-      ...(messageId ? { userMessageId: messageId } : {}),
       _meta: {},
     }
   }
 
   const base = {
     usage: UsageService.buildUsage(info),
-    ...(messageId ? { userMessageId: messageId } : {}),
     _meta: {},
   }
 
@@ -1012,6 +988,7 @@ function mcpRegistrationKey(name: string, config: ReturnType<typeof mcpConfig>) 
 
 function mcpConfig(server: McpServer) {
   if ("type" in server) {
+    if (server.type === "acp") throw new Error("MCP-over-ACP is not supported")
     return {
       type: "remote" as const,
       url: server.url,

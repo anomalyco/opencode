@@ -13,7 +13,6 @@ import {
   type PromptRequest,
   type ResumeSessionRequest,
   type SetSessionConfigOptionRequest,
-  type SetSessionModelRequest,
   type SetSessionModeRequest,
 } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
@@ -70,10 +69,6 @@ export class Agent implements ACPAgent {
 
   setSessionMode(params: SetSessionModeRequest) {
     return run(this.service.setSessionMode(params))
-  }
-
-  unstable_setSessionModel(params: SetSessionModelRequest) {
-    return run(this.service.setSessionModel(params))
   }
 
   prompt(params: PromptRequest) {
