@@ -13,6 +13,7 @@ import { Config } from "../config.js"
 import { Credential } from "../credential.js"
 import { ConfigAgentPlugin } from "../config/plugin/agent.js"
 import { ConfigCommandPlugin } from "../config/plugin/command.js"
+import { ConfigCompactionPlugin } from "../config/plugin/compaction.js"
 import { ConfigFormatterPlugin } from "../config/plugin/formatter.js"
 import { ConfigImagePlugin } from "../config/plugin/image.js"
 import { ConfigInstructionPlugin } from "../config/plugin/instruction.js"
@@ -47,6 +48,7 @@ import { Permission } from "../permission.js"
 import { Reference } from "../reference.js"
 import { WebSearch } from "../websearch.js"
 import { Ripgrep } from "../ripgrep.js"
+import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
 import { Shell } from "../shell.js"
 import { ShellSelect } from "../shell/select.js"
@@ -116,6 +118,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const reference = yield* Reference.Service
   const websearch = yield* WebSearch.Service
   const ripgrep = yield* Ripgrep.Service
+  const compaction = yield* SessionCompaction.Service
   const instructions = yield* SessionInstructions.Service
   const shell = yield* Shell.Service
   const shellSelect = yield* ShellSelect.Service
@@ -158,6 +161,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Reference.Service, reference),
     Context.make(WebSearch.Service, websearch),
     Context.make(Ripgrep.Service, ripgrep),
+    Context.make(SessionCompaction.Service, compaction),
     Context.make(SessionInstructions.Service, instructions),
     Context.make(Shell.Service, shell),
     Context.make(ShellSelect.Service, shellSelect),
@@ -207,6 +211,7 @@ export const requirements = LayerNode.group([
   Reference.node,
   WebSearch.node,
   Ripgrep.node,
+  SessionCompaction.node,
   SessionInstructions.node,
   Shell.node,
   ShellSelect.node,
@@ -253,6 +258,7 @@ const post = [
   ConfigReferencePlugin.Plugin,
   ConfigAgentPlugin.Plugin,
   ConfigCommandPlugin.Plugin,
+  ConfigCompactionPlugin.Plugin,
   ConfigFormatterPlugin.Plugin,
   ConfigImagePlugin.Plugin,
   ConfigShellPlugin.Plugin,

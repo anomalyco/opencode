@@ -34,6 +34,7 @@ import { toSessionError } from "../to-session-error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionUsage } from "../usage.js"
 import { ToolOutput } from "../../tool-output.js"
+import { PluginSupervisor } from "../../plugin/supervisor.js"
 
 /** How one model call ended: settled, awaiting retry/recovery, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
@@ -114,6 +115,7 @@ const layer = Layer.effect(
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
+    const plugins = yield* PluginSupervisor.Service
     const title = yield* SessionTitle.Service
     const toolOutput = yield* ToolOutput.Service
     // Title generation starts once input is visible and must not delay model execution.
@@ -135,6 +137,7 @@ const layer = Layer.effect(
       const promotable = input.promotable ?? "input"
       if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
         return { type: "complete" as const }
+      yield* plugins.flush
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
         if (yield* runPendingCompaction(input.sessionID, promotable)) {
@@ -646,6 +649,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
+    PluginSupervisor.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,
