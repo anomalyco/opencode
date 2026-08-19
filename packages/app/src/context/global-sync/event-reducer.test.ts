@@ -418,6 +418,22 @@ describe("applyDirectoryEvent", () => {
     expect(store.part.msg_a).toBeUndefined()
   })
 
+  test("replaces a message when an update shifts its creation time", () => {
+    const sessionID = "ses_1"
+    const [store, setStore] = createStore(baseState({ message: { [sessionID]: [userMessage("msg_a", sessionID, 1)] } }))
+
+    applyDirectoryEvent({
+      event: { type: "message.updated", properties: { info: userMessage("msg_a", sessionID, 2) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.message[sessionID]).toEqual([userMessage("msg_a", sessionID, 2)])
+  })
+
   test("upserts and prunes message parts", () => {
     const sessionID = "ses_1"
     const messageID = "msg_1"
