@@ -122,6 +122,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     }
 
     function handleEvent(event: V2Event) {
+      // server.instance.disposed is a raw bus event outside the schema event
+      // union. Instance reloads (e.g. hot reload) dispose and rebuild server
+      // state, so refetch the location data that depends on it.
+      if ((event.type as string) === "server.instance.disposed") {
+        void Promise.allSettled([
+          result.location.agent.refresh(),
+          result.location.command.refresh(),
+          result.location.skill.refresh(),
+        ])
+        return
+      }
       switch (event.type) {
         case "catalog.updated":
           void Promise.all([

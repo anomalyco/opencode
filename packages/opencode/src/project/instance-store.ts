@@ -2,6 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { makeGlobalNode, Node } from "@opencode-ai/core/effect/app-node"
 import { GlobalBus } from "@/bus/global"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
+import { HotReload } from "@/config/hot-reload"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
@@ -34,11 +35,13 @@ interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
 }
 
-const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service> = Layer.effect(
+const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service | HotReload.Service> =
+  Layer.effect(
   Service,
   Effect.gen(function* () {
     const project = yield* Project.Service
     const bootstrap = yield* InstanceBootstrap.Service
+    const hotReload = yield* HotReload.Service
     const scope = yield* Scope.Scope
     const cache = new Map<string, Entry>()
 
@@ -59,6 +62,12 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
                 })),
               )
         yield* bootstrap.run.pipe(Effect.provideService(InstanceRef, ctx))
+        yield* hotReload
+          .init(reload({ directory: ctx.directory, worktree: ctx.worktree, project: ctx.project }))
+          .pipe(
+            Effect.provideService(InstanceRef, ctx),
+            Effect.catchCause((cause) => Effect.logWarning("hot reload init failed", { cause })),
+          )
         return ctx
       }).pipe(Effect.withSpan("InstanceStore.boot"))
 
@@ -207,7 +216,7 @@ export const bootstrapNode = LayerNode.unbound(InstanceBootstrap.Service, Node.t
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Project.node, bootstrapNode],
+  deps: [Project.node, bootstrapNode, HotReload.node],
 })
 
 export * as InstanceStore from "./instance-store"
