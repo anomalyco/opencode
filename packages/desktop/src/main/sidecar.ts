@@ -19,7 +19,8 @@ type StartCommand = {
 }
 
 type StopCommand = { type: "stop" }
-type SidecarCommand = StartCommand | StopCommand
+type GcCommand = { type: "gc" }
+type SidecarCommand = StartCommand | StopCommand | GcCommand
 
 type SidecarMessage =
   | { type: "ready" }
@@ -43,6 +44,10 @@ parentPort.on("message", (event) => {
   if (!command) return
   if (command.type === "stop") {
     void stop()
+    return
+  }
+  if (command.type === "gc") {
+    runGc()
     return
   }
   void start(command)
@@ -78,6 +83,10 @@ async function stop() {
     parentPort.postMessage({ type: "stopped" })
     setImmediate(() => process.exit(0))
   }
+}
+
+function runGc() {
+  ;(globalThis as { gc?: () => void }).gc?.()
 }
 
 function prepareSidecarEnv(password: string, userDataPath: string) {
@@ -129,8 +138,9 @@ function useEnvProxy() {
 
 function parseCommand(value: unknown): SidecarCommand | undefined {
   if (!value || typeof value !== "object") return
-  const command = value as Partial<StartCommand | StopCommand>
+  const command = value as Partial<StartCommand | StopCommand | GcCommand>
   if (command.type === "stop") return { type: "stop" }
+  if (command.type === "gc") return { type: "gc" }
   if (command.type !== "start") return
   if (typeof command.hostname !== "string") return
   if (typeof command.port !== "number") return
