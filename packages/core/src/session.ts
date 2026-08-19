@@ -12,6 +12,7 @@ import { SessionMessage } from "./session/message.js"
 import { Base64, FileAttachment, Prompt } from "@opencode-ai/schema/prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Bus } from "./bus.js"
+import { Catalog } from "./catalog.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable, SessionTable } from "./session/sql.js"
@@ -628,31 +629,41 @@ const layer = Layer.effect(
       }),
       command: Effect.fn("Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const commands = yield* Command.Service.pipe(Effect.provide(locations.get(session.location)))
-        const command = yield* commands.get(input.command)
-        if (!command)
-          return yield* new Command.NotFoundError({
-            command: input.command,
-            message: `Command not found: ${input.command}`,
-          })
-        const evaluated = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
+        const locationLayer = locations.get(session.location)
+        const resolved = yield* Effect.gen(function* () {
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush
+          const commands = yield* Command.Service
+          const command = yield* commands.get(input.command)
+          if (!command)
+            return yield* new Command.NotFoundError({
+              command: input.command,
+              message: `Command not found: ${input.command}`,
+            })
+          const evaluated = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
 
-        // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
-        const agent = command.agent ?? input.agent
-        const commandAgent = yield* Effect.gen(function* () {
-          if (!command.agent) return undefined
-          const agents = yield* Agent.Service.pipe(Effect.provide(locations.get(session.location)))
-          return yield* agents.get(Agent.ID.make(command.agent))
-        })
-        const model = command.model ?? commandAgent?.model ?? input.model
-        if (agent !== undefined && session.agent !== Agent.ID.make(agent))
-          yield* result.switchAgent({ sessionID: input.sessionID, agent: Agent.ID.make(agent) })
-        if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })
+          // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
+          const agent = command.agent ?? input.agent
+          const commandAgent = yield* Effect.gen(function* () {
+            if (!command.agent) return undefined
+            const agents = yield* Agent.Service
+            return yield* agents.get(Agent.ID.make(command.agent))
+          })
+          const commandModel = command.model ?? commandAgent?.model
+          const model = commandModel
+            ? yield* inheritModelVariant(commandModel, input.model ?? session.model)
+            : input.model
+          return { agent, evaluated, model }
+        }).pipe(Effect.provide(locationLayer))
+        if (resolved.agent !== undefined && session.agent !== Agent.ID.make(resolved.agent))
+          yield* result.switchAgent({ sessionID: input.sessionID, agent: Agent.ID.make(resolved.agent) })
+        if (resolved.model !== undefined)
+          yield* result.switchModel({ sessionID: input.sessionID, model: resolved.model })
 
         return yield* result.prompt({
           id: input.id,
           sessionID: input.sessionID,
-          text: evaluated.text,
+          text: resolved.evaluated.text,
           files: input.files,
           agents: input.agents,
           skills: input.skills,
@@ -1114,6 +1125,19 @@ function positiveInt(value: string | null) {
   if (value === null) return
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function inheritModelVariant(command: Model.Ref, selected: Model.Ref | undefined) {
+  if (command.variant !== undefined) return Effect.succeed(command)
+  const variant = selected?.variant ?? Model.VariantID.make("default")
+  if (variant === "default") return Effect.succeed({ ...command, variant })
+  return Effect.gen(function* () {
+    const catalog = yield* Catalog.Service
+    const model = yield* catalog.model.get(command.providerID, command.id)
+    if (!model?.variants.some((item) => item.id === variant))
+      return { ...command, variant: Model.VariantID.make("default") }
+    return { ...command, variant }
+  })
 }
 
 // Mirrors the shell tool's in-memory preview safety limit.
