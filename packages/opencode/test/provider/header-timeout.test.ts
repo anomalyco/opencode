@@ -69,6 +69,42 @@ it.live("chunkTimeout raises a response stream error when SSE body stalls", () =
               for await (const part of result.fullStream) {
                 if (part.type === "error") return part.error
               }
+              return undefined
+            } catch (error) {
+              return error
+            }
+          })
+          expect(error).toBeInstanceOf(ProviderError.ResponseStreamError)
+        }),
+      { config: providerConfig(server.url, { chunkTimeout: 50 }) },
+    )
+  }),
+)
+
+it.live("chunkTimeout applies to non-SSE response streams", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.promise(() => delayedBodyServer(250, "application/vnd.amazon.eventstream")),
+      (server) => Effect.sync(() => server.server.close()),
+    )
+
+    yield* provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const provider = yield* Provider.Service
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
+          const result = streamText({
+            model: yield* provider.getLanguage(model),
+            onError() {},
+            messages: [{ role: "user", content: "hello" }],
+          })
+
+          const error = yield* Effect.promise(async () => {
+            try {
+              for await (const part of result.fullStream) {
+                if (part.type === "error") return part.error
+              }
+              return undefined
             } catch (error) {
               return error
             }
@@ -197,9 +233,12 @@ async function delayedHeaderServer(delay: number): Promise<{ server: Server; url
   return { server, url: `http://127.0.0.1:${address.port}` }
 }
 
-async function delayedBodyServer(delay: number): Promise<{ server: Server; url: string }> {
+async function delayedBodyServer(
+  delay: number,
+  contentType = "text/event-stream",
+): Promise<{ server: Server; url: string }> {
   const server = createServer((_, res) => {
-    res.writeHead(200, { "content-type": "text/event-stream" })
+    res.writeHead(200, { "content-type": contentType })
     res.flushHeaders()
     setTimeout(() => {
       res.end('data: {"choices":[{"delta":{"content":"late"}}]}\n\ndata: [DONE]\n\n')
