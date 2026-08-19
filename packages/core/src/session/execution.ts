@@ -30,7 +30,7 @@ export interface Interface {
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionExecution") {}
 
-type InterruptReason = "user" | "shutdown" | "superseded"
+type InterruptReason = "user" | "shutdown"
 
 export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
@@ -111,8 +111,8 @@ export const layer = Layer.effect(
               return
             }
             if (outcome.type === "interrupted") {
-              // A user cancel (or a superseding execution) releases the claim: the turn must not
-              // resurrect at the next boot. Shutdown interruption keeps it for restart continuity.
+              // A user cancel releases the claim: the turn must not resurrect at the next
+              // boot. Shutdown interruption keeps it for restart continuity.
               yield* bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },
