@@ -133,23 +133,36 @@ const layer = Layer.effect(
       let force = input.force
       let continuation = input.continuation
       const promotable = input.promotable ?? "input"
-      if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
+      if (!force && !continuation && !(yield* eligible(input.sessionID, promotable)))
         return { type: "complete" as const }
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
-        if (yield* runPendingCompaction(input.sessionID, promotable)) {
+        // Between-turn control items run under any drain scope: scope gates which user
+        // input may promote, not whether admitted housekeeping runs. Enqueue order still
+        // holds — a control item behind a queued prompt is not the next eligible item.
+        if (yield* runPendingCompaction(input.sessionID, "input")) {
           force = false
           continue
         }
-        if (yield* runPendingMove(input.sessionID, promotable)) return { type: "moved" as const }
+        if (yield* runPendingMove(input.sessionID, "input")) return { type: "moved" as const }
         if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
           return { type: "complete" as const }
         const result = yield* runSteps(input.sessionID, continuation, promotable)
         if (result.type === "moved") return result
-        if (promotable === "steer") return { type: "complete" as const }
         force = false
         continuation = undefined
       }
+    })
+
+    /** Work this drain may perform: scoped input, or a between-turn control item next in line. */
+    const eligible = Effect.fnUntraced(function* (
+      sessionID: SessionSchema.ID,
+      promotable: SessionInbox.Promotable,
+    ) {
+      if (yield* SessionInbox.has(db, sessionID, promotable)) return true
+      if (promotable === "input") return false
+      const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
+      return next?.type === "compaction" || next?.type === "move"
     })
 
     /**

@@ -138,9 +138,13 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           yield* coordinator.interrupt(sessionID, "user")
           if (!options?.continue) return
-          // Resume only steering input from the interrupted intent. Queued next-turn work
-          // stays parked: a steer-scoped drain never promotes queue-delivery rows.
-          if (yield* SessionInbox.has(db, sessionID, "steer")) yield* coordinator.wake(sessionID, "steer")
+          // Resume steering input and between-turn control work from the interrupted
+          // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
+          // promotes them, and a control item behind a queued prompt waits its turn.
+          const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
+          if (next === undefined) return
+          if (next.delivery === "steer" || next.type === "compaction" || next.type === "move")
+            yield* coordinator.wake(sessionID, "steer")
         }),
       resume: coordinator.run,
       wake: coordinator.wake,

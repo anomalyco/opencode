@@ -660,7 +660,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.interrupt",
             summary: "Interrupt session execution",
             description:
-              "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes pending steering input while queued work remains parked.",
+              "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
           }),
         ),
     )
