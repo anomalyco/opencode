@@ -255,7 +255,7 @@ describe("OpenAI Chat route", () => {
     LLMClient.generate(
       LLMRequest.update(request, {
         model: Azure.configure({
-          baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
+          baseURL: "https://opencode-test.openai.azure.com/openai/",
           apiKey: "azure-key",
           headers: { authorization: "Bearer stale" },
         }).chat("gpt-4o-mini"),
@@ -268,6 +268,29 @@ describe("OpenAI Chat route", () => {
             expect(web.url).toBe("https://opencode-test.openai.azure.com/openai/v1/chat/completions?api-version=v1")
             expect(web.headers.get("api-key")).toBe("azure-key")
             expect(web.headers.get("authorization")).toBeNull()
+            return input.respond(sseEvents(deltaChunk({}, "stop")), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("does not duplicate /v1 for already-versioned Azure Chat base URLs", () =>
+    LLMClient.generate(
+      LLMRequest.update(request, {
+        model: Azure.configure({
+          baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
+          apiKey: "azure-key",
+        }).chat("gpt-4o-mini"),
+      }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+            expect(web.url).toBe("https://opencode-test.openai.azure.com/openai/v1/chat/completions?api-version=v1")
             return input.respond(sseEvents(deltaChunk({}, "stop")), {
               headers: { "content-type": "text/event-stream" },
             })

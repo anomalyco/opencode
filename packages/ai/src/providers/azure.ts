@@ -90,7 +90,8 @@ function endpoint(input: Config, modelID: string | ModelID) {
   if (input.baseURL !== undefined && !new URL(input.baseURL).hostname.endsWith(".openai.azure.com")) {
     return { baseURL, query: input.queryParams }
   }
-  return { baseURL: `${baseURL}/v1`, query }
+  // Azure's v1 API serves from /openai/v1; callers may pass the base URL with or without the version segment.
+  return { baseURL: baseURL.endsWith("/v1") ? baseURL : `${baseURL}/v1`, query }
 }
 
 export const configure = (input: Config) => {
