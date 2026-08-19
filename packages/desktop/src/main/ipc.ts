@@ -24,6 +24,8 @@ import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
+import { createRemoteGatewayController } from "./remote-gateway-controller"
+import { createRemotePairingController } from "./remote-pairing-controller"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -54,16 +56,41 @@ type Deps = {
   setNativeTranslations: (bundle: DesktopNativeBundle) => void
 }
 
+function remotePairingTarget(sessionID: unknown, directory: unknown) {
+  if (typeof sessionID !== "string" || sessionID.length === 0) throw new Error("Invalid remote session ID")
+  if (typeof directory !== "string" || directory.length === 0) throw new Error("Invalid remote session directory")
+  return { sessionID, directory }
+}
+
 export function registerIpcHandlers(deps: Deps) {
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
+  const remoteGateway = createRemoteGatewayController({
+    getUpstreamUrl: () => deps.awaitInitialization().then((data) => data.url),
+  })
+  const remotePairing = createRemotePairingController({
+    getSidecar: deps.awaitInitialization,
+    gateway: remoteGateway,
+  })
   app.once("will-quit", updaterSubscriptions.clear)
   app.on("before-quit", () => drafts.flush())
   app.once("will-quit", () => drafts.close())
+  app.once("will-quit", () => void remoteGateway.stop())
   app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
 
-  ipcMain.handle("kill-sidecar", () => deps.killSidecar())
+  ipcMain.handle("kill-sidecar", async () => {
+    await remoteGateway.stop()
+    return deps.killSidecar()
+  })
   ipcMain.handle("await-initialization", () => deps.awaitInitialization())
+  ipcMain.handle("remote-pairing-create", (_event: IpcMainInvokeEvent, sessionID: unknown, directory: unknown) => {
+    const target = remotePairingTarget(sessionID, directory)
+    return remotePairing.create(target.sessionID, target.directory)
+  })
+  ipcMain.handle("remote-pairing-revoke", (_event: IpcMainInvokeEvent, sessionID: unknown, directory: unknown) => {
+    const target = remotePairingTarget(sessionID, directory)
+    return remotePairing.revoke(target.sessionID, target.directory)
+  })
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
   ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>

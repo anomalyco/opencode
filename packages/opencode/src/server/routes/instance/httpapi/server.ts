@@ -28,6 +28,7 @@ import { Vcs } from "@/project/vcs"
 import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { RemoteMobile } from "@/remote/mobile"
 import { SessionCompaction } from "@/session/compaction"
 import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
@@ -79,8 +80,10 @@ import {
   ptyConnectAuthorizationLayer,
   serverAuthorizationLayer,
 } from "./middleware/authorization"
+import { remoteAuthorizationLayer } from "./middleware/remote-authorization"
 import { EventApi } from "./groups/event"
 import { PtyConnectApi } from "./groups/pty"
+import { RemoteAdminApi, RemoteApi, RemotePairApi } from "./groups/remote"
 import { eventHandlers } from "./handlers/event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
@@ -96,6 +99,7 @@ import { projectCopyHandlers } from "./handlers/project-copy"
 import { providerHandlers } from "./handlers/provider"
 import { ptyConnectHandlers, ptyHandlers } from "./handlers/pty"
 import { questionHandlers } from "./handlers/question"
+import { remoteAdminHandlers, remoteHandlers, remotePairHandlers } from "./handlers/remote"
 import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
@@ -131,6 +135,7 @@ const cors = (corsOptions?: CorsOptions) =>
 // - rootApiRoutes: typed /global/* and control routes; auth is declared by RootHttpApi.
 // - eventApiRoutes: typed SSE route with instance routing context and its existing API contract.
 // - ptyConnectApiRoutes: typed WebSocket upgrade route with ticket-aware auth.
+// - remoteMobileRoute: public shell only; the pairing ticket stays in the URL fragment and API calls require scoped auth.
 // - instanceApiRoutes: remaining typed instance routes.
 // - uiRoute: raw catch-all fallback; auth is router middleware so public static assets can bypass it.
 const authOnlyRouterLayer = authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.layer))
@@ -150,6 +155,15 @@ const eventApiRoutes = HttpApiBuilder.layer(EventApi).pipe(
 const ptyConnectApiRoutes = HttpApiBuilder.layer(PtyConnectApi).pipe(
   Layer.provide(ptyConnectHandlers),
   Layer.provide([ptyConnectHttpApiAuthLayer, workspaceRoutingLive, instanceContextLayer]),
+)
+const remoteAdminApiRoutes = HttpApiBuilder.layer(RemoteAdminApi).pipe(
+  Layer.provide(remoteAdminHandlers),
+  Layer.provide([httpApiAuthLayer, workspaceRoutingLive, instanceContextLayer]),
+)
+const remotePairApiRoutes = HttpApiBuilder.layer(RemotePairApi).pipe(Layer.provide(remotePairHandlers))
+const remoteApiRoutes = HttpApiBuilder.layer(RemoteApi).pipe(
+  Layer.provide(remoteHandlers),
+  Layer.provide([remoteAuthorizationLayer, workspaceRoutingLive, instanceContextLayer]),
 )
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
@@ -189,6 +203,10 @@ const docResponse = lazy(() => HttpServerResponse.jsonUnsafe(OpenApi.fromApi(Pub
 
 const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effect.succeed(docResponse()))).pipe(
   Layer.provide(authOnlyRouterLayer),
+)
+
+const remoteMobileRoute = HttpRouter.use((router) =>
+  router.add("GET", "/remote/mobile", () => Effect.succeed(RemoteMobile.response())),
 )
 
 const uiRoute = HttpRouter.use((router) =>
@@ -277,9 +295,13 @@ export function createRoutes(
     rootApiRoutes,
     eventApiRoutes,
     ptyConnectApiRoutes,
+    remoteAdminApiRoutes,
+    remotePairApiRoutes,
+    remoteApiRoutes,
     instanceRoutes,
     serverRoutes,
     docRoute,
+    remoteMobileRoute,
     uiRoute,
   ).pipe(
     Layer.provide([
