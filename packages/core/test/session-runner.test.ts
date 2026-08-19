@@ -2754,7 +2754,7 @@ describe("SessionRunnerLLM", () => {
             { type: "tool", id: "call-blocked", state: { status: "error", error: { message: "Permission blocked" } } },
           ],
         },
-        { type: "assistant", finish: "stop" },
+        { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider returned an empty response" } },
       ])
     }),
   )
@@ -2847,7 +2847,7 @@ describe("SessionRunnerLLM", () => {
             { type: "tool", id: "call-corrected", state: { status: "error", error: { message: "Use another tool" } } },
           ],
         },
-        { type: "assistant", finish: "stop" },
+        { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider returned an empty response" } },
       ])
     }),
   )
