@@ -63,7 +63,10 @@ describe("VLLMPlugin", () => {
               state.models++
               return Response.json({
                 object: "list",
-                data: [remoteModel("Qwen/Qwen3-Coder", 65_536), remoteModel("foreign-model", 4096, "other")],
+                data: [
+                  remoteModel("deepseek-ai/DeepSeek-V4-Flash", 65_536),
+                  remoteModel("foreign-model", 4096, "other"),
+                ],
               })
             },
           }),
@@ -82,7 +85,7 @@ describe("VLLMPlugin", () => {
 
           state.healthy = true
           const model = yield* eventually(
-            catalog.model.get(providerID, Model.ID.make("Qwen/Qwen3-Coder")),
+            catalog.model.get(providerID, Model.ID.make("deepseek-ai/DeepSeek-V4-Flash")),
             (item) => item !== undefined,
           )
           expect(yield* catalog.provider.get(providerID)).toEqual({
@@ -94,10 +97,15 @@ describe("VLLMPlugin", () => {
           })
           expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
           expect(model).toMatchObject({
-            modelID: "Qwen/Qwen3-Coder",
-            name: "Qwen/Qwen3-Coder",
+            modelID: "deepseek-ai/DeepSeek-V4-Flash",
+            name: "deepseek-ai/DeepSeek-V4-Flash",
             capabilities: { tools: false, input: ["text"], output: ["text"] },
             limit: { context: 65_536, output: 0 },
+            variants: [
+              { id: "none", settings: { reasoningEffort: "none" } },
+              { id: "high", settings: { reasoningEffort: "high" } },
+              { id: "max", settings: { reasoningEffort: "max" } },
+            ],
           })
           expect(yield* catalog.model.get(providerID, Model.ID.make("foreign-model"))).toBeUndefined()
         }),

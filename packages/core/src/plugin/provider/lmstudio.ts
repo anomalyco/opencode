@@ -6,6 +6,7 @@ import { Config } from "../../config.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
+import { LocalReasoning } from "./local-reasoning.js"
 
 const providerID = "lmstudio"
 
@@ -23,6 +24,10 @@ const RemoteModel = Schema.Struct({
   capabilities: Schema.Struct({
     vision: Schema.Boolean,
     trained_for_tool_use: Schema.Boolean,
+    reasoning: Schema.Struct({
+      allowed_options: Schema.Array(Schema.Literals(["off", "on", "low", "medium", "high"])),
+      default: Schema.Literals(["off", "on", "low", "medium", "high"]),
+    }).pipe(Schema.optional),
   }).pipe(Schema.optional),
 })
 
@@ -70,6 +75,7 @@ export function make(origin = "http://127.0.0.1:1234", interval: Duration.Input 
               input: ["text", ...(item.capabilities?.vision ? ["image"] : [])],
               output: ["text"],
             }
+            model.variants = LocalReasoning.fromOptions(item.capabilities?.reasoning?.allowed_options ?? [])
             model.limit = {
               context:
                 item.loaded_instances.length === 0

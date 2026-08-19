@@ -6,6 +6,7 @@ import { Config } from "../../config.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
+import { LocalReasoning } from "./local-reasoning.js"
 
 const providerID = "vllm"
 
@@ -55,6 +56,7 @@ export function make(origin = "http://127.0.0.1:8000", interval: Duration.Input 
             model.name = item.id
             // Tool calling depends on vLLM server flags and parsers that model discovery does not report.
             model.capabilities = { tools: false, input: ["text"], output: ["text"] }
+            model.variants = LocalReasoning.infer("vllm", item.id)
             model.limit = { context: item.max_model_len ?? 0, output: 0 }
           })
         }

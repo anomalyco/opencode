@@ -1,4 +1,4 @@
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type ReasoningEffort } from "../schema/index.js"
 import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat.js"
 import type { RouteDefaultsInput } from "../route/client.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
@@ -19,6 +19,7 @@ export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
   readonly baseURL: string
   readonly provider?: string
+  readonly reasoningEffort?: ReasoningEffort
 }
 
 export type FamilyModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
@@ -75,6 +76,8 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     limits: settings.limits,
     provider: settings.provider,
+    providerOptions:
+      settings.reasoningEffort === undefined ? undefined : { openai: { reasoningEffort: settings.reasoningEffort } },
   }).model(modelID)
 
 export const baseten = define(profiles.baseten)

@@ -165,6 +165,7 @@ OpenCode automatically discovers language models from an Ollama server listening
 ```
 
 OpenCode refreshes the inventory in the background and reads context, vision, and tool-use capabilities from Ollama.
+Thinking-capable models also expose reasoning variants.
 Embedding-only models are excluded because they cannot drive a session. Disable discovery with
 `"plugins": ["-opencode.provider.ollama"]`.
 
@@ -199,8 +200,9 @@ address, `http://127.0.0.1:1234`. Discovered models use the `lmstudio` provider 
 }
 ```
 
-OpenCode refreshes the inventory in the background and reads context, vision, and tool-use capabilities from LM
-Studio. Embedding models are excluded because they cannot drive a session. Disable discovery with
+OpenCode refreshes the inventory in the background and reads context, vision, tool-use, and reasoning capabilities from
+LM Studio. Available reasoning controls become model variants. Embedding models are excluded because they cannot drive
+a session. Disable discovery with
 `"plugins": ["-opencode.provider.lmstudio"]`.
 
 For a different host or port, configure the OpenAI-compatible base URL. Models are still discovered automatically:
@@ -238,6 +240,8 @@ OpenCode checks vLLM's `/health` endpoint and refreshes `/v1/models` in the back
 text input and output, but not vision or tools. Tool calling is conservative because vLLM enables it with server-level
 flags such as `--enable-auto-tool-choice` and `--tool-call-parser`, which model discovery does not report. Disable
 discovery with `"plugins": ["-opencode.provider.vllm"]`.
+
+Recognized reasoning models expose reasoning variants.
 
 For a different endpoint or an authenticated server, configure its OpenAI-compatible base URL:
 

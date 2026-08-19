@@ -54,6 +54,7 @@ describe("OllamaPlugin", () => {
                 return Response.json({
                   models: [
                     summary("gemma3:4b", "gemma-digest", "gemma3"),
+                    summary("gpt-oss:20b", "gpt-oss-digest", "gptoss"),
                     summary("nomic-embed", "embed-digest"),
                     summary("removed-model", "removed-digest"),
                   ],
@@ -65,10 +66,12 @@ describe("OllamaPlugin", () => {
               return Response.json(
                 body.model === "gemma3:4b"
                   ? {
-                      capabilities: ["completion", "tools", "vision"],
+                      capabilities: ["completion", "tools", "vision", "thinking"],
                       model_info: { "gemma3.context_length": 131_072 },
                     }
-                  : show({ family: "nomic-bert", capabilities: ["embedding"], context: 8192 }),
+                  : body.model === "gpt-oss:20b"
+                    ? show({ family: "gptoss", capabilities: ["completion", "thinking"], context: 131_072 })
+                    : show({ family: "nomic-bert", capabilities: ["embedding"], context: 8192 }),
               )
             },
           }),
@@ -99,6 +102,17 @@ describe("OllamaPlugin", () => {
             family: "gemma3",
             capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
             limit: { context: 131_072, output: 0 },
+            variants: [
+              { id: "none", settings: { reasoningEffort: "none" } },
+              { id: "thinking", settings: { reasoningEffort: "medium" } },
+            ],
+          })
+          expect(yield* catalog.model.get(providerID, Model.ID.make("gpt-oss:20b"))).toMatchObject({
+            variants: [
+              { id: "low", settings: { reasoningEffort: "low" } },
+              { id: "medium", settings: { reasoningEffort: "medium" } },
+              { id: "high", settings: { reasoningEffort: "high" } },
+            ],
           })
           expect(yield* catalog.model.get(providerID, Model.ID.make("nomic-embed"))).toBeUndefined()
           expect(requests).toContainEqual({ method: "GET", path: "/api/tags" })
