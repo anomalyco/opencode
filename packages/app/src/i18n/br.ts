@@ -125,6 +125,7 @@ export const dict = {
   "command.project.previous": "Projeto anterior",
   "command.project.next": "Próximo projeto",
   "command.project.index": "Alternar para o projeto {{index}}",
+  "command.project.run": "Executar comando de inicialização",
   "command.provider.connect": "Conectar provedor",
   "command.server.switch": "Trocar servidor",
   "command.settings.open": "Abrir configurações",

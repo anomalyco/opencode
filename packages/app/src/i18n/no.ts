@@ -1085,6 +1085,7 @@ export const dict = {
   "command.project.previous": "Forrige prosjekt",
   "command.project.next": "Neste prosjekt",
   "command.project.index": "Bytt til prosjekt {{index}}",
+  "command.project.run": "Kjør oppstartskommando",
   "command.tab.reopenClosed": "Åpne lukket fane på nytt",
 
   "model.tooltip.context.label": "Kontekst",

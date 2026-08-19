@@ -130,7 +130,7 @@ export const dict = {
   "command.project.previous": "上一个项目",
   "command.project.next": "下一个项目",
   "command.project.index": "切换到项目 {{index}}",
-
+  "command.project.run": "运行启动命令",
   "command.provider.connect": "连接提供商",
 
   "command.server.switch": "切换服务器",
