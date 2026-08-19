@@ -127,6 +127,7 @@ describe("Open Responses-compatible route", () => {
           openresponses: {
             reasoningEffort: "low",
             store: true,
+            truncation: "auto",
             allowedTools: { toolNames: ["lookup"] },
             maxToolCalls: 2,
             parallelToolCalls: false,
@@ -144,6 +145,7 @@ describe("Open Responses-compatible route", () => {
       expect(prepared.body).toMatchObject({
         reasoning: { effort: "low" },
         store: true,
+        truncation: "auto",
         tool_choice: {
           type: "allowed_tools",
           mode: "auto",

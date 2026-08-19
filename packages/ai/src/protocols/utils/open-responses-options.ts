@@ -16,6 +16,9 @@ export type ResponseIncludable = (typeof ResponseIncludables)[number] | (string 
 export const ServiceTiers = ["auto", "default", "flex", "priority"] as const
 export type ServiceTier = (typeof ServiceTiers)[number]
 
+export const Truncations = ["auto", "disabled"] as const
+export type Truncation = (typeof Truncations)[number]
+
 export const ReasoningEffort = Schema.String
 export const TextVerbositySchema = TextVerbosity
 export const ResponseIncludableSchema = Schema.declare<ResponseIncludable>(
@@ -23,6 +26,7 @@ export const ResponseIncludableSchema = Schema.declare<ResponseIncludable>(
   { title: "ResponseIncludable" },
 )
 export const ServiceTierSchema = Schema.Literals(ServiceTiers)
+export const TruncationSchema = Schema.Literals(Truncations)
 
 export const AllowedTools = Schema.Struct({
   toolNames: Schema.Array(Schema.String),
@@ -38,6 +42,7 @@ export const Options = Schema.Struct({
   include: Schema.optional(Schema.Array(ResponseIncludableSchema)),
   textVerbosity: Schema.optional(TextVerbositySchema),
   serviceTier: Schema.optional(ServiceTierSchema),
+  truncation: Schema.optional(TruncationSchema),
   allowedTools: Schema.optional(AllowedTools),
   maxToolCalls: Schema.optional(Schema.Int),
   parallelToolCalls: Schema.optional(Schema.Boolean),
