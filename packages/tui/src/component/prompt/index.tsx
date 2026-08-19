@@ -1222,7 +1222,6 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
-    const optimisticPrompt = config.experimental?.["optimistic_prompt"] === true
     if (store.mode === "shell") {
       move.startSubmit()
       void client.api.session.shell({
@@ -1305,22 +1304,21 @@ export function Prompt(props: PromptProps) {
           return false
         }
       }
-      const promptInput = {
-        sessionID,
-        text: inputText,
-        files: store.prompt.files,
-        agents: store.prompt.agents,
-        skills: store.prompt.skills?.length ? store.prompt.skills : undefined,
-        delivery,
-      }
-      if (optimisticPrompt) {
-        // The data layer admits optimistically: the prompt renders
-        // immediately and rolls back if the server rejects it, so submission
-        // does not wait on the network. On rejection the row is already
-        // rolled back; restore the composer unless the user has started
-        // typing something new.
-        const entry = { ...store.prompt, mode: currentMode }
-        data.session.prompt(promptInput, { optimistic: true }).catch((error) => {
+      // The data layer admits optimistically: the prompt renders immediately
+      // and rolls back if the server rejects it, so submission does not wait
+      // on the network. On rejection the row is already rolled back; restore
+      // the composer unless the user has started typing something new.
+      const entry = { ...store.prompt, mode: currentMode }
+      data.session
+        .prompt({
+          sessionID,
+          text: inputText,
+          files: store.prompt.files,
+          agents: store.prompt.agents,
+          skills: store.prompt.skills?.length ? store.prompt.skills : undefined,
+          delivery,
+        })
+        .catch((error) => {
           toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
           if (disposed || input.isDestroyed || input.plainText !== "") return
           input.setText(entry.text)
@@ -1329,17 +1327,6 @@ export function Prompt(props: PromptProps) {
           restoreExtmarksFromPrompt(entry)
           input.cursorOffset = entry.text.length
         })
-      }
-      if (!optimisticPrompt) {
-        const error = await data.session.prompt(promptInput).then(
-          () => undefined,
-          (error) => error,
-        )
-        if (error) {
-          toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
-          return false
-        }
-      }
       if (pendingEditorSelection) editor.markSelectionSent()
     }
     history.append({
@@ -1351,24 +1338,14 @@ export function Prompt(props: PromptProps) {
     setStore("extmarkToPart", new Map())
     props.onSubmit?.()
 
+    // Optimistic admission puts the message in the store synchronously, so
+    // the session view renders it on arrival.
     if (!props.sessionID) {
       if (pendingEditorSelection) editor.preserveSelectionFromNewSession()
-      // Optimistic admission puts the message in the store synchronously, so
-      // the session view renders it on arrival. Without it, keep the delay
-      // that lets the send land before the view mounts.
-      if (optimisticPrompt) {
-        route.navigate({
-          type: "session",
-          sessionID,
-        })
-      } else {
-        setTimeout(() => {
-          route.navigate({
-            type: "session",
-            sessionID,
-          })
-        }, 50)
-      }
+      route.navigate({
+        type: "session",
+        sessionID,
+      })
     }
     input.clear()
     if (finishMoveProgress) move.finishSubmit()
