@@ -74,15 +74,18 @@ function run(cmd: string, args: string[], timeoutMs = 4000): Promise<string> {
 
 /** Normalize an AMD gfx string to the HSA_OVERRIDE_GFX_VERSION value. */
 export function normalizeGfx(gfx: string): string | undefined {
-  const match = gfx.match(/gfx(\d)(\d)(\d+)/)
+  // AMD gfx ids encode the ISA as <major><minor><stepping>, where the last hex
+  // digit is the stepping, the second-to-last is the minor, and everything
+  // before that is the major generation. e.g. gfx1030 -> 10.3.0, gfx900 -> 9.0.0.
+  const match = gfx.match(/gfx([0-9a-f]+)/i)
   if (!match) return undefined
-  const major = match[1]
-  const minor = match[2]
-  // The trailing group is hex-ish; the override wants the final component as decimal.
-  const patchHex = match[3]
-  const patch = Number.parseInt(patchHex, 16)
-  if (Number.isNaN(patch)) return undefined
-  return `${major}.${minor}.${patch}`
+  const digits = match[1]
+  if (digits.length < 3) return undefined
+  const major = Number.parseInt(digits.slice(0, digits.length - 2), 10)
+  const minor = Number.parseInt(digits[digits.length - 2], 16)
+  const stepping = Number.parseInt(digits[digits.length - 1], 16)
+  if ([major, minor, stepping].some((n) => Number.isNaN(n))) return undefined
+  return `${major}.${minor}.${stepping}`
 }
 
 async function detectNvidia(): Promise<GpuInfo[]> {
