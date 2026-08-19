@@ -126,54 +126,6 @@ Keep semantic APIs as separate entrypoints, such as OpenAI `chat` and `responses
 
 Do not expose `Route` in provider package settings. Route composition stays an implementation detail behind `model(...)`.
 
-### Folder layout
-
-```
-packages/ai/src/
-  schema/                   canonical Schema model, split by concern
-    ids.ts                  branded IDs, literal types, ProviderMetadata
-    options.ts              Generation/Provider/Http options, Limits, LanguageModel, cache policy
-    messages.ts             content parts, Message, ToolDefinition, LLMRequest
-    events.ts               Usage, individual events, LLMEvent, LLMResponse
-    errors.ts               error reasons, AIError, ToolFailure
-    index.ts                barrel
-  llm.ts                    request constructors and convenience helpers
-  route/
-    index.ts                @opencode-ai/ai/route advanced barrel
-    client.ts               Route.make + LLMClient.stream/generate
-    executor.ts             RequestExecutor service + transport error mapping
-    protocol.ts             Protocol type + Protocol.make
-    endpoint.ts             Endpoint type + Endpoint.path
-    auth.ts                 Auth type + Auth.bearer / Auth.apiKeyHeader / Auth.passthrough
-    auth-options.ts         ProviderAuthOption shape, AuthOptions.bearer, AtLeastOne helper
-    framing.ts              Framing type + Framing.sse
-    transport/              transport implementations
-      index.ts              Transport execution types + HttpTransport / WebSocketTransport namespaces
-      websocket-channel.ts  generic sequential channel executor/driver contract
-      http.ts               HttpTransport.httpJson — POST + framing
-      websocket.ts          direct one-request channel executor + raw socket adapter
-  protocols/
-    shared.ts               ProviderShared toolkit used inside protocol impls
-    openai-chat.ts          protocol + route (compose OpenAIChat.protocol)
-    open-responses.ts         provider-neutral Responses protocol baseline
-    open-responses-channel.ts provider-neutral Responses WebSocket transport factory
-    openai-responses.ts       OpenAI tools/events and channel policy composed over OpenResponses
-    anthropic-messages.ts
-    gemini.ts
-    bedrock-converse.ts
-    bedrock-event-stream.ts framing for AWS event-stream binary frames
-    openai-compatible-chat.ts route that reuses OpenAIChat.protocol, no canonical URL
-    openai-compatible-responses.ts deployment adapter that reuses OpenResponses.protocol, no canonical URL
-    utils/                  per-protocol helpers (auth, cache, media, tool-stream, ...)
-  providers/
-    openai-compatible.ts    generic Chat helper + family model helpers
-    openai-compatible-responses.ts generic Responses helper
-    openai-compatible-profile.ts family defaults (deepseek, togetherai, ...)
-    azure.ts / amazon-bedrock.ts / cloudflare.ts / github-copilot.ts / google.ts / xai.ts / openai.ts / anthropic.ts / openrouter.ts
-  tool.ts                   typed tool() helper
-  tool-runtime.ts           narrow one-call typed tool dispatcher
-```
-
 The dependency arrow points down: `providers/*.ts` files import protocol routes and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata. `OpenAIResponses` composes the provider-neutral `OpenResponses` protocol; the baseline never imports the OpenAI extension.
 
 ### Shared protocol helpers
