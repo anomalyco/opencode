@@ -369,6 +369,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
           // Skip region prefixing if model already has a cross-region inference profile prefix
           // Models from models.dev may already include prefixes like us., eu., global., etc.
+          // Skip region prefixing for ARN-format model IDs (e.g. arn:aws:bedrock:us-east-1::foundation-model/deepseek.v3.2)
+          if (modelID.startsWith("arn:")) {
+            return sdk.languageModel(modelID)
+          }
+
           const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
           if (crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))) {
             return sdk.languageModel(modelID)
@@ -391,7 +396,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
                 "nova-premier",
                 "nova-2",
                 "claude",
-                "deepseek",
+                "deepseek-r1",
               ].some((m) => modelID.includes(m))
               const isGovCloud = region.startsWith("us-gov")
               if (modelRequiresPrefix && !isGovCloud) {
