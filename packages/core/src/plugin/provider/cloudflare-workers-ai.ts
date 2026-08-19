@@ -8,13 +8,14 @@ import { iife } from "../../util/iife.js"
 import { configuredSettings } from "./configured.js"
 
 const providerID = Provider.ID.make("cloudflare-workers-ai")
+const nativePackage = "@opencode-ai/ai/providers/cloudflare-workers-ai"
 
 export const CloudflareWorkersAIPlugin = define({
   id: "opencode.provider.cloudflare.workers.ai",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
     const form = iife(() => {
-      if (typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})) return
+      if (hasExplicitEndpoint(configured?.baseURL) || resolveAccountId(configured ?? {})) return
       return Form.Fields.make([
         {
           type: "string",
@@ -38,12 +39,24 @@ export const CloudflareWorkersAIPlugin = define({
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(providerID)
       if (!item) return
+      const compatible =
+        Provider.isAISDK(item.provider.package) &&
+        Provider.packageName(item.provider.package) === "@ai-sdk/openai-compatible"
       evt.provider.update(item.provider.id, (provider) => {
-        if (!Provider.isAISDK(provider.package)) return
-        if (typeof provider.settings?.baseURL === "string") return
-        const accountId = resolveAccountId(provider.settings ?? {})
-        if (accountId) provider.settings = { ...provider.settings, baseURL: workersEndpoint(accountId) }
+        if (!compatible) return
+        provider.package = nativePackage
+        provider.settings = nativeSettings(provider.settings)
       })
+      for (const model of item.models.values()) {
+        evt.model.update(item.provider.id, model.id, (draft) => {
+          if (!draft.package && !compatible) return
+          if (draft.package === nativePackage) return
+          if (draft.package && !Provider.isAISDK(draft.package)) return
+          if (draft.package && Provider.packageName(draft.package) !== "@ai-sdk/openai-compatible") return
+          if (draft.package) draft.package = nativePackage
+          draft.settings = nativeSettings(draft.settings)
+        })
+      }
     })
     yield* ctx.aisdk.hook(
       "sdk",
@@ -83,6 +96,17 @@ function workersEndpoint(accountId: string) {
   return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`
 }
 
+function hasExplicitEndpoint(baseURL: unknown) {
+  return typeof baseURL === "string" && !baseURL.includes("${CLOUDFLARE_ACCOUNT_ID}")
+}
+
+function nativeSettings(settings: Record<string, unknown> | undefined) {
+  const result = { ...settings }
+  if (process.env.CLOUDFLARE_ACCOUNT_ID) result.baseURL = workersEndpoint(process.env.CLOUDFLARE_ACCOUNT_ID)
+  else if (!hasExplicitEndpoint(result.baseURL)) delete result.baseURL
+  return result
+}
+
 function hasWorkersEndpoint(model: {
   readonly package?: string
   readonly settings?: Readonly<Record<string, unknown>>
@@ -93,7 +117,7 @@ function hasWorkersEndpoint(model: {
 function sdkOptions(options: Record<string, any>, app: App.Info) {
   return {
     ...options,
-    baseURL: expandAccountId(options.baseURL),
+    baseURL: expandAccountId(options.baseURL, resolveAccountId(options)),
     apiKey: process.env.CLOUDFLARE_API_KEY ?? options.apiKey,
     headers: {
       "User-Agent": `${App.useragent(app)} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
@@ -103,9 +127,9 @@ function sdkOptions(options: Record<string, any>, app: App.Info) {
   }
 }
 
-function expandAccountId(baseURL: unknown) {
+function expandAccountId(baseURL: unknown, accountId: string | undefined) {
   if (typeof baseURL !== "string") return baseURL
-  return baseURL.replaceAll("${CLOUDFLARE_ACCOUNT_ID}", process.env.CLOUDFLARE_ACCOUNT_ID ?? "${CLOUDFLARE_ACCOUNT_ID}")
+  return baseURL.replaceAll("${CLOUDFLARE_ACCOUNT_ID}", accountId ?? "${CLOUDFLARE_ACCOUNT_ID}")
 }
 
 function stringOption(options: Record<string, unknown>, key: string) {
