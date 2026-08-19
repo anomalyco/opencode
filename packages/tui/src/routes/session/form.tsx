@@ -524,6 +524,18 @@ export function FormPrompt(props: {
         },
       },
       {
+        id: "prompt.paste",
+        title: "Paste into answer",
+        group: "Form",
+        async run(_input, event) {
+          event?.preventDefault()
+          event?.stopPropagation()
+          const content = await clipboard.read()
+          if (content?.mime !== "text/plain") return
+          textarea?.insertText(content.data)
+        },
+      },
+      {
         bind: "escape",
         title: textual() ? "Dismiss form" : "Close answer edit",
         group: "Form",
