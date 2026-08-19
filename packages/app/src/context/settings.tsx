@@ -34,6 +34,9 @@ export interface Settings {
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
+    tabOrientation: "horizontal" | "vertical"
+    tabRailSide: "left" | "right"
+    showReviewPanelButton: boolean
     newLayoutDesigns?: boolean
     layoutTransitionEligible?: boolean
     agentVisibilityInitialized?: boolean
@@ -195,6 +198,9 @@ const defaultSettings: Settings = {
     editToolPartsExpanded: false,
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
+    tabOrientation: "horizontal",
+    tabRailSide: "left",
+    showReviewPanelButton: true,
   },
   appearance: {
     fontSize: 14,
@@ -427,6 +433,24 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setMobileTitlebarPosition(value: "top" | "bottom") {
           setStore("general", "mobileTitlebarPosition", value)
+        },
+        tabOrientation: withFallback(
+          () => store.general?.tabOrientation,
+          defaultSettings.general.tabOrientation,
+        ),
+        setTabOrientation(value: "horizontal" | "vertical") {
+          setStore("general", "tabOrientation", value)
+        },
+        tabRailSide: withFallback(() => store.general?.tabRailSide, defaultSettings.general.tabRailSide),
+        setTabRailSide(value: "left" | "right") {
+          setStore("general", "tabRailSide", value)
+        },
+        showReviewPanelButton: withFallback(
+          () => store.general?.showReviewPanelButton,
+          defaultSettings.general.showReviewPanelButton,
+        ),
+        setShowReviewPanelButton(value: boolean) {
+          setStore("general", "showReviewPanelButton", value)
         },
         newLayoutDesigns,
         setNewLayoutDesigns(value: boolean) {

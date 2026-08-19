@@ -940,6 +940,14 @@ export const dict = {
   "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
   "settings.general.row.mobileTitlebarBottom.description":
     "Place the title bar and session tabs at the bottom of the screen on mobile",
+  "settings.general.row.verticalTabs.title": "Vertical tabs",
+  "settings.general.row.verticalTabs.description": "Show session tabs in a sidebar on the left instead of across the top",
+  "settings.general.row.tabRailSide.title": "Tabs on the right",
+  "settings.general.row.tabRailSide.description": "Place the vertical tab sidebar on the right instead of the left",
+  "tabRail.collapse": "Collapse tab sidebar",
+  "tabRail.expand": "Expand tab sidebar",
+  "settings.general.row.showReviewPanelButton.title": "Show review panel button",
+  "settings.general.row.showReviewPanelButton.description": "Show the review panel toggle in the session header",
   "settings.general.row.showCustomAgents.title": "Show agent",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
