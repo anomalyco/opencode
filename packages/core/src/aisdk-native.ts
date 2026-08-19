@@ -8,17 +8,30 @@ export interface Mapping {
   readonly settings: Readonly<Record<string, unknown>>
   readonly headers?: Readonly<Record<string, string>>
   readonly body?: Readonly<Record<string, unknown>>
+  readonly auth?: "none"
 }
 
 export interface MapInput {
   readonly packageName: string | undefined
   readonly settings: Readonly<Record<string, unknown>>
   readonly modelID: string
+  readonly providerID: string
 }
 
 export function map(input: MapInput): Mapping | undefined {
   const baseSettings = mapBaseSettings(input.settings)
   switch (input.packageName) {
+    case "@ai-sdk/anthropic":
+      return {
+        package: "@opencode-ai/ai/providers/anthropic",
+        auth: "none",
+        settings: {
+          ...baseSettings,
+          ...mapAPIKey(input.settings),
+          ...(typeof input.settings.authToken === "string" ? { authToken: input.settings.authToken } : {}),
+          ...mapAnthropicOptions(input.settings),
+        },
+      }
     case "@ai-sdk/amazon-bedrock":
       return {
         package: "@opencode-ai/ai/providers/amazon-bedrock",
@@ -88,6 +101,37 @@ export function map(input: MapInput): Mapping | undefined {
         },
         ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
       }
+    case "@ai-sdk/openai":
+      return {
+        package: "@opencode-ai/ai/providers/openai",
+        auth: "none",
+        settings: {
+          ...baseSettings,
+          ...mapAPIKey(input.settings),
+          ...(typeof input.settings.organization === "string" ? { organization: input.settings.organization } : {}),
+          ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
+          ...(isStringRecord(input.settings.queryParams) ? { queryParams: input.settings.queryParams } : {}),
+          ...mapProviderOptions(input.settings, "openai", [
+            "apiKey",
+            "baseURL",
+            "organization",
+            "project",
+            "queryParams",
+          ]),
+        },
+      }
+    case "@ai-sdk/openai-compatible":
+      if (typeof input.settings.baseURL !== "string") return
+      return {
+        package: "@opencode-ai/ai/providers/openai-compatible",
+        auth: "none",
+        settings: {
+          ...baseSettings,
+          ...mapAPIKey(input.settings),
+          provider: input.providerID,
+          ...mapProviderOptions(input.settings, "openai", ["apiKey", "baseURL"]),
+        },
+      }
     case "@openrouter/ai-sdk-provider":
       return mapOpenRouter(input.settings, baseSettings)
     case "@ai-sdk/xai":
@@ -100,6 +144,20 @@ export function map(input: MapInput): Mapping | undefined {
         },
       }
   }
+}
+
+function mapAnthropicOptions(settings: Readonly<Record<string, unknown>>) {
+  return mapProviderOptions(settings, "anthropic", ["apiKey", "authToken", "baseURL"])
+}
+
+function mapProviderOptions(
+  settings: Readonly<Record<string, unknown>>,
+  key: string,
+  excluded: ReadonlyArray<string>,
+) {
+  const options = Object.fromEntries(Object.entries(settings).filter(([name]) => !excluded.includes(name)))
+  if (Object.keys(options).length === 0) return {}
+  return { providerOptions: { [key]: options } }
 }
 
 function mapBedrockMantle(input: MapInput, baseSettings: Readonly<Record<string, unknown>>): Mapping | undefined {
@@ -256,6 +314,7 @@ function mapGoogleOptions(settings: Readonly<Record<string, unknown>>, extra: Re
   }
   const options = {
     ...(typeof settings.cachedContent === "string" ? { cachedContent: settings.cachedContent } : {}),
+    ...(isStringRecord(settings.labels) ? { labels: settings.labels } : {}),
     ...(Array.isArray(settings.safetySettings) ? { safetySettings: settings.safetySettings } : {}),
     ...(typeof settings.serviceTier === "string" ? { serviceTier: settings.serviceTier } : {}),
     ...(Object.keys(thinkingConfig).length > 0 ? { thinkingConfig } : {}),

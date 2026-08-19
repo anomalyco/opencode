@@ -457,8 +457,12 @@ describe("ModelResolver", () => {
         settings: { baseURL: "https://openai.example/v1" },
         variants: [
           {
-            id: VariantID.make("high"),
-            settings: { reasoningEffort: "high" },
+            id: VariantID.make("xhigh"),
+            settings: {
+              reasoningEffort: "xhigh",
+              reasoningSummary: "auto",
+              include: ["reasoning.encrypted_content"],
+            },
             headers: { "x-variant": "high" },
             body: {
               store: false,
@@ -468,7 +472,7 @@ describe("ModelResolver", () => {
           },
         ],
       })
-      const resolved = yield* ModelResolver.resolveModel(catalog, VariantID.make("high"))
+      const resolved = yield* ModelResolver.resolveModel(catalog, VariantID.make("xhigh"))
 
       expect(resolved.route.defaults.headers).toMatchObject({ "x-test": "header", "x-variant": "high" })
       expect(resolved.route.defaults.http?.body).toEqual({
@@ -478,7 +482,17 @@ describe("ModelResolver", () => {
         temperature: 0.2,
       })
       expect(resolved.route.defaults.providerOptions).toEqual({
-        openai: { store: false, reasoningEffort: "high" },
+        openai: {
+          store: false,
+          reasoningEffort: "xhigh",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"],
+        },
+      })
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      expect(prepared.body).toMatchObject({
+        include: ["reasoning.encrypted_content"],
+        reasoning: { effort: "xhigh", summary: "auto" },
       })
     }),
   )
@@ -816,8 +830,42 @@ describe("ModelResolver", () => {
       const native = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/openai")))
       const packages = [
         [
+          "@ai-sdk/openai",
+          "@opencode-ai/ai/providers/openai",
+          {
+            reasoningEffort: "xhigh",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"],
+          },
+          {
+            openai: {
+              reasoningEffort: "xhigh",
+              reasoningSummary: "auto",
+              include: ["reasoning.encrypted_content"],
+            },
+          },
+        ],
+        [
+          "@ai-sdk/anthropic",
+          "@opencode-ai/ai/providers/anthropic",
+          { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+          { anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" } },
+        ],
+        [
+          "@ai-sdk/openai-compatible",
+          "@opencode-ai/ai/providers/openai-compatible",
+          { reasoningEffort: "high" },
+          { openai: { reasoningEffort: "high" } },
+        ],
+        [
           "@ai-sdk/google",
           "@opencode-ai/ai/providers/google",
+          { thinkingConfig: { thinkingLevel: "high" } },
+          { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
+        ],
+        [
+          "@ai-sdk/google-vertex",
+          "@opencode-ai/ai/providers/google-vertex",
           { thinkingConfig: { thinkingLevel: "high" } },
           { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
         ],

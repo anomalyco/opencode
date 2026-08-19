@@ -2,9 +2,94 @@ import { describe, expect, test } from "bun:test"
 import { AISDKNative } from "@opencode-ai/core/aisdk-native"
 
 const map = (packageName: string, settings: Readonly<Record<string, unknown>>, modelID = "test-model") =>
-  AISDKNative.map({ packageName, settings, modelID })
+  AISDKNative.map({ packageName, settings, modelID, providerID: "test-provider" })
 
 describe("AISDKNative", () => {
+  test("maps OpenAI-family packages and request options to native providers", () => {
+    expect(
+      map("@ai-sdk/openai", {
+        apiKey: "secret",
+        baseURL: "https://api.meta.ai/v1",
+        organization: "org",
+        reasoningEffort: "xhigh",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+        instructions: "Follow the repository instructions.",
+        truncation: "auto",
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/openai",
+      auth: "none",
+      settings: {
+        apiKey: "secret",
+        baseURL: "https://api.meta.ai/v1",
+        organization: "org",
+        providerOptions: {
+          openai: {
+            reasoningEffort: "xhigh",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"],
+            instructions: "Follow the repository instructions.",
+            truncation: "auto",
+          },
+        },
+      },
+    })
+    expect(map("@ai-sdk/openai-compatible", { baseURL: "https://example.com/v1", reasoningEffort: "high" })).toEqual({
+      package: "@opencode-ai/ai/providers/openai-compatible",
+      auth: "none",
+      settings: {
+        baseURL: "https://example.com/v1",
+        provider: "test-provider",
+        providerOptions: { openai: { reasoningEffort: "high" } },
+      },
+    })
+  })
+
+  test("maps Anthropic settings and request options to the native provider", () => {
+    expect(
+      map("@ai-sdk/anthropic", {
+        authToken: "token",
+        baseURL: "https://anthropic.example/v1",
+        thinking: { type: "adaptive", display: "summarized" },
+        effort: "high",
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/anthropic",
+      auth: "none",
+      settings: {
+        authToken: "token",
+        baseURL: "https://anthropic.example/v1",
+        providerOptions: {
+          anthropic: {
+            thinking: { type: "adaptive", display: "summarized" },
+            effort: "high",
+          },
+        },
+      },
+    })
+  })
+
+  test("maps Google Vertex settings to the native provider", () => {
+    expect(
+      map("@ai-sdk/google-vertex", {
+        project: "project",
+        location: "us-central1",
+        labels: { environment: "test" },
+        thinkingConfig: { thinkingLevel: "high" },
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/google-vertex",
+      settings: {
+        project: "project",
+        location: "us-central1",
+        providerOptions: {
+          gemini: { labels: { environment: "test" }, thinkingConfig: { thinkingLevel: "high" } },
+        },
+      },
+    })
+  })
+
   test("maps both models.dev Bedrock packages to native providers", () => {
     expect(map("@ai-sdk/amazon-bedrock", { region: "us-east-1" })).toEqual({
       package: "@opencode-ai/ai/providers/amazon-bedrock",
