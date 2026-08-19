@@ -46,6 +46,7 @@ const ADD_TAB_WIDTH = 3
 const MARQUEE_DELAY = 600
 const MARQUEE_INTERVAL = 80
 const CONTEXT_MENU_WIDTH = 16
+const MIDDLE_MOUSE_BUTTON = 1
 const RIGHT_MOUSE_BUTTON = 2
 
 type TabContextMenuState = {
@@ -569,6 +570,14 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   onMouseOver={() => marquee.enter(tab.sessionID, title(), hoveredTitleWidth())}
                   onMouseOut={() => marquee.leave(tab.sessionID)}
                   onMouseDown={(event) => {
+                    if (event.button === MIDDLE_MOUSE_BUTTON) {
+                      didDrag = false
+                      setDragging(undefined)
+                      tabs.close(tab.sessionID)
+                      event.preventDefault()
+                      event.stopPropagation()
+                      return
+                    }
                     if (event.button === RIGHT_MOUSE_BUTTON) {
                       didDrag = false
                       setDragging(undefined)
@@ -1108,6 +1117,14 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
               onMouseOver={() => marquee.enter(tab.sessionID, title(), hoveredTitleWidth())}
               onMouseOut={() => marquee.leave(tab.sessionID)}
               onMouseDown={(event) => {
+                if (event.button === MIDDLE_MOUSE_BUTTON) {
+                  didDrag = false
+                  setDragging(undefined)
+                  tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
+                  event.preventDefault()
+                  event.stopPropagation()
+                  return
+                }
                 if (event.button === RIGHT_MOUSE_BUTTON) {
                   didDrag = false
                   setDragging(undefined)
