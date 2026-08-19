@@ -692,6 +692,45 @@ describe("OpenAI Chat route", () => {
       expect(replay.body.messages).toEqual([
         { role: "assistant", content: null, refusal: "I can't help with that." },
       ])
+
+      const malformed = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant({
+              type: "text",
+              text: "Keep this visible.",
+              providerMetadata: { openai: { refusal: "invalid" } },
+            }),
+          ],
+        }),
+      )
+      expect(malformed.body.messages).toEqual([{ role: "assistant", content: "Keep this visible." }])
+    }),
+  )
+
+  it.effect("orders metadata-only reasoning before refusal output", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: [] } }] },
+              deltaChunk({ refusal: "I can't help with that." }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { openai: { reasoningDetails: [] } } },
+        {
+          type: "text",
+          text: "I can't help with that.",
+          providerMetadata: { openai: { refusal: true } },
+        },
+      ])
     }),
   )
 
