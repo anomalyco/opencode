@@ -71,7 +71,7 @@ import {
   SessionComposerRegion,
 } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
-import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
+import { MessageTimeline, timelineCache } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -1506,6 +1506,9 @@ export default function Page() {
       (id, previous) => {
         if (!id || !previous || id === previous) return
         if (location.hash || store.messageId || ui.pendingMessage) return
+        // If the session has a cached scroll offset, we're returning to a
+        // previously viewed position — don't auto-scroll to bottom.
+        if (timelineCache.get(sessionKey())?.scrollOffset !== undefined) return
         autoScroll.resume()
       },
     ),
@@ -1572,6 +1575,11 @@ export default function Page() {
     scroller = el
     autoScroll.scrollRef(el)
     if (!el) return
+    // If restoring from cache, pause auto-scroll so the cached position
+    // is preserved instead of jumping to the bottom on first observation.
+    if (timelineCache.get(sessionKey())?.scrollOffset !== undefined) {
+      autoScroll.pause()
+    }
     scheduleScrollState(el)
     fill()
   }
@@ -1978,6 +1986,8 @@ export default function Page() {
     autoScroll: {
       pause: autoScroll.pause,
       forceScrollToBottom: () => {
+        // If restoring from cache, keep the user's previous position.
+        if (timelineCache.get(sessionKey())?.scrollOffset !== undefined) return
         autoScroll.resume()
         scrollToEnd()
       },
