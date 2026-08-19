@@ -83,6 +83,7 @@ export const EditTool = Tool.define(
           yield* assertExternalDirectoryEffect(ctx, filePath)
 
           let diff = ""
+          let patch = ""
           let contentOld = ""
           let contentNew = ""
           yield* lock(filePath).withPermits(1)(
@@ -98,7 +99,8 @@ export const EditTool = Tool.define(
                 const desiredBom = next.bom
                 contentOld = ""
                 contentNew = next.text
-                diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+                patch = createTwoFilesPatch(filePath, filePath, contentOld, contentNew)
+                diff = trimDiff(patch)
                 yield* ctx.ask({
                   permission: "edit",
                   patterns: [path.relative(instance.worktree, filePath)],
@@ -106,6 +108,7 @@ export const EditTool = Tool.define(
                   metadata: {
                     filepath: filePath,
                     diff,
+                    patch,
                   },
                 })
                 yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
@@ -134,14 +137,13 @@ export const EditTool = Tool.define(
               const desiredBom = source.bom || next.bom
               contentNew = next.text
 
-              diff = trimDiff(
-                createTwoFilesPatch(
-                  filePath,
-                  filePath,
-                  normalizeLineEndings(contentOld),
-                  normalizeLineEndings(contentNew),
-                ),
+              patch = createTwoFilesPatch(
+                filePath,
+                filePath,
+                normalizeLineEndings(contentOld),
+                normalizeLineEndings(contentNew),
               )
+              diff = trimDiff(patch)
               yield* ctx.ask({
                 permission: "edit",
                 patterns: [path.relative(instance.worktree, filePath)],
@@ -149,6 +151,7 @@ export const EditTool = Tool.define(
                 metadata: {
                   filepath: filePath,
                   diff,
+                  patch,
                 },
               })
 
@@ -161,14 +164,13 @@ export const EditTool = Tool.define(
                 file: filePath,
                 event: "change",
               })
-              diff = trimDiff(
-                createTwoFilesPatch(
-                  filePath,
-                  filePath,
-                  normalizeLineEndings(contentOld),
-                  normalizeLineEndings(contentNew),
-                ),
+              patch = createTwoFilesPatch(
+                filePath,
+                filePath,
+                normalizeLineEndings(contentOld),
+                normalizeLineEndings(contentNew),
               )
+              diff = trimDiff(patch)
             }).pipe(Effect.orDie),
           )
 
@@ -188,6 +190,7 @@ export const EditTool = Tool.define(
           yield* ctx.metadata({
             metadata: {
               diff,
+              patch,
               filediff,
               diagnostics: {},
             },
@@ -204,6 +207,7 @@ export const EditTool = Tool.define(
             metadata: {
               diagnostics,
               diff,
+              patch,
               filediff,
             },
             title: `${path.relative(instance.worktree, filePath)}`,
