@@ -25,6 +25,12 @@ describe("Patch", () => {
     ])
   })
 
+  test("strips heredoc wrappers with non-word delimiters", () => {
+    expect(
+      Patch.parse("cat <<'PATCH-1'\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nPATCH-1"),
+    ).toEqual([{ type: "add", path: "add.txt", contents: "added" }])
+  })
+
   test("derives fuzzy line updates while preserving BOM", () => {
     const update = Patch.derive("update.txt", [{ oldLines: ["  old   "], newLines: ["new"] }], "\uFEFFold\n")
     expect(update).toEqual({ content: "new\n", bom: true })
