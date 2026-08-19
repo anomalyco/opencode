@@ -24,7 +24,14 @@ import {
   Show,
   on,
 } from "solid-js"
-import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider, useTuiStartup } from "./context/runtime"
+import {
+  TUI_STARTUP_STAGES,
+  TuiPathsProvider,
+  TuiStartupProvider,
+  TuiTerminalEnvironmentProvider,
+  useTuiStartup,
+  type TuiStartupStage,
+} from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
 import { DialogProvider as DialogProviderList } from "./component/dialog-provider"
 import { ErrorComponent } from "./component/error-component"
@@ -235,120 +242,148 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       )
       renderer.once("destroy", () => Deferred.doneUnsafe(shutdown, Effect.void))
       const pluginRuntime = createPluginRuntime()
+      const [startupMode, setStartupMode] = createSignal<"dark" | "light">()
+      const [startupStage, setStartupStage] = createSignal<TuiStartupStage>("terminal")
+      // Concurrent or fast-boot completions must never move the visible bar backward.
+      const progress = (stage: TuiStartupStage) => {
+        setStartupStage((current) =>
+          TUI_STARTUP_STAGES.indexOf(stage) > TUI_STARTUP_STAGES.indexOf(current) ? stage : current,
+        )
+      }
 
       yield* Effect.tryPromise(async () => {
+        // Mount before terminal theme detection so startup never presents a blank alternate screen.
+        await render(() => {
+          return (
+            <StartupLoading
+              stage={startupStage}
+              mode={startupMode}
+              hidden={Boolean(process.env.OPENCODE_FAST_BOOT)}
+            >
+              <Show when={startupMode()} keyed>
+                {(mode) => (
+                  <ExitProvider
+                    exit={(reason) => {
+                      if (renderer.isDestroyed) return
+                      exit.reason = reason
+                      destroyRenderer(renderer)
+                    }}
+                  >
+                    <EpilogueProvider set={(value) => (exit.epilogue = value)}>
+                      <ErrorBoundary
+                        fallback={(error, reset) => <ErrorComponent error={error} reset={reset} mode={mode} />}
+                      >
+                        <TuiPathsProvider
+                          value={{
+                            cwd: process.cwd(),
+                            home: global.home,
+                            state: global.state,
+                            worktree: global.data + "/worktree",
+                          }}
+                        >
+                          <TuiTerminalEnvironmentProvider
+                            value={{
+                              platform: process.platform,
+                              multiplexer: process.env.TMUX ? "tmux" : process.env.STY ? "screen" : undefined,
+                              displayServer: process.env.WAYLAND_DISPLAY
+                                ? "wayland"
+                                : process.env.DISPLAY
+                                  ? "x11"
+                                  : undefined,
+                            }}
+                          >
+                            <TuiStartupProvider
+                              value={{
+                                initialRoute: process.env.OPENCODE_ROUTE
+                                  ? JSON.parse(process.env.OPENCODE_ROUTE)
+                                  : undefined,
+                                skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
+                                progress,
+                              }}
+                            >
+                              <ClipboardProvider>
+                                <OpencodeKeymapProvider keymap={keymap}>
+                                  <ArgsProvider {...input.args}>
+                                    <KVProvider>
+                                      <ToastProvider>
+                                        <RouteProvider
+                                          initialRoute={
+                                            input.args.continue
+                                              ? {
+                                                  type: "session",
+                                                  sessionID: "dummy",
+                                                }
+                                              : undefined
+                                          }
+                                        >
+                                          <TuiConfigProvider config={input.config}>
+                                            <PluginRuntimeProvider value={pluginRuntime}>
+                                              <SDKProvider
+                                                url={input.url}
+                                                directory={input.directory}
+                                                fetch={input.fetch}
+                                                headers={input.headers}
+                                                events={input.events}
+                                              >
+                                                <PermissionProvider>
+                                                  <ProjectProvider>
+                                                    <SyncProvider>
+                                                      <DataProvider>
+                                                        <ThemeProvider mode={mode}>
+                                                          <LocalProvider>
+                                                            <PromptStashProvider>
+                                                              <DialogProvider>
+                                                                <FrecencyProvider>
+                                                                  <PromptHistoryProvider>
+                                                                    <PromptRefProvider>
+                                                                      <EditorContextProvider>
+                                                                        <LocationProvider>
+                                                                          <App
+                                                                            onSnapshot={input.onSnapshot}
+                                                                            pluginHost={input.pluginHost}
+                                                                          />
+                                                                        </LocationProvider>
+                                                                      </EditorContextProvider>
+                                                                    </PromptRefProvider>
+                                                                  </PromptHistoryProvider>
+                                                                </FrecencyProvider>
+                                                              </DialogProvider>
+                                                            </PromptStashProvider>
+                                                          </LocalProvider>
+                                                        </ThemeProvider>
+                                                      </DataProvider>
+                                                    </SyncProvider>
+                                                  </ProjectProvider>
+                                                </PermissionProvider>
+                                              </SDKProvider>
+                                            </PluginRuntimeProvider>
+                                          </TuiConfigProvider>
+                                        </RouteProvider>
+                                      </ToastProvider>
+                                    </KVProvider>
+                                  </ArgsProvider>
+                                </OpencodeKeymapProvider>
+                              </ClipboardProvider>
+                            </TuiStartupProvider>
+                          </TuiTerminalEnvironmentProvider>
+                        </TuiPathsProvider>
+                      </ErrorBoundary>
+                    </EpilogueProvider>
+                  </ExitProvider>
+                )}
+              </Show>
+            </StartupLoading>
+          )
+        }, renderer)
+
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
         const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
         if (renderer.isDestroyed) return
-
-        await render(() => {
-          return (
-            <ExitProvider
-              exit={(reason) => {
-                if (renderer.isDestroyed) return
-                exit.reason = reason
-                destroyRenderer(renderer)
-              }}
-            >
-              <EpilogueProvider set={(value) => (exit.epilogue = value)}>
-                <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} mode={mode} />}>
-                  <TuiPathsProvider
-                    value={{
-                      cwd: process.cwd(),
-                      home: global.home,
-                      state: global.state,
-                      worktree: global.data + "/worktree",
-                    }}
-                  >
-                    <TuiTerminalEnvironmentProvider
-                      value={{
-                        platform: process.platform,
-                        multiplexer: process.env.TMUX ? "tmux" : process.env.STY ? "screen" : undefined,
-                        displayServer: process.env.WAYLAND_DISPLAY
-                          ? "wayland"
-                          : process.env.DISPLAY
-                            ? "x11"
-                            : undefined,
-                      }}
-                    >
-                      <TuiStartupProvider
-                        value={{
-                          initialRoute: process.env.OPENCODE_ROUTE ? JSON.parse(process.env.OPENCODE_ROUTE) : undefined,
-                          skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
-                        }}
-                      >
-                        <ClipboardProvider>
-                          <OpencodeKeymapProvider keymap={keymap}>
-                            <ArgsProvider {...input.args}>
-                              <KVProvider>
-                                <ToastProvider>
-                                  <RouteProvider
-                                    initialRoute={
-                                      input.args.continue
-                                        ? {
-                                            type: "session",
-                                            sessionID: "dummy",
-                                          }
-                                        : undefined
-                                    }
-                                  >
-                                    <TuiConfigProvider config={input.config}>
-                                      <PluginRuntimeProvider value={pluginRuntime}>
-                                        <SDKProvider
-                                          url={input.url}
-                                          directory={input.directory}
-                                          fetch={input.fetch}
-                                          headers={input.headers}
-                                          events={input.events}
-                                        >
-                                          <PermissionProvider>
-                                            <ProjectProvider>
-                                              <SyncProvider>
-                                                <DataProvider>
-                                                  <ThemeProvider mode={mode}>
-                                                    <LocalProvider>
-                                                      <PromptStashProvider>
-                                                        <DialogProvider>
-                                                          <FrecencyProvider>
-                                                            <PromptHistoryProvider>
-                                                              <PromptRefProvider>
-                                                                <EditorContextProvider>
-                                                                  <LocationProvider>
-                                                                    <App
-                                                                      onSnapshot={input.onSnapshot}
-                                                                      pluginHost={input.pluginHost}
-                                                                    />
-                                                                  </LocationProvider>
-                                                                </EditorContextProvider>
-                                                              </PromptRefProvider>
-                                                            </PromptHistoryProvider>
-                                                          </FrecencyProvider>
-                                                        </DialogProvider>
-                                                      </PromptStashProvider>
-                                                    </LocalProvider>
-                                                  </ThemeProvider>
-                                                </DataProvider>
-                                              </SyncProvider>
-                                            </ProjectProvider>
-                                          </PermissionProvider>
-                                        </SDKProvider>
-                                      </PluginRuntimeProvider>
-                                    </TuiConfigProvider>
-                                  </RouteProvider>
-                                </ToastProvider>
-                              </KVProvider>
-                            </ArgsProvider>
-                          </OpencodeKeymapProvider>
-                        </ClipboardProvider>
-                      </TuiStartupProvider>
-                    </TuiTerminalEnvironmentProvider>
-                  </TuiPathsProvider>
-                </ErrorBoundary>
-              </EpilogueProvider>
-            </ExitProvider>
-          )
-        }, renderer)
+        batch(() => {
+          setStartupMode(mode)
+          progress("settings")
+        })
       })
       yield* Deferred.await(shutdown)
       return { epilogue: exit.epilogue, reason: exit.reason }
@@ -416,7 +451,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       console.error("Failed to load TUI plugins", error)
     })
     .finally(() => {
-      setReady(true)
+      batch(() => {
+        setReady(true)
+        // Plugin settlement is the point where the main interface becomes usable.
+        startup.progress?.("ready")
+      })
     })
 
   // Let selection copy/dismiss win ahead of normal bindings when explicit copy is required.
@@ -1125,9 +1164,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           <pluginRuntime.Slot name="app_bottom" />
         </box>
         <pluginRuntime.Slot name="app" />
-      </Show>
-      <Show when={!startup.skipInitialLoading}>
-        <StartupLoading ready={ready} />
       </Show>
     </box>
   )

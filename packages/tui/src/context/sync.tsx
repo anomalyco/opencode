@@ -515,6 +515,8 @@ export const {
           })
         })
         .then(() => {
+          // Only blocking workspace data affects readiness; secondary synchronization continues below.
+          startup.progress?.("theme")
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           void Promise.all([
