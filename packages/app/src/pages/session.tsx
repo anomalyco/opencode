@@ -86,6 +86,7 @@ import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
 import { SessionReviewV2SidebarToggle } from "@opencode-ai/session-ui/v2/session-review-v2"
+import { InputNav } from "@opencode-ai/session-ui/input-nav"
 import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
 import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "@/pages/session/v2/review-diff-kinds"
@@ -2281,6 +2282,15 @@ export default function Page() {
               {sessionPanelContent()}
             </SessionPanelFrame>
           )}
+
+          <Show when={isDesktop() && settings.general.showInputNav() && !!params.id}>
+            <InputNav
+              messages={visibleUserMessages()}
+              getParts={(messageID) => sync().data.part[messageID] ?? []}
+              current={visibleUserMessages().at(-1)}
+              onMessageSelect={(message) => scrollToMessage(message)}
+            />
+          </Show>
 
           <Show when={desktopSessionResizeOpen()}>
             <div onPointerDown={() => size.start()}>

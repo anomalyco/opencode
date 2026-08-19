@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>InputNav Component Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding: 20px; }
+    h2 { margin-bottom: 16px; color: #374151; }
+    .session-panel {
+      position: relative;
+      width: 800px;
+      height: 500px;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .session-content {
+      padding: 20px;
+      height: 100%;
+      overflow-y: auto;
+    }
+    .message {
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      max-width: 85%;
+    }
+    .message.user {
+      background: #f3f4f6;
+      margin-left: auto;
+    }
+    .message.assistant {
+      background: #dbeafe;
+    }
+    .message-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+    .message-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #1f2937;
+    }
+
+    /* InputNav component */
+    .input-nav {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 12px 6px;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+      border-radius: 8px 0 0 8px;
+      box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      height: 4px;
+      cursor: pointer;
+      position: relative;
+    }
+    .nav-bar {
+      height: 100%;
+      border-radius: 2px;
+      background: #d1d5db;
+      transition: all 0.2s ease;
+    }
+    .nav-item:hover .nav-bar {
+      background: #374151;
+    }
+    .nav-item.active .nav-bar {
+      background: #3b82f6;
+    }
+
+    /* Preview popup */
+    .preview {
+      position: absolute;
+      right: calc(100% + 8px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      max-width: 320px;
+      min-width: 200px;
+      display: none;
+      z-index: 100;
+    }
+    .nav-item:hover .preview {
+      display: block;
+    }
+    .preview-text {
+      font-size: 13px;
+      line-height: 1.5;
+      color: #374151;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .preview-images {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .preview-image {
+      max-width: 120px;
+      max-height: 80px;
+      border-radius: 4px;
+      object-fit: cover;
+    }
+    .preview-files {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #e5e7eb;
+    }
+    .preview-file {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #374151;
+    }
+  </style>
+</head>
+<body>
+  <h2>InputNav Component - Session Panel</h2>
+  <div class="session-panel">
+    <div class="session-content">
+      <div class="message user">
+        <div class="message-label">You</div>
+        <div class="message-text">Hello, please help me understand how to build a React component.</div>
+      </div>
+      <div class="message assistant">
+        <div class="message-label">Assistant</div>
+        <div class="message-text">Sure! I can help you build a React component. What kind of component are you looking to create?</div>
+      </div>
+      <div class="message user">
+        <div class="message-label">You</div>
+        <div class="message-text">I need a form component with validation. It should have fields for name, email, and password.</div>
+      </div>
+      <div class="message assistant">
+        <div class="message-label">Assistant</div>
+        <div class="message-text">Here is a React form component with validation for name, email, and password fields.</div>
+      </div>
+      <div class="message user">
+        <div class="message-label">You</div>
+        <div class="message-text">Can you also add error messages that display below each field when validation fails?</div>
+      </div>
+      <div class="message assistant">
+        <div class="message-label">Assistant</div>
+        <div class="message-text">I have updated the component to include error messages below each field.</div>
+      </div>
+      <div class="message user">
+        <div class="message-label">You</div>
+        <div class="message-text">Great! Now please add a submit button that is disabled until all fields are valid. Also add a loading state while the form is being submitted. When the form is submitted successfully, show a success message and reset the form.</div>
+      </div>
+      <div class="message assistant">
+        <div class="message-label">Assistant</div>
+        <div class="message-text">Here is the updated component with a disabled submit button, loading state, and success message.</div>
+      </div>
+    </div>
+
+    <!-- InputNav -->
+    <div class="input-nav">
+      <div class="nav-item" data-index="0">
+        <div class="nav-bar" style="width: 6px;"></div>
+        <div class="preview">
+          <div class="preview-text">Hello, please help me understand how to build a React component.</div>
+        </div>
+      </div>
+      <div class="nav-item active" data-index="1">
+        <div class="nav-bar" style="width: 8px;"></div>
+        <div class="preview">
+          <div class="preview-text">I need a form component with validation. It should have fields for name, email, and password.</div>
+        </div>
+      </div>
+      <div class="nav-item" data-index="2">
+        <div class="nav-bar" style="width: 5px;"></div>
+        <div class="preview">
+          <div class="preview-text">Can you also add error messages that display below each field when validation fails?</div>
+        </div>
+      </div>
+      <div class="nav-item" data-index="3">
+        <div class="nav-bar" style="width: 20px;"></div>
+        <div class="preview">
+          <div class="preview-text">Great! Now please add a submit button that is disabled until all fields are valid. Also add a loading state while the form is being submitted. When the form is submitted successfully, show a success message and reset the form.</div>
+          <div class="preview-images">
+            <img class="preview-image" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='80' viewBox='0 0 120 80'%3E%3Crect fill='%23e5e7eb' width='120' height='80'/%3E%3Ctext fill='%239ca3af' font-family='sans-serif' font-size='12' x='50%25' y='50%25' text-anchor='middle' dy='.3em'%3Escreenshot.png%3C/text%3E%3C/svg%3E" alt="screenshot.png">
+          </div>
+          <div class="preview-files">
+            <div class="preview-file">📄 SignupForm.tsx</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

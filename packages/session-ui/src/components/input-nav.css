@@ -1,0 +1,108 @@
+[data-component="input-nav"] {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 4px;
+  z-index: 5;
+  user-select: none;
+}
+
+[data-slot="input-nav-item"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 3px;
+  cursor: pointer;
+}
+
+[data-slot="input-nav-bar"] {
+  height: 100%;
+  border-radius: 2px;
+  background-color: var(--border-base);
+  transition:
+    background-color 0.2s,
+    width 0.2s;
+}
+
+[data-slot="input-nav-bar"]:hover {
+  background-color: var(--text-base);
+}
+
+[data-slot="input-nav-bar"][data-active] {
+  background-color: var(--color-brand-500);
+}
+
+[data-slot="input-nav-preview-content"] {
+  z-index: 1000;
+  max-width: 300px;
+  max-height: min(400px, calc(100vh - 6rem));
+  overflow-y: auto;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised-stronger-non-alpha);
+  box-shadow:
+    0 0 0 1px var(--border-weak-base, rgba(17, 0, 0, 0.12)),
+    0 1px 2px -1px rgba(19, 16, 16, 0.04),
+    0 1px 2px 0 rgba(19, 16, 16, 0.06),
+    0 1px 3px 0 rgba(19, 16, 16, 0.08);
+}
+
+[data-slot="input-nav-preview"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+[data-slot="input-nav-preview-text"] {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-base);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+[data-slot="input-nav-preview-images"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+[data-slot="input-nav-preview-image"] {
+  max-width: 100%;
+  max-height: 150px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
+[data-slot="input-nav-preview-files"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-slot="input-nav-preview-file"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-base);
+}
+
+[data-slot="input-nav-preview-file-icon"] {
+  flex-shrink: 0;
+}
+
+[data-slot="input-nav-preview-file-name"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="input-nav-preview-empty"] {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}

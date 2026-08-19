@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  defaultSettings,
   hasExistingWebState,
   initialAgentVisibility,
   isAppUpgrade,
@@ -92,5 +93,11 @@ describe("layout transition", () => {
     expect(shouldEnableNewLayout("1.17.20", "1.17.21")).toBe(false)
     expect(shouldEnableNewLayout(undefined, "1.17.19")).toBe(false)
     expect(shouldEnableNewLayout("dev", "1.17.20")).toBe(false)
+  })
+})
+
+describe("showInputNav", () => {
+  test("defaults to false", () => {
+    expect(defaultSettings.general.showInputNav).toBe(false)
   })
 })

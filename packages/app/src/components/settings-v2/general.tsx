@@ -438,6 +438,18 @@ export const SettingsGeneralV2: Component<{
             />
           </div>
         </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.showInputNav.title")}
+          description={language.t("settings.general.row.showInputNav.description")}
+        >
+          <div data-action="settings-show-input-nav">
+            <Switch
+              checked={settings.general.showInputNav()}
+              onChange={(checked) => settings.general.setShowInputNav(checked)}
+            />
+          </div>
+        </SettingsRowV2>
       </SettingsListV2>
     </div>
   )
