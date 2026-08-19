@@ -460,7 +460,17 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
 function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[] {
   switch (input.role) {
     case "system":
-      return [{ role: "system", content: input.content.flatMap(text).join("\n\n") }]
+      return [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: ProviderShared.wrapSystemUpdate(input.content.filter((part) => part.type === "text")),
+            },
+          ],
+        },
+      ]
     case "user":
       return [{ role: "user", content: input.content.flatMap(userPart) }]
     case "assistant":
