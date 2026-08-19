@@ -327,7 +327,7 @@ Recent work
     ])
   })
 
-  test("drops provider-native continuation metadata from failed assistant turns", () => {
+  test("drops provider-native continuation metadata from failed assistant turn tools, but preserves reasoning", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -370,7 +370,11 @@ Recent work
     )
 
     expect(messages[0]?.content).toEqual([
-      { type: "reasoning", text: "Partial thought", providerMetadata: undefined },
+      {
+        type: "reasoning",
+        text: "Partial thought",
+        providerMetadata: { openai: { itemId: "rs_failed", reasoningEncryptedContent: null } },
+      },
       {
         type: "tool-call",
         id: "hosted-failed",
