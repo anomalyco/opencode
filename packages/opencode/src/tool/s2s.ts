@@ -15,6 +15,7 @@
 //                        (addressed by the peer's globally-unique
 //                        session_id); goes in-process when the peer is
 //                        local and persists to s2s_inbox otherwise.
+//   - list             — list paired peers and consent direction.
 //   - leave <session-id> — revoke the allow for a peer (both directions).
 //
 // Addressing is by SESSION_ID, not slug: session.slug is NOT unique
@@ -56,11 +57,11 @@ import DESCRIPTION from "./s2s.txt"
 const MAX_BODY_LENGTH = 16000
 
 export const Parameters = Schema.Struct({
-  command: Schema.Literals(["invite", "accept", "msg", "leave", "relay"]).annotate({
+  command: Schema.Literals(["invite", "accept", "msg", "list", "leave", "relay"]).annotate({
     description: "Which s2s subcommand to run",
   }),
   // For `msg` and `leave` the user supplies the peer's session_id. For
-  // `msg` the body is also required. For `invite`/`accept`/`relay` the
+  // `msg` the body is also required. For `invite`/`accept`/`list`/`relay` the
   // other args are unused. Each is optional at the schema level so a
   // partial call decodes; the tool's run function rejects shape
   // mismatches per-command with a precise error.
@@ -75,9 +76,18 @@ export const Parameters = Schema.Struct({
   }),
 })
 
+type Peer = {
+  peer_id: SessionID
+  title: string
+  established_at: number
+  outbound: boolean
+  inbound: boolean
+}
+
 type Metadata = {
   command: string
   target?: string
+  peers?: Peer[]
 }
 
 export const S2STool = Tool.define<
@@ -224,6 +234,59 @@ export const S2STool = Tool.define<
             title: `Sent to ${params.target}`,
             metadata: { command: "msg", target: params.target },
             output: `Persisted to s2s_inbox (id=${capsule.id}); recipient process will poll and wake.`,
+          }
+        }
+
+        case "list": {
+          const rows = yield* store.listAllows(ctx.sessionID)
+          const peers = rows.reduce((result, row) => {
+            const peerID = row.sessionID === ctx.sessionID ? row.allowedSessionID : row.sessionID
+            const entry = result.get(peerID)
+            const outbound = row.sessionID === ctx.sessionID
+            const inbound = row.allowedSessionID === ctx.sessionID
+            if (entry) {
+              result.set(peerID, {
+                ...entry,
+                established_at: Math.min(entry.established_at, row.establishedAt),
+                outbound: entry.outbound || outbound,
+                inbound: entry.inbound || inbound,
+              })
+              return result
+            }
+            result.set(peerID, {
+              peer_id: peerID,
+              established_at: row.establishedAt,
+              outbound,
+              inbound,
+            })
+            return result
+          }, new Map<SessionID, Omit<Peer, "title">>())
+          const entries = yield* Effect.forEach(Array.from(peers.values()), (peer) =>
+            sessions.get(peer.peer_id).pipe(
+              Effect.map((session) => session.title || "(unknown)"),
+              Effect.catchTag("NotFoundError", () => Effect.succeed("(unknown)")),
+              Effect.map((title) => ({ ...peer, title })),
+            ),
+          )
+          const sorted = entries.toSorted((a, b) => b.established_at - a.established_at)
+          if (sorted.length === 0)
+            return {
+              title: "S2S peers",
+              metadata: { command: "list", peers: [] },
+              output: "No s2s peers.",
+            }
+          return {
+            title: "S2S peers",
+            metadata: { command: "list", peers: sorted },
+            output: sorted
+              .map((peer) => {
+                const consent =
+                  peer.outbound === peer.inbound
+                    ? "bidirectional"
+                    : `ANOMALOUS one-way (${peer.outbound ? "outbound only" : "inbound only"})`
+                return `${peer.peer_id} · ${peer.title} · established ${new Date(peer.established_at).toISOString()} · consent: ${consent}`
+              })
+              .join("\n"),
           }
         }
 

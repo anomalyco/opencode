@@ -42,6 +42,7 @@ import { Agent } from "../../src/agent/agent"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
+import { S2SAllowTable } from "@opencode-ai/core/database/s2s.sql"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Messaging } from "../../src/messaging"
@@ -120,6 +121,127 @@ const ctxFor = (sessionID: SessionID) => ({
 })
 
 describe("S2STool", () => {
+  it.instance("list reports no peers when the caller has no allow rows", () =>
+    Effect.gen(function* () {
+      const caller = yield* seedSession("list-empty")
+      const tool = yield* S2STool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute({ command: "list" }, ctxFor(caller.id))
+
+      expect(result.output).toBe("No s2s peers.")
+      expect(result.metadata).toMatchObject({ command: "list", peers: [] })
+    }),
+  )
+
+  it.instance("list folds a bidirectional pair into one peer with both directions", () =>
+    Effect.gen(function* () {
+      const store = yield* S2SStore.Service
+      const caller = yield* seedSession("list-bidirectional-caller")
+      const peer = yield* seedSession("list-bidirectional-peer")
+      yield* store.insertAllow(caller.id, peer.id)
+      yield* store.insertAllow(peer.id, caller.id)
+      const tool = yield* S2STool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute({ command: "list" }, ctxFor(caller.id))
+
+      expect(result.metadata).toMatchObject({
+        command: "list",
+        peers: [
+          {
+            peer_id: peer.id,
+            title: "list-bidirectional-peer",
+            established_at: expect.any(Number),
+            outbound: true,
+            inbound: true,
+          },
+        ],
+      })
+    }),
+  )
+
+  it.instance("list marks a single outbound allow row as anomalous one-way consent", () =>
+    Effect.gen(function* () {
+      const store = yield* S2SStore.Service
+      const caller = yield* seedSession("list-one-way-caller")
+      const peer = yield* seedSession("list-one-way-peer")
+      yield* store.insertAllow(caller.id, peer.id)
+      const tool = yield* S2STool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute({ command: "list" }, ctxFor(caller.id))
+
+      expect(result.output).toContain("ANOMALOUS one-way (outbound only)")
+      expect(result.metadata).toMatchObject({
+        command: "list",
+        peers: [
+          {
+            peer_id: peer.id,
+            title: "list-one-way-peer",
+            established_at: expect.any(Number),
+            outbound: true,
+            inbound: false,
+          },
+        ],
+      })
+    }),
+  )
+
+  it.instance("list retains a peer without a local session record with an unknown title", () =>
+    Effect.gen(function* () {
+      const store = yield* S2SStore.Service
+      const caller = yield* seedSession("list-missing-caller")
+      const missing = SessionID.make("ses_list_missing_peer")
+      yield* store.insertAllow(caller.id, missing)
+      const tool = yield* S2STool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute({ command: "list" }, ctxFor(caller.id))
+
+      expect(result.output).toContain("(unknown)")
+      expect(result.metadata).toMatchObject({
+        command: "list",
+        peers: [
+          {
+            peer_id: missing,
+            title: "(unknown)",
+            established_at: expect.any(Number),
+            outbound: true,
+            inbound: false,
+          },
+        ],
+      })
+    }),
+  )
+
+  it.instance("list sorts pairs by their earliest established allow row, newest first", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const caller = yield* seedSession("list-sort-caller")
+      const older = yield* seedSession("list-sort-older")
+      const newer = yield* seedSession("list-sort-newer")
+      yield* db
+        .insert(S2SAllowTable)
+        .values([
+          { session_id: caller.id, allowed_session_id: older.id, established_at: 1_704_067_200_000 },
+          { session_id: older.id, allowed_session_id: caller.id, established_at: 1_704_067_200_001 },
+          { session_id: caller.id, allowed_session_id: newer.id, established_at: 1_704_153_600_000 },
+          { session_id: newer.id, allowed_session_id: caller.id, established_at: 1_704_153_600_001 },
+        ])
+        .run()
+      const tool = yield* S2STool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute({ command: "list" }, ctxFor(caller.id))
+      const peers = result.metadata.peers ?? []
+
+      expect(peers.map((peer) => peer.peer_id)).toEqual([newer.id, older.id])
+      expect(peers.map((peer) => peer.established_at)).toEqual([1_704_153_600_000, 1_704_067_200_000])
+      expect(result.output).toContain("2024-01-02T00:00:00.000Z")
+    }),
+  )
+
   it.instance("invite mints a single-use s2s_token row bound to the calling session", () =>
     Effect.gen(function* () {
       const store = yield* S2SStore.Service

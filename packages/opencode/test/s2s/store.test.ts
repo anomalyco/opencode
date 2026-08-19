@@ -27,6 +27,8 @@ const it = testEffect(S2SStore.layer.pipe(Layer.provide(database)))
 // Two valid arbitrary session ids for table-row targets.
 const S1 = SessionID.make("ses_target_alpha")
 const S2 = SessionID.make("ses_target_beta")
+const S3 = SessionID.make("ses_target_gamma")
+const S4 = SessionID.make("ses_target_delta")
 const INVITER = SessionID.make("ses_inviter_one")
 const JOINER = SessionID.make("ses_joiner_one")
 
@@ -195,6 +197,26 @@ describe("S2SStore", () => {
 
       expect(yield* store.isAllowed(S1, S2)).toBe(true)
       expect(yield* store.isAllowed(S2, S1)).toBe(false)
+    }),
+  )
+
+  it.effect("listAllows returns every inbound and outbound row for a session", () =>
+    Effect.gen(function* () {
+      const store = yield* S2SStore.Service
+
+      yield* store.insertAllow(S3, S4)
+      yield* store.insertAllow(S4, S3)
+      yield* store.insertAllow(S2, S3)
+
+      const rows = yield* store.listAllows(S3)
+      expect(rows).toHaveLength(3)
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ sessionID: S3, allowedSessionID: S4 }),
+          expect.objectContaining({ sessionID: S4, allowedSessionID: S3 }),
+          expect.objectContaining({ sessionID: S2, allowedSessionID: S3 }),
+        ]),
+      )
     }),
   )
 

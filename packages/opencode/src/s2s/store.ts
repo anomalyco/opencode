@@ -118,6 +118,12 @@ export interface NewTokenRow {
   createdAt: number
 }
 
+export interface AllowRow {
+  sessionID: SessionID
+  allowedSessionID: SessionID
+  establishedAt: number
+}
+
 export interface Interface {
   readonly insertInbox: (row: NewInboxRow) => Effect.Effect<void, S2SStoreError>
   readonly claimForSessions: (ids: ReadonlyArray<SessionID>) => Effect.Effect<InboxRow[], S2SStoreError>
@@ -127,6 +133,7 @@ export interface Interface {
   readonly insertToken: (row: NewTokenRow) => Effect.Effect<void, S2SStoreError>
   readonly claimToken: (token: string, by: SessionID) => Effect.Effect<Option.Option<TokenRow>, S2SStoreError>
   readonly insertAllow: (from: SessionID, to: SessionID) => Effect.Effect<void, S2SStoreError>
+  readonly listAllows: (me: SessionID) => Effect.Effect<AllowRow[], S2SStoreError>
   readonly isAllowed: (from: SessionID, to: SessionID) => Effect.Effect<boolean, S2SStoreError>
   readonly deleteAllow: (from: SessionID, to: SessionID) => Effect.Effect<void, S2SStoreError>
   readonly deleteOrphaned: () => Effect.Effect<void, S2SStoreError>
@@ -150,6 +157,12 @@ interface TokenDbRow {
   created_at: number
 }
 
+interface AllowDbRow {
+  session_id: string
+  allowed_session_id: string
+  established_at: number
+}
+
 function toInboxRow(row: InboxDbRow): InboxRow {
   return {
     id: row.id,
@@ -167,6 +180,14 @@ function toTokenRow(row: TokenDbRow): TokenRow {
     inviterSessionID: SessionID.make(row.inviter_session_id),
     inviterSlug: row.inviter_slug,
     createdAt: row.created_at,
+  }
+}
+
+function toAllowRow(row: AllowDbRow): AllowRow {
+  return {
+    sessionID: SessionID.make(row.session_id),
+    allowedSessionID: SessionID.make(row.allowed_session_id),
+    establishedAt: row.established_at,
   }
 }
 
@@ -272,6 +293,16 @@ export const layer = Layer.effect(
       )
     })
 
+    const listAllows: Interface["listAllows"] = Effect.fn("S2SStore.listAllows")(function* (me) {
+      const rows = yield* query(
+        db.all<AllowDbRow>(sql`
+          SELECT session_id, allowed_session_id, established_at FROM s2s_allow
+          WHERE session_id = ${me} OR allowed_session_id = ${me}
+        `),
+      )
+      return rows.map(toAllowRow)
+    })
+
     const isAllowed: Interface["isAllowed"] = Effect.fn("S2SStore.isAllowed")(function* (from, to) {
       const row = yield* query(
         db.get<{ present: number }>(sql`
@@ -329,6 +360,7 @@ export const layer = Layer.effect(
       insertToken,
       claimToken,
       insertAllow,
+      listAllows,
       isAllowed,
       deleteAllow,
       deleteOrphaned,
