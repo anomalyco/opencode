@@ -495,6 +495,45 @@ describe("LocationServiceMap", () => {
     ),
   )
 
+  it.live("routes global events to every location", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      (dirs) => Effect.promise(() => Promise.all(dirs.map((dir) => dir[Symbol.asyncDispose]())).then(() => undefined)),
+    ).pipe(
+      Effect.flatMap(([first, second]) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const locations = yield* LocationServiceMap.Service
+            const bus = yield* Bus.Service
+            const firstContext = yield* locations.contextEffect(
+              Location.Ref.make({ directory: AbsolutePath.make(first.path) }),
+            )
+            const secondContext = yield* locations.contextEffect(
+              Location.Ref.make({ directory: AbsolutePath.make(second.path) }),
+            )
+            const received = { first: 0, second: 0 }
+            yield* bus.subscribe(Config.Event.Updated).pipe(
+              Stream.runForEach(() => Effect.sync(() => received.first++)),
+              Effect.provideContext(firstContext),
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            yield* bus.subscribe(Config.Event.Updated).pipe(
+              Stream.runForEach(() => Effect.sync(() => received.second++)),
+              Effect.provideContext(secondContext),
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            yield* Effect.sleep("10 millis")
+
+            yield* bus.publish(Config.Event.Updated, {}, { global: true })
+            yield* Effect.sleep("10 millis")
+
+            expect(received).toEqual({ first: 1, second: 1 })
+          }),
+        ),
+      ),
+    ),
+  )
+
   it.live("reuses cached services for constructed and decoded location refs", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

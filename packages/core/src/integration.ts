@@ -421,7 +421,11 @@ const layer = Layer.effect(
             // Persisting attempts cannot be cancelled, expired, or claimed again.
             yield* SynchronizedRef.update(attempts, (current) => new Map(current).set(attemptID, terminal))
             if (Exit.isFailure(persistence)) yield* Effect.failCause(persistence.cause)
-            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: attempt.integrationID })
+            yield* bus.publish(
+              Integration.Event.ConnectionUpdated,
+              { integrationID: attempt.integrationID },
+              { global: true },
+            )
             yield* bus.publish(Integration.Event.Updated, {})
           }).pipe(Effect.ensuring(close(attempt.scope)))
         }),
@@ -477,7 +481,11 @@ const layer = Layer.effect(
           yield* SynchronizedRef.update(commandAttempts, (current) => new Map(current).set(attemptID, terminal))
           yield* close(attempt.scope)
           if (Exit.isFailure(persistence)) return
-          yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: attempt.integrationID })
+          yield* bus.publish(
+            Integration.Event.ConnectionUpdated,
+            { integrationID: attempt.integrationID },
+            { global: true },
+          )
           yield* bus.publish(Integration.Event.Updated, {})
         }),
       )
@@ -686,6 +694,11 @@ const layer = Layer.effect(
           if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
           const value = yield* authorize(implementation.refresh(credential.value))
           yield* credentials.update(credential.id, { value })
+          yield* bus.publish(
+            Integration.Event.ConnectionUpdated,
+            { integrationID: credential.integrationID },
+            { global: true },
+          )
           return value
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
@@ -711,14 +724,22 @@ const layer = Layer.effect(
               ...(Object.keys(answer).length > 0 ? { configuration: answer } : {}),
             }),
           })
-          yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: input.integrationID })
+          yield* bus.publish(
+            Integration.Event.ConnectionUpdated,
+            { integrationID: input.integrationID },
+            { global: true },
+          )
           yield* bus.publish(Integration.Event.Updated, {})
         }),
         update: Effect.fn("Integration.connection.update")(function* (credentialID, updates) {
           const credential = yield* credentials.get(credentialID)
           yield* credentials.update(credentialID, updates)
           if (credential) {
-            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: credential.integrationID })
+            yield* bus.publish(
+              Integration.Event.ConnectionUpdated,
+              { integrationID: credential.integrationID },
+              { global: true },
+            )
           }
           yield* bus.publish(Integration.Event.Updated, {})
         }),
@@ -726,7 +747,11 @@ const layer = Layer.effect(
           const credential = yield* credentials.get(credentialID)
           yield* credentials.remove(credentialID)
           if (credential) {
-            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: credential.integrationID })
+            yield* bus.publish(
+              Integration.Event.ConnectionUpdated,
+              { integrationID: credential.integrationID },
+              { global: true },
+            )
           }
           yield* bus.publish(Integration.Event.Updated, {})
         }),
