@@ -35,7 +35,6 @@
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/http-recorder": "workspace:*",
     "@opencode-ai/script": "workspace:*",
-    "@opentelemetry/sdk-trace-web": "2.10.0",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "catalog:",
     "@types/babel__core": "7.20.5",

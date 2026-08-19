@@ -75,18 +75,19 @@ export function pruneOrphanedEvents(db: DbShape) {
       )
     `)
 
-    const eventsDeleted = (
-      yield* db.get<{ c: number }>(sql`SELECT changes() as c`)
-    )?.c ?? 0
+    const eventsDeleted = (yield* db.get<{ c: number }>(sql`SELECT changes() as c`))?.c ?? 0
 
     yield* db.run(sql`
       DELETE FROM event_sequence
-      WHERE aggregate_id NOT IN (SELECT DISTINCT aggregate_id FROM event)
+      WHERE aggregate_id IN (
+        SELECT es.aggregate_id
+        FROM event_sequence es
+        LEFT JOIN session s ON s.id = es.aggregate_id
+        WHERE s.id IS NULL
+      )
     `)
 
-    const sequencesDeleted = (
-      yield* db.get<{ c: number }>(sql`SELECT changes() as c`)
-    )?.c ?? 0
+    const sequencesDeleted = (yield* db.get<{ c: number }>(sql`SELECT changes() as c`))?.c ?? 0
 
     return { eventsDeleted, sequencesDeleted }
   }).pipe(Effect.orDie)
@@ -240,7 +241,8 @@ const VacuumCommand = effectCmd({
     `).pipe(Effect.orDie)
 
     const afterPages = after?.page_count ?? 0
-    const reclaimedMB = Math.round(((beforePages - afterPages) * 4096 / 1024 / 1024) * 100) / 100
+    const pageSize = (yield* db.get<{ page_size: number }>(sql`PRAGMA page_size`).pipe(Effect.orDie))?.page_size ?? 4096
+    const reclaimedMB = Math.round(((beforePages - afterPages) * pageSize / 1024 / 1024) * 100) / 100
     console.log(`After: ${afterPages} pages, ${after?.freelist_count ?? 0} free`)
     console.log(`Reclaimed: ${reclaimedMB} MB`)
   }),
