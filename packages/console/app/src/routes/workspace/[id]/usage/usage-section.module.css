@@ -98,7 +98,7 @@
         z-index: 10;
         min-width: 180px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        font-size: var(--font-size-xs);
+        font-size: var(--font-size-x-small);
 
         @media (prefers-color-scheme: dark) {
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -154,7 +154,7 @@
       th,
       td {
         padding: var(--space-2) var(--space-3);
-        font-size: var(--font-size-xs);
+        font-size: var(--font-size-x-small);
       }
 
       /* Hide Model column on mobile */
@@ -176,12 +176,12 @@
 
   [data-slot="breakdown-label"] {
     color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
+    font-size: var(--font-size-x-small);
   }
 
   [data-slot="breakdown-value"] {
     color: var(--color-text);
     font-weight: 500;
-    font-size: var(--font-size-xs);
+    font-size: var(--font-size-x-small);
   }
 }

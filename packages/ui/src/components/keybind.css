@@ -11,7 +11,7 @@
 
   /* text-12-regular */
   font-family: var(--font-family-sans);
-  font-size: 12px;
+  font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-regular);
   line-height: 1;
   color: var(--text-weak);
