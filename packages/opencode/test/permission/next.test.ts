@@ -850,7 +850,7 @@ it.instance(
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
-        always: ["ls"],
+        always: ["*"],
         ruleset: [],
       }).pipe(Effect.forkScoped)
 
@@ -858,7 +858,7 @@ it.instance(
         id: PermissionV1.ID.make("per_test5b"),
         sessionID: SessionID.make("session_same"),
         permission: "bash",
-        patterns: ["ls"],
+        patterns: ["rm"],
         metadata: {},
         always: [],
         ruleset: [],
@@ -870,6 +870,84 @@ it.instance(
       yield* Fiber.join(a)
       yield* Fiber.join(b)
       expect(yield* list()).toHaveLength(0)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - deduplicates identical permission requests in same session",
+  () =>
+    Effect.gen(function* () {
+      const a = yield* ask({
+        id: PermissionV1.ID.make("per_dedup_a"),
+        sessionID: SessionID.make("session_dedup"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const b = yield* ask({
+        id: PermissionV1.ID.make("per_dedup_b"),
+        sessionID: SessionID.make("session_dedup"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      // Only one pending request should exist — b is deduplicated to a
+      yield* waitForPending(1)
+      expect((yield* list()).map((item) => item.id)).toEqual([PermissionV1.ID.make("per_dedup_a")])
+
+      yield* reply({ requestID: PermissionV1.ID.make("per_dedup_a"), reply: "once" })
+
+      // Both callers should succeed from a single reply
+      yield* Fiber.join(a)
+      yield* Fiber.join(b)
+      expect(yield* list()).toHaveLength(0)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - does not deduplicate requests with different patterns",
+  () =>
+    Effect.gen(function* () {
+      const a = yield* ask({
+        id: PermissionV1.ID.make("per_nodedup_a"),
+        sessionID: SessionID.make("session_nodedup"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const b = yield* ask({
+        id: PermissionV1.ID.make("per_nodedup_b"),
+        sessionID: SessionID.make("session_nodedup"),
+        permission: "bash",
+        patterns: ["rm"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      // Different patterns → both pending
+      yield* waitForPending(2)
+      expect((yield* list()).map((item) => item.id)).toEqual([
+        PermissionV1.ID.make("per_nodedup_a"),
+        PermissionV1.ID.make("per_nodedup_b"),
+      ])
+
+      // Rejecting one cascades to all pending in the same session
+      yield* reply({ requestID: PermissionV1.ID.make("per_nodedup_a"), reply: "reject" })
+      const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+      expect(Exit.isFailure(ea)).toBe(true)
+      expect(Exit.isFailure(eb)).toBe(true)
     }),
   { git: true },
 )
