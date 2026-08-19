@@ -33,9 +33,15 @@ import { Heap } from "./cli/heap"
 
 const args = hideBin(process.argv)
 
+// VantaCode fork: when invoked via the `vantacode` launcher (which sets
+// VANTACODE_BRAND), present the vantacode brand in scriptName / help / version /
+// errors. Defaults to the upstream `opencode` brand otherwise, so nothing
+// breaks for existing `opencode` invocations.
+const BRAND = process.env.VANTACODE_BRAND === "vantacode" ? "vantacode" : "opencode"
+
 function show(out: string) {
   const text = out.trimStart()
-  if (!text.startsWith("opencode ")) {
+  if (!text.startsWith(BRAND + " ")) {
     process.stderr.write(UI.logo() + EOL + EOL)
     process.stderr.write(text + EOL)
     return
@@ -45,11 +51,15 @@ function show(out: string) {
 
 const cli = yargs(args)
   .parserConfiguration({ "populate--": true })
-  .scriptName("opencode")
+  .scriptName(BRAND)
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")
-  .version("version", "show version number", InstallationVersion)
+  .version(
+    "version",
+    "show version number",
+    BRAND === "vantacode" ? `vantacode ${InstallationVersion} (fork of opencode)` : InstallationVersion,
+  )
   .alias("version", "v")
   .option("print-logs", {
     describe: "print logs to stderr",
