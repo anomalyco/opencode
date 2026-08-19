@@ -280,20 +280,24 @@ test("a save whose setup throws restores the previous version", async () => {
 
   // The module imports fine but its setup throws — unlike an import failure,
   // the swap has already torn down a1, so keep-last-good means restoring it.
-  await writeFile(
-    source,
-    `
+  const broken = `
 export default {
   id: "test.a",
   setup: async () => {
     throw new Error("setup boom")
   },
 }
-`,
-  )
+`
+  await writeFile(source, broken)
   expect(await until(read, (value) => value === "a1:setup\na1:cleanup\na1:setup\n")).toBe(
     "a1:setup\na1:cleanup\na1:setup\n",
   )
+
+  // Duplicate notifications for unchanged contents must not retry the broken
+  // generation and cycle the restored plugin again.
+  await writeFile(source, broken)
+  await Bun.sleep(250)
+  expect(await read()).toBe("a1:setup\na1:cleanup\na1:setup\n")
 
   // Fixing the file swaps out the restored version normally.
   await writeFile(source, lifecycleSource(marker, "test.a", "a2"))

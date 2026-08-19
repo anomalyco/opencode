@@ -45,13 +45,13 @@ export function localSource(spec: string, directory: string) {
   return undefined
 }
 
-// Key local plugin imports by a source version so edited sources re-import
-// fresh instead of hitting the ESM cache. Bun ignores query params when
-// caching file:// URL imports, so bust with a plain path there; Node keys its
-// cache on the full URL. Numeric versions are truncated because a fractional
-// value breaks Bun's runtime JSX/solid plugin hooks.
-export function freshSpecifier(entrypoint: string, sourceVersion: string | number) {
-  const version = typeof sourceVersion === "number" ? Math.trunc(sourceVersion) : sourceVersion
+// Key local plugin imports by a numeric source version so edited sources
+// re-import fresh instead of hitting the ESM cache. Bun ignores query params
+// when caching file:// URL imports, so bust with a plain path there; Node keys
+// its cache on the full URL. Fractional versions break Bun's runtime JSX/solid
+// plugin hooks, so always truncate them.
+export function freshSpecifier(entrypoint: string, sourceVersion: number) {
+  const version = Math.trunc(sourceVersion)
   if (typeof Bun !== "undefined") return `${fileURLToPath(entrypoint).replaceAll("\\", "/")}?mtime=${version}`
   return `${entrypoint}?mtime=${version}`
 }
