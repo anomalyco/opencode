@@ -343,6 +343,13 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (!(target instanceof HTMLElement)) return
     if (event.altKey || event.ctrlKey || event.metaKey) return
 
+    const digit = Number(event.key)
+    if (!Number.isNaN(digit) && digit >= 1 && digit <= Math.min(count(), 9)) {
+      event.preventDefault()
+      selectOption(digit - 1)
+      return
+    }
+
     if (event.key === "ArrowDown" || event.key === "ArrowRight") {
       event.preventDefault()
       move(1)
