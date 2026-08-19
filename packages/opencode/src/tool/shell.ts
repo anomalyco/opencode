@@ -116,8 +116,63 @@ function parts(node: Node) {
   return out
 }
 
+// Variable-assignment value types that cannot execute commands. Anything
+// outside this set (command_substitution, process_substitution, array,
+// concatenation, etc.) is treated as potentially executable and the
+// assignment is not stripped from permission patterns.
+//
+// `expansion` (${...}) and `arithmetic_expansion` ($((...))) are deliberately
+// excluded: they can execute commands stored in a variable's *value* at
+// runtime with nothing visible in the AST — e.g. `${VAR@P}` prompt expansion
+// runs a `$(...)` held in VAR, and arithmetic recursively evaluates variable
+// contents like `arr[$(cmd)]`. The descendant-based command_substitution check
+// below cannot see those, so these forms are never treated as safe to strip.
+// `simple_expansion` ($VAR, no braces) does not recurse and stays safe.
+const SAFE_ASSIGNMENT_VALUE_TYPES = new Set([
+  "ansi_c_string",
+  "brace_expression",
+  "number",
+  "raw_string",
+  "simple_expansion",
+  "string",
+  "translated_string",
+  "word",
+])
+
+function isSafeAssignment(node: Node): boolean {
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i)
+    if (!child) continue
+    if (child.type === "variable_name" || child.type === "subscript") continue
+    if (!child.isNamed || child.text === "=") continue
+    // This is the value node.
+    if (!SAFE_ASSIGNMENT_VALUE_TYPES.has(child.type)) return false
+    // Defensive recursion: "safe" types like `string` can embed $() via
+    // interpolation, so reject if any descendant is a known executable form.
+    if (child.descendantsOfType("command_substitution").length > 0) return false
+    if (child.descendantsOfType("process_substitution").length > 0) return false
+  }
+  return true
+}
+
 function source(node: Node) {
-  return (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim()
+  // Strip leading env variable assignments so "GOFLAGS=… go test" matches
+  // permission rule "go *". Only strip when every assignment is known-safe;
+  // anything that could execute a command (process/command substitution,
+  // arrays, nested expressions) leaves the original text intact.
+  let lastVarAssign: Node | null = null
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i)
+    if (!child || child.type !== "variable_assignment") break
+    if (!isSafeAssignment(child)) {
+      lastVarAssign = null
+      break
+    }
+    lastVarAssign = child
+  }
+  const base = node.parent?.type === "redirected_statement" ? node.parent : node
+  if (lastVarAssign) return base.text.slice(lastVarAssign.endIndex - base.startIndex).trimStart()
+  return base.text.trim()
 }
 
 function commands(node: Node) {
