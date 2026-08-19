@@ -5,6 +5,7 @@ import { jwtVerify, createRemoteJWKSet } from "jose"
 import { createAppAuth } from "@octokit/auth-app"
 import { Octokit } from "@octokit/rest"
 import { Resource } from "sst"
+import { parseRepositoryClaim } from "./github"
 
 type Env = {
   SYNC_SERVER: DurableObjectNamespace<SyncServer>
@@ -269,16 +270,13 @@ export default new Hono<{ Bindings: Env }>()
 
     // verify token
     const JWKS = createRemoteJWKSet(new URL(JWKS_URL))
-    let owner, repo
+    let repository: ReturnType<typeof parseRepositoryClaim>
     try {
       const { payload } = await jwtVerify(token, JWKS, {
         issuer: GITHUB_ISSUER,
         audience: EXPECTED_AUDIENCE,
       })
-      const sub = payload.sub // e.g. 'repo:my-org/my-repo:ref:refs/heads/main'
-      const parts = sub.split(":")[1].split("/")
-      owner = parts[0]
-      repo = parts[1]
+      repository = parseRepositoryClaim(payload)
     } catch (err) {
       console.error("Token verification failed:", err)
       return c.json({ error: "Invalid or expired token" }, { status: 403 })
@@ -294,8 +292,8 @@ export default new Hono<{ Bindings: Env }>()
     // Lookup installation
     const octokit = new Octokit({ auth: appAuth.token })
     const { data: installation } = await octokit.apps.getRepoInstallation({
-      owner,
-      repo,
+      owner: repository.owner,
+      repo: repository.repo,
     })
 
     // Get installation token
