@@ -314,6 +314,13 @@ export type ContentFilterError = {
   }
 }
 
+export type EmptyResponseError = {
+  name: "EmptyResponseError"
+  data: {
+    message: string
+  }
+}
+
 export type ApiError = {
   name: "APIError"
   data: {
@@ -346,6 +353,7 @@ export type AssistantMessage = {
     | StructuredOutputError
     | ContextOverflowError
     | ContentFilterError
+    | EmptyResponseError
     | ApiError
   parentID: string
   modelID: string
@@ -1222,6 +1230,7 @@ export type GlobalEvent = {
             | StructuredOutputError
             | ContextOverflowError
             | ContentFilterError
+            | EmptyResponseError
             | ApiError
         }
       }
@@ -5361,6 +5370,7 @@ export type SessionError = {
       | StructuredOutputError
       | ContextOverflowError
       | ContentFilterError
+      | EmptyResponseError
       | ApiError
   }
 }
@@ -6686,6 +6696,7 @@ export type EventSessionError = {
       | StructuredOutputError
       | ContextOverflowError
       | ContentFilterError
+      | EmptyResponseError
       | ApiError
   }
 }
