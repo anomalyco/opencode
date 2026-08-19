@@ -22,11 +22,15 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
   if (options?.bypass) return false
 
   const ins = yield* InstanceState.context
-  const full = process.platform === "win32" ? FSUtil.normalizePath(target) : target
+  const full = FSUtil.resolveExisting(target)
   if (containsPath(full, ins)) return false
 
+  // The permission glob keeps the caller's lexical target so user-configured
+  // external_directory allow rules (which are written against the paths an
+  // agent refers to, e.g. a symlinked alias) keep matching. The boundary check
+  // above already used the resolved real path to detect symlink escapes.
   const kind = options?.kind ?? "file"
-  const dir = kind === "directory" ? full : path.dirname(full)
+  const dir = kind === "directory" ? target : path.dirname(target)
   const glob =
     process.platform === "win32"
       ? FSUtil.normalizePathPattern(path.join(dir, "*"))
