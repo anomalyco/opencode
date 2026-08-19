@@ -19,6 +19,7 @@ import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
 import { ScopedKey } from "@/utils/server-scope"
+import { resolveModelVariantForRequest } from "@opencode-ai/core/util/model-variant"
 import { createPromptSubmissionState } from "./submission-state"
 import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
@@ -165,9 +166,15 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       return false
     }
 
+    const model = {
+      providerID: input.draft.model.providerID,
+      id: input.draft.model.modelID,
+      variant: input.draft.variant,
+    }
     await input.api.prompt({
       sessionID: input.draft.sessionID,
       id: messageID,
+      selection: { agent: input.draft.agent, model },
       agent: input.draft.agent,
       model: input.draft.model,
       variant: input.draft.variant,
@@ -336,9 +343,16 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     const modelSelection = input.model ?? local.model
+    if (!modelSelection.ready()) return
+    if (params.id && (!local.session.ready() || !local.session.initialized())) return
+
     const currentModel = modelSelection.current()
     const currentAgent = local.agent.current()
-    const variant = modelSelection.variant.current()
+    const selectedVariant = modelSelection.variant.selected()
+    const variant = resolveModelVariantForRequest({
+      selected: selectedVariant,
+      current: modelSelection.variant.current(),
+    })
     if (!currentModel || !currentAgent) {
       showToast({
         title: language.t("prompt.toast.modelAgentRequired.title"),
@@ -423,7 +437,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           local.session.promote(sessionDirectory, session.id, {
             agent: currentAgent.name,
             model: { providerID: currentModel.provider.id, modelID: currentModel.id },
-            variant: variant ?? null,
+            variant: selectedVariant,
           })
           layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
           const draftID = search.draftId

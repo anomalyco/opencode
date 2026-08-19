@@ -34,6 +34,7 @@ export function createPromptInputController(input: {
   const providersQuery = createQuery(() => input.queryOptions.providers(pathKey(sdk().directory)))
 
   return createMemo<PromptInputControls>(() => {
+    const selection = input.model ?? local.model
     return {
       agents: {
         available: sync().data.agent,
@@ -44,7 +45,8 @@ export function createPromptInputController(input: {
         select: local.agent.set,
       },
       model: {
-        selection: input.model ?? local.model,
+        selection,
+        ready: selection.ready() && (!input.sessionID() || (local.session.ready() && local.session.initialized())),
         paid: providers.paid().length > 0,
         loading:
           (local.agent.visible() && agentsQuery.isLoading) ||

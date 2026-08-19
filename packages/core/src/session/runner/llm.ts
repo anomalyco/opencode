@@ -176,24 +176,32 @@ const layer = Layer.effect(
       step: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
     ) {
-      const session = yield* getSession(sessionID)
-      if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
+      const initial = yield* getSession(sessionID)
+      if (initial.location.directory !== location.directory || initial.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
+      const cutoff = promotion ? yield* EventV2.latestSequence(db, initial.id) : -1
+      const pendingSelection = promotion
+        ? yield* SessionInput.selectionForPromotion(db, initial.id, promotion, cutoff)
+        : undefined
+      const turnSelection = pendingSelection ?? { agent: initial.agent, model: initial.model }
+      const initialAgent = yield* agents.select(turnSelection.agent)
+      const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(initialAgent), initial.id)
+      const promoted = yield* Effect.gen(function* () {
+        if (!promotion) return 0
+        let promoted = 0
+        if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, initial.id, cutoff)
+        if (promotion === "queue") {
+          promoted += Number(yield* SessionInput.promoteNextQueued(db, events, initial.id))
+          promoted += yield* SessionInput.promoteSteers(db, events, initial.id, cutoff)
+        }
+        return promoted
+      })
+      const projected = promoted > 0 ? yield* getSession(sessionID) : initial
+      const session = { ...projected, agent: turnSelection.agent, model: turnSelection.model }
       const agent = yield* agents.select(session.agent)
-      const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
-      let currentStep = step
-      if (promotion) {
-        const cutoff = yield* EventV2.latestSequence(db, session.id)
-        let promoted = 0
-        if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
-        if (promotion === "queue") {
-          promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
-          promoted += yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
-        }
-        if (promoted > 0) currentStep = 1
-      }
+      let currentStep = promoted > 0 ? 1 : step
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
       const model = yield* models.resolve(session)

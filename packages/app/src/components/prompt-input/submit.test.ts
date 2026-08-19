@@ -18,28 +18,39 @@ const optimistic: Array<{
   sessionID?: string
   message: {
     agent: string
-    model: { providerID: string; modelID: string }
-    variant?: string
+    model: { providerID: string; modelID: string; variant?: string }
   }
 }> = []
 const optimisticSeeded: boolean[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
+const promotedVariants: Array<string | null | undefined> = []
 const sentShell: Array<{ sessionID: string; id?: string; command: string }> = []
 const syncedDirectories: string[] = []
 const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
 const sentPrompts: string[] = []
 const promptInputs: unknown[] = []
 const sentCommands: unknown[] = []
+const interruptedSessions: string[] = []
+const selectionCalls: unknown[] = []
 const commands: Array<{ name: string }> = []
 let serverSessionSyncs = 0
+let syncedSession: {
+  id: string
+  agent?: string
+  model?: { providerID: string; id: string; variant?: string }
+} = { id: "session-1", agent: "agent", model: { providerID: "provider", id: "model" } }
 
 let params: { id?: string } = {}
 let search: { draftId?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
+let selectedVariant: string | null | undefined
 let permissionServer = "server-a"
 let createSessionGate: Promise<void> | undefined
+let localSessionReady = true
+let localSessionInitialized = true
+let modelSelectionReady = true
 
 let promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 const [promptStore, setPromptStore] = createStore<PromptStore>({
@@ -100,6 +111,15 @@ const clientFor = (directory: string) => {
         command: async (input: unknown) => {
           sentCommands.push(input)
         },
+        interrupt: async (input: { sessionID: string }) => {
+          interruptedSessions.push(input.sessionID)
+        },
+        switchAgent: async (input: unknown) => {
+          selectionCalls.push({ type: "agent", input })
+        },
+        switchModel: async (input: unknown) => {
+          selectionCalls.push({ type: "model", input })
+        },
         shell: async (input: { sessionID: string; id?: string; command: string }) => {
           sentShell.push(input)
         },
@@ -132,8 +152,7 @@ beforeAll(async () => {
     },
   }))
 
-  mock.module("@opencode-ai/ui/toast", () => ({
-    Toast: { Region: () => null },
+  mock.module("@/utils/toast", () => ({
     showToast: () => 0,
   }))
 
@@ -144,15 +163,19 @@ beforeAll(async () => {
   mock.module("@/context/local", () => ({
     useLocal: () => ({
       model: {
+        ready: () => modelSelectionReady,
         current: () => ({ id: "model", provider: { id: "provider" } }),
-        variant: { current: () => variant },
+        variant: { current: () => variant, selected: () => selectedVariant },
       },
       agent: {
         current: () => ({ name: "agent" }),
       },
       session: {
-        promote(directory: string, sessionID: string) {
+        ready: () => localSessionReady,
+        initialized: () => localSessionInitialized,
+        promote(directory: string, sessionID: string, state?: { variant?: string | null }) {
           promoted.push({ directory, sessionID })
+          promotedVariants.push(state?.variant)
         },
       },
     }),
@@ -235,7 +258,10 @@ beforeAll(async () => {
   mock.module("@/context/server-sync", () => ({
     useServerSync: () => () => ({
       session: {
-        remember: () => undefined,
+        get: () => syncedSession,
+        remember: (session: typeof syncedSession) => {
+          syncedSession = session
+        },
         set: () => undefined,
         sync: async () => {
           serverSessionSyncs++
@@ -286,10 +312,13 @@ beforeEach(() => {
   optimistic.length = 0
   optimisticSeeded.length = 0
   promoted.length = 0
+  promotedVariants.length = 0
   promotedDrafts.length = 0
   sentPrompts.length = 0
   promptInputs.length = 0
   sentCommands.length = 0
+  interruptedSessions.length = 0
+  selectionCalls.length = 0
   commands.length = 0
   promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
   params = {}
@@ -298,9 +327,14 @@ beforeEach(() => {
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
+  selectedVariant = undefined
   permissionServer = "server-a"
   createSessionGate = undefined
+  localSessionReady = true
+  localSessionInitialized = true
+  modelSelectionReady = true
   serverSessionSyncs = 0
+  syncedSession = { id: "session-1", agent: "agent", model: { providerID: "provider", id: "model" } }
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
@@ -494,6 +528,40 @@ describe("prompt submit worktree selection", () => {
     ])
   })
 
+  test("submits changed selection atomically with an existing session prompt", async () => {
+    params = { id: "session-1" }
+    variant = "high"
+    syncedSession = { id: "session-1", agent: "plan", model: { providerID: "openai", id: "gpt" } }
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect(selectionCalls).toEqual([])
+    expect(promptInputs[0]).toMatchObject({
+      selection: {
+        agent: "agent",
+        model: { providerID: "provider", id: "model", variant: "high" },
+      },
+    })
+    expect(sentPrompts).toEqual(["/repo/main"])
+  })
+
   test("submits slash commands through the current session API", async () => {
     params = { id: "session-1" }
     variant = "high"
@@ -536,8 +604,9 @@ describe("prompt submit worktree selection", () => {
   test("uses an injected model selection", async () => {
     params = { id: "session-1" }
     const model = {
+      ready: () => true,
       current: () => ({ id: "draft-model", provider: { id: "draft-provider" } }),
-      variant: { current: () => "draft-variant" },
+      variant: { current: () => "draft-variant", selected: () => undefined },
     } as unknown as ModelSelection
     const submit = createPromptSubmit({
       prompt,
@@ -564,6 +633,141 @@ describe("prompt submit worktree selection", () => {
         model: { providerID: "draft-provider", modelID: "draft-model", variant: "draft-variant" },
       },
     })
+  })
+
+  test("sends explicit default variant on optimistic prompts", async () => {
+    params = { id: "session-1" }
+    selectedVariant = null
+
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(optimistic).toHaveLength(1)
+    expect(optimistic[0]).toMatchObject({
+      message: {
+        agent: "agent",
+        model: { providerID: "provider", modelID: "model", variant: "default" },
+      },
+    })
+  })
+
+  test("requires persisted session and model selections before submitting an existing session", async () => {
+    params = { id: "session-1" }
+    variant = "high"
+
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    localSessionReady = false
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    expect(sentPrompts).toEqual([])
+    expect(optimistic).toEqual([])
+
+    localSessionReady = true
+    localSessionInitialized = false
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    expect(sentPrompts).toEqual([])
+    expect(optimistic).toEqual([])
+
+    localSessionInitialized = true
+    modelSelectionReady = false
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    expect(sentPrompts).toEqual([])
+    expect(optimistic).toEqual([])
+
+    selectedVariant = null
+    modelSelectionReady = true
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect((promptInputs[0] as { variant?: string }).variant).toBe("default")
+  })
+
+  test("allows stopping while persisted model selection is loading", async () => {
+    params = { id: "session-1" }
+    promptValue = [{ type: "text", content: "", start: 0, end: 0 }]
+    modelSelectionReady = false
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect(interruptedSessions).toEqual(["session-1"])
+  })
+
+  test("preserves explicit default when promoting a new session", async () => {
+    selectedVariant = null
+
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(promotedVariants).toEqual([null])
+    expect(optimistic[0]?.message.model.variant).toBe("default")
   })
 
   test("seeds new sessions before optimistic prompts are added", async () => {

@@ -3,50 +3,38 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, startTransition } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createQuery } from "@tanstack/solid-query"
 import { useModels } from "@/context/models"
 import { useSettings } from "@/context/settings"
 import { useProviders } from "@/hooks/use-providers"
 import { resolveDefaultModel } from "@/hooks/provider-catalog"
 import { Persist, persisted } from "@/utils/persist"
 import { hasCustomAgent, resolveAgent } from "./local-agent"
-import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
+import {
+  cycleModelVariant,
+  getConfiguredAgentVariant,
+  resolveModelVariant,
+  resolveModelVariantFromMessage,
+} from "@opencode-ai/core/util/model-variant"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useServerSDK } from "./server-sdk"
+import { useServerSync } from "./server-sync"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+import { pathKey } from "@/utils/path-key"
+import { migrateModelSelection, type ModelKey, type ModelSelectionState } from "./model-selection-migration"
 
-export type ModelKey = { providerID: string; modelID: string; variant?: string }
+export type { ModelKey } from "./model-selection-migration"
 
-type State = {
-  agent?: string
-  model?: ModelKey
-  variant?: string | null
-}
+type State = ModelSelectionState
 
 type Saved = {
   session: Record<string, State | undefined>
 }
 
-const WORKSPACE_KEY = "__workspace__"
 const handoff = new Map<string, State>()
 
 const handoffKey = (scope: ServerScope, dir: string, id: string) => ScopedKey.from(scope, dir, id)
-
-const migrate = (value: unknown) => {
-  if (!value || typeof value !== "object") return { session: {} }
-
-  const item = value as {
-    session?: Record<string, State | undefined>
-    pick?: Record<string, State | undefined>
-  }
-
-  if (item.session && typeof item.session === "object") return { session: item.session }
-  if (!item.pick || typeof item.pick !== "object") return { session: {} }
-
-  return {
-    session: Object.fromEntries(Object.entries(item.pick).filter(([key]) => key !== WORKSPACE_KEY)),
-  }
-}
 
 const clone = (value: State | undefined) => {
   if (!value) return
@@ -63,9 +51,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const sync = useSync()
     const serverSDK = useServerSDK()
+    const serverSync = useServerSync()
     const providers = useProviders(() => sdk().directory)
     const models = useModels()
     const settings = useSettings()
+    const agentsQuery = createQuery(() => serverSync().queryOptions.agents(pathKey(sdk().directory)))
 
     const id = createMemo(() => params.id || undefined)
     const list = createMemo(() => sync().data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))
@@ -75,7 +65,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const [saved, setSaved, , savedReady] = persisted(
       {
         ...Persist.serverWorkspace(serverSDK().scope, sdk().directory, "model-selection", ["model-selection.v1"]),
-        migrate,
+        migrate: migrateModelSelection,
       },
       createStore<Saved>({
         session: {},
@@ -134,6 +124,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     createEffect(() => {
       const session = id()
       if (!session) return
+      if (!savedReady()) return
 
       const key = handoffKey(serverSDK().scope, sdk().directory, session)
       const next = handoff.get(key)
@@ -192,19 +183,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return
         }
 
+        const prev = scope()
         batch(() => {
           setStore("current", item.name)
           setStore("last", {
             type: "agent",
             agent: item.name,
             model: item.model,
-            variant: item.variant ?? null,
+            variant: prev?.variant,
           })
-          const prev = scope()
           const next = {
             agent: item.name,
             model: item.model ?? prev?.model,
-            variant: item.variant ?? prev?.variant,
+            variant: prev?.variant,
           } satisfies State
           const session = id()
           if (session) {
@@ -245,8 +236,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const model = current()
       if (!item || !model) return
       return getConfiguredAgentVariant({
-        agent: { model: item.model, variant: item.variant },
-        model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
+        configured: item.model
+          ? { providerID: item.model.providerID, id: item.model.modelID, variant: item.variant }
+          : undefined,
+        model: { providerID: model.provider.id, id: model.id, variants: model.variants },
       })
     }
 
@@ -325,12 +318,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         configured,
         selected,
         current() {
+          const selected = this.selected()
           const resolved = resolveModelVariant({
             variants: this.list(),
-            selected: this.selected(),
+            selected,
             configured: this.configured(),
           })
           if (resolved) return resolved
+          if (selected === null) return
           const model = current()
           if (!model) return
           const saved = models.variant.get({ providerID: model.provider.id, modelID: model.id })
@@ -358,6 +353,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }),
           )
         },
+        clear() {
+          startTransition(() =>
+            batch(() => {
+              const model = current()
+              setStore("last", {
+                type: "variant",
+                agent: agent.current()?.name,
+                model: model ? { providerID: model.provider.id, modelID: model.id } : null,
+                variant: undefined,
+              })
+              write({ variant: undefined })
+            }),
+          )
+        },
         cycle() {
           const items = this.list()
           if (items.length === 0) return
@@ -378,6 +387,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       agent,
       session: {
         ready: savedReady,
+        initialized() {
+          return scope() !== undefined
+        },
+        initialize() {
+          const session = id()
+          if (!session || scope() !== undefined) return
+          if (agentsQuery.isLoading || !serverSync().child(sdk().directory)[0].provider_ready) return
+          setSaved("session", session, {})
+        },
         reset() {
           setStore({ draft: undefined, promoting: undefined })
         },
@@ -387,7 +405,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const key = handoffKey(serverSDK().scope, dir, session)
           handoff.set(key, next)
 
-          if (dir === sdk().directory) {
+          if (dir === sdk().directory && savedReady()) {
             setSaved("session", session, next)
           }
 
@@ -401,10 +419,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (saved.session[session] !== undefined) return
           if (handoff.has(handoffKey(serverSDK().scope, sdk().directory, session))) return
 
+          const restoredAgent = agentsQuery.data?.find((item) => item.name === msg.agent)
+          const restoredModel = models.find(msg.model)
+          if (!restoredAgent || !restoredModel) return
+          const configured = getConfiguredAgentVariant({
+            configured: restoredAgent.model
+              ? {
+                  providerID: restoredAgent.model.providerID,
+                  id: restoredAgent.model.modelID,
+                  variant: restoredAgent.variant,
+                }
+              : undefined,
+            model: {
+              providerID: restoredModel.provider.id,
+              id: restoredModel.id,
+              variants: restoredModel.variants,
+            },
+          })
+
           setSaved("session", session, {
             agent: msg.agent,
             model: msg.model,
-            variant: msg.model?.variant ?? null,
+            variant: resolveModelVariantFromMessage({ variant: msg.model.variant, configured }),
           })
         },
       },

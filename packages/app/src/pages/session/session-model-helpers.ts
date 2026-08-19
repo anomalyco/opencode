@@ -2,6 +2,7 @@ import type { UserMessage } from "@opencode-ai/sdk/v2"
 
 type Local = {
   session: {
+    initialize(): void
     reset(): void
     restore(msg: UserMessage): void
   }
@@ -12,8 +13,9 @@ type ModelSelection = {
     current(): { id: string; provider: { id: string } } | undefined
     set(model: { providerID: string; modelID: string }): void
     variant: {
-      current(): string | undefined
+      selected(): string | null | undefined
       set(variant: string | undefined): void
+      clear(): void
     }
   }
 }
@@ -31,6 +33,7 @@ export const resetSessionModel = (local: Local) => {
 
 export const syncSessionModel = (local: Local, msg: UserMessage) => {
   local.session.restore(msg)
+  local.session.initialize()
 }
 
 export const syncPromptModel = (local: ModelSelection, prompt: PromptState) => {
@@ -39,7 +42,7 @@ export const syncPromptModel = (local: ModelSelection, prompt: PromptState) => {
   const next = {
     providerID: model.provider.id,
     modelID: model.id,
-    variant: local.model.variant.current(),
+    variant: local.model.variant.selected(),
   }
   const current = prompt.model.current()
   if (current?.providerID === next.providerID && current.modelID === next.modelID && current.variant === next.variant)
@@ -54,10 +57,11 @@ export const restorePromptModel = (local: ModelSelection, prompt: PromptState) =
   if (
     current?.provider.id === model.providerID &&
     current.id === model.modelID &&
-    local.model.variant.current() === (model.variant ?? undefined)
+    local.model.variant.selected() === model.variant
   )
     return true
   local.model.set({ providerID: model.providerID, modelID: model.modelID })
-  local.model.variant.set(model.variant ?? undefined)
+  if (model.variant === undefined) local.model.variant.clear()
+  if (model.variant !== undefined) local.model.variant.set(model.variant ?? undefined)
   return true
 }

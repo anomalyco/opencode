@@ -630,6 +630,59 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("runs a promoted prompt with its admitted agent and model selection", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const agent = AgentV2.ID.make("review")
+      skillBaselines.set(agent, "Review guidance")
+      skillBaselines.set(AgentV2.ID.make("later"), "Later guidance")
+      let switched = false
+      yield* events.listen((event) => {
+        if (event.type !== SessionEvent.Prompted.type || switched) return Effect.void
+        switched = true
+        return Effect.gen(function* () {
+          yield* events.publish(SessionEvent.AgentSwitched, {
+            sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(1),
+            agent: "later",
+          })
+          yield* events.publish(SessionEvent.ModelSwitched, {
+            sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(2),
+            model: { providerID: ProviderV2.ID.make("fake"), id: ModelV2.ID.make("fake-model") },
+          })
+        })
+      })
+      requests.length = 0
+
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Review this change" }),
+        selection: {
+          agent,
+          model: {
+            providerID: ProviderV2.ID.make("fake"),
+            id: ModelV2.ID.make("replacement"),
+          },
+        },
+        resume: false,
+      })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.model).toBe(replacementModel)
+      expect(requests[0]?.system.map((part) => part.text)).toEqual(["Initial context\n\nReview guidance"])
+      expect(yield* session.get(sessionID)).toMatchObject({
+        agent: "later",
+        model: { id: "fake-model", providerID: "fake" },
+      })
+    }),
+  )
+
   it.effect("streams one request with registry definitions from chronological V2 user history", () =>
     Effect.gen(function* () {
       yield* setup
@@ -2446,9 +2499,18 @@ describe("SessionRunnerLLM", () => {
       const defect = new Error("fail after prompt promotion")
       let fail = true
       yield* events.project(SessionEvent.Prompted, () => (fail ? Effect.die(defect) : Effect.void))
-      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Recover promoted input" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Recover promoted input" }),
+        selection: {
+          agent: AgentV2.ID.make("review"),
+          model: { providerID: ProviderV2.ID.make("fake"), id: ModelV2.ID.make("replacement") },
+        },
+        resume: false,
+      })
 
       expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
+      expect(yield* session.get(sessionID)).not.toMatchObject({ agent: "review", model: { id: "replacement" } })
       fail = false
       requests.length = 0
       response = [
@@ -2461,6 +2523,7 @@ describe("SessionRunnerLLM", () => {
       while (requests.length === 0) yield* Effect.yieldNow
 
       expect(userTexts(requests[0]!)).toEqual(["Recover promoted input"])
+      expect(yield* session.get(sessionID)).toMatchObject({ agent: "review", model: { id: "replacement" } })
     }),
   )
 

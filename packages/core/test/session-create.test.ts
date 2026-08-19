@@ -350,6 +350,21 @@ describe("SessionV2.create", () => {
     }),
   )
 
+  it.effect("ignores an agent switch when the selected agent is unchanged", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const agent = AgentV2.ID.make("plan")
+      const created = yield* session.create({ location, agent })
+
+      yield* session.switchAgent({ sessionID: created.id, agent })
+
+      const { db } = yield* Database.Service
+      expect(
+        yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
+      ).toHaveLength(1)
+    }),
+  )
+
   it.effect("switches the selected model through the durable Session event", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service

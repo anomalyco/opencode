@@ -43,6 +43,7 @@ type LegacyPrompt = {
   agent?: string
   model?: { providerID: string; modelID: string }
   variant?: string
+  selection?: { agent: string; model: { providerID: string; id: string; variant?: string } }
   legacyParts?: (TextPartInput | FilePartInput | AgentPartInput)[]
 }
 type LegacyLocation = { directory?: string }
@@ -197,6 +198,8 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       async interrupt(value: Parameters<ServerApi["session"]["interrupt"]>[0]) {
         await legacy().session.abort(value)
       },
+      async switchAgent() {},
+      async switchModel() {},
       async prompt(value: SessionPromptInput & LegacyPrompt) {
         await legacy().session.promptAsync({
           sessionID: value.sessionID,

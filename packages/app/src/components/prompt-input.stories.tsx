@@ -59,6 +59,7 @@ function PromptInputExample() {
     },
     model: {
       selection: model,
+      ready: true,
       paid: true,
       loading: false,
     },
@@ -140,6 +141,7 @@ function PromptInputWithOpenDock() {
         current: () => ({ id: "claude-3-7-sonnet", name: "Claude 3.7 Sonnet", provider: { id: "anthropic" } }),
         variant: { list: () => [], current: () => undefined, set: () => {} },
       },
+      ready: true,
       paid: true,
       loading: false,
     },

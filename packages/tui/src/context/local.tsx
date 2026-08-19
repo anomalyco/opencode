@@ -8,6 +8,7 @@ import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
+import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@opencode-ai/core/util/model-variant"
 import { readJson, writeJsonAtomic } from "../util/persistence"
 import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
@@ -152,7 +153,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           providerID: string
           modelID: string
         }[]
-        variant: Record<string, string | undefined>
+        variant: Record<string, string | null | undefined>
       }>({
         ready: false,
         model: {},
@@ -185,8 +186,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const value = x as Record<string, unknown>
           if (Array.isArray(value.recent)) setModelStore("recent", value.recent)
           if (Array.isArray(value.favorite)) setModelStore("favorite", value.favorite)
-          if (typeof value.variant === "object" && value.variant !== null)
-            setModelStore("variant", value.variant as Record<string, string | undefined>)
+          if (typeof value.variant === "object" && value.variant !== null) {
+            const variant = Object.fromEntries(
+              Object.entries(value.variant).map(([key, value]) => [
+                key,
+                value === "default" ? null : typeof value === "string" || value === null ? value : undefined,
+              ]),
+            ) as Record<string, string | null | undefined>
+            setModelStore("variant", variant)
+            if (Object.values(value.variant).includes("default")) state.pending = true
+          }
         })
         .catch(() => {})
         .finally(() => {
@@ -360,6 +369,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         variant: {
+          configured() {
+            const a = agent.current()
+            const m = currentModel()
+            if (!m || !a) return undefined
+            const provider = sync.data.provider.find((x) => x.id === m.providerID)
+            const info = provider?.models[m.modelID]
+            return getConfiguredAgentVariant({
+              configured: a.model
+                ? { providerID: a.model.providerID, id: a.model.modelID, variant: a.variant }
+                : undefined,
+              model: { providerID: m.providerID, id: m.modelID, variants: info?.variants },
+            })
+          },
           selected() {
             const m = currentModel()
             if (!m) return undefined
@@ -367,10 +389,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return modelStore.variant[key]
           },
           current() {
-            const v = this.selected()
-            if (!v) return undefined
-            if (!this.list().includes(v)) return undefined
-            return v
+            return resolveModelVariant({
+              variants: this.list(),
+              selected: this.selected(),
+              configured: this.configured(),
+            })
           },
           list() {
             const m = currentModel()
@@ -384,23 +407,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const m = currentModel()
             if (!m) return
             const key = `${m.providerID}/${m.modelID}`
-            setModelStore("variant", key, value ?? "default")
+            setModelStore("variant", key, value ?? null)
+            save()
+          },
+          clear() {
+            const m = currentModel()
+            if (!m) return
+            const key = `${m.providerID}/${m.modelID}`
+            setModelStore("variant", key, undefined)
             save()
           },
           cycle() {
             const variants = this.list()
             if (variants.length === 0) return
-            const current = this.current()
-            if (!current) {
-              this.set(variants[0])
-              return
-            }
-            const index = variants.indexOf(current)
-            if (index === -1 || index === variants.length - 1) {
-              this.set(undefined)
-              return
-            }
-            this.set(variants[index + 1])
+            this.set(
+              cycleModelVariant({
+                variants,
+                selected: this.selected(),
+                configured: this.configured(),
+              }),
+            )
           },
         },
       }

@@ -18,6 +18,9 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { AgentV2 } from "@opencode-ai/core/agent"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "./lib/effect"
 
 const executionCalls: SessionV2.ID[] = []
@@ -50,6 +53,15 @@ const it = testEffect(
 )
 const sessionID = SessionV2.ID.make("ses_prompt_test")
 const messageID = SessionMessage.ID.create()
+const promptSelection = (agent: string) =>
+  SessionInput.Selection.make({
+    agent: AgentV2.ID.make(agent),
+    model: ModelV2.Ref.make({
+      providerID: ProviderV2.ID.make("anthropic"),
+      id: ModelV2.ID.make("sonnet"),
+      variant: ModelV2.VariantID.make("high"),
+    }),
+  })
 
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
@@ -159,6 +171,30 @@ describe("SessionV2.prompt", () => {
         prompt: { text: "Fix the failing tests" },
         delivery: "steer",
       })
+    }),
+  )
+
+  it.effect("applies an admitted selection only when the prompt is promoted", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const selection = promptSelection("review")
+
+      const message = yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Review this change" }),
+        selection,
+        resume: false,
+      })
+
+      expect(message).toMatchObject({ selection })
+      expect(yield* session.get(sessionID)).not.toMatchObject(selection)
+
+      yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
+
+      expect(yield* session.get(sessionID)).toMatchObject(selection)
     }),
   )
 
@@ -331,6 +367,33 @@ describe("SessionV2.prompt", () => {
           sessionID,
           prompt: Prompt.make({ text: "Fix the failing tests" }),
           delivery: "queue",
+          resume: false,
+        })
+        .pipe(Effect.flip)
+
+      expect(failure._tag).toBe("Session.PromptConflictError")
+    }),
+  )
+
+  it.effect("rejects reuse of one ID with a different selection", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const prompt = Prompt.make({ text: "Fix the failing tests" })
+
+      yield* session.prompt({
+        id: messageID,
+        sessionID,
+        prompt,
+        selection: promptSelection("build"),
+        resume: false,
+      })
+      const failure = yield* session
+        .prompt({
+          id: messageID,
+          sessionID,
+          prompt,
+          selection: promptSelection("plan"),
           resume: false,
         })
         .pipe(Effect.flip)

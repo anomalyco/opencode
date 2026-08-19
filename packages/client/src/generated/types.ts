@@ -399,6 +399,10 @@ export type SessionsPromptInput = {
       }>
     }
     readonly delivery?: "steer" | "queue" | null
+    readonly selection?: {
+      readonly agent: string
+      readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    } | null
     readonly resume?: boolean | null
   }["id"]
   readonly prompt: {
@@ -417,6 +421,10 @@ export type SessionsPromptInput = {
       }>
     }
     readonly delivery?: "steer" | "queue" | null
+    readonly selection?: {
+      readonly agent: string
+      readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    } | null
     readonly resume?: boolean | null
   }["prompt"]
   readonly delivery?: {
@@ -435,8 +443,34 @@ export type SessionsPromptInput = {
       }>
     }
     readonly delivery?: "steer" | "queue" | null
+    readonly selection?: {
+      readonly agent: string
+      readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    } | null
     readonly resume?: boolean | null
   }["delivery"]
+  readonly selection?: {
+    readonly id?: string | null
+    readonly prompt: {
+      readonly text: string
+      readonly files?: ReadonlyArray<{
+        readonly uri: string
+        readonly name?: string
+        readonly description?: string
+        readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+      readonly agents?: ReadonlyArray<{
+        readonly name: string
+        readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    }
+    readonly delivery?: "steer" | "queue" | null
+    readonly selection?: {
+      readonly agent: string
+      readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    } | null
+    readonly resume?: boolean | null
+  }["selection"]
   readonly resume?: {
     readonly id?: string | null
     readonly prompt: {
@@ -453,6 +487,10 @@ export type SessionsPromptInput = {
       }>
     }
     readonly delivery?: "steer" | "queue" | null
+    readonly selection?: {
+      readonly agent: string
+      readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    } | null
     readonly resume?: boolean | null
   }["resume"]
 }
@@ -477,6 +515,10 @@ export type SessionsPromptOutput = {
       }>
     }
     readonly delivery: "steer" | "queue"
+    readonly selection?: {
+      readonly agent: string
+      readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
     readonly timeCreated: number
     readonly promotedSeq?: number
   }
@@ -748,6 +790,10 @@ export type SessionsHistoryOutput = {
             }>
           }
           readonly delivery: "steer" | "queue"
+          readonly selection?: {
+            readonly agent: string
+            readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+          }
         }
       }
     | {
@@ -775,6 +821,10 @@ export type SessionsHistoryOutput = {
             }>
           }
           readonly delivery: "steer" | "queue"
+          readonly selection?: {
+            readonly agent: string
+            readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+          }
         }
       }
     | {
@@ -1206,6 +1256,10 @@ export type SessionsEventsOutput =
           }>
         }
         readonly delivery: "steer" | "queue"
+        readonly selection?: {
+          readonly agent: string
+          readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        }
       }
     }
   | {
@@ -1233,6 +1287,10 @@ export type SessionsEventsOutput =
           }>
         }
         readonly delivery: "steer" | "queue"
+        readonly selection?: {
+          readonly agent: string
+          readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        }
       }
     }
   | {

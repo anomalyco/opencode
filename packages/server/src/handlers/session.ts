@@ -146,6 +146,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 id: ctx.payload.id,
                 prompt: ctx.payload.prompt,
                 delivery: ctx.payload.delivery,
+                selection: ctx.payload.selection,
                 resume: ctx.payload.resume,
               })
               .pipe(

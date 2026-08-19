@@ -753,3 +753,26 @@ it.instance(
     },
   },
 )
+
+it.instance(
+  "agent variant can be set from config",
+  () =>
+    Effect.gen(function* () {
+      const build = yield* load((svc) => svc.get("build"))
+      expect(build?.variant).toBe("high")
+    }),
+  {
+    config: {
+      agent: {
+        build: { variant: "high" },
+      },
+    },
+  },
+)
+
+it.instance("agent variant defaults to undefined when not set", () =>
+  Effect.gen(function* () {
+    const build = yield* load((svc) => svc.get("build"))
+    expect(build?.variant).toBeUndefined()
+  }),
+)

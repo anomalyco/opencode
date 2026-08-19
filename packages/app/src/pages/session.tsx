@@ -563,21 +563,20 @@ export default function Page() {
     if (path) void file.load(path)
   })
 
-  createEffect(
-    on(
-      () => lastUserMessage()?.id,
-      () => {
-        const msg = lastUserMessage()
-        if (!msg) return
-        syncSessionModel(local, msg)
-      },
-    ),
-  )
+  createEffect(() => {
+    if (!local.session.ready() || !messagesReady()) return
+    const msg = lastUserMessage()
+    if (!msg) {
+      local.session.initialize()
+      return
+    }
+    syncSessionModel(local, msg)
+  })
 
   let restoredModelSession: string | undefined
   createEffect(() => {
     const id = params.id
-    if (!id || !prompt.ready() || !local.session.ready()) return
+    if (!id || !prompt.ready() || !local.session.ready() || !local.session.initialized()) return
     if (restoredModelSession !== id) {
       restoredModelSession = id
       if (restorePromptModel(local, prompt)) return

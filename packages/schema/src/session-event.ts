@@ -12,6 +12,7 @@ import { SessionID } from "./session-id"
 import { Location } from "./location"
 import { SessionMessage } from "./session-message"
 import { Revert } from "./revert"
+import { Selection } from "./session-input"
 
 export { FileAttachment }
 
@@ -33,6 +34,7 @@ const PromptFields = {
   messageID: SessionMessage.ID,
   prompt: Prompt,
   delivery: Delivery,
+  selection: Selection.pipe(optional),
 }
 
 const options = {

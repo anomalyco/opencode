@@ -1,5 +1,12 @@
 # V2 Schema Changelog
 
+## 2026-08-15: Admit Prompt Selection Atomically
+
+- Add an optional complete agent and model selection snapshot to current prompt admission, durable prompt events, admission receipts, and generated clients.
+- Persist the snapshot with `session_input` and apply it to the Session only when that input is promoted into model-visible history.
+- Apply selection, input promotion, and user-message projection in the same durable event transaction, then reload the Session before model execution.
+- Preserve historical events and inputs without selection; exact retries now include selection in their conflict identity.
+
 ## 2026-06-26: Add Finite Session History
 
 - Add `GET /api/session/:sessionID/history` and generated Promise, Effect, and legacy JavaScript client methods.

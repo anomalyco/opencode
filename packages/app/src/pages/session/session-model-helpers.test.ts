@@ -13,7 +13,7 @@ const message = (input?: { agent?: string; model?: UserMessage["model"] }) =>
   }) as UserMessage
 
 describe("syncSessionModel", () => {
-  test("restores the last message through session state", () => {
+  test("initializes session state after attempting message restoration", () => {
     const calls: unknown[] = []
 
     syncSessionModel(
@@ -21,6 +21,9 @@ describe("syncSessionModel", () => {
         session: {
           restore(value) {
             calls.push(value)
+          },
+          initialize() {
+            calls.push("initialize")
           },
           reset() {},
         },
@@ -30,6 +33,7 @@ describe("syncSessionModel", () => {
 
     expect(calls).toEqual([
       message({ model: { providerID: "anthropic", modelID: "claude-sonnet-4", variant: "high" } }),
+      "initialize",
     ])
   })
 })
@@ -43,6 +47,7 @@ describe("resetSessionModel", () => {
         reset() {
           calls.push("reset")
         },
+        initialize() {},
         restore() {},
       },
     })
@@ -52,7 +57,7 @@ describe("resetSessionModel", () => {
 })
 
 describe("syncPromptModel", () => {
-  test("stores the effective session model in prompt state", () => {
+  test("stores the selected session variant in prompt state", () => {
     const calls: unknown[] = []
 
     syncPromptModel(
@@ -60,7 +65,7 @@ describe("syncPromptModel", () => {
         model: {
           current: () => ({ id: "claude-sonnet-4", provider: { id: "anthropic" } }),
           set() {},
-          variant: { current: () => "high", set() {} },
+          variant: { selected: () => undefined, set() {}, clear() {} },
         },
       },
       {
@@ -71,7 +76,7 @@ describe("syncPromptModel", () => {
       },
     )
 
-    expect(calls).toEqual([{ providerID: "anthropic", modelID: "claude-sonnet-4", variant: "high" }])
+    expect(calls).toEqual([{ providerID: "anthropic", modelID: "claude-sonnet-4", variant: undefined }])
   })
 
   test("does not rewrite an unchanged prompt model", () => {
@@ -83,7 +88,7 @@ describe("syncPromptModel", () => {
         model: {
           current: () => ({ id: model.modelID, provider: { id: model.providerID } }),
           set() {},
-          variant: { current: () => model.variant, set() {} },
+          variant: { selected: () => model.variant, set() {}, clear() {} },
         },
       },
       {
@@ -107,8 +112,9 @@ describe("restorePromptModel", () => {
           current: () => ({ id: "gpt", provider: { id: "openai" } }),
           set: (model) => calls.push(model),
           variant: {
-            current: () => undefined,
+            selected: () => undefined,
             set: (variant) => calls.push(variant),
+            clear: () => calls.push("clear"),
           },
         },
       },
@@ -124,6 +130,58 @@ describe("restorePromptModel", () => {
     expect(calls).toEqual([{ providerID: "anthropic", modelID: "claude" }, "high"])
   })
 
+  test("restores an inherited variant without selecting Default", () => {
+    const calls: unknown[] = []
+    const restored = restorePromptModel(
+      {
+        model: {
+          current: () => ({ id: "gpt", provider: { id: "openai" } }),
+          set: (model) => calls.push(model),
+          variant: {
+            selected: () => null,
+            set: (variant) => calls.push(variant),
+            clear: () => calls.push("clear"),
+          },
+        },
+      },
+      {
+        model: {
+          current: () => ({ providerID: "anthropic", modelID: "claude", variant: undefined }),
+          set() {},
+        },
+      },
+    )
+
+    expect(restored).toBe(true)
+    expect(calls).toEqual([{ providerID: "anthropic", modelID: "claude" }, "clear"])
+  })
+
+  test("restores an explicit Default variant", () => {
+    const calls: unknown[] = []
+    const restored = restorePromptModel(
+      {
+        model: {
+          current: () => ({ id: "gpt", provider: { id: "openai" } }),
+          set: (model) => calls.push(model),
+          variant: {
+            selected: () => undefined,
+            set: (variant) => calls.push(variant),
+            clear: () => calls.push("clear"),
+          },
+        },
+      },
+      {
+        model: {
+          current: () => ({ providerID: "anthropic", modelID: "claude", variant: null }),
+          set() {},
+        },
+      },
+    )
+
+    expect(restored).toBe(true)
+    expect(calls).toEqual([{ providerID: "anthropic", modelID: "claude" }, undefined])
+  })
+
   test("does nothing without a persisted prompt model", () => {
     const calls: unknown[] = []
     const restored = restorePromptModel(
@@ -132,8 +190,9 @@ describe("restorePromptModel", () => {
           current: () => ({ id: "gpt", provider: { id: "openai" } }),
           set: (model) => calls.push(model),
           variant: {
-            current: () => undefined,
+            selected: () => undefined,
             set: (variant) => calls.push(variant),
+            clear: () => calls.push("clear"),
           },
         },
       },

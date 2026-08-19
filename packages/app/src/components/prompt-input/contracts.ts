@@ -21,6 +21,7 @@ export type PromptInputControls = {
   }
   model: {
     selection: ReturnType<typeof useLocal>["model"]
+    ready: boolean
     paid: boolean
     loading: boolean
   }

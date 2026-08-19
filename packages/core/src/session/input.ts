@@ -2,7 +2,7 @@ export * as SessionInput from "./input"
 
 import { and, asc, eq, isNull, lte } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
-import { Admitted, Delivery } from "@opencode-ai/schema/session-input"
+import { Admitted, Delivery, Selection } from "@opencode-ai/schema/session-input"
 import type { Database } from "../database/database"
 import type { EventV2 } from "../event"
 import { SessionEvent } from "./event"
@@ -13,10 +13,12 @@ import { SessionInputTable, SessionMessageTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
-export { Admitted, Delivery }
+export { Admitted, Delivery, Selection }
 
 const decodePrompt = Schema.decodeUnknownSync(Prompt)
 const encodePrompt = Schema.encodeSync(Prompt)
+const decodeSelection = Schema.decodeUnknownSync(Selection)
+const encodeSelection = Schema.encodeSync(Selection)
 
 const fromRow = (row: typeof SessionInputTable.$inferSelect): Admitted =>
   Admitted.make({
@@ -25,6 +27,7 @@ const fromRow = (row: typeof SessionInputTable.$inferSelect): Admitted =>
     sessionID: SessionSchema.ID.make(row.session_id),
     prompt: decodePrompt(row.prompt),
     delivery: row.delivery,
+    ...(row.selection === null ? {} : { selection: decodeSelection(row.selection) }),
     timeCreated: DateTime.makeUnsafe(row.time_created),
     ...(row.promoted_seq === null ? {} : { promotedSeq: row.promoted_seq }),
   })
@@ -46,6 +49,7 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
     readonly sessionID: SessionSchema.ID
     readonly prompt: Prompt
     readonly delivery: Delivery
+    readonly selection?: Selection
   },
 ) {
   const existing = yield* find(db, input.id)
@@ -58,6 +62,7 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
       timestamp,
       prompt: input.prompt,
       delivery: input.delivery,
+      selection: input.selection,
     })
     .pipe(
       Effect.flatMap((event) =>
@@ -70,6 +75,7 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
                 sessionID: input.sessionID,
                 prompt: input.prompt,
                 delivery: input.delivery,
+                selection: input.selection,
                 timeCreated: timestamp,
               }),
             ),
@@ -88,6 +94,7 @@ export const projectAdmitted = Effect.fn("SessionInput.projectAdmitted")(functio
     readonly sessionID: SessionSchema.ID
     readonly prompt: Prompt
     readonly delivery: Delivery
+    readonly selection?: Selection
     readonly timeCreated: DateTime.Utc
   },
 ) {
@@ -106,6 +113,7 @@ export const projectAdmitted = Effect.fn("SessionInput.projectAdmitted")(functio
       admitted_seq: input.admittedSeq,
       prompt: encodePrompt(input.prompt),
       delivery: input.delivery,
+      selection: input.selection,
       time_created: DateTime.toEpochMillis(input.timeCreated),
     })
     .onConflictDoNothing()
@@ -122,6 +130,7 @@ export const projectPrompted = Effect.fn("SessionInput.projectPrompted")(functio
     readonly sessionID: SessionSchema.ID
     readonly prompt: Prompt
     readonly delivery: Delivery
+    readonly selection?: Selection
     readonly timeCreated: DateTime.Utc
     readonly promotedSeq: number
   },
@@ -159,6 +168,7 @@ export const projectPrompted = Effect.fn("SessionInput.projectPrompted")(functio
       session_id: input.sessionID,
       prompt: encodePrompt(input.prompt),
       delivery: input.delivery,
+      selection: input.selection,
       admitted_seq: input.promotedSeq,
       promoted_seq: input.promotedSeq,
       time_created: DateTime.toEpochMillis(input.timeCreated),
@@ -188,18 +198,73 @@ export const hasPending = Effect.fn("SessionInput.hasPending")(function* (
   return row !== undefined
 })
 
+const pendingSteers = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID, cutoff: number) {
+  return yield* db
+    .select()
+    .from(SessionInputTable)
+    .where(
+      and(
+        eq(SessionInputTable.session_id, sessionID),
+        isNull(SessionInputTable.promoted_seq),
+        eq(SessionInputTable.delivery, "steer"),
+        lte(SessionInputTable.admitted_seq, cutoff),
+      ),
+    )
+    .orderBy(asc(SessionInputTable.admitted_seq))
+    .all()
+    .pipe(Effect.orDie)
+})
+
+const nextQueued = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+  return yield* db
+    .select()
+    .from(SessionInputTable)
+    .where(
+      and(
+        eq(SessionInputTable.session_id, sessionID),
+        isNull(SessionInputTable.promoted_seq),
+        eq(SessionInputTable.delivery, "queue"),
+      ),
+    )
+    .orderBy(asc(SessionInputTable.admitted_seq))
+    .limit(1)
+    .get()
+    .pipe(Effect.orDie)
+})
+
+export const selectionForPromotion = Effect.fn("SessionInput.selectionForPromotion")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  delivery: Delivery,
+  cutoff: number,
+) {
+  const rows =
+    delivery === "steer"
+      ? yield* pendingSteers(db, sessionID, cutoff)
+      : [yield* nextQueued(db, sessionID), ...(yield* pendingSteers(db, sessionID, cutoff))].filter(
+          (row): row is typeof SessionInputTable.$inferSelect => row !== undefined,
+        )
+  const selection = rows.findLast((row) => row.selection !== null)?.selection
+  return selection === undefined ? undefined : decodeSelection(selection)
+})
+
 export const equivalent = (
   input: Admitted,
   expected: {
     readonly sessionID: SessionSchema.ID
     readonly prompt: Prompt
     readonly delivery: Delivery
+    readonly selection?: Selection
   },
-) => input.delivery === expected.delivery && matchesPrompt(input, expected)
+) => input.delivery === expected.delivery && matchesPrompt(input, expected) && matchesSelection(input, expected)
 
 const matchesPrompt = (input: Admitted, expected: { readonly sessionID: SessionSchema.ID; readonly prompt: Prompt }) =>
   input.sessionID === expected.sessionID &&
   JSON.stringify(encodePrompt(input.prompt)) === JSON.stringify(encodePrompt(expected.prompt))
+
+const matchesSelection = (input: Admitted, expected: { readonly selection?: Selection }) =>
+  JSON.stringify(input.selection === undefined ? undefined : encodeSelection(input.selection)) ===
+  JSON.stringify(expected.selection === undefined ? undefined : encodeSelection(expected.selection))
 
 const matchesProjection = (
   input: Admitted,
@@ -207,6 +272,7 @@ const matchesProjection = (
     readonly sessionID: SessionSchema.ID
     readonly prompt: Prompt
     readonly delivery: Delivery
+    readonly selection?: Selection
     readonly timeCreated: DateTime.Utc
   },
 ) =>
@@ -228,6 +294,7 @@ const publish = Effect.fn("SessionInput.publish")(function* (
         messageID: id,
         prompt: decodePrompt(row.prompt),
         delivery: row.delivery,
+        ...(row.selection === null ? {} : { selection: decodeSelection(row.selection) }),
       })
       .pipe(
         Effect.catchDefect((defect) =>
@@ -248,20 +315,7 @@ export const promoteSteers = Effect.fn("SessionInput.promoteSteers")(function* (
   sessionID: SessionSchema.ID,
   cutoff: number,
 ) {
-  const rows = yield* db
-    .select()
-    .from(SessionInputTable)
-    .where(
-      and(
-        eq(SessionInputTable.session_id, sessionID),
-        isNull(SessionInputTable.promoted_seq),
-        eq(SessionInputTable.delivery, "steer"),
-        lte(SessionInputTable.admitted_seq, cutoff),
-      ),
-    )
-    .orderBy(asc(SessionInputTable.admitted_seq))
-    .all()
-    .pipe(Effect.orDie)
+  const rows = yield* pendingSteers(db, sessionID, cutoff)
   return yield* publish(db, events, sessionID, rows)
 })
 
@@ -270,19 +324,6 @@ export const promoteNextQueued = Effect.fn("SessionInput.promoteNextQueued")(fun
   events: EventV2.Interface,
   sessionID: SessionSchema.ID,
 ) {
-  const row = yield* db
-    .select()
-    .from(SessionInputTable)
-    .where(
-      and(
-        eq(SessionInputTable.session_id, sessionID),
-        isNull(SessionInputTable.promoted_seq),
-        eq(SessionInputTable.delivery, "queue"),
-      ),
-    )
-    .orderBy(asc(SessionInputTable.admitted_seq))
-    .limit(1)
-    .get()
-    .pipe(Effect.orDie)
+  const row = yield* nextQueued(db, sessionID)
   return row === undefined ? false : yield* publish(db, events, sessionID, [row]).pipe(Effect.as(true))
 })

@@ -195,6 +195,7 @@ import type {
   SessionGetResponses,
   SessionInitErrors,
   SessionInitResponses,
+  SessionInputSelection,
   SessionListErrors,
   SessionListResponses,
   SessionMessageErrors,
@@ -5625,6 +5626,7 @@ export class Session3 extends HeyApiClient {
       id?: string
       prompt?: PromptInput
       delivery?: "steer" | "queue"
+      selection?: SessionInputSelection
       resume?: boolean
     },
     options?: Options<never, ThrowOnError>,
@@ -5638,6 +5640,7 @@ export class Session3 extends HeyApiClient {
             { in: "body", key: "id" },
             { in: "body", key: "prompt" },
             { in: "body", key: "delivery" },
+            { in: "body", key: "selection" },
             { in: "body", key: "resume" },
           ],
         },

@@ -57,6 +57,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { resolveModelVariantForRequest, resolveModelVariantFromMessage } from "@opencode-ai/core/util/model-variant"
 
 registerOpencodeSpinner()
 
@@ -315,9 +316,7 @@ export function Prompt(props: PromptProps) {
     const msg = lastUserMessage()
 
     if (sessionID !== syncedSessionID) {
-      if (!sessionID || !msg) return
-
-      syncedSessionID = sessionID
+      if (!sessionID || !msg || !sync.ready || !local.model.ready) return
 
       // Only set agent if it's a primary agent (not a subagent)
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
@@ -326,9 +325,18 @@ export function Prompt(props: PromptProps) {
         if (!args.agent) local.agent.set(msg.agent)
         if (msg.model) {
           local.model.set(msg.model)
-          local.model.variant.set(msg.model.variant)
+          const model = local.model.current()
+          const matches = model?.providerID === msg.model.providerID && model.modelID === msg.model.modelID
+          if (!matches) return
+          const selected = resolveModelVariantFromMessage({
+            variant: msg.model.variant,
+            configured: local.model.variant.configured(),
+          })
+          if (selected === undefined) local.model.variant.clear()
+          if (selected !== undefined) local.model.variant.set(selected ?? undefined)
         }
       }
+      syncedSessionID = sessionID
     }
   })
 
@@ -955,6 +963,7 @@ export function Prompt(props: PromptProps) {
       syncExtmarksWithPromptParts()
     }
     if (props.disabled) return false
+    if (!local.model.ready) return false
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
     if (!store.prompt.input) return false
@@ -986,7 +995,10 @@ export function Prompt(props: PromptProps) {
       return false
     }
 
-    const variant = local.model.variant.current()
+    const variant = resolveModelVariantForRequest({
+      selected: local.model.variant.selected(),
+      current: local.model.variant.current(),
+    })
     let sessionID = props.sessionID
     let finishMoveProgress = false
     if (sessionID == null) {

@@ -1,7 +1,7 @@
 import { batch, createMemo, startTransition } from "solid-js"
+import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@opencode-ai/core/util/model-variant"
 import { useModels } from "@/context/models"
 import type { ModelKey, ModelSelection } from "@/context/local"
-import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/context/model-variant"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -82,20 +82,24 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
         const model = current()
         if (!item || !model) return
         return getConfiguredAgentVariant({
-          agent: { model: item.model, variant: item.variant },
-          model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
+          configured: item.model
+            ? { providerID: item.model.providerID, id: item.model.modelID, variant: item.variant }
+            : undefined,
+          model: { providerID: model.provider.id, id: model.id, variants: model.variants },
         })
       },
       selected() {
         return prompt.model.current()?.variant
       },
       current() {
+        const selected = this.selected()
         const resolved = resolveModelVariant({
           variants: this.list(),
-          selected: this.selected(),
+          selected,
           configured: this.configured(),
         })
         if (resolved) return resolved
+        if (selected === null) return
         const model = current()
         if (!model) return
         const saved = models.variant.get({ providerID: model.provider.id, modelID: model.id })
@@ -113,6 +117,13 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
             models.variant.set({ providerID: model.provider.id, modelID: model.id }, value)
           }),
         )
+      },
+      clear() {
+        startTransition(() => {
+          const model = current()
+          if (!model) return
+          prompt.model.set({ providerID: model.provider.id, modelID: model.id, variant: undefined })
+        })
       },
       cycle() {
         const variants = this.list()

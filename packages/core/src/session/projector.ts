@@ -353,9 +353,18 @@ const layer = Layer.effectDiscard(
           sessionID: event.data.sessionID,
           prompt: event.data.prompt,
           delivery: event.data.delivery,
+          selection: event.data.selection,
           timeCreated: event.data.timestamp,
           promotedSeq: event.durable.seq,
         })
+        if (event.data.selection) {
+          yield* db
+            .update(SessionTable)
+            .set({ agent: event.data.selection.agent, model: event.data.selection.model })
+            .where(eq(SessionTable.id, event.data.sessionID))
+            .run()
+            .pipe(Effect.orDie)
+        }
         yield* run(db, event)
       }),
     )
@@ -368,6 +377,7 @@ const layer = Layer.effectDiscard(
           sessionID: event.data.sessionID,
           prompt: event.data.prompt,
           delivery: event.data.delivery,
+          selection: event.data.selection,
           timeCreated: event.data.timestamp,
         })
       }),
