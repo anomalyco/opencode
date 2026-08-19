@@ -46,9 +46,10 @@ export const WebCommand = effectCmd({
     UI.println(UI.logo("  "))
     UI.empty()
 
+    const suffix = server.basePath || ""
     if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
-      const localhostUrl = `http://localhost:${server.port}`
+      const localhostUrl = `http://localhost:${server.port}${suffix}`
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
 
       // Show network IPs for remote access
@@ -58,7 +59,7 @@ export const WebCommand = effectCmd({
           UI.println(
             UI.Style.TEXT_INFO_BOLD + "  Network access:    ",
             UI.Style.TEXT_NORMAL,
-            `http://${ip}:${server.port}`,
+            `http://${ip}:${server.port}${suffix}`,
           )
         }
       }
@@ -67,7 +68,7 @@ export const WebCommand = effectCmd({
         UI.println(
           UI.Style.TEXT_INFO_BOLD + "  mDNS:              ",
           UI.Style.TEXT_NORMAL,
-          `${opts.mdnsDomain}:${server.port}`,
+          `${opts.mdnsDomain}:${server.port}${suffix}`,
         )
       }
 
