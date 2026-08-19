@@ -438,7 +438,11 @@ export const {
 
         case "vcs.branch.updated": {
           if (workspace === project.workspace.current()) {
-            setStore("vcs", { branch: event.properties.branch })
+            setStore("vcs", {
+              branch: event.properties.branch,
+              dirty: event.properties.dirty,
+              has_conflicts: event.properties.has_conflicts,
+            } as VcsInfo)
           }
           break
         }

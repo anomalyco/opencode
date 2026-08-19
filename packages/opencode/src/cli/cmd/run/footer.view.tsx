@@ -488,6 +488,14 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
   })
   const sectionSeparator = () => <span style={{ fg: theme().muted }}>· </span>
+  const branchInfo = createMemo(() => {
+    const state = props.state()
+    if (!state.branch) return
+    const dotColor = state.dirty ? theme().warning : theme().success
+    const textColor = state.isDefaultBranch ? theme().error : theme().text
+    const conflictColor = state.hasConflicts ? theme().error : undefined
+    return { name: state.branch, dotColor, textColor, conflictColor }
+  })
 
   createEffect(() => {
     props.onRequestExit?.(composer.requestExit)
@@ -828,6 +836,20 @@ export function RunFooterView(props: RunFooterViewProps) {
                     <span style={{ fg: modeColor(), bold: true }}>{modeLabel()}</span>
                   </text>
                 </box>
+
+                <Show when={branchInfo()}>
+                  {(info) => (
+                    <box paddingLeft={1} paddingRight={1} backgroundColor="transparent" flexShrink={0}>
+                      <text wrapMode="none" truncate>
+                        <span style={{ fg: info().dotColor, bold: true }}>●</span>
+                        <Show when={info().conflictColor}>
+                          {(color) => <span style={{ fg: color(), bold: true }}> ✗</span>}
+                        </Show>
+                        <span style={{ fg: info().textColor }}> {info().name}</span>
+                      </text>
+                    </box>
+                  )}
+                </Show>
 
                 <box
                   flexDirection="row"

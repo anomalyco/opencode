@@ -16,6 +16,14 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
   )
   const done = createMemo(() => props.api.kv.get("dismissed_getting_started", false))
   const show = createMemo(() => !has() && !done())
+  const branchInfo = createMemo(() => {
+    const vcs = props.api.state.vcs
+    if (!vcs?.branch) return
+    const isDefault = vcs.branch === "main" || vcs.branch === "master"
+    const dotColor = vcs.dirty ? theme().warning : theme().success
+    const textColor = isDefault ? theme().error : theme().text
+    return { name: vcs.branch, dotColor, textColor }
+  })
   const path = createMemo(() => {
     const session = props.api.state.session.get(props.sessionID)
     const dir = session?.directory || props.api.state.path.directory || paths.cwd
@@ -67,6 +75,7 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
       <text>
         <span style={{ fg: theme().textMuted }}>{path().parent}/</span>
         <span style={{ fg: theme().text }}>{path().name}</span>
+        <Show when={branchInfo()}>{(info) => <span style={{ fg: info().dotColor, bold: true }}> ●</span>}</Show>
       </text>
       <text fg={theme().textMuted}>
         <span style={{ fg: theme().success }}>•</span> <b>Open</b>

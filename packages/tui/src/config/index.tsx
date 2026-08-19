@@ -72,6 +72,9 @@ export const Info = Schema.Struct({
   diff_style: Schema.optional(DiffStyle),
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  show_git_branch: Schema.optional(Schema.Boolean).annotate({
+    description: "Show git branch indicator in status bar (default: true)",
+  }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 

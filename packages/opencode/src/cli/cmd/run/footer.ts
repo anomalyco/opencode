@@ -24,6 +24,7 @@
 // Ctrl-c clears a live prompt draft first; otherwise interrupt and exit use a
 // two-press pattern where the first press shows a hint and the second press
 // within 5 seconds actually fires the action.
+import path from "node:path"
 import { CliRenderEvents, type CliRenderer, type KeyEvent, type Renderable, type TreeSitterClient } from "@opentui/core"
 import type { Keymap } from "@opentui/keymap"
 import { render } from "@opentui/solid"
@@ -216,6 +217,7 @@ export class RunFooter implements FooterApi {
   private paletteRefreshRunning = false
   private paletteRefreshQueued = false
   private themeRefreshTimeouts: NodeJS.Timeout[] = []
+  private gitTimer: NodeJS.Timeout | undefined
 
   private createScrollback(wrote: boolean): RunScrollbackStream {
     return new RunScrollbackStream(this.renderer, this.theme(), {
@@ -296,6 +298,9 @@ export class RunFooter implements FooterApi {
     this.renderer.on(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)
     this.renderer.prependInputHandler(this.handleThemeNotification)
     process.on("SIGUSR2", this.handleThemeSignal)
+    if (options.tuiConfig.show_git_branch !== false) {
+      this.startGitPolling()
+    }
 
     const footer = this
     void render(
@@ -359,6 +364,60 @@ export class RunFooter implements FooterApi {
 
   private get isGone(): boolean {
     return this.destroyed || this.renderer.isDestroyed
+  }
+
+  private startGitPolling(): void {
+    this.refreshGit().catch(() => {})
+    this.gitTimer = setInterval(() => {
+      this.refreshGit().catch(() => {})
+    }, 3000)
+  }
+
+  private async refreshGit(): Promise<void> {
+    try {
+      if (this.isGone) return
+
+      const dir = this.options.directory
+
+      const branchProc = Bun.spawnSync(["git", "-C", dir, "symbolic-ref", "--quiet", "--short", "HEAD"])
+      const branch = branchProc.exitCode === 0 ? branchProc.stdout.toString().trim() : undefined
+
+      const statusProc = Bun.spawnSync(["git", "-C", dir, "status", "--porcelain"])
+      const dirty = statusProc.stdout.byteLength > 0
+
+      const defaultBranch = branch === "main" || branch === "master"
+
+      let hasConflicts = false
+      if (branch) {
+        const gitDirProc = Bun.spawnSync(["git", "-C", dir, "rev-parse", "--absolute-git-dir"])
+        if (gitDirProc.exitCode === 0) {
+          const gitDir = gitDirProc.stdout.toString().trim()
+          hasConflicts =
+            (await Bun.file(path.join(gitDir, "MERGE_HEAD")).exists()) ||
+            (await Bun.file(path.join(gitDir, "REBASE_HEAD")).exists())
+        }
+      }
+
+      const state = this.state()
+      if (
+        state.branch === branch &&
+        state.dirty === dirty &&
+        state.isDefaultBranch === defaultBranch &&
+        state.hasConflicts === hasConflicts
+      )
+        return
+
+      this.setState({ ...state, branch, dirty, isDefaultBranch: defaultBranch, hasConflicts })
+    } catch {
+      // silently ignore git polling failures
+    }
+  }
+
+  private clearGitTimer(): void {
+    if (this.gitTimer) {
+      clearInterval(this.gitTimer)
+      this.gitTimer = undefined
+    }
   }
 
   public onPrompt(fn: (input: RunPrompt) => void): () => void {
@@ -497,6 +556,10 @@ export class RunFooter implements FooterApi {
           : prev.interrupt,
       exit:
         typeof next.exit === "number" && Number.isFinite(next.exit) ? Math.max(0, Math.floor(next.exit)) : prev.exit,
+      branch: typeof next.branch === "string" ? next.branch : prev.branch,
+      dirty: typeof next.dirty === "boolean" ? next.dirty : prev.dirty,
+      isDefaultBranch: typeof next.isDefaultBranch === "boolean" ? next.isDefaultBranch : prev.isDefaultBranch,
+      hasConflicts: typeof next.hasConflicts === "boolean" ? next.hasConflicts : prev.hasConflicts,
     }
 
     if (state.phase === "idle") {
@@ -621,6 +684,7 @@ export class RunFooter implements FooterApi {
       return
     }
 
+    this.clearGitTimer()
     this.flush()
     this.notifyClose()
   }
@@ -1092,6 +1156,7 @@ export class RunFooter implements FooterApi {
     this.clearInterruptTimer()
     this.clearExitTimer()
     this.clearNoticeTimer()
+    this.clearGitTimer()
     this.renderer.off(CliRenderEvents.DESTROY, this.handleDestroy)
     this.renderer.off(CliRenderEvents.PALETTE, this.handlePalette)
     this.renderer.off(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)

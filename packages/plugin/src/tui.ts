@@ -281,12 +281,7 @@ export type TuiAttentionNotifyInput = {
 }
 
 export type TuiAttentionNotifySkipReason =
-  | "attention_disabled"
-  | "empty_message"
-  | "blurred"
-  | "focused"
-  | "focus_unknown"
-  | "renderer_destroyed"
+  "attention_disabled" | "empty_message" | "blurred" | "focused" | "focus_unknown" | "renderer_destroyed"
 
 export type TuiAttentionNotifyResult = {
   ok: boolean
@@ -382,7 +377,7 @@ export type TuiState = {
     worktree: string
     directory: string
   }
-  readonly vcs: { branch?: string; default_branch?: string } | undefined
+  readonly vcs: { branch?: string; default_branch?: string; dirty?: boolean } | undefined
   session: {
     count: () => number
     get: (sessionID: string) => Session | undefined
