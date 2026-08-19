@@ -28,7 +28,7 @@ import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "openai-chat"
-const RESERVED_REASONING_FIELDS = new Set(["role", "content", "tool_calls"])
+const RESERVED_REASONING_FIELDS = new Set(["role", "content", "refusal", "tool_calls"])
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/chat/completions"
 
@@ -97,6 +97,7 @@ const OpenAIChatMessage = Schema.Union([
     Schema.Struct({
       role: Schema.Literal("assistant"),
       content: Schema.NullOr(Schema.String),
+      refusal: optionalNull(Schema.String),
       tool_calls: optionalArray(OpenAIChatAssistantToolCall),
       reasoning_content: Schema.optional(Schema.String),
       reasoning: Schema.optional(Schema.String),
@@ -194,6 +195,7 @@ type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta
 const OpenAIChatDelta = Schema.StructWithRest(
   Schema.Struct({
     content: optionalNull(Schema.String),
+    refusal: optionalNull(Schema.String),
     reasoning_content: optionalNull(Schema.String),
     reasoning: optionalNull(Schema.String),
     reasoning_text: optionalNull(Schema.String),
@@ -241,6 +243,8 @@ export interface ParserState {
   readonly reasoningEmitted: boolean
   readonly latestToolIndex?: number
   readonly nextToolIndex: number
+  readonly activeText?: { readonly kind: "content" | "refusal"; readonly id: string }
+  readonly nextTextIndex: number
 }
 
 // =============================================================================
@@ -336,13 +340,15 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   options: LoweringOptions = {},
 ) {
   const content: TextPart[] = []
+  const refusals: TextPart[] = []
   const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
     if (part.type === "text") {
-      content.push(part)
+      if (part.providerMetadata?.openai?.refusal === true) refusals.push(part)
+      else content.push(part)
       continue
     }
     if (part.type === "reasoning") {
@@ -375,7 +381,13 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   const cacheControl = options.cacheControl?.(cached && "cache" in cached ? cached.cache : undefined)
   const result = {
     role: "assistant" as const,
-    content: content.length > 0 ? content.map((part) => part.text).join("") : toolCalls.length > 0 ? null : "",
+    content:
+      content.length > 0
+        ? content.map((part) => part.text).join("")
+        : toolCalls.length > 0 || refusals.length > 0
+          ? null
+          : "",
+    ...(refusals.length > 0 ? { refusal: refusals.map((part) => part.text).join("") } : {}),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
     ...(details !== undefined ? { reasoning_details: details } : {}),
     ...(cacheControl !== undefined ? { cache_control: cacheControl } : {}),
@@ -705,10 +717,13 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     let nextToolIndex = state.nextToolIndex
 
     let lifecycle = state.lifecycle
+    let activeText = state.activeText
+    let nextTextIndex = state.nextTextIndex
 
     const reasoning = reasoningDelta(delta, state.reasoningField)
     const hasLateContent =
       Boolean(delta?.content) ||
+      Boolean(delta?.refusal) ||
       reasoning !== undefined ||
       (Array.isArray(delta?.reasoning_details) && delta.reasoning_details.length > 0) ||
       toolDeltas.some((tool) => Boolean(tool.id) || Boolean(tool.function?.name) || Boolean(tool.function?.arguments))
@@ -740,7 +755,26 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         "reasoning-0",
         reasoningMetadata(reasoningField, reasoningDetailsObserved ? state.reasoningDetails : undefined),
       )
-      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+      if (activeText?.kind !== "content") {
+        if (activeText) lifecycle = Lifecycle.textEnd(lifecycle, events, activeText.id)
+        activeText = { kind: "content", id: `text-${nextTextIndex++}` }
+      }
+      lifecycle = Lifecycle.textDelta(lifecycle, events, activeText.id, delta.content)
+    }
+
+    if (delta?.refusal) {
+      lifecycle = Lifecycle.reasoningEnd(
+        lifecycle,
+        events,
+        "reasoning-0",
+        reasoningMetadata(reasoningField, reasoningDetailsObserved ? state.reasoningDetails : undefined),
+      )
+      if (activeText?.kind !== "refusal") {
+        if (activeText) lifecycle = Lifecycle.textEnd(lifecycle, events, activeText.id)
+        activeText = { kind: "refusal", id: `refusal-${nextTextIndex++}` }
+        lifecycle = Lifecycle.textStart(lifecycle, events, activeText.id, { openai: { refusal: true } })
+      }
+      lifecycle = Lifecycle.textDelta(lifecycle, events, activeText.id, delta.refusal)
     }
 
     // Compatible providers may omit indexes. Prefer durable identity, then use
@@ -806,6 +840,8 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         reasoningEmitted,
         latestToolIndex,
         nextToolIndex,
+        activeText,
+        nextTextIndex,
       },
       events,
     ] as const
@@ -867,6 +903,7 @@ export const protocol = Protocol.make({
       reasoningDetailsObserved: false,
       reasoningEmitted: false,
       nextToolIndex: 0,
+      nextTextIndex: 0,
     }),
     step,
     onHalt: finishEvents,

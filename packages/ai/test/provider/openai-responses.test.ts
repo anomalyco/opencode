@@ -485,6 +485,52 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("continues after a completed refusal without replaying it", () =>
+    Effect.gen(function* () {
+      const firstInput = [{ role: "user", content: [{ type: "input_text", text: "Unsafe request" }] }]
+      const first = continuationDriver({ type: "response.create", model: "gpt-5.2", store: false, input: firstInput })
+      const create = yield* first.create(undefined)
+      yield* first.observe(
+        create,
+        ProviderShared.encodeJson({
+          type: "response.output_item.done",
+          item: {
+            type: "message",
+            id: "msg_refusal",
+            status: "completed",
+            role: "assistant",
+            content: [{ type: "refusal", refusal: "I can't help with that." }],
+          },
+        }),
+      )
+      const saved = checkpoint(
+        yield* first.observe(
+          create,
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+        ),
+      )
+      const followUp = { role: "user", content: [{ type: "input_text", text: "Try something safe" }] }
+      const next = continuationDriver({
+        type: "response.create",
+        model: "gpt-5.2",
+        store: false,
+        input: [
+          ...firstInput,
+          { role: "assistant", content: [{ type: "refusal", refusal: "I can't help with that." }] },
+          followUp,
+        ],
+      })
+
+      const continued = yield* next.create(saved)
+
+      expect(continued.mode).toBe("incremental")
+      expect(ProviderShared.decodeJson(continued.message)).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [followUp],
+      })
+    }),
+  )
+
   it.effect("continues store-false reasoning without replaying the output-only item ID", () =>
     Effect.gen(function* () {
       const firstInput = [{ role: "user", content: [{ type: "input_text", text: "Think" }] }]
@@ -1502,6 +1548,108 @@ describe("OpenAI Responses route", () => {
           usage,
         },
       ])
+    }),
+  )
+
+  it.effect("preserves and replays standard refusal content", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                output_index: 0,
+                item: { type: "message", id: "msg_refusal", content: [] },
+              },
+              {
+                type: "response.content_part.added",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                part: { type: "refusal", refusal: "" },
+              },
+              {
+                type: "response.refusal.delta",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                delta: "I can't",
+              },
+              {
+                type: "response.refusal.delta",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                delta: " help with that.",
+              },
+              {
+                type: "response.refusal.done",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                refusal: "I can't help with that.",
+              },
+              {
+                type: "response.content_part.done",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                part: { type: "refusal", refusal: "I can't help with that." },
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: {
+                  type: "message",
+                  id: "msg_refusal",
+                  phase: "final_answer",
+                  content: [{ type: "refusal", refusal: "I can't help with that." }],
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("I can't help with that.")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: undefined })
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "I can't help with that.",
+          providerMetadata: { openai: { refusal: true, phase: "final_answer" } },
+        },
+      ])
+
+      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(prepared.body.input).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "refusal", refusal: "I can't help with that." }],
+          phase: "final_answer",
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects refusal events without standard content coordinates", () =>
+    Effect.gen(function* () {
+      const events = [
+        { type: "response.refusal.delta", output_index: 0, content_index: 0, delta: "missing item" },
+        { type: "response.refusal.delta", item_id: "msg_1", content_index: 0, delta: "missing output" },
+        { type: "response.refusal.delta", item_id: "msg_1", output_index: 0, delta: "missing content" },
+        { type: "response.refusal.delta", item_id: "msg_1", output_index: 0, content_index: 0 },
+        { type: "response.refusal.done", item_id: "msg_1", output_index: 0, content_index: 0 },
+      ]
+      for (const event of events) {
+        const error = yield* LLMClient.generate(request).pipe(
+          Effect.provide(fixedResponse(sseEvents(event))),
+          Effect.flip,
+        )
+        expect(error.reason._tag).toBe("InvalidProviderOutput")
+      }
     }),
   )
 

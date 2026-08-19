@@ -118,6 +118,59 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("preserves standard refusal content in the Open Responses namespace", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Unsafe request" })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                output_index: 0,
+                item: { type: "message", id: "msg_refusal", content: [] },
+              },
+              {
+                type: "response.refusal.done",
+                item_id: "msg_refusal",
+                output_index: 0,
+                content_index: 0,
+                refusal: "I can't help with that.",
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: {
+                  type: "message",
+                  id: "msg_refusal",
+                  content: [{ type: "refusal", refusal: "I can't help with that." }],
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "I can't help with that.",
+          providerMetadata: { openresponses: { refusal: true } },
+        },
+      ])
+
+      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(prepared.body.input).toEqual([
+        { role: "assistant", content: [{ type: "refusal", refusal: "I can't help with that." }] },
+      ])
+    }),
+  )
+
   it.effect("reads standard Open Responses options", () =>
     Effect.gen(function* () {
       const model = configure({
