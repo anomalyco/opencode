@@ -238,10 +238,19 @@ const layer = Layer.effect(
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
       }
+      // Only add the directory as a sandbox when it is a genuine linked git
+      // worktree (common .git dir lives outside the working tree). Independent
+      // clones of the same remote share a project ID by design, but each clone
+      // is its own primary worktree and must NOT be treated as a sandbox of the
+      // first one — otherwise the front-end surfaces stale branch info from the
+      // first directory.
+      const isLinkedWorktree =
+        data.vcs?.type === "git" && !FSUtil.contains(data.directory, data.vcs.store)
       if (
         projectID !== ProjectV2.ID.global &&
         data.directory !== result.worktree &&
-        !result.sandboxes.includes(data.directory)
+        !result.sandboxes.includes(data.directory) &&
+        isLinkedWorktree
       )
         result.sandboxes.push(data.directory)
       result.sandboxes = yield* Effect.forEach(
