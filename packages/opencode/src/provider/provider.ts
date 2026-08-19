@@ -1770,6 +1770,9 @@ const layer = Layer.effect(
         const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
+        // consumed by the session retry policy, not the provider SDK
+        delete options["retry"]
+        delete options["backoffDelay"]
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch

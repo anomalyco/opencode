@@ -1755,7 +1755,9 @@ export type ProviderConfig = {
      */
     headerTimeout?: number | false
     chunkTimeout?: number
-    [key: string]: unknown | string | boolean | number | false | number | false | number | undefined
+    retry?: number
+    backoffDelay?: number
+    [key: string]: unknown | string | boolean | number | false | number | false | number | number | undefined
   }
   models?: {
     [key: string]: {

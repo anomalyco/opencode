@@ -43,7 +43,7 @@ function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
 }
 
-export function delay(attempt: number, error?: SessionV1.APIError, random = Math.random()) {
+export function delay(attempt: number, error?: SessionV1.APIError, random = Math.random(), backoffDelay?: number) {
   if (error) {
     const headers = error.data.responseHeaders
     if (headers) {
@@ -69,15 +69,15 @@ export function delay(attempt: number, error?: SessionV1.APIError, random = Math
         }
       }
 
-      return cap(exponential(attempt, random))
+      return cap(exponential(attempt, random, backoffDelay))
     }
   }
 
-  return cap(Math.min(exponential(attempt, random), RETRY_MAX_DELAY_NO_HEADERS))
+  return cap(Math.min(exponential(attempt, random, backoffDelay), RETRY_MAX_DELAY_NO_HEADERS))
 }
 
-function exponential(attempt: number, random: number) {
-  const base = RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
+function exponential(attempt: number, random: number, backoffDelay?: number) {
+  const base = (backoffDelay ?? RETRY_INITIAL_DELAY) * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
   return Math.ceil(base + base * RETRY_JITTER_FACTOR * random)
 }
 
@@ -181,6 +181,8 @@ function parseJSON(value: unknown) {
 
 export function policy(opts: {
   provider: string
+  retry?: number
+  backoffDelay?: number
   parse: (error: unknown) => Err
   set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
 }) {
@@ -189,9 +191,14 @@ export function policy(opts: {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
-      if (meta.attempt > RETRY_MAX_RETRIES) return Cause.done(meta.attempt)
+      if (meta.attempt > (opts.retry ?? RETRY_MAX_RETRIES)) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
-        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+        const wait = delay(
+          meta.attempt,
+          SessionV1.APIError.isInstance(error) ? error : undefined,
+          undefined,
+          opts.backoffDelay,
+        )
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({
           attempt: meta.attempt,
