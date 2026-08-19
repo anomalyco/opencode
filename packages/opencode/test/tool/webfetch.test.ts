@@ -98,6 +98,25 @@ describe("tool.webfetch", () => {
     ),
   )
 
+  it.instance("fetches http urls as provided and does not promise an https upgrade", () =>
+    withFetch(
+      () =>
+        new Response("plain http", {
+          status: 200,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        }),
+      (url) =>
+        Effect.gen(function* () {
+          const info = yield* WebFetchTool
+          expect((yield* info.init()).description).not.toContain("upgraded to HTTPS")
+
+          const target = new URL("/plain.txt", url).toString()
+          expect(target.startsWith("http://")).toBe(true)
+          expect((yield* exec({ url: target, format: "text" })).output).toBe("plain http")
+        }),
+    ),
+  )
+
   it.instance("extracts text from html without scripts or styles", () =>
     withFetch(
       () =>
