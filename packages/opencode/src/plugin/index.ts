@@ -1,6 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type {
   Hooks,
+  HttpRoute,
   PluginInput,
   Plugin as PluginInstance,
   PluginModule,
@@ -35,6 +36,7 @@ import { InstallationChannel } from "@opencode-ai/core/installation/version"
 
 type State = {
   hooks: Hooks[]
+  httpRoutes: HttpRoute[]
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -54,6 +56,7 @@ export interface Interface {
   ) => Effect.Effect<Output>
   readonly list: () => Effect.Effect<Hooks[]>
   readonly init: () => Effect.Effect<void>
+  readonly getRoutes: () => Effect.Effect<HttpRoute[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
@@ -109,16 +112,24 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
   return result
 }
 
-async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
+async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[], httpRoutes: HttpRoute[]) {
   const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
   if (plugin) {
     await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
-    hooks.push(await (plugin as PluginModule).server(input, load.options))
+    const hook = await (plugin as PluginModule).server(input, load.options)
+    hooks.push(hook)
+    if (hook.http?.routes) {
+      httpRoutes.push(...hook.http.routes)
+    }
     return
   }
 
   for (const server of getLegacyPlugins(load.mod)) {
-    hooks.push(await server(input, load.options))
+    const hook = await server(input, load.options)
+    hooks.push(hook)
+    if (hook.http?.routes) {
+      httpRoutes.push(...hook.http.routes)
+    }
   }
 }
 
@@ -132,6 +143,7 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
         const hooks: Hooks[] = []
+        const httpRoutes: HttpRoute[] = []
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
@@ -173,7 +185,12 @@ const layer = Layer.effect(
             Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
             Effect.option,
           )
-          if (init._tag === "Some") hooks.push(init.value)
+          if (init._tag === "Some") {
+            hooks.push(init.value)
+            if (init.value.http?.routes) {
+              httpRoutes.push(...init.value.http.routes)
+            }
+          }
         }
 
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
@@ -220,7 +237,7 @@ const layer = Layer.effect(
           // Keep plugin execution sequential so hook registration and execution
           // order remains deterministic across plugin runs.
           yield* Effect.tryPromise({
-            try: () => applyPlugin(load, input, hooks),
+            try: () => applyPlugin(load, input, hooks, httpRoutes),
             catch: (err) => {
               const message = errorMessage(err)
               return message
@@ -275,7 +292,7 @@ const layer = Layer.effect(
           ),
         )
 
-        return { hooks }
+        return { hooks, httpRoutes }
       }),
     )
 
@@ -299,11 +316,16 @@ const layer = Layer.effect(
       return s.hooks
     })
 
+    const getRoutes = Effect.fn("Plugin.getRoutes")(function* () {
+      const s = yield* InstanceState.get(state)
+      return s.httpRoutes
+    })
+
     const init = Effect.fn("Plugin.init")(function* () {
       yield* InstanceState.get(state)
     })
 
-    return Service.of({ trigger, list, init })
+    return Service.of({ trigger, list, init, getRoutes })
   }),
 )
 

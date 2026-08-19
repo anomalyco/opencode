@@ -47,6 +47,7 @@ const brokenPluginLayer = Layer.succeed(
           },
         },
       ]),
+    getRoutes: () => Effect.succeed([]),
   }),
 )
 

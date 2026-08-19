@@ -216,6 +216,14 @@ export type ProviderHook = {
   models?: (provider: ProviderV2, ctx: ProviderHookContext) => Promise<Record<string, ModelV2>>
 }
 
+export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
+
+export type HttpRoute = {
+  method: HttpMethod
+  path: string
+  handler: (request: Request) => Response | Promise<Response>
+}
+
 /** @deprecated Use AuthOAuthResult instead. */
 export type AuthOuathResult = AuthOAuthResult
 
@@ -228,6 +236,9 @@ export interface Hooks {
   }
   auth?: AuthHook
   provider?: ProviderHook
+  http?: {
+    routes?: HttpRoute[]
+  }
   /**
    * Called when a new message is received
    */
