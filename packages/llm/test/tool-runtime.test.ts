@@ -54,6 +54,31 @@ const schema_only_weather = Tool.make({
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
 })
 
+// Mirrors the real write tool schema — the most-reported failure surface for
+// OpenAI-compatible local models (Qwen, DeepSeek) that emit wrong key names.
+const write_file = Tool.make({
+  description: "Write content to a file.",
+  parameters: Schema.Struct({
+    content: Schema.String,
+    filePath: Schema.String,
+  }),
+  success: Schema.Struct({ output: Schema.String }),
+  execute: ({ filePath }) => Effect.succeed({ output: `Wrote ${filePath}` }),
+})
+
+// Mirrors the real edit tool schema — covers the missing-required-key failure
+// mode where the model runs out of token budget mid-generation.
+const edit_file = Tool.make({
+  description: "Edit a file by replacing a string.",
+  parameters: Schema.Struct({
+    filePath: Schema.String,
+    oldString: Schema.String,
+    newString: Schema.String,
+  }),
+  success: Schema.Struct({ output: Schema.String }),
+  execute: ({ filePath }) => Effect.succeed({ output: `Edited ${filePath}` }),
+})
+
 describe("LLMClient tools", () => {
   it.effect("uses the registered model route when adding runtime tools", () =>
     Effect.gen(function* () {
@@ -649,6 +674,87 @@ describe("LLMClient tools", () => {
       const toolError = events.find(LLMEvent.is.toolError)
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
       expect(toolError?.message).toContain("Invalid tool input")
+    }),
+  )
+
+  it.effect("includes expected and received keys in schema error message when wrong keys are sent", () =>
+    Effect.gen(function* () {
+      const layer = scriptedResponses([
+        sseEvents(toolCallChunk("call_1", "get_weather", '{"cityName":"Paris"}'), finishChunk("tool_calls")),
+        sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
+      ])
+
+      const events = Array.from(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
+      )
+
+      const toolError = events.find(LLMEvent.is.toolError)
+      expect(toolError?.message).toContain("get_weather")
+      expect(toolError?.message).toContain("city")
+      expect(toolError?.message).toContain("cityName")
+    }),
+  )
+
+  it.effect("emits write tool schema error naming expected and received keys when model uses wrong key names", () =>
+    Effect.gen(function* () {
+      // OpenAI-compatible local models (Qwen, DeepSeek) commonly emit "fileContent"
+      // and "path" instead of the declared "content" and "filePath". The error fed
+      // back to the model must name both sides so it can self-correct on the next turn.
+      const layer = scriptedResponses([
+        sseEvents(
+          toolCallChunk("call_1", "write_file", '{"fileContent":"hello world","path":"/tmp/x.ts"}'),
+          finishChunk("tool_calls"),
+        ),
+        sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
+      ])
+
+      const events = Array.from(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { write_file } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
+      )
+
+      const toolError = events.find(LLMEvent.is.toolError)
+      expect(toolError?.message).toContain("write_file")
+      // Model knows what it should have sent
+      expect(toolError?.message).toContain("content")
+      expect(toolError?.message).toContain("filePath")
+      // Model knows what it actually sent wrong
+      expect(toolError?.message).toContain("fileContent")
+      expect(toolError?.message).toContain("path")
+    }),
+  )
+
+  it.effect("emits edit tool schema error when model omits a required key due to token budget truncation", () =>
+    Effect.gen(function* () {
+      // When a model runs out of token budget mid-generation it can produce a
+      // partial tool call — filePath and oldString present but newString missing.
+      // The error must list all expected keys so the model retries with the full set.
+      const layer = scriptedResponses([
+        sseEvents(
+          toolCallChunk("call_1", "edit_file", '{"filePath":"/tmp/x.ts","oldString":"foo"}'),
+          finishChunk("tool_calls"),
+        ),
+        sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
+      ])
+
+      const events = Array.from(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { edit_file } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
+      )
+
+      const toolError = events.find(LLMEvent.is.toolError)
+      expect(toolError?.message).toContain("edit_file")
+      // All three required keys are named so the model knows the full contract
+      expect(toolError?.message).toContain("filePath")
+      expect(toolError?.message).toContain("oldString")
+      expect(toolError?.message).toContain("newString")
     }),
   )
 
