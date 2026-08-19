@@ -38,6 +38,10 @@ function isKimiFamily(model: Provider.Model) {
   return ["api.kimi.com", "api.moonshot.ai", "api.moonshot.cn", "api.moonshotai.cn"].some((host) => url.includes(host))
 }
 
+function isDeepSeekV4(model: Provider.Model) {
+  return model.api.id.toLowerCase().includes("deepseek-v4")
+}
+
 // Maps npm package to the key the AI SDK expects for providerOptions
 function sdkKey(npm: string): string | undefined {
   switch (npm) {
@@ -933,7 +937,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         return Object.fromEntries(["none", "high"].map((effort) => [effort, { reasoningEffort: effort }]))
       }
       const efforts = [...WIDELY_SUPPORTED_EFFORTS]
-      if (model.api.id.toLowerCase().includes("deepseek-v4")) {
+      if (isDeepSeekV4(model)) {
         efforts.push("max")
       }
       return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
@@ -1415,8 +1419,10 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
   return { [key]: normalized }
 }
 
-export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {
-  return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
+export function maxOutputTokens(model: Provider.Model, outputTokenMax?: number): number {
+  const maximum =
+    outputTokenMax ?? (isDeepSeekV4(model) && model.limit.output > 0 ? model.limit.output : OUTPUT_TOKEN_MAX)
+  return Math.min(model.limit.output, maximum) || maximum
 }
 
 type JsonRecord = Record<string, unknown>
