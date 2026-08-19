@@ -291,6 +291,46 @@ describe("MessageV2.page", () => {
     }),
   )
 
+  it.instance("pages forward with after cursor", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 6)
+
+        // Anchor at "before everything": all messages are newer than time 0
+        const anchor = MessageV2.cursor.encode({ id: MessageID.ascending(), time: 0 })
+
+        const a = yield* MessageV2.page({ sessionID, limit: 2, after: anchor })
+        expect(a.items.map((item) => item.info.id)).toEqual(ids.slice(0, 2))
+        expect(a.more).toBe(true)
+        expect(a.cursor).toBeTruthy()
+
+        const b = yield* MessageV2.page({ sessionID, limit: 2, after: a.cursor! })
+        expect(b.items.map((item) => item.info.id)).toEqual(ids.slice(2, 4))
+        expect(b.more).toBe(true)
+        expect(b.cursor).toBeTruthy()
+
+        const c = yield* MessageV2.page({ sessionID, limit: 2, after: b.cursor! })
+        expect(c.items.map((item) => item.info.id)).toEqual(ids.slice(4, 6))
+        expect(c.more).toBe(false)
+        expect(c.cursor).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.instance("rejects requests with both before and after", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        yield* fill(sessionID, 2)
+        const dummyCursor = MessageV2.cursor.encode({ id: MessageID.ascending(), time: 0 })
+
+        const exit = yield* Effect.exit(
+          MessageV2.page({ sessionID, limit: 2, before: dummyCursor, after: dummyCursor }),
+        )
+        expect(exit._tag).toBe("Failure")
+      }),
+    ),
+  )
+
   it.instance("large limit returns all messages without cursor", () =>
     withSession(({ sessionID }) =>
       Effect.gen(function* () {
