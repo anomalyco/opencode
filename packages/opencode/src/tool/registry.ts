@@ -139,6 +139,7 @@ const layer = Layer.effect(
             id,
             parameters,
             jsonSchema,
+            strict: def.strict,
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {
@@ -314,6 +315,7 @@ const layer = Layer.effect(
             description: tool.description,
             parameters: tool.parameters,
             jsonSchema: tool.jsonSchema,
+            strict: tool.strict,
           }
           yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
           const jsonSchema =
@@ -331,6 +333,7 @@ const layer = Layer.effect(
               .join("\n"),
             parameters: output.parameters,
             jsonSchema,
+            strict: output.strict,
             execute: tool.execute,
             formatValidationError: tool.formatValidationError,
           }

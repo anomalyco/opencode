@@ -586,6 +586,67 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.tools.lookup.strict).toBe(false)
   })
 
+  test("a tool's strict flag survives on bedrock and is still overridden on mantle", async () => {
+    const prepare = (npm: string, apiId: string, url: string) =>
+      Effect.runPromise(
+        LLMRequestPrep.prepare({
+          user: {
+            id: "msg_user-test",
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: "test",
+            model: { providerID: "amazon-bedrock", modelID: apiId },
+          } as any,
+          sessionID,
+          model: {
+            ...createGpt5Model(apiId),
+            id: `amazon-bedrock/${apiId}`,
+            providerID: "amazon-bedrock",
+            api: { id: apiId, url, npm },
+          },
+          agent: {
+            name: "test",
+            mode: "primary",
+            options: {},
+            permission: [],
+          } as any,
+          system: [],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {
+            lookup: {
+              description: "Look up a value",
+              inputSchema: jsonSchema({ type: "object", properties: {} }),
+              strict: true,
+            },
+          },
+          provider: { id: "amazon-bedrock", options: {} } as any,
+          auth: undefined,
+          plugin: {
+            trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+            list: () => Effect.succeed([]),
+            init: () => Effect.void,
+          } as any,
+          flags: { outputTokenMax: 32_000, client: "test" } as any,
+          isWorkflow: false,
+        }),
+      )
+
+    const converse = await prepare(
+      "@ai-sdk/amazon-bedrock",
+      "anthropic.claude-sonnet-4-6",
+      "https://bedrock-runtime.us-east-1.amazonaws.com",
+    )
+    const mantle = await prepare(
+      "@ai-sdk/amazon-bedrock/mantle",
+      "openai.gpt-5.5",
+      "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+    )
+
+    expect(converse.tools.lookup.strict).toBe(true)
+    expect(mantle.tools.lookup.strict).toBe(false)
+  })
+
   test("gpt-5.1 should have textVerbosity set to low", () => {
     const model = createGpt5Model("gpt-5.1")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
