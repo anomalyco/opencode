@@ -794,10 +794,18 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         env["CLOUDFLARE_API_TOKEN"] || env["CF_AIG_TOKEN"] || (auth?.type === "api" ? auth.key : undefined)
 
       if (!apiToken) {
-        throw new Error(
-          "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
-        )
+        // Don't crash Provider.list when the env/auth has Cloudflare IDs but no
+        // token — the provider is simply unavailable until credentials exist.
+        // Defer the error to getModel so listing other providers still works.
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error(
+              "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
+                "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+            )
+          },
+        }
       }
 
       const { createAiGateway } = yield* Effect.promise(() => import("ai-gateway-provider"))
@@ -1488,7 +1496,9 @@ const layer = Layer.effect(
               name,
               providerID: ProviderV2.ID.make(providerID),
               capabilities: {
-                temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
+                // Config-defined custom models should forward agent-level temperature
+                // unless the user explicitly disables it for that model.
+                temperature: model.temperature ?? existingModel?.capabilities.temperature ?? true,
                 reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
                 attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
                 toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
