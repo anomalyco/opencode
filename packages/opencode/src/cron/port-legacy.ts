@@ -1,7 +1,6 @@
 import { Effect, Layer } from "effect"
 import { CronDeliveryPort, CronDeliveryError } from "@opencode-ai/core/cron/port"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { SessionRunState } from "@/session/run-state"
 import { SessionPrompt } from "@/session/prompt"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
@@ -11,19 +10,10 @@ import type { InstanceContext } from "@/project/instance-context"
 export const CronDeliveryPortLive = Layer.effect(
   CronDeliveryPort,
   Effect.gen(function* () {
-    const runState = yield* SessionRunState.Service
     const promptSvc = yield* SessionPrompt.Service
     const sessionSvc = yield* Session.Service
 
     return CronDeliveryPort.of({
-      isBusy: (sessionID, opts) => {
-        const refs = (opts?.context ?? {}) as { instance?: InstanceContext; workspace?: string }
-        const work = runState.assertNotBusy(SessionID.make(sessionID)).pipe(
-          Effect.as(false),
-          Effect.catchTag("SessionBusyError", () => Effect.succeed(true)),
-        )
-        return attachWith(work, refs)
-      },
       deliver: (sessionID, prompt, opts) => {
         const refs = (opts?.context ?? {}) as { instance?: InstanceContext; workspace?: string }
         const work = promptSvc

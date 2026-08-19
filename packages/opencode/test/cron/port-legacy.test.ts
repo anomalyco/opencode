@@ -2,7 +2,6 @@ import { describe, expect } from "bun:test"
 import { Cause, Effect, Layer, Exit } from "effect"
 import { CronDeliveryPort, CronDeliveryError } from "@opencode-ai/core/cron/port"
 import { SessionPrompt } from "@/session/prompt"
-import { SessionRunState } from "@/session/run-state"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { InstanceState } from "@/effect/instance-state"
@@ -23,20 +22,12 @@ const mockPrompt = Layer.mock(SessionPrompt.Service)({
     }),
 })
 
-const mockRunState = Layer.mock(SessionRunState.Service)({
-  assertNotBusy: () =>
-    Effect.gen(function* () {
-      seenInstance = yield* InstanceState.context
-    }),
-})
-
 const mockSession = Layer.mock(Session.Service)({
   get: () => Effect.die("unexpected session.get in this test"),
 })
 
 const it = testEffect(
   CronDeliveryPortLive.pipe(
-    Layer.provide(mockRunState),
     Layer.provide(mockPrompt),
     Layer.provide(mockSession),
   ),
@@ -52,15 +43,6 @@ describe("legacy cron delivery port", () => {
         context: { instance: mockInstance, workspace: "w1" },
       })
       expect(promptCalled).toBe(true)
-      expect(seenInstance).toBe(mockInstance)
-    }))
-
-  it.effect("isBusy replays the captured InstanceRef so assertNotBusy can read InstanceState.context", () =>
-    Effect.gen(function* () {
-      seenInstance = undefined
-      const port = yield* CronDeliveryPort
-      const busy = yield* port.isBusy("ses_test", { context: { instance: mockInstance } })
-      expect(busy).toBe(false)
       expect(seenInstance).toBe(mockInstance)
     }))
 
@@ -87,11 +69,6 @@ const existsSessionLayer = Layer.succeed(
 const existsHappyIt = testEffect(
   CronDeliveryPortLive.pipe(
     Layer.provide(
-      Layer.mock(SessionRunState.Service)({
-        assertNotBusy: () => Effect.void,
-      }),
-    ),
-    Layer.provide(
       Layer.mock(SessionPrompt.Service)({
         prompt: () => Effect.succeed({} as any),
       }),
@@ -116,46 +93,10 @@ describe("legacy cron delivery port — exists", () => {
     }))
 })
 
-// --- isBusy → true ---
-
-const busyIt = testEffect(
-  CronDeliveryPortLive.pipe(
-    Layer.provide(
-      Layer.mock(SessionRunState.Service)({
-        assertNotBusy: () => Effect.fail(new Session.BusyError({ sessionID: SessionID.make("ses_busy") })),
-      }),
-    ),
-    Layer.provide(
-      Layer.mock(SessionPrompt.Service)({
-        prompt: () => Effect.succeed({} as any),
-      }),
-    ),
-    Layer.provide(
-      Layer.mock(Session.Service)({
-        get: () => Effect.succeed({ id: "ses_busy" } as any),
-      }),
-    ),
-  ),
-)
-
-describe("legacy cron delivery port — isBusy true branch", () => {
-  busyIt.effect("returns true when assertNotBusy throws SessionBusyError", () =>
-    Effect.gen(function* () {
-      const port = yield* CronDeliveryPort
-      const busy = yield* port.isBusy("ses_busy", { context: { instance: mockInstance } })
-      expect(busy).toBe(true)
-    }))
-})
-
 // --- deliver error mapping ---
 
 const deliverErrorIt = testEffect(
   CronDeliveryPortLive.pipe(
-    Layer.provide(
-      Layer.mock(SessionRunState.Service)({
-        assertNotBusy: () => Effect.void,
-      }),
-    ),
     Layer.provide(
       Layer.mock(SessionPrompt.Service)({
         prompt: () => Effect.fail(new Error("prompt service down")) as any,
