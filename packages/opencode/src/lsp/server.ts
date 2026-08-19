@@ -121,10 +121,32 @@ export const Typescript: Info = {
   extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
   async spawn(root, ctx) {
     const tsserver = Module.resolve("typescript/lib/tsserver.js", ctx.directory)
-    if (!tsserver) return
-    const bin = await Npm.which("typescript-language-server")
+    if (tsserver) {
+      const bin = await Npm.which("typescript-language-server")
+      if (!bin) return
+      const proc = spawn(bin, ["--stdio"], {
+        cwd: root,
+        env: {
+          ...process.env,
+        },
+      })
+      return {
+        process: proc,
+        initialization: {
+          tsserver: {
+            path: tsserver,
+          },
+        },
+      }
+    }
+
+    // typescript@7+ (native Go port) dropped tsserver.js in favor of its own
+    // `tsc --lsp` mode, so typescript-language-server can no longer attach.
+    // Fall back to the native LSP directly.
+    const localTsc = path.join(root, "node_modules", ".bin", "tsc")
+    const bin = (await Filesystem.exists(localTsc)) ? localTsc : which("tsc")
     if (!bin) return
-    const proc = spawn(bin, ["--stdio"], {
+    const proc = spawn(bin, ["--lsp", "-stdio"], {
       cwd: root,
       env: {
         ...process.env,
@@ -132,11 +154,6 @@ export const Typescript: Info = {
     })
     return {
       process: proc,
-      initialization: {
-        tsserver: {
-          path: tsserver,
-        },
-      },
     }
   },
 }
