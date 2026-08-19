@@ -45,20 +45,6 @@
     column-gap: 12px;
   }
 
-  [data-slot="session-review-actions"] [data-component="radio-group"] {
-    [data-slot="radio-group-wrapper"],
-    [data-slot="radio-group-indicator"],
-    [data-slot="radio-group-item-control"] {
-      border-radius: 6px;
-    }
-
-    [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
-      + [data-slot="radio-group-item-label"]:hover
-      [data-slot="radio-group-item-control"] {
-      border-radius: 4px;
-    }
-  }
-
   [data-component="sticky-accordion-header"] {
     --sticky-accordion-top: 0px;
   }
@@ -235,5 +221,16 @@
     display: flex;
     gap: 8px;
     margin-top: 10px;
+  }
+}
+
+[data-slot="segmented-control-v2"].session-review-diff-style {
+  width: fit-content;
+  height: 24px;
+
+  [data-slot="segmented-control-v2-item"] {
+    height: 24px;
+    padding: 0 8px;
+    font-size: 12px;
   }
 }

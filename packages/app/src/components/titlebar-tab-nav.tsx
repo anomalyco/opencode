@@ -2,8 +2,8 @@ import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } fro
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMutation } from "@tanstack/solid-query"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { useGlobal, useServerCtx } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { ServerConnection, serverName, useServers } from "@/context/servers"
@@ -281,7 +281,7 @@ export function TabNavItem(props: {
       </a>
 
       <div data-slot="tab-close">
-        <IconButtonV2
+        <IconButton
           size="small"
           variant="ghost-muted"
           class="hover-reveal relative z-10 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
@@ -290,7 +290,7 @@ export function TabNavItem(props: {
             event.stopPropagation()
           }}
           onClick={closeTab}
-          icon={<IconV2 name="xmark-small" />}
+          icon={<Icon name="xmark-small" />}
         />
       </div>
     </div>
@@ -377,7 +377,7 @@ export function DraftTabItem(props: {
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
       >
         <span class="flex size-4 shrink-0 items-center justify-center">
-          <IconV2 name="edit" />
+          <Icon name="edit" />
         </span>
         <span
           data-titlebar-tab-title
@@ -387,7 +387,7 @@ export function DraftTabItem(props: {
         </span>
       </a>
       <div data-slot="tab-close">
-        <IconButtonV2
+        <IconButton
           size="small"
           variant="ghost-muted"
           onPointerDown={(event) => {
@@ -400,7 +400,7 @@ export function DraftTabItem(props: {
           }}
           class="hover-reveal relative z-10 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
           onClick={closeTab}
-          icon={<IconV2 name="xmark-small" />}
+          icon={<Icon name="xmark-small" />}
           aria-label={language.t("common.closeTab")}
         />
       </div>

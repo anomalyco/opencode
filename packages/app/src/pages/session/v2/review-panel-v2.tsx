@@ -7,7 +7,7 @@ import {
   SessionReviewV2Sidebar,
 } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { SessionReviewFilePreviewV2 } from "@opencode-ai/session-ui/v2/session-review-file-preview-v2"
-import { DiffChanges } from "@opencode-ai/ui/v2/diff-changes-v2"
+import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import type {
   SessionReviewComment,
   SessionReviewCommentActions,

@@ -1,5 +1,6 @@
 import { Button } from "@opencode-ai/ui/button"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { Menu } from "@opencode-ai/ui/menu"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List } from "@opencode-ai/ui/list"
 import { TextField } from "@opencode-ai/ui/text-field"
@@ -156,49 +157,47 @@ export function ServerConnectionList(props: {
               />
               <div class="flex items-center justify-center gap-4 pl-4">
                 <Show when={i.type === "http"}>
-                  <DropdownMenu>
-                    <DropdownMenu.Trigger
+                  <Menu appearance="standard">
+                    <Menu.Trigger
                       as={IconButton}
-                      icon="dot-grid"
+                      icon={<Icon name="dot-grid" />}
                       variant="ghost"
                       class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
                       onClick={(e: MouseEvent) => e.stopPropagation()}
                       onPointerDown={(e: PointerEvent) => e.stopPropagation()}
                     />
-                    <DropdownMenu.Portal>
-                      <DropdownMenu.Content class="mt-1">
-                        <DropdownMenu.Item
+                    <Menu.Portal>
+                      <Menu.Content class="mt-1">
+                        <Menu.Item
                           onSelect={() => {
                             if (i.type !== "http") return
                             props.onEdit(i)
                           }}
                         >
-                          <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
+                          {language.t("dialog.server.menu.edit")}
+                        </Menu.Item>
                         <Show when={props.domain.defaults.available() && props.domain.defaults.key() !== key}>
-                          <DropdownMenu.Item onSelect={() => props.domain.defaults.set(key)}>
-                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.default")}</DropdownMenu.ItemLabel>
-                          </DropdownMenu.Item>
+                          <Menu.Item onSelect={() => props.domain.defaults.set(key)}>
+                            {language.t("dialog.server.menu.default")}
+                          </Menu.Item>
                         </Show>
                         <Show when={props.domain.defaults.available() && props.domain.defaults.key() === key}>
-                          <DropdownMenu.Item onSelect={() => props.domain.defaults.set(null)}>
-                            <DropdownMenu.ItemLabel>
-                              {language.t("dialog.server.menu.defaultRemove")}
-                            </DropdownMenu.ItemLabel>
-                          </DropdownMenu.Item>
+                          <Menu.Item onSelect={() => props.domain.defaults.set(null)}>
+                            {language.t("dialog.server.menu.defaultRemove")}
+                          </Menu.Item>
                         </Show>
                         <Show when={props.domain.connection.canRemove(key)}>
-                          <DropdownMenu.Separator />
-                          <DropdownMenu.Item
+                          <Menu.Separator />
+                          <Menu.Item
                             onSelect={() => props.domain.connection.remove(key)}
                             class="text-text-on-critical-base hover:bg-surface-critical-weak"
                           >
-                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
-                          </DropdownMenu.Item>
+                            {language.t("dialog.server.menu.delete")}
+                          </Menu.Item>
                         </Show>
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Portal>
-                  </DropdownMenu>
+                      </Menu.Content>
+                    </Menu.Portal>
+                  </Menu>
                 </Show>
               </div>
             </div>
@@ -208,7 +207,7 @@ export function ServerConnectionList(props: {
 
       <div class="shrink-0 pb-5">
         <Button
-          variant="secondary"
+          variant="neutral"
           icon="plus-small"
           size="large"
           onClick={props.onAdd}
@@ -244,7 +243,7 @@ export function ServerConnectionForm(props: { form: ServerConnectionFormControll
       />
       <div class="shrink-0 pb-5">
         <Button
-          variant="primary"
+          variant="contrast"
           size="large"
           onClick={props.form.submit}
           disabled={props.form.state.busy()}

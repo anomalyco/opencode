@@ -1,5 +1,5 @@
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { Icon } from "@opencode-ai/ui/v2/icon"
+import { Menu } from "@opencode-ai/ui/menu"
+import { Icon } from "@opencode-ai/ui/icon"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createStore } from "solid-js/store"
 import { createSignal, For, Show, type ComponentProps, type JSX } from "solid-js"
@@ -17,7 +17,7 @@ export function SessionWorkspaceMenu(props: {
   sessionID: string
   project: Project
   directory: string
-  placement?: ComponentProps<typeof MenuV2>["placement"]
+  placement?: ComponentProps<typeof Menu>["placement"]
   gutter?: number
   class?: string
   contentClass?: string
@@ -71,57 +71,57 @@ export function SessionWorkspaceMenu(props: {
   }
 
   return (
-    <MenuV2
+    <Menu
       placement={props.placement ?? "bottom-end"}
       gutter={props.gutter ?? 4}
       modal={false}
       onOpenChange={onOpenChange}
     >
-      <MenuV2.Trigger class={props.class} disabled={blocked()}>
+      <Menu.Trigger class={props.class} disabled={blocked()}>
         {props.children}
-      </MenuV2.Trigger>
-      <MenuV2.Portal>
-        <MenuV2.Content class={`w-[200px] ${props.contentClass ?? ""}`}>
-          <MenuV2.Group>
-            <MenuV2.GroupLabel>{language.t("workspace.move.menu.title")}</MenuV2.GroupLabel>
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content class={`w-[200px] ${props.contentClass ?? ""}`}>
+          <Menu.Group>
+            <Menu.GroupLabel>{language.t("workspace.move.menu.title")}</Menu.GroupLabel>
             <Show when={pathKey(props.directory) !== pathKey(props.project.worktree)}>
-              <MenuV2.Item disabled={!!store.selected || blocked()} onSelect={() => void move(props.project.worktree)}>
+              <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(props.project.worktree)}>
                 <Icon name="monitor" />
                 {language.t("session.new.workspace.local")}
-              </MenuV2.Item>
+              </Menu.Item>
             </Show>
-            <MenuV2.Item disabled={!!store.selected || blocked()} onSelect={() => void move("create")}>
+            <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move("create")}>
               <Icon name="workspace-new" />
               {language.t("workspace.new")}
-            </MenuV2.Item>
+            </Menu.Item>
             <Show when={workspaces().length > 0}>
-              <MenuV2.Sub gutter={0} overlap overflowPadding={8}>
-                <MenuV2.SubTrigger>
+              <Menu.Sub gutter={0} overlap overflowPadding={8}>
+                <Menu.SubTrigger>
                   <Icon name="workspace-isolated" />
                   {language.t("session.new.workspace.existing").replace(/(…|\.{3})$/, "")}
-                </MenuV2.SubTrigger>
-                <MenuV2.Portal>
-                  <MenuV2.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">
+                </Menu.SubTrigger>
+                <Menu.Portal>
+                  <Menu.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">
                     <For each={workspaces()}>
                       {(workspace) => (
-                        <MenuV2.Item disabled={!!store.selected || blocked()} onSelect={() => void move(workspace)}>
+                        <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(workspace)}>
                           <Icon name="workspace-isolated" />
                           <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
-                        </MenuV2.Item>
+                        </Menu.Item>
                       )}
                     </For>
-                  </MenuV2.SubContent>
-                </MenuV2.Portal>
-              </MenuV2.Sub>
+                  </Menu.SubContent>
+                </Menu.Portal>
+              </Menu.Sub>
             </Show>
-          </MenuV2.Group>
-          <MenuV2.Separator class="h-[0.5px] bg-v2-border-border-base" />
-          <MenuV2.Item onSelect={() => openWorkspaces()}>
+          </Menu.Group>
+          <Menu.Separator class="h-[0.5px] bg-v2-border-border-base" />
+          <Menu.Item onSelect={() => openWorkspaces()}>
             <span class="min-w-0 flex-1 truncate">{language.t("common.viewAll")}</span>
-          </MenuV2.Item>
-        </MenuV2.Content>
-      </MenuV2.Portal>
-    </MenuV2>
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
   )
 }
 

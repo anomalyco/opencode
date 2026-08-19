@@ -1,7 +1,7 @@
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
-import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
+import { Divider } from "@opencode-ai/ui/divider"
+import { TextInput } from "@opencode-ai/ui/text-input"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import { type Component, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
@@ -69,12 +69,12 @@ export const DialogServerV2: Component<{
       <DialogHeader hideClose={true}>
         <DialogTitle>{title()}</DialogTitle>
       </DialogHeader>
-      <DividerV2 />
+      <Divider />
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
         <div class="flex w-full min-w-0 flex-col gap-6">
           <div class="flex w-full min-w-0 flex-col gap-2">
             <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.url")}</label>
-            <TextInputV2
+            <TextInput
               type="text"
               appearance="large"
               class="!w-full self-stretch"
@@ -92,7 +92,7 @@ export const DialogServerV2: Component<{
           </div>
           <div class="flex w-full min-w-0 flex-col gap-2">
             <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.name")}</label>
-            <TextInputV2
+            <TextInput
               type="text"
               appearance="large"
               class="!w-full self-stretch"
@@ -106,7 +106,7 @@ export const DialogServerV2: Component<{
           <div class="grid w-full min-w-0 grid-cols-2 gap-4">
             <div class="flex min-w-0 flex-col gap-2">
               <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.username")}</label>
-              <TextInputV2
+              <TextInput
                 type="text"
                 appearance="large"
                 class="!w-full self-stretch"
@@ -119,7 +119,7 @@ export const DialogServerV2: Component<{
             </div>
             <div class="flex min-w-0 flex-col gap-2">
               <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.password")}</label>
-              <TextInputV2
+              <TextInput
                 type="password"
                 appearance="large"
                 class="!w-full self-stretch"
@@ -134,12 +134,12 @@ export const DialogServerV2: Component<{
         </div>
       </DialogBody>
       <DialogFooter>
-        <ButtonV2 variant="neutral" disabled={form.state.busy()} onClick={() => dialog.close()}>
+        <Button variant="neutral" disabled={form.state.busy()} onClick={() => dialog.close()}>
           {language.t("common.cancel")}
-        </ButtonV2>
-        <ButtonV2 variant="contrast" disabled={form.state.busy()} onClick={form.submit}>
+        </Button>
+        <Button variant="contrast" disabled={form.state.busy()} onClick={form.submit}>
           {submitLabel()}
-        </ButtonV2>
+        </Button>
       </DialogFooter>
     </Dialog>
   )

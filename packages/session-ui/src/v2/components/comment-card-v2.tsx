@@ -1,7 +1,7 @@
 import { createSignal, onCleanup, onMount, Show } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { getFilenameTruncated } from "@opencode-ai/util/path"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { AttachmentCardV2 } from "./attachment-card-v2"
 
 export function CommentCardV2(props: {
@@ -30,7 +30,7 @@ export function CommentCardV2(props: {
   })
 
   return (
-    <TooltipV2
+    <Tooltip
       placement="top"
       openDelay={1000}
       value={props.title ?? props.comment}
@@ -59,6 +59,6 @@ export function CommentCardV2(props: {
           </Show>
         </span>
       </AttachmentCardV2>
-    </TooltipV2>
+    </Tooltip>
   )
 }

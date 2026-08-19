@@ -1,7 +1,6 @@
 import type { UserMessage } from "../presentation"
 import { HoverCard } from "@kobalte/core/hover-card"
-import { ComponentProps, For, Match, Show, createSignal, splitProps, Switch } from "solid-js"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { ComponentProps, For, Match, Show, createMemo, createSignal, splitProps, Switch } from "solid-js"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 
 export function MessageNav(
@@ -51,7 +50,7 @@ export function MessageNav(
                 </Match>
                 <Match when={local.size === "normal"}>
                   <button data-slot="message-nav-message-button" onClick={handleClick} onKeyDown={handleKeyPress}>
-                    <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
+                    <MessageDiffBars changes={message.summary?.diffs ?? []} />
                     <div
                       data-slot="message-nav-title-preview"
                       data-active={message.id === local.current?.id || undefined}
@@ -98,5 +97,49 @@ export function MessageNav(
       </Match>
       <Match when={local.size === "normal"}>{content(local.class)}</Match>
     </Switch>
+  )
+}
+
+function MessageDiffBars(props: { changes: { additions: number; deletions: number }[] }) {
+  const additions = createMemo(() => props.changes.reduce((total, diff) => total + diff.additions, 0))
+  const deletions = createMemo(() => props.changes.reduce((total, diff) => total + diff.deletions, 0))
+  const colors = createMemo(() => {
+    const added = additions()
+    const deleted = deletions()
+    if (added === 0 && deleted === 0) return Array(5).fill("var(--icon-weak-base)")
+
+    if (added + deleted < 5) {
+      return [
+        ...Array(added > 0 ? 1 : 0).fill("var(--icon-diff-add-base)"),
+        ...Array(deleted > 0 ? 1 : 0).fill("var(--icon-diff-delete-base)"),
+        ...Array(5 - (added > 0 ? 1 : 0) - (deleted > 0 ? 1 : 0)).fill("var(--icon-weak-base)"),
+      ]
+    }
+
+    const total = added + deleted
+    const ratio = added > deleted ? added / deleted : deleted / added
+    const colored = total < 20 || ratio < 4 ? 4 : 5
+    const addedRaw = (added / total) * colored
+    const deletedRaw = (deleted / total) * colored
+    const addedBars =
+      added === 0 ? 0 : Math.min(added <= 5 ? 1 : added <= 10 ? 2 : colored, Math.max(1, Math.round(addedRaw)))
+    const deletedBars =
+      deleted === 0 ? 0 : Math.min(deleted <= 5 ? 1 : deleted <= 10 ? 2 : colored, Math.max(1, Math.round(deletedRaw)))
+    const overflow = Math.max(0, addedBars + deletedBars - colored)
+    const adjustedAdded = overflow > 0 && addedRaw > deletedRaw ? addedBars - overflow : addedBars
+    const adjustedDeleted = overflow > 0 && addedRaw <= deletedRaw ? deletedBars - overflow : deletedBars
+    return [
+      ...Array(adjustedAdded).fill("var(--icon-diff-add-base)"),
+      ...Array(adjustedDeleted).fill("var(--icon-diff-delete-base)"),
+      ...Array(5 - adjustedAdded - adjustedDeleted).fill("var(--icon-weak-base)"),
+    ]
+  })
+
+  return (
+    <svg data-slot="message-nav-diff-bars" viewBox="0 0 18 14" aria-hidden="true">
+      <For each={colors().slice(0, 5)}>
+        {(color, index) => <rect x={index() * 4} width="2" height="14" rx="1" fill={color} />}
+      </For>
+    </svg>
   )
 }

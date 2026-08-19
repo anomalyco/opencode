@@ -1,15 +1,15 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { showToast } from "@opencode-ai/ui/toast"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
-import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
-import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
-import { RadioGroupV2, RadioItemV2 } from "@opencode-ai/ui/v2/radio-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
+import { Divider } from "@opencode-ai/ui/divider"
+import { Loader } from "@opencode-ai/ui/loader"
+import { RadioGroup, RadioItem } from "@opencode-ai/ui/radio"
+import { TextInput } from "@opencode-ai/ui/text-input"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { showToast } from "@/utils/toast"
 import { useWslAddServerProbes } from "./add-server-probes"
 import { useWslServers } from "./context"
 import { addServerViewModel, type AddServerText } from "./settings-model"
@@ -50,7 +50,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
             fallback={<div class="settings-v2-wsl-loading">{controller.loadError()}</div>}
           >
             <div class="settings-v2-wsl-loading">
-              <LoaderV2 />
+              <Loader />
             </div>
           </Show>
         </Dialog>
@@ -73,7 +73,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
           >
             <Dialog fit class="settings-v2-wsl-dialog">
               <div class="settings-v2-wsl-loading">
-                <LoaderV2 />
+                <Loader />
               </div>
             </Dialog>
           </Show>
@@ -85,13 +85,13 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
               {controller.view() === "main" ? language.t("wsl.server.add") : language.t("wsl.onboarding.installDistro")}
             </DialogTitle>
           </DialogHeader>
-          <DividerV2 />
+          <Divider />
           <Show
             when={controller.view() === "main"}
             fallback={
               <>
                 <DialogBody class="settings-v2-wsl-dialog-body settings-v2-wsl-catalog-picker">
-                  <TextInputV2
+                  <TextInput
                     class="settings-v2-wsl-catalog-search"
                     appearance="large"
                     placeholder={language.t("wsl.onboarding.searchDistros")}
@@ -100,7 +100,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                     onInput={(event) => controller.setCatalogSearch(event.currentTarget.value)}
                   />
                   <div class="settings-v2-wsl-catalog-list">
-                    <RadioGroupV2
+                    <RadioGroup
                       hideLabel
                       class="settings-v2-wsl-distro-group"
                       label={language.t("wsl.onboarding.installDistro")}
@@ -110,7 +110,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                     >
                       <For each={model().filteredInstallableDistros}>
                         {(item) => (
-                          <RadioItemV2
+                          <RadioItem
                             class="settings-v2-wsl-distro-row settings-v2-wsl-catalog-row"
                             value={item.name}
                             disabled={model().busy}
@@ -118,23 +118,23 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                           />
                         )}
                       </For>
-                    </RadioGroupV2>
+                    </RadioGroup>
                   </div>
                 </DialogBody>
                 <DialogFooter>
-                  <ButtonV2 variant="neutral" disabled={model().busy} onClick={controller.closeCatalog}>
+                  <Button variant="neutral" disabled={model().busy} onClick={controller.closeCatalog}>
                     {language.t("common.cancel")}
-                  </ButtonV2>
-                  <ButtonV2
+                  </Button>
+                  <Button
                     variant={model().installingCatalogDistro ? "loading" : "contrast"}
                     disabled={!model().installingCatalogDistro && (model().busy || !model().catalogTarget)}
                     style={{ width: "99px" }}
                     onClick={controller.installCatalogDistro}
                   >
                     <Show when={model().installingCatalogDistro} fallback={language.t("wsl.onboarding.installDistro")}>
-                      <LoaderV2 />
+                      <Loader />
                     </Show>
-                  </ButtonV2>
+                  </Button>
                 </DialogFooter>
               </>
             }
@@ -142,14 +142,9 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
             <DialogBody class="settings-v2-wsl-dialog-body">
               <div class="settings-v2-wsl-section-header">
                 <span class="settings-v2-wsl-section-title">{language.t("wsl.onboarding.installedDistros")}</span>
-                <ButtonV2
-                  variant="ghost-muted"
-                  size="small"
-                  disabled={model().busy}
-                  onClick={controller.refreshDistros}
-                >
+                <Button variant="ghost-muted" size="small" disabled={model().busy} onClick={controller.refreshDistros}>
                   {language.t("wsl.onboarding.checkAgain")}
-                </ButtonV2>
+                </Button>
               </div>
 
               <Show
@@ -165,7 +160,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                 }
               >
                 <div class="settings-v2-wsl-distro-list">
-                  <RadioGroupV2
+                  <RadioGroup
                     hideLabel
                     class="settings-v2-wsl-distro-group"
                     label={language.t("wsl.onboarding.installedDistros")}
@@ -177,7 +172,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                       {(item) => {
                         const status = () => model().distroStatuses[item.name] ?? null
                         return (
-                          <RadioItemV2
+                          <RadioItem
                             class={`settings-v2-wsl-distro-row${item.version === 1 ? " settings-v2-wsl-distro-row--unsupported" : ""}`}
                             value={item.name}
                             disabled={item.version === 1 || model().busy}
@@ -195,7 +190,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                         )
                       }}
                     </For>
-                  </RadioGroupV2>
+                  </RadioGroup>
                 </div>
               </Show>
 
@@ -230,19 +225,19 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
             </DialogBody>
 
             <DialogFooter>
-              <ButtonV2 variant="neutral" disabled={controller.adding()} onClick={controller.close}>
+              <Button variant="neutral" disabled={controller.adding()} onClick={controller.close}>
                 {language.t("common.cancel")}
-              </ButtonV2>
-              <ButtonV2
+              </Button>
+              <Button
                 variant={primaryButton().loading ? "loading" : primaryButton().variant}
                 disabled={!primaryButton().loading && primaryButton().disabled}
                 style={primaryButtonStyle()}
                 onClick={controller.runPrimary}
               >
                 <Show when={primaryButton().loading} fallback={translate(language, primaryButton().label)}>
-                  <LoaderV2 />
+                  <Loader />
                 </Show>
-              </ButtonV2>
+              </Button>
             </DialogFooter>
           </Show>
         </Dialog>
@@ -439,14 +434,14 @@ function DialogWslSetup(props: {
           </Show>
         </div>
         <Show when={props.state === "unavailable" && props.installable}>
-          <ButtonV2 variant="neutral" disabled={props.busy} onClick={props.onInstall}>
+          <Button variant="neutral" disabled={props.busy} onClick={props.onInstall}>
             {language.t("wsl.onboarding.installWsl")}
-          </ButtonV2>
+          </Button>
         </Show>
         <Show when={props.state !== "unavailable"}>
-          <ButtonV2 variant="neutral" onClick={() => dialog.close()}>
+          <Button variant="neutral" onClick={() => dialog.close()}>
             {language.t("common.close")}
-          </ButtonV2>
+          </Button>
         </Show>
       </div>
     </Dialog>

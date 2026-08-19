@@ -1,4 +1,5 @@
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -107,7 +108,7 @@ export function SessionComposerPullout(props: {
               <IconButton
                 data-action={`session-${props.name}-toggle-button`}
                 data-collapsed={props.collapsed ? "true" : "false"}
-                icon="chevron-down"
+                icon={<Icon name="chevron-down" />}
                 size="normal"
                 variant="ghost"
                 style={{ transform: `rotate(${value() * 180}deg)` }}

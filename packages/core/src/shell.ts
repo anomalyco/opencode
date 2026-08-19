@@ -7,7 +7,6 @@ import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
 import { AppProcess } from "@opencode-ai/util/process"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Config } from "./config.js"
 import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
 import { Location } from "./location.js"
@@ -68,14 +67,14 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Shell") {}
 
-export const layer = (options?: ShellSelect.Options) =>
+const layer = () =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const location = yield* Location.Service
-      const config = yield* Config.Service
       const global = yield* Global.Service
+      const shell = yield* ShellSelect.Service
       const environment = yield* Environment.Service
       const hooks = yield* PluginHooks.Service
       const environments = yield* SessionEnvironment.Service
@@ -146,12 +145,7 @@ export const layer = (options?: ShellSelect.Options) =>
         return session.info
       })
 
-      const resolve = () =>
-        config
-          .entries()
-          .pipe(Effect.map((entries) => ShellSelect.preferred(Config.latest(entries, "shell"), options, global.bin)))
-
-      const name = () => resolve().pipe(Effect.map(ShellSelect.name))
+      const name = () => shell.preferred().pipe(Effect.map(ShellSelect.name))
 
       const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
         const session = yield* require(id)
@@ -196,7 +190,7 @@ export const layer = (options?: ShellSelect.Options) =>
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout,
-          shell: yield* resolve(),
+          shell: yield* shell.preferred(),
           env: {
             ...(sessionEnvironment ?? process.env),
             TERM: "xterm-256color",
@@ -353,20 +347,16 @@ export const layer = (options?: ShellSelect.Options) =>
     }),
   )
 
-export function configured(options?: ShellSelect.Options) {
-  return makeLocationNode({
-    service: Service,
-    layer: layer(options),
-    deps: [
-      Bus.node,
-      Location.node,
-      Config.node,
-      Global.node,
-      Environment.node,
-      PluginHooks.node,
-      SessionEnvironment.node,
-    ],
-  })
-}
-
-export const node = configured()
+export const node = makeLocationNode({
+  service: Service,
+  layer: layer(),
+  deps: [
+    Bus.node,
+    Location.node,
+    Global.node,
+    ShellSelect.node,
+    Environment.node,
+    PluginHooks.node,
+    SessionEnvironment.node,
+  ],
+})

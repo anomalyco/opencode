@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, Message } from "../../src/index.js"
+import { LLM, LLMEvent, Message, ToolDefinition } from "../../src/index.js"
 import { configure } from "../../src/providers/openai-compatible-responses.js"
 import { OpenAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
@@ -56,6 +56,28 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("lowers chronological system updates as standard developer messages", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.user("Before."), Message.system("Operator update."), Message.assistant("After.")],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { role: "developer", content: "Operator update." },
+        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+      ])
+    }),
+  )
+
   it.effect("rejects OpenAI-native tools", () =>
     Effect.gen(function* () {
       const model = configure({
@@ -101,13 +123,36 @@ describe("Open Responses-compatible route", () => {
       const model = configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
-        providerOptions: { openresponses: { reasoningEffort: "low", store: true } },
+        providerOptions: {
+          openresponses: {
+            reasoningEffort: "low",
+            store: true,
+            truncation: "auto",
+            allowedTools: { toolNames: ["lookup"] },
+            maxToolCalls: 2,
+            parallelToolCalls: false,
+          },
+        },
       }).model("example-model")
-      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Think." }))
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Think.",
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      )
 
       expect(prepared.body).toMatchObject({
         reasoning: { effort: "low" },
         store: true,
+        truncation: "auto",
+        tool_choice: {
+          type: "allowed_tools",
+          mode: "auto",
+          tools: [{ type: "function", name: "lookup" }],
+        },
+        max_tool_calls: 2,
+        parallel_tool_calls: false,
       })
     }),
   )

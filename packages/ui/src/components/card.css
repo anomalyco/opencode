@@ -58,7 +58,7 @@
     gap: var(--card-gap);
   }
 
-  :where([data-slot="card-title"]) [data-component="icon"] {
+  :where([data-slot="card-title"]) [data-slot="icon-svg"] {
     color: var(--card-accent);
   }
 
@@ -71,7 +71,7 @@
     flex: 0 0 auto;
   }
 
-  :where([data-slot="card-title-icon"][data-placeholder]) [data-component="icon"] {
+  :where([data-slot="card-title-icon"][data-placeholder]) [data-slot="icon-svg"] {
     color: var(--v2-text-text-faint);
   }
 

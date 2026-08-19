@@ -12,10 +12,10 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Keybind } from "@opencode-ai/ui/keybind"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 
 import { LayoutRoute, useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -330,28 +330,28 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
                 </Show>
-                <TooltipV2
+                <Tooltip
                   placement="bottom"
                   value={
                     <>
                       {language.t("home.title")}
-                      <KeybindV2 keys={command.keybindParts("home.toggle")} variant="neutral" />
+                      <Keybind keys={command.keybindParts("home.toggle")} variant="neutral" />
                     </>
                   }
                   class="shrink-0"
                 >
-                  <IconButtonV2
+                  <IconButton
                     type="button"
                     variant="ghost-muted"
                     size="large"
                     class="!w-9 shrink-0"
-                    icon={<IconV2 name="grid-plus" />}
+                    icon={<Icon name="grid-plus" />}
                     state={layout.route().type === "home" ? "pressed" : undefined}
                     onClick={toggleHome}
                     aria-label={language.t("home.title")}
                     aria-pressed={layout.route().type === "home"}
                   />
-                </TooltipV2>
+                </Tooltip>
 
                 <TitlebarTabStrip
                   tabs={tabsStore}
@@ -368,25 +368,25 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   }}
                   onReorder={(keys) => tabsStoreActions.reorder(keys)}
                 />
-                <TooltipV2
+                <Tooltip
                   placement="bottom"
                   value={
                     <>
                       {language.t("command.session.new")}
-                      <KeybindV2 keys={newTabTooltipKeybind(command)} variant="neutral" />
+                      <Keybind keys={newTabTooltipKeybind(command)} variant="neutral" />
                     </>
                   }
                 >
-                  <IconButtonV2
+                  <IconButton
                     type="button"
                     variant="ghost-muted"
                     size="large"
                     class="shrink-0"
-                    icon={<IconV2 name="plus" />}
+                    icon={<Icon name="plus" />}
                     onClick={openNewTab}
                     aria-label={language.t("command.session.new")}
                   />
-                </TooltipV2>
+                </Tooltip>
                 <div class="flex-1" />
                 <TitlebarV2Right state={v2RightState()} />
               </div>

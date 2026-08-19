@@ -15,13 +15,13 @@ import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualIt
 import { Card } from "@opencode-ai/ui/card"
 import { MessageDivider, SessionShellMessage, type UserActions } from "@opencode-ai/session-ui/message-part"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Menu } from "@opencode-ai/ui/menu"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
+import { Button } from "@opencode-ai/ui/button"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
@@ -138,7 +138,7 @@ function WorkspaceMoveAction(props: {
             : "flex h-[46px] w-full items-center gap-2 rounded-b-[6px] px-3 pe-9 pt-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted focus-visible:outline-none"
         }
       >
-        <IconV2 name="workspace-new" class="shrink-0 text-v2-icon-icon-muted" />
+        <Icon name="workspace-new" class="shrink-0 text-v2-icon-icon-muted" />
         <span class="min-w-0 truncate">{language.t("workspace.move.title")}</span>
       </SessionWorkspaceMenu>
       <button
@@ -154,7 +154,7 @@ function WorkspaceMoveAction(props: {
           props.onDismiss()
         }}
       >
-        <IconV2 name="xmark-small" />
+        <Icon name="xmark-small" />
       </button>
     </div>
   )
@@ -203,12 +203,12 @@ function SessionSummaryPanel(props: {
           gutter={-22}
           class={`${row} hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed`}
         >
-          <IconV2 name={props.local ? "monitor" : "workspace-isolated"} class="shrink-0 text-v2-icon-icon-muted" />
+          <Icon name={props.local ? "monitor" : "workspace-isolated"} class="shrink-0 text-v2-icon-icon-muted" />
           <span class="min-w-0 flex-1 truncate text-start">{location()}</span>
-          <IconV2 name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+          <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
         </SessionWorkspaceMenu>
         <div class={row}>
-          <IconV2 name="branch" class="shrink-0 text-v2-icon-icon-muted" />
+          <Icon name="branch" class="shrink-0 text-v2-icon-icon-muted" />
           <Show
             when={props.branch}
             fallback={
@@ -235,13 +235,13 @@ function SessionSummaryPanel(props: {
           class={`${row} hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none`}
           onClick={props.onReview}
         >
-          <IconV2 name="review" class="shrink-0 text-v2-icon-icon-muted" />
+          <Icon name="review" class="shrink-0 text-v2-icon-icon-muted" />
           <Show when={props.diffs} fallback={<span>{language.t("session.review.loadingChanges")}</span>}>
             {(diffs) => (
               <Show when={diffs().length > 0} fallback={<span>{language.t("session.review.noChanges")}</span>}>
                 <span>{language.plural("ui.sessionTurn.diffs.changed", diffs().length)}</span>
                 <span class="text-v2-text-text-muted">·</span>
-                <DiffChanges changes={diffs()} />
+                <DiffChanges appearance="standard" changes={diffs()} />
               </Show>
             )}
           </Show>
@@ -1175,11 +1175,11 @@ function MessageTimelineView(
                     when={workspaceSession()}
                     fallback={
                       <span class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-muted">
-                        <IconV2 name="monitor" />
+                        <Icon name="monitor" />
                       </span>
                     }
                   >
-                    <TooltipV2
+                    <Tooltip
                       placement="bottom-start"
                       value={sessionDirectory()}
                       contentClass="max-w-[calc(100vw-32px)] break-all"
@@ -1189,9 +1189,9 @@ function MessageTimelineView(
                         aria-label={sessionDirectory()}
                         class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-accent"
                       >
-                        <IconV2 name="workspace-isolated" />
+                        <Icon name="workspace-isolated" />
                       </span>
-                    </TooltipV2>
+                    </Tooltip>
                   </Show>
                   <Show when={parentID()}>
                     <button
@@ -1268,8 +1268,8 @@ function MessageTimelineView(
                           onOpenChange={setSummary}
                         >
                           <KobaltePopover.Trigger
-                            as={IconButtonV2}
-                            icon={<IconV2 name="window-analytics" />}
+                            as={IconButton}
+                            icon={<Icon name="window-analytics" />}
                             variant="ghost-muted"
                             size="large"
                             state={summaryOpen() ? "pressed" : undefined}
@@ -1300,7 +1300,7 @@ function MessageTimelineView(
                       )}
                     </Show>
                     <Show when={!parentID()}>
-                      <MenuV2
+                      <Menu
                         gutter={6}
                         placement="bottom-end"
                         open={title.menuOpen}
@@ -1309,9 +1309,9 @@ function MessageTimelineView(
                           if (open) return
                         }}
                       >
-                        <MenuV2.Trigger
-                          as={IconButtonV2}
-                          icon={<IconV2 name="outline-dots" />}
+                        <Menu.Trigger
+                          as={IconButton}
+                          icon={<Icon name="outline-dots" />}
                           variant="ghost-muted"
                           size="large"
                           state={share.open || title.pendingShare ? "pressed" : undefined}
@@ -1321,8 +1321,8 @@ function MessageTimelineView(
                             more = el
                           }}
                         />
-                        <MenuV2.Portal>
-                          <MenuV2.Content
+                        <Menu.Portal>
+                          <Menu.Content
                             style={{ width: "120px", "min-width": "120px" }}
                             onCloseAutoFocus={(event) => {
                               if (title.pendingRename) {
@@ -1340,34 +1340,34 @@ function MessageTimelineView(
                               }
                             }}
                           >
-                            <MenuV2.Item
+                            <Menu.Item
                               onSelect={() => {
                                 setTitle("pendingRename", true)
                                 setTitle("menuOpen", false)
                               }}
                             >
                               {language.t("common.rename")}
-                            </MenuV2.Item>
+                            </Menu.Item>
                             <Show when={shareEnabled()}>
-                              <MenuV2.Item
+                              <Menu.Item
                                 onSelect={() => {
                                   setTitle({ pendingShare: true, menuOpen: false })
                                 }}
                               >
                                 {language.t("session.share.action.share")}...
-                              </MenuV2.Item>
+                              </Menu.Item>
                             </Show>
-                            <MenuV2.Item onSelect={() => void props.action.export(id)}>
+                            <Menu.Item onSelect={() => void props.action.export(id)}>
                               {language.t("common.export")}...
-                            </MenuV2.Item>
+                            </Menu.Item>
                             {/* TODO: Need a V2 session archive API. */}
-                            <MenuV2.Separator />
-                            <MenuV2.Item onSelect={() => props.action.showDelete(id)}>
+                            <Menu.Separator />
+                            <Menu.Item onSelect={() => props.action.showDelete(id)}>
                               {language.t("common.delete")}...
-                            </MenuV2.Item>
-                          </MenuV2.Content>
-                        </MenuV2.Portal>
-                      </MenuV2>
+                            </Menu.Item>
+                          </Menu.Content>
+                        </Menu.Portal>
+                      </Menu>
 
                       <KobaltePopover
                         open={share.open}
@@ -1415,7 +1415,7 @@ function MessageTimelineView(
                               <Show
                                 when={shareUrl()}
                                 fallback={
-                                  <ButtonV2
+                                  <Button
                                     variant="contrast"
                                     class="w-full"
                                     onClick={() => void props.action.share()}
@@ -1424,7 +1424,7 @@ function MessageTimelineView(
                                     {props.pending.share()
                                       ? language.t("session.share.action.publishing")
                                       : language.t("session.share.action.publish")}
-                                  </ButtonV2>
+                                  </Button>
                                 }
                               >
                                 <div class="flex flex-col gap-2">
@@ -1441,26 +1441,26 @@ function MessageTimelineView(
                                     >
                                       {shareUrl()}
                                     </div>
-                                    <IconButtonV2
+                                    <IconButton
                                       type="button"
                                       size="small"
                                       variant="ghost-muted"
-                                      icon={<IconV2 name="outline-copy" />}
+                                      icon={<Icon name="outline-copy" />}
                                       aria-label={language.t("session.share.copy.copyLink")}
                                       onClick={() => void props.action.copyShareUrl()}
                                     />
-                                    <IconButtonV2
+                                    <IconButton
                                       type="button"
                                       size="small"
                                       variant="ghost-muted"
-                                      icon={<IconV2 name="outline-square-arrow" />}
+                                      icon={<Icon name="outline-square-arrow" />}
                                       aria-label={language.t("session.share.action.view")}
                                       onClick={props.action.viewShare}
                                       disabled={props.pending.unshare()}
                                     />
                                   </div>
                                   <div class="flex w-full">
-                                    <ButtonV2
+                                    <Button
                                       variant="outline"
                                       class="w-full"
                                       onClick={() => void props.action.unshare()}
@@ -1469,7 +1469,7 @@ function MessageTimelineView(
                                       {props.pending.unshare()
                                         ? language.t("session.share.action.unpublishing")
                                         : language.t("session.share.action.unpublish")}
-                                    </ButtonV2>
+                                    </Button>
                                   </div>
                                 </div>
                               </Show>

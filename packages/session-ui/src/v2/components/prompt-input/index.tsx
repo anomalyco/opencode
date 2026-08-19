@@ -4,12 +4,10 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { Keybind } from "@opencode-ai/ui/keybind"
+import { Menu } from "@opencode-ai/ui/menu"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { AttachmentCardV2 } from "../attachment-card-v2"
 import { CommentCardV2 } from "../comment-card-v2"
 import { typeLabel } from "../../../components/message-file"
@@ -403,7 +401,7 @@ export function PromptInputV2Attachments(props: {
           <For each={props.comments ?? []}>
             {(comment) => (
               <div class="relative group shrink-0">
-                <TooltipV2
+                <Tooltip
                   value={comment.comment}
                   placement="top"
                   openDelay={800}
@@ -416,14 +414,14 @@ export function PromptInputV2Attachments(props: {
                     active={comment.key === props.activeCommentID}
                     onClick={() => props.onCommentClick?.(comment)}
                   />
-                </TooltipV2>
+                </Tooltip>
                 <button
                   type="button"
                   onClick={() => props.onCommentRemove?.(comment)}
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label={props.removeLabel}
                 >
-                  <IconV2 name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -431,7 +429,7 @@ export function PromptInputV2Attachments(props: {
           <For each={props.attachments}>
             {(attachment) => (
               <div class="relative group shrink-0">
-                <TooltipV2 value={attachment.filename} placement="top" contentClass="break-all">
+                <Tooltip value={attachment.filename} placement="top" contentClass="break-all">
                   <Show
                     when={attachment.mime.startsWith("image/")}
                     fallback={
@@ -448,14 +446,14 @@ export function PromptInputV2Attachments(props: {
                     />
                     <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
                   </Show>
-                </TooltipV2>
+                </Tooltip>
                 <button
                   type="button"
                   onClick={() => props.onAttachmentRemove(attachment)}
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label={props.removeLabel}
                 >
-                  <IconV2 name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -489,45 +487,45 @@ export function PromptInputV2AddMenu(props: {
   onShell: () => void
 }) {
   return (
-    <TooltipV2
+    <Tooltip
       placement="top"
       value={
         <>
           {props.title}
-          <KeybindV2 keys={props.keybind ?? []} variant="neutral" />
+          <Keybind keys={props.keybind ?? []} variant="neutral" />
         </>
       }
     >
-      <MenuV2 gutter={6} modal={false} placement="top-start">
-        <MenuV2.Trigger
-          as={IconButtonV2}
+      <Menu gutter={6} modal={false} placement="top-start">
+        <Menu.Trigger
+          as={IconButton}
           data-action="prompt-attach"
           type="button"
-          icon={<IconV2 name="plus" />}
+          icon={<Icon name="plus" />}
           variant="ghost-muted"
           size="large"
           disabled={props.disabled}
           aria-label={props.title}
         />
-        <MenuV2.Portal>
-          <MenuV2.Content style={{ "min-width": "180px" }}>
-            <MenuV2.Item onSelect={props.onAttach} shortcut={props.attachShortcut}>
+        <Menu.Portal>
+          <Menu.Content style={{ "min-width": "180px" }}>
+            <Menu.Item onSelect={props.onAttach} shortcut={props.attachShortcut}>
               {props.attachLabel}
-            </MenuV2.Item>
-            <MenuV2.Separator />
-            <MenuV2.Item onSelect={props.onCommands} shortcut="/">
+            </Menu.Item>
+            <Menu.Separator />
+            <Menu.Item onSelect={props.onCommands} shortcut="/">
               {props.commandsLabel}
-            </MenuV2.Item>
-            <MenuV2.Item onSelect={props.onContext} shortcut="@">
+            </Menu.Item>
+            <Menu.Item onSelect={props.onContext} shortcut="@">
               {props.contextLabel}
-            </MenuV2.Item>
-            <MenuV2.Item onSelect={props.onShell} shortcut="!">
+            </Menu.Item>
+            <Menu.Item onSelect={props.onShell} shortcut="!">
               {props.shellLabel}
-            </MenuV2.Item>
-          </MenuV2.Content>
-        </MenuV2.Portal>
-      </MenuV2>
-    </TooltipV2>
+            </Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
+    </Tooltip>
   )
 }
 
@@ -566,18 +564,18 @@ export function PromptInputV2Select(props: {
   onSelect: (id: string) => void
 }) {
   return (
-    <TooltipV2
+    <Tooltip
       placement="top"
       value={
         <>
           {props.title}
-          <KeybindV2 keys={props.keybind ?? []} variant="neutral" />
+          <Keybind keys={props.keybind ?? []} variant="neutral" />
         </>
       }
     >
-      <MenuV2 gutter={6} modal={false} placement="top-start" onOpenChange={props.onOpenChange}>
-        <MenuV2.Trigger
-          as={ButtonV2}
+      <Menu gutter={6} modal={false} placement="top-start" onOpenChange={props.onOpenChange}>
+        <Menu.Trigger
+          as={Button}
           variant="ghost-muted"
           size="normal"
           class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
@@ -588,24 +586,24 @@ export function PromptInputV2Select(props: {
             {props.options.find((option) => option.id === props.current)?.label ?? props.current}
           </span>
           <span class="-ms-0.5 -me-1 flex shrink-0">
-            <IconV2 name="chevron-down" />
+            <Icon name="chevron-down" />
           </span>
-        </MenuV2.Trigger>
-        <MenuV2.Portal>
-          <MenuV2.Content>
-            <MenuV2.RadioGroup value={props.current} onChange={props.onSelect}>
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.RadioGroup value={props.current} onChange={props.onSelect}>
               <For each={props.options}>
                 {(option) => (
-                  <MenuV2.RadioItem value={option.id} class="capitalize" closeOnSelect>
+                  <Menu.RadioItem value={option.id} class="capitalize" closeOnSelect>
                     {option.label}
-                  </MenuV2.RadioItem>
+                  </Menu.RadioItem>
                 )}
               </For>
-            </MenuV2.RadioGroup>
-          </MenuV2.Content>
-        </MenuV2.Portal>
-      </MenuV2>
-    </TooltipV2>
+            </Menu.RadioGroup>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
+    </Tooltip>
   )
 }
 
@@ -687,7 +685,7 @@ export function PromptInputV2SubmitButton(props: {
   onStop: () => void
 }) {
   return (
-    <TooltipV2
+    <Tooltip
       placement="top"
       inactive={!props.stopping && props.disabled}
       value={props.stopping ? props.stopLabel : props.sendLabel}
@@ -697,8 +695,8 @@ export function PromptInputV2SubmitButton(props: {
         type="button"
         disabled={!props.stopping && props.disabled}
         tabIndex={props.mode === "normal" ? undefined : -1}
-        icon={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
-        variant="primary"
+        icon={<Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}
+        variant="contrast"
         class="size-7 rounded-md p-[6px] shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
         classList={{
           "text-v2-text-text-contrast": !!props.accent && !props.stopping && !props.disabled,
@@ -721,7 +719,7 @@ export function PromptInputV2SubmitButton(props: {
           props.onSubmit()
         }}
       />
-    </TooltipV2>
+    </Tooltip>
   )
 }
 

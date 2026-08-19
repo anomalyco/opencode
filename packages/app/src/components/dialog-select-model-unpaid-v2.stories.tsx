@@ -39,7 +39,7 @@ function SelectModelWithoutProviders() {
   onMount(open)
 
   return (
-    <Button variant="secondary" onClick={open}>
+    <Button variant="neutral" onClick={open}>
       Open select model dialog
     </Button>
   )

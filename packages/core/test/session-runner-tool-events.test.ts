@@ -353,7 +353,12 @@ test("content-filter finish retains failure evidence until step closeout", async
     publisher.publish(
       LLMEvent.stepFinish({
         index: 0,
-        reason: { normalized: "content-filter" },
+        reason: { normalized: "content-filter", raw: "refusal" },
+        providerMetadata: {
+          anthropic: {
+            stopDetails: { type: "refusal", category: "safety", explanation: "Blocked" },
+          },
+        },
         usage: {
           nonCachedInputTokens: 8,
           outputTokens: 3,
@@ -367,6 +372,10 @@ test("content-filter finish retains failure evidence until step closeout", async
   const settlement = publisher.record().finish
   expect(settlement).toMatchObject({
     finish: "content-filter",
+    rawFinish: "refusal",
+    providerState: {
+      stopDetails: { type: "refusal", category: "safety", explanation: "Blocked" },
+    },
     tokens: { input: 8, output: 2, reasoning: 1 },
   })
   if (!settlement) throw new Error("Expected content-filter settlement")
@@ -381,6 +390,11 @@ test("content-filter finish retains failure evidence until step closeout", async
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1", "session.step.failed.1"])
   expect(published.at(-1)?.data).toMatchObject({
     error: { type: "provider.content-filter", message: "Provider blocked the response" },
+    finish: "content-filter",
+    rawFinish: "refusal",
+    providerState: {
+      stopDetails: { type: "refusal", category: "safety", explanation: "Blocked" },
+    },
     cost: 1.25,
     tokens: { input: 8, output: 2, reasoning: 1 },
     snapshot: "tree-end",

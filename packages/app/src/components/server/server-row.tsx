@@ -64,6 +64,7 @@ export function ServerRow(props: ServerRowProps) {
 
   return (
     <Tooltip
+      appearance="standard"
       class="flex-1 min-w-0"
       value={tooltipValue()}
       contentStyle={{ "max-width": "none", "white-space": "nowrap" }}

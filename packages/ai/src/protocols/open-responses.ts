@@ -90,6 +90,7 @@ const OpenResponsesFunctionCallOutput = Schema.Union([
 
 export const InputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
+  Schema.Struct({ role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenResponsesInputContent) }),
   Schema.Struct({
     role: Schema.tag("assistant"),
@@ -140,6 +141,11 @@ export const Tool = Schema.Struct({
 export const ToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
   Schema.Struct({ type: Schema.tag("function"), name: Schema.String }),
+  Schema.Struct({
+    type: Schema.tag("allowed_tools"),
+    mode: Schema.Literals(["auto", "none", "required"]),
+    tools: Schema.Array(Schema.Struct({ type: Schema.tag("function"), name: Schema.String })),
+  }),
 ])
 
 // Fields shared between the HTTP body and the WebSocket `response.create`
@@ -153,6 +159,7 @@ export const coreFields = {
   tools: optionalArray(Tool),
   tool_choice: Schema.optional(ToolChoice),
   store: Schema.optional(Schema.Boolean),
+  truncation: Schema.optional(OpenResponsesOptions.TruncationSchema),
   service_tier: Schema.optional(OpenResponsesOptions.ServiceTierSchema),
   prompt_cache_key: Schema.optional(Schema.String),
   include: optionalArray(OpenResponsesOptions.ResponseIncludableSchema),
@@ -168,6 +175,8 @@ export const coreFields = {
     }),
   ),
   max_output_tokens: Schema.optional(Schema.Number),
+  max_tool_calls: Schema.optional(Schema.Int),
+  parallel_tool_calls: Schema.optional(Schema.Boolean),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
 }
@@ -439,14 +448,10 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
   for (const message of request.messages) {
     if (message.role === "system") {
-      const part = yield* ProviderShared.wrappedSystemUpdate(extension.name, message)
-      const previous = input.at(-1)
-      if (previous && "role" in previous && previous.role === "user")
-        input[input.length - 1] = {
-          role: "user",
-          content: [...previous.content, { type: "input_text", text: part.text }],
-        }
-      else input.push({ role: "user", content: [{ type: "input_text", text: part.text }] })
+      input.push({
+        role: "developer",
+        content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(extension.name, message)),
+      })
       continue
     }
 
@@ -580,6 +585,19 @@ const lowerOptions = (request: LLMRequest) => {
       : {}),
     ...(options.textVerbosity ? { text: { verbosity: options.textVerbosity } } : {}),
     ...(options.serviceTier ? { service_tier: options.serviceTier } : {}),
+    ...(options.maxToolCalls !== undefined ? { max_tool_calls: options.maxToolCalls } : {}),
+    ...(options.parallelToolCalls !== undefined ? { parallel_tool_calls: options.parallelToolCalls } : {}),
+    ...(options.truncation ? { truncation: options.truncation } : {}),
+  }
+}
+
+const allowedToolChoice = (request: LLMRequest) => {
+  const allowed = OpenResponsesOptions.resolve(request).allowedTools
+  if (!allowed) return undefined
+  return {
+    type: "allowed_tools" as const,
+    mode: allowed.mode,
+    tools: allowed.toolNames.map((name) => ({ type: "function" as const, name })),
   }
 }
 
@@ -602,7 +620,9 @@ export const fromRequestWithExtension = Effect.fn("OpenResponses.fromRequestWith
               ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
             ),
           ),
-    tool_choice: request.toolChoice ? yield* lowerToolChoice(extension.name, request.toolChoice) : undefined,
+    tool_choice:
+      allowedToolChoice(request) ??
+      (request.toolChoice ? yield* lowerToolChoice(extension.name, request.toolChoice) : undefined),
     stream: true as const,
     max_output_tokens: generation?.maxTokens,
     temperature: generation?.temperature,

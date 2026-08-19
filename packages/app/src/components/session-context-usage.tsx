@@ -1,8 +1,7 @@
 import { Show, createMemo, type ComponentProps, type JSX } from "solid-js"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
-import { ProgressCircleV2 } from "@opencode-ai/ui/v2/progress-circle-v2"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { createMediaQuery } from "@solid-primitives/media"
 
 import { useFile } from "@/context/file"
@@ -16,7 +15,7 @@ import { createSessionTabs } from "@/pages/session/helpers"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
-  placement?: ComponentProps<typeof TooltipV2>["placement"]
+  placement?: ComponentProps<typeof Tooltip>["placement"]
 }
 
 function ContextTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
@@ -111,24 +110,21 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const circle = () => (
     <div class="flex items-center justify-center">
       <ProgressCircle
+        appearance="indicator"
         size={16}
         strokeWidth={2}
         percentage={context()?.usage ?? 0}
-        style={
-          variant() === "indicator"
-            ? {
-                "--progress-circle-background": "var(--v2-background-bg-layer-04, var(--border-weak-base))",
-                "--progress-circle-background-overlay": "var(--v2-overlay-simple-overlay-pressed, transparent)",
-                "--progress-circle-progress": "var(--v2-icon-icon-base, var(--icon-base))",
-              }
-            : undefined
-        }
+        style={{
+          "--progress-circle-background": "var(--v2-background-bg-layer-04, var(--border-weak-base))",
+          "--progress-circle-background-overlay": "var(--v2-overlay-simple-overlay-pressed, transparent)",
+          "--progress-circle-progress": "var(--v2-icon-icon-base, var(--icon-base))",
+        }}
       />
     </div>
   )
   const circleV2 = () => (
     <div class="flex items-center justify-center">
-      <ProgressCircleV2 percentage={context()?.usage ?? 0} />
+      <ProgressCircle appearance="compact" percentage={context()?.usage ?? 0} />
     </div>
   )
 
@@ -145,11 +141,11 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   return (
     <Show when={params.id}>
-      <TooltipV2 value={tooltipValue()} placement={props.placement ?? "top"} shift={-8}>
+      <Tooltip value={tooltipValue()} placement={props.placement ?? "top"} shift={-8}>
         <Show
           when={variant() === "indicator"}
           fallback={
-            <IconButtonV2
+            <IconButton
               type="button"
               variant="ghost-muted"
               size="large"
@@ -161,7 +157,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         >
           {circle()}
         </Show>
-      </TooltipV2>
+      </Tooltip>
     </Show>
   )
 }

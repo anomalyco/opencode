@@ -1,6 +1,6 @@
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import type { SelectedLineRange } from "@pierre/diffs"
-import { DiffChanges } from "@opencode-ai/ui/v2/diff-changes-v2"
+import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
@@ -24,8 +24,8 @@ import type {
 import type { SessionReviewExpandMode } from "./session-review-v2"
 import { createLineCommentControllerV2 } from "./line-comment-annotations-v2"
 import { shouldVirtualizeReviewDiff } from "./session-review-file-preview-v2-virtualize"
-import { LineCommentV2OverflowIcon } from "@opencode-ai/ui/v2/line-comment-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { LineCommentOverflowIcon } from "@opencode-ai/ui/line-comment"
+import { Menu } from "@opencode-ai/ui/menu"
 import "./session-review-v2.css"
 
 type ReviewDiff = (PresentationFileDiff & { file: string }) | FileDiffInfo
@@ -68,29 +68,29 @@ function selectionPreview(diff: ViewDiff, range: SelectedLineRange) {
   return previewSelectedLines(contents, range)
 }
 
-function ReviewCommentMenuV2(props: {
+function ReviewCommentMenu(props: {
   labels: SessionReviewCommentActions
   onEdit: VoidFunction
   onDelete: VoidFunction
 }) {
   return (
     <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-      <MenuV2 gutter={4}>
-        <MenuV2.Trigger
+      <Menu gutter={4}>
+        <Menu.Trigger
           as="button"
           type="button"
           data-slot="line-comment-v2-overflow"
           aria-label={props.labels.moreLabel}
         >
-          <LineCommentV2OverflowIcon />
-        </MenuV2.Trigger>
-        <MenuV2.Portal>
-          <MenuV2.Content>
-            <MenuV2.Item onSelect={props.onEdit}>{props.labels.editLabel}</MenuV2.Item>
-            <MenuV2.Item onSelect={props.onDelete}>{props.labels.deleteLabel}</MenuV2.Item>
-          </MenuV2.Content>
-        </MenuV2.Portal>
-      </MenuV2>
+          <LineCommentOverflowIcon />
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Item onSelect={props.onEdit}>{props.labels.editLabel}</Menu.Item>
+            <Menu.Item onSelect={props.onDelete}>{props.labels.deleteLabel}</Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
     </div>
   )
 }
@@ -156,7 +156,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     editSubmitLabel: props.lineCommentActions?.saveLabel,
     renderCommentActions: props.lineCommentActions
       ? (comment, controls) => (
-          <ReviewCommentMenuV2 labels={props.lineCommentActions!} onEdit={controls.edit} onDelete={controls.remove} />
+          <ReviewCommentMenu labels={props.lineCommentActions!} onEdit={controls.edit} onDelete={controls.remove} />
         )
       : undefined,
   })

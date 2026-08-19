@@ -4,6 +4,7 @@ import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode-ai/util/global"
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
@@ -30,12 +31,26 @@ async function until(read: () => Promise<string>, expected: (value: string | und
   return value
 }
 
-async function bootApp(directory: string) {
+async function bootApp(
+  directory: string,
+  options?: {
+    plugins?: unknown[]
+    resolve?: (spec: string, install?: boolean) => Promise<string | undefined>
+  },
+) {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventStream()
   const calls = createFetch((url) => {
+    if (url.pathname === "/api/plugin")
+      return json({
+        location: {
+          directory,
+          project: { id: "proj_test", directory, canonical: directory },
+        },
+        data: options?.plugins ?? [],
+      })
     if (url.pathname !== "/api/fs/list") return
     return json({
       location: {
@@ -54,7 +69,7 @@ async function bootApp(directory: string) {
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: { get: async () => ({}), update: async () => ({}) },
-      packages: { resolve: async () => undefined },
+      packages: { resolve: options?.resolve ?? (async () => undefined) },
       args: {},
       log: () => {},
     }).pipe(
@@ -72,6 +87,40 @@ async function bootApp(directory: string) {
     },
   }
 }
+
+test("loads an advertised package TUI entrypoint only from the local cache", async () => {
+  await using tmp = await tmpdir()
+  const marker = path.join(tmp.path, "marker.txt")
+  const entrypoint = path.join(tmp.path, "tui.ts")
+  await writeFile(entrypoint, lifecycleSource(marker, "test.package", "package"))
+  const resolutions: Array<{ spec: string; install?: boolean }> = []
+
+  await using app = await bootApp(tmp.path, {
+    plugins: [
+      {
+        id: "test.server",
+        source: { type: "package", package: "test-plugin@1.0.0" },
+        status: "active",
+        tui: true,
+      },
+    ],
+    resolve: async (spec, install) => {
+      resolutions.push({ spec, install })
+      return pathToFileURL(entrypoint).href
+    },
+  })
+
+  expect(
+    await until(
+      () => readFile(marker, "utf8"),
+      (value) => value === "package:setup\n",
+    ),
+  ).toBe("package:setup\n")
+  expect(resolutions).toContainEqual({ spec: "test-plugin@1.0.0", install: false })
+
+  process.emit("SIGHUP")
+  await app.task
+})
 
 test("discovers an ancestor TUI plugin directory created after startup", async () => {
   await using tmp = await tmpdir()
@@ -222,29 +271,39 @@ test("a save whose setup throws restores the previous version", async () => {
   const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
   await mkdir(directory, { recursive: true })
   const marker = path.join(tmp.path, "a.txt")
+  const markerB = path.join(tmp.path, "b.txt")
   const source = path.join(directory, "a.ts")
+  const sourceB = path.join(directory, "b.ts")
   await writeFile(source, lifecycleSource(marker, "test.a", "a1"))
+  await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b1"))
 
   await using app = await bootApp(tmp.path)
   const read = () => readFile(marker, "utf8")
+  const readB = () => readFile(markerB, "utf8")
   expect(await until(read, (value) => value === "a1:setup\n")).toBe("a1:setup\n")
+  expect(await until(readB, (value) => value === "b1:setup\n")).toBe("b1:setup\n")
 
   // The module imports fine but its setup throws — unlike an import failure,
   // the swap has already torn down a1, so keep-last-good means restoring it.
-  await writeFile(
-    source,
-    `
+  const broken = `
 export default {
   id: "test.a",
   setup: async () => {
     throw new Error("setup boom")
   },
 }
-`,
-  )
+`
+  await writeFile(source, broken)
   expect(await until(read, (value) => value === "a1:setup\na1:cleanup\na1:setup\n")).toBe(
     "a1:setup\na1:cleanup\na1:setup\n",
   )
+
+  // Duplicate notifications for unchanged contents must not retry the broken
+  // generation and cycle the restored plugin again.
+  await writeFile(source, broken)
+  await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b2"))
+  expect(await until(readB, (value) => value?.includes("b2:setup") ?? false)).toBe("b1:setup\nb1:cleanup\nb2:setup\n")
+  expect(await read()).toBe("a1:setup\na1:cleanup\na1:setup\n")
 
   // Fixing the file swaps out the restored version normally.
   await writeFile(source, lifecycleSource(marker, "test.a", "a2"))

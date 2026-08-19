@@ -1,9 +1,9 @@
 import { Component, Show, createMemo, createResource } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
-import { Switch } from "@opencode-ai/ui/v2/switch-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { Select } from "@opencode-ai/ui/select"
+import { Switch } from "@opencode-ai/ui/switch"
+import { TextInput } from "@opencode-ai/ui/text-input"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useUpdaterAction } from "../updater-action"
@@ -100,8 +100,7 @@ const WorkspaceDestinationSetting: Component = () => {
       title={language.t("settings.workspaces.default.title")}
       description={language.t("settings.workspaces.default.description")}
     >
-      <SelectV2
-        appearance="inline"
+      <Select
         options={options()}
         current={options().find((option) => option.value === settings.workspaces.defaultDestination())}
         value={(option) => option.value}
@@ -127,8 +126,7 @@ const ShellSetting: Component<{ controller: ShellSettingsController }> = (props)
       title={language.t("settings.general.row.shell.title")}
       description={language.t("settings.general.row.shell.description")}
     >
-      <SelectV2
-        appearance="inline"
+      <Select
         data-action="settings-shell"
         options={options()}
         current={options().find((option) => option.value === props.controller.current()) ?? options()[0]}
@@ -156,8 +154,7 @@ const AppearanceSection: Component<{ controller: AppearanceSettingsController }>
           title={language.t("settings.general.row.colorScheme.title")}
           description={language.t("settings.general.row.colorScheme.description")}
         >
-          <SelectV2
-            appearance="inline"
+          <Select
             data-action="settings-color-scheme"
             options={schemeOptions}
             current={schemeOptions.find((option) => option === props.controller.scheme.current())}
@@ -183,8 +180,7 @@ const AppearanceSection: Component<{ controller: AppearanceSettingsController }>
             </>
           }
         >
-          <SelectV2
-            appearance="inline"
+          <Select
             data-action="settings-theme"
             options={props.controller.theme.options()}
             current={props.controller.theme.current()}
@@ -213,7 +209,7 @@ const FontSetting: Component<{
   return (
     <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
       <div class="w-full sm:w-[220px]">
-        <TextInputV2
+        <TextInput
           data-action={config().action}
           type="text"
           appearance="base"
@@ -254,8 +250,7 @@ const SoundSetting: Component<{
   const config = () => soundSettings[props.kind]
   return (
     <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
-      <SelectV2
-        appearance="inline"
+      <Select
         data-action={config().action}
         options={soundOptions}
         current={props.channel.current()}
@@ -283,8 +278,7 @@ const LanguageSetting = () => {
       title={language.t("settings.general.row.language.title")}
       description={language.t("settings.general.row.language.description")}
     >
-      <SelectV2
-        appearance="inline"
+      <Select
         data-action="settings-language"
         options={options()}
         placement="bottom-end"
@@ -500,9 +494,9 @@ export const SettingsGeneral: Component<{
           title={language.t("settings.updates.row.check.title")}
           description={language.t("settings.updates.row.check.description")}
         >
-          <ButtonV2 size="normal" variant="neutral" disabled={!updater.action().run} onClick={() => updater.run()}>
+          <Button size="normal" variant="neutral" disabled={!updater.action().run} onClick={() => updater.run()}>
             {language.t(updater.action().label)}
-          </ButtonV2>
+          </Button>
         </SettingsRowV2>
       </SettingsListV2>
     </div>

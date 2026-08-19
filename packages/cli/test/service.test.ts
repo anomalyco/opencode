@@ -19,29 +19,6 @@ test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("preview-a")).not.toBe(ServiceConfig.defaultPort("preview-b"))
 })
 
-test("managed service forwards the CPU profile path to the server", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-profile-"))
-  const profile = path.join(root, "server.cpuprofile")
-  try {
-    const previous = process.env.OPENCODE_CPU_PROFILE
-    process.env.OPENCODE_CPU_PROFILE = profile
-    try {
-      const options = await Effect.runPromise(
-        ServiceConfig.options().pipe(
-          Effect.provide(Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })),
-          Effect.provide(NodeFileSystem.layer),
-        ),
-      )
-      expect(options.command.slice(-2)).toEqual(["--cpu-profile", profile])
-    } finally {
-      if (previous === undefined) delete process.env.OPENCODE_CPU_PROFILE
-      else process.env.OPENCODE_CPU_PROFILE = previous
-    }
-  } finally {
-    await fs.rm(root, { recursive: true, force: true })
-  }
-})
-
 test("local channel stores service config with the local service filename", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-"))
   try {

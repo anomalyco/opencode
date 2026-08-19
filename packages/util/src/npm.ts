@@ -29,6 +29,7 @@ export interface Interface {
     pkg: string,
     options?: { readonly subpaths?: readonly string[] },
   ) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
+  readonly resolve: (pkg: string, options?: { readonly subpaths?: readonly string[] }) => Effect.Effect<EntryPoint>
   readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
 }
 
@@ -39,6 +40,16 @@ const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|",
 export function sanitize(pkg: string) {
   if (!illegal) return pkg
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
+}
+
+export async function isRegistryPackage(pkg: string) {
+  const { default: npa } = await import("npm-package-arg")
+  try {
+    const result = npa(pkg)
+    return result.name !== undefined && ["version", "range", "tag"].includes(result.type)
+  } catch {
+    return false
+  }
 }
 
 const resolveEntryPoint = (name: string, dir: string, subpaths: readonly string[] = [""]): EntryPoint => {
@@ -134,6 +145,23 @@ const layer = Layer.effect(
       return resolveEntryPoint(first.name, first.path, options?.subpaths)
     }, Effect.scoped)
 
+    const resolve = Effect.fn("Npm.resolve")(function* (
+      pkg: string,
+      options?: { readonly subpaths?: readonly string[] },
+    ) {
+      const { default: npa } = yield* Effect.promise(() => import("npm-package-arg"))
+      const name = (() => {
+        try {
+          return npa(pkg).name ?? pkg
+        } catch {
+          return pkg
+        }
+      })()
+      const dir = path.join(directory(pkg), "node_modules", name)
+      if (!(yield* afs.existsSafe(dir))) return { directory: dir }
+      return resolveEntryPoint(name, dir, options?.subpaths)
+    })
+
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
       const dir = directory(pkg)
       const binDir = path.join(dir, "node_modules", ".bin")
@@ -187,6 +215,7 @@ const layer = Layer.effect(
 
     return Service.of({
       add,
+      resolve,
       which,
     })
   }),
@@ -202,6 +231,10 @@ const { runPromise } = makeRuntime(Service, LayerNode.compile(node))
 
 export async function add(...args: Parameters<Interface["add"]>) {
   return runPromise((svc) => svc.add(...args))
+}
+
+export async function resolve(...args: Parameters<Interface["resolve"]>) {
+  return runPromise((svc) => svc.resolve(...args))
 }
 
 export async function which(...args: Parameters<Interface["which"]>) {

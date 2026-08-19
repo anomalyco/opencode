@@ -1,9 +1,9 @@
 import { For, Show, createMemo, lazy, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { TextInput } from "@opencode-ai/ui/text-input"
 import { showToast } from "@/utils/toast"
 import fuzzysort from "fuzzysort"
 import { DEFAULT_PALETTE_KEYBIND, formatKeybind, parseKeybind, useCommand } from "@/context/command"
@@ -11,7 +11,7 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { SettingsListV2 } from "./settings-v2/parts/list"
 
-const IconV2 = lazy(() => import("@opencode-ai/ui/v2/icon").then((module) => ({ default: module.Icon })))
+const Icon = lazy(() => import("@opencode-ai/ui/icon").then((module) => ({ default: module.Icon })))
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 const PALETTE_ID = "command.palette"
@@ -387,12 +387,12 @@ function SettingsKeybindsV2View(props: {
             <h2 class="settings-v2-tab-title">{language.t("settings.shortcuts.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.shortcuts.description")}</span>
           </div>
-          <ButtonV2 variant="ghost" onClick={props.onReset} disabled={!props.hasOverrides}>
+          <Button variant="ghost" onClick={props.onReset} disabled={!props.hasOverrides}>
             {language.t("settings.shortcuts.reset.button")}
-          </ButtonV2>
+          </Button>
         </div>
         <div class="settings-v2-tab-search">
-          <TextInputV2
+          <TextInput
             type="search"
             appearance="base"
             value={store.filter}
@@ -405,12 +405,12 @@ function SettingsKeybindsV2View(props: {
             aria-label={language.t("settings.shortcuts.search.placeholder")}
           />
           <Show when={store.filter}>
-            <IconButtonV2
+            <IconButton
               type="button"
               variant="ghost-muted"
               size="small"
               class="settings-v2-tab-search-clear"
-              icon={<IconV2 name="close" size="large" class="text-v2-icon-icon-muted" />}
+              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
               onClick={() => setStore("filter", "")}
             />
           </Show>

@@ -111,6 +111,7 @@ export const DEFAULT_THEME = {
       subdued: "$hue.neutral.600",
       action: {
         primary: { default: "$hue.neutral.200", $disabled: "$hue.neutral.500" },
+        secondary: { default: "$text.subdued", $hovered: "$text.default" },
         destructive: { default: "$hue.red.200", $disabled: "$hue.neutral.500" },
       },
       formfield: {
@@ -142,6 +143,7 @@ export const DEFAULT_THEME = {
           $selected: "$hue.interactive.700",
           $disabled: "$hue.neutral.300",
         },
+        secondary: { default: "transparent" },
         destructive: {
           default: "$hue.red.600",
           $hovered: "$hue.red.700",
@@ -324,6 +326,7 @@ export const DEFAULT_THEME = {
       subdued: "$hue.neutral.400",
       action: {
         primary: { default: "$hue.neutral.200", $disabled: "$hue.neutral.500" },
+        secondary: { default: "$text.subdued", $hovered: "$text.default" },
         destructive: { default: "$hue.red.200", $disabled: "$hue.neutral.500" },
       },
       formfield: {
@@ -355,6 +358,7 @@ export const DEFAULT_THEME = {
           $selected: "$hue.interactive.600",
           $disabled: "$hue.neutral.800",
         },
+        secondary: { default: "transparent" },
         destructive: {
           default: "$hue.red.600",
           $hovered: "$hue.red.700",

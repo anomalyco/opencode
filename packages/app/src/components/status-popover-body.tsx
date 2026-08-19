@@ -48,10 +48,9 @@ export function StatusPopoverBody(props: { shown: boolean }) {
       <Tabs
         aria-label={language.t("status.popover.ariaLabel")}
         class="tabs bg-background-strong rounded-xl overflow-hidden"
-        data-component="tabs"
         data-active="mcp"
         defaultValue="mcp"
-        variant="alt"
+        variant="underline"
       >
         <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
           <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
@@ -111,6 +110,7 @@ export function StatusPopoverBody(props: { shown: boolean }) {
                         </span>
                         <div onClick={(event) => event.stopPropagation()}>
                           <Switch
+                            appearance="standard"
                             checked={enabled()}
                             disabled={toggleMcp.isPending && toggleMcp.variables === name}
                             onChange={() => {

@@ -1,10 +1,10 @@
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon } from "@opencode-ai/ui/v2/icon"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Keybind } from "@opencode-ai/ui/keybind"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import type { ReferenceInfo } from "@opencode-ai/client/promise"
 import { createEffect, createMemo, on, Show } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
@@ -503,20 +503,20 @@ function PromptInputV2ModelControl(props: {
   )
   return (
     <Show when={!props.loading}>
-      <TooltipV2
+      <Tooltip
         placement="top"
         gutter={4}
         value={
           <>
             {props.title}
-            <KeybindV2 keys={props.keybind} variant="neutral" />
+            <Keybind keys={props.keybind} variant="neutral" />
           </>
         }
       >
         <Show
           when={props.paid}
           fallback={
-            <ButtonV2
+            <Button
               data-action="prompt-model"
               data-control-type="dialog"
               variant="ghost-muted"
@@ -527,13 +527,13 @@ function PromptInputV2ModelControl(props: {
               onClick={props.onUnpaidClick}
             >
               {content()}
-            </ButtonV2>
+            </Button>
           }
         >
           <ModelSelectorPopoverV2
             model={props.model}
             trigger={(triggerProps) => (
-              <ButtonV2
+              <Button
                 {...triggerProps}
                 variant="ghost-muted"
                 size="normal"
@@ -544,12 +544,12 @@ function PromptInputV2ModelControl(props: {
                 data-control-type="popover"
               >
                 {content()}
-              </ButtonV2>
+              </Button>
             )}
             onClose={props.onClose}
           />
         </Show>
-      </TooltipV2>
+      </Tooltip>
     </Show>
   )
 }

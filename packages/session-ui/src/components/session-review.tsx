@@ -1,7 +1,7 @@
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { RadioGroup } from "@opencode-ai/ui/radio-group"
+import { Menu } from "@opencode-ai/ui/menu"
+import { SegmentedControl, SegmentedControlItem } from "@opencode-ai/ui/segmented-control"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -127,26 +127,22 @@ function ReviewCommentMenu(props: {
 }) {
   return (
     <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-      <DropdownMenu gutter={4} placement="bottom-end">
-        <DropdownMenu.Trigger
+      <Menu appearance="standard" gutter={4} placement="bottom-end">
+        <Menu.Trigger
           as={IconButton}
-          icon="dot-grid"
+          icon={<Icon name="dot-grid" />}
           variant="ghost"
           size="small"
           class="size-6 rounded-md"
           aria-label={props.labels.moreLabel}
         />
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content>
-            <DropdownMenu.Item onSelect={props.onEdit}>
-              <DropdownMenu.ItemLabel>{props.labels.editLabel}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={props.onDelete}>
-              <DropdownMenu.ItemLabel>{props.labels.deleteLabel}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Item onSelect={props.onEdit}>{props.labels.editLabel}</Menu.Item>
+            <Menu.Item onSelect={props.onDelete}>{props.labels.deleteLabel}</Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
     </div>
   )
 }
@@ -345,16 +341,24 @@ export const SessionReview = (props: SessionReviewProps) => {
         </div>
         <div data-slot="session-review-actions">
           <Show when={hasDiffs() && props.onDiffStyleChange}>
-            <RadioGroup
-              options={["unified", "split"] as const}
-              current={diffStyle()}
-              size="small"
-              value={(style) => style}
-              label={(style) =>
-                i18n.t(style === "unified" ? "ui.sessionReview.diffStyle.unified" : "ui.sessionReview.diffStyle.split")
-              }
-              onSelect={(style) => style && props.onDiffStyleChange?.(style)}
-            />
+            <SegmentedControl
+              class="session-review-diff-style"
+              value={diffStyle()}
+              onChange={(style) => {
+                if (style !== "unified" && style !== "split") return
+                props.onDiffStyleChange?.(style)
+              }}
+            >
+              <For each={["unified", "split"] as const}>
+                {(style) => (
+                  <SegmentedControlItem value={style}>
+                    {i18n.t(
+                      style === "unified" ? "ui.sessionReview.diffStyle.unified" : "ui.sessionReview.diffStyle.split",
+                    )}
+                  </SegmentedControlItem>
+                )}
+              </For>
+            </SegmentedControl>
           </Show>
           <Show when={hasDiffs()}>
             <Button
@@ -521,7 +525,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   </Show>
                                   <span data-slot="session-review-filename">{getFilename(file)}</span>
                                   <Show when={props.onViewFile && diffCanRender()}>
-                                    <Tooltip value={openFileLabel()} placement="top" gutter={4}>
+                                    <Tooltip appearance="standard" value={openFileLabel()} placement="top" gutter={4}>
                                       <button
                                         data-slot="session-review-view-button"
                                         type="button"
@@ -544,7 +548,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                       <span data-slot="session-review-change" data-type="added">
                                         {i18n.t("ui.sessionReview.change.added")}
                                       </span>
-                                      <DiffChanges changes={diff()} />
+                                      <DiffChanges appearance="standard" changes={diff()} />
                                     </div>
                                   </Match>
                                   <Match when={isDeleted()}>
@@ -558,7 +562,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     </span>
                                   </Match>
                                   <Match when={true}>
-                                    <DiffChanges changes={diff()} />
+                                    <DiffChanges appearance="standard" changes={diff()} />
                                   </Match>
                                 </Switch>
                                 <Show when={diffCanRender()}>
@@ -602,7 +606,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     <div data-slot="session-review-large-diff-actions">
                                       <Button
                                         size="normal"
-                                        variant="secondary"
+                                        variant="neutral"
                                         onClick={() => setStore("force", file, true)}
                                       >
                                         {i18n.t("ui.sessionReview.largeDiff.renderAnyway")}
