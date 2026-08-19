@@ -71,20 +71,13 @@ Możesz także przypisać skrót klawiszowy, edytując `keymap.json`:
 
 ### JetBrains IDE
 
-Dodaj do swojego [JetBrains IDE](https://www.jetbrains.com/) plik `acp.json` zgodnie z [dokumentacją](https://www.jetbrains.com/help/ai-assistant/acp.html):
+OpenCode jest dostępny w IDE JetBrains przez ACP Registry.
 
-```json title="acp.json"
-{
-  "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
-      "args": ["acp"]
-    }
-  }
-}
-```
+Aby go używać, zainstaluj lub zaktualizuj wtyczkę JetBrains AI Assistant, otwórz AI Chat i wybierz **Install From ACP Registry** z selektora trybu czatu. Możesz też przejść do **Settings | Tools | AI Assistant | Agents**. Wyszukaj **OpenCode**, zainstaluj go, zastosuj ustawienia, a potem wybierz **OpenCode** z selektora agentów AI Chat.
 
-Następnie wybierz „OpenCode” w selektorze agentów AI Chat.
+Pozycja w rejestrze: `opencode`
+
+Więcej informacji znajdziesz w [dokumentacji ACP JetBrains](https://www.jetbrains.com/help/ai-assistant/acp.html) oraz [dokumentacji ACP Registry](https://agentclientprotocol.com/get-started/registry).
 
 ---
 

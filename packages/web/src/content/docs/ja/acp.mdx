@@ -68,20 +68,13 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 
 ### JetBrains IDE
 
-[documentation](https://www.jetbrains.com/help/ai-assistant/acp.html) に従って、[JetBrains IDE](https://www.jetbrains.com/) acp.json に追加します：
+OpenCode は ACP Registry を通じて JetBrains IDE で利用できます。
 
-```json title="acp.json"
-{
-  "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
-      "args": ["acp"]
-    }
-  }
-}
-```
+利用するには、JetBrains AI Assistant プラグインをインストールまたは更新し、AI Chat を開いて、チャットモードセレクタから **Install From ACP Registry** を選択します。**Settings | Tools | AI Assistant | Agents** に移動してもかまいません。**OpenCode** を検索してインストールし、設定を適用したら、AI Chat のエージェントセレクタから **OpenCode** を選択します。
 
-これを開くには、AI Chat エージェントセレクターで新しい「OpenCode」エージェントを使用します。
+レジストリエントリ: `opencode`
+
+詳細は [JetBrains ACP ドキュメント](https://www.jetbrains.com/help/ai-assistant/acp.html) と [ACP Registry ドキュメント](https://agentclientprotocol.com/get-started/registry) を参照してください。
 
 ---
 

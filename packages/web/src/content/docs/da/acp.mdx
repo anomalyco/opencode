@@ -69,20 +69,13 @@ Du kan også binde en tastaturgenvej ved at redigere din `keymap.json`:
 
 ### JetBrains IDE'er
 
-Tilføj til din [JetBrains IDE](https://www.jetbrains.com/) acp.json i henhold til [dokumentationen](https://www.jetbrains.com/help/ai-assistant/acp.html):
+OpenCode er tilgængelig i JetBrains IDE'er via ACP Registry.
 
-```json title="acp.json"
-{
-  "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
-      "args": ["acp"]
-    }
-  }
-}
-```
+For at bruge det skal du installere eller opdatere JetBrains AI Assistant-plugin'et, åbne AI Chat og vælge **Install From ACP Registry** i vælgeren for chattilstand. Du kan også gå til **Settings | Tools | AI Assistant | Agents**. Søg efter **OpenCode**, installér det, anvend indstillingerne, og vælg derefter **OpenCode** i AI Chat-agentvælgeren.
 
-For at åbne den skal du bruge den nye 'OpenCode'-agent i AI Chat-agentvælgeren.
+Registreringspost: `opencode`
+
+Se [JetBrains ACP-dokumentationen](https://www.jetbrains.com/help/ai-assistant/acp.html) og [ACP Registry-dokumentationen](https://agentclientprotocol.com/get-started/registry) for flere detaljer.
 
 ---
 

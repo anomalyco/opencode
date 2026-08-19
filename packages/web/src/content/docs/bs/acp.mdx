@@ -69,20 +69,13 @@ Također možete vezati prečicu na tastaturi uređivanjem vašeg `keymap.json`:
 
 ### JetBrains IDE-ovi
 
-Dodajte u svoj [JetBrains IDE](https://www.jetbrains.com/) `acp.json` prema [dokumentaciji](https://www.jetbrains.com/help/ai-assistant/acp.html):
+OpenCode je dostupan u JetBrains IDE-ovima putem ACP registra.
 
-```json title="acp.json"
-{
-  "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
-      "args": ["acp"]
-    }
-  }
-}
-```
+Da biste ga koristili, instalirajte ili ažurirajte dodatak JetBrains AI Assistant, otvorite AI Chat i iz padajućeg izbornika za način chata izaberite **Install From ACP Registry**. Također možete otići na **Settings | Tools | AI Assistant | Agents**. Potražite **OpenCode**, instalirajte ga, primijenite postavke, a zatim izaberite **OpenCode** iz birača agenata u AI Chatu.
 
-Da biste ga otvorili, koristite novog "OpenCode" agenta u AI Chat agent selektoru.
+Stavka registra: `opencode`
+
+Pogledajte [JetBrains ACP dokumentaciju](https://www.jetbrains.com/help/ai-assistant/acp.html) i [ACP Registry dokumentaciju](https://agentclientprotocol.com/get-started/registry) za više detalja.
 
 ---
 
