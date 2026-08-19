@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { dirname } from "node:path"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, on, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "../../context/theme"
@@ -108,6 +108,11 @@ function TextBody(props: { title: string; description?: string; icon?: string })
   )
 }
 
+function recordValue(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
+}
+
 export function PermissionPrompt(props: { request: PermissionRequest; directory?: string }) {
   const sdk = useSDK()
   const project = useProject()
@@ -116,19 +121,21 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
     stage: "permission" as PermissionStage,
   })
   const pathFormatter = usePathFormatter()
+  createEffect(on(() => props.request.id, () => setStore("stage", "permission"), { defer: true }))
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
 
   const input = createMemo(() => {
+    const metadata = props.request.metadata ?? {}
     const tool = props.request.tool
-    if (!tool) return {}
+    if (!tool) return metadata
     const parts = sync.data.part[tool.messageID] ?? []
     for (const part of parts) {
       if (part.type === "tool" && part.callID === tool.callID && part.state.status !== "pending") {
-        return part.state.input ?? {}
+        return { ...metadata, ...recordValue(part.state.input) }
       }
     }
-    return {}
+    return metadata
   })
 
   const { theme } = useTheme()
@@ -137,6 +144,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
     <Switch>
       <Match when={store.stage === "always"}>
         <Prompt
+          resetKey={props.request.id}
           title="Always allow"
           body={
             <Switch>
@@ -399,6 +407,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
           const body = (
             <Prompt
+              resetKey={props.request.id}
               title="Permission required"
               header={header()}
               body={current.body}
@@ -523,6 +532,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
 }
 
 function Prompt<const T extends Record<string, string>>(props: {
+  resetKey?: string
   title: string
   header?: JSX.Element
   body: JSX.Element
@@ -539,6 +549,13 @@ function Prompt<const T extends Record<string, string>>(props: {
     selected: keys[0],
     expanded: false,
   })
+  createEffect(
+    on(
+      () => props.resetKey,
+      () => setStore({ selected: keys[0], expanded: false }),
+      { defer: true },
+    ),
+  )
   const narrow = createMemo(() => dimensions().width < 80)
   const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
 

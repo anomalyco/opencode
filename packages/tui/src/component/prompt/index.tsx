@@ -37,8 +37,10 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import { ClaudeACPProviderID, claudeACPFooterState, isClaudeACPSlashCommand } from "../../util/claude-acp"
 import { Locale } from "../../util/locale"
+import { assistantContextTokens, latestAssistantContextMessage } from "../../util/session"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -210,7 +212,11 @@ export function Prompt(props: PromptProps) {
   const workspace = usePromptWorkspace(props.sessionID)
   const move = usePromptMove({ projectID: project.project, sessionID: () => props.sessionID })
   const [cursorVersion, setCursorVersion] = createSignal(0)
-  const currentProviderLabel = createMemo(() => local.model.parsed().provider)
+  const currentProviderLabel = createMemo(() => {
+    const model = local.model.parsed()
+    if (model.provider === model.model) return
+    return model.provider
+  })
   const hasRightContent = createMemo(() => Boolean(props.right))
 
   function promptModelWarning() {
@@ -265,11 +271,10 @@ export function Prompt(props: PromptProps) {
     if (!props.sessionID) return
     const session = sync.session.get(props.sessionID)
     const msg = sync.data.message[props.sessionID] ?? []
-    const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
+    const last = latestAssistantContextMessage(msg)
     if (!last) return
 
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    const tokens = assistantContextTokens(last)
     if (tokens <= 0) return
 
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
@@ -1068,10 +1073,7 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
-    } else if (
-      inputText.startsWith("/") &&
-      sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
-    ) {
+    } else if (shouldRunOpencodeSlashCommand(inputText, selectedModel.providerID)) {
       move.startSubmit()
       // Parse command from first line, preserve multi-line content in arguments
       const firstLineEnd = inputText.indexOf("\n")
@@ -1144,6 +1146,13 @@ export function Prompt(props: PromptProps) {
     input.clear()
     if (finishMoveProgress) move.finishSubmit()
     return true
+  }
+
+  function shouldRunOpencodeSlashCommand(inputText: string, providerID: string) {
+    if (!inputText.startsWith("/")) return false
+    const command = inputText.split("\n")[0].split(" ")[0].slice(1)
+    if (providerID === ClaudeACPProviderID && isClaudeACPSlashCommand(command)) return false
+    return sync.data.command.some((item) => item.name === command)
   }
 
   function pasteText(text: string, virtualText: string) {
@@ -1300,10 +1309,26 @@ export function Prompt(props: PromptProps) {
     return !!current
   })
 
+  const claudeAcpFooter = createMemo(() => {
+    if (local.model.current()?.providerID !== ClaudeACPProviderID) return
+    if (!props.sessionID) return
+    return claudeACPFooterState(sync.session.get(props.sessionID)?.metadata)
+  })
+
+  const showClaudeAcpEffort = createMemo(() => !!claudeAcpFooter()?.effort)
+  const showClaudeAcpFast = createMemo(() => claudeAcpFooter()?.fast === true)
+
   const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
   const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
     () => !!local.agent.current() && store.mode === "normal" && showVariant(),
+    animationsEnabled,
+  )
+  const claudeAcpMetaAlpha = createFadeIn(
+    () =>
+      !!local.agent.current() &&
+      store.mode === "normal" &&
+      (showClaudeAcpEffort() || showClaudeAcpFast()),
     animationsEnabled,
   )
   const borderHighlight = createMemo(() => tint(theme.border, highlight(), agentMetaAlpha()))
@@ -1461,7 +1486,25 @@ export function Prompt(props: PromptProps) {
                           >
                             {local.model.parsed().model}
                           </text>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                          <Show when={showClaudeAcpEffort()}>
+                            <text fg={fadeColor(theme.textMuted, claudeAcpMetaAlpha())}>·</text>
+                            <text>
+                              <span style={{ fg: fadeColor(theme.warning, claudeAcpMetaAlpha()), bold: true }}>
+                                {claudeAcpFooter()?.effort}
+                              </span>
+                            </text>
+                          </Show>
+                          <Show when={showClaudeAcpFast()}>
+                            <text fg={fadeColor(theme.textMuted, claudeAcpMetaAlpha())}>·</text>
+                            <text>
+                              <span style={{ fg: fadeColor(theme.warning, claudeAcpMetaAlpha()), bold: true }}>
+                                fast
+                              </span>
+                            </text>
+                          </Show>
+                          <Show when={currentProviderLabel()}>
+                            {(provider) => <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{provider()}</text>}
+                          </Show>
                           <Show when={showVariant()}>
                             <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
                             <text>

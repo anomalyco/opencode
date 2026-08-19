@@ -1,16 +1,19 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
 import { tool, type ModelMessage } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
+import { EffectBridge } from "../../src/effect/bridge"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import z from "zod"
 import { LLM } from "../../src/session/llm"
+import { claudeACPPromptBridge } from "../../src/session/llm"
+import { ClaudeACP } from "../../src/session/llm/claude-acp"
 import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
-import { Provider } from "@/provider/provider"
+import { ClaudeACPModelID, ClaudeACPProviderID, Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 
@@ -27,6 +30,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { LLMEvent } from "@opencode-ai/llm"
 
 type ConfigModel = NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
 
@@ -169,6 +173,107 @@ describe("session.llm.hasToolCalls", () => {
       },
     ] as ModelMessage[]
     expect(LLM.hasToolCalls(messages)).toBe(true)
+  })
+})
+
+describe("session.llm.claudeACPPromptBridge", () => {
+  test("preserves InstanceRef for async Claude ACP callbacks", async () => {
+    const ctx = {
+      directory: "C:/Users/matt/Projects/opencode",
+      worktree: "C:/Users/matt/Projects/opencode",
+      project: {} as never,
+    }
+
+    const callbacks = await Effect.runPromise(
+      Effect.gen(function* () {
+        const bridge = yield* EffectBridge.make()
+        return claudeACPPromptBridge({
+          bridge,
+          abort: new AbortController().signal,
+          permission: {
+            ask: () => Effect.void,
+            askWithReply: () =>
+              Effect.gen(function* () {
+                const current = yield* InstanceRef
+                if (!current) return yield* Effect.die("InstanceRef not provided")
+                return current.directory === ctx.directory ? "once" : "always"
+              }),
+            reply: () => Effect.void,
+            list: () => Effect.succeed([]),
+          },
+          question: {
+            ask: () =>
+              Effect.gen(function* () {
+                const current = yield* InstanceRef
+                if (!current) return yield* Effect.die("InstanceRef not provided")
+                return [[current.directory]]
+              }),
+            reply: () => Effect.void,
+            reject: () => Effect.void,
+            list: () => Effect.succeed([]),
+          },
+        })
+      }).pipe(Effect.provideService(InstanceRef, ctx)),
+    )
+
+    await Promise.resolve()
+
+    expect(await callbacks.permission.ask({} as PermissionV1.AskInput)).toBe("once")
+    expect(await callbacks.question.ask({ sessionID: SessionID.make("ses_test"), questions: [] })).toEqual([
+      [ctx.directory],
+    ])
+  })
+
+  test("wires abort signal into Claude ACP permission asks", async () => {
+    const abort = new AbortController()
+    let interrupted = false
+    let release: ((reply: PermissionV1.Reply) => void) | undefined
+
+    const callbacks = await Effect.runPromise(
+      Effect.gen(function* () {
+        const bridge = yield* EffectBridge.make()
+        return claudeACPPromptBridge({
+          bridge,
+          abort: abort.signal,
+          permission: {
+            ask: () => Effect.void,
+            askWithReply: () =>
+              Effect.callback<PermissionV1.Reply>((resume) => {
+                release = (reply) => resume(Effect.succeed(reply))
+                return Effect.sync(() => {
+                  interrupted = true
+                })
+              }),
+            reply: () => Effect.void,
+            list: () => Effect.succeed([]),
+          },
+          question: {
+            ask: () => Effect.succeed([]),
+            reply: () => Effect.void,
+            reject: () => Effect.void,
+            list: () => Effect.succeed([]),
+          },
+        })
+      }),
+    )
+
+    const pending = callbacks.permission.ask({} as PermissionV1.AskInput)
+    abort.abort()
+
+    const outcome = await Promise.race([
+      pending.then(
+        () => "resolved" as const,
+        () => "rejected" as const,
+      ),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 100)),
+    ])
+    if (outcome === "timeout") {
+      release?.("once")
+      await pending
+    }
+
+    expect(outcome).toBe("rejected")
+    expect(interrupted).toBe(true)
   })
 })
 
@@ -664,8 +769,8 @@ beforeEach(() => {
   state.queue.length = 0
 })
 
-afterAll(() => {
-  void state.server?.stop()
+afterAll(async () => {
+  await state.server?.stop()
 })
 
 function createChatStream(text: string) {
@@ -752,6 +857,160 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
 }
 
 describe("session.llm.stream", () => {
+  const claudeACPDone = () =>
+    Stream.make(
+      LLMEvent.stepStart({ index: 0 }),
+      LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+      LLMEvent.finish({ reason: "stop" }),
+    )
+
+  it.instance(
+    "passes session cwd to Claude ACP instead of process cwd",
+    () =>
+      Effect.gen(function* () {
+        const ctx = yield* InstanceRef
+        if (!ctx) return yield* Effect.die("InstanceRef not provided")
+        const resolved = yield* Provider.use.getModel(ClaudeACPProviderID, ClaudeACPModelID)
+        const sessionID = SessionID.make("session-test-claude-acp-cwd")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        let captured: Parameters<typeof ClaudeACP.stream>[0] | undefined
+        const stream = spyOn(ClaudeACP, "stream").mockImplementation((input) => {
+          captured = input
+          return claudeACPDone()
+        })
+
+        try {
+          yield* drain({
+            cwd: ctx.directory,
+            user: {
+              id: MessageID.make("msg_user-claude-acp-cwd"),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: agent.name,
+              model: { providerID: ClaudeACPProviderID, modelID: resolved.id },
+            } satisfies SessionV1.User,
+            sessionID,
+            model: resolved,
+            agent,
+            system: [],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          } satisfies LLM.StreamInput & { cwd: string })
+        } finally {
+          stream.mockRestore()
+        }
+
+        expect(captured?.cwd).toBe(ctx.directory)
+        expect(captured?.cwd).not.toBe(process.cwd())
+      }),
+    { config: () => ({ enabled_providers: [ClaudeACPProviderID] }) },
+  )
+
+  it.instance(
+    "passes OpenCode system text into Claude ACP prompt messages",
+    () =>
+      Effect.gen(function* () {
+        const ctx = yield* InstanceRef
+        if (!ctx) return yield* Effect.die("InstanceRef not provided")
+        const resolved = yield* Provider.use.getModel(ClaudeACPProviderID, ClaudeACPModelID)
+        const sessionID = SessionID.make("session-test-claude-acp-system")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        let captured: Parameters<typeof ClaudeACP.stream>[0] | undefined
+        const stream = spyOn(ClaudeACP, "stream").mockImplementation((input) => {
+          captured = input
+          return claudeACPDone()
+        })
+
+        try {
+          yield* drain({
+            cwd: ctx.directory,
+            user: {
+              id: MessageID.make("msg_user-claude-acp-system"),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: agent.name,
+              model: { providerID: ClaudeACPProviderID, modelID: resolved.id },
+            } satisfies SessionV1.User,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["OpenCode system instruction.", "Project context instruction."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          } satisfies LLM.StreamInput & { cwd: string })
+        } finally {
+          stream.mockRestore()
+        }
+
+        expect(captured?.messages[0]).toEqual({
+          role: "system",
+          content: "OpenCode system instruction.\n\nProject context instruction.",
+        })
+      }),
+    { config: () => ({ enabled_providers: [ClaudeACPProviderID] }) },
+  )
+
+  it.instance(
+    "fails explicitly when Claude ACP receives unsupported required toolChoice",
+    () =>
+      Effect.gen(function* () {
+        const ctx = yield* InstanceRef
+        if (!ctx) return yield* Effect.die("InstanceRef not provided")
+        const resolved = yield* Provider.use.getModel(ClaudeACPProviderID, ClaudeACPModelID)
+        const sessionID = SessionID.make("session-test-claude-acp-tool-choice")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        let called = false
+        const stream = spyOn(ClaudeACP, "stream").mockImplementation(() => {
+          called = true
+          return claudeACPDone()
+        })
+
+        const exit = yield* drain({
+          cwd: ctx.directory,
+          user: {
+            id: MessageID.make("msg_user-claude-acp-tool-choice"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ClaudeACPProviderID, modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: [],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+          toolChoice: "required",
+        } satisfies LLM.StreamInput & { cwd: string }).pipe(Effect.exit)
+        stream.mockRestore()
+
+        expect(called).toBe(false)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.pretty(exit.cause)).toContain('Claude ACP does not support toolChoice "required"')
+        }
+      }),
+    { config: () => ({ enabled_providers: [ClaudeACPProviderID] }) },
+  )
+
   const vivgridFixture = { providerID: "vivgrid", modelID: "gemini-3.1-pro-preview" }
   it.instance(
     "sends temperature, tokens, and reasoning options for openai-compatible models",

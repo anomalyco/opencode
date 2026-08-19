@@ -96,4 +96,74 @@ describe("getSessionContext", () => {
 
     expect(ctx).toBeUndefined()
   })
+
+  test("prefers the provider-reported total over the token sum", () => {
+    const messages = [
+      {
+        id: "a1",
+        role: "assistant",
+        providerID: "openai",
+        modelID: "gpt-4.1",
+        cost: 0.5,
+        tokens: { total: 800, input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1 },
+      } as unknown as Message,
+    ]
+    const providers = [{ id: "openai", models: { "gpt-4.1": { limit: { context: 1000 } } } }]
+
+    const ctx = getSessionContext(messages, providers)
+
+    expect(ctx?.message.id).toBe("a1")
+    expect(ctx?.total).toBe(800)
+    expect(ctx?.usage).toBe(80)
+  })
+
+  test("skips an interrupt estimate when a reported value exists", () => {
+    const messages = [
+      {
+        id: "reported",
+        role: "assistant",
+        providerID: "openai",
+        modelID: "gpt-4.1",
+        cost: 0.5,
+        tokens: { total: 800, input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1 },
+      } as unknown as Message,
+      {
+        id: "estimated",
+        role: "assistant",
+        providerID: "openai",
+        modelID: "gpt-4.1",
+        cost: 0,
+        error: { name: "MessageAbortedError" },
+        tokens: { input: 100, output: 10, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 2 },
+      } as unknown as Message,
+    ]
+    const providers = [{ id: "openai", models: { "gpt-4.1": { limit: { context: 1000 } } } }]
+
+    const ctx = getSessionContext(messages, providers)
+
+    expect(ctx?.message.id).toBe("reported")
+  })
+
+  test("uses an interrupt estimate when no reported usage exists", () => {
+    const messages = [
+      {
+        id: "estimated",
+        role: "assistant",
+        providerID: "openai",
+        modelID: "gpt-4.1",
+        cost: 0,
+        error: { name: "MessageAbortedError" },
+        tokens: { input: 100, output: 10, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1 },
+      } as unknown as Message,
+    ]
+    const providers = [{ id: "openai", models: { "gpt-4.1": { limit: { context: 1000 } } } }]
+
+    const ctx = getSessionContext(messages, providers)
+
+    expect(ctx?.message.id).toBe("estimated")
+  })
 })

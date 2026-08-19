@@ -8,7 +8,7 @@ import { MessageV2 } from "./message-v2"
 import { SessionRevert } from "./revert"
 import { Session } from "./session"
 import { Agent } from "../agent/agent"
-import { Provider } from "@/provider/provider"
+import { ClaudeACPProviderID, Provider } from "@/provider/provider"
 
 import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
@@ -198,6 +198,7 @@ const layer = Layer.effect(
     }) {
       if (input.session.parentID) return
       if (!Session.isDefaultTitle(input.session.title)) return
+      if (input.providerID === ClaudeACPProviderID) return
 
       const real = (m: SessionV1.WithParts) =>
         m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
@@ -222,8 +223,10 @@ const layer = Layer.effect(
       const msgs = onlySubtasks
         ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
         : yield* MessageV2.toModelMessagesEffect(context, mdl)
+      const ctx = yield* InstanceState.context
       const text = yield* llm
         .stream({
+          cwd: ctx.directory,
           agent: ag,
           user: firstInfo,
           system: [],
@@ -1270,6 +1273,7 @@ const layer = Layer.effect(
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
+              cwd: msg.path.cwd,
               user: lastUser,
               agent,
               permission: session.permission,

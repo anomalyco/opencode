@@ -51,6 +51,36 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
   return { found: false, index: left }
 }
 
+function groupedRequests<T extends { id: string; sessionID: string }>(items: T[]) {
+  return items.toSorted((a, b) => a.id.localeCompare(b.id)).reduce<Record<string, T[]>>((acc, item) => {
+    acc[item.sessionID] = [...(acc[item.sessionID] ?? []), item]
+    return acc
+  }, {})
+}
+
+function requestIDs<T extends { id: string }>(items: Record<string, T[]>) {
+  return new Set(Object.values(items).flatMap((group) => group.map((item) => item.id)))
+}
+
+function mergeGroupedRequests<T extends { id: string; sessionID: string }>(
+  current: Record<string, T[]>,
+  incoming: T[],
+  settled: Set<string>,
+  preexisting: Set<string>,
+) {
+  const incomingRequests = new Map(
+    incoming.filter((item) => !settled.has(item.id)).map((item) => [item.id, item] as const),
+  )
+  return groupedRequests(
+    [
+      ...incomingRequests.values(),
+      ...Object.values(current)
+        .flat()
+        .filter((item) => !settled.has(item.id) && !preexisting.has(item.id) && !incomingRequests.has(item.id)),
+    ],
+  )
+}
+
 function compareMessage(a: Message, b: Message) {
   return a.time.created - b.time.created || a.id.localeCompare(b.id)
 }
@@ -150,6 +180,8 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const settledPermissions = new Set<string>()
+    const settledQuestions = new Set<string>()
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -179,6 +211,7 @@ export const {
           void bootstrap()
           break
         case "permission.replied": {
+          settledPermissions.add(event.properties.requestID)
           const requests = store.permission[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -195,6 +228,7 @@ export const {
 
         case "permission.asked": {
           const request = event.properties
+          settledPermissions.delete(request.id)
           if (permission.mode === "auto") {
             void sdk.client.permission.reply({
               requestID: request.id,
@@ -226,6 +260,7 @@ export const {
 
         case "question.replied":
         case "question.rejected": {
+          settledQuestions.add(event.properties.requestID)
           const requests = store.question[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -242,6 +277,7 @@ export const {
 
         case "question.asked": {
           const request = event.properties
+          settledQuestions.delete(request.id)
           const requests = store.question[request.sessionID]
           if (!requests) {
             setStore("question", request.sessionID, [request])
@@ -527,6 +563,28 @@ export const {
               .list({ workspace })
               .then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
             sdk.client.formatter.status({ workspace }).then((x) => setStore("formatter", reconcile(x.data ?? []))),
+            (() => {
+              const preexisting = requestIDs(store.permission)
+              return sdk.client.permission
+                .list({ workspace })
+                .then((x) =>
+                  setStore(
+                    "permission",
+                    reconcile(mergeGroupedRequests(store.permission, x.data ?? [], settledPermissions, preexisting)),
+                  ),
+                )
+            })(),
+            (() => {
+              const preexisting = requestIDs(store.question)
+              return sdk.client.question
+                .list({ workspace })
+                .then((x) =>
+                  setStore(
+                    "question",
+                    reconcile(mergeGroupedRequests(store.question, x.data ?? [], settledQuestions, preexisting)),
+                  ),
+                )
+            })(),
             sdk.client.session.status({ workspace }).then((x) => {
               setStore("session_status", reconcile(x.data ?? {}))
             }),

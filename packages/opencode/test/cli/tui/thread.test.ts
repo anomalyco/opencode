@@ -51,6 +51,14 @@ describe("tui thread", () => {
     expect(resolveThreadDirectory(undefined, pwd.path, cwd.path)).toBe(cwd.path)
   })
 
+  test("uses launcher cwd when package cwd differs", async () => {
+    await using launch = await tmpdir({ git: true })
+    await using cwd = await tmpdir({ git: true })
+
+    expect(resolveThreadDirectory(undefined, undefined, cwd.path, launch.path)).toBe(launch.path)
+    expect(resolveThreadDirectory("subdir", undefined, cwd.path, launch.path)).toBe(path.join(launch.path, "subdir"))
+  })
+
   test("parses supported --no-replay forms", async () => {
     for (const option of ["--no-replay", "--no-replay=true", "--noReplay"]) {
       const args = await yargs([])
