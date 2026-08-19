@@ -15,6 +15,8 @@ import { Config } from "@/config/config"
 import { Env } from "../../src/env"
 import { Plugin } from "../../src/plugin/index"
 import { Provider } from "@/provider/provider"
+import { Session as SessionNs } from "@/session/session"
+import { Usage } from "@opencode-ai/llm"
 
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Filesystem } from "@/util/filesystem"
@@ -972,6 +974,74 @@ it.instance(
       provider: {
         anthropic: {
           models: { "claude-sonnet-4-20250514": { cost: { input: 999, output: 888 } } },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "uses configured Grok long-context pricing for local session estimates",
+  Effect.gen(function* () {
+    yield* set("XAI_API_KEY", "test-api-key")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("xai")].models["grok-4.5"]
+    expect(model.cost.experimentalOver200K).toEqual({
+      input: 4,
+      output: 12,
+      cache: { read: 1, write: 0 },
+    })
+    const estimate = (inputTokens: number) =>
+      SessionNs.getUsage({
+        model,
+        usage: new Usage({ inputTokens, outputTokens: 0, totalTokens: inputTokens }),
+      }).cost
+    expect(estimate(199_000)).toBe(0.398)
+    expect(estimate(200_000)).toBe(0.4)
+    expect(estimate(201_000)).toBe(0.804)
+  }),
+  {
+    config: {
+      provider: {
+        xai: {
+          models: {
+            "grok-4.5": {
+              cost: {
+                input: 2,
+                output: 6,
+                cache_read: 0.5,
+                context_over_200k: { input: 4, output: 12, cache_read: 1 },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "preserves Grok long-context pricing when config omits it",
+  Effect.gen(function* () {
+    yield* set("XAI_API_KEY", "test-api-key")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("xai")].models["grok-4.5"]
+    expect(model.cost.experimentalOver200K).toEqual({
+      input: 4,
+      output: 12,
+      cache: { read: 1, write: 0 },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: new Usage({ inputTokens: 201_000, outputTokens: 0, totalTokens: 201_000 }),
+    })
+    expect(result.cost).toBe(0.804)
+  }),
+  {
+    config: {
+      provider: {
+        xai: {
+          models: { "grok-4.5": {} },
         },
       },
     },
