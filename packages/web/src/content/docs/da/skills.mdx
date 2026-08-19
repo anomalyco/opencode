@@ -189,8 +189,8 @@ Deaktiver ferdigheter fullstendig for agenter som ikke bør bruge dem:
 
 ```yaml
 ---
-tools:
-  skill: false
+permission:
+  skill: deny
 ---
 ```
 
@@ -200,8 +200,8 @@ tools:
 {
   "agent": {
     "plan": {
-      "tools": {
-        "skill": false
+      "permission": {
+        "skill": "deny"
       }
     }
   }

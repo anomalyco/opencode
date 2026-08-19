@@ -299,6 +299,10 @@ opencode mcp debug my-oauth-server
 
 هذا يعني أنه يمكنك تفعيلها أو تعطيلها على مستوى عام.
 
+:::note
+`tools` مُهمَّل. منفضل استخدام حقل [`permission`](/docs/permissions) للإعدادات الجديدة والتحديثات والتحكم الدقيق.
+:::
+
 ```json title="opencode.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -312,8 +316,8 @@ opencode mcp debug my-oauth-server
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -333,8 +337,8 @@ opencode mcp debug my-oauth-server
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -348,7 +352,7 @@ opencode mcp debug my-oauth-server
 إذا كان لديك عدد كبير من خوادم MCP فقد ترغب في تفعيلها لكل وكيل على حدة وتعطيلها على المستوى العام. للقيام بذلك:
 
 1. عطّلها كأداة على المستوى العام.
-2. في [إعدادات الوكيل](/docs/agents#tools)، فعّل خادم MCP كأداة.
+2. في [إعدادات الوكيل](/docs/agents#permissions)، فعّل خادم MCP كأداة.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -365,8 +369,8 @@ opencode mcp debug my-oauth-server
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

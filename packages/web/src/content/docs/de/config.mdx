@@ -208,19 +208,23 @@ Verfügbare Optionen:
 
 ---
 
-### Werkzeuge
+### Berechtigungen
 
-Sie können die Tools, die ein LLM verwenden kann, über die Option `tools` verwalten.
+Sie können die Tools, die ein LLM verwenden kann, über die Option `permission` verwalten.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` ist **veraltet**. Verwenden Sie statt dessen das [`permission`](/docs/permissions)-Feld für neue Konfigurationen, Aktualisierungen und eine präzisere Steuerung.
+:::
 
 [Erfahren Sie hier mehr über Tools](/docs/tools).
 
@@ -326,10 +330,10 @@ Sie können das Thema, das Sie in Ihrer OpenCode-Konfiguration verwenden möchte
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

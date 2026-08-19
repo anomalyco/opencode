@@ -299,6 +299,10 @@ Twoje MCP są dostępne jako narzędzie w opencode, obok narzędzi dodatkowych. 
 
 Możesz to włączyć lub wyłączyć globalnie.
 
+:::note
+`tools` jest **przestarzałe**. Preferuj pole [`permission`](/docs/permissions) dla nowych konfiguracji, aktualizacji i bardziej precyzyjnej kontroli.
+:::
+
 ```json title="opencode.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -312,8 +316,8 @@ Możesz to włączyć lub wyłączyć globalnie.
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -333,8 +337,8 @@ Dostępne są również wzorca globu, aby wyłączyć wszystkie dyski MCP.
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -348,7 +352,7 @@ Tutaj znajdziesz wzorca globalnego `my-mcp*`, aby wyłączyć wszystkie MCP.
 Jeśli masz największe serwery MCP, możesz włączyć je tylko dla poszczególnych agentów i być globalnie. Aby to zrobić:
 
 1. Wyłącz go jako narzędzie globalnie.
-2. W [konfiguracji agenta](/docs/agents#tools) włącz serwer MCP jako narzędzie.
+2. W [konfiguracji agenta](/docs/agents#permissions) włącz serwer MCP jako narzędzie.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -365,8 +369,8 @@ Jeśli masz największe serwery MCP, możesz włączyć je tylko dla poszczegól
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

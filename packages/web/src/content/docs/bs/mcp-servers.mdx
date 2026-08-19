@@ -277,6 +277,10 @@ Vaši MCP serveri su dostupni kao alati u OpenCode, zajedno s ugrađenim alatima
 
 To znači da ih možete omogućiti ili onemogućiti globalno.
 
+:::note
+`tools` je **zastarjelo**. Preporučuje se korištenje [`permission`](/docs/permissions) polja za nove konfiguracije, ažuriranja i precizniji kontrola.
+:::
+
 ```json title="opencode.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -290,8 +294,8 @@ To znači da ih možete omogućiti ili onemogućiti globalno.
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -311,8 +315,8 @@ Također možemo koristiti glob obrazac da onemogućimo sve odgovarajuće MCP-ov
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -324,7 +328,7 @@ Ovdje koristimo glob obrazac `my-mcp*` da onemogućimo sve MCP servere.
 Ako imate veliki broj MCP servera, možda ćete želeti da ih omogućite samo po agentu i da ih onemogućite globalno. Da biste to učinili:
 
 1. Onemogućite ga kao alat globalno.
-2. U vašem [agent config](/docs/agents#tools), omogućite MCP server kao alat.
+2. U vašem [agent config](/docs/agents#permissions), omogućite MCP server kao alat.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -341,8 +345,8 @@ Ako imate veliki broj MCP servera, možda ćete želeti da ih omogućite samo po
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

@@ -207,19 +207,23 @@ Opzioni disponibili:
 
 ---
 
-### Strumenti
+### Autorizzazioni
 
-Puoi gestire gli strumenti che un LLM puo usare tramite l'opzione `tools`.
+Puoi gestire gli strumenti che un LLM puo usare tramite l'opzione `permission`.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` e **deprecato**. Preferisci il campo [`permission`](/docs/permissions) per nuove configurazioni, aggiornamenti e un controllo piu fine.
+:::
 
 [Scopri di piu sugli strumenti](/docs/tools).
 
@@ -325,10 +329,10 @@ Puoi configurare agenti specializzati per task specifici tramite l'opzione `agen
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

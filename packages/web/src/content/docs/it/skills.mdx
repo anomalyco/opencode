@@ -189,8 +189,8 @@ Disabilita completamente le skill per agenti che non dovrebbero usarle:
 
 ```yaml
 ---
-tools:
-  skill: false
+permission:
+  skill: deny
 ---
 ```
 
@@ -200,8 +200,8 @@ tools:
 {
   "agent": {
     "plan": {
-      "tools": {
-        "skill": false
+      "permission": {
+        "skill": "deny"
       }
     }
   }

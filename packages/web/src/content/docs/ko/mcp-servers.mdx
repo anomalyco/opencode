@@ -312,8 +312,8 @@ MCP는 opencode의 도구로 사용할 수 있으며 내장 도구와 함께 사
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -333,8 +333,8 @@ MCP는 opencode의 도구로 사용할 수 있으며 내장 도구와 함께 사
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -348,7 +348,7 @@ MCP는 opencode의 도구로 사용할 수 있으며 내장 도구와 함께 사
 많은 MCP 서버가 있다면 전역적으로는 비활성화하고 에이전트별로만 활성화할 수 있습니다. 이 작업을 수행:
 
 1. 글로벌 도구로 사용 가능.
-2. [agent config](/docs/agents#tools)에서 MCP 서버를 도구로 사용할 수 있습니다.
+2. [agent config](/docs/agents#permissions)에서 MCP 서버를 도구로 사용할 수 있습니다.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -360,13 +360,13 @@ MCP는 opencode의 도구로 사용할 수 있으며 내장 도구와 함께 사
       "enabled": true
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

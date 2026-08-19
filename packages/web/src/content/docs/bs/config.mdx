@@ -207,19 +207,23 @@ Dostupne opcije:
 
 ---
 
-### Alati
+### Dozvole
 
-Možete upravljati alatima koje LLM može koristiti putem opcije `tools`.
+Možete upravljati alatima koje LLM može koristiti putem opcije `permission`.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` je **zastarjelo**. Preporučuje se korištenje [`permission`](/docs/permissions) polja za nove konfiguracije, ažuriranja i precizniji kontrola.
+:::
 
 [Saznajte više o alatima ovdje](/docs/tools).
 
@@ -325,10 +329,10 @@ Možete konfigurirati specijalizirane agente za određene zadatke putem opcije `
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

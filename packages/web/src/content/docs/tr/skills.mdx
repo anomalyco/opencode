@@ -189,8 +189,8 @@ Beceri kullanmamasi gereken ajanlar icin skill aracini tamamen kapatabilirsiniz:
 
 ```yaml
 ---
-tools:
-  skill: false
+permission:
+  skill: deny
 ---
 ```
 
@@ -200,8 +200,8 @@ tools:
 {
   "agent": {
     "plan": {
-      "tools": {
-        "skill": false
+      "permission": {
+        "skill": "deny"
       }
     }
   }

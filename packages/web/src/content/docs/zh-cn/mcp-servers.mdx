@@ -299,6 +299,10 @@ opencode mcp debug my-oauth-server
 
 你可以全局启用或禁用 MCP 工具。
 
+:::note
+`tools` 已被**弃用**。对于新配置、更新和更细粒度的控制，请优先使用 [`permission`](/docs/permissions) 字段。
+:::
+
 ```json title="opencode.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -312,8 +316,8 @@ opencode mcp debug my-oauth-server
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -333,8 +337,8 @@ opencode mcp debug my-oauth-server
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -348,7 +352,7 @@ opencode mcp debug my-oauth-server
 如果你有大量 MCP 服务器，可以选择全局禁用它们，然后仅在特定代理中启用。具体做法：
 
 1. 全局禁用该工具。
-2. 在[代理配置](/docs/agents#tools)中，将 MCP 服务器作为工具启用。
+2. 在[代理配置](/docs/agents#permissions)中，将 MCP 服务器作为工具启用。
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -365,8 +369,8 @@ opencode mcp debug my-oauth-server
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

@@ -343,17 +343,21 @@ If not specified, OpenCode will automatically discover and use a sensible defaul
 
 ### Tools
 
-You can manage the tools an LLM can use through the `tools` option.
+You can manage the tools an LLM can use through the `permission` option.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` is **deprecated**. Prefer the [`permission`](/docs/permissions) field for new configs, updates and more fine-grained control.
+:::
 
 [Learn more about tools here](/docs/tools).
 
@@ -513,10 +517,10 @@ You can configure specialized agents for specific tasks through the `agent` opti
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

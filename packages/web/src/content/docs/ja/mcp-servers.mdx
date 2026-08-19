@@ -299,6 +299,10 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 
 これは、それらをグローバルに有効または無効にできることを意味します。
 
+:::note
+`tools` は **非推奨** です。新しい構成、更新、より細かい制御には [`permission`](/docs/permissions) フィールドを使用してください。
+:::
+
 ```json title="opencode.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -312,8 +316,8 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -333,8 +337,8 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -348,7 +352,7 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 多数の MCP サーバーがある場合は、エージェントごとにのみ有効にし、グローバルに無効にすることができます。これを行うには:
 
 1. ツールとしてグローバルに無効にします。
-2. [エージェント設定](/docs/agents#tools) で、MCP サーバーをツールとして有効にします。
+2. [エージェント設定](/docs/agents#permissions) で、MCP サーバーをツールとして有効にします。
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -365,8 +369,8 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

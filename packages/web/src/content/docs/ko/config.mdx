@@ -207,19 +207,23 @@ TUI 관련 설정에는 전용 `tui.json` (또는 `tui.jsonc`) 파일을 사용�
 
 ---
 
-### Tools
+### Permissions
 
-`tools` 옵션으로 LLM이 사용할 수 있는 tool을 관리할 수 있습니다.
+`permission` 옵션으로 LLM이 사용할 수 있는 tool을 관리할 수 있습니다.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools`는 **사용되지 않습니다**. 새로운 구성, 업데이트 및 세밀한 제어를 위해 [`permission`](/docs/permissions) 필드를 사용하세요.
+:::
 
 [tool에 대해 더 알아보기](/docs/tools).
 
@@ -325,10 +329,10 @@ Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

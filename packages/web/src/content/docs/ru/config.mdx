@@ -207,19 +207,23 @@ opencode run "Hello world"
 
 ---
 
-### Инструменты
+### Разрешения
 
-Вы можете управлять инструментами, которые LLM может использовать, с помощью опции `tools`.
+Вы можете управлять инструментами, которые LLM может использовать, с помощью опции `permission`.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` устарел. Используйте поле [`permission`](/docs/permissions) для новых конфигураций, обновлений и более точного контроля.
+:::
 
 [Подробнее об инструментах можно узнать здесь](/docs/tools).
 
@@ -325,10 +329,10 @@ Amazon Bedrock поддерживает конфигурацию, специфи
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

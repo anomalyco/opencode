@@ -209,19 +209,23 @@ Tilgængelige muligheder:
 
 ---
 
-### Værktøjer (`tools`)
+### Tilladelser (`permission`)
 
-Du kan administrere de værktøjer, en LLM kan bruge, gennem indstillingen `tools`.
+Du kan administrere de værktøjer, en LLM kan bruge, gennem indstillingen `permission`.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` er **forældet**. Foretræk det [`permission`](/docs/permissions)-felt for nye konfigurationer, opdateringer og mere fint kontrol.
+:::
 
 [Learn more about tools here](/docs/tools).
 
@@ -327,10 +331,10 @@ Du kan konfigurere opgaver specialiserede agenter til specifikke indstillinger g
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },
