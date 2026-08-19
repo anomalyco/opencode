@@ -4,12 +4,10 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Pty } from "@opencode-ai/schema/pty"
-import { Config } from "./config.js"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { PtyID } from "./pty/schema.js"
 import { ShellSelect } from "./shell/select.js"
-import { Global } from "@opencode-ai/util/global"
 import { lazy } from "./util/lazy.js"
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
@@ -90,14 +88,13 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Pty") {}
 
-export const layer = (options?: ShellSelect.Options) =>
+const layer = () =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const location = yield* Location.Service
-      const config = yield* Config.Service
-      const global = yield* Global.Service
+      const shell = yield* ShellSelect.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       const sessions = new Map<PtyID, Active>()
@@ -167,8 +164,7 @@ export const layer = (options?: ShellSelect.Options) =>
 
       const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
         const id = PtyID.ascending()
-        const command =
-          input.command || ShellSelect.preferred(Config.latest(yield* config.entries(), "shell"), options, global.bin)
+        const command = input.command || (yield* shell.preferred())
         const args = ShellSelect.login(command) ? [...(input.args ?? []), "-l"] : [...(input.args ?? [])]
         const cwd = input.cwd || location.directory
         const env = {
@@ -317,12 +313,8 @@ export const layer = (options?: ShellSelect.Options) =>
     }),
   )
 
-export function configured(options?: ShellSelect.Options) {
-  return makeLocationNode({
-    service: Service,
-    layer: layer(options),
-    deps: [Bus.node, Location.node, Config.node, Global.node],
-  })
-}
-
-export const node = configured()
+export const node = makeLocationNode({
+  service: Service,
+  layer: layer(),
+  deps: [Bus.node, Location.node, ShellSelect.node],
+})

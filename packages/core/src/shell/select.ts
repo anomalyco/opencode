@@ -3,8 +3,11 @@ export * as ShellSelect from "./select.js"
 import path from "path"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
-import { Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Global } from "@opencode-ai/util/global"
+import { State } from "../state.js"
 import { which } from "../util/which.js"
 
 const META: Record<string, { deny?: boolean; login?: boolean; ps?: boolean }> = {
@@ -29,6 +32,20 @@ export const Options = Schema.Struct({
   gitbash: Schema.optional(Schema.String),
 })
 export type Options = typeof Options.Type
+
+type Data = {
+  shell?: string
+}
+
+export type Draft = {
+  configure: (shell: string) => void
+}
+
+export interface Interface extends State.Transformable<Draft> {
+  readonly preferred: () => Effect.Effect<string>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/ShellSelect") {}
 
 function stat(file: string) {
   return statSync(file, { throwIfNoEntry: false }) ?? undefined
@@ -181,3 +198,31 @@ export async function list(options?: Options, bin?: string): Promise<Item[]> {
   const shells = process.platform === "win32" ? win(options, bin) : await unix()
   return shells.filter((shell) => resolve(shell, options, bin)).map((shell) => info(shell, options, bin))
 }
+
+const layer = (options?: Options) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const global = yield* Global.Service
+      const state = State.create<Data, Draft>({
+        name: "shell-select",
+        initial: () => ({}),
+        draft: (draft) => ({
+          configure: (shell) => {
+            draft.shell = shell
+          },
+        }),
+      })
+      return Service.of({
+        transform: state.transform,
+        reload: state.reload,
+        preferred: () => Effect.sync(() => preferred(state.get().shell, options, global.bin)),
+      })
+    }),
+  )
+
+export function configured(options?: Options) {
+  return makeLocationNode({ service: Service, layer: layer(options), deps: [Global.node] })
+}
+
+export const node = configured()

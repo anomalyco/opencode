@@ -51,6 +51,22 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapGoogleOptions(input.settings),
         },
       }
+    case "@ai-sdk/google-vertex":
+      return {
+        package: "@opencode-ai/ai/providers/google-vertex",
+        settings: {
+          ...baseSettings,
+          ...(typeof input.settings.accessToken === "string" ? { accessToken: input.settings.accessToken } : {}),
+          ...mapAPIKey(input.settings),
+          ...(typeof input.settings.location === "string" ? { location: input.settings.location } : {}),
+          ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
+          ...mapGoogleOptions(
+            input.settings,
+            isStringRecord(input.settings.labels) ? { labels: input.settings.labels } : {},
+          ),
+        },
+        ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+      }
     case "@ai-sdk/google-vertex/anthropic":
       return {
         package: "@opencode-ai/ai/providers/google-vertex/messages",
@@ -229,7 +245,7 @@ function mapAPIKey(settings: Readonly<Record<string, unknown>>) {
   return typeof settings.apiKey === "string" ? { apiKey: settings.apiKey } : {}
 }
 
-function mapGoogleOptions(settings: Readonly<Record<string, unknown>>) {
+function mapGoogleOptions(settings: Readonly<Record<string, unknown>>, extra: Readonly<Record<string, unknown>> = {}) {
   const input = settings.thinkingConfig
   const thinkingConfig = {
     ...(isRecord(input) && typeof input.thinkingBudget === "number" ? { thinkingBudget: input.thinkingBudget } : {}),
@@ -243,6 +259,7 @@ function mapGoogleOptions(settings: Readonly<Record<string, unknown>>) {
     ...(Array.isArray(settings.safetySettings) ? { safetySettings: settings.safetySettings } : {}),
     ...(typeof settings.serviceTier === "string" ? { serviceTier: settings.serviceTier } : {}),
     ...(Object.keys(thinkingConfig).length > 0 ? { thinkingConfig } : {}),
+    ...extra,
   }
   if (Object.keys(options).length === 0) return {}
   return { providerOptions: { gemini: options } }

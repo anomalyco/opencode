@@ -8,10 +8,8 @@ import { MCP } from "./mcp/index.js"
 import { Bus } from "./bus.js"
 import { AppProcess } from "@opencode-ai/util/process"
 import { ChildProcess } from "effect/unstable/process"
-import { Config } from "./config.js"
 import { Location } from "./location.js"
 import { ShellSelect } from "./shell/select.js"
-import { Global } from "@opencode-ai/util/global"
 
 export const Info = Command.Info
 export type Info = Command.Info
@@ -53,16 +51,15 @@ export interface Interface extends State.Transformable<Draft> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
 
-export const layer = (options?: ShellSelect.Options) =>
+const layer = () =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const mcp = yield* MCP.Service
       const bus = yield* Bus.Service
       const processes = yield* AppProcess.Service
-      const config = yield* Config.Service
       const location = yield* Location.Service
-      const global = yield* Global.Service
+      const shell = yield* ShellSelect.Service
       const state = State.create<Data, Draft>({
         name: "command",
         initial: () => ({ commands: new Map() }),
@@ -109,11 +106,9 @@ export const layer = (options?: ShellSelect.Options) =>
           const command = staticCommand(input.name)
           if (command)
             return yield* evaluateTemplate(input.name, command.template, input.arguments ?? "", {
-              config,
               location,
               processes,
-              shell: options,
-              bin: global.bin,
+              shell,
             })
 
           const prompt = (yield* mcp.prompts()).find(
@@ -163,11 +158,9 @@ function evaluateTemplate(
   template: string,
   input: string,
   services: {
-    readonly config: Config.Interface
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
-    readonly shell?: ShellSelect.Options
-    readonly bin: string
+    readonly shell: ShellSelect.Interface
   },
 ) {
   return Effect.gen(function* () {
@@ -197,20 +190,14 @@ const evaluateShell = Effect.fnUntraced(function* (
   command: string,
   text: string,
   services: {
-    readonly config: Config.Interface
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
-    readonly shell?: ShellSelect.Options
-    readonly bin: string
+    readonly shell: ShellSelect.Interface
   },
 ) {
   const matches = Array.from(text.matchAll(shellRegex))
   if (matches.length === 0) return text
-  const shell = ShellSelect.preferred(
-    Config.latest(yield* services.config.entries(), "shell"),
-    services.shell,
-    services.bin,
-  )
+  const shell = yield* services.shell.preferred()
   const outputs = yield* Effect.forEach(
     matches,
     (match) => {
@@ -267,12 +254,8 @@ const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
 const shellRegex = /!`([^`]+)`/g
 
-export function configured(options?: ShellSelect.Options) {
-  return makeLocationNode({
-    service: Service,
-    layer: layer(options),
-    deps: [MCP.node, Bus.node, AppProcess.node, Config.node, Location.node, Global.node],
-  })
-}
-
-export const node = configured()
+export const node = makeLocationNode({
+  service: Service,
+  layer: layer(),
+  deps: [MCP.node, Bus.node, AppProcess.node, Location.node, ShellSelect.node],
+})

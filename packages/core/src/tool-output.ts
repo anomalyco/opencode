@@ -6,8 +6,8 @@ import { Context, Duration, Effect, Layer, Option, Schedule } from "effect"
 import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
-import { Config } from "./config.js"
 import { Identifier } from "./id/id.js"
+import { State } from "./state.js"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024 // 50 KiB
@@ -16,7 +16,16 @@ export const DIRECTORY = "tool-output"
 
 type Result = Tool.Result
 
-export interface Interface {
+type Limits = {
+  maxLines: number
+  maxBytes: number
+}
+
+export type Draft = {
+  configure: (limits: Partial<Limits>) => void
+}
+
+export interface Interface extends State.Transformable<Draft> {
   readonly truncate: (result: Result) => Effect.Effect<Result>
   readonly cleanup: () => Effect.Effect<void>
 }
@@ -46,31 +55,38 @@ const cleanup = Effect.fn("ToolOutput.cleanup")(function* (fs: FSUtil.Interface,
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const config = yield* Config.Service
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const directory = path.join(global.data, DIRECTORY)
+    const state = State.create<Limits, Draft>({
+      name: "tool-output",
+      initial: () => ({ maxLines: MAX_LINES, maxBytes: MAX_BYTES }),
+      draft: (draft) => ({
+        configure: (limits) => {
+          if (limits.maxLines !== undefined) draft.maxLines = limits.maxLines
+          if (limits.maxBytes !== undefined) draft.maxBytes = limits.maxBytes
+        },
+      }),
+    })
 
     const truncate = Effect.fnUntraced(function* (result: Result) {
       if (result.metadata?.truncated !== undefined) return result
       const content =
         typeof result.content === "string" ? [{ type: "text" as const, text: result.content }] : (result.content ?? [])
       const text = content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")
-      const configured = Config.latest(yield* config.entries(), "tool_output")
-      const maxLines = configured?.max_lines ?? MAX_LINES
-      const maxBytes = configured?.max_bytes ?? MAX_BYTES
+      const limits = state.get()
       const lines = text.split("\n")
       if (text.endsWith("\n")) lines.pop()
       const totalBytes = Buffer.byteLength(text, "utf-8")
-      if (lines.length <= maxLines && totalBytes <= maxBytes)
+      if (lines.length <= limits.maxLines && totalBytes <= limits.maxBytes)
         return { ...result, metadata: { ...result.metadata, truncated: false } }
 
       const kept: string[] = []
       let bytes = 0
       let hitBytes = false
-      for (const line of lines.slice(0, maxLines)) {
+      for (const line of lines.slice(0, limits.maxLines)) {
         const size = Buffer.byteLength(line, "utf-8") + (kept.length > 0 ? 1 : 0)
-        if (bytes + size > maxBytes) {
+        if (bytes + size > limits.maxBytes) {
           hitBytes = true
           break
         }
@@ -113,7 +129,12 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ truncate, cleanup: () => cleanup(fs, directory) })
+    return Service.of({
+      transform: state.transform,
+      reload: state.reload,
+      truncate,
+      cleanup: () => cleanup(fs, directory),
+    })
   }),
 )
 
@@ -137,5 +158,5 @@ const cleanupNode = makeGlobalNode({
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Config.node, FSUtil.node, Global.node, cleanupNode],
+  deps: [FSUtil.node, Global.node, cleanupNode],
 })
