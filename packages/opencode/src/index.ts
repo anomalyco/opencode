@@ -28,7 +28,7 @@ import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
-import { VantacodeCommand } from "./cli/cmd/vantacode"
+import { VantacodeCommand, applyVantacodeSubcommands } from "./cli/cmd/vantacode"
 import { Heap } from "./cli/heap"
 
 const args = hideBin(process.argv)
@@ -49,7 +49,7 @@ function show(out: string) {
   process.stderr.write(out)
 }
 
-const cli = yargs(args)
+const cliBuilder = yargs(args)
   .parserConfiguration({ "populate--": true })
   .scriptName(BRAND)
   .wrap(100)
@@ -112,7 +112,18 @@ const cli = yargs(args)
   .command(SessionCommand)
   .command(PluginCommand)
   .command(DbCommand)
-  .command(VantacodeCommand)
+
+// VantaCode: under the `vantacode` brand bin, expose the doctor/optimize/providers/
+// models/chat subcommands at the top level so the user runs `vantacode chat`
+// directly. Under the upstream `opencode` bin, keep them nested as
+// `opencode vantacode chat`, leaving all upstream commands untouched.
+if (BRAND === "vantacode") {
+  applyVantacodeSubcommands(cliBuilder)
+} else {
+  cliBuilder.command(VantacodeCommand)
+}
+
+const cli = cliBuilder
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

@@ -35,11 +35,16 @@ function printDoctorReport(checks: CheckResult[]) {
   }
 }
 
-export const VantacodeCommand = cmd({
-  command: "vantacode <command>",
-  describe: "VantaCode: local-model provider tools, doctor, and native chat",
-  builder: (yargs) =>
-    yargs
+/**
+ * Attach the VantaCode subcommands (doctor / optimize / providers / models / chat)
+ * onto a yargs instance. Used two ways:
+ *  - flattened at the top level when running under the `vantacode` brand bin, so
+ *    the user types `vantacode chat` (not `vantacode vantacode chat`);
+ *  - nested under a `vantacode` group when running as the upstream `opencode` bin,
+ *    so it stays out of the way as `opencode vantacode chat`.
+ */
+export function applyVantacodeSubcommands<T>(yargs: T): T {
+  return (yargs as any)
       .command(
         "doctor",
         "check Ollama + hardware readiness for reliable tool-calling",
@@ -191,7 +196,18 @@ export const VantacodeCommand = cmd({
           })
         },
       )
-      .demandCommand(1, "Specify a vantacode subcommand: doctor | optimize | providers | models | chat")
-      .strict(),
+      .demandCommand(1, "Specify a subcommand: doctor | optimize | providers | models | chat")
+      .strict()
+}
+
+/**
+ * Nested command group for the upstream `opencode` bin: `opencode vantacode <command>`.
+ * The `vantacode` brand bin instead flattens these to the top level via
+ * `applyVantacodeSubcommands` in index.ts, so users run `vantacode chat` directly.
+ */
+export const VantacodeCommand = cmd({
+  command: "vantacode <command>",
+  describe: "VantaCode: local-model provider tools, doctor, and native chat",
+  builder: (yargs) => applyVantacodeSubcommands(yargs),
   handler: () => {},
 })
