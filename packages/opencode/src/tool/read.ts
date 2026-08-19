@@ -3,6 +3,7 @@ import { NonNegativeInt } from "@opencode-ai/core/schema"
 import * as path from "path"
 import * as Tool from "./tool"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
 import { InstanceState } from "@/effect/instance-state"
@@ -17,6 +18,38 @@ const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+
+// findPriorRead walks the session history for a completed, non-compacted read of
+// the same resolved filepath with the same offset/limit whose recorded mtime+size
+// still match. Because `ctx.messages` is exactly what gets sent to the model
+// (a compacted part has its output cleared, message-v2.ts:293), a hit means the
+// full contents are still in the model's context window, so a `file_unchanged`
+// stub is safe. Cross-turn and post-resume re-reads are both caught here since
+// history is reloaded via filterCompactedEffect.
+const findPriorRead = (
+  messages: SessionV1.WithParts[],
+  filepath: string,
+  offset: number,
+  limit: number,
+  mtimeMs: number,
+  size: number,
+) => {
+  for (const msg of messages) {
+    for (const part of msg.parts) {
+      if (part.type !== "tool" || part.tool !== "read") continue
+      const state = part.state
+      if (state.status !== "completed" || state.time.compacted) continue
+      const display = state.metadata?.display
+      if (display?.type !== "file" || display.path !== filepath) continue
+      const input = state.input as { offset?: number; limit?: number }
+      if ((input.offset || 1) !== offset) continue
+      if ((input.limit ?? DEFAULT_READ_LIMIT) !== limit) continue
+      if (state.metadata?.mtimeMs !== mtimeMs || state.metadata?.size !== size) continue
+      return true
+    }
+  }
+  return false
+}
 
 class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 
@@ -58,6 +91,8 @@ type Metadata = {
   preview: string
   truncated: boolean
   loaded: string[]
+  mtimeMs?: number
+  size?: number
   display?: Display
 }
 
@@ -297,7 +332,32 @@ export const ReadTool = Tool.define<
         }
       }
 
+      const offset = params.offset || 1
+      const limit = params.limit ?? DEFAULT_READ_LIMIT
+      const mtimeMs = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
+      const size = Number(stat.size)
       const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
+      if (findPriorRead(ctx.messages, filepath, offset, limit, mtimeMs, size)) {
+        return {
+          title,
+          output: [
+            `<path>${filepath}</path>`,
+            `<type>file</type>`,
+            "File unchanged since last read. Its full contents are already in the conversation history, so they were not re-sent.",
+            ...(loaded.length > 0
+              ? [`\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`]
+              : []),
+          ].join("\n"),
+          metadata: {
+            preview: "File unchanged since last read",
+            truncated: false,
+            loaded: loaded.map((item) => item.filepath),
+            mtimeMs,
+            size,
+          },
+        }
+      }
+
       const sample = yield* readSample(filepath, Number(stat.size), SAMPLE_BYTES)
 
       const mime = sniffAttachmentMime(sample, FSUtil.mimeType(filepath))
@@ -363,6 +423,8 @@ export const ReadTool = Tool.define<
           preview: file.raw.slice(0, 20).join("\n"),
           truncated,
           loaded: loaded.map((item) => item.filepath),
+          mtimeMs,
+          size,
           display: {
             type: "file" as const,
             path: filepath,

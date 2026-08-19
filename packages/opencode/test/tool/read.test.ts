@@ -1,7 +1,7 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Effect, Exit, Layer, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Stream } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -12,7 +12,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
-import { SessionID, MessageID } from "../../src/session/schema"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { PartID, SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
@@ -146,6 +147,73 @@ const asks = () => {
         }),
     },
   }
+}
+
+const statOf = Effect.fn("ReadToolTest.statOf")(function* (p: string) {
+  const fs = yield* FSUtil.Service
+  const stat = yield* fs.stat(p)
+  return { mtimeMs: Option.getOrElse(stat.mtime, () => new Date(0)).getTime(), size: Number(stat.size) }
+})
+
+// Builds a session containing a completed `read` tool part for `filepath` as the
+// tool would have persisted it: metadata carries the mtime/size we record, and
+// `display.path` is the resolved absolute path.
+const priorRead = (
+  filepath: string,
+  opts: {
+    offset?: number
+    limit?: number
+    mtimeMs?: number
+    size?: number
+    compacted?: boolean
+  } = {},
+): SessionV1.WithParts => {
+  const id = MessageID.ascending()
+  return {
+    info: {
+      id,
+      role: "assistant",
+      sessionID: ctx.sessionID,
+      parentID: MessageID.ascending(),
+      time: { created: Date.now() },
+      mode: "build",
+      agent: "build",
+      path: { cwd: "/tmp", root: "/tmp" },
+      modelID: "test",
+      providerID: "test",
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    } as unknown as SessionV1.Assistant,
+    parts: [
+      {
+        id: PartID.ascending(),
+        messageID: id,
+        sessionID: ctx.sessionID,
+        type: "tool",
+        callID: `call_${id}`,
+        tool: "read",
+        state: {
+          status: "completed",
+          input: {
+            filePath: filepath,
+            ...(opts.offset !== undefined ? { offset: opts.offset } : {}),
+            ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+          },
+          output: "<content>prior content</content>",
+          title: filepath,
+          metadata: {
+            preview: "prior content",
+            truncated: false,
+            loaded: [],
+            ...(opts.mtimeMs !== undefined ? { mtimeMs: opts.mtimeMs } : {}),
+            ...(opts.size !== undefined ? { size: opts.size } : {}),
+            display: { type: "file", path: filepath, text: "prior content", lineStart: 1, lineEnd: 1, totalLines: 1, truncated: false },
+          },
+          time: { start: Date.now(), end: Date.now(), ...(opts.compacted ? { compacted: Date.now() } : {}) },
+        },
+      } as SessionV1.ToolPart,
+    ],
+  } as unknown as SessionV1.WithParts
 }
 
 describe("tool.read external_directory permission", () => {
@@ -603,6 +671,145 @@ describe("tool.read binary detection", () => {
 
       const err = yield* fail(dir, { filePath: path.join(dir, "module.wasm") })
       expect(err.message).toContain("Cannot read binary file")
+    }),
+  )
+})
+
+describe("tool.read unchanged dedup", () => {
+  const live = (name: Parameters<typeof it.live>[0], value: Parameters<typeof it.live>[1]) =>
+    it.live(name, value, { timeout: 30_000 })
+
+  live("re-reads a file when it was never read before", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "test.txt")
+      yield* put(filepath, "hello world")
+
+      const result = yield* exec(dir, { filePath: filepath }, { ...ctx, messages: [] })
+      expect(result.output).toContain("hello world")
+      expect(result.output).not.toContain("File unchanged since last read")
+    }),
+  )
+
+  live("returns a stub when the same file was read with the same mtime and size", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "test.txt")
+      yield* put(filepath, "hello world")
+      const { mtimeMs, size } = yield* statOf(filepath)
+
+      const result = yield* exec(dir, { filePath: filepath }, { ...ctx, messages: [priorRead(filepath, { mtimeMs, size })] })
+      expect(result.output).toContain("File unchanged since last read")
+      expect(result.output).not.toContain("hello world")
+      expect(result.metadata.mtimeMs).toBe(mtimeMs)
+      expect(result.metadata.size).toBe(size)
+    }),
+  )
+
+  live("re-reads when mtime changed even if size is the same", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "test.txt")
+      yield* put(filepath, "hello world")
+      const { size } = yield* statOf(filepath)
+
+      const result = yield* exec(
+        dir,
+        { filePath: filepath },
+        { ...ctx, messages: [priorRead(filepath, { mtimeMs: 1, size })] },
+      )
+      expect(result.output).toContain("hello world")
+      expect(result.output).not.toContain("File unchanged since last read")
+    }),
+  )
+
+  live("re-reads when size changed even if mtime is the same", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "test.txt")
+      yield* put(filepath, "hello world")
+      const { mtimeMs } = yield* statOf(filepath)
+
+      const result = yield* exec(
+        dir,
+        { filePath: filepath },
+        { ...ctx, messages: [priorRead(filepath, { mtimeMs, size: 0 })] },
+      )
+      expect(result.output).toContain("hello world")
+      expect(result.output).not.toContain("File unchanged since last read")
+    }),
+  )
+
+  live("re-reads when a different range was read before", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "test.txt")
+      const content = Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n")
+      yield* put(filepath, content)
+      const { mtimeMs, size } = yield* statOf(filepath)
+
+      const result = yield* exec(
+        dir,
+        { filePath: filepath, offset: 5, limit: 3 },
+        { ...ctx, messages: [priorRead(filepath, { mtimeMs, size, offset: 1, limit: 2000 })] },
+      )
+      expect(result.output).toContain("5: line5")
+      expect(result.output).not.toContain("File unchanged since last read")
+    }),
+  )
+
+  live("re-reads when the prior read part was compacted", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "test.txt")
+      yield* put(filepath, "hello world")
+      const { mtimeMs, size } = yield* statOf(filepath)
+
+      const result = yield* exec(
+        dir,
+        { filePath: filepath },
+        { ...ctx, messages: [priorRead(filepath, { mtimeMs, size, compacted: true })] },
+      )
+      expect(result.output).toContain("hello world")
+      expect(result.output).not.toContain("File unchanged since last read")
+    }),
+  )
+
+  live("re-reads when the prior read was a directory listing", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "test.txt")
+      yield* put(filepath, "hello world")
+      const { mtimeMs, size } = yield* statOf(filepath)
+
+      const prior = priorRead(filepath, { mtimeMs, size })
+      const directoryPart = {
+        ...prior,
+        parts: [
+          {
+            ...(prior.parts[0] as SessionV1.ToolPart),
+            state: {
+              status: "completed",
+              input: { filePath: filepath },
+              output: "<entries>\n</entries>",
+              title: filepath,
+              metadata: {
+                preview: "",
+                truncated: false,
+                loaded: [],
+                mtimeMs,
+                size,
+                display: { type: "directory", path: filepath, entries: ["test.txt"], offset: 1, totalEntries: 1, truncated: false },
+              },
+              time: { start: Date.now(), end: Date.now() },
+            },
+          } as SessionV1.ToolPart,
+        ],
+      } as unknown as SessionV1.WithParts
+
+      const result = yield* exec(dir, { filePath: filepath }, { ...ctx, messages: [directoryPart] })
+      expect(result.output).toContain("hello world")
+      expect(result.output).not.toContain("File unchanged since last read")
     }),
   )
 })
