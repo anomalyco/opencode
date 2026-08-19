@@ -178,6 +178,16 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("passes through custom OpenAI text verbosity strings", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, { providerOptions: { openai: { textVerbosity: "verbose" } } }),
+      )
+
+      expect(prepared.body.text).toEqual({ verbosity: "verbose" })
+    }),
+  )
+
   it.effect("omits unsupported semantic service tiers", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

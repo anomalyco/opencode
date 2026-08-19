@@ -255,7 +255,7 @@ describe("OpenAI Chat route", () => {
     LLMClient.generate(
       LLMRequest.update(request, {
         model: Azure.configure({
-          baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
+          baseURL: "https://opencode-test.openai.azure.com/openai/",
           apiKey: "azure-key",
           headers: { authorization: "Bearer stale" },
         }).chat("gpt-4o-mini"),
