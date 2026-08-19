@@ -495,12 +495,10 @@ describe("ModelResolver", () => {
         temperature: 0.2,
       })
       expect(resolved.route.defaults.providerOptions).toEqual({
-        openai: {
-          store: false,
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
-        },
+        store: false,
+        reasoningEffort: "xhigh",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
       })
       const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
       expect(prepared.body).toMatchObject({
@@ -569,7 +567,7 @@ describe("ModelResolver", () => {
         custom_extension: { enabled: true },
       })
       expect(resolved.route.defaults.providerOptions).toEqual({
-        anthropic: { thinking: { type: "enabled", budgetTokens: 12000 } },
+        thinking: { type: "enabled", budgetTokens: 12000 },
       })
     }),
   )
@@ -851,48 +849,46 @@ describe("ModelResolver", () => {
             include: ["reasoning.encrypted_content"],
           },
           {
-            openai: {
-              reasoningEffort: "xhigh",
-              reasoningSummary: "auto",
-              include: ["reasoning.encrypted_content"],
-            },
+            reasoningEffort: "xhigh",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"],
           },
         ],
         [
           "@ai-sdk/anthropic",
           "@opencode-ai/ai/providers/anthropic",
           { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
-          { anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" } },
+          { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
         ],
         [
           "@ai-sdk/openai-compatible",
           "@opencode-ai/ai/providers/openai-compatible",
           { reasoningEffort: "high" },
-          { openai: { reasoningEffort: "high" } },
+          { reasoningEffort: "high" },
         ],
         [
           "@ai-sdk/google",
           "@opencode-ai/ai/providers/google",
           { thinkingConfig: { thinkingLevel: "high" } },
-          { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
+          { thinkingConfig: { thinkingLevel: "high" } },
         ],
         [
           "@ai-sdk/google-vertex",
           "@opencode-ai/ai/providers/google-vertex",
           { thinkingConfig: { thinkingLevel: "high" } },
-          { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
+          { thinkingConfig: { thinkingLevel: "high" } },
         ],
         [
           "@openrouter/ai-sdk-provider",
           "@opencode-ai/ai/providers/openrouter",
           { reasoning: { effort: "high" } },
-          { openrouter: { reasoning: { effort: "high" } } },
+          { reasoning: { effort: "high" } },
         ],
         [
           "@ai-sdk/xai",
           "@opencode-ai/ai/providers/xai",
           { reasoningEffort: "high" },
-          { xai: { reasoningEffort: "high" } },
+          { reasoningEffort: "high" },
         ],
       ] as const
 
@@ -1008,10 +1004,8 @@ describe("ModelResolver", () => {
                   location: "eu",
                   project: "vertex-project",
                   providerOptions: {
-                    anthropic: {
-                      thinking: { type: "adaptive", display: "summarized" },
-                      effort: "high",
-                    },
+                    thinking: { type: "adaptive", display: "summarized" },
+                    effort: "high",
                   },
                 })
                 return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
@@ -1084,15 +1078,11 @@ describe("ModelResolver", () => {
       )
 
       expect(google.route.id).toBe("gemini")
-      expect(google.route.defaults.providerOptions).toEqual({
-        gemini: { thinkingConfig: { thinkingBudget: 1_024 } },
-      })
+      expect(google.route.defaults.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
       expect(openrouter.route.id).toBe("openrouter")
-      expect(openrouter.route.defaults.providerOptions).toEqual({ openrouter: { reasoning: { effort: "high" } } })
+      expect(openrouter.route.defaults.providerOptions).toEqual({ reasoning: { effort: "high" } })
       expect(xai.route.id).toBe("openai-responses")
-      expect(xai.route.defaults.providerOptions).toEqual({
-        xai: { reasoningEffort: "high", store: false },
-      })
+      expect(xai.route.defaults.providerOptions).toEqual({ reasoningEffort: "high", store: false })
       expect(bedrock.route.id).toBe("bedrock-converse")
       expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
       expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })

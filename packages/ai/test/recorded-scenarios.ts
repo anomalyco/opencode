@@ -302,8 +302,7 @@ const runTextScenario = (context: GoldenScenarioContext) =>
     assistant.expectText(/^Hello!?$/, {
       system: "You are concise.",
       maxTokens: context.maxTokens ?? 40,
-      providerOptions:
-        context.model.route.id === "gemini" ? { gemini: { thinkingConfig: { thinkingBudget: 0 } } } : undefined,
+      providerOptions: context.model.route.id === "gemini" ? { thinkingConfig: { thinkingBudget: 0 } } : undefined,
     }),
   ])
 
