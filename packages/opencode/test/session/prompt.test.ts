@@ -6,7 +6,8 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, DateTime, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -27,6 +28,7 @@ import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
 import { Session } from "@/session/session"
 import { SessionMessageTable } from "@opencode-ai/core/session/sql"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -2437,6 +2439,127 @@ noLLMServer.instance(
           expect(err.data.message).toContain("init")
         }
       }
+    }),
+  30_000,
+)
+
+// Regressions for issue anomalyco/opencode#41387: after switching the session's
+// selected agent, the FIRST user message must be processed with the NEW agent's
+// system prompt, not the previously-selected one.
+//
+// The TUI switch (Tab) updates the session's selected agent (session.agent),
+// then the next typed message is processed. MessageV2's user message carries the
+// agent that was in effect when the message was created, and the loop builds the
+// system prompt from that user message's agent. If createUserMessage ignores the
+// switched session.agent (falling back to the default agent), the first message
+// after the switch is sent to the model with the OLD/default agent's system
+// prompt even though the session is now on the new agent.
+const switchPromptConfig = (url: string) => ({
+  ...providerCfg(url),
+  default_agent: "alpha",
+  agent: {
+    alpha: {
+      model: "test/test-model",
+      prompt: "ALPHA-ONLY-SYSTEM-PROMPT",
+    },
+    beta: {
+      model: "test/test-model",
+      prompt: "BETA-ONLY-SYSTEM-PROMPT",
+    },
+  },
+})
+
+it.instance(
+  "first user message after switching session agent uses the new agent's system prompt",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(switchPromptConfig)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Agent switch" })
+
+      // Tab-equivalent: switch the session's selected agent to "beta".
+      yield* sessions.setAgentModel({
+        sessionID: chat.id,
+        agent: "beta",
+        model: { providerID: ref.providerID, id: ref.modelID },
+        time: Date.now(),
+      })
+      expect(yield* sessions.get(chat.id)).toMatchObject({ agent: "beta" })
+
+      // First user message after the switch. No explicit agent is provided, so
+      // the message should inherit the session's selected agent ("beta").
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        noReply: true,
+        parts: [{ type: "text", text: "hello from beta" }],
+      })
+      yield* llm.text("received")
+
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const hits = yield* llm.hits
+      const messages = hits[0]?.body.messages
+      expect(Array.isArray(messages)).toBe(true)
+      if (!Array.isArray(messages)) return
+      const system = messages.filter((m: { role?: string }) => m.role === "system")
+      const body = JSON.stringify(system)
+      expect(body).toContain("BETA-ONLY-SYSTEM-PROMPT")
+      expect(body).not.toContain("ALPHA-ONLY-SYSTEM-PROMPT")
+    }),
+  30_000,
+)
+
+it.instance(
+  "loop builds the first turn's system prompt from the session's selected agent after a durable switchAgent",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(switchPromptConfig)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const events = yield* EventV2Bridge.Service
+      const chat = yield* sessions.create({ title: "Stale loop agent" })
+      yield* sessions.setAgentModel({
+        sessionID: chat.id,
+        agent: "alpha",
+        model: { providerID: ref.providerID, id: ref.modelID },
+        time: Date.now(),
+      })
+      expect(yield* sessions.get(chat.id)).toMatchObject({ agent: "alpha" })
+
+      // Author a user message with no explicit agent under the selected alpha.
+      // createUserMessage inherits session.agent = alpha, so the message carries
+      // the alpha agent.
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        noReply: true,
+        parts: [{ type: "text", text: "first (alpha)" }],
+      })
+
+      // Tab-equivalent durable switch (AgentSwitched -> projector updates
+      // SessionTable.agent), same event the V2 switchAgent endpoint publishes.
+      yield* events.publish(SessionEvent.AgentSwitched, {
+        sessionID: chat.id,
+        messageID: SessionMessage.ID.create(),
+        timestamp: yield* DateTime.now,
+        agent: "beta",
+      })
+      expect(yield* sessions.get(chat.id)).toMatchObject({ agent: "beta" })
+
+      // The first (and only) turn after the switch must run with beta's system
+      // prompt, but the loop derives the agent from the previously-authored
+      // message (alpha) rather than the session's current agent.
+      yield* llm.text("received")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const hits = yield* llm.hits
+      const messages = hits[0]?.body.messages
+      expect(Array.isArray(messages)).toBe(true)
+      if (!Array.isArray(messages)) return
+      const system = messages.filter((m: { role?: string }) => m.role === "system")
+      const body = JSON.stringify(system)
+      expect(body).toContain("BETA-ONLY-SYSTEM-PROMPT")
+      expect(body).not.toContain("ALPHA-ONLY-SYSTEM-PROMPT")
     }),
   30_000,
 )
