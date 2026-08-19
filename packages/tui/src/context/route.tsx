@@ -20,7 +20,12 @@ export type PluginRoute = {
   data?: Record<string, unknown>
 }
 
-export type Route = HomeRoute | SessionRoute | PluginRoute
+export type WorkflowRoute = {
+  type: "workflow"
+  workflowID?: string
+}
+
+export type Route = HomeRoute | SessionRoute | PluginRoute | WorkflowRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
@@ -49,6 +54,12 @@ function initialRoute(value: unknown): Route | undefined {
   }
   if (value.type === "plugin" && "id" in value && typeof value.id === "string") {
     return { type: "plugin", id: value.id }
+  }
+  if (value.type === "workflow") {
+    return {
+      type: "workflow",
+      workflowID: "workflowID" in value && typeof value.workflowID === "string" ? value.workflowID : undefined,
+    }
   }
 }
 

@@ -15,6 +15,7 @@ import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migrat
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
+import workflowMigration from "@opencode-ai/core/database/migration/20260818120000_workflow"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -95,6 +96,49 @@ describe("DatabaseMigration", () => {
           { name: "session_message_session_time_created_id_idx" },
           { name: "session_message_session_type_seq_idx" },
         ])
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'workflow'`)).toEqual({
+          name: "workflow",
+        })
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'workflow_preference'`),
+        ).toEqual({ name: "workflow_preference" })
+      }),
+    )
+  })
+
+  test("creates workflow tables and index from the workflow migration", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE project (id text PRIMARY KEY, worktree text NOT NULL, sandboxes text DEFAULT '[]' NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL)`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [workflowMigration])
+
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA table_info(workflow_preference)`)).map((column) => column.name),
+        ).toEqual(["project_id", "architect", "coder", "concurrency", "time_created", "time_updated"])
+        expect((yield* db.all<{ name: string }>(sql`PRAGMA table_info(workflow)`)).map((column) => column.name)).toEqual(
+          [
+            "id",
+            "project_id",
+            "story",
+            "status",
+            "architect",
+            "coder",
+            "concurrency",
+            "tasks",
+            "attempts",
+            "sessions",
+            "branch",
+            "time_created",
+            "time_updated",
+          ],
+        )
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'workflow_project_status_idx'`)).toEqual(
+          { name: "workflow_project_status_idx" },
+        )
       }),
     )
   })

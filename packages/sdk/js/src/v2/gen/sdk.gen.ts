@@ -385,6 +385,22 @@ import type {
   V2SessionWaitResponses,
   V2SkillListErrors,
   V2SkillListResponses,
+  V2WorkflowCancelErrors,
+  V2WorkflowCancelResponses,
+  V2WorkflowCreateErrors,
+  V2WorkflowCreateResponses,
+  V2WorkflowGetErrors,
+  V2WorkflowGetResponses,
+  V2WorkflowListErrors,
+  V2WorkflowListResponses,
+  V2WorkflowPauseErrors,
+  V2WorkflowPauseResponses,
+  V2WorkflowPreferencesGetErrors,
+  V2WorkflowPreferencesGetResponses,
+  V2WorkflowPreferencesUpdateErrors,
+  V2WorkflowPreferencesUpdateResponses,
+  V2WorkflowResumeErrors,
+  V2WorkflowResumeResponses,
   VcsApplyErrors,
   VcsApplyResponses,
   VcsDiffErrors,
@@ -395,6 +411,8 @@ import type {
   VcsGetResponses,
   VcsStatusErrors,
   VcsStatusResponses,
+  WorkflowCreateInput,
+  WorkflowPreferencesInput,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -6987,6 +7005,179 @@ export class ProjectCopy2 extends HeyApiClient {
   }
 }
 
+export class Preferences extends HeyApiClient {
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<
+      V2WorkflowPreferencesGetResponses,
+      V2WorkflowPreferencesGetErrors,
+      ThrowOnError
+    >({
+      url: "/api/workflow/preferences",
+      ...options,
+      ...params,
+    })
+  }
+
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      workflowPreferencesInput: WorkflowPreferencesInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { key: "workflowPreferencesInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      V2WorkflowPreferencesUpdateResponses,
+      V2WorkflowPreferencesUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/api/workflow/preferences",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Workflow extends HeyApiClient {
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2WorkflowListResponses, V2WorkflowListErrors, ThrowOnError>({
+      url: "/api/workflow",
+      ...options,
+      ...params,
+    })
+  }
+
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      workflowCreateInput: WorkflowCreateInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { key: "workflowCreateInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2WorkflowCreateResponses, V2WorkflowCreateErrors, ThrowOnError>({
+      url: "/api/workflow",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      workflowID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "workflowID" }] }])
+    return (options?.client ?? this.client).get<V2WorkflowGetResponses, V2WorkflowGetErrors, ThrowOnError>({
+      url: "/api/workflow/{workflowID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  public pause<ThrowOnError extends boolean = false>(
+    parameters: {
+      workflowID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "workflowID" }] }])
+    return (options?.client ?? this.client).post<V2WorkflowPauseResponses, V2WorkflowPauseErrors, ThrowOnError>({
+      url: "/api/workflow/{workflowID}/pause",
+      ...options,
+      ...params,
+    })
+  }
+
+  public resume<ThrowOnError extends boolean = false>(
+    parameters: {
+      workflowID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "workflowID" }] }])
+    return (options?.client ?? this.client).post<V2WorkflowResumeResponses, V2WorkflowResumeErrors, ThrowOnError>({
+      url: "/api/workflow/{workflowID}/resume",
+      ...options,
+      ...params,
+    })
+  }
+
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      workflowID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "workflowID" }] }])
+    return (options?.client ?? this.client).post<V2WorkflowCancelResponses, V2WorkflowCancelErrors, ThrowOnError>({
+      url: "/api/workflow/{workflowID}/cancel",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _preferences?: Preferences
+  get preferences(): Preferences {
+    return (this._preferences ??= new Preferences({ client: this.client }))
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _health?: Health
   get health(): Health {
@@ -7071,6 +7262,11 @@ export class V2 extends HeyApiClient {
   private _projectCopy?: ProjectCopy2
   get projectCopy(): ProjectCopy2 {
     return (this._projectCopy ??= new ProjectCopy2({ client: this.client }))
+  }
+
+  private _workflow?: Workflow
+  get workflow(): Workflow {
+    return (this._workflow ??= new Workflow({ client: this.client }))
   }
 }
 

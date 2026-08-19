@@ -236,6 +236,35 @@ export default {
           CONSTRAINT \`fk_session_share_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      yield* tx.run(`
+        CREATE TABLE \`workflow_preference\` (
+          \`project_id\` text PRIMARY KEY,
+          \`architect\` text,
+          \`coder\` text,
+          \`concurrency\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_workflow_preference_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`workflow\` (
+          \`id\` text PRIMARY KEY,
+          \`project_id\` text NOT NULL,
+          \`story\` text NOT NULL,
+          \`status\` text NOT NULL,
+          \`architect\` text NOT NULL,
+          \`coder\` text NOT NULL,
+          \`concurrency\` integer NOT NULL,
+          \`tasks\` text NOT NULL,
+          \`attempts\` text NOT NULL,
+          \`sessions\` text NOT NULL,
+          \`branch\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_workflow_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(
@@ -269,6 +298,7 @@ export default {
       yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)
       yield* tx.run(`CREATE INDEX \`todo_session_idx\` ON \`todo\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`workflow_project_status_idx\` ON \`workflow\` (\`project_id\`,\`status\`);`)
     })
   },
 } satisfies Omit<DatabaseMigration.Migration, "id">

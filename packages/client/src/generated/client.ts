@@ -112,6 +112,22 @@ import type {
   ProjectCopiesRemoveOutput,
   ProjectCopiesRefreshInput,
   ProjectCopiesRefreshOutput,
+  WorkflowsGetPreferencesInput,
+  WorkflowsGetPreferencesOutput,
+  WorkflowsUpdatePreferencesInput,
+  WorkflowsUpdatePreferencesOutput,
+  WorkflowsCreateInput,
+  WorkflowsCreateOutput,
+  WorkflowsListInput,
+  WorkflowsListOutput,
+  WorkflowsGetInput,
+  WorkflowsGetOutput,
+  WorkflowsPauseInput,
+  WorkflowsPauseOutput,
+  WorkflowsResumeInput,
+  WorkflowsResumeOutput,
+  WorkflowsCancelInput,
+  WorkflowsCancelOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -986,6 +1002,107 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+    },
+    workflows: {
+      getPreferences: (input?: WorkflowsGetPreferencesInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkflowsGetPreferencesOutput }>(
+          {
+            method: "GET",
+            path: `/api/workflow/preferences`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      updatePreferences: (input?: WorkflowsUpdatePreferencesInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkflowsUpdatePreferencesOutput }>(
+          {
+            method: "PUT",
+            path: `/api/workflow/preferences`,
+            query: { location: input?.["location"] },
+            body: { architect: input?.["architect"], coder: input?.["coder"], concurrency: input?.["concurrency"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      create: (input: WorkflowsCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkflowsCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/workflow`,
+            query: { location: input["location"] },
+            body: {
+              story: input["story"],
+              architect: input["architect"],
+              coder: input["coder"],
+              concurrency: input["concurrency"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      list: (input?: WorkflowsListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkflowsListOutput }>(
+          {
+            method: "GET",
+            path: `/api/workflow`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      get: (input: WorkflowsGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkflowsGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/workflow/${encodeURIComponent(input.workflowID)}`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      pause: (input: WorkflowsPauseInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkflowsPauseOutput }>(
+          {
+            method: "POST",
+            path: `/api/workflow/${encodeURIComponent(input.workflowID)}/pause`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      resume: (input: WorkflowsResumeInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkflowsResumeOutput }>(
+          {
+            method: "POST",
+            path: `/api/workflow/${encodeURIComponent(input.workflowID)}/resume`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      cancel: (input: WorkflowsCancelInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkflowsCancelOutput }>(
+          {
+            method: "POST",
+            path: `/api/workflow/${encodeURIComponent(input.workflowID)}/cancel`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
     },
   }
 }

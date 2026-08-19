@@ -2957,6 +2957,20 @@ export type ProjectCopyError = {
   }
 }
 
+export type WorkflowError = {
+  name: "WorkflowError"
+  data: {
+    message: string
+    workflowID?: string
+    taskID?: string
+    role?: "architect" | "coder"
+    from?: string
+    to?: string
+    reason?: string
+    dependency?: string
+  }
+}
+
 export type EffectHttpApiErrorForbidden = {
   _tag: "Forbidden"
 }
@@ -6149,6 +6163,108 @@ export type ReferenceInfo = {
 
 export type ProjectCopyCopy = {
   directory: string
+}
+
+export type WorkflowRoleSelection = {
+  agent: string
+  model?: ModelRef
+}
+
+export type WorkflowPreferences = {
+  projectID: string
+  architect?: WorkflowRoleSelection
+  coder?: WorkflowRoleSelection
+  concurrency?: number
+  time: {
+    updated: number
+  }
+}
+
+export type WorkflowPreferencesInput = {
+  architect?: WorkflowRoleSelection
+  coder?: WorkflowRoleSelection
+  concurrency?: number
+}
+
+export type WorkflowCreateInput = {
+  story: string
+  architect?: WorkflowRoleSelection
+  coder?: WorkflowRoleSelection
+  concurrency?: number
+}
+
+export type WorkflowStatus =
+  | "planning"
+  | "running"
+  | "final_audit"
+  | "paused"
+  | "needs_human"
+  | "completed"
+  | "failed"
+  | "cancelled"
+
+export type WorkflowTaskStatus =
+  | "blocked"
+  | "ready"
+  | "coding"
+  | "audit_pending"
+  | "remediation_ready"
+  | "approved"
+  | "integrating"
+  | "integrated"
+  | "needs_human"
+  | "failed"
+  | "cancelled"
+
+export type WorkflowTask = {
+  id: string
+  title: string
+  status: WorkflowTaskStatus
+  dependencies: Array<string>
+  attempts: number
+  summary?: string
+}
+
+export type WorkflowAttemptStatus = "submitted" | "approved" | "rejected" | "failed"
+
+export type WorkflowAuditFinding = {
+  severity: "info" | "warning" | "error"
+  message: string
+  path?: string
+}
+
+export type WorkflowAttempt = {
+  id: string
+  taskID: string
+  status: WorkflowAttemptStatus
+  sessionID?: string
+  summary?: string
+  feedback?: string
+  findings: Array<WorkflowAuditFinding>
+  time: {
+    created: number
+  }
+}
+
+export type WorkflowInfo = {
+  id: string
+  projectID: string
+  story: string
+  status: WorkflowStatus
+  architect: WorkflowRoleSelection
+  coder: WorkflowRoleSelection
+  concurrency: number
+  tasks: Array<WorkflowTask>
+  attempts: Array<WorkflowAttempt>
+  sessions: {
+    architect: Array<string>
+    coder: Array<string>
+  }
+  branch?: string
+  time: {
+    created: number
+    updated: number
+  }
 }
 
 export type EventModelsDevRefreshed = {
@@ -13584,6 +13700,285 @@ export type V2ProjectCopyRefreshResponses = {
 }
 
 export type V2ProjectCopyRefreshResponse = V2ProjectCopyRefreshResponses[keyof V2ProjectCopyRefreshResponses]
+
+export type V2WorkflowPreferencesGetData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/workflow/preferences"
+}
+
+export type V2WorkflowPreferencesGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2WorkflowPreferencesGetError = V2WorkflowPreferencesGetErrors[keyof V2WorkflowPreferencesGetErrors]
+
+export type V2WorkflowPreferencesGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: WorkflowPreferences
+  }
+}
+
+export type V2WorkflowPreferencesGetResponse =
+  V2WorkflowPreferencesGetResponses[keyof V2WorkflowPreferencesGetResponses]
+
+export type V2WorkflowPreferencesUpdateData = {
+  body: WorkflowPreferencesInput
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/workflow/preferences"
+}
+
+export type V2WorkflowPreferencesUpdateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2WorkflowPreferencesUpdateError =
+  V2WorkflowPreferencesUpdateErrors[keyof V2WorkflowPreferencesUpdateErrors]
+
+export type V2WorkflowPreferencesUpdateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: WorkflowPreferences
+  }
+}
+
+export type V2WorkflowPreferencesUpdateResponse =
+  V2WorkflowPreferencesUpdateResponses[keyof V2WorkflowPreferencesUpdateResponses]
+
+export type V2WorkflowListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/workflow"
+}
+
+export type V2WorkflowListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2WorkflowListError = V2WorkflowListErrors[keyof V2WorkflowListErrors]
+
+export type V2WorkflowListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<WorkflowInfo>
+  }
+}
+
+export type V2WorkflowListResponse = V2WorkflowListResponses[keyof V2WorkflowListResponses]
+
+export type V2WorkflowCreateData = {
+  body: WorkflowCreateInput
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/workflow"
+}
+
+export type V2WorkflowCreateErrors = {
+  /**
+   * WorkflowError | InvalidRequestError
+   */
+  400: WorkflowError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2WorkflowCreateError = V2WorkflowCreateErrors[keyof V2WorkflowCreateErrors]
+
+export type V2WorkflowCreateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: WorkflowInfo
+  }
+}
+
+export type V2WorkflowCreateResponse = V2WorkflowCreateResponses[keyof V2WorkflowCreateResponses]
+
+export type V2WorkflowGetData = {
+  body?: never
+  path: {
+    workflowID: string
+  }
+  query?: never
+  url: "/api/workflow/{workflowID}"
+}
+
+export type V2WorkflowGetErrors = {
+  /**
+   * WorkflowError | InvalidRequestError
+   */
+  400: WorkflowError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2WorkflowGetError = V2WorkflowGetErrors[keyof V2WorkflowGetErrors]
+
+export type V2WorkflowGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: WorkflowInfo
+  }
+}
+
+export type V2WorkflowGetResponse = V2WorkflowGetResponses[keyof V2WorkflowGetResponses]
+
+export type V2WorkflowPauseData = {
+  body?: never
+  path: {
+    workflowID: string
+  }
+  query?: never
+  url: "/api/workflow/{workflowID}/pause"
+}
+
+export type V2WorkflowPauseErrors = {
+  /**
+   * WorkflowError | InvalidRequestError
+   */
+  400: WorkflowError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2WorkflowPauseError = V2WorkflowPauseErrors[keyof V2WorkflowPauseErrors]
+
+export type V2WorkflowPauseResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: WorkflowInfo
+  }
+}
+
+export type V2WorkflowPauseResponse = V2WorkflowPauseResponses[keyof V2WorkflowPauseResponses]
+
+export type V2WorkflowResumeData = {
+  body?: never
+  path: {
+    workflowID: string
+  }
+  query?: never
+  url: "/api/workflow/{workflowID}/resume"
+}
+
+export type V2WorkflowResumeErrors = {
+  /**
+   * WorkflowError | InvalidRequestError
+   */
+  400: WorkflowError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2WorkflowResumeError = V2WorkflowResumeErrors[keyof V2WorkflowResumeErrors]
+
+export type V2WorkflowResumeResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: WorkflowInfo
+  }
+}
+
+export type V2WorkflowResumeResponse = V2WorkflowResumeResponses[keyof V2WorkflowResumeResponses]
+
+export type V2WorkflowCancelData = {
+  body?: never
+  path: {
+    workflowID: string
+  }
+  query?: never
+  url: "/api/workflow/{workflowID}/cancel"
+}
+
+export type V2WorkflowCancelErrors = {
+  /**
+   * WorkflowError | InvalidRequestError
+   */
+  400: WorkflowError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2WorkflowCancelError = V2WorkflowCancelErrors[keyof V2WorkflowCancelErrors]
+
+export type V2WorkflowCancelResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: WorkflowInfo
+  }
+}
+
+export type V2WorkflowCancelResponse = V2WorkflowCancelResponses[keyof V2WorkflowCancelResponses]
 
 export type PtyConnectData = {
   body?: never

@@ -11,6 +11,8 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { Workflow } from "@opencode-ai/core/workflow"
+import { WorkflowCoordinator } from "@opencode-ai/core/workflow/coordinator"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Layer, Option } from "effect"
@@ -34,6 +36,8 @@ const applicationServices = LayerNode.group([
   Credential.node,
   PtyEnvironment.node,
   LocationServiceMap.node,
+  Workflow.node,
+  WorkflowCoordinator.node,
 ])
 
 export function createRoutes(password?: string) {

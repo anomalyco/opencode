@@ -53,6 +53,7 @@ import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
+import { WorkflowRoute } from "./routes/workflow"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -127,6 +128,7 @@ const appBindingCommands = [
   "docs.open",
   "diff.open",
   "workspace.list",
+  "workflow.open",
   "app.debug",
   "app.console",
   "app.heap_snapshot",
@@ -615,6 +617,17 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "workspaces",
         run: () => {
           dialog.replace(() => <DialogWorkspaceList />)
+        },
+      },
+      {
+        name: "workflow.open",
+        title: "Open workflow mode",
+        category: "Workflow",
+        slashName: "workflow",
+        slashAliases: ["workflows"],
+        run: () => {
+          route.navigate({ type: "workflow" })
+          dialog.clear()
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
@@ -1117,6 +1130,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
               <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
                 {(_) => <Session />}
               </Show>
+            </Match>
+            <Match when={route.data.type === "workflow"}>
+              <WorkflowRoute />
             </Match>
           </Switch>
           {plugin()}

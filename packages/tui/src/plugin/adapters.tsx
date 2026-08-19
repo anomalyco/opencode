@@ -51,6 +51,12 @@ function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?
     return
   }
 
+  if (name === "workflow") {
+    const workflowID = params?.workflowID
+    route.navigate({ type: "workflow", workflowID: typeof workflowID === "string" ? workflowID : undefined })
+    return
+  }
+
   route.navigate({ type: "plugin", id: name, data: params })
 }
 
@@ -62,6 +68,14 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
       params: {
         sessionID: route.data.sessionID,
         prompt: route.data.prompt,
+      },
+    }
+  }
+  if (route.data.type === "workflow") {
+    return {
+      name: "workflow",
+      params: {
+        workflowID: route.data.workflowID,
       },
     }
   }

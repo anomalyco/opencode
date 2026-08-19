@@ -101,6 +101,22 @@ export type ProjectCopyError = {
 export const isProjectCopyError = (value: unknown): value is ProjectCopyError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "ProjectCopyError"
 
+export type WorkflowError = {
+  readonly name: "WorkflowError"
+  readonly data: {
+    readonly message: string
+    readonly workflowID?: string | undefined
+    readonly taskID?: string | undefined
+    readonly role?: "architect" | "coder" | undefined
+    readonly from?: string | undefined
+    readonly to?: string | undefined
+    readonly reason?: string | undefined
+    readonly dependency?: string | undefined
+  }
+}
+export const isWorkflowError = (value: unknown): value is WorkflowError =>
+  typeof value === "object" && value !== null && "name" in value && value["name"] === "WorkflowError"
+
 export type HealthGetOutput = { readonly healthy: true }
 
 export type LocationGetInput = {
@@ -2805,3 +2821,520 @@ export type ProjectCopiesRefreshInput = {
 }
 
 export type ProjectCopiesRefreshOutput = void
+
+export type WorkflowsGetPreferencesInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type WorkflowsGetPreferencesOutput = {
+  readonly data: {
+    readonly projectID: string
+    readonly architect?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency?: number
+    readonly time: { readonly updated: number }
+  }
+}["data"]
+
+export type WorkflowsUpdatePreferencesInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly architect?: {
+    readonly architect?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency?: number
+  }["architect"]
+  readonly coder?: {
+    readonly architect?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency?: number
+  }["coder"]
+  readonly concurrency?: {
+    readonly architect?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency?: number
+  }["concurrency"]
+}
+
+export type WorkflowsUpdatePreferencesOutput = {
+  readonly data: {
+    readonly projectID: string
+    readonly architect?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency?: number
+    readonly time: { readonly updated: number }
+  }
+}["data"]
+
+export type WorkflowsCreateInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly story: {
+    readonly story: string
+    readonly architect?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency?: number
+  }["story"]
+  readonly architect?: {
+    readonly story: string
+    readonly architect?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency?: number
+  }["architect"]
+  readonly coder?: {
+    readonly story: string
+    readonly architect?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency?: number
+  }["coder"]
+  readonly concurrency?: {
+    readonly story: string
+    readonly architect?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder?: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency?: number
+  }["concurrency"]
+}
+
+export type WorkflowsCreateOutput = {
+  readonly data: {
+    readonly id: string
+    readonly projectID: string
+    readonly story: string
+    readonly status:
+      | "planning"
+      | "running"
+      | "final_audit"
+      | "paused"
+      | "needs_human"
+      | "completed"
+      | "failed"
+      | "cancelled"
+    readonly architect: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency: number
+    readonly tasks: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly status:
+        | "blocked"
+        | "ready"
+        | "coding"
+        | "audit_pending"
+        | "remediation_ready"
+        | "approved"
+        | "integrating"
+        | "integrated"
+        | "needs_human"
+        | "failed"
+        | "cancelled"
+      readonly dependencies: ReadonlyArray<string>
+      readonly attempts: number
+      readonly summary?: string
+    }>
+    readonly attempts: ReadonlyArray<{
+      readonly id: string
+      readonly taskID: string
+      readonly status: "submitted" | "approved" | "rejected" | "failed"
+      readonly sessionID?: string
+      readonly summary?: string
+      readonly feedback?: string
+      readonly findings: ReadonlyArray<{
+        readonly severity: "info" | "warning" | "error"
+        readonly message: string
+        readonly path?: string
+      }>
+      readonly time: { readonly created: number }
+    }>
+    readonly sessions: { readonly architect: ReadonlyArray<string>; readonly coder: ReadonlyArray<string> }
+    readonly branch?: string
+    readonly time: { readonly created: number; readonly updated: number }
+  }
+}["data"]
+
+export type WorkflowsListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type WorkflowsListOutput = {
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly projectID: string
+    readonly story: string
+    readonly status:
+      | "planning"
+      | "running"
+      | "final_audit"
+      | "paused"
+      | "needs_human"
+      | "completed"
+      | "failed"
+      | "cancelled"
+    readonly architect: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency: number
+    readonly tasks: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly status:
+        | "blocked"
+        | "ready"
+        | "coding"
+        | "audit_pending"
+        | "remediation_ready"
+        | "approved"
+        | "integrating"
+        | "integrated"
+        | "needs_human"
+        | "failed"
+        | "cancelled"
+      readonly dependencies: ReadonlyArray<string>
+      readonly attempts: number
+      readonly summary?: string
+    }>
+    readonly attempts: ReadonlyArray<{
+      readonly id: string
+      readonly taskID: string
+      readonly status: "submitted" | "approved" | "rejected" | "failed"
+      readonly sessionID?: string
+      readonly summary?: string
+      readonly feedback?: string
+      readonly findings: ReadonlyArray<{
+        readonly severity: "info" | "warning" | "error"
+        readonly message: string
+        readonly path?: string
+      }>
+      readonly time: { readonly created: number }
+    }>
+    readonly sessions: { readonly architect: ReadonlyArray<string>; readonly coder: ReadonlyArray<string> }
+    readonly branch?: string
+    readonly time: { readonly created: number; readonly updated: number }
+  }>
+}["data"]
+
+export type WorkflowsGetInput = { readonly workflowID: { readonly workflowID: string }["workflowID"] }
+
+export type WorkflowsGetOutput = {
+  readonly data: {
+    readonly id: string
+    readonly projectID: string
+    readonly story: string
+    readonly status:
+      | "planning"
+      | "running"
+      | "final_audit"
+      | "paused"
+      | "needs_human"
+      | "completed"
+      | "failed"
+      | "cancelled"
+    readonly architect: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency: number
+    readonly tasks: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly status:
+        | "blocked"
+        | "ready"
+        | "coding"
+        | "audit_pending"
+        | "remediation_ready"
+        | "approved"
+        | "integrating"
+        | "integrated"
+        | "needs_human"
+        | "failed"
+        | "cancelled"
+      readonly dependencies: ReadonlyArray<string>
+      readonly attempts: number
+      readonly summary?: string
+    }>
+    readonly attempts: ReadonlyArray<{
+      readonly id: string
+      readonly taskID: string
+      readonly status: "submitted" | "approved" | "rejected" | "failed"
+      readonly sessionID?: string
+      readonly summary?: string
+      readonly feedback?: string
+      readonly findings: ReadonlyArray<{
+        readonly severity: "info" | "warning" | "error"
+        readonly message: string
+        readonly path?: string
+      }>
+      readonly time: { readonly created: number }
+    }>
+    readonly sessions: { readonly architect: ReadonlyArray<string>; readonly coder: ReadonlyArray<string> }
+    readonly branch?: string
+    readonly time: { readonly created: number; readonly updated: number }
+  }
+}["data"]
+
+export type WorkflowsPauseInput = { readonly workflowID: { readonly workflowID: string }["workflowID"] }
+
+export type WorkflowsPauseOutput = {
+  readonly data: {
+    readonly id: string
+    readonly projectID: string
+    readonly story: string
+    readonly status:
+      | "planning"
+      | "running"
+      | "final_audit"
+      | "paused"
+      | "needs_human"
+      | "completed"
+      | "failed"
+      | "cancelled"
+    readonly architect: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency: number
+    readonly tasks: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly status:
+        | "blocked"
+        | "ready"
+        | "coding"
+        | "audit_pending"
+        | "remediation_ready"
+        | "approved"
+        | "integrating"
+        | "integrated"
+        | "needs_human"
+        | "failed"
+        | "cancelled"
+      readonly dependencies: ReadonlyArray<string>
+      readonly attempts: number
+      readonly summary?: string
+    }>
+    readonly attempts: ReadonlyArray<{
+      readonly id: string
+      readonly taskID: string
+      readonly status: "submitted" | "approved" | "rejected" | "failed"
+      readonly sessionID?: string
+      readonly summary?: string
+      readonly feedback?: string
+      readonly findings: ReadonlyArray<{
+        readonly severity: "info" | "warning" | "error"
+        readonly message: string
+        readonly path?: string
+      }>
+      readonly time: { readonly created: number }
+    }>
+    readonly sessions: { readonly architect: ReadonlyArray<string>; readonly coder: ReadonlyArray<string> }
+    readonly branch?: string
+    readonly time: { readonly created: number; readonly updated: number }
+  }
+}["data"]
+
+export type WorkflowsResumeInput = { readonly workflowID: { readonly workflowID: string }["workflowID"] }
+
+export type WorkflowsResumeOutput = {
+  readonly data: {
+    readonly id: string
+    readonly projectID: string
+    readonly story: string
+    readonly status:
+      | "planning"
+      | "running"
+      | "final_audit"
+      | "paused"
+      | "needs_human"
+      | "completed"
+      | "failed"
+      | "cancelled"
+    readonly architect: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency: number
+    readonly tasks: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly status:
+        | "blocked"
+        | "ready"
+        | "coding"
+        | "audit_pending"
+        | "remediation_ready"
+        | "approved"
+        | "integrating"
+        | "integrated"
+        | "needs_human"
+        | "failed"
+        | "cancelled"
+      readonly dependencies: ReadonlyArray<string>
+      readonly attempts: number
+      readonly summary?: string
+    }>
+    readonly attempts: ReadonlyArray<{
+      readonly id: string
+      readonly taskID: string
+      readonly status: "submitted" | "approved" | "rejected" | "failed"
+      readonly sessionID?: string
+      readonly summary?: string
+      readonly feedback?: string
+      readonly findings: ReadonlyArray<{
+        readonly severity: "info" | "warning" | "error"
+        readonly message: string
+        readonly path?: string
+      }>
+      readonly time: { readonly created: number }
+    }>
+    readonly sessions: { readonly architect: ReadonlyArray<string>; readonly coder: ReadonlyArray<string> }
+    readonly branch?: string
+    readonly time: { readonly created: number; readonly updated: number }
+  }
+}["data"]
+
+export type WorkflowsCancelInput = { readonly workflowID: { readonly workflowID: string }["workflowID"] }
+
+export type WorkflowsCancelOutput = {
+  readonly data: {
+    readonly id: string
+    readonly projectID: string
+    readonly story: string
+    readonly status:
+      | "planning"
+      | "running"
+      | "final_audit"
+      | "paused"
+      | "needs_human"
+      | "completed"
+      | "failed"
+      | "cancelled"
+    readonly architect: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly coder: {
+      readonly agent: string
+      readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    }
+    readonly concurrency: number
+    readonly tasks: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly status:
+        | "blocked"
+        | "ready"
+        | "coding"
+        | "audit_pending"
+        | "remediation_ready"
+        | "approved"
+        | "integrating"
+        | "integrated"
+        | "needs_human"
+        | "failed"
+        | "cancelled"
+      readonly dependencies: ReadonlyArray<string>
+      readonly attempts: number
+      readonly summary?: string
+    }>
+    readonly attempts: ReadonlyArray<{
+      readonly id: string
+      readonly taskID: string
+      readonly status: "submitted" | "approved" | "rejected" | "failed"
+      readonly sessionID?: string
+      readonly summary?: string
+      readonly feedback?: string
+      readonly findings: ReadonlyArray<{
+        readonly severity: "info" | "warning" | "error"
+        readonly message: string
+        readonly path?: string
+      }>
+      readonly time: { readonly created: number }
+    }>
+    readonly sessions: { readonly architect: ReadonlyArray<string>; readonly coder: ReadonlyArray<string> }
+    readonly branch?: string
+    readonly time: { readonly created: number; readonly updated: number }
+  }
+}["data"]

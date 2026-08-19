@@ -681,6 +681,103 @@ const adaptGroup17 = (raw: RawClient["server.projectCopy"]) => ({
   refresh: Endpoint17_2(raw),
 })
 
+type Endpoint18_0Request = Parameters<RawClient["server.workflow"]["workflow.preferences.get"]>[0]
+type Endpoint18_0Input = { readonly location?: Endpoint18_0Request["query"]["location"] }
+const Endpoint18_0 = (raw: RawClient["server.workflow"]) => (input?: Endpoint18_0Input) =>
+  raw["workflow.preferences.get"]({ query: { location: input?.["location"] } }).pipe(
+    Effect.mapError(mapClientError),
+    Effect.map((value) => value.data),
+  )
+
+type Endpoint18_1Request = Parameters<RawClient["server.workflow"]["workflow.preferences.update"]>[0]
+type Endpoint18_1Input = {
+  readonly location?: Endpoint18_1Request["query"]["location"]
+  readonly architect?: Endpoint18_1Request["payload"]["architect"]
+  readonly coder?: Endpoint18_1Request["payload"]["coder"]
+  readonly concurrency?: Endpoint18_1Request["payload"]["concurrency"]
+}
+const Endpoint18_1 = (raw: RawClient["server.workflow"]) => (input?: Endpoint18_1Input) =>
+  raw["workflow.preferences.update"]({
+    query: { location: input?.["location"] },
+    payload: { architect: input?.["architect"], coder: input?.["coder"], concurrency: input?.["concurrency"] },
+  }).pipe(
+    Effect.mapError(mapClientError),
+    Effect.map((value) => value.data),
+  )
+
+type Endpoint18_2Request = Parameters<RawClient["server.workflow"]["workflow.create"]>[0]
+type Endpoint18_2Input = {
+  readonly location?: Endpoint18_2Request["query"]["location"]
+  readonly story: Endpoint18_2Request["payload"]["story"]
+  readonly architect?: Endpoint18_2Request["payload"]["architect"]
+  readonly coder?: Endpoint18_2Request["payload"]["coder"]
+  readonly concurrency?: Endpoint18_2Request["payload"]["concurrency"]
+}
+const Endpoint18_2 = (raw: RawClient["server.workflow"]) => (input: Endpoint18_2Input) =>
+  raw["workflow.create"]({
+    query: { location: input["location"] },
+    payload: {
+      story: input["story"],
+      architect: input["architect"],
+      coder: input["coder"],
+      concurrency: input["concurrency"],
+    },
+  }).pipe(
+    Effect.mapError(mapClientError),
+    Effect.map((value) => value.data),
+  )
+
+type Endpoint18_3Request = Parameters<RawClient["server.workflow"]["workflow.list"]>[0]
+type Endpoint18_3Input = { readonly location?: Endpoint18_3Request["query"]["location"] }
+const Endpoint18_3 = (raw: RawClient["server.workflow"]) => (input?: Endpoint18_3Input) =>
+  raw["workflow.list"]({ query: { location: input?.["location"] } }).pipe(
+    Effect.mapError(mapClientError),
+    Effect.map((value) => value.data),
+  )
+
+type Endpoint18_4Request = Parameters<RawClient["server.workflow"]["workflow.get"]>[0]
+type Endpoint18_4Input = { readonly workflowID: Endpoint18_4Request["params"]["workflowID"] }
+const Endpoint18_4 = (raw: RawClient["server.workflow"]) => (input: Endpoint18_4Input) =>
+  raw["workflow.get"]({ params: { workflowID: input["workflowID"] } }).pipe(
+    Effect.mapError(mapClientError),
+    Effect.map((value) => value.data),
+  )
+
+type Endpoint18_5Request = Parameters<RawClient["server.workflow"]["workflow.pause"]>[0]
+type Endpoint18_5Input = { readonly workflowID: Endpoint18_5Request["params"]["workflowID"] }
+const Endpoint18_5 = (raw: RawClient["server.workflow"]) => (input: Endpoint18_5Input) =>
+  raw["workflow.pause"]({ params: { workflowID: input["workflowID"] } }).pipe(
+    Effect.mapError(mapClientError),
+    Effect.map((value) => value.data),
+  )
+
+type Endpoint18_6Request = Parameters<RawClient["server.workflow"]["workflow.resume"]>[0]
+type Endpoint18_6Input = { readonly workflowID: Endpoint18_6Request["params"]["workflowID"] }
+const Endpoint18_6 = (raw: RawClient["server.workflow"]) => (input: Endpoint18_6Input) =>
+  raw["workflow.resume"]({ params: { workflowID: input["workflowID"] } }).pipe(
+    Effect.mapError(mapClientError),
+    Effect.map((value) => value.data),
+  )
+
+type Endpoint18_7Request = Parameters<RawClient["server.workflow"]["workflow.cancel"]>[0]
+type Endpoint18_7Input = { readonly workflowID: Endpoint18_7Request["params"]["workflowID"] }
+const Endpoint18_7 = (raw: RawClient["server.workflow"]) => (input: Endpoint18_7Input) =>
+  raw["workflow.cancel"]({ params: { workflowID: input["workflowID"] } }).pipe(
+    Effect.mapError(mapClientError),
+    Effect.map((value) => value.data),
+  )
+
+const adaptGroup18 = (raw: RawClient["server.workflow"]) => ({
+  getPreferences: Endpoint18_0(raw),
+  updatePreferences: Endpoint18_1(raw),
+  create: Endpoint18_2(raw),
+  list: Endpoint18_3(raw),
+  get: Endpoint18_4(raw),
+  pause: Endpoint18_5(raw),
+  resume: Endpoint18_6(raw),
+  cancel: Endpoint18_7(raw),
+})
+
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroup0(raw["server.health"]),
   location: adaptGroup1(raw["server.location"]),
@@ -700,6 +797,7 @@ const adaptClient = (raw: RawClient) => ({
   questions: adaptGroup15(raw["server.question"]),
   references: adaptGroup16(raw["server.reference"]),
   projectCopies: adaptGroup17(raw["server.projectCopy"]),
+  workflows: adaptGroup18(raw["server.workflow"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

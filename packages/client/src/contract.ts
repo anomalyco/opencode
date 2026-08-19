@@ -35,6 +35,7 @@ export const groupNames = {
   "server.question": "questions",
   "server.reference": "references",
   "server.projectCopy": "projectCopies",
+  "server.workflow": "workflows",
 } as const
 
 export const endpointNames = {
@@ -48,6 +49,8 @@ export const endpointNames = {
   "permission.saved.list": "listSaved",
   "permission.saved.remove": "removeSaved",
   "question.request.list": "listRequests",
+  "workflow.preferences.get": "getPreferences",
+  "workflow.preferences.update": "updatePreferences",
 } as const
 
 export const omitEndpoints = new Set(["fs.read", "pty.connect", "pty.connectToken"])
