@@ -171,6 +171,32 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("falls back to output text for malformed refusal replay metadata", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant({
+              type: "text",
+              text: "Keep this visible.",
+              providerMetadata: { openresponses: { refusal: true, phase: "not-a-phase" } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { role: "assistant", content: [{ type: "output_text", text: "Keep this visible." }] },
+      ])
+    }),
+  )
+
   it.effect("reads standard Open Responses options", () =>
     Effect.gen(function* () {
       const model = configure({

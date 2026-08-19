@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import type { Content } from "@opencode-ai/schema/tool"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
@@ -62,6 +62,11 @@ type OutputContent = Schema.Schema.Type<typeof OutputContent>
 
 export const MessagePhase = Schema.Literals(["commentary", "final_answer"])
 type MessagePhase = Schema.Schema.Type<typeof MessagePhase>
+const ReplayTextMetadata = Schema.Struct({
+  refusal: Schema.optionalKey(Schema.Literal(true)),
+  phase: Schema.optionalKey(Schema.NullOr(MessagePhase)),
+})
+const decodeReplayTextMetadata = Schema.decodeUnknownOption(ReplayTextMetadata)
 
 const OpenResponsesReasoningSummaryText = Schema.Struct({
   type: Schema.tag("summary_text"),
@@ -491,8 +496,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         if (content.length === 0) return
         const groups = content.reduce<Array<{ phase: MessagePhase | null | undefined; parts: TextPart[] }>>(
           (groups, part) => {
-            const metadata = part.providerMetadata?.[providerMetadataKey]
-            const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase, extension) : undefined
+            const phase = messagePhase(replayTextMetadata(part, providerMetadataKey)?.phase, extension)
             const group = groups.at(-1)
             if (group && group.phase === phase) group.parts.push(part)
             else groups.push({ phase, parts: [part] })
@@ -503,12 +507,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         input.push(
           ...groups.map((group) => ({
             role: "assistant" as const,
-            content: group.parts.map((part) => {
-              const metadata = part.providerMetadata?.[providerMetadataKey]
-              return ProviderShared.isRecord(metadata) && metadata.refusal === true
-                ? { type: "refusal" as const, refusal: part.text }
-                : { type: "output_text" as const, text: part.text }
-            }),
+            content: group.parts.map((part) => lowerAssistantContent(part, providerMetadataKey)),
             ...(group.phase === undefined ? {} : { phase: group.phase }),
           })),
         )
@@ -596,6 +595,14 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
       )
     : input
 })
+
+const replayTextMetadata = (part: TextPart, providerMetadataKey: string) =>
+  Option.getOrUndefined(decodeReplayTextMetadata(part.providerMetadata?.[providerMetadataKey]))
+
+const lowerAssistantContent = (part: TextPart, providerMetadataKey: string): OutputContent =>
+  replayTextMetadata(part, providerMetadataKey)?.refusal === true
+    ? { type: "refusal", refusal: part.text }
+    : { type: "output_text", text: part.text }
 
 const lowerOptions = (request: LLMRequest) => {
   const options = OpenResponsesOptions.resolve(request)
