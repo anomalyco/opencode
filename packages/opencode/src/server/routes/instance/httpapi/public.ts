@@ -97,6 +97,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
   }
   normalizeComponentNames(spec)
   collapseDuplicateComponents(spec)
+  collapseConfigPatch(spec)
   applyLegacySchemaOverrides(spec)
   normalizeComponentDescriptions(spec)
   addLegacyErrorSchemas(spec)
@@ -227,6 +228,33 @@ function collapseDuplicateComponents(spec: OpenApiSpec) {
     rewriteRefs(spec, name, base)
     delete schemas[name]
   }
+}
+
+/**
+ * `ConfigPatch` exists so a PATCH body can carry `null` to remove a config
+ * entry. Once `stripOptionalNull` has run, it is structurally identical to
+ * `Config` — the whole difference is the nullability the published spec
+ * deliberately does not carry — so publish it as `Config` and keep the SDK
+ * surface unchanged. Without this, the generated client would rename the
+ * request parameter (`config` -> `configPatch`), a breaking change for every
+ * existing caller.
+ *
+ * `collapseDuplicateComponents` can't do this: it only merges names that
+ * differ by a trailing digit. The structural check is not decoration — if the
+ * two ever genuinely diverge, publishing one as the other would ship a spec
+ * that lies about the request body, so fail loudly instead.
+ */
+function collapseConfigPatch(spec: OpenApiSpec) {
+  const schemas = spec.components?.schemas
+  if (!schemas?.ConfigPatch || !schemas.Config) return
+  if (stableSchema(schemas.ConfigPatch, schemas) !== stableSchema(schemas.Config, schemas)) {
+    throw new Error(
+      "ConfigPatch is no longer structurally identical to Config once nulls are stripped. " +
+        "Publish it as its own component and accept the SDK parameter rename, or realign the two.",
+    )
+  }
+  rewriteRefs(spec, "ConfigPatch", "Config")
+  delete schemas.ConfigPatch
 }
 
 function normalizeComponentNames(spec: OpenApiSpec) {

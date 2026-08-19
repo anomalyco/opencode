@@ -397,6 +397,123 @@ it.effect("updates global config and omits empty shell key in jsonc", () =>
   ),
 )
 
+it.effect("removes a nested member when the global patch sets it to null in json", () =>
+  withGlobalConfig(
+    {
+      config: {
+        provider: { keep: { options: { baseURL: "http://keep" } }, drop: { options: { baseURL: "http://drop" } } },
+      },
+    },
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const result = yield* Config.use.updateGlobal({ provider: { drop: null } })
+
+        const writtenConfig: any = yield* FSUtil.use.readJson(path.join(dir, "opencode.json"))
+        expect(writtenConfig.provider).not.toHaveProperty("drop")
+        expect(writtenConfig.provider).toHaveProperty("keep")
+        expect(result.changed).toBe(true)
+        expect(result.info.provider).not.toHaveProperty("drop")
+        expect(result.info.provider).toHaveProperty("keep")
+      }),
+  ),
+)
+
+it.effect("removes a nested member when the global patch sets it to null in jsonc", () =>
+  withGlobalConfig(
+    {
+      config: {
+        provider: { keep: { options: { baseURL: "http://keep" } }, drop: { options: { baseURL: "http://drop" } } },
+      },
+      name: "opencode.jsonc",
+    },
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const result = yield* Config.use.updateGlobal({ provider: { drop: null } })
+
+        const file = path.join(dir, "opencode.jsonc")
+        const writtenConfig = yield* FSUtil.use.readFileString(file)
+        expect(writtenConfig).not.toContain("drop")
+        expect(writtenConfig).toContain("keep")
+        expect(result.changed).toBe(true)
+        expect(result.info.provider).not.toHaveProperty("drop")
+      }),
+  ),
+)
+
+it.effect("preserves comments and unrelated keys when a null removal is applied to jsonc", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const file = path.join(dir, "opencode.jsonc")
+    yield* FSUtil.use.writeFileString(
+      file,
+      [
+        "{",
+        "  // a comment that must survive",
+        '  "model": "test/model",',
+        '  "provider": {',
+        '    "keep": { "options": { "baseURL": "http://keep" } },',
+        '    "drop": { "options": { "baseURL": "http://drop" } }',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    )
+
+    yield* withGlobalConfigDir(
+      dir,
+      Effect.gen(function* () {
+        yield* Config.use.updateGlobal({ provider: { drop: null } })
+        const written = yield* FSUtil.use.readFileString(file)
+        expect(written).toContain("// a comment that must survive")
+        expect(written).toContain('"model": "test/model"')
+        expect(written).toContain("keep")
+        expect(written).not.toContain("drop")
+      }),
+    )
+  }),
+)
+
+it.effect("applies additions and removals in the same global patch", () =>
+  withGlobalConfig(
+    {
+      config: {
+        provider: { keep: { options: { baseURL: "http://keep" } }, drop: { options: { baseURL: "http://drop" } } },
+      },
+      name: "opencode.jsonc",
+    },
+    ({ dir }) =>
+      Effect.gen(function* () {
+        yield* Config.use.updateGlobal({
+          provider: { drop: null, added: { options: { baseURL: "http://added" } } },
+        })
+
+        const file = path.join(dir, "opencode.jsonc")
+        const written = yield* FSUtil.use.readFileString(file)
+        const parsed = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(written, file), file)
+        expect(parsed.provider).not.toHaveProperty("drop")
+        expect(parsed.provider).toHaveProperty("keep")
+        expect(parsed.provider?.added?.options?.baseURL).toBe("http://added")
+      }),
+  ),
+)
+
+it.effect("is a no-op when a null removal targets a member that is already absent", () =>
+  withGlobalConfig(
+    { config: { provider: { keep: { options: { baseURL: "http://keep" } } } }, name: "opencode.jsonc" },
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const file = path.join(dir, "opencode.jsonc")
+        const before = yield* FSUtil.use.readFileString(file)
+
+        const result = yield* Config.use.updateGlobal({ provider: { missing: null } })
+
+        expect(yield* FSUtil.use.readFileString(file)).toBe(before)
+        expect(result.changed).toBe(false)
+        expect(result.info.provider).toHaveProperty("keep")
+      }),
+  ),
+)
+
 it.instance(
   "loads formatter boolean config",
   Effect.gen(function* () {

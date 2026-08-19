@@ -17,6 +17,10 @@ import { authorizationLayer } from "../../src/server/routes/instance/httpapi/mid
 import { schemaErrorLayer } from "../../src/server/routes/instance/httpapi/middleware/schema-error"
 import { testEffect } from "../lib/effect"
 
+// Captures the patch the route hands to Config.updateGlobal so the tests can
+// assert on what survived payload decoding.
+const patches: unknown[] = []
+
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(RootHttpApi).pipe(
     Layer.provide([controlHandlers, controlPlaneHandlers, globalHandlers]),
@@ -29,7 +33,15 @@ const apiLayer = HttpRouter.serve(
 ).pipe(
   Layer.provideMerge(NodeHttpServer.layerTest),
   Layer.provide(Layer.mock(Auth.Service)({})),
-  Layer.provide(Layer.mock(Config.Service)({})),
+  Layer.provide(
+    Layer.mock(Config.Service)({
+      updateGlobal: (config) =>
+        Effect.sync(() => {
+          patches.push(config)
+          return { info: {}, changed: false }
+        }),
+    }),
+  ),
   Layer.provide(Layer.mock(MoveSession.Service)({})),
   Layer.provide(
     Layer.mock(Installation.Service)({
@@ -61,6 +73,34 @@ describe("global HttpApi", () => {
 
       expect(response.status).toBe(400)
       expect(yield* response.json).toEqual({ success: false, error: "Invalid request body" })
+    }),
+  )
+
+  // A config patch is a JSON Merge Patch (RFC 7396), where `null` removes a
+  // member. Without this the endpoint can add and change config entries but
+  // never delete one, because omitting a key preserves it.
+  it.live("accepts a null member in a config patch as a removal", () =>
+    Effect.gen(function* () {
+      patches.length = 0
+
+      const response = yield* HttpClientRequest.patch(GlobalPaths.config).pipe(
+        HttpClientRequest.setBody(HttpBody.jsonUnsafe({ provider: { drop: null }, username: "kept" })),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(patches).toEqual([{ provider: { drop: null }, username: "kept" }])
+    }),
+  )
+
+  it.live("still rejects a malformed member in a config patch", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.patch(GlobalPaths.config).pipe(
+        HttpClientRequest.setBody(HttpBody.jsonUnsafe({ provider: { bad: 42 } })),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(400)
     }),
   )
 })

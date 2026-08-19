@@ -101,14 +101,15 @@ export const GlobalApi = HttpApi.make("global").add(
         }),
       ),
       HttpApiEndpoint.patch("configUpdate", GlobalPaths.config, {
-        payload: ConfigV1.Info,
+        payload: ConfigV1.Patch,
         success: described(ConfigV1.Info, "Successfully updated global config"),
         error: HttpApiError.BadRequest,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "global.config.update",
           summary: "Update global configuration",
-          description: "Update global OpenCode configuration settings and preferences.",
+          description:
+            'Update global OpenCode configuration settings and preferences. The body is merged into the existing config, so omitted keys are left as they are. To remove an entry from a map-shaped field, set it to `null` (as in JSON Merge Patch): `{"provider":{"my-endpoint":null}}` deletes the `my-endpoint` provider.',
         }),
       ),
       HttpApiEndpoint.post("dispose", GlobalPaths.dispose, {

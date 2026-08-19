@@ -8,7 +8,10 @@ export function make(overrides: Partial<Config.Interface> = {}) {
     getGlobal: () => Effect.succeed({}),
     getConsoleState: () => Effect.succeed(emptyConsoleState),
     update: () => Effect.void,
-    updateGlobal: (config) => Effect.succeed({ info: config, changed: false }),
+    // A patch may carry `null` members (RFC 7396 removals) that `Info` does
+    // not accept; the real service resolves them against the file, so the stub
+    // just reports an empty config rather than echoing the patch back.
+    updateGlobal: () => Effect.succeed({ info: {}, changed: false }),
     invalidate: () => Effect.void,
     directories: () => Effect.succeed([]),
     waitForDependencies: () => Effect.void,
