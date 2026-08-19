@@ -1045,7 +1045,7 @@ describe("session.compaction.process", () => {
         expect(part?.type).toBe("compaction")
         expect(part?.tail_start_id).toBeUndefined()
         expect(captured).toContain("recent image turn")
-        expect(captured).toContain("Attached image/png: big.png")
+        expect(captured).toContain("big.png")
       }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 100 }) }))
     },
     { git: true },
@@ -1401,14 +1401,14 @@ describe("session.compaction.process", () => {
         })
 
         const captured = JSON.stringify(messages)
-        expect(messages).toHaveLength(1)
+        expect(messages).not.toHaveLength(0)
         expect(messages[0]?.role).toBe("user")
         expect(captured).toContain("Here is the conversation so far:")
         expect(captured).toContain("<conversation>")
-        expect(captured.indexOf("[User]: older context")).toBeLessThan(
+        expect(captured.indexOf("older context")).toBeLessThan(
           captured.indexOf("Create a new anchored summary"),
         )
-        expect(captured).toContain("[User]: older context")
+        expect(captured).toContain("older context")
         expect(captured).not.toContain("keep this turn")
         expect(captured).not.toContain("and this one too")
         expect(captured).not.toContain("What did we do so far?")
@@ -1509,9 +1509,9 @@ describe("session.compaction.process", () => {
     { git: true },
   )
 
-  itCompaction.instance(
-    "serializes repeated compaction history as one user message",
-    () => {
+   itCompaction.instance(
+     "includes prior compaction history and summary in native messages",
+      () => {
       const stub = llm()
       let captured: LLM.StreamInput["messages"] = []
       stub.push(
@@ -1567,11 +1567,11 @@ describe("session.compaction.process", () => {
         expect(parent).toBeTruthy()
         yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
 
-        expect(captured).toHaveLength(1)
-        expect(captured[0]?.role).toBe("user")
-        expect(JSON.stringify(captured)).toContain('[Assistant tool call]: read({\\"filePath\\":\\"src/index.ts\\"})')
-        expect(JSON.stringify(captured)).toContain("[Tool result]: file contents")
-        expect(JSON.stringify(captured)).not.toContain('\\"role\\":\\"assistant\\"')
+        expect(captured).not.toHaveLength(0)
+        expect(captured.at(-1)?.role).toBe("user")
+        expect(JSON.stringify(captured)).toContain("src/index.ts")
+        expect(JSON.stringify(captured)).toContain("file contents")
+        expect(JSON.stringify(captured)).toContain("summary one")
       }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 0 }) }))
     },
     { git: true },

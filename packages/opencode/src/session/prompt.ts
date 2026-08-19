@@ -1147,7 +1147,46 @@ const layer = Layer.effect(
           }
 
           if (task?.type === "compaction") {
+             // ponytail: same system + tools as the main turn so the compaction request is a
+             // byte-identical prefix of the last normal turn (KV prefix-cache hit); toolChoice
+             // "none" means resolve only builds tool defs and the stub closures never fire.
+            const compactionAgent = yield* agents.get(lastUser.agent)
+            const [compactionSkills, compactionEnv, compactionInstructions, compactionMcp] = yield* Effect.all([
+              sys.skills(compactionAgent),
+              sys.environment(model),
+              instruction.system().pipe(Effect.orDie),
+              sys.mcp(compactionAgent, session.permission),
+            ])
+            const compactionSystem = [
+              ...compactionEnv,
+              ...compactionInstructions,
+              ...(compactionMcp ? [compactionMcp] : []),
+              ...(compactionSkills ? [compactionSkills] : []),
+            ]
+            const compactionProcessor = {
+              message: MessageV2.latest(msgs).assistant ?? { id: MessageID.ascending() } as unknown as SessionV1.Assistant,
+              updateToolCall: () => Effect.succeed(undefined),
+              completeToolCall: () => Effect.void,
+            } satisfies Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+            const compactionTools = yield* SessionTools.resolve({
+              agent: compactionAgent,
+              model,
+              session,
+              processor: compactionProcessor,
+              bypassAgentCheck: false,
+              messages: msgs,
+              promptOps: yield* ops(),
+            }).pipe(
+              Effect.provideService(Plugin.Service, plugin),
+              Effect.provideService(Permission.Service, permission),
+              Effect.provideService(ToolRegistry.Service, registry),
+              Effect.provideService(MCP.Service, mcp),
+              Effect.provideService(Truncate.Service, truncate),
+              Effect.provideService(RuntimeFlags.Service, flags),
+            )
             const result = yield* compaction.process({
+              system: compactionSystem,
+              tools: compactionTools,
               messages: msgs,
               parentID: lastUser.id,
               sessionID,
