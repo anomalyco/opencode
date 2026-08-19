@@ -30,7 +30,7 @@ describe("SkillTool", () => {
           const reference = path.join(directory, "reference.md")
           yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
           yield* Effect.promise(() =>
-            Promise.all([fs.writeFile(location, "unused"), fs.writeFile(reference, "reference")]),
+            Promise.all([fs.writeFile(location, "# Effect\n\nGuidance"), fs.writeFile(reference, "reference")]),
           )
 
           const info: SkillV2.Info = {
@@ -129,11 +129,11 @@ describe("SkillTool", () => {
             })
             yield* Effect.promise(() =>
               Promise.all([
-                fs.writeFile(flat.location, "public"),
+                fs.writeFile(flat.location, "Public"),
                 fs.writeFile(path.join(tmp.path, "secret.md"), "secret"),
               ]),
             )
-            current = [flat]
+            current = [flat, info]
             expect(
               yield* executeTool(registry, {
                 sessionID,
@@ -141,6 +141,18 @@ describe("SkillTool", () => {
                 call: { type: "tool-call", id: "call-flat-skill", name: "skill", input: { name: "public" } },
               }),
             ).toEqual({ type: "text", value: SkillTool.toModelOutput(flat, []) })
+
+            yield* Effect.promise(() => fs.writeFile(location, "# Effect\n\nUpdated Guidance"))
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: "call-skill-updated", name: "skill", input: { name: "effect" } },
+              }),
+            ).toEqual({
+              type: "text",
+              value: SkillTool.toModelOutput(info, [reference], "# Effect\n\nUpdated Guidance"),
+            })
           }).pipe(Effect.provide(skillToolLayer))
         }),
       ),

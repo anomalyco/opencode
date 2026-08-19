@@ -1,6 +1,7 @@
 import path from "path"
 import { Effect, Schema } from "effect"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { ConfigMarkdown } from "@/config/markdown"
 import { Skill } from "../skill"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
@@ -42,13 +43,21 @@ export const SkillTool = Tool.define(
             limit: 10,
           })
 
+          const content = yield* Effect.tryPromise({
+            try: () => ConfigMarkdown.parse(info.location),
+            catch: () => undefined,
+          }).pipe(
+            Effect.map((md) => md?.content ?? info.content),
+            Effect.catch(() => Effect.succeed(info.content)),
+          )
+
           return {
             title: `Loaded skill: ${info.name}`,
             output: [
               `<skill_content name="${info.name}">`,
               `# Skill: ${info.name}`,
               "",
-              info.content.trim(),
+              content.trim(),
               "",
               `Base directory for this skill: ${base}`,
               "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
