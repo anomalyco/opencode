@@ -1192,6 +1192,7 @@ export const dict = {
   "session.header.open.fileExplorer": "Dosya Gezgini",
   "session.header.open.fileManager": "Dosya Yöneticisi",
   "session.header.open.app.vscode": "VS Code",
+  "session.header.open.app.vscodeInsiders": "VS Code Insiders",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",
   "session.header.open.app.textmate": "TextMate",

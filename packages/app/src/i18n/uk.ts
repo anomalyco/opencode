@@ -861,6 +861,7 @@ export const dict = {
   "session.header.reveal.containingFolder": "Відкрити папку розташування",
   "session.header.open.fileManager": "Файловий менеджер",
   "session.header.open.app.vscode": "VS Code",
+  "session.header.open.app.vscodeInsiders": "VS Code Insiders",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",
   "session.header.open.app.textmate": "TextMate",
