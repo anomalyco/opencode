@@ -11,16 +11,17 @@ export const ResponseIncludables = [
   "reasoning.encrypted_content",
   "message.output_text.logprobs",
 ] as const
-export type ResponseIncludable = (typeof ResponseIncludables)[number]
+export type ResponseIncludable = (typeof ResponseIncludables)[number] | (string & {})
 
 export const ServiceTiers = ["auto", "default", "flex", "priority"] as const
 export type ServiceTier = (typeof ServiceTiers)[number]
 
-const INCLUDABLES = new Set<string>(ResponseIncludables)
-
 export const ReasoningEffort = Schema.String
 export const TextVerbositySchema = TextVerbosity
-export const ResponseIncludableSchema = Schema.Literals(ResponseIncludables)
+export const ResponseIncludableSchema = Schema.declare<ResponseIncludable>(
+  (value): value is ResponseIncludable => typeof value === "string",
+  { title: "ResponseIncludable" },
+)
 export const ServiceTierSchema = Schema.Literals(ServiceTiers)
 
 export const AllowedTools = Schema.Struct({
@@ -34,7 +35,7 @@ export const Options = Schema.Struct({
   store: Schema.optional(Schema.Boolean),
   reasoningEffort: Schema.optional(ReasoningEffort),
   reasoningSummary: Schema.optional(Schema.Literals(["auto", "concise", "detailed"])),
-  include: Schema.optional(Schema.Array(Schema.String)),
+  include: Schema.optional(Schema.Array(ResponseIncludableSchema)),
   textVerbosity: Schema.optional(TextVerbositySchema),
   serviceTier: Schema.optional(ServiceTierSchema),
   allowedTools: Schema.optional(AllowedTools),
@@ -43,13 +44,8 @@ export const Options = Schema.Struct({
 })
 export type Options = typeof Options.Type
 
-export type OptionsInput = Omit<Options, "include"> & {
-  readonly include?: ReadonlyArray<ResponseIncludable>
-}
-
-export type Resolved = Omit<Options, "allowedTools" | "include"> & {
+export type Resolved = Omit<Options, "allowedTools"> & {
   readonly allowedTools?: AllowedTools & { readonly mode: NonNullable<AllowedTools["mode"]> }
-  readonly include?: ReadonlyArray<ResponseIncludable>
 }
 
 const decodeOptions = Schema.decodeUnknownOption(Options)
@@ -59,10 +55,9 @@ export const resolve = (request: LLMRequest): Resolved => {
     decodeOptions(request.providerOptions?.[request.model.route.providerMetadataKey ?? "openresponses"]),
   )
   if (!input) return {}
-  const include = input.include?.filter((entry): entry is ResponseIncludable => INCLUDABLES.has(entry)) ?? []
   return {
     ...input,
-    include: include.length > 0 ? include : undefined,
+    include: input.include?.length ? input.include : undefined,
     allowedTools:
       input.allowedTools && input.allowedTools.toolNames.length > 0
         ? { ...input.allowedTools, mode: input.allowedTools.mode ?? "auto" }

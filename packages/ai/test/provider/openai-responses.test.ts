@@ -1332,20 +1332,17 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("filters unknown includable values out of the include array", () =>
+  it.effect("passes forward-compatible includable values through", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
           prompt: "hi",
-          // The user passed one invalid entry alongside a valid one. Keep the
-          // valid one so the request still succeeds rather than failing on a
-          // typo from upstream config.
           providerOptions: { openai: { include: ["reasoning.encrypted_content", "bogus.thing"] } },
         }),
       )
 
-      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content", "bogus.thing"])
     }),
   )
 
@@ -1359,13 +1356,13 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("treats an all-invalid include as no include at all", () =>
+  it.effect("passes an unknown includable value through", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: ["bogus.thing"] } } }),
       )
 
-      expect(prepared.body.include).toBeUndefined()
+      expect(prepared.body.include).toEqual(["bogus.thing"])
     }),
   )
 
