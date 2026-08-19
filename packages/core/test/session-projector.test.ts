@@ -430,9 +430,12 @@ describe("SessionProjector", () => {
         time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
       })
 
-      expect(
-        yield* SessionMessageUpdater.memory({ messages: [stale, completed] }).getCurrentAssistant(),
-      ).toBeUndefined()
+      const messages: SessionMessage.Message[] = [stale, completed]
+      yield* SessionMessageUpdater.memory({ messages }).editCurrentAssistant((assistant) => {
+        assistant.time.completed = DateTime.makeUnsafe(3)
+      })
+      expect(messages[0]).not.toHaveProperty("time.completed")
+      expect(messages[1]).toMatchObject({ time: { completed: DateTime.makeUnsafe(2) } })
     }),
   )
 

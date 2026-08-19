@@ -225,6 +225,7 @@ const layer = Layer.effect(
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
+        location: session.location,
         model: {
           id: ModelV2.ID.make(model.id),
           providerID: ProviderV2.ID.make(model.provider),
@@ -324,11 +325,13 @@ const layer = Layer.effect(
           if (stepSettlement && !publisher.hasProviderError()) {
             const endSnapshot = yield* snapshots.capture()
             const files =
-              startSnapshot && endSnapshot
-                ? yield* snapshots
-                    .files({ from: startSnapshot, to: endSnapshot })
-                    .pipe(Effect.catch(() => Effect.succeed(undefined)))
-                : undefined
+              !startSnapshot || !endSnapshot
+                ? undefined
+                : startSnapshot === endSnapshot
+                  ? []
+                  : yield* snapshots
+                      .files({ from: startSnapshot, to: endSnapshot })
+                      .pipe(Effect.catch(() => Effect.succeed(undefined)))
             yield* withPublication(
               events.publish(SessionEvent.Step.Ended, {
                 sessionID: session.id,

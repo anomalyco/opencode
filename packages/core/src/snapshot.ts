@@ -2,7 +2,7 @@ export * as Snapshot from "./snapshot"
 
 import { makeLocationNode } from "./effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Ref, Schema } from "effect"
 import { Config } from "./config"
 import { File } from "./file"
 import { FSUtil } from "./fs-util"
@@ -96,6 +96,7 @@ const layer = Layer.effect(
       ? AbsolutePath.make(yield* fs.realPath(source.worktree).pipe(Effect.orDie))
       : location.project.directory
     const gitDirectory = AbsolutePath.make(path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)))
+    const latest = yield* Ref.make<Git.TreeID | undefined>(undefined)
 
     const scope = Effect.fnUntraced(function* () {
       const relative = path.relative(worktree, location.directory)
@@ -111,6 +112,7 @@ const layer = Layer.effect(
           worktree,
           gitDirectory,
           commonDirectory: gitDirectory,
+          alternateObjectDirectories: [AbsolutePath.make(path.join(source.commonDirectory, "objects"))],
         })
       return yield* git.repo
         .create({
@@ -126,19 +128,29 @@ const layer = Layer.effect(
       return Config.latest(yield* config.entries(), "snapshots") !== false
     })
 
+    const captureTree = Effect.fnUntraced(function* () {
+      if (!source) return yield* new Error({ operation: "capture", message: "Project is not a Git repository" })
+      const repo = yield* repository()
+      const base =
+        (yield* Ref.get(latest)) ??
+        (yield* git.tree.head(source).pipe(Effect.mapError((cause) => failure("capture", cause))))
+      const tree = yield* git.tree
+        .capture({
+          repository: repo,
+          base,
+          scopes: [yield* scope()],
+          ignores: source,
+          maximumUntrackedFileBytes: 2 * 1024 * 1024,
+        })
+        .pipe(Effect.mapError((cause) => failure("capture", cause)))
+      yield* Ref.set(latest, tree)
+      return tree
+    })
+
     const capture = Effect.fn("Snapshot.capture")(function* () {
       if (!(yield* enabled())) return undefined
-      return yield* Effect.gen(function* () {
-        const repo = yield* repository()
-        return ID.make(
-          yield* git.tree.capture({
-            repository: repo,
-            scopes: [yield* scope()],
-            ignores: source,
-            maximumUntrackedFileBytes: 2 * 1024 * 1024,
-          }),
-        )
-      }).pipe(
+      return yield* captureTree().pipe(
+        Effect.map(ID.make),
         Effect.catch((cause) => Effect.logWarning("failed to capture snapshot", { cause }).pipe(Effect.as(undefined))),
       )
     })
@@ -190,14 +202,7 @@ const layer = Layer.effect(
       if (!(yield* enabled())) return yield* new Error({ operation: "preview", message: "Snapshots are disabled" })
       const repo = yield* repository().pipe(Effect.mapError((cause) => failure("preview", cause)))
       const files = yield* plan("preview", input)
-      const current = yield* git.tree
-        .capture({
-          repository: repo,
-          scopes: Array.from(files.keys()),
-          ignores: source,
-          maximumUntrackedFileBytes: 2 * 1024 * 1024,
-        })
-        .pipe(Effect.mapError((cause) => failure("preview", cause)))
+      const current = yield* captureTree().pipe(Effect.mapError((cause) => failure("preview", cause)))
       return yield* git.tree
         .preview({
           repository: repo,

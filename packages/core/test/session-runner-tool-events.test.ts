@@ -8,6 +8,8 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publish-llm-event"
+import { Location } from "@opencode-ai/core/location"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const sessionID = SessionV2.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
@@ -41,6 +43,7 @@ const capture = () => {
     publisher: createLLMEventPublisher(events, {
       sessionID,
       agent: "build",
+      location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
       model: {
         id: ModelV2.ID.make("model"),
         providerID: ProviderV2.ID.make("provider"),

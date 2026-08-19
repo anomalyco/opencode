@@ -700,10 +700,7 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
   return [{ ...state, lifecycle: Lifecycle.stepStart(state.lifecycle, events) }, [...events, result]]
 }
 
-const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(function* (
-  state: ParserState,
-  event: AnthropicEvent,
-) {
+const onContentBlockDelta = Effect.fnUntraced(function* (state: ParserState, event: AnthropicEvent) {
   const delta = event.delta
 
   if (delta?.type === "text_delta" && delta.text) {

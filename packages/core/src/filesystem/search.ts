@@ -28,8 +28,9 @@ export const ripgrepLayer = Layer.effect(
     const ripgrep = yield* Ripgrep.Service
     const scope = yield* Scope.Scope
     const state = {
-      files: [] as string[],
-      directories: [] as string[],
+      files: [] as Fuzzysort.Prepared[],
+      directories: [] as Fuzzysort.Prepared[],
+      combined: undefined as Fuzzysort.Prepared[] | undefined,
     }
     const directories = new Set<string>()
     yield* ripgrep
@@ -39,10 +40,17 @@ export const ripgrepLayer = Layer.effect(
         limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
         onEntry: (entry) =>
           Effect.sync(() => {
-            state.files.push(entry.path)
+            state.files.push(fuzzysort.prepare(entry.path))
+            state.combined = undefined
             const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
-            state.directories = Array.from(directories)
+            parts.slice(0, -1).reduce((parent, part) => {
+              const current = parent ? `${parent}/${part}` : part
+              const directory = current + path.sep
+              if (directories.has(directory)) return current
+              directories.add(directory)
+              state.directories.push(fuzzysort.prepare(directory))
+              return current
+            }, "")
           }),
       })
       .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
@@ -105,7 +113,7 @@ export const ripgrepLayer = Layer.effect(
               ? state.files
               : input.type === "directory"
                 ? state.directories
-                : [...state.files, ...state.directories]
+                : (state.combined ??= [...state.files, ...state.directories])
           return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
             const relative = item.target
             const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)

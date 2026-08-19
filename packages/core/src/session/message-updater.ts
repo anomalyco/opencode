@@ -7,12 +7,13 @@ export type MemoryState = {
   messages: SessionMessage.Message[]
 }
 
+export type AssistantEdit = (assistant: WritableDraft<SessionMessage.Assistant>) => void
+export type ShellEdit = (shell: WritableDraft<SessionMessage.Shell>) => void
+
 export interface Adapter {
-  readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined>
-  readonly getAssistant: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Assistant | undefined>
-  readonly getCurrentShell: (callID: string) => Effect.Effect<SessionMessage.Shell | undefined>
-  readonly updateAssistant: (assistant: SessionMessage.Assistant) => Effect.Effect<void>
-  readonly updateShell: (shell: SessionMessage.Shell) => Effect.Effect<void>
+  readonly editCurrentAssistant: (edit: AssistantEdit) => Effect.Effect<void>
+  readonly editAssistant: (messageID: SessionMessage.ID, edit: AssistantEdit) => Effect.Effect<void>
+  readonly editCurrentShell: (callID: string, edit: ShellEdit) => Effect.Effect<void>
   readonly appendMessage: (message: SessionMessage.Message) => Effect.Effect<void>
 }
 
@@ -25,46 +26,31 @@ export function memory(state: MemoryState): Adapter {
     state.messages.findLastIndex((message) => message.type === "shell" && message.callID === callID)
 
   return {
-    getCurrentAssistant() {
+    editCurrentAssistant(edit) {
       return Effect.sync(() => {
         const index = latestAssistantIndex()
         if (index < 0) return
         const assistant = state.messages[index]
-        return assistant?.type === "assistant" && !assistant.time.completed ? assistant : undefined
+        if (assistant?.type !== "assistant" || assistant.time.completed) return
+        state.messages[index] = produce(assistant, edit)
       })
     },
-    getAssistant(messageID) {
+    editAssistant(messageID, edit) {
       return Effect.sync(() => {
         const index = assistantIndex(messageID)
         if (index < 0) return
         const assistant = state.messages[index]
-        return assistant?.type === "assistant" ? assistant : undefined
+        if (assistant?.type !== "assistant") return
+        state.messages[index] = produce(assistant, edit)
       })
     },
-    getCurrentShell(callID) {
+    editCurrentShell(callID, edit) {
       return Effect.sync(() => {
         const index = activeShellIndex(callID)
         if (index < 0) return
         const shell = state.messages[index]
-        return shell?.type === "shell" ? shell : undefined
-      })
-    },
-    updateAssistant(assistant) {
-      return Effect.sync(() => {
-        const index = assistantIndex(assistant.id)
-        if (index < 0) return
-        const current = state.messages[index]
-        if (current?.type !== "assistant") return
-        state.messages[index] = assistant
-      })
-    },
-    updateShell(shell) {
-      return Effect.sync(() => {
-        const index = activeShellIndex(shell.callID)
-        if (index < 0) return
-        const current = state.messages[index]
-        if (current?.type !== "shell") return
-        state.messages[index] = shell
+        if (shell?.type !== "shell") return
+        state.messages[index] = produce(shell, edit)
       })
     },
     appendMessage(message) {
@@ -93,10 +79,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
     assistant?.content.findLast((item): item is DraftReasoning => item.type === "reasoning" && item.id === reasoningID)
 
   const updateOwnedAssistant = (messageID: SessionMessage.ID, recipe: (draft: DraftAssistant) => void) =>
-    Effect.gen(function* () {
-      const assistant = yield* adapter.getAssistant(messageID)
-      if (assistant) yield* adapter.updateAssistant(produce(assistant, recipe))
-    })
+    adapter.editAssistant(messageID, recipe)
 
   return Effect.gen(function* () {
     yield* SessionEvent.All.match(event, {
@@ -171,28 +154,16 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         )
       },
       "session.next.shell.ended": (event) => {
-        return Effect.gen(function* () {
-          const currentShell = yield* adapter.getCurrentShell(event.data.callID)
-          if (currentShell) {
-            yield* adapter.updateShell(
-              produce(currentShell, (draft) => {
-                draft.output = event.data.output
-                draft.time.completed = event.data.timestamp
-              }),
-            )
-          }
+        return adapter.editCurrentShell(event.data.callID, (shell) => {
+          shell.output = event.data.output
+          shell.time.completed = event.data.timestamp
         })
       },
       "session.next.step.started": (event) => {
         return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                draft.time.completed = event.data.timestamp
-              }),
-            )
-          }
+          yield* adapter.editCurrentAssistant((assistant) => {
+            assistant.time.completed = event.data.timestamp
+          })
           yield* adapter.appendMessage(
             SessionMessage.Assistant.make({
               id: event.data.assistantMessageID,

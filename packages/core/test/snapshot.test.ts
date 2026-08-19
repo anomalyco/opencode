@@ -83,6 +83,66 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("isolates captures from existing Git index locks", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await $`git init`.cwd(project).quiet()
+            await $`git config core.fsmonitor false`.cwd(project).quiet()
+            await $`git config commit.gpgsign false`.cwd(project).quiet()
+            await $`git config user.email test@opencode.test`.cwd(project).quiet()
+            await $`git config user.name Test`.cwd(project).quiet()
+            await $`git add .`.cwd(project).quiet()
+            await $`git commit -m initial`.cwd(project).quiet()
+            await fs.writeFile(path.join(project, ".git", "index.lock"), "")
+          })
+
+          const projectID = yield* Effect.gen(function* () {
+            return (yield* Location.Service).project.id
+          }).pipe(
+            Effect.provide(
+              AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
+            ),
+          )
+
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const before = yield* snapshot.capture()
+            expect(before).toBeDefined()
+            if (!before) return
+
+            const storage = path.join(
+              tmp.path,
+              "snapshot",
+              projectID,
+              Hash.fast(yield* Effect.promise(() => fs.realpath(project))),
+            )
+            yield* Effect.promise(async () => {
+              await fs.writeFile(path.join(storage, "index.lock"), "")
+              await fs.writeFile(path.join(project, "tracked.txt"), "two\n")
+            })
+
+            const after = yield* snapshot.capture()
+            expect(after).toBeDefined()
+            if (!after) return
+            expect(yield* snapshot.files({ from: before, to: after })).toEqual([RelativePath.make("tracked.txt")])
+            expect(yield* Effect.promise(() => fs.stat(path.join(storage, "index.lock")))).toBeDefined()
+            expect(
+              (yield* Effect.promise(() => fs.readdir(storage))).filter(
+                (file) => file.startsWith("capture-") || file.startsWith("checkout-") || file.startsWith("restore-"),
+              ),
+            ).toEqual([])
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   testEffect(Layer.empty).live("isolates snapshot indexes by canonical Git worktree", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

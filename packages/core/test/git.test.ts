@@ -121,6 +121,7 @@ describe("Git trees", () => {
         await initRepo(root.path)
         await fs.mkdir(path.join(root.path, "scope"))
         await fs.writeFile(path.join(root.path, "scope", "tracked.txt"), "one\n")
+        await fs.writeFile(path.join(root.path, "scope", "removed.txt"), "remove\n")
         await fs.writeFile(path.join(root.path, "outside.txt"), "outside\n")
         await $`git add .`.cwd(root.path).quiet()
         await $`git commit -m initial`.cwd(root.path).quiet()
@@ -130,24 +131,26 @@ describe("Git trees", () => {
       if (!source) throw new Error("Repository not found")
       const storage = AbsolutePath.make(path.join(root.path, ".snapshot"))
       const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
-      yield* git.index.refresh({ repository, scope: RelativePath.make("scope") })
-      const before = yield* git.tree.write(repository)
+      const base = yield* git.tree.head(source)
+      const before = yield* git.tree.capture({ repository, base, scopes: [RelativePath.make("scope")] })
 
       yield* Effect.promise(async () => {
         await fs.writeFile(path.join(root.path, "scope", "tracked.txt"), "two\n")
         await fs.writeFile(path.join(root.path, "scope", "added.txt"), "added\n")
+        await fs.rm(path.join(root.path, "scope", "removed.txt"))
         await fs.writeFile(path.join(root.path, "outside.txt"), "changed outside\n")
       })
-      yield* git.index.refresh({ repository, scope: RelativePath.make("scope") })
-      const after = yield* git.tree.write(repository)
+      const after = yield* git.tree.capture({ repository, base: before, scopes: [RelativePath.make("scope")] })
 
       expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([
         RelativePath.make("scope/added.txt"),
+        RelativePath.make("scope/removed.txt"),
         RelativePath.make("scope/tracked.txt"),
       ])
       const diffs = yield* git.tree.diff({ repository, from: before, to: after, context: 1 })
       expect(diffs.map((item) => [item.path, item.status])).toEqual([
         [RelativePath.make("scope/added.txt"), "added"],
+        [RelativePath.make("scope/removed.txt"), "deleted"],
         [RelativePath.make("scope/tracked.txt"), "modified"],
       ])
 
@@ -160,5 +163,43 @@ describe("Git trees", () => {
       expect(yield* read(path.join(root.path, "scope", "added.txt"))).toBe("added\n")
       expect(yield* read(path.join(root.path, "outside.txt"))).toBe("changed outside\n")
     }),
+  )
+
+  it.live("captures concurrently with an existing shared index lock", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (root) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await initRepo(root.path)
+            await fs.writeFile(path.join(root.path, "tracked.txt"), "one\n")
+            await $`git add .`.cwd(root.path).quiet()
+            await $`git commit -m initial`.cwd(root.path).quiet()
+          })
+          const git = yield* Git.Service
+          const source = yield* git.repo.discover(AbsolutePath.make(root.path))
+          if (!source) throw new Error("Repository not found")
+          const storage = AbsolutePath.make(`${root.path}-snapshot`)
+          yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(storage, { recursive: true, force: true })))
+          const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+          const base = yield* git.tree.head(source)
+          yield* Effect.promise(() => fs.writeFile(path.join(storage, "index.lock"), ""))
+
+          const trees = yield* Effect.all(
+            [
+              git.tree.capture({ repository, base, scopes: [RelativePath.make(".")] }),
+              git.tree.capture({ repository, base, scopes: [RelativePath.make(".")] }),
+            ],
+            { concurrency: "unbounded" },
+          )
+
+          expect(trees[0]).toBe(trees[1])
+          expect(yield* Effect.promise(() => fs.stat(path.join(storage, "index.lock")))).toBeDefined()
+          expect(
+            (yield* Effect.promise(() => fs.readdir(storage))).filter((file) => file.startsWith("capture-")),
+          ).toEqual([])
+        }),
+      (root) => Effect.promise(() => root[Symbol.asyncDispose]()),
+    ),
   )
 })

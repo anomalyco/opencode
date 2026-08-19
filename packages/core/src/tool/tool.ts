@@ -75,6 +75,9 @@ export function make<
 >(config: Config<Input, Output, Structured>): Definition<Input, Structured> {
   const tool = Object.freeze({}) as Definition<Input, Structured>
   const definitions = new Map<string, ToolDefinition>()
+  const decodeInput = Schema.decodeUnknownEffect(config.input)
+  const encodeOutput = Schema.encodeEffect(config.output)
+  const encodeStructured = config.structured ? Schema.encodeEffect(config.structured) : undefined
   runtimes.set(tool, {
     definition: (name) => {
       const cached = definitions.get(name)
@@ -89,16 +92,16 @@ export function make<
       return definition
     },
     settle: (call, context) =>
-      Schema.decodeUnknownEffect(config.input)(call.input).pipe(
+      decodeInput(call.input).pipe(
         Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
         Effect.flatMap((input) =>
           config.execute(input, context).pipe(
             Effect.flatMap((output) =>
-              Schema.encodeEffect(config.output)(output).pipe(
+              encodeOutput(output).pipe(
                 Effect.flatMap((output) => {
-                  if (!config.structured || !config.toStructuredOutput)
+                  if (!encodeStructured || !config.toStructuredOutput)
                     return Effect.succeed({ output, structured: output })
-                  return Schema.encodeEffect(config.structured)(config.toStructuredOutput({ input, output })).pipe(
+                  return encodeStructured(config.toStructuredOutput({ input, output })).pipe(
                     Effect.map((structured) => ({ output, structured })),
                   )
                 }),

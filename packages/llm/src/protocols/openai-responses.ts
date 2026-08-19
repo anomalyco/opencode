@@ -786,10 +786,7 @@ const onReasoningSummaryPartDone = (state: ParserState, event: OpenAIResponsesEv
   ]
 }
 
-const onFunctionCallArgumentsDelta = Effect.fn("OpenAIResponses.onFunctionCallArgumentsDelta")(function* (
-  state: ParserState,
-  event: OpenAIResponsesEvent,
-) {
+const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (state: ParserState, event: OpenAIResponsesEvent) {
   if (!event.item_id || !event.delta) return [state, NO_EVENTS] satisfies StepResult
   const result = ToolStream.appendExisting(
     ADAPTER,

@@ -1,6 +1,7 @@
 import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue, type Usage } from "@opencode-ai/llm"
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
+import { Location } from "../../location"
 import { ModelV2 } from "../../model"
 import { SessionEvent } from "../event"
 import { SessionMessage } from "../message"
@@ -10,6 +11,7 @@ type Input = {
   readonly sessionID: SessionSchema.ID
   readonly agent: string
   readonly model: ModelV2.Ref
+  readonly location: Location.Ref
   readonly snapshot?: string
 }
 
@@ -52,6 +54,8 @@ const settledOutput = (value: ToolOutput | undefined, result: ToolResultValue): 
 
 /** Persist one provider turn without executing tools or starting a continuation turn. */
 export const createLLMEventPublisher = (events: EventV2.Interface, input: Input) => {
+  const publishEvent = <D extends EventV2.Definition>(definition: D, data: EventV2.Data<D>) =>
+    events.publish(definition, data, { location: input.location })
   const tools = new Map<
     string,
     {
@@ -75,7 +79,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     if (assistantMessageID !== undefined) return assistantMessageID
     assistantMessageID = SessionMessage.ID.create()
     assistantActive = true
-    yield* events.publish(SessionEvent.Step.Started, {
+    yield* publishEvent(SessionEvent.Step.Started, {
       ...input,
       assistantMessageID,
       timestamp: yield* timestamp,
@@ -120,7 +124,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const text = fragments("text", (textID, value) =>
     Effect.gen(function* () {
-      yield* events.publish(SessionEvent.Text.Ended, {
+      yield* publishEvent(SessionEvent.Text.Ended, {
         sessionID: input.sessionID,
         assistantMessageID: yield* currentAssistantMessageID(),
         timestamp: yield* timestamp,
@@ -131,7 +135,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   )
   const reasoning = fragments("reasoning", (reasoningID, value, providerMetadata) =>
     Effect.gen(function* () {
-      yield* events.publish(SessionEvent.Reasoning.Ended, {
+      yield* publishEvent(SessionEvent.Reasoning.Ended, {
         sessionID: input.sessionID,
         assistantMessageID: yield* currentAssistantMessageID(),
         timestamp: yield* timestamp,
@@ -145,7 +149,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     Effect.gen(function* () {
       const tool = tools.get(callID)
       if (!tool) return yield* Effect.die(`Tool input end before start: ${callID}`)
-      yield* events.publish(SessionEvent.Tool.Input.Ended, {
+      yield* publishEvent(SessionEvent.Tool.Input.Ended, {
         sessionID: input.sessionID,
         timestamp: yield* timestamp,
         assistantMessageID: tool.assistantMessageID,
@@ -174,7 +178,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       providerExecuted: false,
     })
     yield* toolInput.start(event.id)
-    yield* events.publish(SessionEvent.Tool.Input.Started, {
+    yield* publishEvent(SessionEvent.Tool.Input.Started, {
       sessionID: input.sessionID,
       timestamp: yield* timestamp,
       assistantMessageID,
@@ -202,7 +206,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     const assistantMessageID = yield* startAssistant()
     assistantActive = false
     assistantFailed = true
-    yield* events.publish(SessionEvent.Step.Failed, {
+    yield* publishEvent(SessionEvent.Step.Failed, {
       sessionID: input.sessionID,
       timestamp: yield* timestamp,
       assistantMessageID,
@@ -217,7 +221,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     for (const [callID, tool] of tools) {
       if (tool.settled || (hostedOnly && !tool.providerExecuted)) continue
       tool.settled = true
-      yield* events.publish(SessionEvent.Tool.Failed, {
+      yield* publishEvent(SessionEvent.Tool.Failed, {
         sessionID: input.sessionID,
         timestamp: yield* timestamp,
         assistantMessageID: tool.assistantMessageID,
@@ -236,16 +240,13 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     return tool ? Effect.succeed(tool.assistantMessageID) : Effect.die(`Unknown tool call: ${callID}`)
   }
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (
-    event: LLMEvent,
-    outputPaths: ReadonlyArray<string> = [],
-  ) {
+  const publish = Effect.fnUntraced(function* (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) {
     switch (event.type) {
       case "step-start":
         return
       case "text-start":
         yield* text.start(event.id)
-        yield* events.publish(SessionEvent.Text.Started, {
+        yield* publishEvent(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
           timestamp: yield* timestamp,
@@ -254,7 +255,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "text-delta":
         yield* text.append(event.id, event.text)
-        yield* events.publish(SessionEvent.Text.Delta, {
+        yield* publishEvent(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
           timestamp: yield* timestamp,
@@ -267,7 +268,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "reasoning-start":
         yield* reasoning.start(event.id)
-        yield* events.publish(SessionEvent.Reasoning.Started, {
+        yield* publishEvent(SessionEvent.Reasoning.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
           timestamp: yield* timestamp,
@@ -277,7 +278,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "reasoning-delta":
         yield* reasoning.append(event.id, event.text)
-        yield* events.publish(SessionEvent.Reasoning.Delta, {
+        yield* publishEvent(SessionEvent.Reasoning.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
           timestamp: yield* timestamp,
@@ -298,7 +299,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           return yield* Effect.die(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`)
         if (tool.inputEnded) return yield* Effect.die(`Tool input delta after end: ${event.id}`)
         yield* toolInput.append(event.id, event.text)
-        yield* events.publish(SessionEvent.Tool.Input.Delta, {
+        yield* publishEvent(SessionEvent.Tool.Input.Delta, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
           assistantMessageID: tool.assistantMessageID,
@@ -320,7 +321,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         tool.called = true
         tool.providerExecuted = event.providerExecuted === true
         tool.providerMetadata = event.providerMetadata
-        yield* events.publish(SessionEvent.Tool.Called, {
+        yield* publishEvent(SessionEvent.Tool.Called, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
           assistantMessageID: tool.assistantMessageID,
@@ -350,7 +351,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           ...(event.providerMetadata === undefined ? {} : { metadata: event.providerMetadata }),
         }
         if ("error" in result) {
-          yield* events.publish(SessionEvent.Tool.Failed, {
+          yield* publishEvent(SessionEvent.Tool.Failed, {
             sessionID: input.sessionID,
             timestamp: yield* timestamp,
             assistantMessageID: tool.assistantMessageID,
@@ -361,7 +362,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           })
           return
         }
-        yield* events.publish(SessionEvent.Tool.Success, {
+        yield* publishEvent(SessionEvent.Tool.Success, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
           assistantMessageID: tool.assistantMessageID,
@@ -380,7 +381,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           return yield* Effect.die(`Tool error name changed for ${event.id}: ${tool.name} -> ${event.name}`)
         if (tool.settled) return yield* Effect.die(`Duplicate tool error: ${event.id}`)
         tool.settled = true
-        yield* events.publish(SessionEvent.Tool.Failed, {
+        yield* publishEvent(SessionEvent.Tool.Failed, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
           assistantMessageID: tool.assistantMessageID,

@@ -1,9 +1,9 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream, SynchronizedRef } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, placeholder } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -172,7 +172,7 @@ export const layerWith = (options?: LayerOptions) =>
     Service,
     Effect.gen(function* () {
       const pubsub = {
-        all: yield* PubSub.unbounded<Payload>(),
+        all: yield* SynchronizedRef.make<PubSub.PubSub<Payload> | undefined>(undefined),
         durable: new Map<string, Set<PubSub.PubSub<void>>>(),
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
@@ -180,6 +180,16 @@ export const layerWith = (options?: LayerOptions) =>
       // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
       const listeners = new Array<Subscriber>()
       const { db } = yield* Database.Service
+      const sequenceByAggregate = db
+        .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, placeholder("aggregateID")))
+        .prepare()
+      const positionByEventID = db
+        .select({ aggregateID: EventTable.aggregate_id, seq: EventTable.seq })
+        .from(EventTable)
+        .where(eq(EventTable.id, placeholder("eventID")))
+        .prepare()
 
       const getOrCreate = (definition: Definition) =>
         Effect.gen(function* () {
@@ -190,9 +200,27 @@ export const layerWith = (options?: LayerOptions) =>
           return created
         })
 
+      const allEvents = () =>
+        SynchronizedRef.modifyEffect(
+          pubsub.all,
+          Effect.fnUntraced(function* (current) {
+            if (current) return [current, current] as const
+            const created = yield* PubSub.unbounded<Payload>()
+            return [created, created] as const
+          }),
+        )
+
+      const resolveLocation = Effect.fnUntraced(function* (location: Location.Ref | undefined) {
+        if (location) return location
+        const service = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+        if (!service) return
+        return { directory: service.directory, workspaceID: service.workspaceID }
+      })
+
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
-          yield* PubSub.shutdown(pubsub.all)
+          const all = yield* SynchronizedRef.get(pubsub.all)
+          if (all) yield* PubSub.shutdown(all)
           yield* Effect.forEach(
             pubsub.durable.values(),
             (pubsubs) => Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
@@ -240,12 +268,7 @@ export const layerWith = (options?: LayerOptions) =>
                     .transaction(
                       () =>
                         Effect.gen(function* () {
-                          const row = yield* db
-                            .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
-                            .from(EventSequenceTable)
-                            .where(eq(EventSequenceTable.aggregate_id, aggregateID))
-                            .get()
-                            .pipe(Effect.orDie)
+                          const row = yield* sequenceByAggregate.get({ aggregateID }).pipe(Effect.orDie)
                           const latest = row?.seq ?? -1
                           const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<
                             string,
@@ -300,12 +323,7 @@ export const layerWith = (options?: LayerOptions) =>
                               }),
                             )
                           }
-                          const stored = yield* db
-                            .select({ aggregateID: EventTable.aggregate_id, seq: EventTable.seq })
-                            .from(EventTable)
-                            .where(eq(EventTable.id, event.id))
-                            .get()
-                            .pipe(Effect.orDie)
+                          const stored = yield* positionByEventID.get({ eventID: event.id }).pipe(Effect.orDie)
                           if (stored)
                             yield* Effect.die(
                               new InvalidDurableEventError({
@@ -412,18 +430,14 @@ export const layerWith = (options?: LayerOptions) =>
           )
           const typed = pubsub.typed.get(event.type)
           if (typed) yield* PubSub.publish(typed, event)
-          yield* PubSub.publish(pubsub.all, event)
+          const all = yield* SynchronizedRef.get(pubsub.all)
+          if (all) yield* PubSub.publish(all, event)
         })
       }
 
       function publish<D extends Definition>(definition: D, data: Data<D>, options?: PublishOptions) {
         return Effect.gen(function* () {
-          const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
-          const location =
-            options?.location ??
-            (serviceLocation
-              ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
-              : undefined)
+          const location = yield* resolveLocation(options?.location)
           return yield* publishEvent(
             definition,
             {
@@ -536,7 +550,7 @@ export const layerWith = (options?: LayerOptions) =>
           Stream.map((event) => event as Payload<D>),
         )
 
-      const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
+      const streamAll = (): Stream.Stream<Payload> => Stream.unwrap(allEvents().pipe(Effect.map(Stream.fromPubSub)))
 
       const readAfter = (aggregateID: string, after: number) =>
         (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
