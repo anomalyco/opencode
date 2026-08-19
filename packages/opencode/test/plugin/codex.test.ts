@@ -326,6 +326,64 @@ describe("plugin.codex", () => {
     )
   })
 
+  test("removes unsupported prompt cache controls from GPT-5.6+ Codex requests", async () => {
+    const requests: Record<string, unknown>[] = []
+    using server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        requests.push((await request.json()) as Record<string, unknown>)
+        return new Response("{}", { status: 200 })
+      },
+    })
+    const hooks = await CodexAuthPlugin({} as never, {
+      codexApiEndpoint: new URL("/backend-api/codex/responses", server.url).toString(),
+    })
+    const loaded = await hooks.auth!.loader!(
+      async () =>
+        ({
+          type: "oauth",
+          refresh: "refresh",
+          access: createTestJwt({ chatgpt_account_id: "acc-123" }),
+          expires: Date.now() + 60_000,
+        }) as never,
+      {} as never,
+    )
+
+    await loaded.fetch!("https://api.openai.com/v1/responses", {
+      method: "POST",
+      body: JSON.stringify({ model: "gpt-5.6-sol", prompt_cache_retention: "24h", input: "hello" }),
+    })
+    await loaded.fetch!("https://api.openai.com/v1/responses", {
+      method: "POST",
+      body: JSON.stringify({ model: "gpt-5.6-sol-fast", prompt_cache_retention: "24h", input: "hello" }),
+    })
+    await loaded.fetch!("https://api.openai.com/v1/responses", {
+      method: "POST",
+      body: JSON.stringify({ model: "gpt-5.6-terra", prompt_cache_retention: "in_memory", input: "hello" }),
+    })
+    await loaded.fetch!("https://api.openai.com/v1/responses", {
+      method: "POST",
+      body: JSON.stringify({
+        model: "gpt-5.6-luna",
+        prompt_cache_retention: "24h",
+        prompt_cache_options: { mode: "explicit", ttl: "30m" },
+        input: "hello",
+      }),
+    })
+    await loaded.fetch!("https://api.openai.com/v1/responses", {
+      method: "POST",
+      body: JSON.stringify({ model: "gpt-5.5", prompt_cache_retention: "24h", input: "hello" }),
+    })
+
+    expect(requests).toEqual([
+      { model: "gpt-5.6-sol", input: "hello" },
+      { model: "gpt-5.6-sol-fast", input: "hello" },
+      { model: "gpt-5.6-terra", input: "hello" },
+      { model: "gpt-5.6-luna", input: "hello" },
+      { model: "gpt-5.5", prompt_cache_retention: "24h", input: "hello" },
+    ])
+  })
+
   test("deduplicates concurrent Codex token refreshes", async () => {
     const refreshedAccess = createTestJwt({
       "https://api.openai.com/auth": { chatgpt_compute_residency: "eu" },
