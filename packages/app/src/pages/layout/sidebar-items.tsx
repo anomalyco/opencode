@@ -104,6 +104,7 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
 }): JSX.Element => {
+  const layout = useLayout()
   const title = () => sessionTitle(props.session.title)
 
   return (
@@ -112,7 +113,12 @@ const SessionRow = (props: {
       class={`flex items-center gap-2 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onPointerDown={props.warmPress}
       onFocus={props.warmFocus}
-      onClick={() => {
+      onClick={(event) => {
+        const sidebar = event.currentTarget.closest<HTMLElement>("[data-component='sidebar-nav-mobile']")
+        const sidebarAutoDismissThreshold = 250
+        if (sidebar && sidebar.getBoundingClientRect().width >= window.innerWidth - sidebarAutoDismissThreshold) {
+          layout.mobileSidebar.hide()
+        }
         if (props.sidebarOpened()) return
         props.clearHoverProjectSoon()
       }}
