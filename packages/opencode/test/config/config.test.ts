@@ -319,6 +319,23 @@ it.effect("creates global jsonc config with schema when no global configs exist"
   ),
 )
 
+it.effect("writes SenseNova defaults without the API key", () =>
+  withProcessEnv(
+    "SENSENOVA_API_KEY",
+    "test-key",
+    withGlobalConfig({}, ({ dir }) =>
+      Effect.gen(function* () {
+        yield* Config.use.get().pipe(provideInstanceEffect(dir))
+
+        const content = yield* FSUtil.use.readFileString(path.join(dir, "opencode.jsonc"))
+        expect(content).toContain('"sensenova"')
+        expect(content).toContain('"SENSENOVA_API_KEY"')
+        expect(content).not.toContain("test-key")
+      }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+    ),
+  ),
+)
+
 it.effect("does not create global config when OPENCODE_CONFIG_DIR is set", () =>
   Effect.gen(function* () {
     const custom = yield* tmpdirScoped()

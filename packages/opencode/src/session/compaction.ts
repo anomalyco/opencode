@@ -8,7 +8,6 @@ import { MessageV2 } from "./message-v2"
 import { Token } from "@/util/token"
 import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
-import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/storage"
 
@@ -194,7 +193,6 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const session = yield* Session.Service
     const agents = yield* Agent.Service
-    const plugin = yield* Plugin.Service
     const processors = yield* SessionProcessor.Service
     const provider = yield* Provider.Service
     const events = yield* EventV2Bridge.Service
@@ -359,6 +357,15 @@ const layer = Layer.effect(
       const model = agent.model
         ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
+      const compactionUser = {
+        ...userMessage,
+        model: {
+          ...userMessage.model,
+          providerID: model.providerID,
+          modelID: model.id,
+          variant: agent.variant ?? userMessage.model.variant,
+        },
+      }
       const cfg = yield* config.get()
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
@@ -369,26 +376,13 @@ const layer = Layer.effect(
         cfg,
         model,
       })
-      // Allow plugins to inject context or replace compaction prompt.
-      const compacting = yield* plugin.trigger(
-        "experimental.session.compacting",
-        { sessionID: input.sessionID },
-        { context: [], prompt: undefined },
-      )
-      const msgs = structuredClone(selected.head)
-      yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-      const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
-      const nextPrompt =
-        compacting.prompt ??
-        [
-          buildPrompt({
-            previousSummary,
-            context: [conversation],
-          }),
-          ...compacting.context,
-        ]
-          .filter(Boolean)
-          .join("\n\n")
+      // Keep compaction owned by this service: the summary input must not be
+      // replaced or augmented by plugin hooks.
+      const conversation = selected.head.map(serialize).filter(Boolean).join("\n\n")
+      const nextPrompt = buildPrompt({
+        previousSummary,
+        context: [conversation],
+      })
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
@@ -397,7 +391,7 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         mode: "compaction",
         agent: "compaction",
-        variant: userMessage.model.variant,
+        variant: compactionUser.model.variant,
         summary: true,
         path: {
           cwd: ctx.directory,
@@ -423,7 +417,7 @@ const layer = Layer.effect(
         model,
       })
       const result = yield* processor.process({
-        user: userMessage,
+        user: compactionUser,
         agent,
         sessionID: input.sessionID,
         tools: {},
@@ -434,12 +428,7 @@ const layer = Layer.effect(
             content: [
               {
                 type: "text",
-                text: [
-                  nextPrompt,
-                  ...(compacting.prompt ? ["The following is the conversation history:", conversation] : []),
-                ]
-                  .filter(Boolean)
-                  .join("\n\n"),
+                text: nextPrompt,
               },
             ],
           },
@@ -495,57 +484,34 @@ const layer = Layer.effect(
         }
 
         if (!replay) {
-          const info = yield* provider.getProvider(userMessage.model.providerID)
-          if (
-            (yield* plugin.trigger(
-              "experimental.compaction.autocontinue",
-              {
-                sessionID: input.sessionID,
-                agent: userMessage.agent,
-                model: yield* provider
-                  .getModel(userMessage.model.providerID, userMessage.model.modelID)
-                  .pipe(Effect.orDie),
-                provider: {
-                  source: info.source,
-                  info,
-                  options: info.options,
-                },
-                message: userMessage,
-                overflow: input.overflow === true,
-              },
-              { enabled: true },
-            )).enabled
-          ) {
-            const continueMsg = yield* session.updateMessage({
-              id: MessageID.ascending(),
-              role: "user",
-              sessionID: input.sessionID,
-              time: { created: Date.now() },
-              agent: userMessage.agent,
-              model: userMessage.model,
-            })
-            const text =
-              (input.overflow
-                ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
-                : "") +
-              "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
-            yield* session.updatePart({
-              id: PartID.ascending(),
-              messageID: continueMsg.id,
-              sessionID: input.sessionID,
-              type: "text",
-              // Internal marker for auto-compaction followups so provider plugins
-              // can distinguish them from manual post-compaction user prompts.
-              // This is not a stable plugin contract and may change or disappear.
-              metadata: { compaction_continue: true },
-              synthetic: true,
-              text,
-              time: {
-                start: Date.now(),
-                end: Date.now(),
-              },
-            })
-          }
+          const continueMsg = yield* session.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: input.sessionID,
+            time: { created: Date.now() },
+            agent: userMessage.agent,
+            model: userMessage.model,
+          })
+          const text =
+            (input.overflow
+              ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
+              : "") +
+            "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
+          yield* session.updatePart({
+            id: PartID.ascending(),
+            messageID: continueMsg.id,
+            sessionID: input.sessionID,
+            type: "text",
+            // Internal marker for auto-compaction followups. This keeps the
+            // continuation distinguishable from a user-authored prompt.
+            metadata: { compaction_continue: true },
+            synthetic: true,
+            text,
+            time: {
+              start: Date.now(),
+              end: Date.now(),
+            },
+          })
         }
       }
 
@@ -597,7 +563,6 @@ export const node = LayerNode.make({
     Config.node,
     Session.node,
     Agent.node,
-    Plugin.node,
     SessionProcessor.node,
     Provider.node,
     EventV2Bridge.node,

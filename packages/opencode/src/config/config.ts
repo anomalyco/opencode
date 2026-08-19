@@ -33,6 +33,7 @@ import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
 import { ConfigPlugin } from "./plugin"
 import { ConfigVariable } from "./variable"
+import { ConfigSensenova } from "./sensenova"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 
@@ -243,21 +244,34 @@ const layer = Layer.effect(
       return yield* loadConfig(text, { path: filepath }, env)
     })
 
-    const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
+    const loadGlobal = Effect.fnUntraced(function* (configEnv?: Record<string, string>) {
       let result: Info = {}
-      // Seed the default global config with the schema for editor completion, but avoid writing when the user
-      // explicitly routes config through env-provided paths or content.
+      // Seed the default global config for editor completion. When SenseNova is
+      // configured, this also persists its model rules and env-key declaration;
+      // the secret itself is never part of the generated JSON.
       if (!Flag.OPENCODE_CONFIG && !Flag.OPENCODE_CONFIG_DIR && !Flag.OPENCODE_CONFIG_CONTENT) {
         const file = globalConfigFile()
+        const currentEnv = yield* env.all()
+        const defaults = currentEnv[ConfigSensenova.API_KEY_ENV]
+          ? ConfigSensenova.defaultConfig()
+          : { $schema: "https://opencode.ai/config.json" }
         if (!existsSync(file)) {
           yield* fs
-            .writeWithDirs(file, JSON.stringify({ $schema: "https://opencode.ai/config.json" }, null, 2))
+            .writeWithDirs(file, JSON.stringify(defaults, null, 2))
             .pipe(Effect.catch(() => Effect.void))
+        } else if (currentEnv[ConfigSensenova.API_KEY_ENV]) {
+          const text = (yield* readConfigFile(file)) ?? ""
+          const parsed = ConfigParse.jsonc(text, file)
+          if (isRecord(parsed) && Object.keys(parsed).every((key) => key === "$schema")) {
+            yield* fs
+              .writeWithDirs(file, JSON.stringify(ConfigSensenova.defaultConfig(), null, 2))
+              .pipe(Effect.catch(() => Effect.void))
+          }
         }
       }
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), env))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json"), env))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"), env))
+      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), configEnv))
+      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json"), configEnv))
+      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"), configEnv))
 
       const legacy = path.join(Global.Path.config, "config")
       if (existsSync(legacy)) {
@@ -582,6 +596,8 @@ const layer = Layer.effect(
         if (Flag.OPENCODE_DISABLE_PRUNE) {
           result.compaction = { ...result.compaction, prune: false }
         }
+
+        result = ConfigSensenova.applyDefaults(result, yield* env.all())
 
         return {
           config: result,

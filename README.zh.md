@@ -115,6 +115,16 @@ OpenCode 内置两种 Agent，可用 `Tab` 键快速切换：
 
 更多配置说明请查看我们的 [**官方文档**](https://opencode.ai/docs)。
 
+### SenseNova 模型压缩（本地 fork）
+
+本地 fork 已内置 SenseNova 的 OpenAI 兼容接口用于上下文压缩。压缩流程由 fork 自己直接执行，不依赖插件 hook。设置 `SENSENOVA_API_KEY` 环境变量后，压缩默认使用 `deepseek-v4-flash` 的最高推理档位（`max`）。如需改用 `sensenova-6.8-flash-lite`，设置：
+
+```bash
+OPENCODE_COMPACTION_MODEL=sensenova-6.8-flash-lite
+```
+
+API 基地址为 `https://token.sensenova.cn/v1`；API 密钥请从 [SenseNova 控制台](https://platform.sensenova.cn/console) 创建，并通过环境变量或本地 `.env` 文件提供，勿提交到 Git。首次启动且检测到密钥时，opencode 会在默认全局配置文件中写入 SenseNova 的 provider、模型规则和密钥环境变量声明；配置文件只保存 `SENSENOVA_API_KEY` 这个环境变量名，不保存密钥内容。压缩 agent 会在启动时根据环境变量选择模型。可复制 [`.env.example`](./.env.example) 为 `.env` 后填写本地密钥。
+
 ### 参与贡献
 
 如有兴趣贡献代码，请在提交 PR 前阅读 [贡献指南 (Contributing Docs)](./CONTRIBUTING.md)。
