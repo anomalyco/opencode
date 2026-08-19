@@ -28,18 +28,6 @@ export const Plugin = define({
           }),
         }),
       )
-      draft.source(
-        SkillV2.EmbeddedSource.make({
-          type: "embedded",
-          skill: SkillV2.Info.make({
-            name: "scheduling",
-            description:
-              "Schedule recurring prompts with cron_add, cron_list, cron_delete. Use when the user asks for periodic reminders, scheduled checks, or automated recurring actions.",
-            location: AbsolutePath.make("/builtin/scheduling.md"),
-            content: schedulingContent,
-          }),
-        }),
-      )
     })
   }),
 })

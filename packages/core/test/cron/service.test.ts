@@ -279,7 +279,9 @@ describe("CronService", () => {
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       expect(deliverCalls).toBe(1)
-      expect((yield* cron.list("s_c"))[0].nextRunAt).toBe(120_000)
+      const firstRun = (yield* cron.list("s_c"))[0]
+      expect(firstRun.nextRunAt).toBe(120_000)
+      expect(firstRun.runCount).toBe(1)
 
       // T=2min, T=4min: delivery still pending → coalesced, cadence advances.
       yield* TestClock.adjust(Duration.minutes(2))
@@ -291,6 +293,7 @@ describe("CronService", () => {
       expect(deliverCalls).toBe(1) // no new delivery while pending
       const afterSkip = (yield* cron.list("s_c"))[0]
       expect(afterSkip.nextRunAt).toBe(6 * 60 * 1000)
+      expect(afterSkip.runCount).toBe(1) // coalesced skips don't fork deliveries
 
       // Release the gate → the pending delivery completes and clears pending.
       yield* Deferred.succeed(gate, undefined)
@@ -302,6 +305,7 @@ describe("CronService", () => {
       yield* TestClock.adjust(Duration.minutes(2))
       yield* Effect.yieldNow
       yield* Effect.yieldNow
+      expect((yield* cron.list("s_c"))[0].runCount).toBe(2)
     }).pipe(Effect.provide(tickLayer), Effect.runPromise)
 
     expect(deliverCalls).toBe(2)
@@ -355,9 +359,11 @@ describe("CronService", () => {
     expect(deliverCalls).toBe(1)
   })
 
-  // Regression for commit 8ef951044: a sooner job inserted while a later job is
-  // sleeping must fire before the later job. The fix's `job.id !== top.id` guard
-  // prevents firing a dequeued sooner-than-peeked job at the later job's tick.
+  // The `job.id !== top.id` guard defends against the heap head changing between
+  // the peek and the dequeue (e.g. a sooner job inserted mid-sleep). Under
+  // immediate-fire this is defensive: a new job fires via its own wake/tick, so
+  // the observable guarantee is ordering — the sooner job fires before the
+  // later job's next tick.
   test("sooner job inserted during a later job's sleep fires first", async () => {
     const deliveries: Array<{ sessionID: string; prompt: string; ts: number }> = []
 
