@@ -12,6 +12,9 @@ import { collectBoundedResponseBody } from "./http-body"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+import * as RobotsTxt from "./robots-txt"
+import { Config } from "../config"
+import { InstallationVersion } from "../installation/version"
 
 export const name = "webfetch"
 export const MAX_RESPONSE_BYTES = 5 * 1024 * 1024
@@ -61,32 +64,14 @@ const headers = (format: Format, userAgent: string) => ({
   "Accept-Language": "en-US,en;q=0.9",
 })
 
-const browserUserAgent =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
-
-const isCloudflareChallenge = (error: unknown) => {
-  if (!error || typeof error !== "object" || !("reason" in error)) return false
-  const reason = error.reason
-  if (
-    !reason ||
-    typeof reason !== "object" ||
-    !("_tag" in reason) ||
-    reason._tag !== "StatusCodeError" ||
-    !("response" in reason)
-  )
-    return false
-  const response = reason.response as HttpClientResponse.HttpClientResponse
-  return response.status === 403 && response.headers["cf-mitigated"] === "challenge"
-}
-
-const request = (url: string, format: Format, userAgent = browserUserAgent) =>
+const request = (url: string, format: Format, userAgent: string) =>
   HttpClientRequest.get(url).pipe(HttpClientRequest.setHeaders(headers(format, userAgent)))
 
 const assertHttpUrl = (url: URL) => {
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("URL must use http:// or https://")
 }
 
-const execute = (http: HttpClient.HttpClient, url: string, format: Format, userAgent = browserUserAgent) =>
+const execute = (http: HttpClient.HttpClient, url: string, format: Format, userAgent: string) =>
   http.execute(request(url, format, userAgent)).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
 
 const collectBody = (response: HttpClientResponse.HttpClientResponse) =>
@@ -120,6 +105,11 @@ const layer = Layer.effectDiscard(
     const tools = yield* Tools.Service
     const http = yield* HttpClient.HttpClient
     const permission = yield* PermissionV2.Service
+    const config = yield* Config.Service
+    const entries = yield* config.entries()
+    const userAgent = Config.latest(entries, "fetch_user_agent") ?? `OpenCode/${InstallationVersion}`
+    const inputMeansTraining = Config.latest(entries, "does_input_mean_training") ?? false
+    const respectRobotsTxt = Config.latest(entries, "respect_robots_txt") ?? true
 
     yield* tools
       .register({
@@ -145,10 +135,18 @@ const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
 
+              if (respectRobotsTxt) {
+                const urlObj = new URL(input.url)
+                const rules = yield* RobotsTxt.fetchRobotsTxt(http, input.url, userAgent).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                if (rules) {
+                  if (!RobotsTxt.isAllowed(urlObj.pathname, rules, userAgent) || RobotsTxt.checkAiOptOut(rules, urlObj.pathname, inputMeansTraining, userAgent)) {
+                    return yield* Effect.fail(new Error(`${urlObj.origin}/robots.txt forbids this request`))
+                  }
+                }
+              }
+
               const { body, contentType } = yield* Effect.gen(function* () {
-                const response = yield* execute(http, input.url, input.format).pipe(
-                  Effect.catchIf(isCloudflareChallenge, () => execute(http, input.url, input.format, "opencode")),
-                )
+                const response = yield* execute(http, input.url, input.format, userAgent)
                 const contentType = response.headers["content-type"] || ""
                 const mime = mimeFrom(contentType)
                 if (isImageAttachment(mime))
@@ -183,7 +181,7 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/webfetch",
   layer,
-  deps: [ToolRegistry.node, PermissionV2.node, LayerNodePlatform.httpClient],
+  deps: [ToolRegistry.node, PermissionV2.node, LayerNodePlatform.httpClient, Config.node],
 })
 
 export function extractTextFromHTML(html: string) {

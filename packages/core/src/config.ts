@@ -25,6 +25,7 @@ import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigWatcher } from "./config/watcher"
 import { ConfigV1 } from "./v1/config/config"
 import { ConfigMigrateV1 } from "./v1/config/migrate"
+import { InstallationVersion } from "./installation/version"
 
 export class Info extends Schema.Class<Info>("Config.Info")({
   $schema: Schema.optional(Schema.String).annotate({
@@ -104,6 +105,15 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   experimental: ConfigExperimental.Experimental.pipe(Schema.optional),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
+  fetch_user_agent: Schema.optional(Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed(`OpenCode/${InstallationVersion}`)),
+  ),
+  does_input_mean_training: Schema.optional(Schema.Boolean).pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
+  respect_robots_txt: Schema.optional(Schema.Boolean).pipe(
+    Schema.withDecodingDefault(Effect.succeed(true)),
+  ),
 }) {}
 
 export class Document extends Schema.Class<Document>("Config.Document")({
