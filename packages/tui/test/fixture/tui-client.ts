@@ -16,6 +16,9 @@ export function createEventStream() {
   const encoder = new TextEncoder()
   const v2 = new Set<ReadableStreamDefaultController<Uint8Array>>()
   const pending: Uint8Array[] = []
+  const logs = new Map<string, Set<ReadableStreamDefaultController<Uint8Array>>>()
+  const logSeq = new Map<string, number>()
+  const logHistory = new Map<string, Array<{ readonly seq: number; readonly event: unknown }>>()
   const response = (
     controllers: Set<ReadableStreamDefaultController<Uint8Array>>,
     queued: Uint8Array[],
@@ -27,7 +30,8 @@ export function createEventStream() {
         start(controller) {
           current = controller
           controllers.add(controller)
-          if (initial) controller.enqueue(encoder.encode(`data: ${JSON.stringify(initial)}\n\n`))
+          const values = Array.isArray(initial) ? initial : initial ? [initial] : []
+          for (const value of values) controller.enqueue(encoder.encode(`data: ${JSON.stringify(value)}\n\n`))
           for (const chunk of queued.splice(0)) controller.enqueue(chunk)
         },
         cancel() {
@@ -53,13 +57,47 @@ export function createEventStream() {
   return {
     emit(event: OpenCodeEvent) {
       send(v2, pending, event)
+      const sessionID =
+        "durable" in event
+          ? event.durable.aggregateID
+          : "sessionID" in event.data && typeof event.data.sessionID === "string"
+            ? event.data.sessionID
+            : undefined
+      if (!sessionID) return
+      const seq = (logSeq.get(sessionID) ?? 0) + 1
+      const item = "durable" in event ? { ...event, durable: { ...event.durable, seq } } : event
+      if ("durable" in event) {
+        logSeq.set(sessionID, seq)
+        logHistory.set(sessionID, [...(logHistory.get(sessionID) ?? []), { seq, event: item }])
+      }
+      const controllers = logs.get(sessionID)
+      if (controllers) send(controllers, [], item)
     },
     v2() {
       return response(v2, pending, { id: "evt_connected", type: "server.connected", data: {} })
     },
+    log(sessionID: string, after: number) {
+      const controllers = logs.get(sessionID) ?? new Set<ReadableStreamDefaultController<Uint8Array>>()
+      logs.set(sessionID, controllers)
+      return response(
+        controllers,
+        [],
+        [
+          ...(logHistory.get(sessionID) ?? []).filter((entry) => entry.seq > after).map((entry) => entry.event),
+          { type: "log.synced", aggregateID: sessionID, seq: logSeq.get(sessionID) ?? 0 },
+        ],
+      )
+    },
+    seq(sessionID: string) {
+      return logSeq.get(sessionID) ?? 0
+    },
     disconnect() {
       for (const controller of v2) controller.close()
       v2.clear()
+      for (const controllers of logs.values()) {
+        for (const controller of controllers) controller.close()
+        controllers.clear()
+      }
     },
   }
 }
@@ -68,6 +106,8 @@ export type FetchHandler = (url: URL, request: Request) => Response | undefined 
 
 export function createFetch(override?: FetchHandler, events?: ReturnType<typeof createEventStream>) {
   const session = [] as URL[]
+  const sessionEvents = events ?? createEventStream()
+  const snapshots = new Map<string, number>()
   async function fetch(input: RequestInfo | URL, init?: RequestInit) {
     const request = input instanceof Request ? input : new Request(input, init)
     const url = new URL(request.url)
@@ -75,6 +115,47 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     const overridden = await override?.(url, request)
     if (overridden) return overridden
     if (url.pathname === "/api/event" && events) return events.v2()
+    const snapshot = url.pathname.match(/^\/api\/session\/([^/]+)\/snapshot$/)
+    if (snapshot) {
+      const sessionID = decodeURIComponent(snapshot[1])
+      const count = snapshots.get(sessionID) ?? 0
+      snapshots.set(sessionID, count + 1)
+      // Synthetic sub-reads reuse the test override as the data source but are
+      // not app traffic; the marker header lets request-observing tests skip them.
+      const read = async (path: string, fallback: unknown) => {
+        const target = new URL(path, url)
+        const response = await override?.(target, new Request(target, { headers: { "x-fixture-synthetic": "snapshot" } }))
+        if (!response) return fallback
+        const body = await response.json()
+        if (typeof body !== "object" || body === null || !("data" in body)) return fallback
+        return body.data
+      }
+      const children = await read(`/api/session?parentID=${encodeURIComponent(sessionID)}`, [])
+      const messages = await read(`/api/session/${encodeURIComponent(sessionID)}/message`, [])
+      return json({
+        data: {
+          session: await read(`/api/session/${encodeURIComponent(sessionID)}`, {
+            id: sessionID,
+            projectID: "proj_test",
+            location: { directory },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 0, updated: 0 },
+          }),
+          children: Array.isArray(children)
+            ? children.filter(
+                (child) =>
+                  typeof child === "object" && child !== null && "parentID" in child && child.parentID === sessionID,
+              )
+            : [],
+          inbox: await read(`/api/session/${encodeURIComponent(sessionID)}/inbox`, []),
+          messages: Array.isArray(messages) ? messages.toReversed() : [],
+          seq: count === 0 ? 0 : sessionEvents.seq(sessionID),
+        },
+      })
+    }
+    const log = url.pathname.match(/^\/api\/experimental\/session\/([^/]+)\/log$/)
+    if (log) return sessionEvents.log(decodeURIComponent(log[1]), Number(url.searchParams.get("after") ?? 0))
 
     if (
       [

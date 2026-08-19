@@ -208,6 +208,11 @@ export function Prompt(props: PromptProps) {
   const config = useConfig().data
   const dialog = useDialog()
   const toast = useToast()
+  onCleanup(
+    data.session.failures.listen((failure) => {
+      toast.show({ title: "Prompt rejected", message: failure.reason, variant: "error" })
+    }),
+  )
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
   const history = usePromptHistory()
   const stash = usePromptStash()
@@ -1304,7 +1309,7 @@ export function Prompt(props: PromptProps) {
           return false
         }
       }
-      const error = await client.api.session
+      const error = await data.session
         .prompt({
           sessionID,
           text: inputText,

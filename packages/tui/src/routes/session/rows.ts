@@ -213,13 +213,25 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const input = (event: SessionInboxEnqueued) => {
     if (
       event.data.sessionID === sessionID() &&
+      event.data.item.delivery !== "queue" &&
       (event.data.item.type === "user" ||
         (event.data.item.type === "synthetic" && event.data.item.payload.description?.trim()))
     )
       appendMessage(event.data.inboxID)
   }
+  const delivery = (event: { data: { sessionID: string; inboxID: string; delivery: "steer" | "queue" } }) => {
+    if (event.data.sessionID !== sessionID()) return
+    if (event.data.delivery === "steer") return appendMessage(event.data.inboxID)
+    setRows(
+      produce((draft) => {
+        const index = draft.findIndex((row) => row.type === "message" && row.messageID === event.data.inboxID)
+        if (index !== -1) draft.splice(index, 1)
+      }),
+    )
+  }
   const subscriptions = [
     data.on("session.inbox.enqueued", input),
+    data.on("session.inbox.delivery.changed", delivery),
     data.on("session.compaction.started", (event) => {
       if (event.data.sessionID === sessionID()) appendMessage(event.data.inputID ?? event.id.replace(/^evt_/, "msg_"))
     }),

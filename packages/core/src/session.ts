@@ -141,6 +141,11 @@ export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()
   sessionID: SessionSchema.ID,
   inboxID: SessionMessage.ID,
 }) {}
+export class SeqUnavailableError extends Schema.TaggedError<SeqUnavailableError>()("Session.SeqUnavailableError", {
+  sessionID: SessionSchema.ID,
+  after: Event.Seq,
+  head: Schema.optional(Event.Seq),
+}) {}
 type InboxItemRef = { readonly sessionID: SessionSchema.ID; readonly inboxID: SessionMessage.ID }
 export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()("Session.SkillNotFoundError", {
   skill: Skill.ID,
@@ -194,13 +199,33 @@ export interface Interface {
    * unhandled compaction barriers.
    */
   readonly inbox: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInbox.Info[], NotFoundError>
+  readonly snapshot: (input: {
+    sessionID: SessionSchema.ID
+    recent?: number
+  }) => Effect.Effect<
+    {
+      readonly session: SessionSchema.Info
+      readonly children: SessionSchema.Info[]
+      readonly inbox: SessionInbox.Info[]
+      readonly messages: SessionMessage.Info[]
+      readonly seq: Event.Seq
+    },
+    NotFoundError | MessageDecodeError
+  >
   readonly cancelInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
   readonly steerInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
   readonly queueInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
+  readonly openLog: (input: {
+    sessionID: SessionSchema.ID
+    after?: number
+    follow?: boolean
+    ephemeral?: boolean
+  }) => Effect.Effect<Stream.Stream<SessionEvent.Event | EventLog.Synced>, NotFoundError | SeqUnavailableError>
   /**
-   * Durable, ordered session log read. Replays durable session bus after
-   * the exclusive `after` cursor, emits a `Synced` marker at the captured
-   * replay watermark, then continues live when `follow` is set.
+   * Ordered session log read. Replays durable session events after the
+   * exclusive `after` cursor, emits a `Synced` marker at the captured replay
+   * watermark, then continues live when `follow` is set. Ephemeral events are
+   * included only in the live phase when explicitly requested.
    * The marker's seq may exceed the last emitted event because other durable
    * bus share the aggregate's sequence space.
    */
@@ -208,7 +233,8 @@ export interface Interface {
     sessionID: SessionSchema.ID
     after?: number
     follow?: boolean
-  }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.Synced, NotFoundError>
+    ephemeral?: boolean
+  }) => Stream.Stream<SessionEvent.Event | EventLog.Synced, NotFoundError | SeqUnavailableError>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: Agent.ID }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: Model.Ref }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
@@ -326,6 +352,7 @@ const layer = Layer.effect(
     })
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
+    const isSessionEvent = Schema.is(SessionEvent.All)
     const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
@@ -557,20 +584,90 @@ const layer = Layer.effect(
         yield* result.get(sessionID)
         return yield* SessionInbox.list(db, sessionID)
       }),
+      snapshot: Effect.fn("Session.snapshot")(function* (input) {
+        return yield* db
+          .transaction(() =>
+            Effect.gen(function* () {
+              const row = yield* db
+                .select()
+                .from(SessionTable)
+                .where(eq(SessionTable.id, input.sessionID))
+                .get()
+                .pipe(Effect.orDie)
+              if (!row) return yield* new NotFoundError({ sessionID: input.sessionID })
+              const children = yield* db
+                .select()
+                .from(SessionTable)
+                .where(eq(SessionTable.parent_id, input.sessionID))
+                .orderBy(desc(SessionTable.time_updated), desc(SessionTable.id))
+                .all()
+                .pipe(Effect.orDie)
+              const inbox = yield* SessionInbox.list(db, input.sessionID)
+              const messages = yield* db
+                .select()
+                .from(SessionMessageTable)
+                .where(eq(SessionMessageTable.session_id, input.sessionID))
+                .orderBy(desc(SessionMessageTable.seq))
+                .limit(input.recent ?? 200)
+                .all()
+                .pipe(Effect.orDie)
+              const seq = yield* Bus.latestSequence(db, input.sessionID)
+              if (seq < 0) return yield* Effect.die(new Error(`Session ${input.sessionID} has no event sequence`))
+              return {
+                session: fromRow(row),
+                children: children.map(fromRow),
+                inbox,
+                messages: yield* Effect.forEach(messages.toReversed(), decode),
+                seq: Event.Seq.make(seq),
+              }
+            }),
+          )
+          .pipe(Effect.catchTag("SqlError", Effect.die))
+      }),
       cancelInbox: Effect.fn("Session.cancelInbox")((input) => mutatePending(input, SessionInbox.cancel)),
       steerInbox: Effect.fn("Session.steerInbox")((input) => mutatePending(input, SessionInbox.steer, true)),
       queueInbox: Effect.fn("Session.queueInbox")((input) => mutatePending(input, SessionInbox.queue)),
-      log: (input) =>
-        Stream.unwrap(
-          result
-            .get(input.sessionID)
-            .pipe(Effect.as(bus.log({ aggregateID: input.sessionID, after: input.after, follow: input.follow }))),
-        ).pipe(
-          Stream.filter(
-            (item): item is SessionEvent.DurableEvent | EventLog.Synced =>
-              Bus.isSynced(item) || isDurableSessionEvent(item),
-          ),
-        ),
+      openLog: Effect.fn("Session.openLog")(function* (input) {
+        yield* result.get(input.sessionID)
+        if (input.after !== undefined) {
+          const head = yield* Bus.latestSequence(db, input.sessionID)
+          if (input.after > head)
+            return yield* new SeqUnavailableError({
+              sessionID: input.sessionID,
+              after: Event.Seq.make(input.after),
+              head: head >= 0 ? Event.Seq.make(head) : undefined,
+            })
+          // A cursor claims the caller already holds everything through `after`, so
+          // replay of (after, head] must be provably complete. Without retained rows
+          // covering the range (events.persist off, or pruned history) replaying
+          // nothing would silently desync the caller; fail so it re-snapshots instead.
+          if (input.after < head) {
+            const retained = yield* Bus.retainedCount(db, input.sessionID, input.after, head)
+            if (retained < head - input.after)
+              return yield* new SeqUnavailableError({
+                sessionID: input.sessionID,
+                after: Event.Seq.make(input.after),
+                head: Event.Seq.make(head),
+              })
+          }
+        }
+        return bus
+          .log({
+            aggregateID: input.sessionID,
+            after: input.after,
+            follow: input.follow,
+            includeLive: input.ephemeral
+              ? (event) => isSessionEvent(event) && event.data.sessionID === input.sessionID
+              : undefined,
+          })
+          .pipe(
+            Stream.filter(
+              (item): item is SessionEvent.Event | EventLog.Synced =>
+                Bus.isSynced(item) || (input.ephemeral ? isSessionEvent(item) : isDurableSessionEvent(item)),
+            ),
+          )
+      }),
+      log: (input) => Stream.unwrap(result.openLog(input)),
       prompt: Effect.fn("Session.prompt")((input) =>
         Effect.uninterruptible(
           Effect.gen(function* () {

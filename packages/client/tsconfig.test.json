@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "include": [
+    "src",
+    "script",
+    "test/fixture",
+    "test/engine-data.test.ts",
+    "test/legacy-divergence.test.ts",
+    "test/sync-engine-laws.test.ts",
+    "test/sync-engine-sim.test.ts"
+  ]
+}

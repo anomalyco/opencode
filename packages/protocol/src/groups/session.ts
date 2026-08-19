@@ -18,6 +18,7 @@ import {
   InvalidRequestError,
   MessageNotFoundError,
   ServiceUnavailableError,
+  SeqUnavailableError,
   SessionBusyError,
   SessionNotFoundError,
   SkillNotFoundError,
@@ -216,6 +217,30 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           identifier: "v2.session.get",
           summary: "Get session",
           description: "Retrieve a session by ID.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.snapshot", "/api/session/:sessionID/snapshot", {
+        params: { sessionID: Session.ID },
+        query: {
+          recent: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional),
+        },
+        success: Schema.Struct({
+          data: Schema.Struct({
+            session: Session.Info,
+            children: Schema.Array(Session.Info),
+            inbox: Schema.Array(SessionInbox.Info),
+            messages: Schema.Array(SessionMessage.Info),
+            seq: Event.Seq,
+          }),
+        }).annotate({ identifier: "SessionSnapshotResponse" }),
+        error: [SessionNotFoundError, UnknownError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.snapshot",
+          summary: "Snapshot session state",
+          description: "Retrieve projected session state and its aggregate sequence from one consistent read.",
         }),
       ),
     )
@@ -633,17 +658,18 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         query: {
           after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional),
           follow: BooleanFromString.pipe(Schema.optional),
+          ephemeral: BooleanFromString.pipe(Schema.optional),
         },
         success: HttpApiSchema.StreamSse({
-          data: Schema.Union([SessionEvent.Durable, EventLog.Synced]).annotate({ identifier: "SessionLogItem" }),
+          data: Schema.Union([SessionEvent.All, EventLog.Synced]).annotate({ identifier: "SessionLogItem" }),
         }),
-        error: SessionNotFoundError,
+        error: [SessionNotFoundError, SeqUnavailableError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "v2.session.log",
           summary: "Read the session log",
           description:
-            "Experimental durable session event log. Reads events after an exclusive aggregate sequence and continues with live events when follow=true.",
+            "Experimental session event log. Replay is durable-only; follow mode can opt into live ephemeral events.",
         }),
       ),
     )

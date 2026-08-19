@@ -1,4 +1,4 @@
-import { createData } from "@opencode-ai/client/solid"
+import { createEngineData } from "@opencode-ai/client/solid"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
@@ -10,7 +10,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: () => {
     const client = useClient()
-    const data = createData({
+    const data = createEngineData({
       api: () => client.api,
       event: client.event,
       connection: client.connection,

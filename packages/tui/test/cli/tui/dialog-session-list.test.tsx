@@ -27,7 +27,10 @@ test("scopes sessions to the active session location", async () => {
   const active = "/tmp/opencode/project-b"
   const events = createEventStream()
   const requestedProjects: string[] = []
-  const calls = createFetch((url) => {
+  const calls = createFetch((url, request) => {
+    // The fixture's snapshot synthesizer reads through this handler; only app
+    // traffic belongs in the scoping assertions.
+    if (request.headers.get("x-fixture-synthetic")) return undefined
     if (url.pathname === "/api/location") {
       const directory = url.searchParams.get("location[directory]") ?? process.cwd()
       const project = directory === active ? "proj_b" : "proj_a"

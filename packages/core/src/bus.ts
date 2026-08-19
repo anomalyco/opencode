@@ -44,6 +44,21 @@ export const reserveSequence = Effect.fn("Bus.reserveSequence")(function* (
     .pipe(Effect.orDie)
 })
 
+export const retainedCount = Effect.fn("Bus.retainedCount")(function* (
+  db: Database.Interface["db"],
+  aggregateID: string,
+  after: number,
+  through: number,
+) {
+  const row = yield* db
+    .select({ count: sql<number>`count(*)` })
+    .from(EventTable)
+    .where(and(eq(EventTable.aggregate_id, aggregateID), gt(EventTable.seq, after), lte(EventTable.seq, through)))
+    .get()
+    .pipe(Effect.orDie)
+  return row?.count ?? 0
+})
+
 export type SerializedEvent = {
   readonly id: Event.ID
   readonly type: string
@@ -150,6 +165,7 @@ export interface Interface {
     readonly aggregateID: string
     readonly after?: number
     readonly follow?: boolean
+    readonly includeLive?: (event: Event.Payload) => boolean
   }) => Stream.Stream<LogItem>
   /** @deprecated Use `subscribe()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
@@ -768,6 +784,7 @@ export function configured(options?: Options) {
           readonly aggregateID: string
           readonly after?: number
           readonly follow?: boolean
+          readonly includeLive?: (event: Event.Payload) => boolean
         }): Stream.Stream<LogItem> =>
           Stream.unwrap(
             Effect.gen(function* () {
@@ -791,7 +808,8 @@ export function configured(options?: Options) {
                 )
               // Subscribing before the historical read means events committed during
               // replay either appear in the read or arrive through a post-marker wake.
-              const wakes = input.follow ? yield* subscribeDurable(input.aggregateID) : undefined
+              const subscription = input.follow && input.includeLive ? yield* PubSub.subscribe(pubsub.live) : undefined
+              const wakes = input.follow && !subscription ? yield* subscribeDurable(input.aggregateID) : undefined
               const target = yield* latestSequence(db, input.aggregateID)
               const marker: EventLog.Synced = {
                 type: "log.synced",
@@ -802,6 +820,14 @@ export function configured(options?: Options) {
                 Stream.map((event): LogItem => event),
                 Stream.concat(Stream.make(marker)),
               )
+              if (subscription && input.includeLive) {
+                const follow: Stream.Stream<LogItem> = Stream.fromSubscription(subscription).pipe(
+                  Stream.filter(input.includeLive),
+                  Stream.filter((event) => !event.durable || event.durable.seq > target),
+                  Stream.map((event): LogItem => event),
+                )
+                return Stream.concat(replay, follow)
+              }
               if (!wakes) return replay
               const live: Stream.Stream<LogItem> = Stream.fromSubscription(wakes).pipe(
                 Stream.mapEffect(() => latestSequence(db, input.aggregateID)),
