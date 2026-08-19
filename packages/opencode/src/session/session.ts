@@ -1012,5 +1012,6 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
 })
+export const defaultLayer = layer
 
 export * as Session from "./session"

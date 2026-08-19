@@ -67,5 +67,6 @@ const layer = Layer.effect(
 )
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2.node] })
+export const defaultLayer = layer
 
 export * as EventV2Bridge from "./event-v2-bridge"
