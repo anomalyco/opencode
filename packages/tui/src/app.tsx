@@ -45,6 +45,7 @@ import {
   type TuiApp,
 } from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
+import { linkAt } from "./ui/link"
 import { DialogIntegration } from "./component/dialog-integration"
 import { ErrorComponent } from "./component/error-component"
 import { PluginRouteMissing } from "./component/plugin-route-missing"
@@ -1284,7 +1285,13 @@ function App(props: { pair?: DialogPairCredentials }) {
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={copyOnSelectEnabled() ? () => Selection.copy(renderer, toast, clipboard) : undefined}
+      onMouseUp={(event) => {
+        if (copyOnSelectEnabled()) Selection.copy(renderer, toast, clipboard)
+        if (event.defaultPrevented || event.button !== MouseButton.LEFT || event.isDragging) return
+        const href = linkAt(renderer.currentRenderBuffer, event.x, event.y)
+        if (!href) return
+        open(href).catch(() => {})
+      }}
     >
       <box
         flexGrow={1}
