@@ -126,3 +126,61 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     mock.restore()
   }
 })
+
+test("fatal errors raised during cleanup are reported after finalizers", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const core = await import("@opentui/core")
+  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+  const events = createEventSource()
+  const calls = createFetch()
+  const originalWrite = process.stderr.write.bind(process.stderr)
+  const originalExitCode = process.exitCode
+  let stderr = ""
+  let triggerFatal!: (error: unknown) => void
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += String(chunk)
+    return true
+  }) as typeof process.stderr.write
+  process.exitCode = undefined
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        url: "http://test",
+        directory,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        fetch: calls.fetch,
+        events: events.source,
+        args: {},
+        onReady(controls) {
+          triggerFatal = controls.triggerFatal
+          ready()
+        },
+        pluginHost: {
+          async start() {},
+          async dispose() {
+            triggerFatal(new Error("worker disconnected during cleanup"))
+          },
+        },
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+    )
+
+    await mounted
+    process.emit("SIGHUP")
+    await task
+
+    expect(stderr).toContain("worker disconnected during cleanup")
+    expect(Number(process.exitCode)).toBe(1)
+  } finally {
+    process.stderr.write = originalWrite
+    process.exitCode = originalExitCode
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    mock.restore()
+  }
+})
