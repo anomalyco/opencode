@@ -28,6 +28,9 @@ export interface MockServerConfig {
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
+  forkSession?: (input: { sessionID: string; parentID?: string; messageID?: string }) => unknown
+  onPrompt?: (input: { sessionID: string; body: unknown }) => void
+  onSessionRemove?: (sessionID: string) => void
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -253,7 +256,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }
 
     const sessionMatch = path.match(/^\/session\/([^/]+)$/)
-    if (sessionMatch) {
+    if (sessionMatch && route.request().method() === "GET") {
       const session = config.sessions.find((s) => s.id === sessionMatch[1])
       return json(route, session ?? {})
     }
@@ -273,6 +276,29 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const todoMatch = path.match(/^\/session\/([^/]+)\/todo$/)
     if (todoMatch) return json(route, config.todos?.(todoMatch[1]!) ?? [])
     if (/^\/session\/[^/]+\/(children|diff)$/.test(path)) return json(route, [])
+
+    const forkMatch = path.match(/^\/session\/([^/]+)\/fork$/)
+    if (forkMatch && route.request().method() === "POST") {
+      const body = (route.request().postDataJSON() ?? {}) as { parentID?: string; messageID?: string }
+      return json(
+        route,
+        config.forkSession?.({ sessionID: forkMatch[1]!, parentID: body.parentID, messageID: body.messageID }) ?? {},
+      )
+    }
+
+    const promptMatch = path.match(/^\/session\/([^/]+)\/prompt_async$/)
+    if (promptMatch && route.request().method() === "POST") {
+      config.onPrompt?.({ sessionID: promptMatch[1]!, body: route.request().postDataJSON() })
+      return json(route, true)
+    }
+
+    const removeMatch = path.match(/^\/session\/([^/]+)$/)
+    if (removeMatch && route.request().method() === "DELETE") {
+      config.onSessionRemove?.(removeMatch[1]!)
+      return json(route, true)
+    }
+
+    if (/^\/session\/[^/]+\/abort$/.test(path) && route.request().method() === "POST") return json(route, true)
 
     const currentMessagesMatch = path.match(/^\/api\/session\/([^/]+)\/message$/)
     if (currentMessagesMatch) {

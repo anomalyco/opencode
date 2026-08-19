@@ -210,6 +210,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 type PromptSubmitInput = {
   prompt: ReturnType<typeof usePrompt>
   info: Accessor<{ id: string } | undefined>
+  sessionID?: Accessor<string | undefined>
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
@@ -245,6 +246,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const [search] = useSearchParams<{ draftId?: string }>()
   const tabs = useTabs()
   const pendingKey = (sessionID: string) => ScopedKey.from(sdk().scope, sessionID)
+  const sessionID = () => input.sessionID?.() ?? params.id
 
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "message" in err && typeof err.message === "string") return err.message
@@ -257,14 +259,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   }
 
   const abort = async () => {
-    const sessionID = params.id
-    if (!sessionID) return Promise.resolve()
+    const id = sessionID()
+    if (!id) return Promise.resolve()
 
-    serverSync().session.set("todo", sessionID, [])
+    serverSync().session.set("todo", id, [])
 
     input.onAbort?.()
 
-    const key = pendingKey(sessionID)
+    const key = pendingKey(id)
     const queued = pending.get(key)
     if (queued) {
       queued.abort.abort()
@@ -273,7 +275,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return Promise.resolve()
     }
     return sdk()
-      .api.session.interrupt({ sessionID })
+      .api.session.interrupt({ sessionID: id })
       .catch(() => {})
   }
 
@@ -352,7 +354,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const projectDirectory = sdk().directory
     const permissionState = permission.currentServerState()
-    const isNewSession = !params.id
+    const isNewSession = !sessionID()
     const shouldAutoAccept = isNewSession && input.autoAccept()
     const worktreeSelection = input.newSessionWorktree?.() || "main"
 

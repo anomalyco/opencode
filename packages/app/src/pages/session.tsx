@@ -82,6 +82,14 @@ import {
   sessionPanelWidthMax,
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import {
+  appendPromptText,
+  createSideChatTabID,
+  isSideChatTab,
+  nextSideChatOrdinal,
+  quoteSelection,
+  type SideChatTab,
+} from "@/pages/session/side-chat"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
@@ -533,6 +541,134 @@ export default function Page() {
 
   const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
+  const [sideChats, setSideChats] = createStore({ tabs: [] as SideChatTab[] })
+  let nextSideChatID = 0
+
+  const discardSideChat = async (sessionID: string) => {
+    const api = sdk().api.session
+    await api.interrupt({ sessionID }).catch(() => undefined)
+    await api.remove({ sessionID })
+    sync().session.evict(sessionID)
+  }
+
+  const closeSideChat = (tabID: string) => {
+    const sideChat = sideChats.tabs.find((tab) => tab.tabID === tabID)
+    if (!sideChat) return
+    const sessionID = sideChat.sessionID
+    setSideChats("tabs", (current) => current.filter((tab) => tab.tabID !== tabID))
+    tabs().close(tabID)
+    if (!sessionID) return
+    void discardSideChat(sessionID).catch((error) => {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
+
+  const openSideChat = async (selection?: string) => {
+    const parentID = params.id
+    if (!parentID || info()?.parentID) return
+    const ordinal = nextSideChatOrdinal(sideChats.tabs)
+    const tabID = createSideChatTabID(++nextSideChatID, ordinal)
+    const initialPrompt = selection
+      ? quoteSelection(language.t("session.sideChat.quoteSource.main"), selection)
+      : undefined
+    setSideChats("tabs", (current) => [
+      ...current,
+      {
+        tabID,
+        ordinal,
+        parentID,
+        sessionID: undefined,
+        creating: true,
+        initialMessageIDs: [],
+        initialPrompt,
+      },
+    ])
+    openReviewPanel()
+    void tabs().open(tabID)
+    tabs().setActive(tabID)
+
+    let forkedID: string | undefined
+    try {
+      const forked = await sdk()
+        .client.session.fork({ sessionID: parentID, parentID })
+        .then((response) => response.data)
+      if (!forked) throw new Error(language.t("common.requestFailed"))
+      forkedID = forked.id
+      sync().session.remember(forked)
+      await sync().session.sync(forked.id, { force: true })
+      const initialMessageIDs = (sync().data.message[forked.id] ?? []).map((message) => message.id)
+      const index = sideChats.tabs.findIndex((tab) => tab.tabID === tabID)
+
+      if (index < 0 || params.id !== parentID) {
+        await discardSideChat(forked.id).catch(() => undefined)
+        return
+      }
+
+      setSideChats("tabs", index, {
+        tabID,
+        ordinal,
+        parentID,
+        sessionID: forked.id,
+        creating: false,
+        initialMessageIDs,
+        initialPrompt,
+      })
+    } catch (error) {
+      if (forkedID) void discardSideChat(forkedID).catch(() => undefined)
+      if (!sideChats.tabs.some((tab) => tab.tabID === tabID)) return
+      setSideChats("tabs", (current) => current.filter((tab) => tab.tabID !== tabID))
+      tabs().close(tabID)
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  const quoteInMain = (selection: string) => {
+    const quote = quoteSelection(language.t("session.sideChat.quoteSource.side"), selection)
+    if (!quote) return
+    const next = appendPromptText(prompt.current(), quote)
+    prompt.set(next.prompt, next.cursor)
+    queueMicrotask(() => inputRef?.focus())
+  }
+
+  const sideChatController = {
+    tabs: () => sideChats.tabs,
+    open: () => void openSideChat(),
+    close: closeSideChat,
+    onQuoteMain: quoteInMain,
+  }
+
+  createEffect(() => {
+    const live = new Set(sideChats.tabs.map((tab) => tab.tabID))
+    for (const tab of tabs().all()) {
+      if (isSideChatTab(tab) && !live.has(tab)) tabs().close(tab)
+    }
+  })
+
+  createEffect(
+    on(
+      () => params.id,
+      (sessionID) => {
+        for (const sideChat of sideChats.tabs.slice()) {
+          if (sideChat.parentID === sessionID) continue
+          closeSideChat(sideChat.tabID)
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  onCleanup(() => {
+    for (const sideChat of sideChats.tabs.slice()) {
+      tabs().close(sideChat.tabID)
+      if (sideChat.sessionID) void discardSideChat(sideChat.sessionID).catch(() => undefined)
+    }
+  })
   const canReview = createMemo(() => !!sync().project)
   const reviewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
@@ -541,6 +677,7 @@ export default function Page() {
     normalizeTab,
     review: reviewTab,
     hasReview: canReview,
+    customTab: isSideChatTab,
   })
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
@@ -1141,6 +1278,8 @@ export default function Page() {
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
+    openSideChat,
+    closeSideChat,
     review: reviewTab,
     fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
   })
@@ -1152,6 +1291,18 @@ export default function Page() {
       onSelect: () => command.trigger("file.open", "palette"),
     },
   ])
+  command.register("side-chat-tabs", () =>
+    sideChats.tabs.map((tab) => ({
+      id: `session.sideChat.switch.${tab.tabID}`,
+      title: language.t("command.session.sideChat.switch", { number: tab.ordinal }),
+      description: language.t("command.session.sideChat.switch.description"),
+      category: language.t("command.category.session"),
+      onSelect: () => {
+        openReviewPanel()
+        tabs().setActive(tab.tabID)
+      },
+    })),
+  )
 
   const openReviewFile = createOpenReviewFile({
     showAllFiles,
@@ -2118,6 +2269,10 @@ export default function Page() {
                   setScrollToEnd={(fn) => {
                     scrollToEnd = fn
                   }}
+                  selectionAction={{
+                    label: language.t("session.sideChat.askSelection"),
+                    onSelect: (text) => void openSideChat(text),
+                  }}
                 />
               )}
             </Show>
@@ -2248,7 +2403,13 @@ export default function Page() {
 
   return (
     <SessionRouteFrame>
-      <SessionHeader />
+      <SessionHeader
+        sideChat={{
+          visible: isDesktop() && !!params.id && !isChildSession(),
+          opened: isSideChatTab(activeTab()),
+          onToggle: () => void openSideChat(),
+        }}
+      />
       <div
         ref={panelRow}
         class="flex-1 min-h-0 flex flex-col md:flex-row"
@@ -2264,9 +2425,7 @@ export default function Page() {
             "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap && !desktopInlineTerminalOnlyOpen(),
           }}
-          style={{
-            width: sessionPanelWidth(),
-          }}
+          style={{ width: sessionPanelWidth() }}
         >
           {settings.general.newLayoutDesigns() ? (
             <Show when={sessionPanelKey()} keyed>
@@ -2316,6 +2475,7 @@ export default function Page() {
               focusReviewDiff={focusReviewDiff}
               reviewSnap={ui.reviewSnap}
               size={size}
+              sideChats={sideChatController}
             />
           </Suspense>
         </Show>
@@ -2347,6 +2507,7 @@ export default function Page() {
                       reviewSnap={ui.reviewSnap}
                       size={size}
                       stacked={desktopV2PanelLayout().stacked}
+                      sideChats={sideChatController}
                     />
                   </Suspense>
                 </div>
