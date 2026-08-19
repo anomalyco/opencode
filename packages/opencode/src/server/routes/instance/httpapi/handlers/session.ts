@@ -7,6 +7,7 @@ import { Permission } from "@/permission"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
+import { SessionHandoff } from "@/session/handoff"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
@@ -26,6 +27,7 @@ import {
   CommandPayload,
   DiffQuery,
   ForkPayload,
+  HandoffPayload,
   InitPayload,
   ListQuery,
   MessagesQuery,
@@ -52,6 +54,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const promptSvc = yield* SessionPrompt.Service
     const revertSvc = yield* SessionRevert.Service
     const compactSvc = yield* SessionCompaction.Service
+    const handoffSvc = yield* SessionHandoff.Service
     const runState = yield* SessionRunState.Service
     const agentSvc = yield* Agent.Service
     const permissionSvc = yield* Permission.Service
@@ -292,6 +295,20 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return true
     })
 
+    const handoff = Effect.fn("SessionHttpApi.handoff")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof HandoffPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      return yield* handoffSvc
+        .create({
+          sessionID: ctx.params.sessionID,
+          providerID: ctx.payload.providerID,
+          modelID: ctx.payload.modelID,
+        })
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+    })
+
     const prompt = Effect.fn("SessionHttpApi.prompt")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
@@ -428,6 +445,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("share", share)
       .handle("unshare", unshare)
       .handle("summarize", summarize)
+      .handle("handoff", handoff)
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)
       .handle("command", command)

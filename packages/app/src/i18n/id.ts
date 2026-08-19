@@ -186,6 +186,8 @@ export const dict = {
   "command.session.redo.description": "Ulangi pesan yang diurungkan",
   "command.session.compact": "Ringkas sesi",
   "command.session.compact.description": "Ringkas sesi untuk mengurangi ukuran konteks",
+  "command.session.handoff": "Serahkan sesi",
+  "command.session.handoff.description": "Ringkas sesi dan lanjutkan pekerjaan di sesi baru",
   "command.session.fork": "Fork dari pesan",
   "command.session.fork.description": "Buat sesi baru dari pesan sebelumnya",
   "command.session.share": "Bagikan sesi",
@@ -665,6 +667,8 @@ export const dict = {
   "toast.session.share.success.description": "URL berbagi disalin ke papan klip!",
   "toast.session.share.failed.title": "Gagal membagikan sesi",
   "toast.session.share.failed.description": "Terjadi kesalahan saat membagikan sesi",
+  "toast.session.handoff.failed.title": "Gagal menyerahkan sesi",
+  "toast.session.handoff.failed.description": "Sesi ini tidak dapat diringkas untuk diserahkan",
 
   "toast.session.unshare.success.title": "Berbagi sesi dihentikan",
   "toast.session.unshare.success.description": "Berbagi sesi berhasil dihentikan!",

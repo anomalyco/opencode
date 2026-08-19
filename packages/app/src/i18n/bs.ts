@@ -186,6 +186,8 @@ export const dict = {
   "command.session.redo.description": "Vrati posljednju poništenu poruku",
   "command.session.compact": "Sažmi sesiju",
   "command.session.compact.description": "Sažmi sesiju kako bi se smanjio kontekst",
+  "command.session.handoff": "Predaj sesiju",
+  "command.session.handoff.description": "Sažmi sesiju i nastavi rad u novoj sesiji",
   "command.session.fork": "Fork iz poruke",
   "command.session.fork.description": "Kreiraj novu sesiju iz prethodne poruke",
   "command.session.share": "Podijeli sesiju",
@@ -656,6 +658,8 @@ export const dict = {
   "toast.session.share.success.description": "URL za dijeljenje je kopiran u međuspremnik!",
   "toast.session.share.failed.title": "Neuspjelo dijeljenje sesije",
   "toast.session.share.failed.description": "Došlo je do greške prilikom dijeljenja sesije",
+  "toast.session.handoff.failed.title": "Predaja sesije nije uspjela",
+  "toast.session.handoff.failed.description": "Ovu sesiju nije moguće sažeti za predaju",
 
   "toast.session.unshare.success.title": "Dijeljenje sesije ukinuto",
   "toast.session.unshare.success.description": "Dijeljenje sesije je uspješno ukinuto!",

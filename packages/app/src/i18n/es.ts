@@ -186,6 +186,8 @@ export const dict = {
   "command.session.redo.description": "Rehacer el último mensaje deshecho",
   "command.session.compact": "Compactar sesión",
   "command.session.compact.description": "Resumir la sesión para reducir el tamaño del contexto",
+  "command.session.handoff": "Transferir sesión",
+  "command.session.handoff.description": "Compactar la sesión y continuar el trabajo en una sesión nueva",
   "command.session.fork": "Bifurcar desde mensaje",
   "command.session.fork.description": "Crear una nueva sesión desde un mensaje anterior",
   "command.session.share": "Compartir sesión",
@@ -658,6 +660,8 @@ export const dict = {
   "toast.session.share.success.description": "Enlace para compartir copiado al portapapeles.",
   "toast.session.share.failed.title": "Fallo al compartir sesión",
   "toast.session.share.failed.description": "Ocurrió un error al compartir la sesión",
+  "toast.session.handoff.failed.title": "No se pudo transferir la sesión",
+  "toast.session.handoff.failed.description": "No se pudo resumir esta sesión para transferirla",
 
   "toast.session.unshare.success.title": "La sesión dejó de compartirse",
   "toast.session.unshare.success.description": "La sesión dejó de compartirse correctamente.",
