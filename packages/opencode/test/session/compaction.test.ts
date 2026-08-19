@@ -196,6 +196,7 @@ function createCompactionMarker(sessionID: SessionID) {
 function fake(
   input: Parameters<SessionProcessorModule.SessionProcessor.Interface["create"]>[0],
   result: "continue" | "compact",
+  session: SessionNs.Interface,
 ) {
   const msg = input.assistantMessage
   return {
@@ -204,17 +205,35 @@ function fake(
     },
     updateToolCall: Effect.fn("TestSessionProcessor.updateToolCall")(() => Effect.succeed(undefined)),
     completeToolCall: Effect.fn("TestSessionProcessor.completeToolCall")(() => Effect.void),
-    process: Effect.fn("TestSessionProcessor.process")(() => Effect.succeed(result)),
+    process: Effect.fn("TestSessionProcessor.process")(function* () {
+      if (result === "compact") return result
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: msg.id,
+        sessionID: msg.sessionID,
+        type: "text",
+        text: "summary",
+      })
+      return result
+    }),
   } satisfies SessionProcessorModule.SessionProcessor.Handle
 }
 
-function processorLayer(result: "continue" | "compact") {
-  return Layer.succeed(
+function processorNode(result: "continue" | "compact") {
+  const layer = Layer.effect(
     SessionProcessorModule.SessionProcessor.Service,
-    SessionProcessorModule.SessionProcessor.Service.of({
-      create: Effect.fn("TestSessionProcessor.create")((input) => Effect.succeed(fake(input, result))),
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      return SessionProcessorModule.SessionProcessor.Service.of({
+        create: Effect.fn("TestSessionProcessor.create")((input) => Effect.succeed(fake(input, result, session))),
+      })
     }),
   )
+  return LayerNode.make({
+    service: SessionProcessorModule.SessionProcessor.Service,
+    layer,
+    deps: [SessionNs.node],
+  })
 }
 
 function cfg(compaction?: ConfigV1.Info["compaction"]) {
@@ -233,7 +252,7 @@ const compactionTestNode = LayerNode.group([
 ])
 const env = AppNodeBuilder.build(compactionTestNode, [
   [Provider.node, defaultProvider.layer],
-  [SessionProcessorModule.SessionProcessor.node, processorLayer("continue")],
+  [SessionProcessorModule.SessionProcessor.node, processorNode("continue")],
   [RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })],
 ])
 
@@ -265,7 +284,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
   if (!options?.llm) {
     return AppNodeBuilder.build(compactionTestNode, [
       ...replacements,
-      [SessionProcessorModule.SessionProcessor.node, processorLayer(options?.result ?? "continue")],
+      [SessionProcessorModule.SessionProcessor.node, processorNode(options?.result ?? "continue")],
       ...(options?.plugin ? ([[Plugin.node, options.plugin]] as const) : []),
       ...(options?.config ? ([[Config.node, options.config]] as const) : []),
     ])
@@ -902,6 +921,71 @@ describe("session.compaction.process", () => {
         expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
       }
     }).pipe(withCompaction({ result: "compact" })),
+  )
+
+  itCompaction.instance(
+    "rejects reasoning-only compaction summaries without hiding history",
+    () => {
+      const stub = llm()
+      stub.push(
+        Stream.make(
+          LLMEvent.reasoningStart({ id: "reasoning-1" }),
+          LLMEvent.reasoningDelta({ id: "reasoning-1", text: "thinking about the conversation" }),
+          LLMEvent.reasoningEnd({ id: "reasoning-1" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop", usage: basicUsage() }),
+          LLMEvent.finish({ reason: "stop", usage: basicUsage() }),
+        ),
+      )
+
+      return Effect.gen(function* () {
+        const events = yield* EventV2Bridge.Service
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const original = yield* createUserMessage(session.id, "original context")
+        yield* createCompactionMarker(session.id)
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+
+        const seen: string[] = []
+        const unsub = yield* events.listen((event) =>
+          Effect.sync(() => {
+            seen.push(event.type)
+          }),
+        )
+        yield* Effect.addFinalizer(() => unsub)
+
+        const result = yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: true,
+        })
+
+        const all = yield* ssn.messages({ sessionID: session.id })
+        const summary = all.find((item) => item.info.role === "assistant" && item.info.summary)
+        const filtered = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
+
+        expect(result).toBe("stop")
+        expect(summary?.info.role).toBe("assistant")
+        if (summary?.info.role === "assistant") {
+          expect(summary.info.finish).toBe("error")
+          expect(JSON.stringify(summary.info.error)).toContain("Compaction produced no summary")
+        }
+        expect(summary?.parts.some((part) => part.type === "reasoning")).toBe(true)
+        expect(summary?.parts.some((part) => part.type === "text" && part.text.trim().length > 0)).toBe(false)
+        expect(seen).not.toContain(SessionCompaction.Event.Compacted.type)
+        expect(filtered.map((item) => item.info.id)).toContain(original.id)
+        expect(
+          all.some(
+            (item) =>
+              item.info.role === "user" &&
+              item.parts.some((part) => part.type === "text" && part.metadata?.compaction_continue === true),
+          ),
+        ).toBe(false)
+      }).pipe(withCompaction({ llm: stub.llmLayer }))
+    },
+    { git: true },
   )
 
   it.instance(
