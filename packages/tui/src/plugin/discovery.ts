@@ -45,15 +45,13 @@ export function localSource(spec: string, directory: string) {
   return undefined
 }
 
-// Key local plugin imports by mtime so edited sources re-import fresh instead
-// of hitting the ESM cache. Bun ignores query params when caching file:// URL
-// imports, so bust with a plain path there; Node keys its cache on the full
-// URL. Mirrors the core plugin supervisor's loader.
-// The mtime is truncated to whole milliseconds: a fractional mtimeMs puts a
-// dot in the query, and Bun's compiled binaries then skip runtime plugin
-// hooks for the import, breaking JSX/solid rewriting for external plugins.
-export function freshSpecifier(entrypoint: string, mtime: number) {
-  const version = Math.trunc(mtime)
+// Key local plugin imports by a source version so edited sources re-import
+// fresh instead of hitting the ESM cache. Bun ignores query params when
+// caching file:// URL imports, so bust with a plain path there; Node keys its
+// cache on the full URL. Numeric versions are truncated because a fractional
+// value breaks Bun's runtime JSX/solid plugin hooks.
+export function freshSpecifier(entrypoint: string, sourceVersion: string | number) {
+  const version = typeof sourceVersion === "number" ? Math.trunc(sourceVersion) : sourceVersion
   if (typeof Bun !== "undefined") return `${fileURLToPath(entrypoint).replaceAll("\\", "/")}?mtime=${version}`
   return `${entrypoint}?mtime=${version}`
 }

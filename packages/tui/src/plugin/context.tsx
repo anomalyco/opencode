@@ -14,7 +14,8 @@ import {
   type ParentProps,
 } from "solid-js"
 import path from "path"
-import { stat } from "fs/promises"
+import { readFile, stat } from "fs/promises"
+import { createHash } from "crypto"
 import { fileURLToPath, pathToFileURL } from "url"
 import type { Page } from "@opencode-ai/plugin/tui/context"
 import { resolveSlots, type Claim } from "./structure"
@@ -239,6 +240,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   // Package resolution failures would otherwise retry a full npm install on
   // every watch event; remember them until the configuration changes.
   const npmFailures = new Map<string, string>()
+  // One save can emit several watch events. Remember setup failures so those
+  // events do not repeatedly tear down and restore the last good generation.
+  const setupFailures = new Map<string, { version: string; options: Registration["options"]; error: string }>()
   const reconcile = async () => {
     await Promise.all(props.directories.map(watcher.wait))
     const entries = [
@@ -301,6 +305,24 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
             options: previous.options,
             enabled: previous.active,
           })
+        continue
+      }
+      const setupFailure = setupFailures.get(target)
+      if (setupFailure?.version === resolved.version && sameOptions(setupFailure.options, options) && previous) {
+        failures.push({
+          target,
+          id: previous.plugin.id,
+          status: "failed",
+          error: previous.active ? `${setupFailure.error} (previous version still active)` : setupFailure.error,
+        })
+        desired.set(previous.plugin.id, {
+          plugin: previous.plugin,
+          source: previous.source,
+          target,
+          version: previous.version,
+          options: previous.options,
+          enabled: previous.active,
+        })
         continue
       }
       desired.set(resolved.plugin.id, {
@@ -375,7 +397,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         continue
       }
       const error = await activate(id).then(() => undefined, errorMessage)
-      if (!error) continue
+      if (!error) {
+        if (item.target) setupFailures.delete(item.target)
+        continue
+      }
+      if (item.target) setupFailures.set(item.target, { version: item.version, options: item.options, error })
       errors.set(id, error)
       if (!fallback) continue
       setStore("registrations", id, toRegistration(fallback))
@@ -571,9 +597,16 @@ async function resolvePlugin(
     return { status: "unchanged" as const, plugin: previous.plugin, version: previous.version }
   const entrypoint = local ? await resolveLocal(local) : await packages.resolve(spec, install)
   if (!entrypoint) return { status: "unsupported" as const }
-  // The cache-busted specifier doubles as the version: unique per entrypoint
-  // and mtime, so equal versions mean an identical module.
-  const version = local ? freshSpecifier(entrypoint, (await stat(new URL(entrypoint))).mtimeMs) : entrypoint
+  // The cache-busted specifier doubles as the version. Content remains stable
+  // across the several mtimes one save may expose to filesystem watchers.
+  const version = local
+    ? freshSpecifier(
+        entrypoint,
+        createHash("sha256")
+          .update(await readFile(new URL(entrypoint)))
+          .digest("hex"),
+      )
+    : entrypoint
   if (previous && previous.version === version && sameOptions(previous.options, options))
     return { status: "unchanged" as const, plugin: previous.plugin, version }
   const mod: { readonly default?: unknown } = await import(version)
