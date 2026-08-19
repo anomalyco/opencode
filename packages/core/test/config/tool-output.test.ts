@@ -26,31 +26,37 @@ describe("ConfigToolOutputPlugin.Plugin", () => {
           const plugins = yield* Plugin.Service
           yield* ConfigToolOutputPlugin.Plugin.effect(yield* PluginHost.make(plugins))
 
-          expect(yield* isTruncated(output)).toBe(true)
+          expect((yield* output.truncate({ content: "one\ntwo" })).metadata?.truncated).toBe(true)
 
-          yield* config.setEntries([document({ max_lines: 2, max_bytes: 1_000 })])
+          yield* config.setEntries([
+            new Document({
+              type: "document",
+              info: new Info({
+                tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }),
+              }),
+            }),
+          ])
           yield* bus.publish(Event.Updated, {})
-          yield* waitUntil(isTruncated(output).pipe(Effect.map((value) => !value)))
+          for (let attempt = 0; attempt < 200; attempt++) {
+            const result = yield* output.truncate({ content: "one\ntwo" })
+            if (result.metadata?.truncated === false) return
+            yield* Effect.sleep("10 millis")
+          }
+          yield* Effect.die(new Error("Timed out waiting for tool output config reload"))
         }).pipe(
           Effect.provide(AppNodeBuilder.build(ToolOutput.node, [[Global.node, Global.layerWith({ data: tmp.path })]])),
         ),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(Effect.provide(PluginTestLayer), Effect.provide(Config.testLayer([document({ max_lines: 1 })]))),
+    ).pipe(
+      Effect.provide(PluginTestLayer),
+      Effect.provide(
+        Config.testLayer([
+          new Document({
+            type: "document",
+            info: new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 1 }) }),
+          }),
+        ]),
+      ),
+    ),
   )
-})
-
-function document(toolOutput: ConstructorParameters<typeof ConfigToolOutput.Info>[0]) {
-  return new Document({ type: "document", info: new Info({ tool_output: new ConfigToolOutput.Info(toolOutput) }) })
-}
-
-const isTruncated = Effect.fnUntraced(function* (output: ToolOutput.Interface) {
-  return (yield* output.truncate({ content: "one\ntwo" })).metadata?.truncated === true
-})
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  yield* Effect.die(new Error("Timed out waiting for tool output config reload"))
 })
