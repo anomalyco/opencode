@@ -194,6 +194,12 @@ describe("acp config options", () => {
     })
   })
 
+  test("strips trailing slash from model selection", () => {
+    expect(parseModelSelection("openai/gpt-5/", providers)).toEqual({
+      model: { providerID: "openai", modelID: "gpt-5" },
+    })
+  })
+
   test("formats current model ids with and without selected variants", () => {
     expect(
       formatCurrentModelId({

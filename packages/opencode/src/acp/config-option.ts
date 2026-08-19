@@ -113,9 +113,10 @@ export function buildConfigOptions(input: {
 }
 
 export function parseModelSelection(modelId: string, providers: readonly ConfigOptionProvider[]): ModelSelection {
-  const provider = providers.find((item) => modelId.startsWith(`${item.id}/`))
+  const trimmed = modelId.replace(/\/+$/, "")
+  const provider = providers.find((item) => trimmed.startsWith(`${item.id}/`))
   if (provider) {
-    const modelID = modelId.slice(provider.id.length + 1)
+    const modelID = trimmed.slice(provider.id.length + 1)
     if (provider.models[modelID]) {
       return { model: { providerID: provider.id, modelID } }
     }
@@ -132,15 +133,15 @@ export function parseModelSelection(modelId: string, providers: readonly ConfigO
     return { model: { providerID: provider.id, modelID } }
   }
 
-  const separator = modelId.indexOf("/")
+  const separator = trimmed.indexOf("/")
   if (separator === -1) {
-    return { model: { providerID: modelId, modelID: "" } }
+    return { model: { providerID: trimmed, modelID: "" } }
   }
 
   return {
     model: {
-      providerID: modelId.slice(0, separator),
-      modelID: modelId.slice(separator + 1),
+      providerID: trimmed.slice(0, separator),
+      modelID: trimmed.slice(separator + 1),
     },
   }
 }
