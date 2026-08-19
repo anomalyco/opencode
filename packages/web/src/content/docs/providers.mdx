@@ -457,6 +457,14 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    /models
    ```
 
+#### Microsoft Entra ID (Azure CLI)
+
+You can use your Azure CLI session instead of an API key. [Install the Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli), run `az login`, then select **Microsoft Entra ID (Azure CLI)** when connecting the **Azure** provider and enter the same Resource name.
+
+OpenCode finds the Resource group and discovers its deployed models from the active Azure CLI subscription. Run `az account set --subscription NAME_OR_ID` first if the Resource is in a different subscription.
+
+Assign your identity the inference role required by the deployment: **Cognitive Services OpenAI User** for Azure OpenAI models or **Cognitive Services User** for other Foundry models. OpenCode refreshes access tokens through the Azure CLI, so you only need to sign in again when the CLI session expires.
+
 ---
 
 ### Azure Cognitive Services
