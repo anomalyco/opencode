@@ -1192,6 +1192,10 @@ export function options(input: {
     }
   }
 
+  if (input.model.api.npm === "@openrouter/ai-sdk-provider") {
+    result["extraBody"] = { session_id: input.sessionID }
+  }
+
   if (
     input.model.providerID === "baseten" ||
     (input.model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(input.model.api.id))

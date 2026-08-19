@@ -300,6 +300,19 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.prompt_cache_key).toBeUndefined()
   })
+
+  test("should inject session_id via extraBody for OpenRouter", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...mockModel,
+        providerID: "openrouter",
+        api: { ...mockModel.api, npm: "@openrouter/ai-sdk-provider" },
+      },
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.extraBody).toEqual({ session_id: sessionID })
+  })
 })
 
 describe("ProviderTransform.options - zai/zhipuai thinking", () => {
