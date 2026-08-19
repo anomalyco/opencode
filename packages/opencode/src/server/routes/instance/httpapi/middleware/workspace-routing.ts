@@ -84,7 +84,16 @@ function selectedV2WorkspaceID(
 }
 
 function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string {
-  return url.searchParams.get("directory") || request.headers["x-opencode-directory"] || process.cwd()
+  return url.searchParams.get("directory") || headerDirectory(request.headers["x-opencode-directory"]) || process.cwd()
+}
+
+function headerDirectory(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
 }
 
 function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {

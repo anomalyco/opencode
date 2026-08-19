@@ -16,6 +16,7 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { ReloadTool } from "./reload"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -44,6 +45,7 @@ import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { ConfigReload } from "@/config/reload"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
@@ -114,6 +116,7 @@ const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const reloadtool = yield* ReloadTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -219,6 +222,7 @@ const layer = Layer.effect(
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          reload: Tool.init(reloadtool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -242,6 +246,7 @@ const layer = Layer.effect(
             tool.todo,
             tool.search,
             tool.skill,
+            tool.reload,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
@@ -441,6 +446,7 @@ export const node = LayerNode.make({
     Instruction.node,
     FSUtil.node,
     EventV2Bridge.node,
+    ConfigReload.node,
     httpClient,
     CrossSpawnSpawner.node,
     Format.node,
