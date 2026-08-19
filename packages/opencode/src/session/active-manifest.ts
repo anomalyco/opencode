@@ -1,4 +1,5 @@
-import path from "path"
+import path from "node:path"
+import fs from "node:fs/promises"
 import { Global } from "@opencode-ai/core/global"
 import { Effect } from "effect"
 
@@ -27,7 +28,9 @@ async function readRaw(): Promise<Manifest> {
 }
 
 async function writeRaw(manifest: Manifest): Promise<void> {
-  await Bun.write(manifestPath(), JSON.stringify(manifest))
+  const tmp = manifestPath() + ".tmp"
+  await Bun.write(tmp, JSON.stringify(manifest))
+  await fs.rename(tmp, manifestPath())
 }
 
 const write = Effect.fn("ActiveManifest.write")(function* (entry: ActiveSession) {
@@ -43,12 +46,18 @@ const remove = Effect.fn("ActiveManifest.remove")(function* (sessionID: string) 
   yield* Effect.promise(async () => {
     const manifest = await readRaw()
     const without = manifest.sessions.filter((s) => s.id !== sessionID)
+    if (without.length === 0) {
+      const file = Bun.file(manifestPath())
+      if (await file.exists()) await file.unlink()
+      return
+    }
     await writeRaw({ sessions: without })
   })
 })
 
 const read = Effect.fn("ActiveManifest.read")(function* () {
-  return yield* Effect.promise(() => readRaw().then((m) => m.sessions))
+  const manifest = yield* Effect.promise(() => readRaw())
+  return manifest.sessions
 })
 
 const clear = Effect.fn("ActiveManifest.clear")(function* () {
@@ -63,9 +72,9 @@ const hasCrashed = Effect.fn("ActiveManifest.hasCrashed")(function* () {
 })
 
 export const ActiveManifest = {
-  write,
-  remove,
-  read,
-  clear,
-  hasCrashed,
+  write: (entry: ActiveSession) => write(entry).pipe(Effect.catch(() => Effect.void)),
+  remove: (sessionID: string) => remove(sessionID).pipe(Effect.catch(() => Effect.void)),
+  read: () => read().pipe(Effect.catch(() => Effect.succeed([] as ActiveSession[]))),
+  clear: () => clear().pipe(Effect.catch(() => Effect.void)),
+  hasCrashed: () => hasCrashed().pipe(Effect.catch(() => Effect.succeed(false))),
 }

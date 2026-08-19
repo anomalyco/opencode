@@ -7,8 +7,6 @@ import { ActiveManifest, setManifestDir } from "@/session/active-manifest"
 
 const sampleEntry = {
   id: "session-001",
-  model: { id: "claude-sonnet", providerID: "anthropic" },
-  agent: "build",
   timestamp: Date.now(),
 }
 
@@ -39,8 +37,6 @@ test("writeActiveSession adds to existing manifest", async () => {
     await Effect.runPromise(
       ActiveManifest.write({
         id: "session-002",
-        model: { id: "gpt-4", providerID: "openai" },
-        agent: "general",
         timestamp: Date.now(),
       }),
     )
@@ -53,10 +49,10 @@ test("writeActiveSession updates existing session", async () => {
   await withTmpDir(async (dir) => {
     setManifestDir(dir)
     await Effect.runPromise(ActiveManifest.write(sampleEntry))
-    await Effect.runPromise(ActiveManifest.write({ ...sampleEntry, agent: "plan" }))
+    await Effect.runPromise(ActiveManifest.write({ ...sampleEntry, timestamp: 999 }))
     const sessions = await Effect.runPromise(ActiveManifest.read())
     expect(sessions).toHaveLength(1)
-    expect(sessions[0].agent).toBe("plan")
+    expect(sessions[0].timestamp).toBe(999)
   })
 })
 
@@ -67,6 +63,16 @@ test("removeActiveSession removes from manifest", async () => {
     await Effect.runPromise(ActiveManifest.remove("session-001"))
     const sessions = await Effect.runPromise(ActiveManifest.read())
     expect(sessions).toHaveLength(0)
+  })
+})
+
+test("removeActiveSession deletes manifest file when last session removed", async () => {
+  await withTmpDir(async (dir) => {
+    setManifestDir(dir)
+    await Effect.runPromise(ActiveManifest.write(sampleEntry))
+    await Effect.runPromise(ActiveManifest.remove("session-001"))
+    const crashed = await Effect.runPromise(ActiveManifest.hasCrashed())
+    expect(crashed).toBe(false)
   })
 })
 
