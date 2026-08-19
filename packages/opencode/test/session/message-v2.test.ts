@@ -61,6 +61,17 @@ const model: Provider.Model = {
   release_date: "2026-01-01",
 }
 
+const kimiModel: Provider.Model = {
+  ...model,
+  id: ModelV2.ID.make("kimi-k3"),
+  providerID: ProviderV2.ID.make("kimi"),
+  api: {
+    id: "kimi-k3",
+    url: "http://127.0.0.1:8317/v1",
+    npm: "@ai-sdk/openai-compatible",
+  },
+}
+
 function userInfo(id: string): SessionV1.User {
   return {
     id,
@@ -1360,6 +1371,293 @@ describe("session.message-v2.toModelMessage", () => {
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
     expect(texts.map((t) => t.text)).toStrictEqual(["", "hello"])
+  })
+
+  test("injects placeholder text for tool-call-only assistant messages on openai-compatible providers", async () => {
+    // Kimi via chat/completions rejects assistant messages whose serialized
+    // content is empty: @ai-sdk/openai-compatible emits content: "" (or null)
+    // for turns carrying only tool calls (anomalyco/opencode#37946).
+    const userID = "m-user-oc-tool"
+    const assistantID = "m-assistant-oc-tool"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, kimiModel)
+
+    const assistant = result.find((msg) => msg.role === "assistant")
+    expect(assistant).toBeDefined()
+    const content = assistant!.content as any[]
+    expect(content[0].type).toBe("text")
+    const texts = content.filter((part) => part.type === "text")
+    expect(texts.map((part) => part.text)).toStrictEqual([" "])
+    expect(content.some((part) => part.type === "tool-call")).toBe(true)
+  })
+
+  test("reasoning-only assistant messages already carry text on openai-compatible providers", async () => {
+    // convertToModelMessages turns reasoning parts into text, so the
+    // serialized content is non-empty without any placeholder injection.
+    const assistantID = "m-assistant-oc-reasoning"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, kimiModel)
+
+    expect(result).toHaveLength(1)
+    const content = result[0].content as any[]
+    const texts = content.filter((part) => part.type === "text")
+    expect(texts.map((part) => part.text)).toStrictEqual(["thinking"])
+  })
+
+  test("does not inject placeholder text for tool-call-only assistant messages on anthropic", async () => {
+    // Anthropic accepts tool_use-only assistant turns; signed-thinking replay
+    // must not gain synthetic text (handled separately above).
+    const anthropicModel: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make("claude-opus-4-7"),
+      providerID: ProviderV2.ID.make("anthropic"),
+      api: {
+        id: "claude-opus-4-7-20250805",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    }
+    const userID = "m-user-ant-tool"
+    const assistantID = "m-assistant-ant-tool"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, anthropicModel)
+
+    const assistant = result.find((msg) => msg.role === "assistant")
+    expect(assistant).toBeDefined()
+    const content = assistant!.content as any[]
+    expect(content.every((part) => part.type !== "text")).toBe(true)
+    expect(content.some((part) => part.type === "tool-call")).toBe(true)
+  })
+
+  test("still drops step-start-only assistant messages on openai-compatible providers", async () => {
+    const userID = "m-user-oc-step"
+    const assistantID = "m-assistant-oc-step"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hi",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [{ ...basePart(assistantID, "a1"), type: "step-start" }] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, kimiModel)
+
+    expect(result.find((msg) => msg.role === "assistant")).toBeUndefined()
+  })
+
+  test("does not inject placeholder text when assistant already has non-empty text on openai-compatible", async () => {
+    const userID = "m-user-oc-text"
+    const assistantID = "m-assistant-oc-text"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "text",
+            text: "done",
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, kimiModel)
+
+    const assistant = result.find((msg) => msg.role === "assistant")
+    expect(assistant).toBeDefined()
+    const content = assistant!.content as any[]
+    const texts = content.filter((part) => part.type === "text")
+    expect(texts.map((part) => part.text)).toStrictEqual(["done"])
+  })
+
+  test("injects placeholder text into every step-start split piece on openai-compatible providers", async () => {
+    // A multi-step turn splits into separate wire messages at step-start;
+    // the piece after the split also needs non-empty content (regression:
+    // Kimi 400 moved from position 14 to position 17 when only the first
+    // piece was patched).
+    const userID = "m-user-oc-split"
+    const assistantID = "m-assistant-oc-split"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tools",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+          { ...basePart(assistantID, "a2"), type: "step-start" },
+          {
+            ...basePart(assistantID, "a3"),
+            type: "tool",
+            callID: "call-2",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { path: "/tmp" },
+              output: "ok",
+              title: "Read",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, kimiModel)
+
+    const assistants = result.filter((msg) => msg.role === "assistant")
+    expect(assistants).toHaveLength(2)
+    for (const assistant of assistants) {
+      const content = assistant.content as any[]
+      const texts = content.filter((part) => part.type === "text")
+      expect(texts.map((part) => part.text)).toStrictEqual([" "])
+      expect(content.some((part) => part.type === "tool-call")).toBe(true)
+    }
+  })
+
+  test("injects placeholder text for empty-text-only assistant messages on openai-compatible providers", async () => {
+    const assistantID = "m-assistant-oc-emptytext"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [{ ...basePart(assistantID, "a1"), type: "text", text: "" }] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, kimiModel)
+
+    expect(result).toHaveLength(1)
+    const content = result[0].content as any[]
+    const texts = content.filter((part) => part.type === "text")
+    expect(texts.map((part) => part.text)).toStrictEqual([" ", ""])
   })
 })
 
