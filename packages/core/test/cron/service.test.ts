@@ -31,7 +31,6 @@ describe("CronService", () => {
   const fakePort = Layer.succeed(
     CronDeliveryPort,
     CronDeliveryPort.of({
-      isBusy: () => Effect.succeed(false),
       exists: () => Effect.succeed(true),
       deliver: () => Effect.void,
     }),
@@ -111,7 +110,6 @@ describe("CronService", () => {
     const observingPort = Layer.succeed(
       CronDeliveryPort,
       CronDeliveryPort.of({
-        isBusy: () => Effect.succeed(false),
         exists: () => Effect.succeed(true),
         deliver: (sessionID, prompt) => Deferred.succeed(delivered, { sessionID, prompt }),
       }),
@@ -138,7 +136,6 @@ describe("CronService", () => {
     const observingPort = Layer.succeed(
       CronDeliveryPort,
       CronDeliveryPort.of({
-        isBusy: () => Effect.succeed(false),
         exists: () => Effect.succeed(true),
         deliver: (sessionID, prompt) => Deferred.succeed(delivered, { sessionID, prompt }),
       }),
@@ -181,7 +178,6 @@ describe("CronService", () => {
     const defectingPort = Layer.succeed(
       CronDeliveryPort,
       CronDeliveryPort.of({
-        isBusy: () => Effect.succeed(false),
         deliver: () => Effect.die("boom from port"),
         exists: () => Effect.succeed(true),
       }),
@@ -207,7 +203,6 @@ describe("CronService", () => {
     const absentPort = Layer.succeed(
       CronDeliveryPort,
       CronDeliveryPort.of({
-        isBusy: () => Effect.succeed(false),
         exists: () => Effect.succeed(false),
         deliver: () => Effect.void,
       }),
@@ -232,7 +227,6 @@ describe("CronService", () => {
     const failingPort = Layer.succeed(
       CronDeliveryPort,
       CronDeliveryPort.of({
-        isBusy: () => Effect.succeed(false),
         exists: () => Effect.succeed(true),
         deliver: () => Effect.fail(new CronDeliveryError({ message: "delivery refused" })),
       }),
@@ -263,7 +257,6 @@ describe("CronService", () => {
     const gatedPort = Layer.succeed(
       CronDeliveryPort,
       CronDeliveryPort.of({
-        isBusy: () => Effect.succeed(false),
         exists: () => Effect.succeed(true),
         deliver: (sessionID, prompt) =>
           Effect.gen(function* () {
@@ -325,7 +318,6 @@ describe("CronService", () => {
     const gatedPort = Layer.succeed(
       CronDeliveryPort,
       CronDeliveryPort.of({
-        isBusy: () => Effect.succeed(false),
         exists: () => Effect.succeed(true),
         deliver: () =>
           Effect.gen(function* () {
@@ -372,7 +364,6 @@ describe("CronService", () => {
     const trackingPort = Layer.succeed(
       CronDeliveryPort,
       CronDeliveryPort.of({
-        isBusy: () => Effect.succeed(false),
         exists: () => Effect.succeed(true),
         deliver: (sessionID, prompt) =>
           Effect.gen(function* () {
