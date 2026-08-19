@@ -235,6 +235,9 @@ beforeAll(async () => {
       session: {
         remember: () => undefined,
         setStatus: () => undefined,
+        // Mirrors the data layer's optimistic prompt admission by delegating
+        // to the same API client the submit flow targets.
+        prompt: (input: unknown) => rootClient.api.session.prompt(input as never),
       },
       location: {
         info: () => ({ project: { id: "project", directory: "/repo/main" } }),

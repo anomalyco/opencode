@@ -132,7 +132,9 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       })
     }
 
-    await input.api.prompt({
+    // The data layer admits optimistically: the prompt renders immediately
+    // and rolls back if the server rejects it.
+    await input.data.session.prompt({
       sessionID: input.draft.sessionID,
       id: messageID,
       text: request.text,

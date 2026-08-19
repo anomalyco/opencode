@@ -1304,7 +1304,9 @@ export function Prompt(props: PromptProps) {
           return false
         }
       }
-      const error = await client.api.session
+      // The data layer admits optimistically: the prompt renders immediately
+      // and rolls back if the server rejects it.
+      const error = await data.session
         .prompt({
           sessionID,
           text: inputText,
