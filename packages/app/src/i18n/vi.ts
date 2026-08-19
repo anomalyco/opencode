@@ -743,6 +743,8 @@ export const dict = {
   "session.messages.loadEarlier": "Tải tin nhắn trước đó",
   "session.messages.loading": "Đang tải tin nhắn...",
   "session.messages.jumpToLatest": "Chuyển đến mới nhất",
+  "session.messages.timelineNavigation": "Điều hướng tin nhắn",
+  "session.messages.jumpToMessage": "Chuyển đến tin nhắn {{index}}",
   "session.context.addToContext": "Thêm {{selection}} vào ngữ cảnh",
   "session.todo.title": "việc cần làm",
   "session.todo.collapse": "Thu gọn",
@@ -976,6 +978,9 @@ export const dict = {
     "Chuyển đổi giữa các tác nhân trong trình soạn thảo. Khi ẩn, tác nhân mặc định là Build.",
   "settings.general.row.reasoningSummaries.title": "Hiển thị tóm tắt lý luận",
   "settings.general.row.reasoningSummaries.description": "Hiển thị tóm tắt lý luận mô hình trong dòng thời gian",
+  "settings.general.row.preloadTimelineHistory.title": "Tải trước toàn bộ lịch sử tin nhắn",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Tải các tin nhắn cũ trong nền để điều hướng tin nhắn bao quát toàn bộ phiên.",
   "settings.general.row.shellToolPartsExpanded.title": "Mở rộng các phần của công cụ shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Hiển thị các phần công cụ shell được mở rộng theo mặc định trong dòng thời gian",

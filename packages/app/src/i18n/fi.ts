@@ -631,6 +631,8 @@ export const dict = {
   "session.messages.loadEarlier": "Lataa aikaisemmat viestit",
   "session.messages.loading": "Ladataan viestejä...",
   "session.messages.jumpToLatest": "Siirry uusimpaan",
+  "session.messages.timelineNavigation": "Viestinavigointi",
+  "session.messages.jumpToMessage": "Siirry viestiin {{index}}",
   "session.context.addToContext": "Lisää {{selection}} kontekstiin",
   "session.todo.title": "Tehtävät",
   "session.todo.collapse": "Kutista",
@@ -864,6 +866,9 @@ export const dict = {
     "Vaihda agenttien välillä viestikentässä. Kun valinta on piilotettu, Build-agenttia käytetään oletuksena.",
   "settings.general.row.reasoningSummaries.title": "Näytä päättelyn yhteenvedot",
   "settings.general.row.reasoningSummaries.description": "Näytä mallin päättelyn yhteenvedot aikajanalla",
+  "settings.general.row.preloadTimelineHistory.title": "Esilataa koko viestihistoria",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Lataa vanhemmat viestit taustalla, jotta viestinavigointi kattaa koko istunnon.",
   "settings.general.row.shellToolPartsExpanded.title": "Laajenna shell-työkalun osat",
   "settings.general.row.shellToolPartsExpanded.description":
     "Näytä shell-työkalun osat oletuksena laajennettuina aikajanalla",

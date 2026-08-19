@@ -657,6 +657,8 @@ export const dict = {
   "session.messages.loading": "Indlæser beskeder...",
 
   "session.messages.jumpToLatest": "Gå til seneste",
+  "session.messages.timelineNavigation": "Beskednavigation",
+  "session.messages.jumpToMessage": "Gå til besked {{index}}",
   "session.context.addToContext": "Tilføj {{selection}} til kontekst",
   "session.todo.title": "Opgaver",
   "session.todo.collapse": "Skjul",
@@ -828,6 +830,9 @@ export const dict = {
     "Skift mellem agenter i promptfeltet. Når vælgeren er skjult, bruges Build-agenten som standard.",
   "settings.general.row.reasoningSummaries.title": "Vis ræsonneringsoversigter",
   "settings.general.row.reasoningSummaries.description": "Vis oversigter over modellens ræsonnering på tidslinjen",
+  "settings.general.row.preloadTimelineHistory.title": "Forudindlæs hele beskedhistorikken",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Indlæs ældre beskeder i baggrunden, så beskednavigationen dækker hele sessionen.",
 
   "settings.general.row.shellToolPartsExpanded.title": "Udvid shell-værktøjsdele",
   "settings.general.row.shellToolPartsExpanded.description": "Vis shell-værktøjsdele udvidet som standard i tidslinjen",

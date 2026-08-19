@@ -76,6 +76,7 @@ import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
+import { MessageTimelineNav } from "./timeline-message-nav"
 import { filterVirtualIndexes } from "./virtual-items"
 
 const emptyMessages: MessageType[] = []
@@ -251,6 +252,7 @@ export function MessageTimeline(props: {
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   userMessages: UserMessage[]
+  onJumpToMessage: (message: UserMessage) => void
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
@@ -1398,6 +1400,12 @@ export function MessageTimeline(props: {
           </button>
         </Show>
       </div>
+      <MessageTimelineNav
+        messages={props.userMessages}
+        overflow={props.scroll.overflow}
+        listRoot={listRoot}
+        onJump={props.onJumpToMessage}
+      />
       <ScrollView
         viewportRef={bindListRoot}
         onWheel={handleListWheel}

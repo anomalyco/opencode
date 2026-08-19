@@ -656,6 +656,8 @@ export const dict = {
   "session.messages.loadEarlier": "Last inn tidligere meldinger",
   "session.messages.loading": "Laster meldinger...",
   "session.messages.jumpToLatest": "Hopp til nyeste",
+  "session.messages.timelineNavigation": "Meldingsnavigasjon",
+  "session.messages.jumpToMessage": "Gå til melding {{index}}",
 
   "session.context.addToContext": "Legg til {{selection}} i kontekst",
   "session.todo.title": "Oppgaver",
@@ -793,6 +795,9 @@ export const dict = {
   "settings.general.row.followup.option.steer": "Styr",
   "settings.general.row.reasoningSummaries.title": "Vis resonneringssammendrag",
   "settings.general.row.reasoningSummaries.description": "Vis sammendrag av modellresonnering i tidslinjen",
+  "settings.general.row.preloadTimelineHistory.title": "Forhåndslast hele meldingshistorikken",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Last eldre meldinger i bakgrunnen slik at meldingsnavigasjonen dekker hele sesjonen.",
   "settings.general.row.shellToolPartsExpanded.title": "Utvid shell-verktøydeler",
   "settings.general.row.shellToolPartsExpanded.description": "Vis shell-verktøydeler utvidet som standard i tidslinjen",
   "settings.general.row.editToolPartsExpanded.title": "Utvid edit-verktøydeler",

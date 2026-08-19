@@ -781,6 +781,8 @@ export const dict = {
   "session.messages.loadEarlier": "Cargar mensajes anteriores",
   "session.messages.loading": "Cargando mensajes...",
   "session.messages.jumpToLatest": "Ir al mensaje más reciente",
+  "session.messages.timelineNavigation": "Navegación de mensajes",
+  "session.messages.jumpToMessage": "Ir al mensaje {{index}}",
 
   "session.context.addToContext": "Añadir {{selection}} al contexto",
   "session.todo.title": "Tareas",
@@ -959,6 +961,9 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Mostrar resúmenes de razonamiento",
   "settings.general.row.reasoningSummaries.description":
     "Mostrar resúmenes del razonamiento del modelo en la línea de tiempo",
+  "settings.general.row.preloadTimelineHistory.title": "Precargar el historial completo de mensajes",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Carga los mensajes anteriores en segundo plano para que la navegación de mensajes cubra toda la sesión.",
   "settings.general.row.shellToolPartsExpanded.title": "Expandir partes de la herramienta shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Mostrar las partes de la herramienta shell expandidas por defecto en la línea de tiempo",

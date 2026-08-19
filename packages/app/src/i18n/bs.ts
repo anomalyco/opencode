@@ -778,6 +778,8 @@ export const dict = {
   "session.messages.loadEarlier": "Učitaj ranije poruke",
   "session.messages.loading": "Učitavanje poruka...",
   "session.messages.jumpToLatest": "Idi na najnovije",
+  "session.messages.timelineNavigation": "Navigacija porukama",
+  "session.messages.jumpToMessage": "Idi na poruku {{index}}",
 
   "session.context.addToContext": "Dodaj {{selection}} u kontekst",
   "session.todo.title": "Zadaci",
@@ -951,6 +953,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "Prikaži izbor agenta u uređivaču poruke",
   "settings.general.row.reasoningSummaries.title": "Prikaži sažetke rasuđivanja",
   "settings.general.row.reasoningSummaries.description": "Prikaži sažetke rasuđivanja modela na vremenskoj traci",
+  "settings.general.row.preloadTimelineHistory.title": "Unaprijed učitaj kompletnu historiju poruka",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Učitaj starije poruke u pozadini kako bi navigacija porukama pokrivala cijelu sesiju.",
 
   "settings.general.row.shellToolPartsExpanded.title": "Proširi dijelove shell alata",
   "settings.general.row.shellToolPartsExpanded.description":
