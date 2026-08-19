@@ -2,7 +2,7 @@ export * as ConfigExternalPlugin from "./external"
 
 import type { Plugin as EffectPlugin } from "@opencode-ai/plugin/v2/effect"
 import type { Plugin as PromisePlugin } from "@opencode-ai/plugin/v2/promise"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Schema } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Config } from "../../config"
@@ -11,6 +11,7 @@ import { Location } from "../../location"
 import { Npm } from "../../npm"
 import { define } from "../../plugin/internal"
 import { PluginPromise } from "../../plugin/promise"
+import { State } from "../../state"
 
 const PluginModule = Schema.Struct({
   default: Schema.Union([
@@ -36,56 +37,68 @@ export const Plugin = define({
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const npm = yield* Npm.Service
-    yield* Effect.gen(function* () {
-      const configured: { package: string; options?: Record<string, any> }[] = []
+    yield* State.unbatched(
+      Effect.gen(function* () {
+        const configured: { package: string; options?: Record<string, any> }[] = []
 
-      for (const entry of yield* config.entries()) {
-        if (entry.type === "document") {
-          const directory = entry.path ? path.dirname(entry.path) : location.directory
-          for (const item of entry.info.plugins ?? []) {
-            const ref = typeof item === "string" ? { package: item } : item
-            const packageName = (() => {
-              if (ref.package.startsWith("file://")) return fileURLToPath(ref.package)
-              if (ref.package.startsWith("./") || ref.package.startsWith("../")) {
-                return path.resolve(directory, ref.package)
-              }
-              return ref.package
-            })()
-            configured.push({ package: packageName, options: ref.options })
+        for (const entry of yield* config.entries()) {
+          if (entry.type === "document") {
+            const directory = entry.path ? path.dirname(entry.path) : location.directory
+            for (const item of entry.info.plugins ?? []) {
+              const ref = typeof item === "string" ? { package: item } : item
+              const packageName = (() => {
+                if (ref.package.startsWith("file://")) return fileURLToPath(ref.package)
+                if (ref.package.startsWith("./") || ref.package.startsWith("../")) {
+                  return path.resolve(directory, ref.package)
+                }
+                return ref.package
+              })()
+              configured.push({ package: packageName, options: ref.options })
+            }
+          }
+
+          if (entry.type === "directory") {
+            const files = yield* fs
+              .glob("{plugin,plugins}/*.{ts,js}", {
+                cwd: entry.path,
+                absolute: true,
+                include: "file",
+                dot: true,
+                symlink: true,
+              })
+              .pipe(Effect.orElseSucceed(() => []))
+            files.sort()
+            for (const file of files) configured.push({ package: file })
           }
         }
 
-        if (entry.type === "directory") {
-          const files = yield* fs
-            .glob("{plugin,plugins}/*.{ts,js}", {
-              cwd: entry.path,
-              absolute: true,
-              include: "file",
-              dot: true,
-              symlink: true,
+        yield* Effect.logInfo("external plugin discovery", {
+          entries: configured.map((item) => item.package),
+        })
+
+        for (const ref of configured) {
+          yield* Effect.logInfo("external plugin load", { package: ref.package })
+          yield* Effect.gen(function* () {
+            const entrypoint = path.isAbsolute(ref.package)
+              ? pathToFileURL(ref.package).href
+              : (yield* npm.add(ref.package)).entrypoint
+            if (!entrypoint) return
+
+            const mod = yield* Effect.promise(() => import(entrypoint))
+            const value = (yield* Schema.decodeUnknownEffect(PluginModule)(mod)).default
+            const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
+            yield* ctx.plugin.add({
+              id: plugin.id,
+              effect: (host) => plugin.effect({ ...host, options: ref.options ?? {} }),
             })
-            .pipe(Effect.orElseSucceed(() => []))
-          files.sort()
-          for (const file of files) configured.push({ package: file })
+          }).pipe(
+            Effect.tapCause((cause) =>
+              Effect.logError("failed to load external plugin", { package: ref.package, cause: Cause.pretty(cause) }),
+            ),
+            Effect.ignoreCause,
+          )
         }
-      }
-
-      for (const ref of configured) {
-        yield* Effect.gen(function* () {
-          const entrypoint = path.isAbsolute(ref.package)
-            ? pathToFileURL(ref.package).href
-            : (yield* npm.add(ref.package)).entrypoint
-          if (!entrypoint) return
-
-          const mod = yield* Effect.promise(() => import(entrypoint))
-          const value = (yield* Schema.decodeUnknownEffect(PluginModule)(mod)).default
-          const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
-          yield* ctx.plugin.add({
-            id: plugin.id,
-            effect: (host) => plugin.effect({ ...host, options: ref.options ?? {} }),
-          })
-        }).pipe(Effect.ignoreCause)
-      }
-    }).pipe(Effect.forkScoped({ startImmediately: true }))
+      }),
+    ).pipe(Effect.forkScoped({ startImmediately: true }))
   }),
 })
