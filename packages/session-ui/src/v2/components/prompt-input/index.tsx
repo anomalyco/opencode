@@ -70,7 +70,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
       localInput = false
       return
     }
-    renderPromptInputV2Editor(editor, parts)
+    renderPromptInputV2Editor(editor, parts, props.controller.cursor())
   })
 
   return (
@@ -269,8 +269,9 @@ export function PromptInputV2(props: PromptInputV2Props) {
   )
 }
 
-function renderPromptInputV2Editor(editor: HTMLDivElement, prompt: PromptInputV2Prompt) {
+function renderPromptInputV2Editor(editor: HTMLDivElement, prompt: PromptInputV2Prompt, cursor?: number) {
   const active = document.activeElement === editor
+  const previous = cursor ?? promptInputV2Cursor(editor)
   editor.replaceChildren(
     ...prompt.flatMap<Node>((part) => {
       if (part.type === "image") return []
@@ -290,10 +291,50 @@ function renderPromptInputV2Editor(editor: HTMLDivElement, prompt: PromptInputV2
     }),
   )
   if (!active) return
-  const selection = window.getSelection()
+  setPromptInputV2Cursor(editor, previous)
+}
+
+// Restores the caret at a prompt character offset after the editor DOM is rebuilt.
+// Mentions are uneditable spans that still occupy their text length, so the caret
+// is placed before or after a mention, never inside it.
+function setPromptInputV2Cursor(editor: HTMLDivElement, position: number) {
+  let remaining = position
+  let node = editor.firstChild
+  while (node) {
+    const isText = node.nodeType === Node.TEXT_NODE
+    const isMention =
+      node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.mention !== undefined
+    const length = isText
+      ? (node.textContent ?? "").replace(/\u200B/g, "").length
+      : isMention
+        ? (node.textContent ?? "").length
+        : 0
+    if (isText && remaining <= length) {
+      const range = document.createRange()
+      range.setStart(node, Math.max(0, remaining))
+      range.collapse(true)
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      return
+    }
+    if (isMention && remaining <= length) {
+      const range = document.createRange()
+      if (remaining === 0) range.setStartBefore(node)
+      else range.setStartAfter(node)
+      range.collapse(true)
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      return
+    }
+    remaining -= length
+    node = node.nextSibling
+  }
   const range = document.createRange()
   range.selectNodeContents(editor)
   range.collapse(false)
+  const selection = window.getSelection()
   selection?.removeAllRanges()
   selection?.addRange(range)
 }

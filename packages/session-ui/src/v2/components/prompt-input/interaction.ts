@@ -301,6 +301,9 @@ export function createPromptInputV2Controller(input: {
     parts() {
       return draft.state.prompt
     },
+    cursor() {
+      return draft.state.cursor
+    },
     addPart,
     contextItem(id: string) {
       return draft.state.context.items.find((item) => item.key === id)
