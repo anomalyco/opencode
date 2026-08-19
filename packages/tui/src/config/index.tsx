@@ -58,6 +58,16 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+export const DEFAULT_SPINNER_VERBS = ["Thinking", "Working", "Processing", "Analyzing", "Computing"]
+const SpinnerVerbsMode = Schema.Literals(["replace", "append"])
+const SpinnerVerb = Schema.Trim
+const SpinnerVerbs = Schema.Struct({
+  mode: Schema.optional(SpinnerVerbsMode).annotate({
+    description: "'replace' shows only your verbs, 'append' adds them to the defaults (default: 'replace')",
+  }),
+  verbs: Schema.mutable(Schema.Array(SpinnerVerb)).annotate({ description: "Verbs to cycle while the model is thinking" }),
+}).annotate({ description: "Customize the spinner verbs shown while the model is thinking" })
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -72,10 +82,11 @@ export const Info = Schema.Struct({
   diff_style: Schema.optional(DiffStyle),
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  spinner_verbs: Schema.optional(SpinnerVerbs),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor" | "spinner_verbs"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -91,6 +102,7 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
+  spinner_verbs: string[]
 }
 
 export const ResolveOptions = Schema.Struct({
@@ -109,6 +121,13 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
         .join(",")
     }
   }
+
+  const spinnerVerbs = (input.spinner_verbs
+    ? input.spinner_verbs.mode === "append"
+      ? Array.from(new Set([...DEFAULT_SPINNER_VERBS, ...input.spinner_verbs.verbs]))
+      : [...input.spinner_verbs.verbs]
+    : []
+  ).filter((verb) => verb.length > 0)
 
   return {
     ...input,
@@ -132,6 +151,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
           blinking: input.cursor.blinking ?? true,
         }
       : undefined,
+    spinner_verbs: spinnerVerbs,
   }
 }
 
