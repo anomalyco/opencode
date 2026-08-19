@@ -471,7 +471,7 @@
       "version": "1.18.15",
       "dependencies": {
         "@hono/standard-validator": "catalog:",
-        "@opencode-ai/core": "workspace:*",
+        "@opencode-ai/schema": "workspace:*",
         "@opencode-ai/session-ui": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@opencode-ai/util": "workspace:*",
@@ -695,6 +695,7 @@
         "@solidjs/meta": "catalog:",
         "diff": "catalog:",
         "dompurify": "3.3.1",
+        "effect": "catalog:",
         "fuzzysort": "catalog:",
         "luxon": "catalog:",
         "marked": "catalog:",
@@ -833,6 +834,7 @@
     "packages/storybook": {
       "name": "@opencode-ai/storybook",
       "devDependencies": {
+        "@opencode-ai/client": "workspace:*",
         "@opencode-ai/session-ui": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@solidjs/meta": "catalog:",

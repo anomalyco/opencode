@@ -131,6 +131,7 @@ export type ToolPart = PartBase & {
   callID?: string
   tool: string
   state: ToolState
+  metadata?: Record<string, unknown>
 }
 
 type PassivePart = PartBase & {

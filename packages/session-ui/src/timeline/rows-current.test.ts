@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
-
-const { Timeline, TimelineRow } = await import("./rows")
+import { Timeline, TimelineRow } from "./projection"
 
 describe("current session timeline rows", () => {
   test("derives turns and tagged rows from chronological current messages", () => {
@@ -25,7 +24,7 @@ describe("current session timeline rows", () => {
         time: { created: 5 },
       },
     ] satisfies SessionMessageInfo[]
-    const result = Timeline.constructSessionMessageRows(source, true, "busy")
+    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
     expect(result.activeMessageID).toBe("msg_3")
     expect(result.rows.map(TimelineRow.key)).toEqual([
@@ -50,7 +49,7 @@ describe("current session timeline rows", () => {
         time: { created: 1, completed: 2 },
       },
     ] satisfies SessionMessageInfo[]
-    const result = Timeline.constructSessionMessageRows(source, true, "idle")
+    const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
 
     expect(result.activeMessageID).toBe("msg_shell")
     expect(result.rows.map(TimelineRow.key)).toEqual(["shell:msg_shell"])
@@ -75,7 +74,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, "idle")
+    const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
 
     expect(result.activeMessageID).toBe("msg_assistant")
     expect(result.rows.map(TimelineRow.key)).toEqual([
@@ -136,7 +135,7 @@ describe("current session timeline rows", () => {
         time: { created: 11 },
       },
     ] satisfies SessionMessageInfo[]
-    const result = Timeline.constructSessionMessageRows(source, true, "idle")
+    const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_user",
@@ -156,7 +155,7 @@ describe("current session timeline rows", () => {
       { id: "msg_z", type: "user", text: "existing", time: { created: 1 } },
       { id: "msg_a", type: "user", text: "pending", time: { created: 2 } },
     ] satisfies SessionMessageInfo[]
-    const result = Timeline.constructSessionMessageRows(source, true, "busy")
+    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
     expect(result.activeMessageID).toBe("msg_a")
     expect(result.rows.map(TimelineRow.key)).toEqual([
@@ -181,7 +180,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, "busy")
+    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
   })
@@ -207,8 +206,122 @@ describe("current session timeline rows", () => {
         time: { created: 4 },
       },
     ] satisfies SessionMessageInfo[]
-    const result = Timeline.constructSessionMessageRows(source, true, "busy")
+    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
+  })
+
+  test("keeps content IDs and groups adjacent context tools", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "inspect", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          { type: "text", text: " " },
+          { type: "reasoning", text: "hidden" },
+          {
+            type: "tool",
+            id: "tool_read",
+            name: "read",
+            state: { status: "running", input: {}, metadata: {} },
+            time: { created: 2 },
+          },
+          {
+            type: "tool",
+            id: "tool_grep",
+            name: "grep",
+            state: { status: "running", input: {}, metadata: {} },
+            time: { created: 3 },
+          },
+          {
+            type: "tool",
+            id: "tool_todo",
+            name: "todowrite",
+            state: { status: "running", input: {}, metadata: {} },
+            time: { created: 4 },
+          },
+          {
+            type: "tool",
+            id: "tool_question",
+            name: "question",
+            state: { status: "streaming", input: "" },
+            time: { created: 5 },
+          },
+          { type: "text", text: "visible" },
+        ],
+        time: { created: 2 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = Timeline.constructSessionMessageRows(source, false, { type: "idle" })
+    const groups = result.rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group] : []))
+
+    expect(groups).toEqual([
+      {
+        type: "context",
+        key: "context:tool_read",
+        refs: [
+          { messageID: "msg_assistant", partID: "tool_read" },
+          { messageID: "msg_assistant", partID: "tool_grep" },
+        ],
+      },
+      {
+        type: "part",
+        key: "part:msg_assistant:msg_assistant:text:1",
+        ref: { messageID: "msg_assistant", partID: "msg_assistant:text:1" },
+      },
+    ])
+  })
+
+  test("places a divider after interrupted output unless the turn compacts", () => {
+    const messages = [
+      { id: "msg_user", type: "user", text: "continue", time: { created: 1 } },
+      {
+        id: "msg_interrupted",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "before" }],
+        error: { type: "ExecutionInterrupted", message: "stopped" },
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "msg_continued",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "after" }],
+        time: { created: 4, completed: 5 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(Timeline.constructSessionMessageRows(messages, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual([
+      "UserMessage",
+      "AssistantPart",
+      "TurnDivider",
+      "AssistantPart",
+    ])
+
+    const compacted = [
+      messages[0],
+      messages[1],
+      {
+        id: "msg_compaction",
+        type: "compaction",
+        status: "completed",
+        reason: "auto",
+        summary: "summary",
+        recent: "recent",
+        time: { created: 4 },
+      },
+      messages[2],
+    ] satisfies SessionMessageInfo[]
+
+    expect(Timeline.constructSessionMessageRows(compacted, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual(
+      ["UserMessage", "AssistantPart", "Notice", "AssistantPart"],
+    )
   })
 })

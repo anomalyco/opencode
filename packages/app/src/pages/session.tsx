@@ -1,5 +1,5 @@
-import type { FilePart } from "@/types"
 import type { FileDiffInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionUserActions } from "@opencode-ai/session-ui/message"
 import { getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
@@ -1613,14 +1613,15 @@ export default function Page() {
 
   // attachment bytes are embedded as a data URL, so downloading always works;
   // revealing requires the on-disk path captured by the client that attached the file
-  const openAttachment = (file: FilePart) => {
+  const openAttachment: NonNullable<SessionUserActions["openAttachment"]> = (file) => {
+    const url = file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
     const download = () => {
       const anchor = document.createElement("a")
-      anchor.href = file.url
-      anchor.download = getFilename(file.filename) || "attachment"
+      anchor.href = url
+      anchor.download = getFilename(file.name) || "attachment"
       anchor.click()
     }
-    const path = file.filename ?? ""
+    const path = file.name ?? ""
     const absolute = path.startsWith("/") || path.startsWith("\\\\") || /^[a-zA-Z]:[\\/]/.test(path)
     if (platform.revealPath && absolute) {
       void platform.revealPath(path).then(
@@ -1634,7 +1635,7 @@ export default function Page() {
     download()
   }
 
-  const actions = { revert, openAttachment }
+  const actions = { revert, openAttachment } satisfies SessionUserActions
 
   createEffect(() => {
     const sessionID = controller.identity.params.id

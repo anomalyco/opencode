@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { PartGroup } from "@opencode-ai/session-ui/message-part"
-import { reuseTimelineRows } from "./row-reconciliation"
-import { TimelineRow } from "./timeline-row"
+import type { ModelRef, SessionMessageInfo } from "@opencode-ai/client/promise"
+import { createTimelineProjection, reuseTimelineRows, TimelineRow, type PartGroup } from "./projection"
 
 const context = (key: string, partIDs: string[], userMessageID = "user-1") =>
   new TimelineRow.AssistantPart({
@@ -92,5 +91,85 @@ describe("reuseTimelineRows", () => {
     expect(keys(result)).toEqual([...expected])
     expect(new Set(keys(result)).size).toBe(result.length)
     reused.forEach(([resultIndex, previousIndex]) => expect(result[resultIndex]).toBe(previous[previousIndex]))
+  })
+})
+
+describe("createTimelineProjection", () => {
+  test("builds current message, parent, context, and row indexes", () => {
+    const selectedModel = { id: "selected", providerID: "provider" } satisfies ModelRef
+    const assistantModel = { id: "assistant", providerID: "provider", variant: "fast" } satisfies ModelRef
+    const messages = [
+      { id: "agent", type: "agent-switched", agent: "explore", time: { created: 1 } },
+      { id: "model", type: "model-switched", model: selectedModel, time: { created: 2 } },
+      { id: "user-1", type: "user", text: "first", time: { created: 3 } },
+      {
+        id: "assistant-1",
+        type: "assistant",
+        agent: "build",
+        model: assistantModel,
+        content: [{ type: "text", text: "answer" }],
+        time: { created: 4, completed: 5 },
+      },
+      {
+        id: "user-2",
+        type: "user",
+        text: "second",
+        metadata: {
+          agent: "review",
+          model: { modelID: "override", providerID: "custom", variant: "precise" },
+        },
+        time: { created: 6 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = createTimelineProjection({
+      sessionMessages: messages,
+      status: { type: "busy" },
+      showReasoningSummaries: true,
+    })
+
+    expect(result.activeMessageID).toBe("user-2")
+    expect(result.messageByID).toBe(result.sessionMessageByID)
+    expect(result.sessionMessageByID.get("assistant-1")).toBe(messages[3])
+    expect(result.assistantMessagesByParent.get("user-1")?.map((message) => message.id)).toEqual(["assistant-1"])
+    expect(result.assistantMessagesByParent.has("user-2")).toBe(false)
+    expect(result.userContextByID.get("user-1")).toEqual({ agent: "build", model: assistantModel })
+    expect(result.userContextByID.get("user-2")).toEqual({
+      agent: "review",
+      model: { id: "override", providerID: "custom", variant: "precise" },
+    })
+    expect(result.messageRowIndex.get("user-1")).toBe(0)
+    expect(result.messageLastRowIndex.get("user-1")).toBe(3)
+    expect(result.lastAssistantGroupKey.get("user-1")).toBe("part:assistant-1:assistant-1:text:0")
+    expect(result.rowByKey.get("user-message:user-1")).toBe(result.rows[2])
+  })
+
+  test("reuses a stable projected row array", () => {
+    const messages = [
+      { id: "user-1", type: "user", text: "first", time: { created: 1 } },
+      {
+        id: "assistant-1",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "answer" }],
+        time: { created: 2, completed: 3 },
+      },
+    ] satisfies SessionMessageInfo[]
+    const first = createTimelineProjection({
+      sessionMessages: messages,
+      status: { type: "idle" },
+      showReasoningSummaries: true,
+    })
+    const second = createTimelineProjection({
+      sessionMessages: messages,
+      status: { type: "idle" },
+      showReasoningSummaries: true,
+      previousRows: first.rows,
+    })
+
+    expect(second.rows).toBe(first.rows)
+    expect(second.rows[0]).toBe(first.rows[0])
+    expect(second.rows[1]).toBe(first.rows[1])
   })
 })

@@ -1,4 +1,3 @@
-import { Message, Model, Part, Session, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { SessionTurn } from "@opencode-ai/session-ui/session-turn"
 import { SessionReview } from "@opencode-ai/session-ui/session-review"
 import { DataProvider } from "@opencode-ai/session-ui/context"
@@ -6,15 +5,13 @@ import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { iife } from "@opencode-ai/core/util/iife"
 import { Binary } from "@opencode-ai/util/binary"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { DateTime } from "luxon"
 import { createStore } from "solid-js/store"
 import NotFound from "../[...404]"
@@ -28,32 +25,24 @@ import { getRequestEvent } from "solid-js/web"
 
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   import("@opencode-ai/session-ui/pierre/worker").then((m) => ({
-    default: (props: { children: any }) => (
+    default: (props: { children: JSX.Element }) => (
       <WorkerPoolProvider pools={m.getWorkerPools()}>{props.children}</WorkerPoolProvider>
     ),
   })),
 )
 
-class SessionDataMissingError extends NamedError {
+class SessionDataMissingError extends Error {
   public override readonly name = "SessionDataMissingError"
 
   constructor(
     public readonly data: { sessionID: string; message?: string },
     options?: ErrorOptions,
   ) {
-    super("SessionDataMissingError", options)
+    super(data.message ?? `Session data is missing: ${data.sessionID}`, options)
   }
 
   static isInstance(input: unknown): input is SessionDataMissingError {
-    return NamedError.hasName(input, "SessionDataMissingError")
-  }
-
-  schema(): never {
-    throw new Error("SessionDataMissingError does not expose a schema")
-  }
-
-  toObject() {
-    return { name: this.name, data: this.data }
+    return input instanceof Error && input.name === "SessionDataMissingError"
   }
 }
 
@@ -65,21 +54,21 @@ const getData = query(async (shareID) => {
   const result: {
     sessionID: string
     shareID: string
-    session: Session[]
+    session: Share.Session[]
     session_diff: {
       [sessionID: string]: Share.SessionDiff[]
     }
     session_status: {
-      [sessionID: string]: SessionStatus
+      [sessionID: string]: { type: "idle" }
     }
     message: {
-      [sessionID: string]: Message[]
+      [sessionID: string]: Share.StoredMessage[]
     }
     part: {
-      [messageID: string]: Part[]
+      [messageID: string]: Share.StoredPart[]
     }
     model: {
-      [sessionID: string]: Model[]
+      [sessionID: string]: Share.Model[]
     }
   } = {
     sessionID: share.sessionID,
@@ -194,7 +183,7 @@ export default function () {
               <ClientOnlyWorkerPoolProvider>
                 <FileComponentProvider component={FileSSR}>
                   <DataProvider data={data()} directory={info().directory}>
-                    {iife(() => {
+                    {(() => {
                       const [store, setStore] = createStore({
                         messageId: undefined as string | undefined,
                       })
@@ -209,7 +198,7 @@ export default function () {
                       const activeMessage = createMemo(
                         () => messages().find((m) => m.id === store.messageId) ?? firstUserMessage(),
                       )
-                      function setActiveMessage(message: UserMessage | undefined) {
+                      function setActiveMessage(message: Share.StoredUserMessage | undefined) {
                         if (message) {
                           setStore("messageId", message.id)
                         } else {
@@ -405,7 +394,7 @@ export default function () {
                           </div>
                         </div>
                       )
-                    })}
+                    })()}
                   </DataProvider>
                 </FileComponentProvider>
               </ClientOnlyWorkerPoolProvider>

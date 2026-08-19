@@ -8,6 +8,7 @@
     "build": "storybook build"
   },
   "devDependencies": {
+    "@opencode-ai/client": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@opencode-ai/session-ui": "workspace:*",
     "@opencode-ai/ui": "workspace:*",

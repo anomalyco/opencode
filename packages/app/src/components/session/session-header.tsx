@@ -45,7 +45,7 @@ export function SessionHeader() {
   )
 }
 
-type SessionHeaderV2ActionsState = {
+export type SessionHeaderV2ActionsState = {
   statusVisible: boolean
   statusLabel: string
   reviewLabel: string
@@ -55,7 +55,7 @@ type SessionHeaderV2ActionsState = {
   onReviewToggle: () => void
 }
 
-function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
+export function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
   return (
     <div class="flex items-center gap-2">
       <Show when={props.state.statusVisible}>

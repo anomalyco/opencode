@@ -1,15 +1,23 @@
+// Delete this bridge when current message and tool renderers no longer consume presentation.ts.
 import type {
   SessionMessageAssistant,
   SessionMessageAssistantTool,
   SessionMessageUser,
 } from "@opencode-ai/client/promise"
-import type { AssistantMessage, FilePart, Part, ToolPart, UserMessage } from "@/types"
 import { Option, Schema } from "effect"
-import { createCommentMetadata, formatCommentNote, readPromptPresentation } from "./comment-note"
+import { partDefaultOpen } from "../components/part-default-open"
+import type {
+  AgentPart,
+  AssistantMessage,
+  FilePart,
+  ReasoningPart,
+  TextPart,
+  ToolPart,
+  UserMessage,
+} from "../presentation"
+import type { SessionUserComment } from "../actions"
 
-const emptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 const decodeToolInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
-
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
 }
@@ -35,31 +43,35 @@ function normalizeToolMetadata(name: string, metadata: Record<string, unknown>) 
   }
 }
 
-export function sessionMessagePartID(messageID: string, type: "text" | "reasoning", ordinal: number) {
+function contentID(messageID: string, type: "text" | "reasoning", ordinal: number) {
   return `${messageID}:${type}:${ordinal}`
 }
 
-export function presentUserMessage(
+export function toLegacyUserMessage(
   sessionID: string,
   message: SessionMessageUser,
-  agent: string,
-  model: { id: string; providerID: string; variant?: string },
+  historicalAgent: string,
+  historicalModel: SessionMessageAssistant["model"],
 ): UserMessage {
   return {
     id: message.id,
     sessionID,
     role: "user",
     time: message.time,
-    agent,
-    model: { providerID: model.providerID, modelID: model.id, variant: model.variant },
+    agent: historicalAgent,
+    model: { providerID: historicalModel.providerID, modelID: historicalModel.id },
   }
 }
 
-export function presentUserParts(sessionID: string, message: SessionMessageUser): Part[] {
-  const presentation = readPromptPresentation(message.metadata)
-  const text = presentation?.displayText ?? message.text
+export function toLegacyUserParts(
+  sessionID: string,
+  message: SessionMessageUser,
+  displayText?: string,
+  comments: SessionUserComment[] = [],
+) {
+  const text = displayText ?? message.text
   return [
-    ...(text ? [textPart(sessionID, message.id, 0, text)] : []),
+    ...(text ? [toLegacyTextPart(sessionID, message.id, 0, text)] : []),
     ...(message.files ?? []).map(
       (file, index): FilePart => ({
         id: `${message.id}:file:${index}`,
@@ -79,7 +91,7 @@ export function presentUserParts(sessionID: string, message: SessionMessageUser)
       }),
     ),
     ...(message.agents ?? []).map(
-      (item, index): Part => ({
+      (item, index): AgentPart => ({
         id: `${message.id}:agent:${index}`,
         sessionID,
         messageID: message.id,
@@ -90,29 +102,29 @@ export function presentUserParts(sessionID: string, message: SessionMessageUser)
           : undefined,
       }),
     ),
-    ...(presentation?.comments ?? []).map(
-      (comment, index): Part => ({
+    ...comments.map(
+      (comment, index): TextPart => ({
         id: `${message.id}:comment:${index}`,
         sessionID,
         messageID: message.id,
         type: "text",
         text: formatCommentNote(comment),
         synthetic: true,
-        metadata: createCommentMetadata(comment),
+        metadata: { opencodeComment: comment },
       }),
     ),
   ]
 }
 
-export function presentAssistantMessage(
+export function toLegacyAssistantMessage(
   sessionID: string,
   parentID: string,
   message: SessionMessageAssistant,
 ): AssistantMessage {
   const error = message.error
     ? message.error.type.toLowerCase().includes("abort") || message.error.type.toLowerCase().includes("interrupt")
-      ? { name: "MessageAbortedError" as const, data: { message: message.error.message } }
-      : { name: "UnknownError" as const, data: { message: message.error.message } }
+      ? { name: "MessageAbortedError", data: { message: message.error.message } }
+      : { name: "UnknownError", data: { message: message.error.message } }
     : undefined
   return {
     id: message.id,
@@ -123,34 +135,28 @@ export function presentAssistantMessage(
     parentID,
     modelID: message.model.id,
     providerID: message.model.providerID,
-    variant: message.model.variant,
-    mode: message.agent,
     agent: message.agent,
-    path: { cwd: "", root: "" },
-    cost: message.cost ?? 0,
-    tokens: message.tokens ?? emptyTokens,
-    finish: message.finish,
   }
 }
 
-export function presentAssistantParts(sessionID: string, message: SessionMessageAssistant): Part[] {
+export function toLegacyAssistantParts(sessionID: string, message: SessionMessageAssistant) {
   const ordinals = { text: 0, reasoning: 0 }
-  return message.content.flatMap((content): Part[] => {
-    const id =
-      content.type === "tool" ? content.id : sessionMessagePartID(message.id, content.type, ordinals[content.type]++)
-    const part = presentAssistantContent(sessionID, message, id, content)
+  return message.content.flatMap((content): (TextPart | ReasoningPart | ToolPart)[] => {
+    const id = content.type === "tool" ? content.id : contentID(message.id, content.type, ordinals[content.type]++)
+    const part = toLegacyAssistantContent(sessionID, message, id, content)
     if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return []
     return [part]
   })
 }
 
-export function presentAssistantContent(
+export function toLegacyAssistantContent(
   sessionID: string,
   message: SessionMessageAssistant,
   id: string,
   content: SessionMessageAssistant["content"][number],
-): Part {
-  if (content.type === "text") return { id, sessionID, messageID: message.id, type: "text", text: content.text }
+) {
+  if (content.type === "text")
+    return { id, sessionID, messageID: message.id, type: "text", text: content.text } satisfies TextPart
   if (content.type === "reasoning")
     return {
       id,
@@ -163,34 +169,47 @@ export function presentAssistantContent(
         start: content.time?.created ?? message.time.created,
         end: content.time?.completed,
       },
-    }
-  return toolPart(sessionID, message.id, content)
+    } satisfies ReasoningPart
+  return toLegacyToolPart(sessionID, message.id, content)
 }
 
-function textPart(sessionID: string, messageID: string, ordinal: number, text: string, synthetic?: boolean): Part {
+export function legacyContentDefaultOpen(
+  sessionID: string,
+  message: SessionMessageAssistant,
+  content: SessionMessageAssistant["content"][number],
+  id: string,
+  shellExpanded: boolean,
+  editExpanded: boolean,
+) {
+  return partDefaultOpen(toLegacyAssistantContent(sessionID, message, id, content), shellExpanded, editExpanded)
+}
+
+function toLegacyTextPart(sessionID: string, messageID: string, ordinal: number, text: string): TextPart {
   return {
-    id: sessionMessagePartID(messageID, "text", ordinal),
+    id: contentID(messageID, "text", ordinal),
     sessionID,
     messageID,
     type: "text",
     text,
-    synthetic,
   }
 }
 
-function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssistantTool): ToolPart {
+function toLegacyToolPart(sessionID: string, messageID: string, tool: SessionMessageAssistantTool): ToolPart {
   const start = tool.time.ran ?? tool.time.created
   const state = (() => {
     if (tool.state.status === "streaming") {
       const value = Option.getOrUndefined(decodeToolInput(tool.state.input))
-      const input = normalizeToolInput(tool.name, record(value) ? value : {})
-      return { status: "pending" as const, input, raw: tool.state.input }
+      return {
+        status: "pending" as const,
+        input: normalizeToolInput(tool.name, record(value) ? value : {}),
+        raw: tool.state.input,
+      }
     }
     if (tool.state.status === "running") {
       return {
         status: "running" as const,
         input: normalizeToolInput(tool.name, tool.state.input),
-        metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
+        metadata: normalizeToolMetadata(tool.name, tool.state.metadata),
         time: { start },
       }
     }
@@ -236,6 +255,17 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
     callID: tool.id,
     tool: tool.name,
     state,
-    metadata: { providerState: tool.providerState, providerResultState: tool.providerResultState },
   }
+}
+
+function formatCommentNote(comment: SessionUserComment) {
+  const start = comment.selection ? Math.min(comment.selection.startLine, comment.selection.endLine) : undefined
+  const end = comment.selection ? Math.max(comment.selection.startLine, comment.selection.endLine) : undefined
+  const range =
+    start === undefined || end === undefined
+      ? "this file"
+      : start === end
+        ? `line ${start}`
+        : `lines ${start} through ${end}`
+  return `The user made the following comment regarding ${range} of ${comment.path}: ${comment.comment}`
 }

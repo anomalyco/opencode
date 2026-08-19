@@ -13,7 +13,15 @@ import {
 import { createStore } from "solid-js/store"
 import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
 import { Card } from "@opencode-ai/ui/card"
-import { MessageDivider, SessionShellMessage, type UserActions } from "@opencode-ai/session-ui/message-part"
+import {
+  currentContentDefaultOpen,
+  MessageDivider,
+  SessionAssistantContent,
+  SessionContextToolGroup,
+  SessionShellMessage,
+  SessionUserMessage,
+  type SessionUserActions,
+} from "@opencode-ai/session-ui/message"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -36,7 +44,7 @@ import { useData } from "@/context/server"
 import { useWorkspaceLocation } from "@/context/location"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
-import { MessageComment, Timeline, TimelineRow, TimelineRowMap } from "./rows"
+import { Timeline, TimelineRow, type TimelineRowMap } from "@opencode-ai/session-ui/timeline/projection"
 import { filterVirtualIndexes } from "./virtual-items"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { containsDirectory, isWorkspaceDirectory, workspaceDirectories } from "@/utils/workspace"
@@ -44,12 +52,7 @@ import { SessionWorkspaceMenu } from "@/components/session-workspace-menu"
 import { getProjectAvatarVariant } from "@/context/layout"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
-import {
-  CurrentAssistantContent,
-  CurrentContextToolGroup,
-  CurrentUserMessage,
-  currentPartDefaultOpen,
-} from "./current-message"
+import { parseCommentNote, readPromptPresentation } from "@/utils/comment-note"
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 
@@ -264,7 +267,7 @@ function SessionSummaryPanel(props: {
 
 type MessageTimelineProps = {
   session: TimelineSessionSource
-  actions?: UserActions
+  actions?: SessionUserActions
   scroll: { overflow: boolean; bottom: boolean; jump: boolean }
   onResumeScroll: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
@@ -792,7 +795,7 @@ function MessageTimelineView(
       })
 
       return (
-        <CurrentContextToolGroup
+        <SessionContextToolGroup
           sessionID={sessionID()!}
           tools={tools()}
           open={open()}
@@ -827,7 +830,7 @@ function MessageTimelineView(
       if (group.type !== "part" || current?.type !== "assistant") return
       const item = content()
       if (!item) return
-      return currentPartDefaultOpen(
+      return currentContentDefaultOpen(
         sessionID()!,
         current,
         item,
@@ -844,7 +847,7 @@ function MessageTimelineView(
         {(message) => (
           <Show when={content()}>
             {(content) => (
-              <CurrentAssistantContent
+              <SessionAssistantContent
                 sessionID={sessionID()!}
                 parentID={row().userMessageID}
                 message={message()}
@@ -900,9 +903,15 @@ function MessageTimelineView(
           const m = messageByID().get(userMessageRow().userMessageID)
           if (m?.type === "user") return m
         })
-        const messageComments = createMemo(() => {
+        const presentation = createMemo(() => {
           const current = message()
-          return current ? MessageComment.fromMessage(current) : []
+          if (!current) return
+          const value = readPromptPresentation(current.metadata)
+          const parsed = value ? undefined : parseCommentNote(current.text)
+          return {
+            displayText: value?.displayText,
+            comments: value?.comments ?? (parsed ? [parsed] : []),
+          }
         })
         const context = createMemo(() => projection.userContextByID().get(userMessageRow().userMessageID))
         return (
@@ -911,14 +920,15 @@ function MessageTimelineView(
               {(message) => (
                 <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
                   <div data-slot="session-turn-message-content" aria-live="off">
-                    <CurrentUserMessage
+                    <SessionUserMessage
                       sessionID={sessionID()!}
                       message={message()}
-                      agent={context()?.agent ?? ""}
-                      model={context()?.model ?? { id: "", providerID: "" }}
+                      displayText={presentation()?.displayText}
+                      historicalAgent={context()?.agent ?? ""}
+                      historicalModel={context()?.model ?? { id: "", providerID: "" }}
                       actions={props.actions}
                       useV2Actions
-                      comments={messageComments()}
+                      comments={presentation()?.comments}
                     />
                   </div>
                 </div>
