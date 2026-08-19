@@ -5,7 +5,14 @@ import type {
   ModelListOutput,
   ProviderListOutput,
 } from "@opencode-ai/client/promise"
-import { directoryKey, normalizeAgentList, normalizePermissionRequest, normalizeProviderList } from "./utils"
+import {
+  directoryKey,
+  enrichProject,
+  mergeProjectMeta,
+  normalizeAgentList,
+  normalizePermissionRequest,
+  normalizeProviderList,
+} from "./utils"
 
 describe("normalizeAgentList", () => {
   test("adapts current agents to the app agent shape", () => {
@@ -134,5 +141,88 @@ describe("directoryKey", () => {
     expect(String(directoryKey("C:/Repos/sst/opencode/"))).toBe("C:/Repos/sst/opencode")
     expect(String(directoryKey("C:/"))).toBe("C:/")
     expect(String(directoryKey("/"))).toBe("/")
+  })
+})
+
+type Base = {
+  worktree: string
+  name?: string
+  icon?: { color?: string; override?: string }
+  commands?: { start?: string }
+}
+
+describe("mergeProjectMeta", () => {
+  test("returns base unchanged when there is no local projectMeta", () => {
+    const base: Base = { worktree: "/repo", name: "Repo" }
+    expect(mergeProjectMeta(base, undefined)).toBe(base)
+  })
+
+  test("applies local name for projects without a server registration", () => {
+    const base: Base = { worktree: "/repo" }
+    expect(mergeProjectMeta(base, { name: "MicroservicesABC" })).toEqual({
+      worktree: "/repo",
+      name: "MicroservicesABC",
+    })
+  })
+
+  test("keeps server name when local projectMeta has no name", () => {
+    const base: Base = { worktree: "/repo", name: "SOOK" }
+    expect(mergeProjectMeta(base, { icon: { color: "red" } })).toEqual({
+      worktree: "/repo",
+      name: "SOOK",
+      icon: { color: "red" },
+    })
+  })
+
+  test("preserves an empty local name (display falls back to the folder name downstream)", () => {
+    const base: Base = { worktree: "/repo" }
+    expect(mergeProjectMeta(base, { name: "" })).toEqual({ worktree: "/repo", name: "" })
+  })
+
+  test("merges icon and commands overrides", () => {
+    const base: Base = { worktree: "/repo", icon: { color: "blue" }, commands: { start: "" } }
+    expect(
+      mergeProjectMeta(base, { icon: { color: "red", override: "data:img" }, commands: { start: "bun dev" } }),
+    ).toEqual({
+      worktree: "/repo",
+      icon: { color: "red", override: "data:img" },
+      commands: { start: "bun dev" },
+    })
+  })
+})
+
+describe("enrichProject", () => {
+  test("applies the legacy icon override on top of projectMeta", () => {
+    const base: Base = { worktree: "/repo", name: "Repo" }
+    expect(enrichProject(base, { name: "Renamed", icon: { color: "red" } }, "data:legacy")).toEqual({
+      worktree: "/repo",
+      name: "Renamed",
+      icon: { color: "red", override: "data:legacy" },
+    })
+  })
+
+  test("returns merged base unchanged when there is no legacy icon", () => {
+    const base: Base = { worktree: "/repo" }
+    expect(enrichProject(base, { name: "Renamed" }, undefined)).toEqual({
+      worktree: "/repo",
+      name: "Renamed",
+    })
+  })
+
+  test("applies local projectMeta for projects with a server id", () => {
+    const base: Base = { worktree: "/repo", name: "opencode_configaaa" }
+    expect(enrichProject(base, { name: "opencode_config" }, undefined)).toEqual({
+      worktree: "/repo",
+      name: "opencode_config",
+    })
+  })
+
+  test("still applies the legacy icon override for projects with a server id", () => {
+    const base: Base = { worktree: "/repo", name: "opencode_configaaa" }
+    expect(enrichProject(base, { name: "opencode_config" }, "data:legacy")).toEqual({
+      worktree: "/repo",
+      name: "opencode_config",
+      icon: { override: "data:legacy" },
+    })
   })
 })

@@ -1297,21 +1297,20 @@ export default function LegacyLayout(props: ParentProps) {
     if (next === current) return
     const name = next === getFilename(project.worktree) ? "" : next
 
+    serverSync().project.meta(project.worktree, { name })
+
     if (project.id && project.id !== "global") {
       const sdk = serverSDK()
-      if ((await sdk.protocol) !== "v1") return
       const result = await sdk.client.project
         .update({ projectID: project.id, directory: project.worktree, name })
         .then((response) => response.data)
-      if (!result) return
-      // const result = await serverSDK().api.project.update({ projectID: project.id, name })
-      serverSync().set("project", (items) =>
-        items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
-      )
-      return
+        .catch(() => undefined)
+      if (result) {
+        serverSync().set("project", (items) =>
+          items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
+        )
+      }
     }
-
-    serverSync().project.meta(project.worktree, { name })
   }
 
   const renameWorkspace = (directory: string, next: string, projectId?: string, branch?: string) => {
