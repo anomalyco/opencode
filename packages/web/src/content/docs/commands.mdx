@@ -232,7 +232,7 @@ The `template` option defines the prompt that will be sent to the LLM when the c
 }
 ```
 
-This is a **required** config option.
+This is **required** when defining a new command. It can be omitted when overriding a [built-in command](#built-in), in which case the built-in template is kept and only the options you specify are overridden.
 
 ---
 
@@ -321,3 +321,15 @@ Custom commands can override built-in commands.
 :::
 
 If you define a custom command with the same name, it will override the built-in command.
+
+You can also partially override a built-in command by omitting the `template`. For example, to run `/review` with a specific agent while keeping the built-in review prompt:
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "my-reviewer"
+    }
+  }
+}
+```

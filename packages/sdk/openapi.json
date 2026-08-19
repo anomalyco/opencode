@@ -21144,7 +21144,6 @@
                   "type": "boolean"
                 }
               },
-              "required": ["template"],
               "additionalProperties": false
             }
           },

@@ -27,22 +27,31 @@ export const Plugin = define({
             ]),
           )
         }).pipe(Effect.map((documents) => documents.flat()))
+        // Merge each command field-wise across documents first so a template-less
+        // entry is not dropped when another document supplies the template.
+        const merged = new Map<string, ConfigCommand.Info>()
         for (const document of documents) {
           for (const [name, command] of Object.entries(document.commands ?? {})) {
-            draft.update(name, (item) => {
-              item.template = command.template
-              if (command.description !== undefined) item.description = command.description
-              if (command.agent !== undefined) item.agent = command.agent
-              if (command.model !== undefined) {
-                const model = ModelV2.parse(command.model)
-                item.model = { id: model.modelID, providerID: model.providerID, variant: item.model?.variant }
-              }
-              if (command.variant !== undefined && item.model !== undefined) {
-                item.model.variant = ModelV2.VariantID.make(command.variant)
-              }
-              if (command.subtask !== undefined) item.subtask = command.subtask
-            })
+            merged.set(name, { ...merged.get(name), ...command })
           }
+        }
+        for (const [name, command] of merged) {
+          // Commands without a template partially override an existing command
+          // (e.g. set only `agent` on the built-in /review); skip them otherwise.
+          if (command.template === undefined && draft.get(name) === undefined) continue
+          draft.update(name, (item) => {
+            if (command.template !== undefined) item.template = command.template
+            if (command.description !== undefined) item.description = command.description
+            if (command.agent !== undefined) item.agent = command.agent
+            if (command.model !== undefined) {
+              const model = ModelV2.parse(command.model)
+              item.model = { id: model.modelID, providerID: model.providerID, variant: item.model?.variant }
+            }
+            if (command.variant !== undefined && item.model !== undefined) {
+              item.model.variant = ModelV2.VariantID.make(command.variant)
+            }
+            if (command.subtask !== undefined) item.subtask = command.subtask
+          })
         }
       }),
     )

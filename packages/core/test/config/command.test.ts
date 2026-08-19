@@ -80,4 +80,53 @@ Review files`,
       ),
     ),
   )
+
+  it.effect("commands without a template partially override existing commands", () =>
+    Effect.gen(function* () {
+      const command = yield* CommandV2.Service
+      yield* command.transform((draft) => {
+        draft.update("review", (item) => {
+          item.template = "Built-in review"
+          item.description = "Built-in description"
+        })
+      })
+      yield* ConfigCommandPlugin.Plugin.effect(host({ command: { ...command, reload: command.reload } })).pipe(
+        Effect.provideService(
+          Config.Service,
+          Config.Service.of({
+            entries: () =>
+              Effect.succeed([
+                new Config.Document({
+                  type: "document",
+                  info: decode({
+                    commands: {
+                      review: { agent: "reviewer" },
+                      ghost: { agent: "reviewer" },
+                      split: { agent: "reviewer" },
+                    },
+                  }),
+                }),
+                new Config.Document({
+                  type: "document",
+                  info: decode({ commands: { split: { template: "Split template" } } }),
+                }),
+              ]),
+          }),
+        ),
+      )
+
+      expect(yield* command.get("review")).toEqual(
+        CommandV2.Info.make({
+          name: "review",
+          template: "Built-in review",
+          description: "Built-in description",
+          agent: "reviewer",
+        }),
+      )
+      expect(yield* command.get("ghost")).toBeUndefined()
+      expect(yield* command.get("split")).toEqual(
+        CommandV2.Info.make({ name: "split", template: "Split template", agent: "reviewer" }),
+      )
+    }),
+  )
 })

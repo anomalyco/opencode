@@ -1890,7 +1890,7 @@ export type Config = {
   server?: ServerConfig
   command?: {
     [key: string]: {
-      template: string
+      template?: string
       description?: string
       agent?: string
       model?: string

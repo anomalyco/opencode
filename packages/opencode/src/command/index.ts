@@ -88,17 +88,34 @@ const layer = Layer.effect(
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
+        if (command.template !== undefined) {
+          const template = command.template
+          commands[name] = {
+            name,
+            agent: command.agent,
+            model: command.model,
+            description: command.description,
+            source: "command",
+            template,
+            subtask: command.subtask,
+            hints: hints(template),
+          }
+          continue
+        }
+        // Commands without a template partially override a built-in command
+        // (e.g. set only `agent` on /review); skip them if nothing to override.
+        const existing = commands[name]
+        if (existing === undefined || typeof existing.template !== "string") continue
+        const template = existing.template
         commands[name] = {
           name,
-          agent: command.agent,
-          model: command.model,
-          description: command.description,
+          agent: command.agent ?? existing.agent,
+          model: command.model ?? existing.model,
+          description: command.description ?? existing.description,
           source: "command",
-          get template() {
-            return command.template
-          },
-          subtask: command.subtask,
-          hints: hints(command.template),
+          template,
+          subtask: command.subtask ?? existing.subtask,
+          hints: hints(template),
         }
       }
 
