@@ -62,6 +62,62 @@ describe("GitGraphDiagram", () => {
     ])
   })
 
+  test("parses cherry-pick onto the current branch inheriting message and tags", () => {
+    const diagram = parseMermaidGitGraphDiagram(`gitGraph
+      commit id: "base"
+      branch hotfix
+      commit id: "fix" msg: "Fix crash" tag: "v1.1"
+      checkout main
+      cherry-pick id: "fix"
+      cherry-pick id: "fix" tag: "backported"`)
+
+    expect(diagram.commits).toEqual([
+      { id: "base", tags: [], type: "NORMAL", branch: "main", parents: [] },
+      { id: "fix", message: "Fix crash", tags: ["v1.1"], type: "NORMAL", branch: "hotfix", parents: ["base"] },
+      {
+        id: "commit-1",
+        message: "Fix crash",
+        tags: ["v1.1"],
+        type: "CHERRY",
+        branch: "main",
+        parents: ["base"],
+        cherryPicked: "fix",
+      },
+      {
+        id: "commit-2",
+        message: "Fix crash",
+        tags: ["backported"],
+        type: "CHERRY",
+        branch: "main",
+        parents: ["commit-1"],
+        cherryPicked: "fix",
+      },
+    ])
+  })
+
+  test("rejects cherry-pick without an id or referencing an unknown commit", () => {
+    expect(() => parseMermaidGitGraphDiagram("gitGraph\n commit id: base\n cherry-pick")).toThrow(
+      "GitGraph cherry-pick requires an id",
+    )
+    expect(() => parseMermaidGitGraphDiagram("gitGraph\n commit id: base\n cherry-pick id: missing")).toThrow(
+      'cherry-pick references unknown commit "missing"',
+    )
+  })
+
+  test("renders cherry-picked commits with a hollow glyph", () => {
+    expect(
+      renderGitGraphDiagram(`gitGraph
+        commit id: base
+        branch hotfix
+        commit id: fix tag: "v1.1"
+        checkout main
+        cherry-pick id: fix`),
+    ).toBe(`●    base
+├─╮
+│ ●  fix  [hotfix] [v1.1]
+◌    commit-1  [main] [v1.1]`)
+  })
+
   test("supports shorthand messages and preserves branch heads without direct commits", () => {
     const diagram = parseMermaidGitGraphDiagram(`gitGraph
       commit "Initial release"
@@ -127,7 +183,7 @@ describe("GitGraphDiagram", () => {
       new MermaidSyntaxError("gitGraph", 2, "checkout missing", 'Unknown branch "missing"'),
     )
     expect(() => parseMermaidGitGraphDiagram("gitGraph\n cherry-pick id: one")).toThrow(
-      new MermaidSyntaxError("gitGraph", 2, "cherry-pick id: one", "Cherry-pick is not supported"),
+      new MermaidSyntaxError("gitGraph", 2, "cherry-pick id: one", 'cherry-pick references unknown commit "one"'),
     )
     expect(() => parseMermaidGitGraphDiagram("gitGraph\n commit id: same\n commit id: same")).toThrow(
       'Duplicate commit id "same"',
@@ -148,11 +204,14 @@ describe("GitGraphDiagram", () => {
         commit id: work type: REVERSE
         checkout main
         commit id: checkpoint type: HIGHLIGHT
-        merge feature id: done`),
+        merge feature id: done
+        cherry-pick id: checkpoint`),
     )
     const styles = new Set(grid.rows.flatMap((row) => row.map((cell) => cell.style).filter(Boolean)))
 
-    expect(styles).toEqual(new Set(["branch0", "branch1", "commit", "reverse", "highlight", "merge", "label"]))
+    expect(styles).toEqual(
+      new Set(["branch0", "branch1", "commit", "reverse", "highlight", "merge", "cherry", "label"]),
+    )
     expect(Object.keys(resolveGitGraphStyleColors()).sort()).toEqual(
       [
         "branch0",
@@ -163,6 +222,7 @@ describe("GitGraphDiagram", () => {
         "branch5",
         "branch6",
         "branch7",
+        "cherry",
         "commit",
         "highlight",
         "label",
