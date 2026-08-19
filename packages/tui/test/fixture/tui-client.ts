@@ -130,6 +130,11 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       })
     if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/active") return json({ data: {} })
+    if (url.pathname === "/api/model/default")
+      return json({
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+        data: null,
+      })
     if (url.pathname === "/api/permission/request")
       return json({
         location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
