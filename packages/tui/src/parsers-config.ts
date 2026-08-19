@@ -142,6 +142,15 @@ export default {
       },
     },
     {
+      filetype: "solidity",
+      wasm: "https://unpkg.com/@repomix/tree-sitter-wasms@0.1.17/out/tree-sitter-solidity.wasm",
+      queries: {
+        highlights: [
+          "https://raw.githubusercontent.com/JoranHonig/tree-sitter-solidity/4e938a46c7030dd001bc99e1ac0f0c750ac98254/queries/highlights.scm",
+        ],
+      },
+    },
+    {
       filetype: "html",
       wasm: "https://github.com/tree-sitter/tree-sitter-html/releases/download/v0.23.2/tree-sitter-html.wasm",
       queries: {
