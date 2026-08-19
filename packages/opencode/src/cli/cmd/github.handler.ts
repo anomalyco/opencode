@@ -437,6 +437,9 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     let session: { id: SessionID; title: string; version: string }
     let shareId: string | undefined
     let exitCode = 0
+    // Id of the 👀 reaction we add, captured so removeReaction can delete it
+    // directly instead of re-finding it by author (which differs per auth path).
+    let reactionId: number | undefined
     type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
     const triggerCommentId = isCommentEvent
       ? (payload as IssueCommentEvent | PullRequestReviewCommentEvent).comment.id
@@ -493,7 +496,8 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       // Skip permission check and reactions for repo events (no actor to check, no issue to react to)
       if (isUserEvent) {
         await assertPermissions()
-        await addReaction(commentType)
+        const reaction = await addReaction(commentType)
+        reactionId = reaction.data.id
       }
 
       // Setup opencode session
@@ -1205,61 +1209,32 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     }
 
     async function removeReaction(commentType?: "issue" | "pr_review") {
-      // Only called for non-schedule events, so triggerCommentId is defined
+      // Delete the exact reaction we created; skip if addReaction never ran.
+      if (!reactionId) return
       console.log("Removing reaction...")
       if (triggerCommentId) {
         if (commentType === "pr_review") {
-          const reactions = await octoRest.rest.reactions.listForPullRequestReviewComment({
-            owner,
-            repo,
-            comment_id: triggerCommentId!,
-            content: AGENT_REACTION,
-          })
-
-          const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
-          if (!eyesReaction) return
-
           return await octoRest.rest.reactions.deleteForPullRequestComment({
             owner,
             repo,
             comment_id: triggerCommentId!,
-            reaction_id: eyesReaction.id,
+            reaction_id: reactionId,
           })
         }
-
-        const reactions = await octoRest.rest.reactions.listForIssueComment({
-          owner,
-          repo,
-          comment_id: triggerCommentId!,
-          content: AGENT_REACTION,
-        })
-
-        const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
-        if (!eyesReaction) return
 
         return await octoRest.rest.reactions.deleteForIssueComment({
           owner,
           repo,
           comment_id: triggerCommentId!,
-          reaction_id: eyesReaction.id,
+          reaction_id: reactionId,
         })
       }
 
-      const reactions = await octoRest.rest.reactions.listForIssue({
+      return await octoRest.rest.reactions.deleteForIssue({
         owner,
         repo,
         issue_number: issueId!,
-        content: AGENT_REACTION,
-      })
-
-      const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
-      if (!eyesReaction) return
-
-      await octoRest.rest.reactions.deleteForIssue({
-        owner,
-        repo,
-        issue_number: issueId!,
-        reaction_id: eyesReaction.id,
+        reaction_id: reactionId,
       })
     }
 
