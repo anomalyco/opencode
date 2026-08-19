@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
+import { extractResponseText, formatPromptTooLargeError, isAllowedBot, isBotActor } from "../../src/cli/cmd/github"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
@@ -80,6 +80,42 @@ function createStepFinishPart(): SessionV1.Part {
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   }
 }
+
+describe("bot authorization", () => {
+  test("identifies bots from the webhook sender type", () => {
+    expect(isBotActor({ type: "Bot" })).toBe(true)
+    expect(isBotActor({ type: "User" })).toBe(false)
+    expect(isBotActor({ type: "Organization" })).toBe(false)
+  })
+
+  test("denies bots by default", () => {
+    expect(isAllowedBot({ login: "opencode-agent[bot]", type: "Bot" }, "")).toBe(false)
+  })
+
+  test("allows configured bots with or without the suffix", () => {
+    const sender = { login: "opencode-agent[bot]", type: "Bot" }
+    expect(isAllowedBot(sender, "opencode-agent")).toBe(true)
+    expect(isAllowedBot(sender, "opencode-agent[bot]")).toBe(true)
+  })
+
+  test("normalizes case and whitespace", () => {
+    expect(
+      isAllowedBot(
+        { login: "OpenCode-Agent[bot]", type: "Bot" },
+        " dependabot, OPENCODE-AGENT[BOT] ",
+      ),
+    ).toBe(true)
+  })
+
+  test("allows all bots with a wildcard", () => {
+    expect(isAllowedBot({ login: "unknown[bot]", type: "Bot" }, " * ")).toBe(true)
+  })
+
+  test("does not allow unlisted bots or human actors", () => {
+    expect(isAllowedBot({ login: "unknown[bot]", type: "Bot" }, "opencode-agent")).toBe(false)
+    expect(isAllowedBot({ login: "opencode-agent[bot]", type: "User" }, "*")).toBe(false)
+  })
+})
 
 describe("extractResponseText", () => {
   test("returns text from text part", () => {
