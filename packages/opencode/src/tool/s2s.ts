@@ -10,7 +10,7 @@
 // Commands:
 //   - invite           — mint a single-use token bound to this session.
 //   - accept <token>   — consume a peer's token; writes both allow
-//                        directions and seeds the in-process allow list.
+//                        directions in the durable consent record.
 //   - msg <session-id> <body> — send a body to an allow-listed peer
 //                        (addressed by the peer's globally-unique
 //                        session_id); goes in-process when the peer is

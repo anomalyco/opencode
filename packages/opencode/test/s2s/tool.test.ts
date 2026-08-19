@@ -188,6 +188,33 @@ describe("S2STool", () => {
     }),
   )
 
+  it.instance("list marks a single inbound allow row as anomalous one-way consent", () =>
+    Effect.gen(function* () {
+      const store = yield* S2SStore.Service
+      const caller = yield* seedSession("list-inbound-caller")
+      const peer = yield* seedSession("list-inbound-peer")
+      yield* store.insertAllow(peer.id, caller.id)
+      const tool = yield* S2STool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute({ command: "list" }, ctxFor(caller.id))
+
+      expect(result.output).toContain("ANOMALOUS one-way (inbound only)")
+      expect(result.metadata).toMatchObject({
+        command: "list",
+        peers: [
+          {
+            peer_id: peer.id,
+            title: "list-inbound-peer",
+            established_at: expect.any(Number),
+            outbound: false,
+            inbound: true,
+          },
+        ],
+      })
+    }),
+  )
+
   it.instance("list retains a peer without a local session record with an unknown title", () =>
     Effect.gen(function* () {
       const store = yield* S2SStore.Service

@@ -5,13 +5,15 @@ Peers are addressed by their globally-unique session_id (the `ses_...` id), NOT 
 Usage:
 1. On the inviter session, run `s2s(command:"invite")` to mint a one-shot token. Share that token out-of-band with the peer (chat, paste, etc.).
 2. On the joining session, run `s2s(command:"accept", token:"<the-token>")` within 10 minutes. This writes the durable allow row in both directions (the consent record). The output reports the peer's session_id.
-3. Either side can now run `s2s(command:"msg", target:"<peer-session-id>", body:"...")` to send. Same-process peers hit the in-process inbox (tagged `source="sibling-session"` so the runLoop drain renders it as `<external-context>`); cross-process peers persist a row to `s2s_inbox` that the recipient's poller picks up.
-4. Either side can revoke with `s2s(command:"leave", target:"<peer-session-id>")`.
+3. Either side can run `s2s(command:"list")` to check paired peers before sending.
+4. Either side can run `s2s(command:"msg", target:"<peer-session-id>", body:"...")` to send. Same-process peers hit the in-process inbox (tagged `source="sibling-session"` so the runLoop drain renders it as `<external-context>`); cross-process peers persist a row to `s2s_inbox` that the recipient's poller picks up.
+5. Either side can revoke with `s2s(command:"leave", target:"<peer-session-id>")`.
 
 Commands:
 - `invite`                   — mint a token bound to this session.
 - `accept <token>`           — consume a peer's token; writes both allow directions.
 - `msg <session-id> <body>`  — send a body to an allow-listed peer (addressed by session_id).
+- `list`                     — list paired peers with session_id, title, established time, and consent direction.
 - `leave <session-id>`       — revoke the allow for a peer.
 - `relay`                    — emit a capsule as a copy-pasteable JSON blob (zero-infra fallback for future cross-machine delivery).
 
@@ -20,4 +22,5 @@ Usage notes:
 - `msg` is bounded two ways, both surfacing as a visible `AbuseError` (never a silent drop): a DURABLE recipient undelivered-row cap (50 — a DB count that holds across restarts and processes; delivered rows are deleted, so this is the real cross-process abuse bound), and a SOFT per-process outbound throttle (~50/hour/sender) that only catches a runaway loop in one process and resets on restart — do not rely on it as a security boundary.
 - Body length is capped at 16000 characters; longer bodies are rejected before delivery.
 - Consent is checked against the durable s2s_allow table (session_id based): you can only `msg` a peer you have invited+accepted. An un-consented target is rejected with a clear error. This works the same whether the peer is in this process or another, and survives a restart.
+- A one-directional consent entry is anomalous; a normal invite/accept pair has both directions.
 - This tool is the cross-process sibling primitive. For parent/child subagent messaging, use `message` instead.
