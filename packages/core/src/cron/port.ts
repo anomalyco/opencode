@@ -11,7 +11,6 @@ export class CronError extends Schema.TaggedErrorClass<CronError>()("Cron.Error"
 }) {}
 
 interface Interface {
-  readonly isBusy: (sessionID: string, opts?: { readonly context?: unknown }) => Effect.Effect<boolean>
   readonly deliver: (
     sessionID: string,
     prompt: string,
