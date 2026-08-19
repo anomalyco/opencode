@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { Config } from "@/config/config"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { TuiConfig } from "@opencode-ai/tui/config"
 import { Schema } from "effect"
@@ -16,11 +15,19 @@ function generateEffect(schema: Schema.Top) {
     $defs: document.definitions,
   })
   if (!isRecord(normalized)) throw new Error("schema generator produced a non-object schema")
-  const restored = restoreModelRefs(normalized)
+  const rooted = inlineRootRef(normalized)
+  const restored = restoreModelRefs(rooted)
   if (!isRecord(restored)) throw new Error("schema generator produced a non-object schema")
-  restored.allowComments = true
-  restored.allowTrailingCommas = true
   return restored
+}
+
+function inlineRootRef(schema: JsonSchema) {
+  const name = typeof schema.$ref === "string" ? schema.$ref.match(/^#\/\$defs\/(.+)$/)?.[1] : undefined
+  const definitions = isRecord(schema.$defs) ? schema.$defs : undefined
+  const target = name && definitions ? definitions[name] : undefined
+  if (!isRecord(target)) return schema
+  const { $ref: _, ...rest } = schema
+  return { ...rest, ...target, $defs: definitions }
 }
 
 function normalize(value: unknown): unknown {
