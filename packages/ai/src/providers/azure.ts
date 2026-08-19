@@ -1,7 +1,7 @@
 import { Auth } from "../route/auth.js"
 import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
 import type { Route as RouteDef, RouteDefaultsInput } from "../route/client.js"
-import type { ProviderPackage } from "../provider-package.js"
+import { ProviderPackage } from "../provider-package.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
@@ -120,28 +120,29 @@ export const provider = {
   configure,
 }
 
-const config = (settings: Settings): Config => {
+const config = (input: ProviderPackage.ModelInput<Settings>): Config => {
+  const settings = input.settings
+  const configuration = input.credential?.type === "key" ? input.credential.configuration : undefined
+  const baseURL = settings.baseURL ?? (typeof configuration?.baseURL === "string" ? configuration.baseURL : undefined)
+  const resourceName =
+    settings.resourceName ?? (typeof configuration?.resourceName === "string" ? configuration.resourceName : undefined)
   const common = {
-    apiKey: settings.apiKey,
+    ...ProviderPackage.routeDefaults(input.defaults),
+    ...(input.credential
+      ? ProviderPackage.apiKeyOrBearerAuthOption(input.credential, "api-key")
+      : { apiKey: settings.apiKey }),
     apiVersion: settings.apiVersion,
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
     providerOptions: settings.providerOptions,
     queryParams: settings.queryParams === undefined ? undefined : { ...settings.queryParams },
     useDeploymentBasedUrls: settings.useDeploymentBasedUrls,
   }
-  if (settings.baseURL !== undefined) return { ...common, baseURL: settings.baseURL }
-  if (settings.resourceName !== undefined) return { ...common, resourceName: settings.resourceName }
+  if (baseURL !== undefined) return { ...common, baseURL }
+  if (resourceName !== undefined) return { ...common, resourceName }
   throw new Error("Azure requires resourceName or baseURL")
 }
 
-export const responsesModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => configure(config(settings)).responses(modelID)
-export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => configure(config(settings)).chat(modelID)
+export const responsesModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (input) =>
+  configure(config(input)).responses(input.id)
+export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (input) =>
+  configure(config(input)).chat(input.id)
 export const model = responsesModel

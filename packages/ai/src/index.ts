@@ -37,6 +37,9 @@ export type {
   LanguageModelOptions as ProviderLanguageModelOptions,
 } from "./provider.js"
 export type {
+  Credential as ProviderPackageCredential,
+  Defaults as ProviderPackageDefaults,
   Definition as ProviderPackageDefinition,
+  ModelInput as ProviderPackageModelInput,
   Settings as ProviderPackageSettings,
 } from "./provider-package.js"

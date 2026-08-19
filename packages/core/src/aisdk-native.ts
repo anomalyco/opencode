@@ -20,16 +20,48 @@ export interface MapInput {
 export function map(input: MapInput): Mapping | undefined {
   const baseSettings = mapBaseSettings(input.settings)
   switch (input.packageName) {
-    case "@ai-sdk/anthropic":
+    case "@ai-sdk/openai":
+      return {
+        package: "@opencode-ai/ai/providers/openai",
+        settings: {
+          ...baseSettings,
+          ...mapAPIKey(input.settings),
+          ...(typeof input.settings.organization === "string" ? { organization: input.settings.organization } : {}),
+          ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
+          ...(isStringRecord(input.settings.queryParams) ? { queryParams: input.settings.queryParams } : {}),
+          ...openAIOptions(input.settings),
+        },
+        ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+      }
+    case "@ai-sdk/anthropic": {
+      const providerOptions = {
+        ...(isRecord(input.settings.thinking) ? { thinking: input.settings.thinking } : {}),
+        ...(typeof input.settings.effort === "string" ? { effort: input.settings.effort } : {}),
+      }
       return {
         package: "@opencode-ai/ai/providers/anthropic",
         settings: {
           ...baseSettings,
           ...mapAPIKey(input.settings),
           ...(typeof input.settings.authToken === "string" ? { authToken: input.settings.authToken } : {}),
-          ...mapProviderOptions(input.settings, ["apiKey", "authToken", "baseURL"]),
+          ...(Object.keys(providerOptions).length === 0 ? {} : { providerOptions }),
         },
+        ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
       }
+    }
+    case "@ai-sdk/openai-compatible":
+      return typeof input.settings.baseURL !== "string"
+        ? undefined
+        : {
+            package: "@opencode-ai/ai/providers/openai-compatible",
+            settings: {
+              ...baseSettings,
+              ...mapAPIKey(input.settings),
+              provider: input.providerID,
+              ...mapOpenAIOptions(input.settings),
+            },
+            ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+          }
     case "@ai-sdk/amazon-bedrock":
       return {
         package: "@opencode-ai/ai/providers/amazon-bedrock",
@@ -71,10 +103,7 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapAPIKey(input.settings),
           ...(typeof input.settings.location === "string" ? { location: input.settings.location } : {}),
           ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
-          ...mapGoogleOptions(
-            input.settings,
-            isStringRecord(input.settings.labels) ? { labels: input.settings.labels } : {},
-          ),
+          ...mapGoogleOptions(input.settings),
         },
         ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
       }
@@ -97,29 +126,6 @@ export function map(input: MapInput): Mapping | undefined {
         },
         ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
       }
-    case "@ai-sdk/openai":
-      return {
-        package: "@opencode-ai/ai/providers/openai",
-        settings: {
-          ...baseSettings,
-          ...mapAPIKey(input.settings),
-          ...(typeof input.settings.organization === "string" ? { organization: input.settings.organization } : {}),
-          ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
-          ...(isStringRecord(input.settings.queryParams) ? { queryParams: input.settings.queryParams } : {}),
-          ...mapProviderOptions(input.settings, ["apiKey", "baseURL", "organization", "project", "queryParams"]),
-        },
-      }
-    case "@ai-sdk/openai-compatible":
-      if (typeof input.settings.baseURL !== "string") return
-      return {
-        package: "@opencode-ai/ai/providers/openai-compatible",
-        settings: {
-          ...baseSettings,
-          ...mapAPIKey(input.settings),
-          provider: input.providerID,
-          ...mapProviderOptions(input.settings, ["apiKey", "baseURL"]),
-        },
-      }
     case "@openrouter/ai-sdk-provider":
       return mapOpenRouter(input.settings, baseSettings)
     case "@ai-sdk/xai":
@@ -132,12 +138,6 @@ export function map(input: MapInput): Mapping | undefined {
         },
       }
   }
-}
-
-function mapProviderOptions(settings: Readonly<Record<string, unknown>>, excluded: ReadonlyArray<string>) {
-  const options = Object.fromEntries(Object.entries(settings).filter(([name]) => !excluded.includes(name)))
-  if (Object.keys(options).length === 0) return {}
-  return { providerOptions: options }
 }
 
 function mapBedrockMantle(input: MapInput, baseSettings: Readonly<Record<string, unknown>>): Mapping | undefined {
@@ -260,17 +260,26 @@ function bedrockRegion(settings: Readonly<Record<string, unknown>>) {
 }
 
 function mapOpenAIOptions(settings: Readonly<Record<string, unknown>>) {
+  const options = openAIOptions(settings)
+  if (Object.keys(options).length === 0) return {}
+  return { providerOptions: options }
+}
+
+function openAIOptions(settings: Readonly<Record<string, unknown>>) {
   const options = {
+    ...(typeof settings.instructions === "string" ? { instructions: settings.instructions } : {}),
     ...(typeof settings.reasoningEffort === "string" ? { reasoningEffort: settings.reasoningEffort } : {}),
     ...(typeof settings.reasoningSummary === "string" ? { reasoningSummary: settings.reasoningSummary } : {}),
     ...(Array.isArray(settings.include) ? { include: settings.include } : {}),
     ...(typeof settings.store === "boolean" ? { store: settings.store } : {}),
-    ...(typeof settings.promptCacheKey === "string" ? { promptCacheKey: settings.promptCacheKey } : {}),
     ...(typeof settings.textVerbosity === "string" ? { textVerbosity: settings.textVerbosity } : {}),
     ...(typeof settings.serviceTier === "string" ? { serviceTier: settings.serviceTier } : {}),
+    ...(typeof settings.truncation === "string" ? { truncation: settings.truncation } : {}),
+    ...(isRecord(settings.allowedTools) ? { allowedTools: settings.allowedTools } : {}),
+    ...(typeof settings.maxToolCalls === "number" ? { maxToolCalls: settings.maxToolCalls } : {}),
+    ...(typeof settings.parallelToolCalls === "boolean" ? { parallelToolCalls: settings.parallelToolCalls } : {}),
   }
-  if (Object.keys(options).length === 0) return {}
-  return { providerOptions: options }
+  return options
 }
 
 function mapBaseSettings(settings: Readonly<Record<string, unknown>>) {
@@ -283,7 +292,7 @@ function mapAPIKey(settings: Readonly<Record<string, unknown>>) {
   return typeof settings.apiKey === "string" ? { apiKey: settings.apiKey } : {}
 }
 
-function mapGoogleOptions(settings: Readonly<Record<string, unknown>>, extra: Readonly<Record<string, unknown>> = {}) {
+function mapGoogleOptions(settings: Readonly<Record<string, unknown>>) {
   const input = settings.thinkingConfig
   const thinkingConfig = {
     ...(isRecord(input) && typeof input.thinkingBudget === "number" ? { thinkingBudget: input.thinkingBudget } : {}),
@@ -298,7 +307,6 @@ function mapGoogleOptions(settings: Readonly<Record<string, unknown>>, extra: Re
     ...(Array.isArray(settings.safetySettings) ? { safetySettings: settings.safetySettings } : {}),
     ...(typeof settings.serviceTier === "string" ? { serviceTier: settings.serviceTier } : {}),
     ...(Object.keys(thinkingConfig).length > 0 ? { thinkingConfig } : {}),
-    ...extra,
   }
   if (Object.keys(options).length === 0) return {}
   return { providerOptions: options }

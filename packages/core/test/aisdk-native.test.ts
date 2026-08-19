@@ -22,14 +22,12 @@ describe("AISDKNative", () => {
       settings: {
         apiKey: "secret",
         baseURL: "https://api.meta.ai/v1",
-        providerOptions: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
-          instructions: "Follow the repository instructions.",
-          truncation: "auto",
-        },
         organization: "org",
+        reasoningEffort: "xhigh",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+        instructions: "Follow the repository instructions.",
+        truncation: "auto",
       },
     })
     expect(map("@ai-sdk/openai-compatible", { baseURL: "https://example.com/v1", reasoningEffort: "high" })).toEqual({

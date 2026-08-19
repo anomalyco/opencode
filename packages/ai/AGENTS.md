@@ -71,7 +71,7 @@ export const route = Route.make({
 })
 ```
 
-Route defaults are request-shaping defaults such as `headers`, `limits`, `generation`, `providerOptions`, and `http`. Endpoint host/query belongs on the route endpoint. Selected `LanguageModel` values carry only model id, provider id, and the configured route value. Model capability/catalog metadata lives outside this package; protocol support is enforced by request lowering and typed `AIError`s.
+Route defaults are request-shaping defaults such as `headers`, `limits`, `generation`, `providerOptions`, and `http`. Endpoint host/query belongs on the route endpoint. Selected `LanguageModel` values carry model identity and the configured route; low-level callers may also attach model-specific defaults and compatibility metadata. Model capability/catalog metadata lives outside this package; protocol support is enforced by request lowering and typed `AIError`s.
 
 The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
@@ -88,7 +88,7 @@ For providers where the URL is derived from typed inputs (Azure resource name, B
 Provider-facing APIs are configured facades over route values. Endpoint/auth/resource/API-version setup happens before model selection, and model selectors accept only a model or deployment id:
 
 ```ts
-const openai = OpenAI.configure({ apiKey, baseURL })
+const openai = OpenAI.configure({ apiKey, baseURL, store: false })
 const model = openai.responses("gpt-4o-mini")
 
 const azure = Azure.configure({ resourceName, apiKey, apiVersion: "v1" })
@@ -108,17 +108,22 @@ Keep provider facades small and explicit:
 - Resolve `apiKey` → `Auth` with `AuthOptions.bearer(options, "<PROVIDER>_API_KEY")` (it honors an explicit `auth` override and falls back to `Auth.config(envVar)` so missing keys surface a typed `Authentication` error rather than a runtime crash).
 - Use separate top-level facades for products with different required setup, such as `CloudflareAIGateway` and `CloudflareWorkersAI`.
 
+Provider facades and model-derived `LLMRequest.providerOptions` are provider-specific, so expose typed native options flat at those boundaries. Provider package settings keep deployment configuration separate from their typed `providerOptions` field, except facades such as OpenAI whose settings are already unambiguous when flat. The selected `LanguageModel<Options>` carries request-option typing; the route decodes the flat runtime record. Keep provider metadata namespaced because replay may contain metadata from multiple layers.
+
 `Provider.make(...)` remains available for simple static provider definitions, but new built-in providers should prefer plain configured facades unless a helper removes real duplication without adding runtime behavior.
 
 ### Provider Package Entrypoints
 
-Catalog-selected native providers use package-like export paths from `@opencode-ai/ai`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
+Catalog-selected native providers use package-like export paths from `@opencode-ai/ai`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model({ id, settings, credential, defaults })`. Core selects and refreshes the optional `key | oauth` credential; the provider package interprets it as route authentication. Serializable provider settings remain separate from common `headers`, `body`, and `limits` defaults.
 
 ```ts
 import { model } from "@opencode-ai/ai/providers/openai/responses"
 
-const selected = model("gpt-5", {
-  apiKey,
+const selected = model({
+  id: "gpt-5",
+  settings: {},
+  credential: { type: "key", value: apiKey },
+  defaults: {},
 })
 ```
 

@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { ProviderPackage } from "../provider-package.js"
+import { ProviderPackage } from "../provider-package.js"
 import { Gemini } from "../protocols/gemini.js"
 import { ProviderShared } from "../protocols/shared.js"
 import { Auth } from "../route/auth.js"
@@ -94,7 +94,10 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
   return route.with({
     ...rest,
     endpoint: { baseURL: endpoint },
-    auth: apiKey === undefined ? GoogleVertexShared.oauth(input, project) : Auth.header("x-goog-api-key", apiKey),
+    auth:
+      apiKey === undefined
+        ? GoogleVertexShared.oauth(input, project)
+        : Auth.remove("authorization").andThen(Auth.header("x-goog-api-key", apiKey)),
   })
 }
 
@@ -111,17 +114,21 @@ export const provider = {
   id,
   configure,
 }
-export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (modelID, settings) => {
-  if (settings.apiKey !== undefined && settings.accessToken !== undefined)
+export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (input) => {
+  if (!input.credential && input.settings.apiKey !== undefined && input.settings.accessToken !== undefined)
     throw new Error("Google Vertex apiKey cannot be combined with accessToken or auth")
   return configure({
-    ...(settings.apiKey === undefined ? { accessToken: settings.accessToken } : { apiKey: settings.apiKey }),
-    baseURL: settings.baseURL,
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
-    location: settings.location,
-    project: settings.project,
-    providerOptions: settings.providerOptions,
-  }).model(modelID)
+    ...ProviderPackage.routeDefaults(input.defaults),
+    ...(input.credential
+      ? input.credential.type === "key"
+        ? { apiKey: input.credential.value }
+        : { accessToken: input.credential.accessToken }
+      : input.settings.apiKey === undefined
+        ? { accessToken: input.settings.accessToken }
+        : { apiKey: input.settings.apiKey }),
+    baseURL: input.settings.baseURL,
+    location: input.settings.location,
+    project: input.settings.project,
+    providerOptions: input.settings.providerOptions,
+  }).model(input.id)
 }

@@ -1,4 +1,4 @@
-import type { ProviderPackage } from "../provider-package.js"
+import { ProviderPackage } from "../provider-package.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { Auth } from "../route/auth.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
@@ -32,7 +32,9 @@ export const routes = [AnthropicMessages.route]
 
 const auth = (input: ProviderAuthOption<"optional">) => {
   if ("auth" in input && input.auth) return input.auth
-  return Auth.optional("apiKey" in input ? input.apiKey : undefined, "apiKey").pipe(Auth.header("x-api-key"))
+  return Auth.remove("authorization").andThen(
+    Auth.optional("apiKey" in input ? input.apiKey : undefined, "apiKey").pipe(Auth.header("x-api-key")),
+  )
 }
 
 export const configure = (input: Config) => {
@@ -57,21 +59,20 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => {
-  if (settings.apiKey !== undefined && settings.authToken !== undefined)
+export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (input) => {
+  if (!input.credential && input.settings.apiKey !== undefined && input.settings.authToken !== undefined)
     throw new Error("Anthropic-compatible apiKey cannot be combined with authToken")
   return configure({
-    ...(settings.authToken === undefined ? { apiKey: settings.apiKey } : { auth: Auth.bearer(settings.authToken) }),
-    baseURL: settings.baseURL,
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
-    provider: settings.provider,
-    providerOptions: settings.providerOptions,
-  }).model(modelID)
+    ...ProviderPackage.routeDefaults(input.defaults),
+    ...(input.credential
+      ? ProviderPackage.apiKeyOrBearerAuthOption(input.credential, "x-api-key")
+      : input.settings.authToken === undefined
+        ? { apiKey: input.settings.apiKey }
+        : { auth: Auth.bearer(input.settings.authToken) }),
+    baseURL: input.settings.baseURL,
+    provider: input.settings.provider,
+    providerOptions: input.settings.providerOptions,
+  }).model(input.id)
 }
 
 export * as AnthropicCompatible from "./anthropic-compatible.js"

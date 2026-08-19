@@ -1,6 +1,6 @@
 import type { RouteDefaultsInput } from "../route/client.js"
 import { Auth } from "../route/auth.js"
-import type { ProviderPackage } from "../provider-package.js"
+import { ProviderPackage } from "../provider-package.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import * as BedrockConverse from "../protocols/bedrock-converse.js"
 import type { BedrockCredentials } from "../protocols/bedrock-converse.js"
@@ -50,19 +50,21 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
-  if (settings.auth === "bearer" && settings.apiKey === undefined)
+export const model: ProviderPackage.Definition<Settings>["model"] = (input) => {
+  if (!input.credential && input.settings.auth === "bearer" && input.settings.apiKey === undefined)
     throw new Error("Amazon Bedrock bearer auth requires apiKey")
-  if (settings.auth === "sigv4" && settings.apiKey !== undefined)
+  if (!input.credential && input.settings.auth === "sigv4" && input.settings.apiKey !== undefined)
     throw new Error("Amazon Bedrock SigV4 auth does not accept apiKey")
   return configure({
-    apiKey: settings.auth === "sigv4" ? undefined : settings.apiKey,
-    baseURL: settings.baseURL,
-    credentials: settings.credentials,
-    generation: settings.topP === undefined ? undefined : { topP: settings.topP },
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
-    region: settings.region,
-  }).model(modelID)
+    ...ProviderPackage.routeDefaults(input.defaults),
+    apiKey: input.credential
+      ? ProviderPackage.bearerCredentialValue(input.credential)
+      : input.settings.auth === "sigv4"
+        ? undefined
+        : input.settings.apiKey,
+    baseURL: input.settings.baseURL,
+    credentials: input.settings.credentials,
+    generation: input.settings.topP === undefined ? undefined : { topP: input.settings.topP },
+    region: input.settings.region,
+  }).model(input.id)
 }

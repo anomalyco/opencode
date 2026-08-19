@@ -8,7 +8,7 @@ import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { XAIImages } from "../protocols/xai-images.js"
 import type { OpenAIOptionsInput } from "./openai-options.js"
-import type { ProviderPackage } from "../provider-package.js"
+import { ProviderPackage } from "../provider-package.js"
 
 export const id = ProviderID.make("xai")
 
@@ -95,15 +95,13 @@ export const configure = (input: LanguageModelOptions = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings, XAIProviderOptionsInput>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Definition<Settings, XAIProviderOptionsInput>["model"] = (input) =>
   configure({
-    apiKey: settings.apiKey,
-    baseURL: settings.baseURL,
-    headers: settings.headers,
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
-    providerOptions: settings.providerOptions,
-  }).model(modelID)
+    ...ProviderPackage.routeDefaults(input.defaults),
+    ...(input.credential ? ProviderPackage.bearerAuthOption(input.credential) : { apiKey: input.settings.apiKey }),
+    baseURL: input.settings.baseURL,
+    providerOptions: input.settings.providerOptions,
+  }).model(input.id)
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image

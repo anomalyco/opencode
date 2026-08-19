@@ -69,9 +69,8 @@ const adc = (project?: string) => {
 export const oauth = (input: OAuthOptions, project?: string) => {
   if (input.accessToken !== undefined && input.auth !== undefined)
     throw new Error("Google Vertex accessToken cannot be combined with auth")
-  if (input.auth) return input.auth
-  if (input.accessToken !== undefined) return Auth.bearer(input.accessToken)
-  return adc(project)
+  const auth = input.auth ?? (input.accessToken !== undefined ? Auth.bearer(input.accessToken) : adc(project))
+  return Auth.remove("x-goog-api-key").andThen(auth)
 }
 
 export * as GoogleVertexShared from "./google-vertex-shared.js"

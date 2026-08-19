@@ -1,5 +1,5 @@
 import { Effect, Schema, Struct } from "effect"
-import type { ProviderPackage } from "../provider-package.js"
+import { ProviderPackage } from "../provider-package.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
@@ -100,19 +100,15 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => {
-  if (settings.apiKey !== undefined) throw new Error("Google Vertex Messages does not support API keys")
+export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (input) => {
+  if (input.credential?.type === "key" || (!input.credential && input.settings.apiKey !== undefined))
+    throw new Error("Google Vertex Messages does not support API keys")
   return configure({
-    accessToken: settings.accessToken,
-    baseURL: settings.baseURL,
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
-    location: settings.location,
-    project: settings.project,
-    providerOptions: settings.providerOptions,
-  }).model(modelID)
+    ...ProviderPackage.routeDefaults(input.defaults),
+    accessToken: input.credential?.type === "oauth" ? input.credential.accessToken : input.settings.accessToken,
+    baseURL: input.settings.baseURL,
+    location: input.settings.location,
+    project: input.settings.project,
+    providerOptions: input.settings.providerOptions,
+  }).model(input.id)
 }

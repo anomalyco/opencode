@@ -17,13 +17,12 @@ import { OpenAI } from "@opencode-ai/ai/providers"
 const apiKey = Config.redacted("OPENAI_API_KEY")
 
 // 1. Pick a model. The provider helper records provider identity, protocol
-// choice, capabilities, deployment options, authentication, and defaults.
+// choice, deployment options, authentication, and defaults. Catalog capabilities
+// remain application-owned and are not part of LanguageModel.
 const model = OpenAI.configure({
   apiKey,
   generation: { maxTokens: 160 },
-  providerOptions: {
-    store: false,
-  },
+  store: false,
 }).model("gpt-4o-mini")
 
 // 2. Build a provider-neutral request. This is useful when reusing one request
@@ -74,8 +73,8 @@ const streamText = LLM.stream(request).pipe(
   Stream.runDrain,
 )
 
-// 5. Tools are typed with Effect Schema. Provider turns remain explicit:
-// advertise definitions on the request, stream one turn, dispatch local calls,
+// 5. Tools are typed with Effect Schema. Model calls remain explicit:
+// advertise definitions on the request, stream one call, dispatch local calls,
 // then persist/build follow-up history in the enclosing product flow.
 const tools = {
   get_weather: Tool.make({
@@ -102,7 +101,7 @@ const streamWithTools = Effect.gen(function* () {
     console.log("tool result", event.name, dispatched.result)
 
     // A durable agent would persist these messages before starting another
-    // raw model turn. This tutorial keeps the boundary visible instead.
+    // model call. This tutorial keeps the boundary visible instead.
     const followUp = LLMRequest.update(request, {
       messages: [
         ...request.messages,

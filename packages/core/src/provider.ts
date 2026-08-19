@@ -171,7 +171,7 @@ const importPackage = Effect.fn("Provider.importPackage")(function* (
   if (typeof module !== "object" || module === null || typeof (module as { model?: unknown }).model !== "function") {
     return yield* new LoadError({
       package: specifier,
-      cause: new Error(`Provider package ${specifier} does not export model(modelID, settings)`),
+      cause: new Error(`Provider package ${specifier} does not export model(input)`),
     })
   }
   return module as ProviderPackageDefinition

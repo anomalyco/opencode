@@ -81,8 +81,22 @@ OpenAI.configure({
 }).responses("gpt-4.1-mini")
 OpenAI.configure({
   generation: { maxTokens: 100 },
-  providerOptions: { store: false },
+  store: false,
 }).responses("gpt-4.1-mini")
+OpenAI.model({
+  id: "gpt-5",
+  settings: {},
+  credential: { type: "key", value: "sk-test" },
+  defaults: { headers: { "x-test": "value" } },
+})
+OpenAI.model({
+  id: "gpt-5",
+  settings: {
+    // @ts-expect-error Common request defaults belong under input.defaults.
+    headers: { "x-test": "value" },
+  },
+  defaults: {},
+})
 
 // @ts-expect-error OpenAI model selectors only accept model ids.
 OpenAI.configure({ apiKey: "sk-test" }).responses("gpt-4.1-mini", {})
@@ -97,7 +111,7 @@ OpenAI.configure({ bogus: true })
 OpenAI.configure({ generation: { maxTokens: "many" } })
 
 // @ts-expect-error provider-native options remain typed.
-OpenAI.configure({ providerOptions: { store: "false" } })
+OpenAI.configure({ store: "false" })
 
 // @ts-expect-error auth is an override, so OpenAI rejects apiKey with auth.
 OpenAI.configure({ apiKey: "sk-test", auth: Auth.bearer("oauth-token") })
@@ -145,8 +159,12 @@ Anthropic.configure({
 }).model("claude-haiku")
 // @ts-expect-error Anthropic model selectors only accept model ids.
 Anthropic.configure({ apiKey: "anthropic-key" }).model("claude-haiku", {})
-// @ts-expect-error Anthropic package settings accept only one auth source.
-Anthropic.model("claude-sonnet-4-6", { apiKey: "anthropic-key", authToken: "anthropic-token" })
+Anthropic.model({
+  id: "claude-sonnet-4-6",
+  // @ts-expect-error Anthropic package settings accept only one auth source.
+  settings: { apiKey: "anthropic-key", authToken: "anthropic-token" },
+  defaults: {},
+})
 // @ts-expect-error Enabled Anthropic thinking requires a token budget.
 Anthropic.configure({ providerOptions: { thinking: { type: "enabled" } } })
 // @ts-expect-error Anthropic thinking budgets must be numbers.
@@ -162,11 +180,15 @@ AnthropicCompatible.configure({
 AnthropicCompatible.configure({ apiKey: "messages-key" })
 // @ts-expect-error Anthropic-compatible model selectors only accept model ids.
 AnthropicCompatible.configure({ baseURL: "https://messages.example.com/v1" }).model("compatible-model", {})
-// @ts-expect-error Anthropic-compatible package settings accept only one auth source.
-AnthropicCompatible.model("compatible-model", {
-  apiKey: "messages-key",
-  authToken: "messages-token",
-  baseURL: "https://messages.example.com/v1",
+AnthropicCompatible.model({
+  id: "compatible-model",
+  // @ts-expect-error Anthropic-compatible package settings accept only one auth source.
+  settings: {
+    apiKey: "messages-key",
+    authToken: "messages-token",
+    baseURL: "https://messages.example.com/v1",
+  },
+  defaults: {},
 })
 
 Google.configure({ apiKey: "google-key" }).model("gemini-2.5-flash")
@@ -189,15 +211,23 @@ GoogleVertex.configure({ auth: Auth.bearer("vertex-token"), project: "project" }
 GoogleVertex.configure({ apiKey: "vertex-key" }).model("gemini-3.5-flash", {})
 // @ts-expect-error Vertex Gemini config accepts only one auth source.
 GoogleVertex.configure({ accessToken: "vertex-token", apiKey: "vertex-key", project: "project" })
-// @ts-expect-error Vertex Gemini package settings accept only one auth source.
-GoogleVertex.model("gemini-3.5-flash", { accessToken: "vertex-token", apiKey: "vertex-key", project: "project" })
+GoogleVertex.model({
+  id: "gemini-3.5-flash",
+  // @ts-expect-error Vertex Gemini package settings accept only one auth source.
+  settings: { accessToken: "vertex-token", apiKey: "vertex-key", project: "project" },
+  defaults: {},
+})
 
 GoogleVertexChat.configure({ accessToken: "vertex-token", project: "project" }).model("deepseek-ai/deepseek-v3.2-maas")
 GoogleVertexChat.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model(
   "deepseek-ai/deepseek-v3.2-maas",
 )
-// @ts-expect-error Vertex Chat package settings do not accept API keys.
-GoogleVertexChat.model("deepseek-ai/deepseek-v3.2-maas", { apiKey: "vertex-key", project: "project" })
+GoogleVertexChat.model({
+  id: "deepseek-ai/deepseek-v3.2-maas",
+  // @ts-expect-error Vertex Chat package settings do not accept API keys.
+  settings: { apiKey: "vertex-key", project: "project" },
+  defaults: {},
+})
 GoogleVertexChat.configure({ accessToken: "vertex-token", project: "project" }).model(
   "deepseek-ai/deepseek-v3.2-maas",
   // @ts-expect-error Vertex Chat model selectors only accept model ids.
@@ -214,8 +244,12 @@ GoogleVertexResponses.configure({ accessToken: "vertex-token", project: "project
 GoogleVertexResponses.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model(
   "xai/grok-4.20-reasoning",
 )
-// @ts-expect-error Vertex Responses package settings do not accept API keys.
-GoogleVertexResponses.model("xai/grok-4.20-reasoning", { apiKey: "vertex-key", project: "project" })
+GoogleVertexResponses.model({
+  id: "xai/grok-4.20-reasoning",
+  // @ts-expect-error Vertex Responses package settings do not accept API keys.
+  settings: { apiKey: "vertex-key", project: "project" },
+  defaults: {},
+})
 GoogleVertexResponses.configure({ accessToken: "vertex-token", project: "project" }).model(
   "xai/grok-4.20-reasoning",
   // @ts-expect-error Vertex Responses model selectors only accept model ids.
@@ -233,8 +267,12 @@ GoogleVertexMessages.configure({
   project: "project",
   providerOptions: { thinking: { type: "adaptive", display: "omitted" }, effort: "low" },
 }).model("claude-sonnet-4-6")
-// @ts-expect-error Vertex Messages package settings do not accept API keys.
-GoogleVertexMessages.model("claude-sonnet-4-6", { apiKey: "vertex-key", project: "project" })
+GoogleVertexMessages.model({
+  id: "claude-sonnet-4-6",
+  // @ts-expect-error Vertex Messages package settings do not accept API keys.
+  settings: { apiKey: "vertex-key", project: "project" },
+  defaults: {},
+})
 GoogleVertexMessages.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model("claude-sonnet-4-6")
 GoogleVertexMessages.configure({ accessToken: "vertex-token", project: "project" }).model(
   "claude-sonnet-4-6",

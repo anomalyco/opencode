@@ -1,6 +1,6 @@
 import { Auth } from "../route/auth.js"
 import type { Route as RouteDef, RouteDefaultsInput } from "../route/client.js"
-import type { ProviderPackage } from "../provider-package.js"
+import { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenAIResponses } from "../protocols/openai-responses.js"
 import { BedrockAuth, type Credentials } from "../protocols/utils/bedrock-auth.js"
@@ -79,29 +79,27 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 
-const config = (settings: Settings): Config => {
-  if (settings.auth === "bearer" && settings.apiKey === undefined)
+const config = (input: ProviderPackage.ModelInput<Settings>): Config => {
+  if (!input.credential && input.settings.auth === "bearer" && input.settings.apiKey === undefined)
     throw new Error("Amazon Bedrock Mantle bearer auth requires apiKey")
-  if (settings.auth === "sigv4" && settings.apiKey !== undefined)
+  if (!input.credential && input.settings.auth === "sigv4" && input.settings.apiKey !== undefined)
     throw new Error("Amazon Bedrock Mantle SigV4 auth does not accept apiKey")
   return {
-    apiKey: settings.auth === "sigv4" ? undefined : settings.apiKey,
-    baseURL: settings.baseURL,
-    credentials: settings.credentials,
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
-    providerOptions: settings.providerOptions,
-    region: settings.region,
+    ...ProviderPackage.routeDefaults(input.defaults),
+    apiKey: input.credential
+      ? ProviderPackage.bearerCredentialValue(input.credential)
+      : input.settings.auth === "sigv4"
+        ? undefined
+        : input.settings.apiKey,
+    baseURL: input.settings.baseURL,
+    credentials: input.settings.credentials,
+    providerOptions: input.settings.providerOptions,
+    region: input.settings.region,
   }
 }
 
-export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => configure(config(settings)).chat(modelID)
-export const responsesModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => configure(config(settings)).responses(modelID)
+export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (input) =>
+  configure(config(input)).chat(input.id)
+export const responsesModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (input) =>
+  configure(config(input)).responses(input.id)
 export const model = chatModel
