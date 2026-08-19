@@ -88,7 +88,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Pty") {}
 
-export const layer = () =>
+const layer = () =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -313,12 +313,8 @@ export const layer = () =>
     }),
   )
 
-export function configured() {
-  return makeLocationNode({
-    service: Service,
-    layer: layer(),
-    deps: [Bus.node, Location.node, ShellSelect.node],
-  })
-}
-
-export const node = configured()
+export const node = makeLocationNode({
+  service: Service,
+  layer: layer(),
+  deps: [Bus.node, Location.node, ShellSelect.node],
+})

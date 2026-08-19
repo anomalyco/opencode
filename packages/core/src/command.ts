@@ -51,7 +51,7 @@ export interface Interface extends State.Transformable<Draft> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
 
-export const layer = () =>
+const layer = () =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -254,12 +254,8 @@ const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
 const shellRegex = /!`([^`]+)`/g
 
-export function configured() {
-  return makeLocationNode({
-    service: Service,
-    layer: layer(),
-    deps: [MCP.node, Bus.node, AppProcess.node, Location.node, ShellSelect.node],
-  })
-}
-
-export const node = configured()
+export const node = makeLocationNode({
+  service: Service,
+  layer: layer(),
+  deps: [MCP.node, Bus.node, AppProcess.node, Location.node, ShellSelect.node],
+})

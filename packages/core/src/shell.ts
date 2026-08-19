@@ -67,7 +67,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Shell") {}
 
-export const layer = () =>
+const layer = () =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -347,20 +347,16 @@ export const layer = () =>
     }),
   )
 
-export function configured() {
-  return makeLocationNode({
-    service: Service,
-    layer: layer(),
-    deps: [
-      Bus.node,
-      Location.node,
-      Global.node,
-      ShellSelect.node,
-      Environment.node,
-      PluginHooks.node,
-      SessionEnvironment.node,
-    ],
-  })
-}
-
-export const node = configured()
+export const node = makeLocationNode({
+  service: Service,
+  layer: layer(),
+  deps: [
+    Bus.node,
+    Location.node,
+    Global.node,
+    ShellSelect.node,
+    Environment.node,
+    PluginHooks.node,
+    SessionEnvironment.node,
+  ],
+})
