@@ -8,7 +8,9 @@ import { useSync } from "@/context/sync"
 import { useProviders } from "@/hooks/use-providers"
 import { resolveDefaultModel } from "@/hooks/provider-catalog"
 
-export function createPromptModelSelection(input: { agent: () => { model?: ModelKey; variant?: string } | undefined }) {
+export function createPromptModelSelection(input: {
+  agent: () => { name?: string; model?: ModelKey; variant?: string } | undefined
+}) {
   const sdk = useSDK()
   const sync = useSync()
   const models = useModels()
@@ -36,8 +38,21 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
     })[0]
   }
 
+  const agentName = () => input.agent()?.name
+
+  // A manual model pick is an override scoped to the agent it was made under.
+  // Unscoped values either predate this field or were inherited from another tab
+  // (see openNewTab in components/titlebar.tsx); those must not shadow an agent
+  // that has a model configured.
+  const override = () => {
+    const value = prompt.model.current()
+    if (!value) return
+    if (value.agent === undefined) return input.agent()?.model ? undefined : value
+    return value.agent === agentName() ? value : undefined
+  }
+
   const current = () => {
-    const key = [prompt.model.current(), input.agent()?.model, configured(), recent(), fallback()].find(
+    const key = [override(), input.agent()?.model, configured(), recent(), fallback()].find(
       (item): item is ModelKey => !!item && valid(item),
     )
     if (!key) return
@@ -67,7 +82,7 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
     set(item: ModelKey | undefined, options?: { recent?: boolean }) {
       startTransition(() =>
         batch(() => {
-          prompt.model.set(item ? { ...item, variant: prompt.model.current()?.variant } : undefined)
+          prompt.model.set(item ? { ...item, variant: override()?.variant, agent: agentName() } : undefined)
           if (!item) return
           models.setVisibility(item, true)
           if (options?.recent) models.recent.push(item)
@@ -87,7 +102,7 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
         })
       },
       selected() {
-        return prompt.model.current()?.variant
+        return override()?.variant
       },
       current() {
         const resolved = resolveModelVariant({
@@ -109,7 +124,12 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
           batch(() => {
             const model = current()
             if (!model) return
-            prompt.model.set({ providerID: model.provider.id, modelID: model.id, variant: value ?? null })
+            prompt.model.set({
+              providerID: model.provider.id,
+              modelID: model.id,
+              variant: value ?? null,
+              agent: agentName(),
+            })
             models.variant.set({ providerID: model.provider.id, modelID: model.id }, value)
           }),
         )
