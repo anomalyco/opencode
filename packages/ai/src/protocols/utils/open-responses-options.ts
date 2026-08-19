@@ -1,6 +1,5 @@
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import { TextVerbosity, type LLMRequest } from "../../schema/index.js"
-import { isRecord } from "../../utils/record.js"
 
 export const ResponseIncludables = [
   "file_search_call.results",
@@ -17,66 +16,57 @@ export type ResponseIncludable = (typeof ResponseIncludables)[number]
 export const ServiceTiers = ["auto", "default", "flex", "priority"] as const
 export type ServiceTier = (typeof ServiceTiers)[number]
 
-export interface AllowedTools {
-  readonly toolNames: ReadonlyArray<string>
-  readonly mode: "auto" | "none" | "required"
-}
-
-const TEXT_VERBOSITY = new Set<string>(["low", "medium", "high"])
 const INCLUDABLES = new Set<string>(ResponseIncludables)
-const SERVICE_TIERS = new Set<string>(ServiceTiers)
-
-const isTextVerbosity = (value: unknown): value is Schema.Schema.Type<typeof TextVerbosity> =>
-  typeof value === "string" && TEXT_VERBOSITY.has(value)
-
-const isServiceTier = (value: unknown): value is ServiceTier => typeof value === "string" && SERVICE_TIERS.has(value)
 
 export const ReasoningEffort = Schema.String
 export const TextVerbositySchema = TextVerbosity
 export const ResponseIncludableSchema = Schema.Literals(ResponseIncludables)
 export const ServiceTierSchema = Schema.Literals(ServiceTiers)
 
-export interface Resolved {
-  readonly instructions?: string
-  readonly store?: boolean
-  readonly reasoningEffort?: string
-  readonly reasoningSummary?: "auto" | "concise" | "detailed"
+export const AllowedTools = Schema.Struct({
+  toolNames: Schema.Array(Schema.String),
+  mode: Schema.optional(Schema.Literals(["auto", "none", "required"])),
+})
+export type AllowedTools = typeof AllowedTools.Type
+
+export const Options = Schema.Struct({
+  instructions: Schema.optional(Schema.String),
+  store: Schema.optional(Schema.Boolean),
+  reasoningEffort: Schema.optional(ReasoningEffort),
+  reasoningSummary: Schema.optional(Schema.Literals(["auto", "concise", "detailed"])),
+  include: Schema.optional(Schema.Array(Schema.String)),
+  textVerbosity: Schema.optional(TextVerbositySchema),
+  serviceTier: Schema.optional(ServiceTierSchema),
+  allowedTools: Schema.optional(AllowedTools),
+  maxToolCalls: Schema.optional(Schema.Int),
+  parallelToolCalls: Schema.optional(Schema.Boolean),
+})
+export type Options = typeof Options.Type
+
+export type OptionsInput = Omit<Options, "include"> & {
   readonly include?: ReadonlyArray<ResponseIncludable>
-  readonly textVerbosity?: Schema.Schema.Type<typeof TextVerbosity>
-  readonly serviceTier?: ServiceTier
-  readonly allowedTools?: AllowedTools
-  readonly maxToolCalls?: number
-  readonly parallelToolCalls?: boolean
 }
 
+export type Resolved = Omit<Options, "allowedTools" | "include"> & {
+  readonly allowedTools?: AllowedTools & { readonly mode: NonNullable<AllowedTools["mode"]> }
+  readonly include?: ReadonlyArray<ResponseIncludable>
+}
+
+const decodeOptions = Schema.decodeUnknownOption(Options)
+
 export const resolve = (request: LLMRequest): Resolved => {
-  const input = request.providerOptions?.[request.model.route.providerMetadataKey ?? "openresponses"]
-  const include = Array.isArray(input?.include)
-    ? input.include.filter((entry): entry is ResponseIncludable => INCLUDABLES.has(entry))
-    : []
-  const reasoningSummary = input?.reasoningSummary
-  const allowedTools = input?.allowedTools
-  const toolNames = isRecord(allowedTools) && Array.isArray(allowedTools.toolNames) ? allowedTools.toolNames : []
-  const allowedMode = isRecord(allowedTools) ? allowedTools.mode : undefined
+  const input = Option.getOrUndefined(
+    decodeOptions(request.providerOptions?.[request.model.route.providerMetadataKey ?? "openresponses"]),
+  )
+  if (!input) return {}
+  const include = input.include?.filter((entry): entry is ResponseIncludable => INCLUDABLES.has(entry)) ?? []
   return {
-    instructions: typeof input?.instructions === "string" ? input.instructions : undefined,
-    store: typeof input?.store === "boolean" ? input.store : undefined,
-    reasoningEffort: typeof input?.reasoningEffort === "string" ? input.reasoningEffort : undefined,
-    reasoningSummary:
-      reasoningSummary === "auto" || reasoningSummary === "concise" || reasoningSummary === "detailed"
-        ? reasoningSummary
-        : undefined,
+    ...input,
     include: include.length > 0 ? include : undefined,
-    textVerbosity: isTextVerbosity(input?.textVerbosity) ? input.textVerbosity : undefined,
-    serviceTier: isServiceTier(input?.serviceTier) ? input.serviceTier : undefined,
     allowedTools:
-      toolNames.length > 0 &&
-      toolNames.every((name): name is string => typeof name === "string") &&
-      (allowedMode === undefined || allowedMode === "auto" || allowedMode === "none" || allowedMode === "required")
-        ? { toolNames, mode: allowedMode ?? "auto" }
+      input.allowedTools && input.allowedTools.toolNames.length > 0
+        ? { ...input.allowedTools, mode: input.allowedTools.mode ?? "auto" }
         : undefined,
-    maxToolCalls: typeof input?.maxToolCalls === "number" ? input.maxToolCalls : undefined,
-    parallelToolCalls: typeof input?.parallelToolCalls === "boolean" ? input.parallelToolCalls : undefined,
   }
 }
 
