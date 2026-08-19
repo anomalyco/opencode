@@ -237,6 +237,58 @@ test("searches from an absolute root without a default base", async () => {
   expect(directories).toEqual(["/"])
 })
 
+test("lists the base directory when the filter is empty", async () => {
+  const listed: string[] = []
+  let found = 0
+  const sdk = {
+    api: {
+      file: {
+        list: (input: { location?: { directory?: string } }) => {
+          listed.push(input.location?.directory ?? "")
+          return Promise.resolve({
+            data: [
+              { path: "projects/", type: "directory" },
+              { path: "notes.txt", type: "file" },
+              { path: "work/", type: "directory" },
+            ],
+          })
+        },
+        // `find` is index-backed and returns nothing for an empty query in a home
+        // directory or the filesystem root, so the empty filter must not use it.
+        find: () => {
+          found++
+          return Promise.resolve({ data: [] })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
+
+  expect(await search("")).toEqual(["/home/luke/projects", "/home/luke/work"])
+  expect(listed).toEqual(["/home/luke"])
+  expect(found).toBe(0)
+})
+
+test("still fuzzy-finds once the filter is non-empty", async () => {
+  let found = 0
+  const sdk = {
+    api: {
+      file: {
+        list: () => Promise.resolve({ data: [] }),
+        find: (input: { query?: string }) => {
+          found++
+          expect(input.query).toBe("proj")
+          return Promise.resolve({ data: [{ path: "projects/" }] })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
+
+  expect(await search("proj")).toEqual(["/home/luke/projects"])
+  expect(found).toBe(1)
+})
+
 test("identifies the next directory level to preload", () => {
   expect(
     preloadTreeDirectories("src/", [

@@ -307,9 +307,23 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 const project = global.ensureServerCtx(conn).projects.list()[0]
                 return project ? [{ server: ServerConnection.key(conn), project }] : []
               })[0]
-              if (!fallback) return
+              if (fallback) {
+                tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
+                return
+              }
 
-              tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
+              // No project has been opened in this browser yet. Without this the button
+              // silently does nothing on a fresh profile. The server already reports the
+              // directory it was started in, so use that and remember it as an open project.
+              const connection = global.servers.list()[0] ?? server.current
+              if (!connection) return
+              const ctx = global.ensureServerCtx(connection)
+              const directory = ctx.sync.data.path.directory
+              if (!directory) return
+
+              ctx.projects.open(directory)
+              ctx.projects.touch(directory)
+              tabs.newDraft({ server: ServerConnection.key(connection), directory }, "")
             }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
