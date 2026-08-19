@@ -60,7 +60,11 @@ describe("LMStudioPlugin", () => {
                   architecture: "gemma4",
                   loaded_instances: [{ config: { context_length: 32_768 } }, { config: { context_length: 16_384 } }],
                   max_context_length: 262_144,
-                  capabilities: { vision: true, trained_for_tool_use: true },
+                  capabilities: {
+                    vision: true,
+                    trained_for_tool_use: true,
+                    reasoning: { allowed_options: ["off", "on"], default: "on" },
+                  },
                 },
                 {
                   type: "llm",
@@ -105,6 +109,10 @@ describe("LMStudioPlugin", () => {
             name: "Gemma 4 26B A4B",
             capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
             limit: { context: 16_384, output: 0 },
+            variants: [
+              { id: "none", settings: { reasoningEffort: "none" } },
+              { id: "thinking", settings: { reasoningEffort: "medium" } },
+            ],
           })
           expect(yield* catalog.model.get(providerID, Model.ID.make("deepseek-r1"))).toMatchObject({
             capabilities: { tools: false, input: ["text"], output: ["text"] },

@@ -6,6 +6,7 @@ import { Config } from "../../config.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
+import { LocalReasoning } from "./local-reasoning.js"
 
 const providerID = "ollama"
 
@@ -96,6 +97,9 @@ export function make(origin = "http://127.0.0.1:11434", interval: Duration.Input
               input: ["text", ...(item.show.capabilities?.includes("vision") ? ["image"] : [])],
               output: ["text"],
             }
+            model.variants = item.show.capabilities?.includes("thinking")
+              ? LocalReasoning.infer("ollama", `${item.model} ${model.family ?? ""}`)
+              : []
             model.limit = {
               context:
                 Object.entries(item.show.model_info ?? {}).flatMap(([key, value]) =>
