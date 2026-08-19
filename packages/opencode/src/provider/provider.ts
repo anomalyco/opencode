@@ -82,6 +82,71 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 }
 
+// Some openai-compatible gateways append non-chat SSE frames (e.g. billing.summary,
+// usage-only frames). @ai-sdk/openai-compatible Zod-validates every data payload as
+// a chat chunk (requires choices|error), so non-chat frames kill the stream.
+// Drop any SSE data line whose JSON payload is a non-null object without
+// `choices` (chat chunk) or `error` (API error) properties.
+export function filterNonChatSseChunks(res: Response): Response {
+  if (!res.body) return res
+  if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  const encoder = new TextEncoder()
+  let buffer = ""
+
+  const body = new ReadableStream<Uint8Array>({
+    async pull(ctrl) {
+      const part = await reader.read()
+      if (part.done) {
+        if (buffer.length > 0) {
+          const kept = isValidChatSseLine(buffer)
+          if (kept !== undefined) ctrl.enqueue(encoder.encode(kept))
+          buffer = ""
+        }
+        ctrl.close()
+        return
+      }
+
+      buffer += decoder.decode(part.value, { stream: true })
+      const lines = buffer.split(/\r?\n/)
+      buffer = lines.pop() ?? ""
+
+      const out = lines.flatMap((line) => {
+        const kept = isValidChatSseLine(line)
+        return kept === undefined ? [] : [kept]
+      })
+      if (out.length === 0) return
+      ctrl.enqueue(encoder.encode(out.join("\n") + "\n"))
+    },
+    async cancel(reason) {
+      await reader.cancel(reason)
+    },
+  })
+
+  return new Response(body, {
+    headers: new Headers(res.headers),
+    status: res.status,
+    statusText: res.statusText,
+  })
+}
+
+function isValidChatSseLine(line: string): string | undefined {
+  if (!line.startsWith("data:")) return line
+  const payload = line.slice(5).trimStart()
+  if (payload === "" || payload === "[DONE]") return line
+  try {
+    const parsed = JSON.parse(payload)
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      if (!("choices" in parsed) && !("error" in parsed)) return undefined
+    }
+  } catch {
+    // keep malformed JSON data lines
+  }
+  return line
+}
+
 function timeoutController(ms: number) {
   const ctl = new AbortController()
   const id = setTimeout(() => ctl.abort(new ProviderError.HeaderTimeoutError(ms)), ms)
@@ -1794,8 +1859,11 @@ const layer = Layer.effect(
             timeout: false,
           }).finally(() => headerTimeoutCtl?.clear())
 
-          if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          const filtered = model.api.npm.includes("@ai-sdk/openai-compatible")
+            ? filterNonChatSseChunks(res)
+            : res
+          if (!chunkAbortCtl) return filtered
+          return wrapSSE(filtered, chunkTimeout, chunkAbortCtl)
         }
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
