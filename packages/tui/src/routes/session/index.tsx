@@ -2953,7 +2953,17 @@ function Shell(props: ToolProps) {
     const id = shellID()
     return Boolean(background() && id && data.shell.get(id))
   })
-  const isRunning = createMemo(() => props.part.state.status === "running" || backgroundRunning())
+  const stepCompleted = createMemo(() =>
+    data.session.message.list(ctx.sessionID).some(
+      (message) =>
+        message.type === "assistant" &&
+        message.finish !== undefined &&
+        message.content.some((part) => part.type === "tool" && part.id === props.part.id),
+    ),
+  )
+  const isRunning = createMemo(() =>
+    background() ? backgroundRunning() : props.part.state.status === "running" && !stepCompleted(),
+  )
   const command = createMemo(() => stringValue(props.input.command))
   const workdir = createMemo(() => pathFormatter.format(stringValue(props.input.workdir)))
   const [expanded, setExpanded] = createSignal(false)
