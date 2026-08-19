@@ -15,15 +15,29 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
         id === "session.child.first" ? ["ctrl+j"] : id === "command.palette.show" ? ["ctrl+p"] : [],
     },
     data: {
+      on: () => () => {},
       session: {
         family: () => ["session", "child"],
-        status: (id: string) => (id === "child" ? "running" : "idle"),
+        status: (id: string) => (id === "child" || id === "session" ? "running" : "idle"),
         get: () => ({ id: "session", location: { directory: "/workspace" } }),
         cost: () => 1,
-        message: { list: () => [] },
+        message: {
+          list: () => [
+            {
+              type: "assistant",
+              content: [
+                {
+                  type: "tool",
+                  id: "call-shell",
+                  state: { status: "completed", metadata: { status: "running" } },
+                },
+              ],
+            },
+          ],
+        },
       },
       shell: {
-        list: () => [{ metadata: { sessionID: "session" } }],
+        list: () => [{ metadata: { sessionID: "session", callID: "call-shell" } }],
       },
       location: {
         model: { list: () => [] },

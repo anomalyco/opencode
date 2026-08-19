@@ -2938,12 +2938,32 @@ function Shell(props: ToolProps) {
   const permission = useToolPermission(() => props.part)
   const color = createMemo(() => (permission() ? theme.text.feedback.warning.default : theme.text.default))
   const shellID = createMemo(() => stringValue(props.metadata.shellID))
-  const background = createMemo(() => Boolean(shellID()) && props.part.state.status !== "running")
+  const [shellRevision, updateShellRevision] = createSignal(0)
+  const shellExited = (event: { data: { id: string } }) => {
+    if (event.data.id === shellID()) updateShellRevision((revision) => revision + 1)
+  }
+  onCleanup(data.on("shell.exited", shellExited))
+  onCleanup(data.on("shell.deleted", shellExited))
+  const background = createMemo(
+    () => Boolean(shellID()) && props.part.state.status === "completed" && props.metadata.status === "running",
+  )
   const backgroundRunning = createMemo(() => {
+    shellRevision()
+    data.session.status(ctx.sessionID)
     const id = shellID()
-    return Boolean(id && data.shell.get(id))
+    return Boolean(background() && id && data.shell.get(id))
   })
-  const isRunning = createMemo(() => props.part.state.status === "running" || backgroundRunning())
+  const stepCompleted = createMemo(() =>
+    data.session.message.list(ctx.sessionID).some(
+      (message) =>
+        message.type === "assistant" &&
+        message.finish !== undefined &&
+        message.content.some((part) => part.type === "tool" && part.id === props.part.id),
+    ),
+  )
+  const isRunning = createMemo(() =>
+    background() ? backgroundRunning() : props.part.state.status === "running" && !stepCompleted(),
+  )
   const command = createMemo(() => stringValue(props.input.command))
   const workdir = createMemo(() => pathFormatter.format(stringValue(props.input.workdir)))
   const [expanded, setExpanded] = createSignal(false)

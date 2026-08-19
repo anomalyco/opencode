@@ -728,12 +728,16 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.tool.success":
+        let completedShellID: string | undefined
+        const shellCompleted = event.data.metadata?.status === "completed"
         message.update(event.data.sessionID, (draft, index) => {
           const match = message.latestTool(
             message.assistant(draft, index, event.data.assistantMessageID),
             event.data.id,
           )
           if (match?.state.status !== "running") return
+          if (shellCompleted && typeof match.state.metadata.shellID === "string")
+            completedShellID = match.state.metadata.shellID
           match.state = {
             status: "completed",
             input: match.state.input,
@@ -744,6 +748,19 @@ export function createData(config: CreateDataInput) {
           match.providerResultState = event.data.resultState
           match.time.completed = event.created
         })
+        if (shellCompleted && event.location)
+          setStore(
+            "location",
+            locationKey(event.location),
+            "shell",
+            reconcile(
+              Object.fromEntries(
+                Object.entries(store.location[locationKey(event.location)]?.shell ?? {}).filter(
+                  ([id, shell]) => id !== completedShellID && shell.metadata.callID !== event.data.id,
+                ),
+              ),
+            ),
+          )
         return
       case "session.tool.failed":
         message.update(event.data.sessionID, (draft, index) => {
@@ -975,10 +992,16 @@ export function createData(config: CreateDataInput) {
         break
       case "shell.exited":
       case "shell.deleted":
-        setStore("location", locationKey(location), (data) => ({
-          ...data,
-          shell: Object.fromEntries(Object.entries(data?.shell ?? {}).filter(([id]) => id !== event.data.id)),
-        }))
+        setStore(
+          "location",
+          locationKey(location),
+          "shell",
+          reconcile(
+            Object.fromEntries(
+              Object.entries(store.location[locationKey(location)]?.shell ?? {}).filter(([id]) => id !== event.data.id),
+            ),
+          ),
+        )
         break
       case "reference.updated":
         result.location.reference.invalidate()

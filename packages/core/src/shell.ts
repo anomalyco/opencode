@@ -291,16 +291,17 @@ export const layer = (options?: ShellSelect.Options) =>
                   })
                   yield* beforeWait
                   yield* Deferred.await(outputDone)
-                  // Resolve waiters with the terminal Info before any retention eviction, so an evicted
-                  // session still reports success rather than the removal NotFoundError. This runs before
-                  // the timeout-fiber interrupt below, which on the timeout path would otherwise cancel
-                  // this very fiber (finish is invoked by the timeout fiber) before waiters are resolved.
-                  yield* Deferred.succeed(session.done, session.info)
+                  // Publish terminal state before unblocking waiters. Once done resolves, the managing
+                  // scope may close and interrupt this exit watcher before clients receive shell.exited.
                   yield* bus.publish(Shell.Event.Exited, {
                     id,
                     ...(exit !== undefined ? { exit } : {}),
                     status,
                   })
+                  // Resolve waiters before retention eviction, so an evicted session still reports success
+                  // rather than the removal NotFoundError. This also runs before the timeout-fiber interrupt
+                  // below, which can otherwise cancel finish when invoked by that same timeout fiber.
+                  yield* Deferred.succeed(session.done, session.info)
                   exitOrder.push(id)
                   while (exitOrder.length > EXITED_LIMIT) {
                     const oldest = exitOrder[0]
@@ -327,6 +328,7 @@ export const layer = (options?: ShellSelect.Options) =>
                   )
                 })
 
+              yield* bus.publish(Shell.Event.Created, { info })
               yield* session.timeout(invocation.timeout)
 
               runFork(
@@ -336,7 +338,6 @@ export const layer = (options?: ShellSelect.Options) =>
                 ),
               )
 
-              yield* bus.publish(Shell.Event.Created, { info })
               yield* Deferred.succeed(ready, session)
               // Hold the handle's scope open until the command terminates; closing it earlier would
               // release (kill) the process before its exit is observed.

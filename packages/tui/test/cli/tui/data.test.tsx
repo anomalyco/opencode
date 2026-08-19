@@ -1997,9 +1997,13 @@ test("keeps shell state scoped to location", async () => {
     })
   }, events)
   let data!: ReturnType<typeof useData>
+  let otherShellCount = 0
 
   function Probe() {
     data = useData()
+    createEffect(() => {
+      otherShellCount = data.shell.list({ directory: other, workspaceID: workspace }).length
+    })
     return (
       <RouteProvider initialRoute={{ type: "session", sessionID: "ses_shared" }}>
         <Keymap.Provider>
@@ -2067,6 +2071,15 @@ test("keeps shell state scoped to location", async () => {
     expect(
       data.shell.listBySession("ses_shared").find((shell) => shell.id === "sh_live_other")?.location.directory,
     ).toBe(other)
+    await wait(() => otherShellCount === 2)
+    events.emit({
+      id: "evt_shell_exited",
+      created: 0,
+      type: "shell.exited",
+      location: { directory: other, workspaceID: workspace },
+      data: { id: "sh_live_other", exit: 0, status: "exited" },
+    })
+    await wait(() => otherShellCount === 1)
   } finally {
     app.renderer.destroy()
   }
@@ -2757,6 +2770,75 @@ test("settles pending tools when a live failure arrives", async () => {
       previous: { id: "model-1", providerID: "provider-1", variant: "medium" },
       model: { id: "model-1", providerID: "provider-1", variant: "high" },
     })
+
+    emitEvent(events, {
+      id: "evt_input_2",
+      created: 1,
+      type: "session.tool.input.started",
+      durable: durable("session-1", 7),
+      data: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_explicit_assistant_9",
+        id: "call-2",
+        name: "shell",
+      },
+    })
+    emitEvent(events, {
+      id: "evt_called_2",
+      created: 1,
+      type: "session.tool.called",
+      durable: durable("session-1", 8),
+      data: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_explicit_assistant_9",
+        id: "call-2",
+        input: { command: "exit 0" },
+        executed: false,
+      },
+    })
+    emitEvent(events, {
+      id: "evt_shell_created_2",
+      created: 1,
+      type: "shell.created",
+      data: {
+        info: {
+          id: "sh_completed",
+          status: "running",
+          command: "exit 0",
+          cwd: directory,
+          shell: "/bin/sh",
+          file: "/tmp/opencode-shell",
+          metadata: { sessionID: "session-1", callID: "call-2" },
+          time: { started: 1 },
+        },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_progress_2",
+      created: 1,
+      type: "session.tool.progress",
+      data: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_explicit_assistant_9",
+        id: "call-2",
+        metadata: { shellID: "sh_completed" },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_success_2",
+      created: 2,
+      type: "session.tool.success",
+      durable: durable("session-1", 9, 2),
+      data: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_explicit_assistant_9",
+        id: "call-2",
+        content: [{ type: "text", text: "(no output)" }],
+        metadata: { status: "completed", exit: 0 },
+        executed: false,
+      },
+    })
+    await wait(() => sync.shell.list().length === 0)
   } finally {
     app.renderer.destroy()
   }
