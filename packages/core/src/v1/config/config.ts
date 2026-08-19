@@ -125,6 +125,21 @@ export const Info = Schema.Struct({
     description: "Additional instruction files or patterns to include",
   }),
   layout: Schema.optional(ConfigLayoutV1.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
+  display: Schema.optional(
+    Schema.Struct({
+      currency: Schema.optional(Schema.String).annotate({
+        description:
+          'Preferred display currency (ISO 4217 code, e.g. "CNY") for usage costs. When unset, costs are shown in the provider\'s source currency.',
+      }),
+      exchangeRates: Schema.optional(Schema.Record(Schema.String, Schema.Finite)).annotate({
+        description:
+          "Custom exchange rates as units per 1 USD. Take precedence over the built-in approximate display rates. An invalid rate disables conversion for that currency.",
+      }),
+    }),
+  ).annotate({
+    description:
+      "Presentation options. The display currency only affects how usage costs are shown; amounts are never relabeled without conversion.",
+  }),
   permission: Schema.optional(ConfigPermissionV1.Info),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   attachment: Schema.optional(ConfigAttachmentV1.Info).annotate({

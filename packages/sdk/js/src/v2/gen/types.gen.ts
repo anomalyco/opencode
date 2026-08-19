@@ -1999,6 +1999,12 @@ export type Config = {
       }
   instructions?: Array<string>
   layout?: LayoutConfig
+  display?: {
+    currency?: string
+    exchangeRates?: {
+      [key: string]: number
+    }
+  }
   permission?: PermissionConfig
   tools?: {
     [key: string]: boolean
@@ -2071,6 +2077,7 @@ export type Model = {
       read: number
       write: number
     }
+    currency?: string
     tiers?: Array<{
       input: number
       output: number
