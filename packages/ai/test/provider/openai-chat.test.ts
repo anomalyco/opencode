@@ -664,6 +664,65 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("preserves and replays streamed refusals", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ role: "assistant", refusal: "I can't" }),
+              deltaChunk({ refusal: " help with that." }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("I can't help with that.")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "I can't help with that.",
+          providerMetadata: { openai: { refusal: true } },
+        },
+      ])
+
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: null, refusal: "I can't help with that." },
+      ])
+    }),
+  )
+
+  it.effect("uses fresh block ids when content and refusal deltas alternate", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ refusal: "No." }),
+              deltaChunk({ content: " Alternative." }),
+              deltaChunk({ refusal: " Still no." }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.textStart).map((event) => event.id)).toEqual([
+        "refusal-0",
+        "text-1",
+        "refusal-2",
+      ])
+      expect(response.events.filter(LLMEvent.is.textEnd).map((event) => event.id)).toEqual([
+        "refusal-0",
+        "text-1",
+        "refusal-2",
+      ])
+    }),
+  )
+
   it.effect("parses and replays OpenAI-compatible reasoning fields", () =>
     Effect.gen(function* () {
       const fields = ["reasoning_content", "reasoning", "reasoning_text"] as const
