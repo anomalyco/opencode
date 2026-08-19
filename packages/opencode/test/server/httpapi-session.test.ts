@@ -427,6 +427,52 @@ describe("session HttpApi", () => {
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
   )
 
+  it.live("legacy prompt endpoint honors explicit and persisted session agents", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      yield* llm.text("ok", { usage: { input: 1, output: 1 } })
+      yield* llm.text("ok", { usage: { input: 1, output: 1 } })
+
+      const directory = yield* tmpdirScoped({
+        git: true,
+        config: {
+          ...testProviderConfig(llm.url),
+          agent: {
+            helper: {
+              mode: "primary",
+              model: "test/test-model",
+              permission: {},
+            },
+          },
+        },
+      })
+      const headers = { "x-opencode-directory": directory, "content-type": "application/json" }
+      const session = yield* createSession({ title: "agent prompt", agent: "helper" }).pipe(provideInstanceEffect(directory))
+
+      const implicit = yield* request(pathFor(SessionPaths.prompt, { sessionID: session.id }), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ noReply: true, parts: [{ type: "text", text: "implicit" }] }),
+      })
+      const explicit = yield* request(pathFor(SessionPaths.prompt, { sessionID: session.id }), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ agent: "helper", noReply: true, parts: [{ type: "text", text: "explicit" }] }),
+      })
+
+      expect(implicit.status).toBe(200)
+      expect(explicit.status).toBe(200)
+      yield* responseJson(implicit)
+      yield* responseJson(explicit)
+
+      const messages = yield* Session.use.messages({ sessionID: session.id }).pipe(provideInstanceEffect(directory), Effect.orDie)
+      const userAgents = messages
+        .filter((message) => message.info.role === "user")
+        .map((message) => message.info.agent)
+      expect(userAgents).toEqual(["helper", "helper"])
+    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
+  )
+
   it.instance(
     "returns v2 public request errors for cursor and workspace query failures",
     () =>
