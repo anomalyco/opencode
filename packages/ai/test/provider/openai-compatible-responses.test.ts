@@ -157,6 +157,38 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("preserves native reasoning in the Open Responses namespace", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const reasoningItem = {
+        type: "reasoning" as const,
+        id: "rs_1",
+        summary: [{ type: "summary_text" as const, text: "Short summary." }],
+        content: [{ type: "reasoning_text" as const, text: "Long raw reasoning." }],
+        encrypted_content: "encrypted-state",
+      }
+      const { id: _id, ...replayItem } = reasoningItem
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.done", item: reasoningItem },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Short summary.")
+      expect(response.message.content[0]).toMatchObject({
+        providerMetadata: { openresponses: { reasoningItem: replayItem } },
+      })
+    }),
+  )
+
   it.effect("does not interpret OpenAI hosted-tool items", () =>
     Effect.gen(function* () {
       const model = configure({

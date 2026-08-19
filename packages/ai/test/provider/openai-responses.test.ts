@@ -489,14 +489,31 @@ describe("OpenAI Responses route", () => {
             type: "reasoning",
             id: "rs_1",
             summary: [{ type: "summary_text", text: "Thought" }],
+            content: [{ type: "reasoning_text", text: "Raw thought" }],
             encrypted_content: "encrypted",
+            status: "completed",
           },
         }),
       )
       const saved = checkpoint(
         yield* first.observe(
           create,
-          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+          ProviderShared.encodeJson({
+            type: "response.completed",
+            response: {
+              id: "resp_1",
+              output: [
+                {
+                  type: "reasoning",
+                  id: "rs_1",
+                  summary: [{ type: "summary_text", text: "Thought" }],
+                  content: [{ type: "reasoning_text", text: "Raw thought" }],
+                  encrypted_content: "encrypted",
+                  status: "completed",
+                },
+              ],
+            },
+          }),
         ),
       )
       const next = continuationDriver({
@@ -506,7 +523,9 @@ describe("OpenAI Responses route", () => {
           {
             type: "reasoning",
             summary: [{ type: "summary_text", text: "Thought" }],
+            content: [{ type: "reasoning_text", text: "Raw thought" }],
             encrypted_content: "encrypted",
+            status: "completed",
           },
           { role: "user", content: [{ type: "input_text", text: "Continue" }] },
         ],
@@ -1676,16 +1695,29 @@ describe("OpenAI Responses route", () => {
       expect(response.events).toMatchObject([
         { type: "step-start", index: 0 },
         { type: "reasoning-start", id: "rs_1" },
-        { type: "reasoning-delta", id: "rs_1", text: "thinking" },
         { type: "text-start", id: "msg_1" },
         { type: "text-delta", id: "msg_1", text: "Hello" },
-        { type: "reasoning-end", id: "rs_1" },
+        { type: "reasoning-delta", id: "rs_1", text: "thinking" },
+        {
+          type: "reasoning-end",
+          id: "rs_1",
+          providerMetadata: {
+            openai: {
+              itemId: "rs_1",
+              reasoningEncryptedContent: null,
+              reasoningItem: {
+                type: "reasoning",
+                summary: [{ type: "summary_text", text: "thinking" }],
+              },
+            },
+          },
+        },
         { type: "text-end", id: "msg_1" },
         { type: "step-finish", index: 0, reason: { normalized: "stop", raw: undefined } },
         { type: "finish", reason: { normalized: "stop", raw: undefined } },
       ])
       expect(response.events.filter((event) => event.type === "finish")).toHaveLength(1)
-      expect(response.message.content).toEqual([
+      expect(response.message.content).toMatchObject([
         { type: "reasoning", text: "thinking" },
         { type: "text", text: "Hello" },
       ])
@@ -1718,13 +1750,197 @@ describe("OpenAI Responses route", () => {
         expect.objectContaining({
           type: "reasoning-end",
           id: "rs_1",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: {
+            openai: {
+              itemId: "rs_1",
+              reasoningEncryptedContent: "encrypted-state",
+              reasoningItem: {
+                type: "reasoning",
+                encrypted_content: "encrypted-state",
+                summary: [{ type: "summary_text", text: "thinking" }],
+              },
+            },
+          },
         }),
       )
     }),
   )
 
-  it.effect("streams each reasoning summary part as a separate block", () =>
+  it.effect("displays reasoning summaries and replays the native item", () =>
+    Effect.gen(function* () {
+      const reasoningItem = {
+        type: "reasoning" as const,
+        id: "rs_1",
+        summary: [
+          { type: "summary_text" as const, text: "Checked Codex." },
+          { type: "summary_text" as const, text: "Checked Pi." },
+        ],
+        content: [
+          { type: "reasoning_text" as const, text: "Raw Codex analysis." },
+          { type: "reasoning_text" as const, text: "Raw Pi analysis." },
+        ],
+        encrypted_content: "encrypted-state",
+        status: "completed",
+        provider_extension: { trace: "native-value" },
+      }
+      const { id: _id, ...replayItem } = reasoningItem
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, { providerOptions: { openai: { store: false } } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
+              {
+                type: "response.reasoning_text.delta",
+                item_id: "rs_1",
+                content_index: 0,
+                delta: "Raw Codex analysis.",
+              },
+              {
+                type: "response.reasoning_summary_text.delta",
+                item_id: "rs_1",
+                summary_index: 0,
+                delta: "Checked Codex.",
+              },
+              { type: "response.output_item.done", item: reasoningItem },
+              { type: "response.completed", response: { id: "resp_1", output: [reasoningItem] } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Checked Codex.\n\nChecked Pi.")
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Checked Codex.\n\nChecked Pi.",
+          providerMetadata: {
+            openai: {
+              itemId: "rs_1",
+              reasoningEncryptedContent: "encrypted-state",
+              reasoningItem: replayItem,
+            },
+          },
+        },
+      ])
+
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [response.message, Message.user("Continue.")],
+          providerOptions: { openai: { store: false } },
+        }),
+      )
+      expect(prepared.body.input).toEqual([
+        replayItem,
+        { role: "user", content: [{ type: "input_text", text: "Continue." }] },
+      ])
+    }),
+  )
+
+  it.effect("uses raw reasoning when no summary is available", () =>
+    Effect.gen(function* () {
+      const reasoningItem = {
+        type: "reasoning" as const,
+        id: "rs_raw",
+        summary: [],
+        content: [
+          { type: "reasoning_text" as const, text: "First raw part." },
+          { type: "reasoning_text" as const, text: "Second raw part." },
+        ],
+        encrypted_content: "encrypted-state",
+      }
+      const { id: _id, ...replayItem } = reasoningItem
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_raw" } },
+              { type: "response.output_item.done", item: reasoningItem },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("First raw part.\n\nSecond raw part.")
+      expect(response.message.content[0]).toMatchObject({
+        type: "reasoning",
+        text: "First raw part.\n\nSecond raw part.",
+        providerMetadata: { openai: { reasoningItem: replayItem } },
+      })
+    }),
+  )
+
+  it.effect("preserves native reasoning for xAI Responses", () =>
+    Effect.gen(function* () {
+      const reasoningItem = {
+        type: "reasoning" as const,
+        id: "rs_xai",
+        summary: [{ type: "summary_text" as const, text: "xAI summary." }],
+        content: [{ type: "reasoning_text" as const, text: "xAI raw reasoning." }],
+        encrypted_content: "xai-state",
+      }
+      const { id: _id, ...replayItem } = reasoningItem
+      const response = yield* LLMClient.generate(LLM.request({ model: xaiModel, prompt: "Think." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.done", item: reasoningItem },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("xAI summary.")
+      expect(response.message.content[0]).toMatchObject({
+        providerMetadata: { xai: { reasoningItem: replayItem } },
+      })
+      const prepared = yield* compileRequest(
+        LLM.request({ model: xaiModel, messages: [response.message, Message.user("Continue.")] }),
+      )
+      expect(prepared.body.input).toEqual([
+        replayItem,
+        { role: "user", content: [{ type: "input_text", text: "Continue." }] },
+      ])
+    }),
+  )
+
+  it.effect("uses terminal reasoning output over a sparse item completion", () =>
+    Effect.gen(function* () {
+      const reasoningItem = {
+        type: "reasoning" as const,
+        id: "rs_terminal",
+        summary: [{ type: "summary_text" as const, text: "Terminal summary." }],
+        content: [{ type: "reasoning_text" as const, text: "Terminal raw content." }],
+        encrypted_content: "encrypted-state",
+      }
+      const { id: _id, ...replayItem } = reasoningItem
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_terminal" } },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_terminal", encrypted_content: null },
+              },
+              { type: "response.completed", response: { id: "resp_1", output: [reasoningItem] } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Terminal summary.")
+      expect(response.message.content[0]).toMatchObject({
+        providerMetadata: { openai: { reasoningItem: replayItem } },
+      })
+    }),
+  )
+
+  it.effect("projects reasoning summary parts as one display block", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, { providerOptions: { openai: { store: false } } }),
@@ -1752,26 +1968,32 @@ describe("OpenAI Responses route", () => {
         ),
       )
 
-      expect(response.reasoning).toBe("FirstSecond")
+      expect(response.reasoning).toBe("First\n\nSecond")
       expect(response.events).toMatchObject([
         { type: "step-start", index: 0 },
         {
           type: "reasoning-start",
-          id: "rs_1:0",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+          id: "rs_1",
+          providerMetadata: { openai: { itemId: "rs_1" } },
         },
-        { type: "reasoning-delta", id: "rs_1:0", text: "First" },
-        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
-        {
-          type: "reasoning-start",
-          id: "rs_1:1",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
-        },
-        { type: "reasoning-delta", id: "rs_1:1", text: "Second" },
+        { type: "reasoning-delta", id: "rs_1", text: "First\n\nSecond" },
         {
           type: "reasoning-end",
-          id: "rs_1:1",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          id: "rs_1",
+          providerMetadata: {
+            openai: {
+              itemId: "rs_1",
+              reasoningEncryptedContent: "encrypted-state",
+              reasoningItem: {
+                type: "reasoning",
+                encrypted_content: "encrypted-state",
+                summary: [
+                  { type: "summary_text", text: "First" },
+                  { type: "summary_text", text: "Second" },
+                ],
+              },
+            },
+          },
         },
         { type: "step-finish", index: 0, reason: { normalized: "stop", raw: undefined } },
         { type: "finish", reason: { normalized: "stop", raw: undefined } },
@@ -1779,7 +2001,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("closes reasoning summary parts when storage is not disabled", () =>
+  it.effect("closes the reasoning item when storage is not disabled", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, { providerOptions: { openai: { store: true } } }),
@@ -1808,8 +2030,24 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.events.filter((event) => event.type === "reasoning-end")).toEqual([
-        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
-        { type: "reasoning-end", id: "rs_1:1", providerMetadata: { openai: { itemId: "rs_1" } } },
+        {
+          type: "reasoning-end",
+          id: "rs_1",
+          providerMetadata: {
+            openai: {
+              itemId: "rs_1",
+              reasoningEncryptedContent: null,
+              reasoningItem: {
+                type: "reasoning",
+                encrypted_content: null,
+                summary: [
+                  { type: "summary_text", text: "First" },
+                  { type: "summary_text", text: "Second" },
+                ],
+              },
+            },
+          },
+        },
       ])
     }),
   )

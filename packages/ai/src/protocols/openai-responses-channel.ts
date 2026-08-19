@@ -67,12 +67,10 @@ const comparable = (value: unknown) => {
       name: value.name,
       arguments: json(value.arguments),
     }
-  if (value.type === "reasoning")
-    return {
-      type: value.type,
-      summary: value.summary,
-      encrypted_content: value.encrypted_content,
-    }
+  if (value.type === "reasoning") {
+    const { id: _id, ...reasoning } = value
+    return reasoning
+  }
   return value
 }
 
@@ -141,6 +139,8 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
         )
         const observation = yield* input.base.observe(create, frame)
         if (event.type === "response.output_item.done" && event.item) output.push(event.item)
+        if ((event.type === "response.completed" || event.type === "response.incomplete") && event.response?.output)
+          output = [...event.response.output]
         if (observation.type === "provider-failure") {
           const rejection = code(event)
           if (rejection === "previous_response_not_found") return rejected(input, observation, "retry-full")

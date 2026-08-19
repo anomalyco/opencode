@@ -216,7 +216,14 @@ const onHostedToolDone = Effect.fn("OpenAIResponses.onHostedToolDone")(function*
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
   if (event.type === "response.reasoning_text.delta" || event.type === "response.reasoning_summary.delta")
     return event.item_id
-      ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
+      ? Effect.succeed(
+          OpenResponses.onReasoningDelta(
+            state,
+            event,
+            event.item_id,
+            event.type === "response.reasoning_summary.delta" ? "summary" : "content",
+          ),
+        )
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
   if (event.type === "response.reasoning_text.done" || event.type === "response.reasoning_summary.done")
     return event.item_id
