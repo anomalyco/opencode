@@ -106,7 +106,13 @@ const layer = Layer.effect(
       const index = msgs.findIndex((msg) => msg.info.id === messageID)
       const target = index < 0 ? undefined : msgs[index]
       const remove = index < 0 ? [] : msgs.slice(index + (session.revert.partID ? 1 : 0))
-      for (const msg of remove) {
+      // Newest-first, so the boundary message is removed last and acts as its own progress
+      // marker. Each removal is a separate durable transaction: if this loop is interrupted
+      // partway, the surviving boundary lets the next cleanup locate the remaining rows and
+      // finish. Deleting the boundary first would strand them -- the next findIndex returns
+      // -1, remove is empty, and clearRevert below still discards the only marker that could
+      // have found them, so they silently rejoin the transcript.
+      for (const msg of remove.toReversed()) {
         yield* sessions.removeMessage({ sessionID, messageID: msg.info.id })
       }
       if (session.revert.partID && target) {
@@ -115,7 +121,9 @@ const layer = Layer.effect(
         if (idx >= 0) {
           const removeParts = target.parts.slice(idx)
           target.parts = target.parts.slice(0, idx)
-          for (const part of removeParts) {
+          // Same reasoning as the message loop above: the boundary part is removed last so an
+          // interrupted cleanup stays resumable.
+          for (const part of removeParts.toReversed()) {
             yield* sessions.removePart({ sessionID, messageID: target.info.id, partID: part.id })
           }
         }
