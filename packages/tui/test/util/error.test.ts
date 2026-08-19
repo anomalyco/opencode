@@ -46,4 +46,29 @@ describe("util.error", () => {
     expect(data.message).toBe("ResolveMessage: Cannot resolve module")
     expect(String(data.formatted)).toContain("ResolveMessage")
   })
+
+  test("surfaces the cause when a tagged error has no message", () => {
+    // Effect's `Data.TaggedError` subclasses (e.g. `ServeError`) leave `message`
+    // empty and park the real failure on `cause`. Printing the bare name told
+    // the user nothing.
+    const inner = Object.assign(new Error("listen EADDRINUSE: address already in use"), { code: "EADDRINUSE" })
+    const tagged = new Error("")
+    tagged.name = "ServeError"
+    Object.assign(tagged, { _tag: "ServeError", cause: inner })
+
+    expect(errorMessage(tagged)).toBe("ServeError: listen EADDRINUSE: address already in use")
+  })
+
+  test("still falls back to the name when the cause is empty too", () => {
+    const tagged = new Error("")
+    tagged.name = "ServeError"
+    Object.assign(tagged, { cause: null })
+
+    expect(errorMessage(tagged)).toBe("ServeError")
+  })
+
+  test("prefers an explicit message over the cause", () => {
+    const err = new Error("outer", { cause: new Error("inner") })
+    expect(errorMessage(err)).toBe("outer")
+  })
 })

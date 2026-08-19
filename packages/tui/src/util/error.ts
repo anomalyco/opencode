@@ -125,6 +125,12 @@ export function errorFormat(error: unknown): string {
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) {
     if (error.message) return error.message
+    // Tagged errors (e.g. Effect's `ServeError`) carry an empty `message` and hide
+    // the real failure in `cause`. Printing just the name tells the user nothing.
+    if (error.cause !== undefined && error.cause !== null) {
+      const inner = errorMessage(error.cause)
+      if (inner && inner !== "unknown error") return error.name ? `${error.name}: ${inner}` : inner
+    }
     if (error.name) return error.name
   }
 

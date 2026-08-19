@@ -1,7 +1,8 @@
 import { Effect } from "effect"
-import { effectCmd } from "../effect-cmd"
+import { CliError, effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { errorMessage } from "@/util/error"
 
 export const ServeCommand = effectCmd({
   command: "serve",
@@ -16,7 +17,13 @@ export const ServeCommand = effectCmd({
       console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
     const opts = yield* resolveNetworkOptions(args)
-    const server = yield* Effect.promise(() => Server.listen(opts))
+    // A failed bind is a user-fixable mistake (busy port, wrong --hostname), not
+    // a crash — surface it as a CliError so the message prints on its own instead
+    // of behind "Unexpected error".
+    const server = yield* Effect.tryPromise({
+      try: () => Server.listen(opts),
+      catch: (error) => new CliError({ message: errorMessage(error) }),
+    })
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 
     yield* Effect.never
