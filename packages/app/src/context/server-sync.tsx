@@ -32,6 +32,7 @@ import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { formatServerError } from "@/utils/server-errors"
+import { waitForServerReady } from "@/utils/server-health"
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import type { SolidQueryOptions } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
@@ -320,6 +321,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const bootstrap = useQuery(() => ({
     queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
+      // Wait for the local sidecar to be reachable before firing the bootstrap
+      // fan-out, otherwise the first batch of `get`/`list` requests races the
+      // server's cold start and throws `TypeError: Failed to fetch`.
+      if (ServerConnection.local(serverSDK.server)) {
+        await waitForServerReady(serverSDK.server.http, globalThis.fetch)
+      }
       await bootstrapGlobal({
         serverSDK: serverSDK.client,
         serverAPI: serverSDK.api,
@@ -476,6 +483,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 
     children.pin(key)
     const promise = Promise.resolve().then(async () => {
+      // Same readiness gate as the global bootstrap: a directory may be opened
+      // after a server restart, so re-check before its data fan-out.
+      if (ServerConnection.local(serverSDK.server)) {
+        await waitForServerReady(serverSDK.server.http, globalThis.fetch)
+      }
       const child = children.ensureChild(directory)
       const cache = children.vcsCache.get(key)
       if (!cache) return

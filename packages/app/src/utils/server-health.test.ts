@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ServerConnection } from "@/context/server"
-import { checkServerHealth } from "./server-health"
+import { checkServerHealth, waitForServerReady } from "./server-health"
 
 const server: ServerConnection.HttpBase = {
   url: "http://localhost:4096",
@@ -174,5 +174,58 @@ describe("checkServerHealth", () => {
 
     expect(count).toBe(6)
     expect(result).toEqual({ healthy: false })
+  })
+})
+
+describe("waitForServerReady", () => {
+  test("resolves immediately when the server is already healthy", async () => {
+    const fetch = (async () =>
+      new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof globalThis.fetch
+
+    const ready = await waitForServerReady(server, fetch, { timeoutMs: 1000, pollMs: 50 })
+
+    expect(ready).toBe(true)
+  })
+
+  test("waits and resolves once the server becomes reachable", async () => {
+    let count = 0
+    const fetch = (async () => {
+      count += 1
+      if (count < 3) throw new TypeError("Failed to fetch")
+      return new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    }) as unknown as typeof globalThis.fetch
+
+    const ready = await waitForServerReady(server, fetch, { timeoutMs: 5000, pollMs: 20 })
+
+    expect(ready).toBe(true)
+    expect(count).toBeGreaterThanOrEqual(3)
+  })
+
+  test("returns false when the server never becomes reachable", async () => {
+    const fetch = (async () => {
+      throw new TypeError("Failed to fetch")
+    }) as unknown as typeof globalThis.fetch
+
+    const ready = await waitForServerReady(server, fetch, { timeoutMs: 200, pollMs: 20 })
+
+    expect(ready).toBe(false)
+  })
+
+  test("aborts early when the signal fires", async () => {
+    const fetch = (async () => {
+      throw new TypeError("Failed to fetch")
+    }) as unknown as typeof globalThis.fetch
+    const abort = new AbortController()
+    abort.abort()
+
+    const ready = await waitForServerReady(server, fetch, { timeoutMs: 5000, pollMs: 20, signal: abort.signal })
+
+    expect(ready).toBe(false)
   })
 })
