@@ -94,6 +94,12 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused skill.transform"),
       reload: () => Effect.die("unused skill.reload"),
     },
+    storage: overrides.storage ?? {
+      get: () => Effect.die("unused storage.get"),
+      set: () => Effect.die("unused storage.set"),
+      remove: () => Effect.die("unused storage.remove"),
+      scan: () => Effect.die("unused storage.scan"),
+    },
     shell: overrides.shell ?? {
       hook: () => Effect.die("unused shell.hook"),
     },
