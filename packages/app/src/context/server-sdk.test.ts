@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { adaptServerEvent, coalesceServerEvents, enqueueServerEvent, resumeStreamAfterPageShow } from "./server-sdk"
+import {
+  adaptServerEvent,
+  coalesceServerEvents,
+  createEventStreamWatchdog,
+  enqueueServerEvent,
+  resumeStreamAfterPageShow,
+} from "./server-sdk"
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import type { Event } from "@opencode-ai/sdk/v2/client"
 
@@ -12,6 +18,44 @@ describe("resumeStreamAfterPageShow", () => {
     resumeStreamAfterPageShow({ persisted: true } as PageTransitionEvent, start)
 
     expect(starts).toBe(1)
+  })
+})
+
+describe("createEventStreamWatchdog", () => {
+  test("fires only when no newer stream activity resets the timer", () => {
+    const timers = new Map<number, () => void>()
+    const cleared: number[] = []
+    let timeout = 0
+    let stale = 0
+    const watchdog = createEventStreamWatchdog({
+      timeout: 10,
+      onStale: () => stale++,
+      setTimer: (callback, ms) => {
+        expect(ms).toBe(10)
+        timeout++
+        timers.set(timeout, callback)
+        return timeout as unknown as ReturnType<typeof setTimeout>
+      },
+      clearTimer: (timer) => cleared.push(timer as unknown as number),
+    })
+
+    watchdog.reset()
+    const first = timeout
+    watchdog.reset()
+    const second = timeout
+    timers.get(first)?.()
+    expect(stale).toBe(0)
+
+    timers.get(second)?.()
+    expect(stale).toBe(1)
+
+    watchdog.reset()
+    const third = timeout
+    watchdog.stop()
+    timers.get(third)?.()
+
+    expect(stale).toBe(1)
+    expect(cleared).toEqual([first, third])
   })
 })
 

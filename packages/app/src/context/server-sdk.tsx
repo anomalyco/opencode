@@ -18,6 +18,44 @@ const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
 const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
+
+const EVENT_STREAM_STALE_MS = 45_000
+
+type EventStreamWatchdogOptions = {
+  timeout: number
+  onStale: () => void
+  setTimer?: (callback: () => void, timeout: number) => ReturnType<typeof setTimeout>
+  clearTimer?: (timer: ReturnType<typeof setTimeout>) => void
+}
+
+export function createEventStreamWatchdog(options: EventStreamWatchdogOptions) {
+  const setTimer = options.setTimer ?? setTimeout
+  const clearTimer = options.clearTimer ?? clearTimeout
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let generation = 0
+
+  const stop = () => {
+    generation++
+    if (!timer) return
+    clearTimer(timer)
+    timer = undefined
+  }
+
+  const reset = () => {
+    generation++
+    const current = generation
+    if (timer) clearTimer(timer)
+    timer = setTimer(() => {
+      if (current !== generation) return
+      timer = undefined
+      options.onStale()
+    }, options.timeout)
+  }
+
+  return { reset, stop }
+}
+
 export type ServerEvent = Event & { current?: OpenCodeEvent }
 type QueuedServerEvent = { directory: string; payload: ServerEvent }
 type CurrentDelta = Extract<
@@ -267,8 +305,13 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
       while (!abort.signal.aborted && started && generation === active) {
         attempt = new AbortController()
+        const streamAttempt = attempt
+        const watchdog = createEventStreamWatchdog({
+          timeout: EVENT_STREAM_STALE_MS,
+          onStale: () => streamAttempt.abort(),
+        })
         const onAbort = () => {
-          attempt?.abort()
+          streamAttempt.abort()
         }
         abort.signal.addEventListener("abort", onAbort)
         try {
@@ -277,8 +320,10 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
             kind === "v1"
               ? (await eventSdk.global.event({ signal: attempt.signal })).stream
               : eventApi.event.subscribe({ signal: attempt.signal })
+          watchdog.reset()
           let yielded = Date.now()
           for await (const event of events) {
+            watchdog.reset()
             streamErrorLogged = false
             const legacy = "payload" in event
             if (legacy && event.payload.type === "sync") continue
@@ -300,6 +345,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
             })
           }
         } finally {
+          watchdog.stop()
           abort.signal.removeEventListener("abort", onAbort)
           attempt = undefined
         }
