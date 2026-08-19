@@ -175,6 +175,9 @@ export const dict = {
   "command.session.redo.description": "Повторете последното отменено съобщение",
   "command.session.compact": "Компактна сесия",
   "command.session.compact.description": "Обобщете сесията, за да намалите размера на контекста",
+  "command.session.background": "Подагенти във фонов режим",
+  "command.session.background.description":
+    "Отделете подагентите, които блокират тази сесия, и ги продължете във фонов режим",
   "command.session.fork": "Разклонение от съобщение",
   "command.session.fork.description": "Създайте нова сесия от предишно съобщение",
   "command.session.share": "Споделяне на сесия",
@@ -625,6 +628,7 @@ export const dict = {
   "toast.session.export.success.description": "Запазена сесия в {{filename}}",
   "toast.session.export.failed.title": "Неуспешно експортиране на сесия",
   "toast.session.export.failed.description": "Възникна грешка при експортиране на сесията",
+  "toast.session.background.failed.title": "Неуспешно прехвърляне на подагентите във фонов режим",
   "toast.session.listFailed.title": "Неуспешно зареждане на сесии за {{project}}",
   "toast.project.reloadFailed.title": "Неуспешно презареждане на {{project}}",
   "toast.update.title": "Налична актуализация",

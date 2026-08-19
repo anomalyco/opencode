@@ -172,6 +172,9 @@ export const dict = {
   "command.session.redo.description": "Ger seinastu ógjørt boðini aftur",
   "command.session.compact": "Kompakt seta",
   "command.session.compact.description": "Samanber setuna fyri at minka um samanhangsstøddina",
+  "command.session.background": "Koyr undiragentar í bakgrundini",
+  "command.session.background.description":
+    "Loys undiragentarnar, sum blokera hesa setuna, og lat teir halda fram í bakgrundini",
   "command.session.fork": "Greina frá boðum",
   "command.session.fork.description": "Stovna eina nýggja setu frá einum undanfarnum boði",
   "command.session.share": "Deil setu",
@@ -620,6 +623,7 @@ export const dict = {
   "toast.session.export.success.description": "Goymd seta til {{filename}}",
   "toast.session.export.failed.title": "Tað eydnaðist ikki at útflyta setu",
   "toast.session.export.failed.description": "Ein feilur hendi, meðan setan varð útflutt.",
+  "toast.session.background.failed.title": "Fekk ikki koyrt undiragentarnar í bakgrundini",
   "toast.session.listFailed.title": "Tað eydnaðist ikki at heinta setur fyri {{project}}",
   "toast.project.reloadFailed.title": "Tað eydnaðist ikki at endurlesa {{project}}",
   "toast.update.title": "Dagføring er tøk",

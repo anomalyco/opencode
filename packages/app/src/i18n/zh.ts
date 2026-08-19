@@ -211,6 +211,8 @@ export const dict = {
   "command.session.redo.description": "重做上一条撤销的消息",
   "command.session.compact": "压缩会话",
   "command.session.compact.description": "总结会话以减少上下文大小",
+  "command.session.background": "在后台运行子代理",
+  "command.session.background.description": "分离阻塞当前会话的子代理，让它们在后台继续运行",
   "command.session.fork": "从消息创建新会话",
   "command.session.fork.description": "从之前的消息创建新会话",
   "command.session.share": "分享会话",
@@ -665,6 +667,7 @@ export const dict = {
   "toast.session.export.success.description": "已将会话保存到 {{filename}}",
   "toast.session.export.failed.title": "导出会话失败",
   "toast.session.export.failed.description": "导出会话时发生错误",
+  "toast.session.background.failed.title": "无法将子代理转入后台",
 
   "toast.session.listFailed.title": "无法加载 {{project}} 的会话",
   "toast.update.title": "有可用更新",

@@ -172,6 +172,9 @@ export const dict = {
   "command.session.redo.description": "Buat semula mesej yang telah diundur",
   "command.session.compact": "Padatkan sesi",
   "command.session.compact.description": "Ringkaskan sesi untuk mengurangkan saiz konteks",
+  "command.session.background": "Jalankan subejen di latar belakang",
+  "command.session.background.description":
+    "Tanggalkan subejen yang menyekat sesi ini dan teruskan mereka di latar belakang",
   "command.session.fork": "Cabang dari mesej",
   "command.session.fork.description": "Cipta sesi baharu daripada mesej terdahulu",
   "command.session.share": "Kongsi sesi",
@@ -620,6 +623,7 @@ export const dict = {
   "toast.session.export.success.description": "Sesi disimpan ke {{filename}}",
   "toast.session.export.failed.title": "Gagal mengeksport sesi",
   "toast.session.export.failed.description": "Ralat berlaku semasa mengeksport sesi",
+  "toast.session.background.failed.title": "Gagal menjalankan subejen di latar belakang",
   "toast.session.listFailed.title": "Gagal memuatkan sesi untuk {{project}}",
   "toast.project.reloadFailed.title": "Gagal memuat semula {{project}}",
   "toast.update.title": "Kemas kini tersedia",

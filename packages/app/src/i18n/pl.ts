@@ -179,6 +179,8 @@ export const dict = {
   "command.session.redo.description": "Ponów ostatnią cofniętą wiadomość",
   "command.session.compact": "Kompaktuj sesję",
   "command.session.compact.description": "Podsumuj sesję, aby zmniejszyć rozmiar kontekstu",
+  "command.session.background": "Uruchom podagenty w tle",
+  "command.session.background.description": "Odłącz podagenty blokujące tę sesję i kontynuuj je w tle",
   "command.session.fork": "Rozwidlij od wiadomości",
   "command.session.fork.description": "Utwórz nową sesję od poprzedniej wiadomości",
   "command.session.share": "Udostępnij sesję",
@@ -621,6 +623,7 @@ export const dict = {
   "toast.session.export.success.description": "Sesję zapisano jako {{filename}}",
   "toast.session.export.failed.title": "Nie udało się wyeksportować sesji",
   "toast.session.export.failed.description": "Wystąpił błąd podczas eksportowania sesji",
+  "toast.session.background.failed.title": "Nie udało się uruchomić podagentów w tle",
 
   "toast.session.listFailed.title": "Nie udało się załadować sesji dla {{project}}",
   "toast.update.title": "Dostępna aktualizacja",

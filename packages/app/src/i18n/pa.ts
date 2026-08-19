@@ -178,6 +178,9 @@ export const dict = {
   "command.session.redo.description": "آخری انڈون سنیہا دوبارہ کرو",
   "command.session.compact": "سیشن مختصر کرو",
   "command.session.compact.description": "سیاق و سباق دا سائز گھٹ کرن لئی سیشن دا خلاصہ کرو",
+  "command.session.background": "ਸਬ-ਏਜੰਟ ਬੈਕਗਰਾਊਂਡ ਵਿੱਚ ਚਲਾਓ",
+  "command.session.background.description":
+    "ਇਸ ਸੈਸ਼ਨ ਨੂੰ ਰੋਕ ਰਹੇ ਸਬ-ਏਜੰਟ ਵੱਖ ਕਰੋ ਅਤੇ ਉਹਨਾਂ ਨੂੰ ਬੈਕਗਰਾਊਂਡ ਵਿੱਚ ਜਾਰੀ ਰੱਖੋ",
   "command.session.fork": "سنیہا توں فورک",
   "command.session.fork.description": "پچھلے سنیہے توں اک نواں سیشن بناؤ",
   "command.session.share": "سیشن شیئر کرو",
@@ -630,6 +633,7 @@ export const dict = {
   "toast.session.export.success.description": "سیشن نوں \u2068{{filename}}\u2069 وچ محفوظ کر دتا گیا",
   "toast.session.export.failed.title": "سیشن برآمد کرن چ ناکامی ہوئی",
   "toast.session.export.failed.description": "سیشن برآمد کردے ویلے اک غلطی ہو گئی",
+  "toast.session.background.failed.title": "ਸਬ-ਏਜੰਟ ਬੈਕਗਰਾਊਂਡ ਵਿੱਚ ਨਹੀਂ ਚਲਾਏ ਜਾ ਸਕੇ",
 
   "toast.session.listFailed.title": "{{project}} لئی سیشن لوڈ کرن چ ناکام رہیا",
   "toast.project.reloadFailed.title": "{{project}} دوبارہ لوڈ نئیں ہو سکیا",

@@ -180,6 +180,9 @@ export const dict = {
   "command.session.redo.description": "آخری کالعدم پیغام کو دوبارہ کریں۔",
   "command.session.compact": "سیشن مختصر کریں",
   "command.session.compact.description": "سیاق و سباق کے سائز کو کم کرنے کے لیے سیشن کا خلاصہ کریں۔",
+  "command.session.background": "ذیلی ایجنٹس کو پس منظر میں چلائیں",
+  "command.session.background.description":
+    "اس سیشن کو روکنے والے ذیلی ایجنٹس کو الگ کریں اور انہیں پس منظر میں جاری رکھیں",
   "command.session.fork": "پیغام سے نئی شاخ بنائیں",
   "command.session.fork.description": "پچھلے پیغام سے ایک نیا سیشن بنائیں",
   "command.session.share": "سیشن شیئر کریں۔",
@@ -632,6 +635,7 @@ export const dict = {
   "toast.session.export.success.description": "سیشن کو \u2068{{filename}}\u2069 میں محفوظ کر دیا گیا",
   "toast.session.export.failed.title": "سیشن برآمد کرنے میں ناکام",
   "toast.session.export.failed.description": "سیشن برآمد کرتے وقت ایک خرابی پیش آ گئی",
+  "toast.session.background.failed.title": "ذیلی ایجنٹس کو پس منظر میں منتقل نہیں کیا جا سکا",
 
   "toast.session.listFailed.title": "{{project}} کے لیے سیشن لوڈ کرنے میں ناکام",
   "toast.project.reloadFailed.title": "{{project}} کو دوبارہ لوڈ کرنے میں ناکام",

@@ -174,6 +174,8 @@ export const dict = {
   "command.session.redo.description": "Son geri alınmış mesajı yenidən et",
   "command.session.compact": "Sessiyanı sıxlaşdır",
   "command.session.compact.description": "Kontekst həcmini azaltmaq üçün sessiyanı xülasə et",
+  "command.session.background": "Alt agentləri fonda işlət",
+  "command.session.background.description": "Bu sessiyanı bloklayan alt agentləri ayırın və onları fonda davam etdirin",
   "command.session.fork": "Mesajdan fork et",
   "command.session.fork.description": "Əvvəlki mesajdan yeni sessiya yarat",
   "command.session.share": "Sessiyanı paylaş",
@@ -627,6 +629,7 @@ export const dict = {
   "toast.session.export.success.description": "Sessiya {{filename}} faylına saxlanıldı",
   "toast.session.export.failed.title": "Sessiya ixrac edilə bilmədi",
   "toast.session.export.failed.description": "Sessiyanı ixrac edərkən xəta baş verdi",
+  "toast.session.background.failed.title": "Alt agentləri fonda işlətmək alınmadı",
 
   "toast.session.listFailed.title": "{{project}} üçün sessiyalar yüklənə bilmədi",
   "toast.project.reloadFailed.title": "{{project}} yenidən yüklənə bilmədi",

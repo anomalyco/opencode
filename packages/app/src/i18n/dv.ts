@@ -175,6 +175,9 @@ export const dict = {
   "command.session.redo.description": "އެންމެ ފަހުން އަންޑޯން މެސެޖު އަލުން ކުރާށެވެ",
   "command.session.compact": "ކޮމްޕެކްޓް ސެޝަން",
   "command.session.compact.description": "ކޮންޓެކްސްޓް ސައިޒު ކުޑަކުރުމަށްޓަކައި ސެޝަން ޚުލާޞާކުރުން",
+  "command.session.background": "ސަބްއޭޖެންޓުތައް ބެކްގްރައުންޑްގައި ހިންގުން",
+  "command.session.background.description":
+    "މި ސެޝަން ހުއްޓުވާ ސަބްއޭޖެންޓުތައް ވަކިކޮށް ބެކްގްރައުންޑްގައި ކުރިއަށް ގެންދިއުން",
   "command.session.fork": "މެސެޖުން ފޯކް",
   "command.session.fork.description": "ކުރީގެ މެސެޖަކުން އާ ސެޝަނެއް އުފެއްދުން",
   "command.session.share": "ޝެއާ ސެޝަން",
@@ -628,6 +631,7 @@ export const dict = {
   "toast.session.export.success.description": "ސެޝަން ސޭވްކޮށްފައިވަނީ {{filename}} އަށެވެ",
   "toast.session.export.failed.title": "އެކްސްޕޯޓް ސެޝަން ނާކާމިޔާބުވެއްޖެ",
   "toast.session.export.failed.description": "ސެޝަން އެކްސްޕޯޓް ކުރަމުން ދިޔައިރު ގޯހެއް ދިމާވިއެވެ",
+  "toast.session.background.failed.title": "ސަބްއޭޖެންޓުތައް ބެކްގްރައުންޑަށް ބަދަލުކުރެވޭ ގޮތެއް ނުވި",
   "toast.session.listFailed.title": "{{project}} އަށް ސެޝަންތައް ލޯޑް ނުކުރެވިއްޖެއެވެ",
   "toast.project.reloadFailed.title": "{{project}} ރީލޯޑް ނުކުރެވިއްޖެއެވެ",
   "toast.update.title": "އަޕްޑޭޓް ލިބެން ހުރެއެވެ",

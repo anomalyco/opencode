@@ -188,6 +188,8 @@ export const dict = {
   "command.session.redo.description": "重做上一則復原的訊息",
   "command.session.compact": "精簡工作階段",
   "command.session.compact.description": "摘要工作階段以減少上下文大小",
+  "command.session.background": "在背景執行子代理",
+  "command.session.background.description": "分離阻塞此工作階段的子代理，讓它們在背景繼續執行",
   "command.session.fork": "從訊息分支",
   "command.session.fork.description": "從先前的訊息建立新工作階段",
   "command.session.share": "分享工作階段",
@@ -657,6 +659,7 @@ export const dict = {
   "toast.session.export.success.description": "已將工作階段儲存至 {{filename}}",
   "toast.session.export.failed.title": "匯出工作階段失敗",
   "toast.session.export.failed.description": "匯出工作階段時發生錯誤",
+  "toast.session.background.failed.title": "無法將子代理轉入背景",
 
   "toast.session.listFailed.title": "無法載入 {{project}} 的工作階段",
 

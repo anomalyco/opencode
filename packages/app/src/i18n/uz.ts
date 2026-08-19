@@ -174,6 +174,9 @@ export const dict = {
   "command.session.redo.description": "Oxirgi bekor qilingan xabarni takrorlang",
   "command.session.compact": "Yilni seans",
   "command.session.compact.description": "Kontekst hajmini kamaytirish uchun sessiyani umumlashtiring",
+  "command.session.background": "Quyi agentlarni fonda ishga tushirish",
+  "command.session.background.description":
+    "Ushbu sessiyani bloklayotgan quyi agentlarni ajrating va ularni fonda davom ettiring",
   "command.session.fork": "Xabardan vilka",
   "command.session.fork.description": "Oldingi xabardan yangi seans yarating",
   "command.session.share": "Seansni ulashish",
@@ -623,6 +626,7 @@ export const dict = {
   "toast.session.export.success.description": "Seans {{filename}}ga saqlandi",
   "toast.session.export.failed.title": "Seansni eksport qilib boʻlmadi",
   "toast.session.export.failed.description": "Seansni eksport qilishda xatolik yuz berdi",
+  "toast.session.background.failed.title": "Quyi agentlarni fonda ishga tushirib bo'lmadi",
   "toast.session.listFailed.title": "{{project}} uchun seanslar yuklanmadi",
   "toast.project.reloadFailed.title": "{{project}} qayta yuklanmadi",
   "toast.update.title": "Yangilanish mavjud",

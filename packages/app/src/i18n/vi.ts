@@ -179,6 +179,8 @@ export const dict = {
   "command.session.redo.description": "Làm lại tin nhắn đã hoàn tác gần đây nhất",
   "command.session.compact": "Nén phiên",
   "command.session.compact.description": "Tóm tắt phiên để giảm kích thước ngữ cảnh",
+  "command.session.background": "Chạy subagent ở chế độ nền",
+  "command.session.background.description": "Tách các subagent đang chặn phiên này và tiếp tục chúng ở chế độ nền",
   "command.session.fork": "Tách nhánh từ tin nhắn",
   "command.session.fork.description": "Tạo phiên mới từ tin nhắn trước đó",
   "command.session.share": "Chia sẻ phiên",
@@ -630,6 +632,7 @@ export const dict = {
   "toast.session.export.success.description": "Đã lưu phiên vào {{filename}}",
   "toast.session.export.failed.title": "Không thể xuất phiên",
   "toast.session.export.failed.description": "Đã xảy ra lỗi khi xuất phiên",
+  "toast.session.background.failed.title": "Không thể chạy subagent ở chế độ nền",
 
   "toast.session.listFailed.title": "Không thể tải phiên cho {{project}}",
   "toast.project.reloadFailed.title": "Không thể tải lại {{project}}",
