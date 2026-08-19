@@ -1,0 +1,5 @@
+Download a large HTTP(S) file directly to disk with live progress reporting.
+
+Use this tool instead of webfetch, shell, curl, or wget when a file may be large or take more than a few seconds. Do not poll or narrate progress: the host streams the file and keeps the current tool call open, so the next model turn starts only after the download completes or fails.
+
+The download is written to a temporary adjacent file and moved into place after the body and optional SHA-256 checksum complete. Existing destination files are preserved unless overwrite is explicitly true.

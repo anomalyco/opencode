@@ -252,6 +252,25 @@ Allows the LLM to fetch and read web pages. Useful for looking up documentation 
 
 ---
 
+### download
+
+Stream a large HTTP or HTTPS file directly to disk.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "download": "allow"
+  }
+}
+```
+
+The download remains inside one tool call while OpenCode displays byte, speed, and estimated-time progress. The model does not receive another turn until the transfer completes or fails. Downloads are written to an adjacent temporary file, optionally verified with SHA-256, and then moved into place.
+
+Use this tool instead of `webfetch` or a shell command when saving a file that may be large or slow.
+
+---
+
 ### websearch
 
 Search the web for information.

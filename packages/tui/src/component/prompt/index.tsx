@@ -57,6 +57,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { parseBtwCommand } from "../../util/btw"
 
 registerOpencodeSpinner()
 
@@ -65,6 +66,7 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  onBtw?: (question: string) => void
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
   right?: JSX.Element
@@ -1056,7 +1058,11 @@ export function Prompt(props: PromptProps) {
           ]
         : []
 
-    if (store.mode === "shell") {
+    const btwQuestion = currentMode === "normal" && props.onBtw ? parseBtwCommand(inputText) : undefined
+
+    if (btwQuestion !== undefined) {
+      props.onBtw?.(btwQuestion)
+    } else if (store.mode === "shell") {
       move.startSubmit()
       void sdk.client.session.shell({
         sessionID,

@@ -15,6 +15,7 @@ import type {
   AuthRemoveResponses,
   AuthSetErrors,
   AuthSetResponses,
+  BtwExchange,
   CommandListErrors,
   CommandListResponses,
   Config as Config3,
@@ -177,6 +178,8 @@ import type {
   QuestionV2Reply,
   SessionAbortErrors,
   SessionAbortResponses,
+  SessionBtwErrors,
+  SessionBtwResponses,
   SessionChildrenErrors,
   SessionChildrenResponses,
   SessionCommandErrors,
@@ -3934,6 +3937,47 @@ export class Session2 extends HeyApiClient {
       url: "/session/{sessionID}/abort",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Ask a side question
+   *
+   * Ask an ephemeral, tool-free question using the current session context without changing its message history or execution state.
+   */
+  public btw<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      question?: string
+      exchanges?: Array<BtwExchange>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "question" },
+            { in: "body", key: "exchanges" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionBtwResponses, SessionBtwErrors, ThrowOnError>({
+      url: "/session/{sessionID}/btw",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

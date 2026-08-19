@@ -2547,6 +2547,24 @@ export type NotFoundError = {
   }
 }
 
+export type BtwExchange = {
+  question: string
+  answer: string
+}
+
+export type BtwResult = {
+  answer: string
+  providerID: string
+  modelID: string
+}
+
+export type BtwError = {
+  name: "BtwError"
+  data: {
+    message: string
+  }
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -9985,6 +10003,47 @@ export type SessionAbortResponses = {
 }
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
+
+export type SessionBtwData = {
+  body?: {
+    question: string
+    exchanges?: Array<BtwExchange>
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/btw"
+}
+
+export type SessionBtwErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * BtwError
+   */
+  500: BtwError
+}
+
+export type SessionBtwError = SessionBtwErrors[keyof SessionBtwErrors]
+
+export type SessionBtwResponses = {
+  /**
+   * Ephemeral side answer
+   */
+  200: BtwResult
+}
+
+export type SessionBtwResponse = SessionBtwResponses[keyof SessionBtwResponses]
 
 export type SessionInitData = {
   body?: {

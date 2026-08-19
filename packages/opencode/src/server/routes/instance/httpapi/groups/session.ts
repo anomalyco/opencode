@@ -70,10 +70,19 @@ export const SummarizePayload = Schema.Struct({
 export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"]))
 export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInput.fields, ["sessionID"]))
 export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"]))
+export const BtwPayload = Schema.Struct(Struct.omit(SessionPrompt.BtwInput.fields, ["sessionID"]))
 export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"]))
 export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
 })
+
+export class BtwApiError extends Schema.ErrorClass<BtwApiError>("BtwError")(
+  {
+    name: Schema.Literal("BtwError"),
+    data: Schema.Struct({ message: Schema.String }),
+  },
+  { httpApiStatus: 500 },
+) {}
 
 export const SessionPaths = {
   list: root,
@@ -89,6 +98,7 @@ export const SessionPaths = {
   update: `${root}/:sessionID`,
   fork: `${root}/:sessionID/fork`,
   abort: `${root}/:sessionID/abort`,
+  btw: `${root}/:sessionID/btw`,
   share: `${root}/:sessionID/share`,
   init: `${root}/:sessionID/init`,
   summarize: `${root}/:sessionID/summarize`,
@@ -260,6 +270,20 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.abort",
             summary: "Abort session",
             description: "Abort an active session and stop any ongoing AI processing or command execution.",
+          }),
+        ),
+        HttpApiEndpoint.post("btw", SessionPaths.btw, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: BtwPayload,
+          success: described(SessionPrompt.BtwResult, "Ephemeral side answer"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError, BtwApiError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.btw",
+            summary: "Ask a side question",
+            description:
+              "Ask an ephemeral, tool-free question using the current session context without changing its message history or execution state.",
           }),
         ),
         HttpApiEndpoint.post("init", SessionPaths.init, {

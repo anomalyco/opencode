@@ -442,6 +442,92 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
   return { prompt, run, sessions, chat }
 })
 
+it.instance("btw answers from shared context without changing session history", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* seed(chat.id)
+    const before = yield* sessions.messages({ sessionID: chat.id })
+
+    yield* llm.text("ephemeral answer")
+    const result = yield* prompt.btw({
+      sessionID: chat.id,
+      question: "what is the current goal?",
+      exchanges: [{ question: "what was the greeting?", answer: "It was hello." }],
+    })
+
+    expect(result.answer).toBe("ephemeral answer")
+    expect(String(result.providerID)).toBe("test")
+    expect(String(result.modelID)).toBe("test-model")
+    expect(yield* sessions.messages({ sessionID: chat.id })).toEqual(before)
+
+    const inputs = yield* llm.inputs
+    expect(inputs).toHaveLength(1)
+    expect(JSON.stringify(inputs[0]?.messages)).toContain("hello")
+    expect(JSON.stringify(inputs[0]?.messages)).not.toContain("hi there")
+    expect(JSON.stringify(inputs[0]?.messages)).toContain("what was the greeting?")
+    expect(JSON.stringify(inputs[0]?.messages)).toContain("what is the current goal?")
+  }),
+)
+
+it.instance("btw strips tool history from its text-only context", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const seeded = yield* seed(chat.id, { finish: "stop" })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: seeded.assistant.id,
+      sessionID: chat.id,
+      type: "tool",
+      callID: "call-secret",
+      tool: "bash",
+      state: {
+        status: "completed",
+        input: { command: "curl https://example.com/private.zip" },
+        output: "private tool output",
+        title: "Bash",
+        metadata: {},
+        time: { start: 1, end: 2 },
+      },
+    })
+
+    yield* llm.text("plain answer")
+    const result = yield* prompt.btw({ sessionID: chat.id, question: "what happened?" })
+
+    expect(result.answer).toBe("plain answer")
+    const inputs = yield* llm.inputs
+    const body = JSON.stringify(inputs[0]?.messages)
+    expect(body).toContain("hi there")
+    expect(body).not.toContain("curl https://example.com/private.zip")
+    expect(body).not.toContain("private tool output")
+    expect(body).not.toContain("tool_calls")
+  }),
+)
+
+it.instance("btw retries when a model emits DSML as plain text", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* seed(chat.id)
+
+    yield* llm.text('<｜DSML｜tool_calls><｜DSML｜invoke name="bash">')
+    yield* llm.text("Profiling builds are mainly intended for diagnostics, not ordinary daily development.")
+    const result = yield* prompt.btw({ sessionID: chat.id, question: "is the profiling build for daily use?" })
+
+    expect(result.answer).toBe("Profiling builds are mainly intended for diagnostics, not ordinary daily development.")
+    const inputs = yield* llm.inputs
+    expect(inputs).toHaveLength(2)
+    expect(JSON.stringify(inputs[1]?.messages)).toContain("text-only side conversation")
+  }),
+)
+
 // Loop semantics
 
 noLLMServer.instance(

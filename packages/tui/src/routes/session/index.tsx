@@ -78,10 +78,18 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
+import { DialogBtw, type BtwExchange } from "./dialog-btw"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import {
+  downloadDetail,
+  downloadPercent,
+  downloadProgressBar,
+  formatDownloadDuration,
+  parseDownloadProgress,
+} from "../../util/download"
 
 addDefaultParsers(parsers.parsers)
 
@@ -354,6 +362,26 @@ export function Session() {
   const keymap = useOpencodeKeymap()
   const dialog = useDialog()
   const renderer = useRenderer()
+  const [btwExchanges, setBtwExchanges] = createSignal<BtwExchange[]>([])
+  let btwSessionID = route.sessionID
+
+  createEffect(() => {
+    const sessionID = route.sessionID
+    if (sessionID === btwSessionID) return
+    btwSessionID = sessionID
+    setBtwExchanges([])
+  })
+
+  function openBtw(question = "") {
+    dialog.replace(() => (
+      <DialogBtw
+        sessionID={route.sessionID}
+        initialQuestion={question}
+        exchanges={btwExchanges()}
+        onChange={setBtwExchanges}
+      />
+    ))
+  }
 
   event.on("session.status", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
@@ -503,6 +531,15 @@ export function Session() {
           })
         dialog.clear()
       },
+    },
+    {
+      title: "Ask a side question",
+      value: "session.btw",
+      category: "Session",
+      slash: {
+        name: "btw",
+      },
+      run: () => openBtw(),
     },
     {
       title: "Rename session",
@@ -1324,6 +1361,7 @@ export function Session() {
                       visible={visible()}
                       ref={bind}
                       disabled={disabled()}
+                      onBtw={openBtw}
                       onSubmit={() => {
                         toBottom()
                       }}
@@ -1764,6 +1802,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={display() === "websearch"}>
           <WebSearch {...toolprops} />
         </Match>
+        <Match when={display() === "download"}>
+          <Download {...toolprops} />
+        </Match>
         <Match when={display() === "write"}>
           <Write {...toolprops} />
         </Match>
@@ -1838,6 +1879,67 @@ function GenericTool(props: ToolProps) {
         </box>
       </BlockTool>
     </Show>
+  )
+}
+
+function Download(props: ToolProps) {
+  const { theme } = useTheme()
+  const progress = createMemo(() => parseDownloadProgress(props.metadata.download))
+  const running = createMemo(() => props.part.state.status === "running")
+  const filePath = createMemo(
+    () => progress()?.filePath ?? stringValue(props.metadata.filePath) ?? stringValue(props.input.filePath) ?? "file",
+  )
+  const title = createMemo(() => {
+    const phase = progress()?.phase
+    const action = phase === "verifying" ? "Verifying" : running() ? "Downloading" : "Downloaded"
+    return `# ${action} ${path.basename(filePath())}`
+  })
+  const percent = createMemo(() => {
+    const value = progress()
+    if (!value) return "--"
+    const next = downloadPercent(value)
+    return next === undefined ? "--" : `${Math.round(next)}%`
+  })
+  const checksum = createMemo(() => stringValue(props.metadata.sha256))
+
+  return (
+    <BlockTool title={title()} spinner={running()} part={props.part}>
+      <box flexDirection="column" gap={1} paddingLeft={3} paddingRight={1}>
+        <Show
+          when={progress()}
+          fallback={
+            <text fg={theme.textMuted} wrapMode="word">
+              Preparing the download…
+            </text>
+          }
+        >
+          {(value) => (
+            <>
+              <box flexDirection="row" gap={1}>
+                <text fg={value().phase === "completed" ? theme.success : theme.primary} wrapMode="none">
+                  {downloadProgressBar(value(), 30)}
+                </text>
+                <text fg={theme.text} wrapMode="none">
+                  {percent()}
+                </text>
+              </box>
+              <text fg={theme.text} wrapMode="none" truncate>
+                {downloadDetail(value())}
+              </text>
+              <text fg={theme.textMuted} wrapMode="none" truncate>
+                {filePath()}
+              </text>
+              <Show when={!running()}>
+                <text fg={theme.textMuted} wrapMode="none" truncate>
+                  {formatDownloadDuration(value().elapsedMs)}
+                  <Show when={checksum()}>{(sha) => ` · SHA-256 ${sha().slice(0, 12)}…`}</Show>
+                </text>
+              </Show>
+            </>
+          )}
+        </Show>
+      </box>
+    </BlockTool>
   )
 }
 

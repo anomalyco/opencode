@@ -567,8 +567,9 @@ describe("SessionRunnerLLM", () => {
           input: Schema.Struct({ query: Schema.String }),
           output: Schema.Struct({ answer: Schema.String }),
           execute: ({ query }, context) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               contexts.push(context)
+              yield* (context.progress?.({ structured: { phase: "checkpoint" } }) ?? Effect.void).pipe(Effect.ignore)
               return { answer: query.toUpperCase() }
             }),
         }),
@@ -593,8 +594,17 @@ describe("SessionRunnerLLM", () => {
           agent: AgentV2.ID.make("build"),
           assistantMessageID: expect.stringMatching(/^msg_/),
           toolCallID: "call-application",
+          progress: expect.any(Function),
         },
       ])
+      const { db } = yield* Database.Service
+      const eventTypes = yield* db
+        .select({ type: EventTable.type })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .all()
+        .pipe(Effect.orDie)
+      expect(eventTypes.map((event) => event.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Progress.type, 1))
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Use application context" },
         {

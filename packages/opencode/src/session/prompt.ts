@@ -10,7 +10,7 @@ import { Session } from "./session"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
 
-import { type Tool as AITool, tool, jsonSchema } from "ai"
+import { type ModelMessage, type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { SystemPrompt } from "./system"
@@ -81,6 +81,46 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+const BTW_SYSTEM_PROMPT = `You are answering an ephemeral /btw side question about the current conversation.
+
+The main task may still be running. Do not continue, alter, or claim to control that work. Answer only the latest /btw question, using the supplied conversation and prior /btw exchanges as context.
+
+You have no tools in this request. Never emit tool-call syntax, function-call markup, DSML, shell commands intended for execution, or requests to invoke a tool. Do not claim to inspect files, run commands, browse, or perform actions. If the answer depends on fresh tool output, say what is missing. Respond only with the natural-language answer to the side question. Keep the answer focused and useful.`
+
+const BTW_TOOL_RETRY_PROMPT = `Your previous attempt tried to call a tool or emitted tool-call protocol instead of answering. This is a text-only side conversation and no tools exist. Answer the user's latest side question directly in ordinary natural language. Do not reproduce or discuss the attempted tool call.`
+
+function btwContext(messages: SessionV1.WithParts[]) {
+  return messages
+    .map(
+      (message): SessionV1.WithParts => ({
+        info: structuredClone(message.info),
+        // Preserve visible conversation and user attachments without replaying
+        // tool calls, tool output, or hidden reasoning into a tool-free request.
+        parts: message.parts
+          .filter((part) => part.type === "text" || (message.info.role === "user" && part.type === "file"))
+          .map((part) => structuredClone(part)),
+      }),
+    )
+    .filter((message) => message.parts.length > 0)
+}
+
+function looksLikeBtwToolProtocol(value: string) {
+  const prefix = value
+    .trimStart()
+    .slice(0, 1_000)
+    .replace(/^[`]+/, "")
+    .toLowerCase()
+    .replace(/[\s|｜¦]+/g, "")
+  return (
+    prefix.startsWith("<dsmltool_calls") ||
+    prefix.startsWith("<dsmlinvoke") ||
+    prefix.startsWith("<dsmlparameter") ||
+    prefix.startsWith("<tool_call") ||
+    prefix.startsWith("<toolcalls") ||
+    prefix.startsWith("<invoke")
+  )
+}
+
 function mcpResourceBase64Size(value: string) {
   const trimmed = value.replace(/\s/g, "")
   const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
@@ -101,6 +141,7 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  readonly btw: (input: BtwInput) => Effect.Effect<BtwResult, unknown>
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
@@ -630,6 +671,90 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
       if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
       return yield* provider.defaultModel().pipe(Effect.orDie)
+    })
+
+    const btw = Effect.fn("SessionPrompt.btw")(function* (input: BtwInput) {
+      const question = input.question.trim()
+      if (!question) return yield* Effect.fail(new Error("A /btw question is required"))
+      if (question.length > 8_000) return yield* Effect.fail(new Error("The /btw question is too long"))
+
+      const session = yield* sessions.get(input.sessionID)
+      const snapshot = MessageV2.filterCompacted(yield* sessions.messages({ sessionID: input.sessionID }))
+        // In-flight assistant content can be incomplete. Share complete turns
+        // and the current user prompt without treating partial work as final.
+        .filter((message) => message.info.role === "user" || Boolean(message.info.finish))
+        .map((message) => structuredClone(message))
+      const lastUser = snapshot.findLast((message) => message.info.role === "user")
+      if (!lastUser || lastUser.info.role !== "user")
+        return yield* Effect.fail(new Error("The session has no conversation context for /btw"))
+
+      const agent = (yield* agents.get(lastUser.info.agent)) ?? (yield* agents.defaultInfo())
+      const modelRef = yield* currentModel(input.sessionID)
+      const model = yield* getModel(modelRef.providerID, modelRef.modelID, input.sessionID)
+
+      // Plugins may rewrite message objects, so only expose the cloned snapshot.
+      // The side request must never mutate the persisted parent conversation.
+      yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: snapshot })
+
+      const [env, instructions, modelMessages] = yield* Effect.all([
+        sys.environment(model),
+        instruction.system().pipe(Effect.orDie),
+        MessageV2.toModelMessagesEffect(btwContext(snapshot), model),
+      ])
+      const system = [...env, ...instructions, BTW_SYSTEM_PROMPT]
+      const exchanges = (input.exchanges ?? []).slice(-8)
+      const sideMessages: ModelMessage[] = exchanges.flatMap((exchange) => [
+        { role: "user" as const, content: exchange.question.slice(0, 8_000) },
+        { role: "assistant" as const, content: exchange.answer.slice(0, 20_000) },
+      ])
+      sideMessages.push({ role: "user", content: question })
+
+      const user: SessionV1.User = {
+        ...lastUser.info,
+        id: MessageID.ascending(),
+        time: { created: Date.now() },
+        model: {
+          providerID: modelRef.providerID,
+          modelID: modelRef.modelID,
+          variant: "variant" in modelRef && typeof modelRef.variant === "string" ? modelRef.variant : undefined,
+        },
+        tools: { "*": false },
+        format: { type: "text" },
+      }
+      const sideAgent: Agent.Info = { ...agent, prompt: BTW_SYSTEM_PROMPT }
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const output = yield* Stream.runFold(
+          llm.stream({
+            user,
+            sessionID: input.sessionID,
+            parentSessionID: session.parentID,
+            model,
+            agent: sideAgent,
+            permission: session.permission,
+            system: attempt === 0 ? system : [...system, BTW_TOOL_RETRY_PROMPT],
+            messages: [...modelMessages, ...sideMessages],
+            tools: {},
+            toolChoice: "none",
+            retries: 2,
+          }),
+          () => ({ text: "", error: undefined as string | undefined, toolAttempted: false }),
+          (result, event) => {
+            if (LLMEvent.is.textDelta(event)) result.text += event.text
+            if (LLMEvent.is.toolCall(event)) result.toolAttempted = true
+            if (LLMEvent.is.providerError(event)) result.error = event.message
+            return result
+          },
+        )
+        if (output.error) return yield* Effect.fail(new Error(output.error))
+        const answer = output.text.trim()
+        const invalid = output.toolAttempted || looksLikeBtwToolProtocol(answer)
+        if (answer && !invalid) return BtwResult.make({ answer, providerID: model.providerID, modelID: model.id })
+        if (attempt === 0 && invalid) continue
+        if (!answer) return yield* Effect.fail(new Error("The /btw model returned an empty response"))
+        return yield* Effect.fail(new Error("The /btw model attempted to call a tool instead of answering"))
+      }
+      return yield* Effect.fail(new Error("The /btw model did not return a usable answer"))
     })
 
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
@@ -1482,6 +1607,7 @@ const layer = Layer.effect(
 
     return Service.of({
       cancel,
+      btw,
       prompt,
       loop,
       shell,
@@ -1495,6 +1621,25 @@ const ModelRef = Schema.Struct({
   providerID: ProviderV2.ID,
   modelID: ModelV2.ID,
 })
+
+export const BtwExchange = Schema.Struct({
+  question: Schema.String,
+  answer: Schema.String,
+}).annotate({ identifier: "BtwExchange" })
+export type BtwExchange = Schema.Schema.Type<typeof BtwExchange>
+
+export const BtwInput = Schema.Struct({
+  sessionID: SessionID,
+  question: Schema.String,
+  exchanges: Schema.optional(Schema.Array(BtwExchange)),
+})
+export type BtwInput = Schema.Schema.Type<typeof BtwInput>
+
+export class BtwResult extends Schema.Class<BtwResult>("BtwResult")({
+  answer: Schema.String,
+  providerID: ProviderV2.ID,
+  modelID: ModelV2.ID,
+}) {}
 
 export const PromptInput = Schema.Struct({
   sessionID: SessionID,

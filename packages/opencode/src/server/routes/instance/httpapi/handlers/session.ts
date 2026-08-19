@@ -23,6 +23,8 @@ import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import {
+  BtwApiError,
+  BtwPayload,
   CommandPayload,
   DiffQuery,
   ForkPayload,
@@ -38,6 +40,7 @@ import {
 } from "../groups/session"
 import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
+import { errorMessage } from "@/util/error"
 
 const tryParseJson = (text: string) =>
   Effect.try({
@@ -234,6 +237,29 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return true
     })
 
+    const btw = Effect.fn("SessionHttpApi.btw")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof BtwPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      if (!ctx.payload.question.trim()) return yield* new HttpApiError.BadRequest({})
+      return yield* promptSvc
+        .btw({
+          sessionID: ctx.params.sessionID,
+          question: ctx.payload.question,
+          exchanges: ctx.payload.exchanges,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new BtwApiError({
+                name: "BtwError",
+                data: { message: errorMessage(error) },
+              }),
+          ),
+        )
+    })
+
     const init = Effect.fn("SessionHttpApi.init")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof InitPayload.Type
@@ -424,6 +450,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("update", update)
       .handleRaw("fork", forkRaw)
       .handle("abort", abort)
+      .handle("btw", btw)
       .handle("init", init)
       .handle("share", share)
       .handle("unshare", unshare)
