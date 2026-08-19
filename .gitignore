@@ -32,3 +32,13 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# VantaCode: never commit local secrets, model caches, checkpoints, or debug logs
+.dev.vars
+.dev.vars.*
+.vantacode/
+*.vantacode-checkpoints.json
+vantacode-debug*.log
+.ollama/
+models/*.gguf
+*.gguf
