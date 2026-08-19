@@ -336,7 +336,7 @@ export const layer = (options?: ShellSelect.Options) =>
                 ),
               )
 
-              yield* bus.publish(Shell.Event.Created, { info })
+              yield* bus.publish(Shell.Event.Created, { info: session.info })
               yield* Deferred.succeed(ready, session)
               // Hold the handle's scope open until the command terminates; closing it earlier would
               // release (kill) the process before its exit is observed.
