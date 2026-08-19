@@ -26,6 +26,7 @@ type PersistTarget = {
 
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
+const SERVER_REGISTRY_KEY = `${GLOBAL_STORAGE}:server`
 const WINDOW_STORAGE = "opencode.window"
 const LOCAL_PREFIX = "opencode."
 const fallback = new Map<string, boolean>()
@@ -118,7 +119,7 @@ function evict(storage: Storage, keep: string, value: string) {
     const name = storage.key(index)
     if (!name) continue
     if (!name.startsWith(LOCAL_PREFIX)) continue
-    if (name === keep) continue
+    if (name === keep || name === SERVER_REGISTRY_KEY) continue
     const stored = storage.getItem(name)
     items.push({ key: name, size: stored?.length ?? 0 })
   }
@@ -150,14 +151,16 @@ function write(storage: Storage, key: string, value: string) {
     if (!quota(error)) throw error
   }
 
-  try {
-    storage.removeItem(key)
-    cacheDelete(key)
-    storage.setItem(key, value)
-    cacheSet(key, value)
-    return true
-  } catch (error) {
-    if (!quota(error)) throw error
+  if (key !== SERVER_REGISTRY_KEY) {
+    try {
+      storage.removeItem(key)
+      cacheDelete(key)
+      storage.setItem(key, value)
+      cacheSet(key, value)
+      return true
+    } catch (error) {
+      if (!quota(error)) throw error
+    }
   }
 
   const ok = evict(storage, key, value)
