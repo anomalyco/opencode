@@ -184,6 +184,20 @@ describe("createCompatibleApi", () => {
     expect(url.searchParams.get("limit")).toBe("20")
   })
 
+  test("routes V1 diffs through the requested workspace", async () => {
+    const { api, requests } = setup("v1")
+    await api.vcs.diff({
+      location: { directory: "/repo", workspace: "workspace-1" },
+      mode: "working",
+    })
+
+    const url = new URL(requests[0]!.url)
+    expect(url.pathname).toBe("/vcs/diff")
+    expect(url.searchParams.get("directory")).toBe("/repo")
+    expect(url.searchParams.get("workspace")).toBe("workspace-1")
+    expect(url.searchParams.get("mode")).toBe("git")
+  })
+
   test("routes V1 permission replies through the requested directory", async () => {
     const { api, requests } = setup("v1")
     await api.permission.reply({
