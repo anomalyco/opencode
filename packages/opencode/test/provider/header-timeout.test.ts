@@ -112,7 +112,7 @@ it.live("headerTimeout aborts when response headers do not arrive", () =>
   }),
 )
 
-it.live("headerTimeout is opt-in for non-OpenAI providers", () =>
+it.live("default headerTimeout does not abort briefly delayed headers", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
       Effect.promise(() => delayedHeaderServer(100)),

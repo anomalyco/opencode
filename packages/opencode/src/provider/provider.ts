@@ -32,7 +32,9 @@ import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
 
-const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
+// A connection that is established but silently blackholed (e.g. a broken IPv6
+// path, see #36029/#39859) would otherwise wait for response headers forever.
+const HEADER_TIMEOUT_DEFAULT = 300_000
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -205,7 +207,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
-        options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
+        options: { headerTimeout: HEADER_TIMEOUT_DEFAULT },
       }),
     meta: () =>
       Effect.succeed({
@@ -1767,7 +1769,7 @@ const layer = Layer.effect(
 
         const customFetch = options["fetch"]
         const chunkTimeout = options["chunkTimeout"]
-        const headerTimeout = options["headerTimeout"]
+        const headerTimeout = options["headerTimeout"] ?? HEADER_TIMEOUT_DEFAULT
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
