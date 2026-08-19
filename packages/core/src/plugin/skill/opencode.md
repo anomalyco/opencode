@@ -236,24 +236,6 @@ problem belongs to the client, the shared server, or one project.
 - Redact API keys, authorization headers, prompts, file contents, and other
   sensitive data before sharing diagnostics.
 
-### CPU profiles
-
-On Linux and macOS, send `SIGPROF` to a running OpenCode process to capture its
-CPU activity. Get the background server PID from the health endpoint, then send
-the signal:
-
-```sh
-opencode2 api get /api/health
-kill -SIGPROF <pid>
-```
-
-One signal starts a ten-second profile and stops it automatically. OpenCode
-writes the result to its log directory as
-`cpu-<pid>-<timestamp>.cpuprofile` and logs the complete path. Additional
-`SIGPROF` signals are ignored while a profile is active. Signal-triggered CPU
-profiles are unavailable on Windows. There is no CPU profile CLI flag or
-environment variable.
-
 See the [full troubleshooting guide](https://opencode.ai/v2/docs/troubleshooting)
 for service lifecycle commands, API inspection, log locations, explicit server
 connections, issue-reporting details, and local development paths.
