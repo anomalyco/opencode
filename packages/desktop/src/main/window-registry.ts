@@ -20,6 +20,9 @@ export function createWindowRegistry<W>(persistence: {
     setQuitting(value = true) {
       quitting = value
     },
+    isQuitting() {
+      return quitting
+    },
     register(id: string, window: W) {
       windows.set(id, window)
       const ids = persisted()
