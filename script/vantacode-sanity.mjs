@@ -1,12 +1,20 @@
-// Node sanity runner for VantaCode pure modules. Uses --experimental-strip-types.
-// Not part of the build — a fast offline check runnable without Bun.
-import { maskSecret, isRetryable, candidatesFromKeys, runWithFailover, AllCandidatesFailedError } from "./packages/opencode/src/vantacode/failover.ts"
-import { ExecutionLog, HallucinationStreak, detectHallucination } from "./packages/opencode/src/vantacode/hallucination-guard.ts"
-import { validateToolCall, validationRetryMessage } from "./packages/opencode/src/vantacode/tool-validate.ts"
-import { diffLines, diffStat, renderDiff } from "./packages/opencode/src/vantacode/diff.ts"
-import { computeTunedSettings, normalizeGfx, verifyOffload } from "./packages/opencode/src/vantacode/hardware.ts"
-import { resolveKeys, resolveProviders, mergeConfig, selectProvider } from "./packages/opencode/src/vantacode/config.ts"
-import { toolCallLine, renderStatusLine, renderTaskList, renderFilesSummary, Renderer } from "./packages/opencode/src/vantacode/renderer.ts"
+// ============================================================================
+// VantaCode OFFLINE SANITY CHECK — this is NOT the real test suite.
+//
+// It exists only so the pure VantaCode logic can be smoke-tested with plain
+// Node (no Bun) via:  node --experimental-strip-types script/vantacode-sanity.mjs
+//
+// The REAL tests are the bun:test files in packages/opencode/test/vantacode/*.
+// Run them with `bun test` on a machine that has Bun installed. Do not mistake
+// this file for the test suite.
+// ============================================================================
+import { maskSecret, isRetryable, candidatesFromKeys, runWithFailover, AllCandidatesFailedError } from "../packages/opencode/src/vantacode/failover.ts"
+import { ExecutionLog, HallucinationStreak, detectHallucination } from "../packages/opencode/src/vantacode/hallucination-guard.ts"
+import { validateToolCall, validationRetryMessage } from "../packages/opencode/src/vantacode/tool-validate.ts"
+import { diffLines, diffStat, renderDiff } from "../packages/opencode/src/vantacode/diff.ts"
+import { computeTunedSettings, normalizeGfx, verifyOffload } from "../packages/opencode/src/vantacode/hardware.ts"
+import { resolveKeys, resolveProviders, mergeConfig, selectProvider } from "../packages/opencode/src/vantacode/config.ts"
+import { toolCallLine, renderStatusLine, renderTaskList, renderFilesSummary, Renderer } from "../packages/opencode/src/vantacode/renderer.ts"
 
 let pass = 0, fail = 0
 const eq = (a, b, msg) => { const ok = JSON.stringify(a) === JSON.stringify(b); if (ok) pass++; else { fail++; console.error("FAIL:", msg, "got", JSON.stringify(a), "want", JSON.stringify(b)) } }
