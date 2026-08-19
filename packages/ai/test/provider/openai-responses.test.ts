@@ -485,52 +485,6 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("continues after a completed refusal without replaying it", () =>
-    Effect.gen(function* () {
-      const firstInput = [{ role: "user", content: [{ type: "input_text", text: "Unsafe request" }] }]
-      const first = continuationDriver({ type: "response.create", model: "gpt-5.2", store: false, input: firstInput })
-      const create = yield* first.create(undefined)
-      yield* first.observe(
-        create,
-        ProviderShared.encodeJson({
-          type: "response.output_item.done",
-          item: {
-            type: "message",
-            id: "msg_refusal",
-            status: "completed",
-            role: "assistant",
-            content: [{ type: "refusal", refusal: "I can't help with that." }],
-          },
-        }),
-      )
-      const saved = checkpoint(
-        yield* first.observe(
-          create,
-          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
-        ),
-      )
-      const followUp = { role: "user", content: [{ type: "input_text", text: "Try something safe" }] }
-      const next = continuationDriver({
-        type: "response.create",
-        model: "gpt-5.2",
-        store: false,
-        input: [
-          ...firstInput,
-          { role: "assistant", content: [{ type: "refusal", refusal: "I can't help with that." }] },
-          followUp,
-        ],
-      })
-
-      const continued = yield* next.create(saved)
-
-      expect(continued.mode).toBe("incremental")
-      expect(ProviderShared.decodeJson(continued.message)).toMatchObject({
-        previous_response_id: "resp_1",
-        input: [followUp],
-      })
-    }),
-  )
-
   it.effect("continues store-false reasoning without replaying the output-only item ID", () =>
     Effect.gen(function* () {
       const firstInput = [{ role: "user", content: [{ type: "input_text", text: "Think" }] }]
@@ -1551,7 +1505,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("preserves and replays standard refusal content", () =>
+  it.effect("preserves standard refusal content as ordinary assistant text", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
@@ -1619,7 +1573,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "text",
           text: "I can't help with that.",
-          providerMetadata: { openai: { refusal: true, phase: "final_answer" } },
+          providerMetadata: { openai: { phase: "final_answer" } },
         },
       ])
 
@@ -1627,7 +1581,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.input).toEqual([
         {
           role: "assistant",
-          content: [{ type: "refusal", refusal: "I can't help with that." }],
+          content: [{ type: "output_text", text: "I can't help with that." }],
           phase: "final_answer",
         },
       ])
