@@ -1,5 +1,19 @@
 import { Option, Schema } from "effect"
-import { TextVerbosity, type LLMRequest } from "../../schema/index.js"
+import type { LLMRequest } from "../../schema/index.js"
+
+export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
+export type ReasoningEffort = (typeof ReasoningEfforts)[number] | (string & {})
+export const ReasoningEffort = Schema.declare<ReasoningEffort>(
+  (value): value is ReasoningEffort => typeof value === "string",
+  { title: "ReasoningEffort" },
+)
+
+export const TextVerbosities = ["low", "medium", "high"] as const
+export type TextVerbosity = (typeof TextVerbosities)[number] | (string & {})
+export const TextVerbosity = Schema.declare<TextVerbosity>(
+  (value): value is TextVerbosity => typeof value === "string",
+  { title: "TextVerbosity" },
+)
 
 export const ResponseIncludables = [
   "file_search_call.results",
@@ -19,7 +33,6 @@ export type ServiceTier = (typeof ServiceTiers)[number]
 export const Truncations = ["auto", "disabled"] as const
 export type Truncation = (typeof Truncations)[number]
 
-export const ReasoningEffort = Schema.String
 export const TextVerbositySchema = TextVerbosity
 export const ResponseIncludableSchema = Schema.declare<ResponseIncludable>(
   (value): value is ResponseIncludable => typeof value === "string",
