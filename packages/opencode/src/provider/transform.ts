@@ -727,6 +727,27 @@ function googleThinkingVariants(model: Provider.Model): Record<string, Record<st
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
+  const isNvidiaNimGlm =
+  model.providerID === "nvidia" &&
+  /^z-ai\/glm/i.test(model.api.id)
+
+  if (isNvidiaNimGlm) {
+    return {
+      high: {
+        chat_template_kwargs: {
+          enable_thinking: true,
+          reasoning_effort: "high",
+        },
+      },
+      max: {
+        chat_template_kwargs: {
+          enable_thinking: true,
+          reasoning_effort: "max",
+        },
+      },
+    }
+  }
+
   const id = model.id.toLowerCase()
   const glm52 = ["glm-5.2", "glm-5-2", "glm-5p2"].some(
     (name) => id.includes(name) || model.api.id.toLowerCase().includes(name),
@@ -1205,6 +1226,19 @@ export function options(input: {
   ) {
     result["thinking"] = {
       type: "enabled",
+      clear_thinking: false,
+    }
+  }
+
+  // NVIDIA NIM: GLM models need chat_template_kwargs to enable thinking
+  const nvidiaModelId = input.model.api.id.toLowerCase()
+  if (
+    input.model.providerID === "nvidia" &&
+    /^z-ai\/glm/.test(nvidiaModelId) &&
+    input.model.api.npm === "@ai-sdk/openai-compatible"
+  ) {
+    result["chat_template_kwargs"] = {
+      enable_thinking: true,
       clear_thinking: false,
     }
   }
