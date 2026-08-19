@@ -17,7 +17,14 @@ import {
 } from "@opencode-ai/core/v1/session"
 
 import { NamedError } from "@opencode-ai/core/util/error"
-import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
+import {
+  APICallError,
+  JSONParseError,
+  convertToModelMessages,
+  LoadAPIKeyError,
+  type ModelMessage,
+  type UIMessage,
+} from "ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { NotFoundError } from "@/storage/storage"
@@ -702,6 +709,18 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    // ai-sdk throws JSONParseError on malformed SSE chunks; classify as retryable
+    // so the existing backoff path recovers (previously fell through to UnknownError).
+    // See #13579.
+    case JSONParseError.isInstance(e):
+      return new APIError(
+        {
+          message: `Provider returned malformed JSON stream: ${e.message.slice(0, 200)}`,
+          isRetryable: true,
+        },
+        { cause: e },
+      ).toObject()
+
     case e instanceof Error:
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
     default:
