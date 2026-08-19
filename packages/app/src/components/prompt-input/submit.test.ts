@@ -235,8 +235,8 @@ beforeAll(async () => {
       session: {
         remember: () => undefined,
         setStatus: () => undefined,
-        // Mirrors the data layer's optimistic prompt admission by delegating
-        // to the same API client the submit flow targets.
+        // Delegates straight to the API client; optimistic admission and
+        // rollback are covered by the data-layer tests in packages/tui.
         prompt: (input: unknown) => rootClient.api.session.prompt(input as never),
       },
       location: {

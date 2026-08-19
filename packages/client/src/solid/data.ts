@@ -35,11 +35,10 @@ import type {
 } from "../promise"
 import { Worktree } from "@opencode-ai/schema/worktree"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { isPermissionNotFoundError } from "../promise"
-import type { SessionPromptInput } from "../promise"
+import { isPermissionNotFoundError, type SessionPromptInput } from "../promise"
 import { createStore, produce, reconcile } from "solid-js/store"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import { createEffect, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
 
@@ -180,11 +179,6 @@ export function createData(config: CreateDataInput) {
     setStore("session", "active", sessionID, status)
   }
 
-  function addPending(item: SessionInboxInfo) {
-    if (store.session.pending[item.sessionID]?.some((pending) => pending.id === item.id)) return
-    setStore("session", "pending", item.sessionID, [...(store.session.pending[item.sessionID] ?? []), item])
-  }
-
   function removePending(sessionID: string, inboxID?: string) {
     if (!inboxID) return
     if (store.session.pending[sessionID]?.some((item) => item.id === inboxID))
@@ -225,40 +219,53 @@ export function createData(config: CreateDataInput) {
   // echo. This is the one deliberate piece of in-flight bookkeeping in this
   // layer: it exists so a rejection only rolls back rows the server never
   // acknowledged, and so a concurrent pending re-fetch cannot wipe a row the
-  // server does not know about yet.
+  // server does not know about yet. Entries clear on the enqueued echo or on
+  // rollback — not on POST success, which typically precedes the echo.
   const outbox = new Set<string>()
 
-  // Insert an admitted inbox item into pending, input, and (for user and
+  // Upsert an admitted inbox item into pending, input, and (for user and
   // synthetic items) the visible transcript. Used by the inbox.enqueued
-  // handler and by optimistic prompt admission; both paths dedupe by inbox ID,
-  // so whichever runs second is a no-op.
+  // handler and by optimistic prompt admission; the upsert is what reconciles
+  // the durable echo with an optimistic placeholder — the durable payload and
+  // times replace the client's guess.
   function admitLocal(item: SessionInboxInfo) {
-    addPending(item)
-    if (!store.session.input[item.sessionID]?.includes(item.id))
-      setStore("session", "input", item.sessionID, [...(store.session.input[item.sessionID] ?? []), item.id])
-    if (item.type !== "user" && item.type !== "synthetic") return
-    message.update(item.sessionID, (draft, index) => {
-      message.append(
-        draft,
-        index,
-        item.type === "user"
-          ? { id: item.id, type: "user", ...item.payload, time: { created: item.timeCreated } }
-          : { id: item.id, type: "synthetic", ...item.payload, time: { created: item.timeCreated } },
+    batch(() => {
+      const pending = store.session.pending[item.sessionID] ?? []
+      const at = pending.findIndex((entry) => entry.id === item.id)
+      setStore(
+        "session",
+        "pending",
+        item.sessionID,
+        at < 0 ? [...pending, item] : pending.map((entry, index) => (index === at ? item : entry)),
       )
+      const input = store.session.input[item.sessionID] ?? []
+      if (!input.includes(item.id)) setStore("session", "input", item.sessionID, [...input, item.id])
+      if (item.type !== "user" && item.type !== "synthetic") return
+      message.update(item.sessionID, (draft, index) => {
+        const row =
+          item.type === "user"
+            ? { id: item.id, type: "user" as const, ...item.payload, time: { created: item.timeCreated } }
+            : { id: item.id, type: "synthetic" as const, ...item.payload, time: { created: item.timeCreated } }
+        const position = index.get(item.id)
+        if (position === undefined) return message.append(draft, index, row)
+        draft[position] = row
+      })
     })
   }
 
   // Remove an inbox item from pending, input, and the visible transcript.
   // Used by the inbox.cancelled handler and by optimistic rollback.
   function retractLocal(sessionID: string, inboxID: string) {
-    removePending(sessionID, inboxID)
-    if (!messageIndex.get(sessionID)?.has(inboxID)) return
-    message.update(sessionID, (draft, index) => {
-      const position = index.get(inboxID)
-      if (position === undefined) return
-      draft.splice(position, 1)
-      index.delete(inboxID)
-      message.reindex(draft, index, position)
+    batch(() => {
+      removePending(sessionID, inboxID)
+      if (!messageIndex.get(sessionID)?.has(inboxID)) return
+      message.update(sessionID, (draft, index) => {
+        const position = index.get(inboxID)
+        if (position === undefined) return
+        draft.splice(position, 1)
+        index.delete(inboxID)
+        message.reindex(draft, index, position)
+      })
     })
   }
 
@@ -368,6 +375,7 @@ export function createData(config: CreateDataInput) {
   }
 
   function removeSession(sessionID: string) {
+    store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -1078,7 +1086,7 @@ export function createData(config: CreateDataInput) {
             const inflight = (store.session.pending[sessionID] ?? []).filter(
               (item) => outbox.has(item.id) && !pending.some((row) => row.id === item.id),
             )
-            const merged = [...pending, ...inflight]
+            const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
             setStore("session", "pending", sessionID, reconcile(merged))
             setStore(
               "session",
@@ -1094,41 +1102,44 @@ export function createData(config: CreateDataInput) {
       },
       // Optimistic prompt admission: render the prompt immediately under a
       // client-minted ID, send it, and let the durable inbox.enqueued echo
-      // reconcile by that same ID. Server admission is idempotent per ID, so
-      // retrying with the identical payload cannot double-admit.
-      async prompt(input: SessionPromptInput) {
+      // upsert that same ID with the server's payload. Server admission is
+      // idempotent per ID, so retrying with the identical payload cannot
+      // double-admit.
+      prompt(input: SessionPromptInput) {
         const id = input.id ?? SessionMessage.ID.create()
-        outbox.add(id)
-        admitLocal({
-          id,
-          sessionID: input.sessionID,
-          timeCreated: Date.now(),
-          type: "user",
-          delivery: input.delivery ?? "steer",
-          // Files and skills stay off the optimistic row: their durable forms
-          // are server-loaded (content, mime, resolution), so they render
-          // fully when the echo arrives.
-          payload: {
-            text: input.text,
-            agents: input.agents?.map((agent) => ({ ...agent })),
-            metadata: input.metadata,
-          },
-        })
-        return api()
-          .session.prompt({ ...input, id })
-          .then(
-            (admitted) => {
-              outbox.delete(id)
-              return admitted
+        // A retry may reuse an ID that is already rendered — and possibly
+        // already durable. Admit optimistically only for new IDs so a failed
+        // retry cannot roll back acknowledged state.
+        const fresh =
+          !messageIndex.get(input.sessionID)?.has(id) &&
+          !store.session.pending[input.sessionID]?.some((item) => item.id === id)
+        if (fresh) {
+          outbox.add(id)
+          admitLocal({
+            id,
+            sessionID: input.sessionID,
+            timeCreated: Date.now(),
+            type: "user",
+            delivery: input.delivery ?? "steer",
+            // Files and skills stay off the optimistic row: their durable
+            // forms are server-loaded (content, mime, resolution), so they
+            // fill in when the echo upserts the row.
+            payload: {
+              text: input.text,
+              agents: input.agents?.map((agent) => ({ ...agent })),
+              metadata: input.metadata,
             },
-            (error) => {
-              // Roll back only while unacknowledged: once the echo confirmed
-              // the row it is server state, and a late transport failure must
-              // not delete it.
-              if (outbox.delete(id)) retractLocal(input.sessionID, id)
-              throw error
-            },
-          )
+          })
+        }
+        // Wrapped so even a synchronous client failure reaches the rollback.
+        return Promise.resolve()
+          .then(() => api().session.prompt({ ...input, id }))
+          .catch((error) => {
+            // Roll back only rows this call admitted and the echo has not
+            // acknowledged: anything else is server state.
+            if (fresh && outbox.delete(id)) retractLocal(input.sessionID, id)
+            throw error
+          })
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {

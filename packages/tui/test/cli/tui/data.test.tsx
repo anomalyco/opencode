@@ -3152,25 +3152,103 @@ test("admits prompts optimistically and reconciles with the durable echo", async
     expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
     expect(sync.session.input.list(sessionID)).toEqual([messageID])
 
-    // The durable echo reconciles by ID instead of duplicating.
+    // The durable echo upserts by ID instead of duplicating: server-loaded
+    // payload (files) and durable times replace the optimistic placeholder.
     const received: string[] = []
     const unsubscribe = sync.listen((event) => received.push(event.name))
+    const echoFile = { data: "aGVsbG8=", mime: "text/plain", source: { type: "uri" as const, uri: "file:///a.txt" } }
     emitEvent(events, {
       id: "evt_echo_1",
       created: 5,
       type: "session.inbox.enqueued",
       durable: durable(sessionID),
-      data: { sessionID, inboxID: messageID, item: { type: "user", payload: { text: "hello" }, delivery: "steer" } },
+      data: {
+        sessionID,
+        inboxID: messageID,
+        item: { type: "user", payload: { text: "hello", files: [echoFile] }, delivery: "steer" },
+      },
     })
     await wait(() => received.includes("session.inbox.enqueued"))
     unsubscribe()
-    expect(sync.session.pending.list(sessionID)).toHaveLength(1)
-    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
+    expect(sync.session.pending.list(sessionID)).toEqual([
+      {
+        id: messageID,
+        sessionID,
+        timeCreated: 5,
+        type: "user",
+        payload: { text: "hello", files: [echoFile] },
+        delivery: "steer",
+      },
+    ])
+    const echoed = sync.session.message.list(sessionID)[0]
+    expect(echoed?.type).toBe("user")
+    if (echoed?.type !== "user") return
+    expect(echoed.time.created).toBe(5)
+    expect(echoed.files).toEqual([echoFile])
 
     // A late transport failure after the echo must not delete acknowledged state.
     release(json({ _tag: "UnknownError", message: "response lost" }, { status: 500 }))
     expect(await settled).toBeDefined()
     expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
+  } finally {
+    release(json({ _tag: "UnknownError", message: "cleanup" }, { status: 500 }))
+    app.renderer.destroy()
+  }
+})
+
+test("keeps the row when the response lands before the echo", async () => {
+  const events = createEventStream()
+  const sessionID = "session-1"
+  const messageID = "msg_early_1"
+  const admission = {
+    id: messageID,
+    sessionID,
+    timeCreated: 1,
+    type: "user",
+    payload: { text: "hello" },
+    delivery: "steer",
+  }
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/prompt`) return json({ data: admission })
+    // The server's inbox listing still misses the admission (projection lag).
+    if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [] })
+  }, events)
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+
+    // POST resolved but the echo has not arrived: a racing pending re-fetch
+    // still cannot wipe the row.
+    await sync.session.pending.sync(sessionID)
+    sync.session.pending.invalidate(sessionID)
+    await sync.session.pending.sync(sessionID)
+    expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
+    expect(sync.session.input.list(sessionID)).toEqual([messageID])
     expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
   } finally {
     app.renderer.destroy()
@@ -3235,9 +3313,11 @@ test("a retry under the same client-minted ID cannot duplicate rows", async () =
     delivery: "steer",
   }
   const posts: string[] = []
+  let fail = false
   const calls = createFetch(async (url, request) => {
     if (url.pathname === `/api/session/${sessionID}/prompt`) {
       posts.push(((await request.json()) as { id: string }).id)
+      if (fail) return json({ _tag: "UnknownError", message: "transient" }, { status: 500 })
       return json({ data: admission })
     }
   }, events)
@@ -3275,6 +3355,24 @@ test("a retry under the same client-minted ID cannot duplicate rows", async () =
     expect(posts).toEqual([messageID, messageID])
     expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
     expect(sync.session.input.list(sessionID)).toEqual([messageID])
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
+
+    // The row is acknowledged (echo applied): a FAILED retry under the same
+    // ID must not roll back acknowledged state.
+    const received: string[] = []
+    const unsubscribe = sync.listen((event) => received.push(event.name))
+    emitEvent(events, {
+      id: "evt_ack_1",
+      created: 2,
+      type: "session.inbox.enqueued",
+      durable: durable(sessionID),
+      data: { sessionID, inboxID: messageID, item: { type: "user", payload: { text: "hello" }, delivery: "steer" } },
+    })
+    await wait(() => received.includes("session.inbox.enqueued"))
+    unsubscribe()
+    fail = true
+    await expect(sync.session.prompt({ sessionID, id: messageID, text: "hello" })).rejects.toThrow()
+    expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
     expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
   } finally {
     app.renderer.destroy()
