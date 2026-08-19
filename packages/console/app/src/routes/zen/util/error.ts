@@ -4,6 +4,7 @@ export class MonthlyLimitError extends Error {}
 export class UserLimitError extends Error {}
 export class ModelError extends Error {}
 export class RegionError extends Error {}
+export class DataPolicyError extends Error {}
 
 class LimitError extends Error {
   retryAfter?: number

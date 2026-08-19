@@ -328,9 +328,11 @@ export const dict = {
   "go.faq.a5.used": "使用",
   "go.faq.a5.notUsed": "不使用",
   "go.faq.a5.noAgreement": "无协议",
+  "go.faq.a5.notZdr": "非 ZDR",
   "go.faq.a5.grokRetention":
     "ZDR 会禁用依赖所存储数据的重要 API 功能，包括有状态的 Responses API、Files and Collections 和 Batch API。",
   "go.faq.a5.gptRetention": "所有 API 功能的使用都会生成滥用监控日志，并最多保留 30 天。",
+  "go.faq.a5.museRetention": "以允许使用你的提示词和补全结果训练未来的 Meta 模型为交换，token 价格可获得大幅折扣。",
   "go.faq.a5.learnMore": "了解更多",
   "go.faq.a5.deepseekRetention": "ZDR 协议每月续签。当前协议有效期至 2026 年 8 月 31 日。",
   "go.faq.a5.beforeExceptions": "Go 模型托管在美国。提供商遵循零留存政策，不使用您的数据进行模型训练，",
@@ -368,6 +370,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached": "您已达到每月支出限额 ${{amount}}。请在此处管理您的限额：{{membersUrl}}",
   "zen.api.error.modelDisabled": "模型已禁用",
   "zen.api.error.regionNotAllowed": "该模型的最新版本仅在中国提供托管服务，需明确选择启用：{{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "该模型在你所在的国家或地区不可用。",
+  "zen.api.error.trainingNotAllowed": "该模型会收集用于提升其质量的数据，使用前需要你明确同意：{{consoleGoUrl}}",
   "zen.api.error.trialEnded": "{{model}} 的限免活动已结束。您可以订阅 OpenCode Go 继续使用该模型 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 访问全球顶尖编程模型",

@@ -348,6 +348,7 @@ export const dict = {
   "go.faq.a5.used": "Kullanılır",
   "go.faq.a5.notUsed": "Kullanılmaz",
   "go.faq.a5.noAgreement": "Anlaşma yok",
+  "go.faq.a5.notZdr": "ZDR değil",
   "go.faq.a5.grokRetention":
     "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
   "go.faq.a5.gptRetention":
@@ -355,6 +356,8 @@ export const dict = {
   "go.faq.a5.learnMore": "Daha fazla bilgi",
   "go.faq.a5.deepseekRetention":
     "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ağustos 2026 tarihine kadar geçerlidir.",
+  "go.faq.a5.museRetention":
+    "İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları.",
 
   "go.faq.a5.beforeExceptions":
     "Go modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
@@ -395,6 +398,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Model devre dışı",
   "zen.api.error.regionNotAllowed":
     "Bu modelin en son sürümü yalnızca Çin'de barındırılıyor ve kullanabilmek için açıkça onay vermeniz gerekiyor: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Bu model ülkenizde kullanılamıyor.",
+  "zen.api.error.trainingNotAllowed":
+    "Bu model, kalitesini artırmak için kullanılan verileri toplar. Modeli kullanabilmek için açıkça onay vermeniz gerekir: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "{{model}} için ücretsiz promosyon sona erdi. OpenCode Go'ya abone olarak modeli kullanmaya devam edebilirsiniz - {{link}}",
 

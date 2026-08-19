@@ -346,12 +346,15 @@ export const dict = {
   "go.faq.a5.used": "Wykorzystywane",
   "go.faq.a5.notUsed": "Niewykorzystywane",
   "go.faq.a5.noAgreement": "Brak umowy",
+  "go.faq.a5.notZdr": "Nie ZDR",
   "go.faq.a5.grokRetention":
     "ZDR wyłącza ważne funkcje API zależne od przechowywanych danych, w tym stanowy Responses API, Files and Collections oraz Batch API.",
   "go.faq.a5.gptRetention":
     "Dzienniki monitorowania nadużyć są generowane dla każdego użycia funkcji API i przechowywane przez maksymalnie 30 dni.",
   "go.faq.a5.learnMore": "Dowiedz się więcej",
   "go.faq.a5.deepseekRetention": "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 31 sierpnia 2026 r.",
+  "go.faq.a5.museRetention":
+    "Znacznie obniżone ceny tokenów w zamian za zgodę na wykorzystanie Twoich promptów i odpowiedzi do trenowania przyszłych modeli Meta.",
 
   "go.faq.a5.beforeExceptions":
     "Modele Go są hostowane w USA. Dostawcy stosują politykę zerowej retencji i nie używają Twoich danych do trenowania modeli, z",
@@ -392,6 +395,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Model jest wyłączony",
   "zen.api.error.regionNotAllowed":
     "Najnowsza wersja tego modelu jest dostępna wyłącznie jako usługa hostowana w Chinach i wymaga jawnej zgody użytkownika: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Ten model nie jest dostępny w Twoim kraju.",
+  "zen.api.error.trainingNotAllowed":
+    "Ten model zbiera dane wykorzystywane do poprawy jego jakości i wymaga wyraźnej zgody użytkownika: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Bezpłatna promocja {{model}} dobiegła końca. Możesz dalej korzystać z modelu, subskrybując OpenCode Go - {{link}}",
 

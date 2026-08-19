@@ -350,6 +350,7 @@ export const dict = {
   "go.faq.a5.used": "Используется",
   "go.faq.a5.notUsed": "Не используется",
   "go.faq.a5.noAgreement": "Нет соглашения",
+  "go.faq.a5.notZdr": "Не ZDR",
   "go.faq.a5.grokRetention":
     "ZDR отключает важные функции API, зависящие от сохраненных данных, включая Responses API с сохранением состояния, Files and Collections и Batch API.",
   "go.faq.a5.gptRetention":
@@ -357,6 +358,8 @@ export const dict = {
   "go.faq.a5.learnMore": "Подробнее",
   "go.faq.a5.deepseekRetention":
     "Соглашение ZDR продлевается ежемесячно. Текущее соглашение действует до 31 августа 2026 года.",
+  "go.faq.a5.museRetention":
+    "Значительно сниженная стоимость токенов в обмен на разрешение использовать ваши промпты и ответы для обучения будущих моделей Meta.",
 
   "go.faq.a5.beforeExceptions":
     "Модели Go размещены в США. Провайдеры следуют политике нулевого хранения и не используют ваши данные для обучения моделей, за",
@@ -397,6 +400,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Модель отключена",
   "zen.api.error.regionNotAllowed":
     "Последняя версия этой модели размещена только в Китае. Чтобы использовать её, необходимо явно подтвердить согласие: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Эта модель недоступна в вашей стране.",
+  "zen.api.error.trainingNotAllowed":
+    "Эта модель собирает данные, которые используются для улучшения её качества, и требует явного согласия: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Бесплатная акция для {{model}} завершена. Вы можете продолжить использование модели, подписавшись на OpenCode Go - {{link}}",
 
