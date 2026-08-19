@@ -250,6 +250,23 @@ const layer = Layer.effect(
           )
         }
 
+        // Wire tui.prompt.submit handlers into the footer submit chain.
+        // These handlers fire in the TUI process when the user submits a prompt.
+        // The import is dynamic because runtime.queue is a TUI module that isn't
+        // available in server-only (headless) mode.
+        yield* Effect.promise(async () => {
+          try {
+            const { footerSubmit } = await import("../cli/cmd/run/runtime.queue")
+            for (const hook of hooks) {
+              const handler = (hook as any)["tui.prompt.submit"]
+              if (handler) footerSubmit.register(handler)
+            }
+          } catch {
+            // runtime.queue not available (server-only mode) — tui.prompt.submit
+            // is CLI-only in the initial implementation.
+          }
+        })
+
         const unsubscribe = yield* events.listen((event) => {
           if (event.location?.directory !== ctx.directory) return Effect.void
           return Effect.sync(() => {
