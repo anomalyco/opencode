@@ -264,6 +264,15 @@ export async function handler(
             if (!isNewInference) headers.delete("x-opencode-session")
             headers.delete("x-opencode-project")
             headers.delete("x-opencode-client")
+            headers.delete("cf-connecting-ip")
+            headers.delete("cf-ipcountry")
+            headers.delete("cf-ray")
+            headers.delete("cf-visitor")
+            headers.delete("cf-ew-via")
+            headers.delete("true-client-ip")
+            headers.delete("x-forwarded-for")
+            headers.delete("x-real-ip")
+            headers.delete("cdn-loop")
             return headers
           })(),
           body: reqBody,
