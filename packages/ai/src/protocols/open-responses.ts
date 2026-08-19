@@ -90,6 +90,7 @@ const OpenResponsesFunctionCallOutput = Schema.Union([
 
 export const InputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
+  Schema.Struct({ role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenResponsesInputContent) }),
   Schema.Struct({
     role: Schema.tag("assistant"),
@@ -439,14 +440,10 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
   for (const message of request.messages) {
     if (message.role === "system") {
-      const part = yield* ProviderShared.wrappedSystemUpdate(extension.name, message)
-      const previous = input.at(-1)
-      if (previous && "role" in previous && previous.role === "user")
-        input[input.length - 1] = {
-          role: "user",
-          content: [...previous.content, { type: "input_text", text: part.text }],
-        }
-      else input.push({ role: "user", content: [{ type: "input_text", text: part.text }] })
+      input.push({
+        role: "developer",
+        content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(extension.name, message)),
+      })
       continue
     }
 
