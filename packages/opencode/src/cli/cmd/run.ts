@@ -270,7 +270,7 @@ export const RunCommand = effectCmd({
     const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
-      const interactive = args.mini
+      const interactive = args.mini || args.interactive
       const auto = args.auto || args.yolo || args["dangerously-skip-permissions"]
       const thinking = interactive ? (args.thinking ?? true) : (args.thinking ?? false)
       const die = (message: string): never => {
@@ -290,10 +290,10 @@ export const RunCommand = effectCmd({
         .join(" ")
 
       if (interactive && args.command) {
-        die("--mini cannot be used with --command")
+        die("--interactive cannot be used with --command")
       }
 
-      if (interactive && args._?.[0] !== "mini") {
+      if (interactive && !args.interactive && args._?.[0] !== "mini") {
         die("--mini must be used without the run subcommand")
       }
 
@@ -317,7 +317,7 @@ export const RunCommand = effectCmd({
       }
 
       if (interactive && !process.stdout.isTTY) {
-        die("--mini requires a TTY stdout")
+        die("interactive mode requires a TTY stdout")
       }
 
       if (interactive) {
