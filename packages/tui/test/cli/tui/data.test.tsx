@@ -3211,8 +3211,9 @@ test("keeps the row when the response lands before the echo", async () => {
   }
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/prompt`) return json({ data: admission })
-    // The server's inbox listing still misses the admission (projection lag).
+    // The server's listings still miss the admission (projection lag).
     if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [] })
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
   }, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
@@ -3242,11 +3243,14 @@ test("keeps the row when the response lands before the echo", async () => {
     await mounted
     await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
 
-    // POST resolved but the echo has not arrived: a racing pending re-fetch
-    // still cannot wipe the row.
+    // POST resolved but the echo has not arrived: racing pending and message
+    // re-fetches still cannot wipe the row.
     await sync.session.pending.sync(sessionID)
     sync.session.pending.invalidate(sessionID)
     await sync.session.pending.sync(sessionID)
+    await sync.session.message.sync(sessionID)
+    sync.session.message.invalidate(sessionID)
+    await sync.session.message.sync(sessionID)
     expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
     expect(sync.session.input.list(sessionID)).toEqual([messageID])
     expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])

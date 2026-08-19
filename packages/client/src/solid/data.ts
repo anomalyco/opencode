@@ -1180,7 +1180,14 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
             const response = await api().message.list({ sessionID, limit: 200, order: "desc" })
-            const messages = response.data.toReversed()
+            const fetched = response.data.toReversed()
+            // Same protection as the pending sync: a re-fetch racing an
+            // optimistic admission must not wipe the in-flight transcript row.
+            const ids = new Set(fetched.map((item) => item.id))
+            const inflight = (store.session.message[sessionID] ?? []).filter(
+              (item) => outbox.has(item.id) && !ids.has(item.id),
+            )
+            const messages = inflight.length === 0 ? fetched : [...fetched, ...inflight]
             messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
             setStore("session", "message", sessionID, reconcile(messages))
             setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
