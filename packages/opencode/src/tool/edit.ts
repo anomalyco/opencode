@@ -68,7 +68,9 @@ export const EditTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          if (!params.filePath) {
+          // Local models sometimes emit trailing whitespace/newlines in filePath.
+          const trimmed = params.filePath.trim()
+          if (!trimmed) {
             throw new Error("filePath is required")
           }
 
@@ -77,9 +79,7 @@ export const EditTool = Tool.define(
           }
 
           const instance = yield* InstanceState.context
-          const filePath = path.isAbsolute(params.filePath)
-            ? params.filePath
-            : path.join(instance.directory, params.filePath)
+          const filePath = path.isAbsolute(trimmed) ? trimmed : path.join(instance.directory, trimmed)
           yield* assertExternalDirectoryEffect(ctx, filePath)
 
           let diff = ""
