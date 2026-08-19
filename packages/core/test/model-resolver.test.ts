@@ -219,7 +219,10 @@ describe("ModelResolver", () => {
         settings: { baseURL: "https://openai.example/v1" },
         limit: { context: 100, input: 80, output: 20 },
       })
-      const resolved = yield* ModelResolver.fromCatalogModel(catalog)
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        catalog,
+        Credential.Key.make({ type: "key", key: "secret" }),
+      )
 
       expect(catalog.id).toBe(ID.make("test-model"))
       expect(resolved).toMatchObject({ id: "api-test-model", provider: "test-provider" })
@@ -254,22 +257,24 @@ describe("ModelResolver", () => {
   )
 
   it.effect("treats an empty configured API key as omitted", () =>
-    Effect.gen(function* () {
-      const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/openai"), {
-          settings: { apiKey: "", baseURL: "https://openai.example/v1" },
-        }),
-      )
-      const headers = yield* resolved.route.auth.apply({
-        request: LLM.request({ model: resolved, prompt: "Hello" }),
-        method: "POST",
-        url: "https://openai.example/v1/responses",
-        body: "{}",
-        headers: Headers.empty,
-      })
+    withEnv({ OPENAI_API_KEY: "environment-key" }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/openai"), {
+            settings: { apiKey: "", baseURL: "https://openai.example/v1" },
+          }),
+        )
+        const headers = yield* resolved.route.auth.apply({
+          request: LLM.request({ model: resolved, prompt: "Hello" }),
+          method: "POST",
+          url: "https://openai.example/v1/responses",
+          body: "{}",
+          headers: Headers.empty,
+        })
 
-      expect(headers.authorization).toBeUndefined()
-    }),
+        expect(headers.authorization).toBe("Bearer environment-key")
+      }),
+    ),
   )
 
   it.effect("uses no native API-key auth for an explicitly enabled provider without credentials", () => {

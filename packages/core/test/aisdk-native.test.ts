@@ -19,7 +19,6 @@ describe("AISDKNative", () => {
       }),
     ).toEqual({
       package: "@opencode-ai/ai/providers/openai",
-      auth: "none",
       settings: {
         apiKey: "secret",
         baseURL: "https://api.meta.ai/v1",
@@ -37,7 +36,6 @@ describe("AISDKNative", () => {
     })
     expect(map("@ai-sdk/openai-compatible", { baseURL: "https://example.com/v1", reasoningEffort: "high" })).toEqual({
       package: "@opencode-ai/ai/providers/openai-compatible",
-      auth: "none",
       settings: {
         baseURL: "https://example.com/v1",
         provider: "test-provider",
@@ -56,7 +54,6 @@ describe("AISDKNative", () => {
       }),
     ).toEqual({
       package: "@opencode-ai/ai/providers/anthropic",
-      auth: "none",
       settings: {
         authToken: "token",
         baseURL: "https://anthropic.example/v1",

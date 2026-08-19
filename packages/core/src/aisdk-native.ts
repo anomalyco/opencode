@@ -8,7 +8,6 @@ export interface Mapping {
   readonly settings: Readonly<Record<string, unknown>>
   readonly headers?: Readonly<Record<string, string>>
   readonly body?: Readonly<Record<string, unknown>>
-  readonly auth?: "none"
 }
 
 export interface MapInput {
@@ -24,7 +23,6 @@ export function map(input: MapInput): Mapping | undefined {
     case "@ai-sdk/anthropic":
       return {
         package: "@opencode-ai/ai/providers/anthropic",
-        auth: "none",
         settings: {
           ...baseSettings,
           ...mapAPIKey(input.settings),
@@ -104,7 +102,6 @@ export function map(input: MapInput): Mapping | undefined {
     case "@ai-sdk/openai":
       return {
         package: "@opencode-ai/ai/providers/openai",
-        auth: "none",
         settings: {
           ...baseSettings,
           ...mapAPIKey(input.settings),
@@ -124,7 +121,6 @@ export function map(input: MapInput): Mapping | undefined {
       if (typeof input.settings.baseURL !== "string") return
       return {
         package: "@opencode-ai/ai/providers/openai-compatible",
-        auth: "none",
         settings: {
           ...baseSettings,
           ...mapAPIKey(input.settings),

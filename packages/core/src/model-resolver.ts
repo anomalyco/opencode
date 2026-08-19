@@ -169,10 +169,6 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       return LanguageModel.update(runtime, {
         provider: resolved.providerID,
-        route:
-          mapping?.auth === "none" && credential === undefined && !hasConfiguredAuth(resolved)
-            ? runtime.route.with({ auth: Auth.none })
-            : runtime.route,
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
           : runtime.compatibility,
