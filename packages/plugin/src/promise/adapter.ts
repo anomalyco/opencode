@@ -1,5 +1,5 @@
 import { Tool } from "@opencode-ai/schema/tool"
-import { Effect, Schema, SchemaAST, Scope, Stream } from "effect"
+import { Cause, Effect, Exit, Queue, Schema, SchemaAST, Scope, Stream } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
 import { define } from "../effect/plugin.js"
 import type { Context, Plugin } from "./plugin.js"
@@ -153,13 +153,55 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.command.reload()),
           },
           event: {
-            subscribe: () =>
-              Stream.toAsyncIterable(
-                host.event.subscribe().pipe(
-                  Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
-                  Stream.map((event) => event as unknown as PromiseEvent),
-                ),
-              ),
+            subscribe: () => {
+              const events = host.event.subscribe().pipe(
+                Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
+                Stream.map((event) => event as unknown as PromiseEvent),
+              )
+              return {
+                [Symbol.asyncIterator]() {
+                  const child = Scope.forkUnsafe(scope)
+                  const done = { done: true, value: undefined } as const
+                  let terminal = false
+                  let closing: Promise<IteratorResult<PromiseEvent>> | undefined
+                  const queue = Effect.gen(function* () {
+                    const queue = yield* Stream.toQueue(events, { capacity: "unbounded" })
+                    // Finalizers are LIFO: mark terminal before queue shutdown wakes a pending next().
+                    yield* Scope.addFinalizer(
+                      child,
+                      Effect.sync(() => (terminal = true)),
+                    )
+                    return queue
+                  }).pipe(Scope.provide(child), Effect.runPromiseWith(context))
+                  const iterator = {
+                    next: () => {
+                      if (terminal) return closing ?? Promise.resolve(done)
+                      return queue
+                        .then((queue) => Effect.runPromiseWith(context)(Queue.take(queue)))
+                        .then(
+                          (value) => (terminal ? (closing ?? done) : { done: false as const, value }),
+                          async (error) => {
+                            if (terminal) return closing ?? done
+                            await iterator.return()
+                            if (Cause.isDone(error)) return done
+                            throw error
+                          },
+                        )
+                    },
+                    return: () => {
+                      if (closing) return closing
+                      terminal = true
+                      closing = Effect.runPromiseWith(context)(Scope.close(child, Exit.void)).then(
+                        () => done,
+                        () => done,
+                      )
+                      return closing
+                    },
+                  }
+                  return iterator
+                },
+              }
+            },
           },
           integration: {
             list: adaptApiMethod(IntegrationEndpoints["integration.list"], host.integration.list),

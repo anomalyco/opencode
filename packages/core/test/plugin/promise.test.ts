@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Message, SystemPart } from "@opencode-ai/ai"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Deferred, Effect, Schema, Stream } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
+import { Bus } from "@opencode-ai/core/bus"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
@@ -18,6 +19,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { define } from "@opencode-ai/plugin/promise/plugin"
+import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
@@ -446,6 +448,170 @@ describe("fromPromise", () => {
       )
 
       expect(events).toEqual(["setup", "cleanup"])
+    }),
+  )
+
+  it.effect("closes a pending event iterator with the plugin scope", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      let finalized = 0
+      let iterator: AsyncIterator<unknown> | undefined
+      let pending: Promise<IteratorResult<unknown>> | undefined
+      const host = testHost({
+        event: {
+          subscribe: () =>
+            Stream.fromEffect(Deferred.succeed(started, undefined)).pipe(
+              Stream.flatMap(() => Stream.never),
+              Stream.ensuring(Effect.sync(() => finalized++)),
+            ),
+        },
+      })
+
+      yield* Effect.scoped(
+        PluginPromise.fromPromise(
+          define({
+            id: "promise-event-pending",
+            setup: async (ctx) => {
+              iterator = ctx.event.subscribe()[Symbol.asyncIterator]()
+              pending = iterator.next()
+              await Effect.runPromise(Deferred.await(started))
+            },
+          }),
+        ).effect(host),
+      )
+
+      expect(finalized).toBe(1)
+      if (!pending || !iterator) yield* Effect.die("event iterator was not initialized")
+      expect(yield* Effect.promise(() => pending)).toEqual({ done: true, value: undefined })
+      expect(yield* Effect.promise(() => iterator.next())).toEqual({ done: true, value: undefined })
+    }),
+  )
+
+  it.live("closes event iterators on break, completion, and failure", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const plugins = yield* Plugin.Service
+      const closed: string[] = []
+      const broke = yield* Deferred.make<void>()
+      const promisePlugin = define({
+        id: "promise-event-terminal",
+        setup: async (ctx) => {
+          void (async () => {
+            for await (const _event of ctx.event.subscribe()) break
+            await Effect.runPromise(Deferred.succeed(broke, undefined))
+          })()
+        },
+      })
+
+      yield* plugins.activate([{ ...PluginPromise.fromPromise(promisePlugin), version: "1" }])
+      yield* Effect.sleep("10 millis")
+      yield* bus.publish(ConfigSchema.Event.Updated, {})
+      yield* Deferred.await(broke)
+
+      yield* Effect.scoped(
+        PluginPromise.fromPromise(
+          define({
+            id: "promise-event-complete",
+            setup: async (ctx) => {
+              const iterator = ctx.event.subscribe()[Symbol.asyncIterator]()
+              expect(await iterator.next()).toEqual({ done: true, value: undefined })
+              expect(await iterator.next()).toEqual({ done: true, value: undefined })
+            },
+          }),
+        ).effect(
+          testHost({
+            event: {
+              subscribe: () => Stream.empty.pipe(Stream.ensuring(Effect.sync(() => closed.push("complete")))),
+            },
+          }),
+        ),
+      )
+
+      yield* Effect.scoped(
+        PluginPromise.fromPromise(
+          define({
+            id: "promise-event-failure",
+            setup: async (ctx) => {
+              const iterator = ctx.event.subscribe()[Symbol.asyncIterator]()
+              await expect(iterator.next()).rejects.toThrow("event failure")
+              expect(await iterator.next()).toEqual({ done: true, value: undefined })
+            },
+          }),
+        ).effect(
+          testHost({
+            event: {
+              subscribe: () =>
+                Stream.fail(new Error("event failure")).pipe(
+                  Stream.ensuring(Effect.sync(() => closed.push("failure"))),
+                ),
+            },
+          }),
+        ),
+      )
+
+      expect(closed).toEqual(["complete", "failure"])
+    }),
+  )
+
+  it.effect("closes every event iterator when the plugin scope closes", () =>
+    Effect.gen(function* () {
+      const ready = yield* Deferred.make<void>()
+      let started = 0
+      let finalized = 0
+      const host = testHost({
+        event: {
+          subscribe: () =>
+            Stream.fromEffect(
+              Effect.sync(() => ++started).pipe(
+                Effect.tap((count) => (count === 3 ? Deferred.succeed(ready, undefined) : Effect.void)),
+              ),
+            ).pipe(
+              Stream.flatMap(() => Stream.never),
+              Stream.ensuring(Effect.sync(() => finalized++)),
+            ),
+        },
+      })
+
+      yield* Effect.scoped(
+        PluginPromise.fromPromise(
+          define({
+            id: "promise-event-multiple",
+            setup: async (ctx) => {
+              const events = ctx.event.subscribe()
+              void events[Symbol.asyncIterator]().next()
+              void events[Symbol.asyncIterator]().next()
+              void ctx.event.subscribe()[Symbol.asyncIterator]().next()
+              await Effect.runPromise(Deferred.await(ready))
+            },
+          }),
+        ).effect(host),
+      )
+
+      expect(finalized).toBe(3)
+    }),
+  )
+
+  it.effect("closes a Promise event iterator when the plugin is replaced", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      let iterator: AsyncIterator<unknown> | undefined
+      let pending: Promise<IteratorResult<unknown>> | undefined
+      const previous = PluginPromise.fromPromise(
+        define({
+          id: "promise-event-replacement",
+          setup: async (ctx) => {
+            iterator = ctx.event.subscribe()[Symbol.asyncIterator]()
+            pending = iterator.next()
+          },
+        }),
+      )
+
+      yield* plugins.activate([{ ...previous, version: "1" }])
+      yield* plugins.activate([{ id: previous.id, version: "2", effect: () => Effect.void }])
+
+      if (!pending || !iterator) yield* Effect.die("event iterator was not initialized")
+      expect(yield* Effect.promise(() => pending)).toEqual({ done: true, value: undefined })
+      expect(yield* Effect.promise(() => iterator.next())).toEqual({ done: true, value: undefined })
     }),
   )
 
