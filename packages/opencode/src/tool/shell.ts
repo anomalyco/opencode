@@ -124,6 +124,27 @@ function commands(node: Node) {
   return node.descendantsOfType("command").filter((child): child is Node => Boolean(child))
 }
 
+function formatCommand(root: Node, command: string): string {
+  const starts: number[] = []
+  const walk = (node: Node) => {
+    if (node.text === "&&") starts.push(node.startIndex)
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i)
+      if (child) walk(child)
+    }
+  }
+  walk(root)
+  if (starts.length === 0) return command
+  const pieces: string[] = []
+  let prev = 0
+  for (const start of starts) {
+    pieces.push(command.slice(prev, start).replace(/\s+$/, ""))
+    prev = start
+  }
+  pieces.push(command.slice(prev))
+  return pieces.join(" \\\n")
+}
+
 function unquote(text: string) {
   if (text.length < 2) return text
   const first = text[0]
@@ -260,7 +281,11 @@ const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boole
   return tree
 })
 
-const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan, input: { command: string }) {
+const ask = Effect.fn("ShellTool.ask")(function* (
+  ctx: Tool.Context,
+  scan: Scan,
+  input: { command: string; commandDisplay: string },
+) {
   if (scan.dirs.size > 0) {
     const directories = Array.from(scan.dirs)
     const globs = directories.map((dir) => {
@@ -273,6 +298,7 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
       always: globs,
       metadata: {
         command: input.command,
+        commandDisplay: input.commandDisplay,
         directories,
         patterns: globs,
       },
@@ -286,6 +312,7 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
     always: Array.from(scan.always),
     metadata: {
       command: input.command,
+      commandDisplay: input.commandDisplay,
     },
   })
 })
@@ -429,6 +456,7 @@ export const ShellTool = Tool.define(
       input: {
         shell: string
         command: string
+        commandDisplay: string
         cwd: string
         env: NodeJS.ProcessEnv
         timeout: number
@@ -475,6 +503,7 @@ export const ShellTool = Tool.define(
       yield* ctx.metadata({
         metadata: {
           output: "",
+          commandDisplay: input.commandDisplay,
         },
       })
 
@@ -515,6 +544,7 @@ export const ShellTool = Tool.define(
                       ctx.metadata({
                         metadata: {
                           output: last,
+                          commandDisplay: input.commandDisplay,
                         },
                       }),
                     ),
@@ -525,6 +555,7 @@ export const ShellTool = Tool.define(
               return ctx.metadata({
                 metadata: {
                   output: last,
+                  commandDisplay: input.commandDisplay,
                 },
               })
             }),
@@ -588,6 +619,7 @@ export const ShellTool = Tool.define(
           output: last || preview(output),
           exit: code,
           truncated: cut,
+          commandDisplay: input.commandDisplay,
           ...(cut && file ? { outputPath: file } : {}),
         },
         output,
@@ -617,14 +649,16 @@ export const ShellTool = Tool.define(
               }
               const timeout = params.timeout ?? defaultTimeoutMs
               const ps = Shell.ps(shell)
-              yield* Effect.scoped(
+              const commandDisplay = yield* Effect.scoped(
                 Effect.gen(function* () {
                   const tree = yield* Effect.acquireRelease(parse(params.command, ps), (tree) =>
                     Effect.sync(() => tree.delete()),
                   )
                   const scan = yield* collect(tree.rootNode, cwd, ps, shell, instanceCtx)
                   if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
-                  yield* ask(ctx, scan, params)
+                  const display = formatCommand(tree.rootNode, params.command)
+                  yield* ask(ctx, scan, { command: params.command, commandDisplay: display })
+                  return display
                 }),
               )
 
@@ -632,6 +666,7 @@ export const ShellTool = Tool.define(
                 {
                   shell,
                   command: params.command,
+                  commandDisplay,
                   cwd,
                   env: yield* shellEnv(ctx, cwd),
                   timeout,
