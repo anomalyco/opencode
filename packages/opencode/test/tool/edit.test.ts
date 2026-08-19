@@ -263,6 +263,20 @@ describe("tool.edit", () => {
       }),
     )
 
+    it.instance("rejects ambiguous whitespace-normalized matches", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "file.txt")
+        const original = "alpha   beta\nalpha\tbeta\n"
+        yield* put(filepath, original)
+
+        expect(
+          (yield* fail({ filePath: filepath, oldString: "alpha beta", newString: "updated" })).message,
+        ).toContain("Found multiple matches")
+        expect(yield* load(filepath)).toBe(original)
+      }),
+    )
+
     it.instance("emits change event for existing files", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
