@@ -3,7 +3,7 @@ import { pathToFileURL, fileURLToPath } from "url"
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
 import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
 import { Process } from "@/util/process"
-import { LANGUAGE_EXTENSIONS } from "./language"
+import { languageId } from "./language"
 import { Effect, Schema } from "effect"
 import type * as LSPServer from "./server"
 import { withTimeout } from "../util/timeout"
@@ -556,8 +556,7 @@ export async function create(input: {
           path.isAbsolute(request.path) ? request.path : path.resolve(input.directory, request.path),
         )
         const text = await Filesystem.readText(request.path)
-        const extension = path.extname(request.path)
-        const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
+        const language = languageId(request.path)
 
         const document = files[request.path]
         if (document !== undefined) {
@@ -611,7 +610,7 @@ export async function create(input: {
         await connection.sendNotification("textDocument/didOpen", {
           textDocument: {
             uri: pathToFileURL(request.path).href,
-            languageId,
+            languageId: language,
             version: 0,
             text,
           },
