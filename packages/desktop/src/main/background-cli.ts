@@ -5,6 +5,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { app } from "electron"
+import { BACKGROUND_CLI_PASSWORD_ARGS } from "./background-cli-command"
 
 const execFileAsync = promisify(execFile)
 const root = dirname(fileURLToPath(import.meta.url))
@@ -41,7 +42,7 @@ export async function startBackgroundCli(logger: Logger, shellStateHome?: string
 
   const daemonStateHome = found?.stateHome ?? stateHome
   const url = await run(binary, ["service", "start"], logger, { stateHome: daemonStateHome })
-  const password = await run(binary, ["service", "get", "password"], logger, {
+  const password = await run(binary, BACKGROUND_CLI_PASSWORD_ARGS, logger, {
     redact: true,
     stateHome: daemonStateHome,
   })

@@ -17,6 +17,10 @@ function mimeToModality(mime: string): Modality | undefined {
 
 export const OUTPUT_TOKEN_MAX = 32_000
 
+export function supportsToolChoice(model: Pick<Provider.Model, "id" | "api">) {
+  return ![model.id, model.api.id].some((id) => id.toLowerCase().includes("deepseek-v4"))
+}
+
 // OpenAI Responses `include` value that returns the encrypted reasoning state
 // needed for stateless multi-turn reasoning (store: false). Hoisted so every
 // branch that requests it stays in lockstep.

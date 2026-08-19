@@ -2,8 +2,10 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import type { Prompt, PromptStore } from "@/context/prompt"
 import type { ModelSelection } from "@/context/local"
+import type { FollowupSendInput } from "./submit"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
+let sendFollowupDraft: typeof import("./submit").sendFollowupDraft
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
@@ -31,7 +33,7 @@ const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string
 const sentPrompts: string[] = []
 const promptInputs: unknown[] = []
 const sentCommands: unknown[] = []
-const commands: Array<{ name: string }> = []
+const commands: FollowupSendInput["sync"]["data"]["command"] = []
 let serverSessionSyncs = 0
 
 let params: { id?: string } = {}
@@ -70,6 +72,16 @@ const prompt = {
   capture: () => prompt,
 }
 
+const pendingUser = () => ({
+  admittedSeq: 0,
+  id: "message",
+  sessionID: "session",
+  timeCreated: 0,
+  type: "user" as const,
+  data: { text: "" },
+  delivery: "steer" as const,
+})
+
 const clientFor = (directory: string) => {
   createdClients.push(directory)
   return {
@@ -95,10 +107,11 @@ const clientFor = (directory: string) => {
         prompt: async (input: unknown) => {
           sentPrompts.push(directory)
           promptInputs.push(input)
-          return { data: undefined }
+          return pendingUser()
         },
         command: async (input: unknown) => {
           sentCommands.push(input)
+          return pendingUser()
         },
         shell: async (input: { sessionID: string; id?: string; command: string }) => {
           sentShell.push(input)
@@ -135,6 +148,11 @@ beforeAll(async () => {
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
     showToast: () => 0,
+    toaster: {
+      show: () => 0,
+      promise: () => 0,
+      dismiss: () => undefined,
+    },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -276,6 +294,7 @@ beforeAll(async () => {
 
   const mod = await import("./submit")
   createPromptSubmit = mod.createPromptSubmit
+  sendFollowupDraft = mod.sendFollowupDraft
 })
 
 beforeEach(() => {
@@ -497,7 +516,7 @@ describe("prompt submit worktree selection", () => {
   test("submits slash commands through the current session API", async () => {
     params = { id: "session-1" }
     variant = "high"
-    commands.push({ name: "review" })
+    commands.push({ name: "review", template: "" })
     promptValue = [{ type: "text", content: "/review staged changes", start: 0, end: 22 }]
 
     const submit = createPromptSubmit({
@@ -531,6 +550,43 @@ describe("prompt submit worktree selection", () => {
       },
     ])
     expect(serverSessionSyncs).toBe(0)
+  })
+
+  test("sends slash-like visualization follow-ups as ordinary prompts when commands are disabled", async () => {
+    commands.push({ name: "review", template: "" })
+
+    const input = {
+      api: clientFor("/repo/main").api.session,
+      sync: {
+        data: { command: commands },
+        session: {
+          optimistic: {
+            add: () => undefined,
+            remove: () => undefined,
+          },
+        },
+      },
+      serverSync: {
+        session: {
+          set: () => undefined,
+        },
+      },
+      draft: {
+        sessionID: "session-1",
+        sessionDirectory: "/repo/main",
+        prompt: [{ type: "text", content: "/review current selection", start: 0, end: 25 }],
+        context: [],
+        agent: "agent",
+        model: { providerID: "provider", modelID: "model" },
+      },
+      allowCommand: false,
+    } satisfies FollowupSendInput
+
+    await sendFollowupDraft(input)
+
+    expect(sentCommands).toHaveLength(0)
+    expect(promptInputs).toHaveLength(1)
+    expect(promptInputs[0]).toMatchObject({ text: "/review current selection" })
   })
 
   test("uses an injected model selection", async () => {

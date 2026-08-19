@@ -69,18 +69,29 @@ export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
+export function resolveCliSource(env = Bun.env) {
+  const path = env.OPENCODE_DESKTOP_CLI_PATH
+  if (path) return { type: "local" as const, path }
+  return { type: "remote" as const }
+}
+
 export async function downloadCliToResources() {
-  const cli = getCurrentCli()
-  const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
+  const source = resolveCliSource()
   const dest = windowsify("resources/opencode-cli")
-  try {
-    await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${CLI_VERSION}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
-    await copyFile(
-      join(directory, "node_modules", cli.package, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
-      dest,
-    )
-  } finally {
-    await rm(directory, { recursive: true, force: true })
+  if (source.type === "local") {
+    await copyFile(source.path, dest)
+  } else {
+    const cli = getCurrentCli()
+    const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
+    try {
+      await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${CLI_VERSION}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
+      await copyFile(
+        join(directory, "node_modules", cli.package, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
+        dest,
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   }
   if (process.platform !== "win32") await chmod(dest, 0o755)
   if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
@@ -88,7 +99,9 @@ export async function downloadCliToResources() {
   }
   if (process.platform === "darwin") await $`codesign --force --sign - ${dest}`
 
-  console.log(`Copied ${cli.package} to ${dest}`)
+  console.log(
+    `Copied ${source.type === "local" ? `local CLI from ${source.path}` : getCurrentCli().package} to ${dest}`,
+  )
 }
 
 export function windowsify(path: string) {

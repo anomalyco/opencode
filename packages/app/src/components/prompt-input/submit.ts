@@ -41,12 +41,20 @@ export type FollowupDraft = {
   variant?: string
 }
 
-type FollowupSendInput = {
-  api: DirectorySDK["api"]["session"]
-  serverSync: ServerSync
-  sync: DirectorySync
+export type FollowupSendInput = {
+  api: Pick<DirectorySDK["api"]["session"], "command" | "prompt">
+  serverSync: {
+    session: Pick<ServerSync["session"], "set">
+  }
+  sync: {
+    data: Pick<DirectorySync["data"], "command">
+    session: {
+      optimistic: Pick<DirectorySync["session"]["optimistic"], "add" | "remove">
+    }
+  }
   draft: FollowupDraft
   messageID?: string
+  allowCommand?: boolean
   optimisticBusy?: boolean
   before?: () => Promise<boolean> | boolean
 }
@@ -76,7 +84,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
   const [head, ...tail] = text.split(" ")
   const cmd = head?.startsWith("/") ? head.slice(1) : undefined
-  if (cmd && input.sync.data.command.find((item) => item.name === cmd)) {
+  if (input.allowCommand !== false && cmd && input.sync.data.command.find((item) => item.name === cmd)) {
     setBusy()
     try {
       if (!(await wait())) {
