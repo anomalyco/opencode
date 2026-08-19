@@ -74,15 +74,22 @@ export async function read() {
   if (text) return { data: text, mime: "text/plain" }
 }
 
+export type ClipboardSelection = "clipboard" | "primary" | "both"
+
 export function copyCommand(
   os: NodeJS.Platform,
   wayland: boolean,
   has: (name: string) => boolean,
+  selection: ClipboardSelection = "clipboard",
 ): string[] | undefined {
   if (os === "darwin" && has("osascript")) return ["osascript"]
-  if (os === "linux" && wayland && has("wl-copy")) return ["wl-copy"]
-  if (os === "linux" && has("xclip")) return ["xclip", "-selection", "clipboard"]
-  if (os === "linux" && has("xsel")) return ["xsel", "--clipboard", "--input"]
+  if (os === "linux" && wayland && has("wl-copy"))
+    return selection === "primary"
+      ? ["wl-copy", "-p", "--type", "text/plain;charset=utf-8"]
+      : ["wl-copy", "--type", "text/plain;charset=utf-8"]
+  if (os === "linux" && has("xclip")) return ["xclip", "-selection", selection]
+  if (os === "linux" && has("xsel"))
+    return selection === "primary" ? ["xsel", "--primary", "--input"] : ["xsel", "--clipboard", "--input"]
   if (os === "win32" && has("powershell.exe")) {
     return [
       "powershell.exe",
@@ -94,32 +101,51 @@ export function copyCommand(
   }
 }
 
-let copyMethod: Promise<(text: string) => Promise<void>> | undefined
+let copyMethod: Promise<(text: string, selection?: ClipboardSelection) => Promise<void>> | undefined
 
 function getCopyMethod() {
   return (copyMethod ??= (async () => {
     const { which } = await import("@opencode-ai/core/util/which")
-    const native = copyCommand(platform(), Boolean(process.env.WAYLAND_DISPLAY), (name) => Boolean(which(name)))
+    const os = platform()
+    const wayland = Boolean(process.env.WAYLAND_DISPLAY)
+    const has = (name: string) => Boolean(which(name))
+
+    const clipboardCmd = copyCommand(os, wayland, has, "clipboard")
+    const primaryCmd = copyCommand(os, wayland, has, "primary")
+    const native = clipboardCmd
+
     if (native?.[0] === "osascript") {
-      return async (text: string) => {
+      return async (text: string, selection?: ClipboardSelection) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
         await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
       }
     }
     if (native) {
-      return async (text: string) => {
-        await command(native[0], native.slice(1), text).catch(() => undefined)
+      return async (text: string, selection?: ClipboardSelection) => {
+        if (selection === "both" && primaryCmd) {
+          await Promise.allSettled([
+            command(native[0], native.slice(1), text),
+            command(primaryCmd[0], primaryCmd.slice(1), text),
+          ])
+        } else if (selection === "primary" && primaryCmd) {
+          await command(primaryCmd[0], primaryCmd.slice(1), text).catch(() => undefined)
+        } else {
+          await command(native[0], native.slice(1), text).catch(() => undefined)
+        }
       }
     }
-    return async (text: string) => {
+    return async (text: string, selection?: ClipboardSelection) => {
       const { default: clipboardy } = await import("clipboardy")
+      if (selection === "primary") return
       await clipboardy.write(text).catch(() => undefined)
     }
   })())
 }
 
-export async function write(text: string) {
-  writeOsc52(text)
+export async function write(text: string, selection?: ClipboardSelection) {
+  if (selection !== "primary") {
+    writeOsc52(text)
+  }
   const method = await getCopyMethod()
-  await method(text)
+  await method(text, selection)
 }
