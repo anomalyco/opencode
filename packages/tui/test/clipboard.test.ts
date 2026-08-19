@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { copyCommand } from "../src/clipboard"
+import { copyCommand, writeWith, type ClipboardDeps } from "../src/clipboard"
 
 test("prefers Wayland clipboard when available", () => {
   expect(copyCommand("linux", true, (name) => name === "wl-copy")).toEqual(["wl-copy"])
@@ -16,4 +16,71 @@ test("falls back through X11 clipboard commands", () => {
 
 test("returns undefined when native clipboard is unavailable", () => {
   expect(copyCommand("linux", false, () => false)).toBeUndefined()
+})
+
+function writeDeps(overrides?: Partial<ClipboardDeps>): ClipboardDeps {
+  return {
+    os: "linux",
+    wayland: false,
+    has: () => true,
+    command: async () => {},
+    clipboardy: { write: async () => {} },
+    ...overrides,
+  }
+}
+
+test("rejects when the native clipboard command fails", () => {
+  expect(
+    writeWith(
+      writeDeps({
+        command: async () => {
+          throw new Error("xclip failed")
+        },
+      }),
+      "hello",
+    ),
+  ).rejects.toThrow("xclip failed")
+})
+
+test("rejects when the clipboardy fallback fails", () => {
+  expect(
+    writeWith(
+      writeDeps({
+        has: () => false,
+        clipboardy: {
+          write: async () => {
+            throw new Error("xsel missing")
+          },
+        },
+      }),
+      "hello",
+    ),
+  ).rejects.toThrow("xsel missing")
+})
+
+test("resolves when the native clipboard command succeeds", async () => {
+  const calls: string[] = []
+  await writeWith(
+    writeDeps({
+      command: async (cmd, args) => {
+        calls.push(cmd, ...args)
+      },
+    }),
+    "hello",
+  )
+  expect(calls[0]).toBe("xclip")
+})
+
+test("escapes text for osascript", async () => {
+  let received: string | undefined
+  await writeWith(
+    writeDeps({
+      os: "darwin",
+      command: async (_, args) => {
+        received = args[1]
+      },
+    }),
+    `say "hi"`,
+  )
+  expect(received).toBe('set the clipboard to "say \\"hi\\""')
 })

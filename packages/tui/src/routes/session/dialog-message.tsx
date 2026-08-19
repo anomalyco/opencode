@@ -69,7 +69,7 @@ export function DialogMessage(props: {
               return agg
             }, "")
 
-            await clipboard.write?.(text)
+            await clipboard.write?.(text).catch(() => {})
             dialog.clear()
           },
         },
