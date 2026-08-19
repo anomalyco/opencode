@@ -74,6 +74,7 @@ function init() {
     }[],
     size: "medium" as "medium" | "large" | "xlarge",
   })
+  let revision = 0
 
   const renderer = useRenderer()
   const modeStack = useOpencodeModeStack()
@@ -115,6 +116,7 @@ function init() {
           }
           const current = store.stack.at(-1)
           current?.onClose?.()
+          revision += 1
           setStore("stack", store.stack.slice(0, -1))
           refocus()
         },
@@ -129,6 +131,7 @@ function init() {
           }
           const current = store.stack.at(-1)
           current?.onClose?.()
+          revision += 1
           setStore("stack", store.stack.slice(0, -1))
           refocus()
         },
@@ -138,6 +141,7 @@ function init() {
 
   return {
     clear() {
+      revision += 1
       for (const item of store.stack) {
         if (item.onClose) item.onClose()
       }
@@ -148,6 +152,7 @@ function init() {
       refocus()
     },
     replace(input: any, onClose?: () => void) {
+      revision += 1
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()
@@ -165,6 +170,9 @@ function init() {
     },
     get stack() {
       return store.stack
+    },
+    get revision() {
+      return revision
     },
     get size() {
       return store.size

@@ -82,6 +82,7 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { useUsageController } from "../../component/usage-controller"
 
 addDefaultParsers(parsers.parsers)
 
@@ -198,6 +199,7 @@ export function Session() {
     const current = session()
     return current ? { directory: current.directory, workspaceID: current.workspaceID } : undefined
   })
+  const usageController = useUsageController(() => route.sessionID, location)
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
@@ -1328,6 +1330,7 @@ export function Session() {
                         toBottom()
                       }}
                       sessionID={route.sessionID}
+                      showUsage={usageController.show}
                       right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
                     />
                   </pluginRuntime.Slot>

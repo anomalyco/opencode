@@ -2652,6 +2652,65 @@ export type EventTuiSessionSelect = {
   }
 }
 
+export type UsageResultError = {
+  code: "fetch_failed" | "missing_auth" | "missing_oauth" | "reauth_required" | "unsupported_provider"
+  message: string
+  retryable: boolean
+}
+
+export type UsageResult = {
+  provider: string
+  displayName: string
+  status: "ok" | "stale" | "unavailable" | "unauthenticated" | "unsupported"
+  snapshot: {
+    windows: Array<{
+      id: string
+      label: string
+      usedPercent: number
+      windowMinutes: number | null
+      resetsAt: number | null
+    }>
+    credits: {
+      hasCredits: boolean
+      unlimited: boolean
+      balance: string | null
+      label?: string
+      overagePermitted?: boolean
+      total?: number | null
+      used?: number | null
+      remaining?: number | null
+    } | null
+    planType:
+      | "guest"
+      | "free"
+      | "go"
+      | "plus"
+      | "pro"
+      | "prolite"
+      | "free_workspace"
+      | "team"
+      | "business"
+      | "self_serve_business_prolite"
+      | "self_serve_business_usage_based"
+      | "education"
+      | "quorum"
+      | "k12"
+      | "enterprise"
+      | "ent26"
+      | "enterprise_cbp_automation"
+      | "enterprise_cbp_usage_based"
+      | "edu"
+      | "unknown"
+      | null
+    updatedAt: number
+  } | null
+  error?: UsageResultError
+}
+
+export type UsageResponse = {
+  results: Array<UsageResult>
+}
+
 export type Workspace = {
   id: string
   type: string
@@ -10999,6 +11058,36 @@ export type TuiControlResponseResponses = {
 }
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
+
+export type UsageGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    provider?: string
+    refresh?: boolean
+  }
+  url: "/usage"
+}
+
+export type UsageGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type UsageGetError = UsageGetErrors[keyof UsageGetErrors]
+
+export type UsageGetResponses = {
+  /**
+   * Usage response
+   */
+  200: UsageResponse
+}
+
+export type UsageGetResponse = UsageGetResponses[keyof UsageGetResponses]
 
 export type ExperimentalWorkspaceAdapterListData = {
   body?: never

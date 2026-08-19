@@ -8,6 +8,7 @@ type OpenApiSchema = {
   readonly anyOf?: ReadonlyArray<OpenApiSchema>
   readonly type?: string
   readonly enum?: readonly unknown[]
+  readonly items?: OpenApiSchema
   readonly properties?: Record<string, OpenApiSchema>
   readonly required?: readonly string[]
   readonly contentSchema?: OpenApiSchema
@@ -63,6 +64,20 @@ function componentNames(response: OpenApiResponse | undefined) {
   return [
     ...new Set([schema, ...(schema.anyOf ?? [])].flatMap((item) => (item.$ref ? [componentName(item.$ref)] : []))),
   ]
+}
+
+function nonNull(schema: OpenApiSchema | undefined) {
+  return schema?.anyOf?.find((item) => item.type !== "null") ?? schema
+}
+
+function isNullable(schema: OpenApiSchema | undefined) {
+  return Boolean(schema?.anyOf?.some((item) => item.type === "null"))
+}
+
+function resolveSchema(spec: OpenApiSpec, schema: OpenApiSchema | undefined): OpenApiSchema | undefined {
+  const ref = schema?.$ref
+  if (!ref) return schema
+  return spec.components.schemas[componentName(ref)]
 }
 
 function isBuiltInEndpointError(name: string) {
@@ -218,6 +233,40 @@ describe("PublicApi OpenAPI v2 errors", () => {
     expect(componentName(responseRef(spec.paths["/api/provider/{providerID}"]?.get?.responses?.["503"]) ?? "")).toBe(
       "ServiceUnavailableError",
     )
+  })
+
+  // Pins every hand-maintained nullability override in applyUsageSchemaNullability.
+  // stripOptionalNull erases null from legacy component schemas, and this
+  // override restores the runtime response shape.
+  test("documents usage response shape", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    expect(spec.paths["/usage"]?.get).toBeDefined()
+
+    const result = resolveSchema(spec, spec.components.schemas.UsageResponse?.properties?.results?.items)
+    expect(result?.required).toContain("provider")
+    expect(result?.required).toContain("displayName")
+    expect(result?.required).toContain("status")
+    expect(result?.required).toContain("snapshot")
+    expect(result?.properties?.status?.enum).toEqual(["ok", "stale", "unavailable", "unauthenticated", "unsupported"])
+    expect(isNullable(result?.properties?.snapshot)).toBe(true)
+
+    const snapshot = nonNull(result?.properties?.snapshot)
+    const window = snapshot?.properties?.windows?.items
+    expect(window?.required).toEqual(["id", "label", "usedPercent", "windowMinutes", "resetsAt"])
+    expect(window?.properties?.id?.type).toBe("string")
+    expect(window?.properties?.label?.type).toBe("string")
+    expect(window?.properties?.usedPercent?.type).toBe("number")
+    expect(isNullable(window?.properties?.windowMinutes)).toBe(true)
+    expect(isNullable(window?.properties?.resetsAt)).toBe(true)
+
+    expect(isNullable(snapshot?.properties?.credits)).toBe(true)
+    const credits = nonNull(snapshot?.properties?.credits)
+    expect(isNullable(credits?.properties?.balance)).toBe(true)
+    expect(isNullable(credits?.properties?.total)).toBe(true)
+    expect(isNullable(credits?.properties?.used)).toBe(true)
+    expect(isNullable(credits?.properties?.remaining)).toBe(true)
+    expect(isNullable(snapshot?.properties?.planType)).toBe(true)
   })
 
   test("documents v2 session not-found errors", () => {

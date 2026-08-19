@@ -15,6 +15,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { iife } from "@opencode-ai/core/util/iife"
 import { tint, useTheme } from "../../context/theme"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -73,6 +74,7 @@ export type PromptProps = {
     normal?: string[]
     shell?: string[]
   }
+  showUsage?: (commandText: string) => boolean
 }
 
 function pastedFilepath(value: string, platform: string) {
@@ -212,6 +214,12 @@ export function Prompt(props: PromptProps) {
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
+
+  function firstToken(input: string) {
+    const line = input.split("\n")[0]?.trim()
+    if (!line) return ""
+    return line.split(/\s+/)[0] ?? ""
+  }
 
   function promptModelWarning() {
     toast.show({
@@ -512,6 +520,23 @@ export function Prompt(props: PromptProps) {
           input.cursorOffset = Bun.stringWidth(normalized)
         },
       },
+      ...iife(() => {
+        const customUsageCommand = sync.data.command.some((x) => x.name === "usage")
+        if (customUsageCommand || !props.showUsage) return []
+        return [
+          {
+            title: "Show usage limits",
+            name: "usage.show",
+            slashDescription: "Show usage limits (--used|--remaining|--background)",
+            category: "Provider",
+            slashName: "usage",
+            suggested: true,
+            run: () => {
+              props.showUsage?.("/usage")
+            },
+          },
+        ]
+      }),
       {
         title: "Skills",
         name: "prompt.skills",
@@ -576,6 +601,7 @@ export function Prompt(props: PromptProps) {
       "session.interrupt",
       "workspace.set",
       "session.move",
+      "usage.show",
     ]),
   }))
 
@@ -955,8 +981,11 @@ export function Prompt(props: PromptProps) {
       syncExtmarksWithPromptParts()
     }
     if (props.disabled) return false
+    const promptToken = firstToken(store.prompt.input)
+    const customUsageCommand = sync.data.command.some((x) => x.name === "usage")
+    const isBuiltInUsage = promptToken === "/usage" && !customUsageCommand
     if (workspace.creating() || move.creating()) return false
-    if (auto()?.visible) return false
+    if (auto()?.visible && !isBuiltInUsage) return false
     if (!store.prompt.input) return false
     const agent = local.agent.current()
     if (!agent) return false
@@ -965,6 +994,27 @@ export function Prompt(props: PromptProps) {
       void exit()
       return true
     }
+
+    if (isBuiltInUsage && store.mode !== "shell") {
+      if (!props.showUsage) {
+        toast.show({
+          message: "/usage is only available inside a session.",
+          variant: "error",
+        })
+        return true
+      }
+      if (!props.showUsage(store.prompt.input)) return true
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+      props.onSubmit?.()
+      input.clear()
+      return true
+    }
+
     const selectedModel = local.model.current()
     if (!selectedModel) {
       void promptModelWarning()
@@ -1119,6 +1169,7 @@ export function Prompt(props: PromptProps) {
         })
       if (editorParts.length > 0) editor.markSelectionSent()
     }
+
     history.append({
       ...store.prompt,
       mode: currentMode,

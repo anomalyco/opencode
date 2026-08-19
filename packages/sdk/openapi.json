@@ -9275,6 +9275,76 @@
         ]
       }
     },
+    "/usage": {
+      "get": {
+        "tags": ["usage"],
+        "operationId": "usage.get",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Fetch usage limits for authenticated providers.",
+        "summary": "Get usage",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.usage.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/workspace/adapter": {
       "get": {
         "tags": ["workspace"],
@@ -23366,6 +23436,210 @@
         "required": ["type", "properties"],
         "additionalProperties": false
       },
+      "UsageResultError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["fetch_failed", "missing_auth", "missing_oauth", "reauth_required", "unsupported_provider"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": ["code", "message", "retryable"],
+        "additionalProperties": false
+      },
+      "UsageResult": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ok", "stale", "unavailable", "unauthenticated", "unsupported"]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "windows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "usedPercent": {
+                          "type": "number"
+                        },
+                        "windowMinutes": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "resetsAt": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["id", "label", "usedPercent", "windowMinutes", "resetsAt"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "credits": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "hasCredits": {
+                            "type": "boolean"
+                          },
+                          "unlimited": {
+                            "type": "boolean"
+                          },
+                          "balance": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "overagePermitted": {
+                            "type": "boolean"
+                          },
+                          "total": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "used": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "remaining": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["hasCredits", "unlimited", "balance"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "planType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "guest",
+                          "free",
+                          "go",
+                          "plus",
+                          "pro",
+                          "prolite",
+                          "free_workspace",
+                          "team",
+                          "business",
+                          "self_serve_business_prolite",
+                          "self_serve_business_usage_based",
+                          "education",
+                          "quorum",
+                          "k12",
+                          "enterprise",
+                          "ent26",
+                          "enterprise_cbp_automation",
+                          "enterprise_cbp_usage_based",
+                          "edu",
+                          "unknown"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  }
+                },
+                "required": ["windows", "credits", "planType", "updatedAt"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "$ref": "#/components/schemas/UsageResultError"
+          }
+        },
+        "required": ["provider", "displayName", "status", "snapshot"],
+        "additionalProperties": false
+      },
+      "UsageResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageResult"
+            }
+          }
+        },
+        "required": ["results"],
+        "additionalProperties": false
+      },
       "Workspace": {
         "type": "object",
         "properties": {
@@ -36864,6 +37138,10 @@
     {
       "name": "tui",
       "description": "Experimental HttpApi TUI routes."
+    },
+    {
+      "name": "usage",
+      "description": "Experimental HttpApi usage routes."
     },
     {
       "name": "workspace",

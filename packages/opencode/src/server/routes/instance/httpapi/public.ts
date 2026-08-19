@@ -71,6 +71,7 @@ const QueryParameterSchemas: Record<string, OpenApiSchema> = {
   "GET /api/session start": { type: "number" },
   "GET /api/session roots": QueryBooleanOpenApi,
   "GET /api/session/{sessionID}/message limit": { type: "number" },
+  "GET /usage refresh": { type: "boolean" },
 }
 
 const LegacyComponentDescriptions: Record<string, string> = {
@@ -269,6 +270,7 @@ function applyLegacySchemaOverrides(spec: OpenApiSpec) {
   }
   if (schemas.GlobalSession?.properties?.project)
     schemas.GlobalSession.properties.project = nullable(schemas.GlobalSession.properties.project)
+  applyUsageSchemaNullability(schemas)
   const providerOptions = schemas.ProviderConfig?.properties?.options
   if (providerOptions) providerOptions.additionalProperties = {}
   const model = schemas.ProviderConfig?.properties?.models?.additionalProperties
@@ -276,6 +278,35 @@ function applyLegacySchemaOverrides(spec: OpenApiSpec) {
   if (variants && typeof variants === "object") variants.additionalProperties = {}
   const syncInfo = schemas.SyncEventSessionUpdated?.properties?.data?.properties?.info
   if (syncInfo?.properties) makePropertiesNullable(syncInfo.properties)
+}
+
+function applyUsageSchemaNullability(schemas: Record<string, OpenApiSchema>) {
+  const result = schemas.UsageResult
+  const properties = result?.properties
+  const snapshot = properties?.snapshot
+  if (!snapshot) return
+  properties.snapshot = nullable(snapshot)
+  makeUsageSnapshotNullable(snapshot)
+}
+
+function makeUsageSnapshotNullable(schema: OpenApiSchema) {
+  const target = schema.anyOf?.find((item) => item.type !== "null") ?? schema
+  const properties = target.properties
+  if (!properties) return
+  const window = typeof properties.windows?.items === "object" ? properties.windows.items : undefined
+  if (window?.properties) {
+    if (window.properties.windowMinutes) window.properties.windowMinutes = nullable(window.properties.windowMinutes)
+    if (window.properties.resetsAt) window.properties.resetsAt = nullable(window.properties.resetsAt)
+  }
+  const credits = properties.credits
+  if (credits) {
+    if (credits.properties?.balance) credits.properties.balance = nullable(credits.properties.balance)
+    if (credits.properties?.total) credits.properties.total = nullable(credits.properties.total)
+    if (credits.properties?.used) credits.properties.used = nullable(credits.properties.used)
+    if (credits.properties?.remaining) credits.properties.remaining = nullable(credits.properties.remaining)
+    properties.credits = nullable(credits)
+  }
+  if (properties.planType) properties.planType = nullable(properties.planType)
 }
 
 function normalizeComponentDescriptions(spec: OpenApiSpec) {

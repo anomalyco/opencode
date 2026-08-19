@@ -29,7 +29,7 @@ async function mountPrompt(input: {
   await Bun.write(path.join(state, "kv.json"), "{}")
 
   const [
-    { DialogProvider },
+    { DialogProvider, useDialog },
     { DialogPrompt },
     { KVProvider },
     { ThemeProvider },
@@ -45,6 +45,13 @@ async function mountPrompt(input: {
     import("../../../src/ui/toast"),
     import("../../../src/keymap"),
   ])
+
+  let dialog: ReturnType<typeof useDialog> | undefined
+
+  function Prompt() {
+    dialog = useDialog()
+    return <DialogPrompt title="Rename Session" value="draft" onConfirm={input.onConfirm} />
+  }
 
   function Harness() {
     const renderer = useRenderer()
@@ -71,7 +78,7 @@ async function mountPrompt(input: {
               <ThemeProvider mode="dark">
                 <ToastProvider>
                   <DialogProvider>
-                    <DialogPrompt title="Rename Session" value="draft" onConfirm={input.onConfirm} />
+                    <Prompt />
                   </DialogProvider>
                 </ToastProvider>
               </ThemeProvider>
@@ -85,11 +92,36 @@ async function mountPrompt(input: {
   const app = await testRender(() => <Harness />, { kittyKeyboard: true })
   return {
     app,
+    dialog: () => dialog,
     async cleanup() {
       app.renderer.destroy()
     },
   }
 }
+
+test("dialog revision tracks replace and clear", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountPrompt({ root: tmp.path, keybinds: {}, onConfirm() {} })
+
+  try {
+    await wait(() => prompt.dialog() !== undefined)
+    const dialog = prompt.dialog()
+    if (!dialog) throw new Error("expected dialog context")
+
+    const revision = dialog.revision
+    dialog.replace(() => <text>Replacement</text>)
+    expect(dialog.revision).toBe(revision + 1)
+
+    dialog.clear()
+    expect(dialog.revision).toBe(revision + 2)
+
+    dialog.replace(() => <text>Replacement</text>)
+    dialog.clear()
+    expect(dialog.revision).toBe(revision + 4)
+  } finally {
+    await prompt.cleanup()
+  }
+})
 
 test("dialog prompt submit wins when return is also input newline", async () => {
   await using tmp = await tmpdir()

@@ -279,6 +279,10 @@ const scenarios: Scenario[] = [
       body: { method: "bad" },
     }))
     .status(400),
+  http.protected.get("/usage", "usage.get").json(200, (body) => {
+    object(body)
+    array(body.results)
+  }),
   http.protected.get("/permission", "permission.list").json(200, array),
   http.protected
     .post("/permission/{requestID}/reply", "permission.reply.invalid")

@@ -58,6 +58,13 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+export const UsageProviderScope = Schema.Literals(["current", "all"]).annotate({
+  description: "Show usage for the current provider or all providers",
+})
+export const UsageValueMode = Schema.Literals(["used", "remaining"]).annotate({
+  description: "Show usage percentages as used or remaining",
+})
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -72,6 +79,8 @@ export const Info = Schema.Struct({
   diff_style: Schema.optional(DiffStyle),
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  show_usage_provider_scope: Schema.optional(UsageProviderScope),
+  show_usage_value_mode: Schema.optional(UsageValueMode),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 

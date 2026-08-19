@@ -263,6 +263,8 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptErrors,
   TuiSubmitPromptResponses,
+  UsageGetErrors,
+  UsageGetResponses,
   V2AgentListErrors,
   V2AgentListResponses,
   V2CommandListErrors,
@@ -5021,6 +5023,42 @@ export class Tui extends HeyApiClient {
   }
 }
 
+export class Usage extends HeyApiClient {
+  /**
+   * Get usage
+   *
+   * Fetch usage limits for authenticated providers.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      provider?: string
+      refresh?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "refresh" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UsageGetResponses, UsageGetErrors, ThrowOnError>({
+      url: "/usage",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Health extends HeyApiClient {
   /**
    * Check server health
@@ -7210,6 +7248,11 @@ export class OpencodeClient extends HeyApiClient {
   private _tui?: Tui
   get tui(): Tui {
     return (this._tui ??= new Tui({ client: this.client }))
+  }
+
+  private _usage?: Usage
+  get usage(): Usage {
+    return (this._usage ??= new Usage({ client: this.client }))
   }
 
   private _v2?: V2

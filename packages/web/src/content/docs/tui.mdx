@@ -283,6 +283,46 @@ Unshare current session. [Learn more](/docs/share#un-sharing).
 
 ---
 
+### usage
+
+Show usage limits for authenticated providers that support usage tracking.
+
+```bash frame="none"
+/usage
+```
+
+The usage dialog fetches all authenticated usage providers and shows provider-specific rate-limit windows, reset times, and credits or quota when available.
+
+Use display flags to choose how percentages are shown for that dialog invocation.
+
+```bash frame="none"
+/usage --used
+/usage --remaining
+```
+
+Refresh usage in the background without opening the dialog.
+
+```bash frame="none"
+/usage --background
+```
+
+:::note
+The `/usage` dialog always shows all authenticated usage providers. The `show_usage_provider_scope` setting only controls the sidebar Usage section.
+:::
+
+The dialog can also be opened from the command palette or bound to a key through the `usage_show` keybind, which is unbound by default.
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "keybinds": {
+    "usage_show": "<leader>v"
+  }
+}
+```
+
+---
+
 ## Editor setup
 
 Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
@@ -383,7 +423,9 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
     "sounds": {
       "error": "./sounds/error.mp3"
     }
-  }
+  },
+  "show_usage_provider_scope": "current",
+  "show_usage_value_mode": "used"
 }
 ```
 
@@ -402,6 +444,8 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
+- `show_usage_provider_scope` - Controls the sidebar Usage section. `"current"` shows usage for the currently selected provider; `"all"` shows all authenticated usage providers. The `/usage` dialog always shows all providers.
+- `show_usage_value_mode` - Controls whether usage percentages are shown as `"used"` or `"remaining"` by default. The `/usage --used` and `/usage --remaining` flags override this for a single dialog invocation.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
 

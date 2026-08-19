@@ -15,6 +15,7 @@ import { isConsoleManagedProvider } from "../util/provider-origin"
 import { useConnected } from "./use-connected"
 import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
+import { useUsageResource } from "./usage-client"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -81,6 +82,16 @@ export function normalizeCustomProviderID(value: string) {
   const providerID = value.trim().replace(/^@ai-sdk\//, "")
   if (!CUSTOM_PROVIDER_ID.test(providerID)) return
   return providerID
+}
+
+export async function refreshAfterProviderAuth(input: {
+  dispose: () => Promise<unknown>
+  bootstrap: () => Promise<unknown>
+  refetch: () => unknown
+}) {
+  await input.dispose()
+  await input.bootstrap()
+  input.refetch()
 }
 
 export function createDialogProviderOptions() {
@@ -243,6 +254,7 @@ function AutoMethod(props: AutoMethodProps) {
   const sync = useSync()
   const toast = useToast()
   const clipboard = useClipboard()
+  const usage = useUsageResource()
 
   useBindings(() => ({
     bindings: [
@@ -278,8 +290,11 @@ function AutoMethod(props: AutoMethodProps) {
       dialog.clear()
       return
     }
-    await sdk.client.instance.dispose()
-    await sync.bootstrap()
+    await refreshAfterProviderAuth({
+      dispose: () => sdk.client.instance.dispose(),
+      bootstrap: () => sync.bootstrap(),
+      refetch: usage.refetch,
+    })
     dialog.replace(() => <DialogModel providerID={props.providerID} />)
   })
 
@@ -316,6 +331,7 @@ function CodeMethod(props: CodeMethodProps) {
   const sdk = useSDK()
   const sync = useSync()
   const dialog = useDialog()
+  const usage = useUsageResource()
   const [error, setError] = createSignal(false)
 
   return (
@@ -329,8 +345,11 @@ function CodeMethod(props: CodeMethodProps) {
           code: value,
         })
         if (!error) {
-          await sdk.client.instance.dispose()
-          await sync.bootstrap()
+          await refreshAfterProviderAuth({
+            dispose: () => sdk.client.instance.dispose(),
+            bootstrap: () => sync.bootstrap(),
+            refetch: usage.refetch,
+          })
           dialog.replace(() => <DialogModel providerID={props.providerID} />)
           return
         }
@@ -361,6 +380,7 @@ function ApiMethod(props: ApiMethodProps) {
   const sync = useSync()
   const toast = useToast()
   const { theme } = useTheme()
+  const usage = useUsageResource()
 
   return (
     <DialogPrompt
@@ -402,8 +422,11 @@ function ApiMethod(props: ApiMethodProps) {
             ...(props.metadata ? { metadata: props.metadata } : {}),
           },
         })
-        await sdk.client.instance.dispose()
-        await sync.bootstrap()
+        await refreshAfterProviderAuth({
+          dispose: () => sdk.client.instance.dispose(),
+          bootstrap: () => sync.bootstrap(),
+          refetch: usage.refetch,
+        })
         if (props.custom && !sync.data.provider_next.all.some((provider) => provider.id === props.providerID)) {
           toast.show({
             variant: "info",
