@@ -466,7 +466,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     if (queuedPrompts().length > 0 && queuedShortcut()) {
       items.push({ kind: "queued", key: queuedShortcut(), label: `${queue()} queued` })
     }
-    if (activeTabs().length > 0 && subagentShortcut()) {
+    if (tabs().length > 0 && subagentShortcut()) {
       items.push({ kind: "subagents", key: subagentShortcut(), label: "subagents" })
     }
 
