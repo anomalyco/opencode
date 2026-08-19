@@ -80,10 +80,13 @@ export function copyCommand(
   os: NodeJS.Platform,
   wayland: boolean,
   has: (name: string) => boolean,
-  selection: ClipboardSelection = "clipboard",
+  selection: "clipboard" | "primary" = "clipboard",
 ): string[] | undefined {
   if (os === "darwin" && has("osascript")) return ["osascript"]
-  if (os === "linux" && wayland && has("wl-copy")) return selection === "primary" ? ["wl-copy", "-p"] : ["wl-copy"]
+  if (os === "linux" && wayland && has("wl-copy"))
+    return selection === "primary"
+      ? ["wl-copy", "-p", "--type", "text/plain;charset=utf-8"]
+      : ["wl-copy", "--type", "text/plain;charset=utf-8"]
   if (os === "linux" && has("xclip")) return ["xclip", "-selection", selection]
   if (os === "linux" && has("xsel")) return selection === "primary" ? ["xsel", "--primary", "--input"] : ["xsel", "--clipboard", "--input"]
   if (os === "win32" && has("powershell.exe")) {
@@ -132,6 +135,9 @@ function getCopyMethod() {
     }
     return async (text: string, selection?: "clipboard" | "primary" | "both") => {
       const { default: clipboardy } = await import("clipboardy")
+      // clipboardy only supports the clipboard (not primary) selection
+      if (selection === "primary") return
+      // For "clipboard" or "both", write to clipboard (primary is not supported without native tools)
       await clipboardy.write(text).catch(() => undefined)
     }
   })())
