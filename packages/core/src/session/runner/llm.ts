@@ -326,6 +326,8 @@ const layer = Layer.effect(
             sessionID: session.id,
             assistantMessageID: yield* publisher.startAssistant(),
             finish: finish.finish,
+            rawFinish: finish.rawFinish,
+            providerState: finish.providerState,
             ...stepUsage(finish),
             ...end,
           })

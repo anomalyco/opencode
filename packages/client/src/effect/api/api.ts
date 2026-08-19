@@ -579,6 +579,8 @@ export type Endpoint5_31Output =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
+            readonly rawFinish?: string | undefined
+            readonly providerState?: SessionMessage.ProviderState | undefined
             readonly cost: number & Brand.Brand<"Money.USD">
             readonly tokens: {
               readonly input: number
@@ -601,6 +603,9 @@ export type Endpoint5_31Output =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly finish?: "content-filter" | undefined
+            readonly rawFinish?: string | undefined
+            readonly providerState?: SessionMessage.ProviderState | undefined
             readonly cost?: (number & Brand.Brand<"Money.USD">) | undefined
             readonly tokens?:
               | {

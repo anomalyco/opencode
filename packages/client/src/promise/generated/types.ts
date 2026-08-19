@@ -1108,6 +1108,8 @@ export type SessionStepEnded = {
     sessionID: string
     assistantMessageID: string
     finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
+    rawFinish?: string
+    providerState?: SessionMessageProviderState1
     cost: MoneyUSD
     tokens: TokenUsageInfo
     snapshot?: string
@@ -1145,6 +1147,9 @@ export type SessionStepFailed = {
     sessionID: string
     assistantMessageID: string
     error: SessionStructuredError
+    finish?: "content-filter"
+    rawFinish?: string
+    providerState?: SessionMessageProviderState1
     cost?: MoneyUSD
     tokens?: TokenUsageInfo
     snapshot?: string
@@ -1921,6 +1926,8 @@ export type SessionMessageAssistant = {
   content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
   snapshot?: { start?: string; end?: string; files?: Array<string> }
   finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
+  rawFinish?: string
+  providerState?: SessionMessageProviderState
   cost?: MoneyUSD
   tokens?: TokenUsageInfo
   error?: SessionStructuredError
@@ -2691,6 +2698,8 @@ export type SessionImportInput = {
           >
           readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
           readonly finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
+          readonly rawFinish?: string
+          readonly providerState?: { readonly [x: string]: JsonValue }
           readonly cost?: number
           readonly tokens?: {
             readonly input: number
@@ -2958,6 +2967,8 @@ export type SessionImportInput = {
           >
           readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
           readonly finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
+          readonly rawFinish?: string
+          readonly providerState?: { readonly [x: string]: JsonValue }
           readonly cost?: number
           readonly tokens?: {
             readonly input: number
@@ -3225,6 +3236,8 @@ export type SessionImportInput = {
           >
           readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
           readonly finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
+          readonly rawFinish?: string
+          readonly providerState?: { readonly [x: string]: JsonValue }
           readonly cost?: number
           readonly tokens?: {
             readonly input: number

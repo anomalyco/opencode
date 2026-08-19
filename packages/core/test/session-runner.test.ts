@@ -4161,13 +4161,49 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("persists raw finish reasons and provider state", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* TestLLM.push(
+        TestLLM.complete(
+          {
+            reason: { normalized: "stop", raw: "end_turn" },
+            providerMetadata: { openai: { responseId: "response-1", serviceTier: "priority" } },
+          },
+          LLMEvent.textStart({ id: "answer" }),
+          LLMEvent.textDelta({ id: "answer", text: "Complete" }),
+          LLMEvent.textEnd({ id: "answer" }),
+        ),
+      )
+
+      yield* runPrompt(session, "Keep provider finish details")
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        {
+          type: "assistant",
+          finish: "stop",
+          rawFinish: "end_turn",
+          providerState: { responseId: "response-1", serviceTier: "priority" },
+          content: [{ type: "text", text: "Complete" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("projects content-filter finishes as visible terminal failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* TestLLM.push(
         TestLLM.complete(
           {
-            reason: { normalized: "content-filter" },
+            reason: { normalized: "content-filter", raw: "SAFETY" },
+            providerMetadata: {
+              openai: {
+                responseId: "response-blocked",
+                refusal: { category: "safety", explanation: "Prompt blocked" },
+              },
+            },
             usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1 },
           },
           LLMEvent.textStart({ id: "partial" }),
@@ -4182,7 +4218,12 @@ describe("SessionRunnerLLM", () => {
         { type: "user" },
         {
           type: "assistant",
-          finish: "error",
+          finish: "content-filter",
+          rawFinish: "SAFETY",
+          providerState: {
+            responseId: "response-blocked",
+            refusal: { category: "safety", explanation: "Prompt blocked" },
+          },
           error: { type: "provider.content-filter" },
           cost: 0,
           tokens: { input: 8, output: 2, reasoning: 1, cache: { read: 0, write: 0 } },
