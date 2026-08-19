@@ -184,6 +184,20 @@ describe("tool.apply_patch freeform", () => {
     { git: true },
   )
 
+  it.instance("uses directory-relative permission paths in non-git projects", () =>
+    Effect.gen(function* () {
+      const { ctx, calls } = makeCtx()
+
+      const patchText = "*** Begin Patch\n*** Add File: .agents/new.txt\n+created\n*** End Patch"
+
+      yield* execute({ patchText }, ctx)
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0]?.patterns).toEqual([".agents/new.txt"])
+      expect(calls[0]?.metadata.files[0]?.relativePath).toBe(".agents/new.txt")
+    }),
+  )
+
   it.instance("applies multiple hunks to one file", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

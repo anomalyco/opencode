@@ -94,6 +94,31 @@ describe("tool.write", () => {
         expect(content).toBe("relative content")
       }),
     )
+
+    it.instance("uses directory-relative permission paths in non-git projects", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, ".agents", "file.txt")
+        const calls: Array<{ patterns: readonly string[] }> = []
+
+        yield* run(
+          {
+            filePath: filepath,
+            content: "content",
+          },
+          {
+            ...ctx,
+            ask: (input) =>
+              Effect.sync(() => {
+                calls.push({ patterns: input.patterns })
+              }),
+          },
+        )
+
+        expect(calls).toHaveLength(1)
+        expect(calls[0]?.patterns).toEqual([path.join(".agents", "file.txt")])
+      }),
+    )
   })
 
   describe("existing file overwrite", () => {

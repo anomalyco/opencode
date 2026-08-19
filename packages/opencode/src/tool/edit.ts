@@ -17,6 +17,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { relative } from "./relative"
 import * as Bom from "@/util/bom"
 
 function normalizeLineEndings(text: string): string {
@@ -81,6 +82,7 @@ export const EditTool = Tool.define(
             ? params.filePath
             : path.join(instance.directory, params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filePath)
+          const rel = relative(instance, filePath)
 
           let diff = ""
           let contentOld = ""
@@ -101,7 +103,7 @@ export const EditTool = Tool.define(
                 diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
                 yield* ctx.ask({
                   permission: "edit",
-                  patterns: [path.relative(instance.worktree, filePath)],
+                  patterns: [rel],
                   always: ["*"],
                   metadata: {
                     filepath: filePath,
@@ -144,7 +146,7 @@ export const EditTool = Tool.define(
               )
               yield* ctx.ask({
                 permission: "edit",
-                patterns: [path.relative(instance.worktree, filePath)],
+                patterns: [rel],
                 always: ["*"],
                 metadata: {
                   filepath: filePath,
@@ -206,7 +208,7 @@ export const EditTool = Tool.define(
               diff,
               filediff,
             },
-            title: `${path.relative(instance.worktree, filePath)}`,
+            title: rel,
             output,
           }
         }),

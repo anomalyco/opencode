@@ -149,6 +149,21 @@ const asks = () => {
 }
 
 describe("tool.read external_directory permission", () => {
+  it.live("uses directory-relative read permission paths in non-git projects", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, ".agents", "test.txt"), "hello world")
+
+      const { items, next } = asks()
+
+      const result = yield* exec(dir, { filePath: path.join(dir, ".agents", "test.txt") }, next)
+      expect(result.output).toContain("hello world")
+      const read = items.find((item) => item.permission === "read")
+      expect(read).toBeDefined()
+      expect(read!.patterns).toEqual([path.join(".agents", "test.txt")])
+    }),
+  )
+
   it.live("allows reading absolute path inside project directory", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
