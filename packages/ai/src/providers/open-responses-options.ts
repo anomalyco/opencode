@@ -1,4 +1,4 @@
-import type { ResponseIncludable, ServiceTier } from "../protocols/utils/open-responses-options.js"
+import type { ResponseIncludable, ServiceTier, Truncation } from "../protocols/utils/open-responses-options.js"
 import type { ProviderOptions, ReasoningEffort, TextVerbosity } from "../schema/index.js"
 
 export interface OpenResponsesOptionsInput {
@@ -10,6 +10,7 @@ export interface OpenResponsesOptionsInput {
   readonly include?: ReadonlyArray<ResponseIncludable>
   readonly textVerbosity?: TextVerbosity
   readonly serviceTier?: ServiceTier
+  readonly truncation?: Truncation
 }
 
 export type OpenResponsesProviderOptionsInput = ProviderOptions & {

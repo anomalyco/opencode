@@ -154,6 +154,7 @@ export const coreFields = {
   tools: optionalArray(Tool),
   tool_choice: Schema.optional(ToolChoice),
   store: Schema.optional(Schema.Boolean),
+  truncation: Schema.optional(OpenResponsesOptions.TruncationSchema),
   service_tier: Schema.optional(OpenResponsesOptions.ServiceTierSchema),
   prompt_cache_key: Schema.optional(Schema.String),
   include: optionalArray(OpenResponsesOptions.ResponseIncludableSchema),
@@ -577,6 +578,7 @@ const lowerOptions = (request: LLMRequest) => {
       : {}),
     ...(options.textVerbosity ? { text: { verbosity: options.textVerbosity } } : {}),
     ...(options.serviceTier ? { service_tier: options.serviceTier } : {}),
+    ...(options.truncation ? { truncation: options.truncation } : {}),
   }
 }
 

@@ -123,13 +123,14 @@ describe("Open Responses-compatible route", () => {
       const model = configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
-        providerOptions: { openresponses: { reasoningEffort: "low", store: true } },
+        providerOptions: { openresponses: { reasoningEffort: "low", store: true, truncation: "auto" } },
       }).model("example-model")
       const prepared = yield* compileRequest(LLM.request({ model, prompt: "Think." }))
 
       expect(prepared.body).toMatchObject({
         reasoning: { effort: "low" },
         store: true,
+        truncation: "auto",
       })
     }),
   )

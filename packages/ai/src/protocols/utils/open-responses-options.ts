@@ -16,19 +16,25 @@ export type ResponseIncludable = (typeof ResponseIncludables)[number]
 export const ServiceTiers = ["auto", "default", "flex", "priority"] as const
 export type ServiceTier = (typeof ServiceTiers)[number]
 
+export const Truncations = ["auto", "disabled"] as const
+export type Truncation = (typeof Truncations)[number]
+
 const TEXT_VERBOSITY = new Set<string>(["low", "medium", "high"])
 const INCLUDABLES = new Set<string>(ResponseIncludables)
 const SERVICE_TIERS = new Set<string>(ServiceTiers)
+const TRUNCATIONS = new Set<string>(Truncations)
 
 const isTextVerbosity = (value: unknown): value is Schema.Schema.Type<typeof TextVerbosity> =>
   typeof value === "string" && TEXT_VERBOSITY.has(value)
 
 const isServiceTier = (value: unknown): value is ServiceTier => typeof value === "string" && SERVICE_TIERS.has(value)
+const isTruncation = (value: unknown): value is Truncation => typeof value === "string" && TRUNCATIONS.has(value)
 
 export const ReasoningEffort = Schema.String
 export const TextVerbositySchema = TextVerbosity
 export const ResponseIncludableSchema = Schema.Literals(ResponseIncludables)
 export const ServiceTierSchema = Schema.Literals(ServiceTiers)
+export const TruncationSchema = Schema.Literals(Truncations)
 
 export interface Resolved {
   readonly instructions?: string
@@ -38,6 +44,7 @@ export interface Resolved {
   readonly include?: ReadonlyArray<ResponseIncludable>
   readonly textVerbosity?: Schema.Schema.Type<typeof TextVerbosity>
   readonly serviceTier?: ServiceTier
+  readonly truncation?: Truncation
 }
 
 export const resolve = (request: LLMRequest): Resolved => {
@@ -57,6 +64,7 @@ export const resolve = (request: LLMRequest): Resolved => {
     include: include.length > 0 ? include : undefined,
     textVerbosity: isTextVerbosity(input?.textVerbosity) ? input.textVerbosity : undefined,
     serviceTier: isServiceTier(input?.serviceTier) ? input.serviceTier : undefined,
+    truncation: isTruncation(input?.truncation) ? input.truncation : undefined,
   }
 }
 

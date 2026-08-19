@@ -1283,6 +1283,7 @@ describe("OpenAI Responses route", () => {
               reasoningEffort: "high",
               reasoningSummary: "auto",
               include: ["reasoning.encrypted_content"],
+              truncation: "disabled",
             },
           },
         }),
@@ -1293,6 +1294,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
       expect(prepared.body.reasoning).toEqual({ effort: "high", summary: "auto" })
       expect(prepared.body.text).toEqual({ verbosity: "low" })
+      expect(prepared.body.truncation).toBe("disabled")
     }),
   )
 
