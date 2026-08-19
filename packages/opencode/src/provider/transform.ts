@@ -1335,7 +1335,11 @@ export function smallOptions(model: Provider.Model) {
     const base = { store: false }
     return mergeDeep(base, small)
   }
-  if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
+  if (
+    model.providerID === "openrouter" ||
+    model.providerID === "llmgateway" ||
+    model.providerID === "llmgateway-providers"
+  ) {
     if (Object.keys(small).length === 0 && model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }

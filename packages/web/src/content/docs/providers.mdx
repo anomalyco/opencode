@@ -1823,9 +1823,14 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ### LLM Gateway
 
+LLM Gateway exposes two providers, both served by the same endpoint and API key:
+
+- **DevPass (LLM Gateway)** — `llmgateway`: aggregated model IDs such as `claude-sonnet-5`, auto-routed by the gateway across upstream providers.
+- **LLM Gateway** — `llmgateway-providers`: provider-pinned model IDs such as `anthropic/claude-sonnet-5`, each entry served by that specific upstream provider with its own pricing and limits.
+
 1. Head over to the [LLM Gateway dashboard](https://llmgateway.io/dashboard), click **Create API Key**, and copy the key.
 
-2. Run the `/connect` command and search for LLM Gateway.
+2. Run the `/connect` command and search for LLM Gateway, then pick either provider.
 
    ```txt
    /connect
