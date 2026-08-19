@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { LLM, LanguageModel } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
-import { Effect, Layer } from "effect"
+import { ConfigProvider, Effect, Layer } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
@@ -64,6 +64,10 @@ function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect:
         })
       }),
   )
+}
+
+function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effect.Effect<A, E, R>) {
+  return effect().pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env }))))
 }
 
 describe("ModelResolver", () => {
@@ -257,7 +261,7 @@ describe("ModelResolver", () => {
   )
 
   it.effect("treats an empty configured API key as omitted", () =>
-    withEnv({ OPENAI_API_KEY: "environment-key" }, () =>
+    withConfigEnv({ OPENAI_API_KEY: "environment-key" }, () =>
       Effect.gen(function* () {
         const resolved = yield* ModelResolver.fromCatalogModel(
           model(Provider.aisdk("@ai-sdk/openai"), {
@@ -337,7 +341,7 @@ describe("ModelResolver", () => {
     })
     const layer = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
 
-    return withEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined }, () =>
+    return withConfigEnv({}, () =>
       Effect.gen(function* () {
         const resolver = yield* ModelResolver.Service
         const resolved = yield* resolver.resolveModel(selected)
@@ -358,7 +362,7 @@ describe("ModelResolver", () => {
   })
 
   it.effect("keeps native provider environment auth strict when no API key is configured", () =>
-    withEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined }, () =>
+    withConfigEnv({}, () =>
       Effect.gen(function* () {
         const resolved = yield* ModelResolver.fromCatalogModel(
           model(Provider.aisdk("@ai-sdk/google"), {
@@ -477,7 +481,11 @@ describe("ModelResolver", () => {
           },
         ],
       })
-      const resolved = yield* ModelResolver.resolveModel(catalog, VariantID.make("xhigh"))
+      const resolved = yield* ModelResolver.resolveModel(
+        catalog,
+        VariantID.make("xhigh"),
+        Credential.Key.make({ type: "key", key: "secret" }),
+      )
 
       expect(resolved.route.defaults.headers).toMatchObject({ "x-test": "header", "x-variant": "high" })
       expect(resolved.route.defaults.http?.body).toEqual({
