@@ -2,7 +2,7 @@ import { app } from "electron"
 import { Deferred, Effect, Fiber } from "effect"
 import type { ServerReadyData } from "../shared/ipc-contract"
 import { checkAppExists, resolveAppPath } from "./files/apps"
-import { registerIpcHandlers, registerUpdaterIpcHandlers, registerWslIpcHandlers } from "./ipc"
+import { registerIpcHandlers } from "./ipc"
 import {
   acquireApplicationLock,
   configureApplication,
@@ -21,6 +21,7 @@ import { getDefaultServerUrl, setDefaultServerUrl } from "./service/server-setti
 import { createUpdaterIpc, setupAutoUpdater, showUpdaterDialog, startAutoUpdater } from "./updater"
 import { getLastFocusedWindow, setBackgroundColor } from "./windows"
 import { startWsl } from "./wsl/start"
+import { createDeferredWslIpc } from "./wsl/ipc"
 
 const main = Effect.gen(function* () {
   const logger = configureApplication()
@@ -33,6 +34,8 @@ const main = Effect.gen(function* () {
   yield* prepareDesktop(logger)
 
   const updater = setupAutoUpdater(lifecycle.prepareToRestart)
+  const updaterIpc = createUpdaterIpc(updater)
+  const wslIpc = createDeferredWslIpc()
   const menu = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
@@ -41,7 +44,7 @@ const main = Effect.gen(function* () {
     checkForUpdates: () => void showUpdaterDialog(updater),
     relaunch: lifecycle.relaunch,
   }
-  registerIpcHandlers({
+  const ipcDeps: Parameters<typeof registerIpcHandlers>[0] = {
     relaunch: lifecycle.relaunch,
     awaitInitialization: Effect.fnUntraced(
       function* () {
@@ -66,8 +69,8 @@ const main = Effect.gen(function* () {
     setNativeTranslations: (bundle) => {
       if (setNativeTranslations(bundle)) createMenu(menu)
     },
-  })
-  registerUpdaterIpcHandlers(createUpdaterIpc(updater))
+  }
+  yield* Effect.promise(() => registerIpcHandlers(ipcDeps, updaterIpc, wslIpc.ipc))
   startAutoUpdater(updater)
   yield* Effect.promise(() => startNetworkLogging())
 
@@ -76,7 +79,7 @@ const main = Effect.gen(function* () {
     logger.log("starting v2 background service")
     const background = yield* Effect.promise(() => startBackgroundCli(logger))
     const wsl = yield* Effect.promise(() => startWsl(background, logger))
-    registerWslIpcHandlers(wsl.ipc)
+    wslIpc.set(wsl.ipc)
     wsl.start()
     lifecycle.setWslShutdown(wsl.stop)
     yield* Deferred.succeed(serverReady, {

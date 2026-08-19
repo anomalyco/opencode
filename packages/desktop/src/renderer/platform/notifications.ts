@@ -1,5 +1,5 @@
 import type { Platform } from "@opencode-ai/app"
-import type { ElectronAPI } from "../../preload/types"
+import type { ElectronAPI } from "../api-types"
 
 export function createDesktopNotify(api: ElectronAPI): Platform["notify"] {
   return async (title, description, onClick) => {

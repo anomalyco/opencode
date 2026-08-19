@@ -14,7 +14,7 @@ import {
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, Show } from "solid-js"
-import type { ElectronAPI } from "../preload/types"
+import type { ElectronAPI } from "./api-types"
 import { MigrationStatus } from "./migration-status"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform, type DesktopWindowState } from "./platform"

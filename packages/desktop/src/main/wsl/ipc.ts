@@ -1,7 +1,8 @@
 import { app } from "electron"
 import type { WebContents } from "electron"
 import type { WslServerConfig, WslServersState } from "@opencode-ai/app/wsl/types"
-import { Ipc, sendIpcEvent } from "../../shared/ipc-contract"
+import { WslServersChanged } from "../../shared/ipc-rpc/events"
+import { emitIpcEvent } from "../ipc-events"
 import type { WslServersController } from "./servers"
 import { nativeT } from "../native/translations"
 
@@ -19,6 +20,34 @@ export type WslIpc = {
   addServer(value: string): Promise<WslServerConfig>
   removeServer(value: string): Promise<void>
   startServer(value: string): Promise<void>
+}
+
+export function createDeferredWslIpc() {
+  let current: WslIpc | undefined
+  const get = () => {
+    if (!current) throw new Error("WSL service is not initialized")
+    return current
+  }
+  return {
+    ipc: {
+      subscribe: (sender) => get().subscribe(sender),
+      unsubscribe: (id) => get().unsubscribe(id),
+      getState: () => get().getState(),
+      probeRuntime: () => get().probeRuntime(),
+      refreshDistros: () => get().refreshDistros(),
+      installWsl: () => get().installWsl(),
+      installDistro: (value) => get().installDistro(value),
+      probeAddable: (value) => get().probeAddable(value),
+      installOpencode: (value) => get().installOpencode(value),
+      openTerminal: (value) => get().openTerminal(value),
+      addServer: (value) => get().addServer(value),
+      removeServer: (value) => get().removeServer(value),
+      startServer: (value) => get().startServer(value),
+    } satisfies WslIpc,
+    set: (ipc: WslIpc) => {
+      current = ipc
+    },
+  }
 }
 
 export function createWslIpc(controller?: WslServersController): WslIpc {
@@ -48,7 +77,7 @@ export function createWslIpc(controller?: WslServersController): WslIpc {
             unsubscribe(id)
             return
           }
-          sendIpcEvent(sender, Ipc.wsl.event, payload)
+          emitIpcEvent(sender, new WslServersChanged({ event: payload }))
         }),
       )
       sender.once("destroyed", () => unsubscribe(id))
@@ -88,7 +117,7 @@ function createUnavailableWslIpc(): WslIpc {
   })
 
   return {
-    subscribe: (sender) => sendIpcEvent(sender, Ipc.wsl.event, { type: "state", state: state() }),
+    subscribe: (sender) => emitIpcEvent(sender, new WslServersChanged({ event: { type: "state", state: state() } })),
     unsubscribe: () => undefined,
     getState: state,
     probeRuntime: unavailable,

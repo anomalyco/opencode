@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { Ipc } from "../../shared/ipc-contract"
 import { initializationData, initializationReady } from "./initialization"
 
 describe("desktop renderer initialization", () => {
@@ -15,10 +14,8 @@ describe("desktop renderer initialization", () => {
     }
   })
 
-  test("removes Electron's remote invocation wrapper from startup errors", () => {
-    const error = new Error(
-      `Error invoking remote method '${Ipc.app.awaitInitialization}': Error: Cannot migrate session_message projections`,
-    )
+  test("preserves clean RPC startup errors", () => {
+    const error = new Error("Cannot migrate session_message projections")
 
     try {
       initializationData(Object.assign(() => undefined, { error }))

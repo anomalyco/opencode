@@ -1,6 +1,6 @@
 import { createDraftStore, type Platform } from "@opencode-ai/app"
 import type { AsyncStorage } from "@solid-primitives/storage"
-import type { ElectronAPI } from "../../preload/types"
+import type { ElectronAPI } from "../api-types"
 
 export function createDesktopStorage(api: ElectronAPI) {
   const cache = new Map<string, AsyncStorage>()
