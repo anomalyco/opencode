@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { Database } from "@opencode-ai/core/database/database"
 import { Effect, Option } from "effect"
+import { sql } from "drizzle-orm"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
@@ -602,7 +604,7 @@ describe("MessageV2.filterCompacted", () => {
       Effect.gen(function* () {
         const ids = yield* fill(sessionID, 5)
 
-        const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
         expect(result).toHaveLength(5)
         // reversed from newest-first to chronological
         expect(result.map((item) => item.info.id)).toEqual(ids)
@@ -636,7 +638,7 @@ describe("MessageV2.filterCompacted", () => {
           text: "new response",
         })
 
-        const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
         // Includes compaction boundary: u1, a1, u2, a2
         expect(result[0].info.id).toBe(u1)
         expect(result.length).toBe(4)
@@ -658,8 +660,23 @@ describe("MessageV2.filterCompacted", () => {
         yield* addCompactionPart(sessionID, u1)
         yield* addUser(sessionID, "world")
 
-        const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
         expect(result).toHaveLength(2)
+      }),
+    ),
+  )
+
+  it.instance("retains history for an incomplete compaction", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const before = yield* fill(sessionID, 2)
+        const compaction = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, compaction)
+        const incomplete = yield* addAssistant(sessionID, compaction, { finish: "end_turn" })
+        const after = yield* fill(sessionID, 60)
+
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
+        expect(result.map((item) => item.info.id)).toEqual([...before, compaction, incomplete, ...after])
       }),
     ),
   )
@@ -677,7 +694,7 @@ describe("MessageV2.filterCompacted", () => {
         yield* addAssistant(sessionID, u1, { summary: true, finish: "end_turn", error })
         yield* addUser(sessionID, "retry")
 
-        const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
         // Error assistant doesn't add to completed, so compaction boundary never triggers
         expect(result).toHaveLength(3)
       }),
@@ -694,7 +711,7 @@ describe("MessageV2.filterCompacted", () => {
         yield* addAssistant(sessionID, u1, { summary: true })
         yield* addUser(sessionID, "next")
 
-        const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
         expect(result).toHaveLength(3)
       }),
     ),
@@ -744,7 +761,7 @@ describe("MessageV2.filterCompacted", () => {
           text: "third reply",
         })
 
-        const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
 
         expect(result.map((item) => item.info.id)).toEqual([c1, s1, u2, a2, u3, a3])
       }),
@@ -797,11 +814,11 @@ describe("MessageV2.filterCompacted", () => {
         text: "third reply",
       })
 
-      const parentFiltered = MessageV2.filterCompacted(yield* MessageV2.stream(created.id))
+      const parentFiltered = yield* MessageV2.filterCompactedEffect(created.id)
       expect(parentFiltered.map((item) => item.info.id)).toEqual([c1, s1, u2, a2, u3, a3])
 
       const forked = yield* session.fork({ sessionID: created.id })
-      const childFiltered = MessageV2.filterCompacted(yield* MessageV2.stream(forked.id))
+      const childFiltered = yield* MessageV2.filterCompactedEffect(forked.id)
       expect(childFiltered).toHaveLength(parentFiltered.length)
 
       const tailPart = childFiltered.flatMap((m) => m.parts).find((p) => p.type === "compaction")
@@ -867,7 +884,7 @@ describe("MessageV2.filterCompacted", () => {
           text: "third reply",
         })
 
-        const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
 
         expect(result.map((item) => item.info.id)).toEqual([c1, s1, a3, u3, a4])
       }),
@@ -939,9 +956,34 @@ describe("MessageV2.filterCompacted", () => {
           text: "fourth reply",
         })
 
-        const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
 
         expect(result.map((item) => item.info.id)).toEqual([c2, s2, u3, a3, u4, a4])
+      }),
+    ),
+  )
+
+  it.instance("does not hydrate parts before a completed full compaction", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const old = yield* addUser(sessionID, "old prompt")
+        const compaction = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, compaction)
+        const summary = yield* addAssistant(sessionID, compaction, { summary: true, finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: summary,
+          type: "text",
+          text: "summary",
+        })
+        const recent = yield* fill(sessionID, 60)
+
+        const { db } = yield* Database.Service
+        yield* db.run(sql`UPDATE part SET data = 'invalid json' WHERE message_id = ${old}`)
+
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
+        expect(result.map((item) => item.info.id)).toEqual([compaction, summary, ...recent])
       }),
     ),
   )
