@@ -132,6 +132,60 @@ All instruction files are combined with your `AGENTS.md` files.
 
 ---
 
+## Audience
+
+Instruction files are included for every session and agent by default. Add `opencode.audience` frontmatter to restrict a file:
+
+```markdown title="AGENTS.md"
+---
+opencode:
+  audience:
+    - role: main
+    - agent: reviewer*
+    - { role: subagent, agent: general* }
+---
+```
+
+The array is OR: matching any entry includes the file. Fields in one entry are AND, so `{ role: subagent, agent: general* }` requires both conditions. A single role has a shorter form:
+
+```markdown title="AGENTS.md"
+---
+opencode:
+  audience: main
+---
+```
+
+| Field | Values | Meaning |
+|---|---|---|
+| `role` | `main`, `subagent`, `all` | `main` is a session with no parent. `subagent` is any child session. This is structural: an agent configured with `mode: "primary"` is still a `subagent` when dispatched as a child. An agent run directly in a root session is `main`. |
+| `agent` | Wildcard pattern | Matches the running agent name with `*` and `?`. Matching is case-sensitive on Linux. |
+
+Unknown keys inside `opencode` are fatal. This catches routing mistakes such as `audiance`, which valid YAML would otherwise treat as unrelated metadata and silently include everywhere. An empty `opencode: {}` and files with no `opencode` key have no audience directive, so they remain included everywhere and their contents are unchanged.
+
+Audience filtering applies when opencode assembles instruction files into the system prompt and when the read tool finds nearby instruction files such as a nested `AGENTS.md`. It does not filter arbitrary file contents read by tools.
+
+:::caution
+The V2 session core assembles its system context through a separate path that does not yet apply audience filtering. Sessions served by it include every instruction file regardless of `opencode.audience`, with frontmatter left in place, and a malformed directive is not fatal there.
+:::
+
+:::caution
+`role` is derived from whether the session has a parent, so it describes how a session was created rather than what it is being used for. A client that creates parentless sessions to run subagent-class work, such as an external supervisor driving workers over the HTTP API, produces sessions that are `main` by construction and those sessions receive `role: main` files. Scope by `agent` instead when the distinction you need is the kind of work rather than the shape of the session tree.
+
+This is a per-session property, not a per-installation one: a single opencode process commonly serves both shapes at once, since task-tool subagents carry a parent while externally created sessions may not. A setting that disabled the `role` axis for an installation would break the sessions where it currently works.
+:::
+
+:::tip
+Claude Code and Codex do not interpret `opencode.audience` when they read the same `AGENTS.md`. Keep shared doctrine in a file those tools still load, or configure an equivalent include for each tool.
+:::
+
+Audience and sparse context are separate filters. Sparse context first keeps project-origin instructions; audience filtering then keeps files matching the current reader. An audience label cannot make a global or configured instruction survive sparse origin filtering.
+
+Moving doctrine from a global `AGENTS.md` to `config.instructions` also changes assembly order from early to late. Compare the final system prompt before and after moving it when precedence matters.
+
+Audience-specific root and child prompts create distinct cache prefixes for the same agent. That is intentional, and it is not free: a reader that excludes files no longer shares a prefix with one that includes them. Whether the smaller prompt is worth the extra prefix depends on which instructions are excluded and has not been measured.
+
+---
+
 ## Referencing External Files
 
 While opencode doesn't automatically parse file references in `AGENTS.md`, you can achieve similar functionality in two ways:

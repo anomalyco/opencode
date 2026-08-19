@@ -297,7 +297,8 @@ export const ReadTool = Tool.define<
         }
       }
 
-      const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
+      if (!ctx.reader) return yield* Effect.fail(new Error("ReadTool instruction resolution requires reader identity"))
+      const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID, ctx.reader)
       const sample = yield* readSample(filepath, Number(stat.size), SAMPLE_BYTES)
 
       const mime = sniffAttachmentMime(sample, FSUtil.mimeType(filepath))
