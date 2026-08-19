@@ -47,7 +47,8 @@ already-loaded config until then.
 | Global commands               | `~/.config/opencode/command(s)/<name>.md`                                                                                 |
 | Project skills                | `.opencode/skill(s)/<name>/SKILL.md`                                                                                      |
 | Global skills                 | `~/.config/opencode/skill(s)/<name>/SKILL.md`                                                                             |
-| External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                                    |
+| Project external skills       | `.claude/skills/<name>/SKILL.md`, `.agents/skills/<name>/SKILL.md` (opencode walks up from the cwd to the worktree root) |
+| Global external skills        | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                                   |
 
 Configs from each scope are deep-merged. Project overrides global. Unknown
 top-level keys in `opencode.json` are rejected with `ConfigInvalidError`.
@@ -187,7 +188,8 @@ description: One sentence covering what this skill does AND when to trigger it. 
 
 Register skills from non-default locations via `skills.paths` (scanned
 recursively for `**/SKILL.md`) and `skills.urls` (each URL serves a list of
-skills).
+skills). Project and global `.claude/skills` and `.agents/skills` directories
+are discovered automatically and do not need entries in `skills.paths`.
 
 ## References
 
@@ -434,9 +436,10 @@ When a user's config is broken and opencode won't start, these env vars help:
   inject inline JSON as a final local-scope merge.
 - `OPENCODE_DISABLE_DEFAULT_PLUGINS=1`: skip default plugins.
 - `OPENCODE_PURE=1`: skip external plugins entirely.
-- `OPENCODE_DISABLE_EXTERNAL_SKILLS=1`,
-  `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1`: skip the external skill scans under
-  `~/.claude/` and `~/.agents/`.
+- `OPENCODE_DISABLE_EXTERNAL_SKILLS=1`: skip all project and global skill scans
+  under `.claude/` and `.agents/`.
+- `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1`: skip project and global
+  `.claude/skills/` scans while keeping `.agents/skills/` enabled.
 
 ## When proposing edits
 
