@@ -2026,7 +2026,8 @@ export function sort<T extends { id: string }>(models: T[]) {
 }
 
 export function parseModel(model: string) {
-  const [providerID, ...rest] = model.split("/")
+  const match = /^(https?:\/\/[^/]+)\/(.+)$/i.exec(model)
+  const [providerID, ...rest] = match ? [match[1], match[2]] : model.split("/")
   return {
     providerID: ProviderV2.ID.make(providerID),
     modelID: ModelV2.ID.make(rest.join("/")),
