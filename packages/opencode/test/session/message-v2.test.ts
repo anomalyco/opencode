@@ -1794,7 +1794,7 @@ describe("session.message-v2 request-only partition", () => {
   })
 
   test("keeps every provider message expanded from a request-only source in the suffix", async () => {
-    const assistantID = "m-tail-tool"
+    const assistantID = "m-tail-split"
     const input: SessionV1.WithParts[] = [
       {
         info: userInfo("m-durable"),
@@ -1803,21 +1803,9 @@ describe("session.message-v2 request-only partition", () => {
       {
         info: assistantInfo(assistantID, "m-durable"),
         parts: [
-          { ...basePart(assistantID, "text"), type: "text", text: "request-only answer" },
-          {
-            ...basePart(assistantID, "tool"),
-            type: "tool",
-            callID: "call-request-only",
-            tool: "probe",
-            state: {
-              status: "completed",
-              input: { value: 1 },
-              output: "request-only output",
-              title: "Probe",
-              metadata: {},
-              time: { start: 0, end: 1 },
-            },
-          },
+          { ...basePart(assistantID, "first"), type: "text", text: "request-only first" },
+          { ...basePart(assistantID, "step"), type: "step-start" },
+          { ...basePart(assistantID, "second"), type: "text", text: "request-only second" },
         ] as SessionV1.Part[],
       },
     ]
@@ -1826,9 +1814,60 @@ describe("session.message-v2 request-only partition", () => {
       MessageV2.toModelMessagesSplitEffect(input, model, { requestOnlyTailCount: 1 }),
     )
     expect(output.messages).toEqual([{ role: "user", content: [{ type: "text", text: "durable" }] }])
-    expect(output.tail.map((message) => message.role)).toEqual(["assistant", "tool"])
-    expect(JSON.stringify(output.tail)).toContain("request-only answer")
-    expect(JSON.stringify(output.tail)).toContain("request-only output")
+    expect(output.tail.map((message) => message.role)).toEqual(["assistant", "assistant"])
+    expect(JSON.stringify(output.tail)).toContain("request-only first")
+    expect(JSON.stringify(output.tail)).toContain("request-only second")
+  })
+
+  test("keeps structured request-only content in the normal AI SDK conversion path", async () => {
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("m-durable"),
+        parts: [{ ...basePart("m-durable", "durable"), type: "text", text: "durable" }] as SessionV1.Part[],
+      },
+      {
+        info: userInfo("m-tail-file"),
+        parts: [
+          {
+            ...basePart("m-tail-file", "file"),
+            type: "file",
+            mime: "image/png",
+            filename: "image.png",
+            url: "https://example.com/image.png",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const bulk = await MessageV2.toModelMessages(input, model)
+    const output = await Effect.runPromise(
+      MessageV2.toModelMessagesSplitEffect(input, model, { requestOnlyTailCount: 1 }),
+    )
+
+    expect(output.messages).toEqual(bulk)
+    expect(output.tail).toEqual([])
+  })
+
+  test("keeps empty request-only text in the normal AI SDK conversion path", async () => {
+    const assistantID = "m-tail-empty"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("m-durable"),
+        parts: [{ ...basePart("m-durable", "durable"), type: "text", text: "durable" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, "m-durable"),
+        parts: [{ ...basePart(assistantID, "empty"), type: "text", text: "" }] as SessionV1.Part[],
+      },
+    ]
+
+    const bulk = await MessageV2.toModelMessages(input, model)
+    const output = await Effect.runPromise(
+      MessageV2.toModelMessagesSplitEffect(input, model, { requestOnlyTailCount: 1 }),
+    )
+
+    expect(output.messages).toEqual(bulk)
+    expect(output.tail).toEqual([])
   })
 })
 

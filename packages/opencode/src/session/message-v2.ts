@@ -447,9 +447,22 @@ export const toModelMessagesSplitEffect = Effect.fnUntraced(function* (
     return { messages: yield* convert(filtered), tail: [] }
   }
 
+  // The AI SDK lowers ModelMessage into a provider prompt before middleware runs. The suffix joins
+  // inside that middleware, so only text (plus the step boundary that converts into text messages)
+  // is already in the same shape on both sides of that lowering. Keep richer plugin appends in the
+  // main array rather than risk changing files, tool results, or other structured content in flight.
+  const tail = filtered.slice(split)
+  if (
+    !tail.every((message) =>
+      message.parts.every((part) => part.type === "step-start" || (part.type === "text" && part.text !== "")),
+    )
+  ) {
+    return { messages: yield* convert(filtered), tail: [] }
+  }
+
   return {
     messages: yield* convert(filtered.slice(0, split)),
-    tail: yield* convert(filtered.slice(split)),
+    tail: yield* convert(tail),
   }
 })
 
