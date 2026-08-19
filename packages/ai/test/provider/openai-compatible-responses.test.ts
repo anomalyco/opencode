@@ -118,7 +118,7 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
-  it.effect("preserves standard refusal content in the Open Responses namespace", () =>
+  it.effect("preserves standard refusal content as ordinary assistant text", () =>
     Effect.gen(function* () {
       const model = configure({
         apiKey: "test-key",
@@ -156,43 +156,11 @@ describe("Open Responses-compatible route", () => {
         ),
       )
 
-      expect(response.message.content).toEqual([
-        {
-          type: "text",
-          text: "I can't help with that.",
-          providerMetadata: { openresponses: { refusal: true } },
-        },
-      ])
+      expect(response.message.content).toEqual([{ type: "text", text: "I can't help with that." }])
 
       const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(prepared.body.input).toEqual([
-        { role: "assistant", content: [{ type: "refusal", refusal: "I can't help with that." }] },
-      ])
-    }),
-  )
-
-  it.effect("falls back to output text for malformed refusal replay metadata", () =>
-    Effect.gen(function* () {
-      const model = configure({
-        apiKey: "test-key",
-        baseURL: "https://responses.example.test/v1",
-        provider: "example",
-      }).model("example-model")
-      const prepared = yield* compileRequest(
-        LLM.request({
-          model,
-          messages: [
-            Message.assistant({
-              type: "text",
-              text: "Keep this visible.",
-              providerMetadata: { openresponses: { refusal: true, phase: "not-a-phase" } },
-            }),
-          ],
-        }),
-      )
-
-      expect(prepared.body.input).toEqual([
-        { role: "assistant", content: [{ type: "output_text", text: "Keep this visible." }] },
+        { role: "assistant", content: [{ type: "output_text", text: "I can't help with that." }] },
       ])
     }),
   )

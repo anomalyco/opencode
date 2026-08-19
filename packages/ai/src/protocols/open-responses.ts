@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import type { Content } from "@opencode-ai/schema/tool"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
@@ -53,20 +53,9 @@ const OpenResponsesOutputText = Schema.Struct({
   type: Schema.tag("output_text"),
   text: Schema.String,
 })
-const OpenResponsesRefusal = Schema.Struct({
-  type: Schema.tag("refusal"),
-  refusal: Schema.String,
-})
-export const OutputContent = Schema.Union([OpenResponsesOutputText, OpenResponsesRefusal])
-type OutputContent = Schema.Schema.Type<typeof OutputContent>
 
 export const MessagePhase = Schema.Literals(["commentary", "final_answer"])
 type MessagePhase = Schema.Schema.Type<typeof MessagePhase>
-const ReplayTextMetadata = Schema.Struct({
-  refusal: Schema.optionalKey(Schema.Literal(true)),
-  phase: Schema.optionalKey(Schema.NullOr(MessagePhase)),
-})
-const decodeReplayTextMetadata = Schema.decodeUnknownOption(ReplayTextMetadata)
 
 const OpenResponsesReasoningSummaryText = Schema.Struct({
   type: Schema.tag("summary_text"),
@@ -105,7 +94,7 @@ export const InputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenResponsesInputContent) }),
   Schema.Struct({
     role: Schema.tag("assistant"),
-    content: Schema.Array(OutputContent),
+    content: Schema.Array(OpenResponsesOutputText),
     phase: Schema.optionalKey(MessagePhase),
   }),
   OpenResponsesReasoningItem,
@@ -127,7 +116,7 @@ type LoweredInputItem =
   | OpenResponsesInputItem
   | {
       readonly role: "assistant"
-      readonly content: ReadonlyArray<OutputContent>
+      readonly content: ReadonlyArray<{ readonly type: "output_text"; readonly text: string }>
       readonly phase?: MessagePhase | null
     }
 
@@ -479,7 +468,8 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         if (content.length === 0) return
         const groups = content.reduce<Array<{ phase: MessagePhase | null | undefined; parts: TextPart[] }>>(
           (groups, part) => {
-            const phase = messagePhase(replayTextMetadata(part, providerMetadataKey)?.phase, extension)
+            const metadata = part.providerMetadata?.[providerMetadataKey]
+            const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase, extension) : undefined
             const group = groups.at(-1)
             if (group && group.phase === phase) group.parts.push(part)
             else groups.push({ phase, parts: [part] })
@@ -490,7 +480,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         input.push(
           ...groups.map((group) => ({
             role: "assistant" as const,
-            content: group.parts.map((part) => lowerAssistantContent(part, providerMetadataKey)),
+            content: group.parts.map((part) => ({ type: "output_text" as const, text: part.text })),
             ...(group.phase === undefined ? {} : { phase: group.phase }),
           })),
         )
@@ -578,14 +568,6 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
       )
     : input
 })
-
-const replayTextMetadata = (part: TextPart, providerMetadataKey: string) =>
-  Option.getOrUndefined(decodeReplayTextMetadata(part.providerMetadata?.[providerMetadataKey]))
-
-const lowerAssistantContent = (part: TextPart, providerMetadataKey: string): OutputContent =>
-  replayTextMetadata(part, providerMetadataKey)?.refusal === true
-    ? { type: "refusal", refusal: part.text }
-    : { type: "output_text", text: part.text }
 
 const lowerOptions = (request: LLMRequest) => {
   const options = OpenResponsesOptions.resolve(request)
@@ -711,18 +693,17 @@ const onOutputTextDone = (state: ParserState, event: Event, id: string): StepRes
 
 const refusalID = (event: Event) => `refusal:${event.item_id}:${event.content_index}`
 
-const refusalMetadata = (
+const messageMetadata = (
   state: ParserState,
   itemID: string,
   phase: MessagePhase | null | undefined = state.messagePhases[itemID],
-) =>
-  providerMetadata(state, { refusal: true, ...(phase === undefined ? {} : { phase }) })
+) => (phase === undefined ? undefined : providerMetadata(state, { phase }))
 
 const onRefusalDelta = (state: ParserState, event: Event): StepResult => {
   if (!event.item_id || !event.delta) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   const id = refusalID(event)
-  const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, refusalMetadata(state, event.item_id))
+  const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, messageMetadata(state, event.item_id))
   return [{ ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) }, events]
 }
 
@@ -730,7 +711,7 @@ const onRefusalDone = (state: ParserState, event: Event): StepResult => {
   if (!event.item_id) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   const id = refusalID(event)
-  const metadata = refusalMetadata(state, event.item_id)
+  const metadata = messageMetadata(state, event.item_id)
   const started =
     state.lifecycle.text.has(id) || event.refusal === undefined
       ? state.lifecycle
@@ -949,7 +930,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     const lifecycle = Array.from(state.lifecycle.text)
       .filter((id) => id.startsWith(`refusal:${itemID}:`))
       .reduce(
-        (lifecycle, id) => Lifecycle.textEnd(lifecycle, events, id, refusalMetadata(state, itemID, phase)),
+        (lifecycle, id) => Lifecycle.textEnd(lifecycle, events, id, messageMetadata(state, itemID, phase)),
         Lifecycle.textEnd(state.lifecycle, events, itemID, metadata),
       )
     const messageItems = new Set(state.messageItems)

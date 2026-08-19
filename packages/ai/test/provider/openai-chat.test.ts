@@ -664,7 +664,7 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("preserves and replays streamed refusals", () =>
+  it.effect("preserves streamed refusals as ordinary assistant text", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
@@ -680,32 +680,10 @@ describe("OpenAI Chat route", () => {
 
       expect(response.text).toBe("I can't help with that.")
       expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
-      expect(response.message.content).toEqual([
-        {
-          type: "text",
-          text: "I can't help with that.",
-          providerMetadata: { openai: { refusal: true } },
-        },
-      ])
+      expect(response.message.content).toEqual([{ type: "text", text: "I can't help with that." }])
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
-      expect(replay.body.messages).toEqual([
-        { role: "assistant", content: null, refusal: "I can't help with that." },
-      ])
-
-      const malformed = yield* compileRequest(
-        LLM.request({
-          model,
-          messages: [
-            Message.assistant({
-              type: "text",
-              text: "Keep this visible.",
-              providerMetadata: { openai: { refusal: "invalid" } },
-            }),
-          ],
-        }),
-      )
-      expect(malformed.body.messages).toEqual([{ role: "assistant", content: "Keep this visible." }])
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "I can't help with that." }])
     }),
   )
 
@@ -728,13 +706,12 @@ describe("OpenAI Chat route", () => {
         {
           type: "text",
           text: "I can't help with that.",
-          providerMetadata: { openai: { refusal: true } },
         },
       ])
     }),
   )
 
-  it.effect("uses fresh block ids when content and refusal deltas alternate", () =>
+  it.effect("joins content and refusal deltas into ordinary assistant text", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
@@ -749,16 +726,9 @@ describe("OpenAI Chat route", () => {
         ),
       )
 
-      expect(response.events.filter(LLMEvent.is.textStart).map((event) => event.id)).toEqual([
-        "refusal-0",
-        "text-1",
-        "refusal-2",
-      ])
-      expect(response.events.filter(LLMEvent.is.textEnd).map((event) => event.id)).toEqual([
-        "refusal-0",
-        "text-1",
-        "refusal-2",
-      ])
+      expect(response.text).toBe("No. Alternative. Still no.")
+      expect(response.events.filter(LLMEvent.is.textStart).map((event) => event.id)).toEqual(["text-0"])
+      expect(response.events.filter(LLMEvent.is.textEnd).map((event) => event.id)).toEqual(["text-0"])
     }),
   )
 

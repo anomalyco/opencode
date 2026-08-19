@@ -29,8 +29,6 @@ import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "openai-chat"
 const RESERVED_REASONING_FIELDS = new Set(["role", "content", "refusal", "tool_calls"])
-const RefusalMetadata = Schema.Struct({ refusal: Schema.Literal(true) })
-const isRefusalMetadata = Schema.is(RefusalMetadata)
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/chat/completions"
 
@@ -99,7 +97,6 @@ const OpenAIChatMessage = Schema.Union([
     Schema.Struct({
       role: Schema.Literal("assistant"),
       content: Schema.NullOr(Schema.String),
-      refusal: optionalNull(Schema.String),
       tool_calls: optionalArray(OpenAIChatAssistantToolCall),
       reasoning_content: Schema.optional(Schema.String),
       reasoning: Schema.optional(Schema.String),
@@ -232,12 +229,6 @@ interface PendingToolDelta {
   readonly input: string
 }
 
-type TextChannel = "content" | "refusal"
-interface ActiveText {
-  readonly kind: TextChannel
-  readonly id: string
-}
-
 export interface ParserState {
   readonly tools: ToolStream.State<number>
   readonly pendingTools: Partial<Record<number, PendingToolDelta>>
@@ -251,8 +242,6 @@ export interface ParserState {
   readonly reasoningEmitted: boolean
   readonly latestToolIndex?: number
   readonly nextToolIndex: number
-  readonly activeText?: ActiveText
-  readonly nextTextIndex: number
 }
 
 // =============================================================================
@@ -348,15 +337,13 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   options: LoweringOptions = {},
 ) {
   const content: TextPart[] = []
-  const refusals: TextPart[] = []
   const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
     if (part.type === "text") {
-      if (isRefusalMetadata(part.providerMetadata?.openai)) refusals.push(part)
-      else content.push(part)
+      content.push(part)
       continue
     }
     if (part.type === "reasoning") {
@@ -389,13 +376,7 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   const cacheControl = options.cacheControl?.(cached && "cache" in cached ? cached.cache : undefined)
   const result = {
     role: "assistant" as const,
-    content:
-      content.length > 0
-        ? content.map((part) => part.text).join("")
-        : toolCalls.length > 0 || refusals.length > 0
-          ? null
-          : "",
-    ...(refusals.length > 0 ? { refusal: refusals.map((part) => part.text).join("") } : {}),
+    content: content.length > 0 ? content.map((part) => part.text).join("") : toolCalls.length > 0 ? null : "",
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
     ...(details !== undefined ? { reasoning_details: details } : {}),
     ...(cacheControl !== undefined ? { cache_control: cacheControl } : {}),
@@ -725,8 +706,6 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     let nextToolIndex = state.nextToolIndex
 
     let lifecycle = state.lifecycle
-    let activeText = state.activeText
-    let nextTextIndex = state.nextTextIndex
 
     const reasoning = reasoningDelta(delta, state.reasoningField)
     const hasLateContent =
@@ -763,13 +742,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         "reasoning-0",
         reasoningMetadata(reasoningField, reasoningDetailsObserved ? state.reasoningDetails : undefined),
       )
-      if (activeText?.kind !== "content") {
-        // Chat exposes independent scalar channels without part IDs. Segment field
-        // switches so provider-neutral consumers receive balanced, unique blocks.
-        if (activeText) lifecycle = Lifecycle.textEnd(lifecycle, events, activeText.id)
-        activeText = { kind: "content", id: `text-${nextTextIndex++}` }
-      }
-      lifecycle = Lifecycle.textDelta(lifecycle, events, activeText.id, delta.content)
+      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
     }
 
     if (delta?.refusal) {
@@ -779,12 +752,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         "reasoning-0",
         reasoningMetadata(reasoningField, reasoningDetailsObserved ? state.reasoningDetails : undefined),
       )
-      if (activeText?.kind !== "refusal") {
-        if (activeText) lifecycle = Lifecycle.textEnd(lifecycle, events, activeText.id)
-        activeText = { kind: "refusal", id: `refusal-${nextTextIndex++}` }
-        lifecycle = Lifecycle.textStart(lifecycle, events, activeText.id, { openai: { refusal: true } })
-      }
-      lifecycle = Lifecycle.textDelta(lifecycle, events, activeText.id, delta.refusal)
+      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.refusal)
     }
 
     // Compatible providers may omit indexes. Prefer durable identity, then use
@@ -850,8 +818,6 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         reasoningEmitted,
         latestToolIndex,
         nextToolIndex,
-        activeText,
-        nextTextIndex,
       },
       events,
     ] as const
@@ -913,7 +879,6 @@ export const protocol = Protocol.make({
       reasoningDetailsObserved: false,
       reasoningEmitted: false,
       nextToolIndex: 0,
-      nextTextIndex: 0,
     }),
     step,
     onHalt: finishEvents,
