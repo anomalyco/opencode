@@ -112,6 +112,44 @@ This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
 
+### Local Ollama and API-key providers
+
+OpenCode supports API-key providers out of the box and now includes an opt-in local **Ollama** provider. When enabled, OpenCode discovers the models available from your local Ollama server and only marks models that advertise Ollama's `tools` capability as tool-call capable. This prevents unsupported local models from being selected for coding-agent tool loops.
+
+Add this to `~/.config/opencode/opencode.json` (or your project `opencode.json`), then restart OpenCode:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama": {
+      "name": "Ollama (local)",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:11434/v1"
+      }
+    }
+  }
+}
+```
+
+No API key is required for a standard local Ollama installation. For another OpenAI-compatible endpoint, use **Settings → Providers → Custom provider** and supply its base URL, model IDs, and API key when required.
+
+#### Reliable local tool use
+
+Ollama tool calling requires a model that supports tools. Use a current tool-capable model and verify its advertised capabilities with `ollama show <model>`. During an agent run OpenCode exposes each read, search, shell, edit, and MCP invocation in the session timeline; edit tools include the file diff so every changed file can be reviewed.
+
+#### Ollama performance checklist
+
+OpenCode sends inference to Ollama; it cannot force GPU or RAM allocation from the client. Optimize the **Ollama server** instead:
+
+1. Run `ollama ps` while a model is active. `100% GPU` confirms the whole model is in VRAM; a CPU/GPU split means the model or context does not fit.
+2. Choose a model quantization and context size that fit your VRAM. Larger context windows consume more memory.
+3. Keep frequently used models warm with `OLLAMA_KEEP_ALIVE` (or Ollama's `keep_alive` API option), and do not load more parallel models than your VRAM can hold.
+4. Update GPU drivers and Ollama, then use `OLLAMA_DEBUG=1` to diagnose GPU discovery issues. Flash Attention (`OLLAMA_FLASH_ATTENTION=1`) and KV-cache quantization may lower memory use on supported hardware.
+
+See the official [Ollama tool-calling guide](https://docs.ollama.com/capabilities/tool-calling), [context-length guide](https://docs.ollama.com/context-length), and [FAQ](https://docs.ollama.com/faq) for platform-specific setup details.
+
 ### Documentation
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).

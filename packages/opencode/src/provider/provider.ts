@@ -98,6 +98,63 @@ function googleVertexAnthropicBaseURL(project: string | undefined, location: str
   return `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`
 }
 
+function ollamaBaseURL(options: Record<string, unknown>) {
+  const configured = typeof options.baseURL === "string" ? options.baseURL : "http://127.0.0.1:11434/v1"
+  return new URL(configured).origin
+}
+
+type OllamaModel = {
+  name?: unknown
+  model?: unknown
+}
+
+type OllamaModelDetails = {
+  capabilities?: unknown
+}
+
+function ollamaModels(input: OllamaModel[], details: Record<string, OllamaModelDetails>): Record<string, Model> {
+  return Object.fromEntries(
+    input
+      .map((item) =>
+        typeof item.name === "string" ? item.name : typeof item.model === "string" ? item.model : undefined,
+      )
+      .filter((id): id is string => !!id)
+      .map((id) => {
+        const capabilities = details[id]?.capabilities
+        const hasCapabilities = Array.isArray(capabilities) && capabilities.every((item) => typeof item === "string")
+        const canComplete = !hasCapabilities || capabilities.includes("completion")
+        const canCallTools = hasCapabilities && capabilities.includes("tools")
+        return [
+          id,
+          {
+            id: ModelV2.ID.make(id),
+            providerID: ProviderV2.ID.make("ollama"),
+            name: id,
+            family: "ollama",
+            api: { id, url: "", npm: "@ai-sdk/openai-compatible" },
+            status: "active",
+            headers: {},
+            options: {},
+            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+            limit: { context: 0, output: 0 },
+            capabilities: {
+              temperature: true,
+              reasoning: false,
+              attachment: false,
+              toolcall: canCallTools,
+              input: { text: canComplete, audio: false, image: false, video: false, pdf: false },
+              output: { text: canComplete, audio: false, image: false, video: false, pdf: false },
+              interleaved: false,
+            },
+            release_date: "",
+            variants: {},
+          } satisfies Model,
+        ]
+      })
+      .filter((entry) => entry[1].capabilities.input.text),
+  )
+}
+
 type BundledSDK = {
   languageModel(modelId: string): LanguageModelV3
   chat?: (modelId: string) => LanguageModelV3
@@ -174,6 +231,57 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           headers: {
             "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
           },
+        },
+      }),
+    ollama: (input) =>
+      Effect.succeed({
+        // Ollama is deliberately opt-in: a configured provider is the explicit signal that
+        // OpenCode may contact a local service during provider initialization.
+        autoload: true,
+        options: {
+          baseURL: typeof input.options.baseURL === "string" ? input.options.baseURL : "http://127.0.0.1:11434/v1",
+          apiKey: typeof input.options.apiKey === "string" ? input.options.apiKey : "ollama",
+          headerTimeout: input.options.headerTimeout ?? 10_000,
+        },
+        async discoverModels() {
+          try {
+            const tags = await fetch(`${ollamaBaseURL(input.options)}/api/tags`, {
+              signal: AbortSignal.timeout(2_000),
+            })
+            if (!tags.ok) return {}
+            const payload: { models?: OllamaModel[] } = await tags.json()
+            const models = Array.isArray(payload.models) ? payload.models : []
+            const details = Object.fromEntries(
+              (
+                await Promise.all(
+                  models.map(async (model) => {
+                    const id =
+                      typeof model.name === "string"
+                        ? model.name
+                        : typeof model.model === "string"
+                          ? model.model
+                          : undefined
+                    if (!id) return
+                    try {
+                      const response = await fetch(`${ollamaBaseURL(input.options)}/api/show`, {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ name: id }),
+                        signal: AbortSignal.timeout(2_000),
+                      })
+                      if (!response.ok) return [id, {}] as const
+                      return [id, (await response.json()) as OllamaModelDetails] as const
+                    } catch {
+                      return [id, {}] as const
+                    }
+                  }),
+                )
+              ).filter((entry): entry is readonly [string, OllamaModelDetails] => entry !== undefined),
+            )
+            return ollamaModels(models, details)
+          } catch {
+            return {}
+          }
         },
       }),
     opencode: Effect.fnUntraced(function* (input: Info) {
@@ -1624,17 +1732,19 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+        for (const [id, discoverModels] of Object.entries(discoveryLoaders)) {
+          const providerID = ProviderV2.ID.make(id)
+          const provider = providers[providerID]
+          if (!provider || !isProviderAllowed(providerID)) continue
           yield* Effect.promise(async () => {
             try {
-              const discovered = await discoveryLoaders[gitlab]()
+              const discovered = await discoverModels()
               for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
+                if (!provider.models[modelID]) {
+                  provider.models[modelID] = model
                 }
               }
-            } catch (e) {}
+            } catch {}
           })
         }
 
