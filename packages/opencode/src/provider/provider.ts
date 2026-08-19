@@ -18,7 +18,7 @@ import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, Context, Schema, Types } from "effect"
+import { Effect, Layer, Context, Option, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
@@ -31,56 +31,9 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { StreamLiveness } from "./stream-liveness"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
-
-function wrapSSE(res: Response, ms: number, ctl: AbortController) {
-  if (typeof ms !== "number" || ms <= 0) return res
-  if (!res.body) return res
-  if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
-
-  const reader = res.body.getReader()
-  const body = new ReadableStream<Uint8Array>({
-    async pull(ctrl) {
-      const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
-        const id = setTimeout(() => {
-          const err = new ProviderError.ResponseStreamError("SSE read timed out")
-          ctl.abort(err)
-          void reader.cancel(err)
-          reject(err)
-        }, ms)
-
-        reader.read().then(
-          (part) => {
-            clearTimeout(id)
-            resolve(part)
-          },
-          (err) => {
-            clearTimeout(id)
-            reject(err)
-          },
-        )
-      })
-
-      if (part.done) {
-        ctrl.close()
-        return
-      }
-
-      ctrl.enqueue(part.value)
-    },
-    async cancel(reason) {
-      ctl.abort(reason)
-      await reader.cancel(reason)
-    },
-  })
-
-  return new Response(body, {
-    headers: new Headers(res.headers),
-    status: res.status,
-    statusText: res.statusText,
-  })
-}
 
 function timeoutController(ms: number) {
   const ctl = new AbortController()
@@ -89,6 +42,14 @@ function timeoutController(ms: number) {
     signal: ctl.signal,
     clear: () => clearTimeout(id),
   }
+}
+
+const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+
+function streamsResponse(body: BodyInit | null | undefined) {
+  if (typeof body !== "string") return false
+  const value = Option.getOrUndefined(decodeJson(body))
+  return isRecord(value) && value.stream === true
 }
 
 function googleVertexAnthropicBaseURL(project: string | undefined, location: string | undefined) {
@@ -1182,6 +1143,7 @@ interface State {
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
+  streamLiveness: StreamLiveness.Detector
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
@@ -1384,6 +1346,7 @@ const layer = Layer.effect(
           [providerID: string]: CustomVarsLoader
         } = {}
         const sdk = new Map<string, BundledSDK>()
+        const streamLiveness = StreamLiveness.create()
         const discoveryLoaders: {
           [providerID: string]: CustomDiscoverModels
         } = {}
@@ -1695,6 +1658,7 @@ const layer = Layer.effect(
           sdk,
           modelLoaders,
           varsLoaders,
+          streamLiveness,
         }
       }),
     )
@@ -1766,7 +1730,13 @@ const layer = Layer.effect(
         if (existing) return existing
 
         const customFetch = options["fetch"]
-        const chunkTimeout = options["chunkTimeout"]
+        const configuredChunkTimeout = options["chunkTimeout"]
+        const fixedChunkTimeout =
+          typeof configuredChunkTimeout === "number" && Number.isFinite(configuredChunkTimeout)
+            ? configuredChunkTimeout
+            : undefined
+        const streamTimeoutDisabled =
+          configuredChunkTimeout === false || (fixedChunkTimeout !== undefined && fixedChunkTimeout <= 0)
         const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
@@ -1774,13 +1744,13 @@ const layer = Layer.effect(
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
-          const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+          const streamAbortController = streamTimeoutDisabled ? undefined : new AbortController()
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
           const signals: AbortSignal[] = []
 
           if (opts.signal) signals.push(opts.signal)
-          if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
+          if (streamAbortController) signals.push(streamAbortController.signal)
           if (headerTimeoutCtl) signals.push(headerTimeoutCtl.signal)
           if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
             signals.push(AbortSignal.timeout(options["timeout"]))
@@ -1794,8 +1764,14 @@ const layer = Layer.effect(
             timeout: false,
           }).finally(() => headerTimeoutCtl?.clear())
 
-          if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          if (!streamAbortController) return res
+          return s.streamLiveness.wrap({
+            response: res,
+            bucket: `${model.providerID}:${model.api.npm}`,
+            controller: streamAbortController,
+            timeout: fixedChunkTimeout,
+            stream: streamsResponse(opts.body),
+          })
         }
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
