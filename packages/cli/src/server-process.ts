@@ -120,13 +120,13 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               onListen: (address, shutdown) =>
                 Effect.gen(function* () {
                   if (!config.password) yield* ServiceConfig.password(password)
-                  return yield* ServiceRegistration.register(
+                  return yield* ServiceRegistration.register({
                     address,
                     password,
-                    instanceID,
-                    serviceOptions.file,
+                    id: instanceID,
+                    file: serviceOptions.file,
                     shutdown,
-                  )
+                  })
                 }),
             },
         transform,

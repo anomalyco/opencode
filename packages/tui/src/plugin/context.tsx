@@ -585,17 +585,24 @@ async function resolvePlugin(
   if (!entrypoint) return { status: "unsupported" as const }
   // Content remains stable across the several mtimes one save may expose to
   // filesystem watchers, while the generation keeps reverted modules fresh.
-  const generation = local ? await sourceGeneration(entrypoint) : undefined
-  const version = generation === undefined ? entrypoint : freshSpecifier(entrypoint, generation)
-  if (previous && previous.version === version && sameOptions(previous.options, options))
-    return { status: "unchanged" as const, plugin: previous.plugin, version }
-  const mod: { readonly default?: unknown } = await import(version)
-  // In-place saves can change the file between hashing and import. Resolve
-  // again so setup always runs under the generation of the imported bytes.
-  if (generation !== undefined && generation !== (await sourceGeneration(entrypoint)))
-    return resolvePlugin(spec, local, options, previous, packages, install, sourceGeneration)
-  if (!isPlugin(mod.default)) throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
-  return { status: "loaded" as const, plugin: mod.default, version }
+  let generation = local ? await sourceGeneration(entrypoint) : undefined
+  while (true) {
+    const version = generation === undefined ? entrypoint : freshSpecifier(entrypoint, generation)
+    if (previous && previous.version === version && sameOptions(previous.options, options))
+      return { status: "unchanged" as const, plugin: previous.plugin, version }
+    const mod: { readonly default?: unknown } = await import(version)
+    if (generation !== undefined) {
+      const observed = await sourceGeneration(entrypoint)
+      // In-place saves can change the file between hashing and import. Retry
+      // so setup always runs under the generation of the imported bytes.
+      if (generation !== observed) {
+        generation = observed
+        continue
+      }
+    }
+    if (!isPlugin(mod.default)) throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
+    return { status: "loaded" as const, plugin: mod.default, version }
+  }
 }
 
 function toRegistration(item: Desired): Registration {

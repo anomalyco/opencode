@@ -8,9 +8,8 @@ import { pathToFileURL } from "node:url"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
-function lifecycleSource(marker: string, id: string, version: string) {
+function lifecyclePluginSource(marker: string, id: string, version: string) {
   return `
-import { appendFile } from "node:fs/promises"
 export default {
   id: ${JSON.stringify(id)},
   setup: async () => {
@@ -18,6 +17,13 @@ export default {
     return () => appendFile(${JSON.stringify(marker)}, "${version}:cleanup\\n")
   },
 }
+`
+}
+
+function lifecycleSource(marker: string, id: string, version: string) {
+  return `
+import { appendFile } from "node:fs/promises"
+${lifecyclePluginSource(marker, id, version)}
 `
 }
 
@@ -33,13 +39,7 @@ while (true) {
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
 }
-export default {
-  id: ${JSON.stringify(id)},
-  setup: async () => {
-    await appendFile(${JSON.stringify(marker)}, "${version}:setup\\n")
-    return () => appendFile(${JSON.stringify(marker)}, "${version}:cleanup\\n")
-  },
-}
+${lifecyclePluginSource(marker, id, version)}
 `
 }
 
@@ -211,16 +211,20 @@ test("does not activate a local plugin whose source changes during import", asyn
   expect(await until(read, (value) => value === "v1:setup\n")).toBe("v1:setup\n")
 
   await writeFile(source, gatedLifecycleSource(marker, ready, gate, "test.hot", "v2"))
-  expect(
-    await until(
-      () => readFile(ready, "utf8"),
-      (value) => value === "ready\n",
-    ),
-  ).toBe("ready\n")
-  await writeFile(source, lifecycleSource(marker, "test.hot", "v3"))
-  await writeFile(gate, "open")
+  try {
+    expect(
+      await until(
+        () => readFile(ready, "utf8"),
+        (value) => value === "ready\n",
+      ),
+    ).toBe("ready\n")
+    await writeFile(source, lifecycleSource(marker, "test.hot", "v3"))
+    await writeFile(gate, "open")
 
-  expect(await until(read, (value) => value?.includes("v3:setup") ?? false)).toBe("v1:setup\nv1:cleanup\nv3:setup\n")
+    expect(await until(read, (value) => value?.includes("v3:setup") ?? false)).toBe("v1:setup\nv1:cleanup\nv3:setup\n")
+  } finally {
+    await writeFile(gate, "open")
+  }
 
   process.emit("SIGHUP")
   await app.task

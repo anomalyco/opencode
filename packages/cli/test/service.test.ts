@@ -466,13 +466,13 @@ test("service registration replaces a stale owner with the bound address", async
   )
   try {
     const cleanup = await Effect.runPromise(
-      ServiceRegistration.register(
-        { _tag: "TcpAddress", hostname: "127.0.0.1", port: 4321 },
-        "secret",
-        "owner",
-        registration,
-        Effect.never,
-      ).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
+      ServiceRegistration.register({
+        address: { _tag: "TcpAddress", hostname: "127.0.0.1", port: 4321 },
+        password: "secret",
+        id: "owner",
+        file: registration,
+        shutdown: Effect.never,
+      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
     )
     expect(await Bun.file(registration).json()).toEqual({
       id: "owner",

@@ -2,26 +2,13 @@ import { expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { isolatedEnv } from "./fixture/environment"
 
 test("standalone server exits when its owner is killed", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-cli-standalone-"))
   const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "fixture/standalone-owner.ts")], {
     cwd: path.join(import.meta.dir, ".."),
-    env: {
-      ...process.env,
-      HOME: root,
-      OPENCODE_CONFIG_CONTENT: "{}",
-      OPENCODE_CONFIG_DIR: path.join(root, "config"),
-      OPENCODE_DB: path.join(root, "opencode.db"),
-      OPENCODE_DISABLE_FILEWATCHER: "true",
-      OPENCODE_DISABLE_MODELS_FETCH: "true",
-      OPENCODE_SERVER_USERNAME: "custom",
-      OPENCODE_TEST_HOME: root,
-      XDG_CACHE_HOME: path.join(root, "cache"),
-      XDG_CONFIG_HOME: path.join(root, "xdg-config"),
-      XDG_DATA_HOME: path.join(root, "data"),
-      XDG_STATE_HOME: path.join(root, "state"),
-    },
+    env: isolatedEnv(root, { OPENCODE_SERVER_USERNAME: "custom" }),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -45,6 +32,7 @@ test("standalone server exits when its owner is killed", async () => {
     expect(await waitForExit(pid)).toBe(true)
   } finally {
     owner.kill("SIGKILL")
+    await owner.exited
     if (running(pid)) process.kill(pid, "SIGKILL")
     await fs.rm(root, { recursive: true, force: true })
   }
