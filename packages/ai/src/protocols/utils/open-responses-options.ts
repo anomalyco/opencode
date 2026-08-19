@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { TextVerbosity, type LLMRequest } from "../../schema/index.js"
+import { isRecord } from "../../utils/record.js"
 
 export const ResponseIncludables = [
   "file_search_call.results",
@@ -15,6 +16,11 @@ export type ResponseIncludable = (typeof ResponseIncludables)[number]
 
 export const ServiceTiers = ["auto", "default", "flex", "priority"] as const
 export type ServiceTier = (typeof ServiceTiers)[number]
+
+export interface AllowedTools {
+  readonly toolNames: ReadonlyArray<string>
+  readonly mode: "auto" | "none" | "required"
+}
 
 const TEXT_VERBOSITY = new Set<string>(["low", "medium", "high"])
 const INCLUDABLES = new Set<string>(ResponseIncludables)
@@ -38,6 +44,9 @@ export interface Resolved {
   readonly include?: ReadonlyArray<ResponseIncludable>
   readonly textVerbosity?: Schema.Schema.Type<typeof TextVerbosity>
   readonly serviceTier?: ServiceTier
+  readonly allowedTools?: AllowedTools
+  readonly maxToolCalls?: number
+  readonly parallelToolCalls?: boolean
 }
 
 export const resolve = (request: LLMRequest): Resolved => {
@@ -46,6 +55,9 @@ export const resolve = (request: LLMRequest): Resolved => {
     ? input.include.filter((entry): entry is ResponseIncludable => INCLUDABLES.has(entry))
     : []
   const reasoningSummary = input?.reasoningSummary
+  const allowedTools = input?.allowedTools
+  const toolNames = isRecord(allowedTools) && Array.isArray(allowedTools.toolNames) ? allowedTools.toolNames : []
+  const allowedMode = isRecord(allowedTools) ? allowedTools.mode : undefined
   return {
     instructions: typeof input?.instructions === "string" ? input.instructions : undefined,
     store: typeof input?.store === "boolean" ? input.store : undefined,
@@ -57,6 +69,14 @@ export const resolve = (request: LLMRequest): Resolved => {
     include: include.length > 0 ? include : undefined,
     textVerbosity: isTextVerbosity(input?.textVerbosity) ? input.textVerbosity : undefined,
     serviceTier: isServiceTier(input?.serviceTier) ? input.serviceTier : undefined,
+    allowedTools:
+      toolNames.length > 0 &&
+      toolNames.every((name): name is string => typeof name === "string") &&
+      (allowedMode === undefined || allowedMode === "auto" || allowedMode === "none" || allowedMode === "required")
+        ? { toolNames, mode: allowedMode ?? "auto" }
+        : undefined,
+    maxToolCalls: typeof input?.maxToolCalls === "number" ? input.maxToolCalls : undefined,
+    parallelToolCalls: typeof input?.parallelToolCalls === "boolean" ? input.parallelToolCalls : undefined,
   }
 }
 

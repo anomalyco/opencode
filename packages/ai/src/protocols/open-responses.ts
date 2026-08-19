@@ -141,6 +141,11 @@ export const Tool = Schema.Struct({
 export const ToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
   Schema.Struct({ type: Schema.tag("function"), name: Schema.String }),
+  Schema.Struct({
+    type: Schema.tag("allowed_tools"),
+    mode: Schema.Literals(["auto", "none", "required"]),
+    tools: Schema.Array(Schema.Struct({ type: Schema.tag("function"), name: Schema.String })),
+  }),
 ])
 
 // Fields shared between the HTTP body and the WebSocket `response.create`
@@ -169,6 +174,8 @@ export const coreFields = {
     }),
   ),
   max_output_tokens: Schema.optional(Schema.Number),
+  max_tool_calls: Schema.optional(Schema.Int),
+  parallel_tool_calls: Schema.optional(Schema.Boolean),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
 }
@@ -577,6 +584,18 @@ const lowerOptions = (request: LLMRequest) => {
       : {}),
     ...(options.textVerbosity ? { text: { verbosity: options.textVerbosity } } : {}),
     ...(options.serviceTier ? { service_tier: options.serviceTier } : {}),
+    ...(options.maxToolCalls !== undefined ? { max_tool_calls: options.maxToolCalls } : {}),
+    ...(options.parallelToolCalls !== undefined ? { parallel_tool_calls: options.parallelToolCalls } : {}),
+  }
+}
+
+const allowedToolChoice = (request: LLMRequest) => {
+  const allowed = OpenResponsesOptions.resolve(request).allowedTools
+  if (!allowed) return undefined
+  return {
+    type: "allowed_tools" as const,
+    mode: allowed.mode,
+    tools: allowed.toolNames.map((name) => ({ type: "function" as const, name })),
   }
 }
 
@@ -599,7 +618,9 @@ export const fromRequestWithExtension = Effect.fn("OpenResponses.fromRequestWith
               ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
             ),
           ),
-    tool_choice: request.toolChoice ? yield* lowerToolChoice(extension.name, request.toolChoice) : undefined,
+    tool_choice:
+      allowedToolChoice(request) ??
+      (request.toolChoice ? yield* lowerToolChoice(extension.name, request.toolChoice) : undefined),
     stream: true as const,
     max_output_tokens: generation?.maxTokens,
     temperature: generation?.temperature,

@@ -246,11 +246,7 @@ describe("OpenAI Responses route", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
-          messages: [
-            Message.user("Before."),
-            Message.system("Operator update."),
-            Message.assistant("After."),
-          ],
+          messages: [Message.user("Before."), Message.system("Operator update."), Message.assistant("After.")],
         }),
       )
 
@@ -1278,11 +1274,19 @@ describe("OpenAI Responses route", () => {
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model("gpt-5.2"),
           prompt: "think",
           promptCacheKey: "session_123",
+          tools: [
+            ToolDefinition.make({ name: "read", description: "Read a file", inputSchema: { type: "object" } }),
+            ToolDefinition.make({ name: "grep", description: "Search files", inputSchema: { type: "object" } }),
+          ],
+          toolChoice: "none",
           providerOptions: {
             openai: {
               reasoningEffort: "high",
               reasoningSummary: "auto",
               include: ["reasoning.encrypted_content"],
+              allowedTools: { toolNames: ["read", "grep"], mode: "required" },
+              maxToolCalls: 4,
+              parallelToolCalls: false,
             },
           },
         }),
@@ -1293,6 +1297,16 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
       expect(prepared.body.reasoning).toEqual({ effort: "high", summary: "auto" })
       expect(prepared.body.text).toEqual({ verbosity: "low" })
+      expect(prepared.body.tool_choice).toEqual({
+        type: "allowed_tools",
+        mode: "required",
+        tools: [
+          { type: "function", name: "read" },
+          { type: "function", name: "grep" },
+        ],
+      })
+      expect(prepared.body.max_tool_calls).toBe(4)
+      expect(prepared.body.parallel_tool_calls).toBe(false)
     }),
   )
 
