@@ -1274,6 +1274,7 @@ describe("OpenAI Responses route", () => {
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model("gpt-5.2"),
           prompt: "think",
           promptCacheKey: "session_123",
+          generation: { presencePenalty: 0.25, frequencyPenalty: -0.25 },
           tools: [
             ToolDefinition.make({ name: "read", description: "Read a file", inputSchema: { type: "object" } }),
             ToolDefinition.make({ name: "grep", description: "Search files", inputSchema: { type: "object" } }),
@@ -1284,6 +1285,10 @@ describe("OpenAI Responses route", () => {
               reasoningEffort: "high",
               reasoningSummary: "auto",
               include: ["reasoning.encrypted_content"],
+              metadata: { environment: "test", tenant: "acme" },
+              safetyIdentifier: "user_123",
+              streamOptions: { includeObfuscation: false },
+              topLogprobs: 5,
               truncation: "disabled",
               allowedTools: { toolNames: ["read", "grep"], mode: "required" },
               maxToolCalls: 4,
@@ -1298,6 +1303,12 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
       expect(prepared.body.reasoning).toEqual({ effort: "high", summary: "auto" })
       expect(prepared.body.text).toEqual({ verbosity: "low" })
+      expect(prepared.body.metadata).toEqual({ environment: "test", tenant: "acme" })
+      expect(prepared.body.safety_identifier).toBe("user_123")
+      expect(prepared.body.stream_options).toEqual({ include_obfuscation: false })
+      expect(prepared.body.top_logprobs).toBe(5)
+      expect(prepared.body.presence_penalty).toBe(0.25)
+      expect(prepared.body.frequency_penalty).toBe(-0.25)
       expect(prepared.body.truncation).toBe("disabled")
       expect(prepared.body.tool_choice).toEqual({
         type: "allowed_tools",
