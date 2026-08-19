@@ -152,6 +152,21 @@ const layer = Layer.effect(
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* Effect.logInfo("cancel", { "session.id": sessionID })
       yield* state.cancel(sessionID)
+      // Input admitted while the aborted turn was running ("queued" messages)
+      // is persisted as user messages behind the last assistant one. Without a
+      // fresh loop those stay in history forever, never answered — restart the
+      // loop for them instead of dropping the queue on the floor.
+      const messages = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.catch(() => Effect.succeed([] as SessionV1.WithParts[])),
+      )
+      const { user: lastUser, assistant: lastAssistant } = MessageV2.latest(messages)
+      if (lastUser !== undefined && (lastAssistant === undefined || lastUser.id > lastAssistant.id)) {
+        yield* Effect.logInfo("cancel restarting loop for stranded queued input", {
+          "session.id": sessionID,
+        })
+        yield* loop({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
+      }
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
