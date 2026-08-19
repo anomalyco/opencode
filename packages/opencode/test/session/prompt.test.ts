@@ -2103,6 +2103,47 @@ noLLMServer.instance(
 // Missing file handling
 
 noLLMServer.instance(
+  "does not fail the prompt when an image attachment cannot be decoded (unsupported format)",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      // Minimal AVIF payload — valid enough to carry image/avif but not decodable by the photon resizer.
+      const avif = Buffer.from(
+        "AAAAABZmdHlwYXZpZm0wMDEAAAAAAG1pZjEA",
+        "base64",
+      ).toString("base64")
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "please review this image" },
+          {
+            type: "file",
+            mime: "image/avif",
+            url: `data:image/avif;base64,${avif}`,
+            filename: "screenshot.avif",
+          },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const notice = msg.parts.find(
+        (part) =>
+          part.type === "text" && part.synthetic && part.text.includes("could not be processed"),
+      )
+      expect(notice).toBeDefined()
+      expect(notice?.type === "text" && notice.text.includes("screenshot.avif")).toBe(true)
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
   "does not fail the prompt when a file part is missing",
   () =>
     Effect.gen(function* () {
