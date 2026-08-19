@@ -42,31 +42,47 @@ import { Agent } from "../../src/agent/agent"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Messaging } from "../../src/messaging"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { S2SCapsule, decodeCapsule } from "../../src/s2s/capsule"
 import { S2SStore } from "../../src/s2s/store"
 import { Session } from "@/session/session"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Truncate } from "@/tool/truncate"
 import { S2STool } from "../../src/tool/s2s"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { testEffectShared } from "../lib/effect"
 
 const database = Database.layerFromPath(":memory:")
+const s2sFlags = RuntimeFlags.layer({
+  experimentalEventSystem: true,
+  experimentalAgentMessaging: true,
+  experimentalS2S: true,
+})
 
 // Minimal layer for the S2STool + enqueueExternal tests. The S2STool
 // depends on S2SStore + Messaging + Session only, so we don't need
 // the full runLoop (no ToolRegistry, no SessionPrompt, no BackgroundJob).
-const baseLayer = Layer.mergeAll(
-  EventV2Bridge.defaultLayer,
-  Agent.defaultLayer,
-  Config.defaultLayer,
-  CrossSpawnSpawner.defaultLayer,
-  Session.defaultLayer,
-  Truncate.defaultLayer,
-  Messaging.defaultLayer,
-  S2SStore.defaultLayer,
-).pipe(Layer.provide(database))
+const baseLayer = LayerNode.compile(
+  LayerNode.group([
+    Database.node,
+    Session.node,
+    SessionProjector.node,
+    EventV2Bridge.node,
+    Config.node,
+    S2SStore.node,
+    Messaging.node,
+    Agent.node,
+    CrossSpawnSpawner.node,
+    Truncate.node,
+  ]),
+  [
+    [Database.node, database],
+    [RuntimeFlags.node, s2sFlags],
+  ],
+)
 
 const it = testEffectShared(baseLayer as unknown as Layer.Layer<any, any, never>)
 
