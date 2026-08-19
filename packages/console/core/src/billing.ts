@@ -381,6 +381,11 @@ export namespace Billing {
             return {
               line_items: [{ price: LiteData.priceID(), quantity: 1 }],
               billing_address_collection: "required",
+              payment_method_options: {
+                card: {
+                  request_three_d_secure: "any",
+                },
+              },
             }
           })(),
           tax_id_collection: {
