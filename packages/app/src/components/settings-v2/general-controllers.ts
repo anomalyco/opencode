@@ -2,6 +2,7 @@ import { createMemo, createResource, onMount, type Accessor } from "solid-js"
 import type { ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { usePermission } from "@/context/permission"
+import type { ServerConnection } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import {
@@ -22,29 +23,45 @@ import { createSoundPreviewController, type ShellOption } from "./general-contro
 export { createShellOptions, createSoundPreviewController } from "./general-controller-behavior"
 export type { ShellOption, ShellSelectOption } from "./general-controller-behavior"
 
-export function createPermissionScopeController(sessionID: Accessor<string | undefined>) {
+export function createPermissionScopeController(
+  sessionID: Accessor<string | undefined>,
+  activeDirectory: Accessor<string | undefined> = () => undefined,
+  activeServer: Accessor<ServerConnection.Key | undefined> = () => undefined,
+) {
   const permission = usePermission()
   const serverSync = useServerSync()
   const directory = createMemo(() => {
     const id = sessionID()
-    if (!id) return undefined
+    if (!id) return activeDirectory()
     return serverSync().session.lineage.peek(id)?.session.directory
   })
+  const state = () => {
+    const server = activeServer()
+    if (!server) return permission
+    return permission.ensureServerState(server)
+  }
 
   return {
     accepting: createMemo(() => {
       const id = sessionID()
       const dir = directory()
-      if (!id || !dir) return false
-      return permission.isAutoAccepting(id, dir)
+      if (!dir) return false
+      if (!id) return state().isAutoAcceptingDirectory(dir)
+      return state().isAutoAccepting(id, dir)
     }),
     enabled: createMemo(() => !!directory()),
     set: (checked: boolean) => {
       const id = sessionID()
       const dir = directory()
-      if (!id || !dir) return
-      if (checked) return permission.enableAutoAccept(id, dir)
-      permission.disableAutoAccept(id, dir)
+      if (!dir) return
+      const api = state()
+      if (!id) {
+        if (api.isAutoAcceptingDirectory(dir) === checked) return
+        api.toggleAutoAcceptDirectory(dir)
+        return
+      }
+      if (checked) return api.enableAutoAccept(id, dir)
+      api.disableAutoAccept(id, dir)
     },
   }
 }
