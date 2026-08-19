@@ -167,6 +167,49 @@ async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>
 }
 
 describe("HttpApi Server.listen", () => {
+  test("rejects plugin client re-entry while plugins are loading", async () => {
+    await using tmp = await tmpdir({
+      config: { formatter: false, lsp: false, plugin: ["./server-plugin.js"] },
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "server-plugin.js"),
+          `export default {
+  id: "plugin-client-reentry-probe",
+  async server(input) {
+    try {
+      const result = await input.client.config.get();
+      await Bun.write(${JSON.stringify(path.join(dir, "plugin-client-result.json"))}, JSON.stringify({ ok: !result.error, error: result.error }));
+    } catch (error) {
+      await Bun.write(${JSON.stringify(path.join(dir, "plugin-client-result.json"))}, JSON.stringify({ ok: false, error: String(error) }));
+    }
+    return {};
+  },
+};
+`,
+        )
+      },
+    })
+    const listener = await startListener()
+    try {
+      const response = await withTimeout(
+        fetch(new URL("/config", listener.url), {
+          headers: { authorization: authorization(), "x-opencode-directory": tmp.path },
+        }),
+        5_000,
+        "timed out waiting for plugin re-entry guarded request",
+      )
+      expect(response.status).toBe(200)
+      const result = JSON.parse(await Bun.file(path.join(tmp.path, "plugin-client-result.json")).text()) as {
+        ok?: boolean
+        error?: unknown
+      }
+      expect(result.ok).toBe(false)
+      expect(JSON.stringify(result.error)).toContain("Plugin client request cannot enter instance")
+    } finally {
+      await stop(listener, "timed out cleaning up plugin re-entry listener").catch(() => undefined)
+    }
+  })
+
   testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startListener()
