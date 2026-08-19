@@ -181,7 +181,18 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   return {
     system,
     messages,
-    tools: Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b))),
+    tools: Object.fromEntries(
+      Object.entries(tools)
+        .toSorted(([a], [b]) => a.localeCompare(b))
+        .map(([name, tool]) => {
+          if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
+            const schema = tool.inputSchema as unknown
+            const plain = isRecord(schema) && isRecord(schema.jsonSchema) ? schema.jsonSchema : isRecord(schema) ? schema : undefined
+            if (plain) foldArrayItems(plain)
+          }
+          return [name, tool]
+        }),
+    ),
     params,
     messageTransformOptions: options,
     headers: {
@@ -211,6 +222,49 @@ function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission"
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+// @ai-sdk/google's convertJSONSchemaToOpenAPISchema splits a nullable array
+// written as `type: ["null", "array"]` into `anyOf: [{ type: "array" }]` but
+// leaves a sibling `items` dangling at the parent, which Gemini rejects. Fold
+// `items` into the array-typed branches of any union so the generated
+// function declaration carries `items` inside the array branch. Mutates the
+// plain schema object in place so the surrounding jsonSchema() wrapper (whose
+// `jsonSchema` getter returns this same reference) keeps working.
+const foldArrayItems = (schema: unknown): void => {
+  if (Array.isArray(schema)) {
+    for (const item of schema) foldArrayItems(item)
+    return
+  }
+  if (!isRecord(schema)) return
+  for (const value of Object.values(schema)) foldArrayItems(value)
+  if (schema.items === undefined) return
+  const type = schema.type
+  if (Array.isArray(type) && type.includes("array")) {
+    const arrayBranch: Record<string, unknown> = { type: "array", items: schema.items }
+    schema.anyOf = type.includes("null") ? [arrayBranch, { type: "null" }] : [arrayBranch]
+    delete schema.type
+    delete schema.items
+    return
+  }
+  const combiner = ["anyOf", "oneOf", "allOf"].find((key) => Array.isArray(schema[key]))
+  if (!combiner) return
+  const branches = schema[combiner]
+  if (!Array.isArray(branches)) return
+  for (const branch of branches) {
+    if (!isRecord(branch)) continue
+    const branchType = branch.type
+    if (
+      (branchType === "array" || (Array.isArray(branchType) && branchType.includes("array"))) &&
+      branch.items === undefined
+    ) {
+      branch.items = schema.items
+    }
+  }
+  delete schema.items
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {
