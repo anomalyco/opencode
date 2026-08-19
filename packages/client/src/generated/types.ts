@@ -1753,6 +1753,8 @@ export type SessionsMessageOutput = {
       }
 }["data"]
 
+export type SessionsCostOutput = { readonly data: number }["data"]
+
 export type MessagesListInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly limit?: {

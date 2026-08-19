@@ -339,6 +339,8 @@ import type {
   V2SessionCompactResponses,
   V2SessionContextErrors,
   V2SessionContextResponses,
+  V2SessionCostErrors,
+  V2SessionCostResponses,
   V2SessionCreateErrors,
   V2SessionCreateResponses,
   V2SessionEventsErrors,
@@ -5463,6 +5465,18 @@ export class Session3 extends HeyApiClient {
       url: "/api/session",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Get today's session cost
+   *
+   * Get the total cost of sessions updated since local midnight.
+   */
+  public cost<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<V2SessionCostResponses, V2SessionCostErrors, ThrowOnError>({
+      url: "/api/session/cost",
+      ...options,
     })
   }
 

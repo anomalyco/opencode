@@ -11370,6 +11370,28 @@ export type V2SessionListResponses = {
 
 export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListResponses]
 
+export type V2SessionCostData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/session/cost"
+}
+
+export type V2SessionCostErrors = {
+  400: InvalidRequestError
+  401: UnauthorizedError
+}
+
+export type V2SessionCostError = V2SessionCostErrors[keyof V2SessionCostErrors]
+
+export type V2SessionCostResponses = {
+  200: {
+    data: number
+  }
+}
+
+export type V2SessionCostResponse = V2SessionCostResponses[keyof V2SessionCostResponses]
+
 export type V2SessionCreateData = {
   body: {
     id?: string

@@ -371,6 +371,17 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           }),
         ),
     )
+    .add(
+      HttpApiEndpoint.get("session.cost", "/api/session/cost", {
+        success: Schema.Struct({ data: Schema.Finite }),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.cost",
+          summary: "Get today's session cost",
+          description: "Get the total cost of sessions updated since local midnight.",
+        }),
+      ),
+    )
     .annotateMerge(
       OpenApi.annotations({
         title: "sessions",

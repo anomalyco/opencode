@@ -72,10 +72,14 @@ export const Info = Schema.Struct({
   diff_style: Schema.optional(DiffStyle),
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  show_today_cost: Schema.optional(Schema.Boolean).annotate({
+    description: "Show today's session cost in the sidebar Context section (default: false)",
+  }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor"> & {
+  show_today_cost: boolean
   attention: {
     enabled: boolean
     notifications: boolean
@@ -132,6 +136,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
           blinking: input.cursor.blinking ?? true,
         }
       : undefined,
+    show_today_cost: input.show_today_cost ?? false,
   }
 }
 
