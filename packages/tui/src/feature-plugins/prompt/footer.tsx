@@ -51,27 +51,18 @@ export function PromptFooter(props: { context: Plugin.Context; sessionID?: strin
             <box flexDirection="row" flexShrink={1} minWidth={0}>
               <Show when={live()}>
                 <box
-                  flexDirection="row"
                   flexShrink={0}
-                  backgroundColor={
-                    liveHovered()
-                      ? props.context.theme.background.action.primary.focused
-                      : props.context.theme.background.action.primary.default
-                  }
                   onMouseOver={() => setLiveHovered(true)}
                   onMouseOut={() => setLiveHovered(false)}
-                  onMouseDown={() => setLiveHovered(true)}
                   onMouseUp={() => props.context.keymap.dispatch("session.child.first")}
                 >
                   <text
-                    fg={
-                      liveHovered()
-                        ? props.context.theme.text.action.primary.focused
-                        : props.context.theme.text.action.primary.default
-                    }
+                    fg={liveHovered() ? props.context.theme.text.default : props.context.theme.text.subdued}
                     wrapMode="none"
                   >
-                    <Show when={shortcut("session.child.first")}>{(value) => <>{value()} </>}</Show>
+                    <Show when={shortcut("session.child.first")}>
+                      {(value) => <span style={{ fg: props.context.theme.text.default }}>{value()} </span>}
+                    </Show>
                     <Show when={subagents()}>{(value) => <>{value()}</>}</Show>
                     <Show when={subagents() && shells()}> · </Show>
                     <Show when={shells()}>{(value) => <>{value()}</>}</Show>
