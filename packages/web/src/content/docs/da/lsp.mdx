@@ -33,7 +33,7 @@ OpenCode leveres med flere indbyggede LSP-servere til populære sprog:
 | nixd               | .nix                                                      | `nixd` kommando tilgængelig                                     |
 | ocaml-lsp          | .ml,.mli                                                  | `ocamllsp` kommando tilgængelig                                 |
 | oxlint             | .ts,.tsx,.js,.jsx,.mjs,.cjs,.mts,.cts,.vue,.astro,.svelte | `oxlint` afhængighed i projekt                                  |
-| php intelephense   | .php                                                      | Automatiske installationer til PHP-projekter                    |
+| phpantom            | .php                                                      | Auto-installerer fra GitHub-udgivelser                          |
 | prisma             | .prisma                                                   | `prisma` kommando tilgængelig                                   |
 | pyright            | .py,.pyi                                                  | `pyright` afhængig installeret                                  |
 | ruby-lsp (rubocop) | .rb,.rake,.gemspec,.ru                                    | `ruby` og `gem` kommandoer tilgængelige                         |
@@ -194,15 +194,3 @@ Du kan tilføje brugerdefinerede LSP-servere ved at angive kommandoen og filtype
 }
 ```
 
----
-
-## Yderligere oplysninger
-
-### PHP Intelephense
-
-PHP Intelephense tilbyder premium funktioner gennem en licensnøgle. Du kan angive en licensnøgle ved at placere (kun) nøglen i en tekstfil på:
-
-- På macOS/Linux: `$HOME/intelephense/license.txt`
-- På Windows: `%USERPROFILE%/intelephense/license.txt`
-
-Filen bør kun indeholde licensnøglen uden yderligere indhold.

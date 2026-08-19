@@ -44,7 +44,7 @@ export const builtinServerIds = [
   "kotlin-ls",
   "yaml-ls",
   "lua-ls",
-  "php intelephense",
+  "phpantom",
   "prisma",
   "dart",
   "ocaml-lsp",

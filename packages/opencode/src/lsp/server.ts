@@ -1512,33 +1512,74 @@ export const LuaLS: Info = {
   },
 }
 
-export const PHPIntelephense: Info = {
-  id: "php intelephense",
+export const PHPantom: Info = {
+  id: "phpantom",
   extensions: [".php"],
-  root: NearestRoot(["composer.json", "composer.lock", ".php-version"]),
+  root: NearestRoot(["composer.json", "composer.lock", ".php-version", ".phpantom.toml"]),
   async spawn(root, _ctx, flags) {
-    let binary = which("intelephense")
-    const args: string[] = []
-    if (!binary) {
+    let bin = which("phpantom_lsp")
+
+    if (!bin) {
       if (flags.disableLspDownload) return
-      const resolved = await Npm.which("intelephense")
-      if (!resolved) return
-      binary = resolved
+
+      const response = await fetch("https://api.github.com/repos/PHPantom-dev/phpantom_lsp/releases/latest")
+      if (!response.ok) return
+
+      const release = (await response.json()) as {
+        tag_name?: string
+        assets?: { name?: string; browser_download_url?: string }[]
+      }
+      const version = release.tag_name?.replace("v", "")
+      if (!version) return
+
+      const platform = process.platform
+      const arch = process.arch
+
+      const rustArch = arch === "arm64" ? "aarch64" : "x86_64"
+      const rustTarget =
+        platform === "darwin"
+          ? `${rustArch}-apple-darwin`
+          : platform === "win32"
+            ? `${rustArch}-pc-windows-msvc`
+            : `${rustArch}-unknown-linux-gnu`
+      const ext = platform === "win32" ? "zip" : "tar.gz"
+      const assetName = `phpantom_lsp-${rustTarget}.${ext}`
+
+      const assets = release.assets ?? []
+      const asset = assets.find((a) => a.name === assetName)
+      if (!asset?.browser_download_url) return
+
+      const downloadResponse = await fetch(asset.browser_download_url)
+      if (!downloadResponse.ok) return
+
+      const tempPath = path.join(Global.Path.bin, assetName)
+      if (downloadResponse.body) await Filesystem.writeStream(tempPath, downloadResponse.body)
+
+      if (ext === "zip") {
+        const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+          .then(() => true)
+          .catch(() => false)
+        if (!ok) return
+      }
+      if (ext === "tar.gz") {
+        await run(["tar", "-xzf", tempPath], { cwd: Global.Path.bin })
+      }
+
+      await fs.rm(tempPath, { force: true })
+
+      bin = path.join(Global.Path.bin, "phpantom_lsp" + (platform === "win32" ? ".exe" : ""))
+
+      if (!(await Filesystem.exists(bin))) return
+
+      if (platform !== "win32") {
+        await fs.chmod(bin, 0o755).catch(() => {})
+      }
     }
-    args.push("--stdio")
-    const proc = spawn(binary, args, {
-      cwd: root,
-      env: {
-        ...process.env,
-      },
-    })
+
     return {
-      process: proc,
-      initialization: {
-        telemetry: {
-          enabled: false,
-        },
-      },
+      process: spawn(bin, ["--stdio"], {
+        cwd: root,
+      }),
     }
   },
 }

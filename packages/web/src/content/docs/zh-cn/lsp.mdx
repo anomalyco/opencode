@@ -33,7 +33,7 @@ OpenCode 内置了多种适用于主流语言的 LSP 服务器：
 | nixd               | .nix                                                                | 需要 `nixd` 命令可用                                  |
 | ocaml-lsp          | .ml, .mli                                                           | 需要 `ocamllsp` 命令可用                              |
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | 项目中需要 `oxlint` 依赖                              |
-| php intelephense   | .php                                                                | 为 PHP 项目自动安装                                   |
+| phpantom            | .php                                                                | 从 GitHub 发布自动安装                                |
 | prisma             | .prisma                                                             | 需要 `prisma` 命令可用                                |
 | pyright            | .py, .pyi                                                           | 需要已安装 `pyright` 依赖                             |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | 需要 `ruby` 和 `gem` 命令可用                         |
@@ -194,15 +194,3 @@ LSP 可以通过语言服务器诊断帮助 agent 发现并修复问题。这对
 }
 ```
 
----
-
-## 补充信息
-
-### PHP Intelephense
-
-PHP Intelephense 通过许可证密钥提供高级功能。你可以将许可证密钥单独放在以下路径的文本文件中：
-
-- macOS/Linux：`$HOME/intelephense/license.txt`
-- Windows：`%USERPROFILE%/intelephense/license.txt`
-
-该文件应仅包含许可证密钥，不要添加其他任何内容。

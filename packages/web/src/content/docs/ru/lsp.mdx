@@ -32,7 +32,7 @@ opencode поставляется с несколькими встроенным
 | nixd               | .nix                                                                | `nixd` команда доступна                                                   |
 | ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` команда доступна                                               |
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` зависимость в проекте                                            |
-| php intelephense   | .php                                                                | Автоматически устанавливается для проектов PHP                            |
+| phpantom            | .php                                                                | Автоматически устанавливается из релизов GitHub                           |
 | prisma             | .prisma                                                             | `prisma` команда доступна                                                 |
 | pyright            | .py, .pyi                                                           | `pyright` зависимость установлена                                         |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` и `gem` команды доступны                                           |
@@ -193,15 +193,3 @@ LSP может помочь агенту находить и исправлят�
 }
 ```
 
----
-
-## Дополнительная информация
-
-### PHP Intelephense
-
-PHP Intelephense предлагает дополнительные функции через лицензионный ключ. Вы можете предоставить лицензионный ключ, поместив (только) ключ в текстовый файл по адресу:
-
-- В macOS/Linux: `$HOME/intelephense/license.txt`
-- В Windows: `%USERPROFILE%/intelephense/license.txt`
-
-Файл должен содержать только лицензионный ключ без какого-либо дополнительного содержимого.
