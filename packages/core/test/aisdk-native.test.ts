@@ -279,6 +279,7 @@ describe("AISDKNative", () => {
         accessToken: "vertex-token",
         baseURL: "https://vertex.example/v1",
         headers: { "x-test": "value" },
+        labels: { component: "opencode", environment: "test" },
         location: "eu",
         project: "vertex-project",
         thinkingConfig: { thinkingLevel: "high" },
@@ -290,7 +291,12 @@ describe("AISDKNative", () => {
         baseURL: "https://vertex.example/v1",
         location: "eu",
         project: "vertex-project",
-        providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
+        providerOptions: {
+          gemini: {
+            labels: { component: "opencode", environment: "test" },
+            thinkingConfig: { thinkingLevel: "high" },
+          },
+        },
       },
       headers: { "x-test": "value" },
     })
