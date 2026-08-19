@@ -255,6 +255,88 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance(
+    "execute refreshes derived permissions when resuming with a different subagent type",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed()
+        yield* sessions.setPermission({
+          sessionID: chat.id,
+          permission: [{ permission: "bash", pattern: "*", action: "deny" }],
+        })
+        const child = yield* sessions.create({
+          parentID: chat.id,
+          title: "General child",
+          agent: "general",
+          permission: [
+            { permission: "bash", pattern: "*", action: "deny" },
+            { permission: "task", pattern: "*", action: "deny" },
+            { permission: "webfetch", pattern: "*", action: "deny" },
+          ],
+        })
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const context = {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
+        const resume = (subagent_type: string) =>
+          def.execute(
+            {
+              description: "continue bug",
+              prompt: "continue investigating",
+              subagent_type,
+              task_id: child.id,
+            },
+            context,
+          )
+
+        const result = yield* resume("reviewer")
+
+        expect(result.metadata.sessionId).toBe(child.id)
+        expect(seen?.agent).toBe("reviewer")
+        expect(yield* sessions.get(child.id)).toMatchObject({
+          agent: "reviewer",
+          permission: [
+            { permission: "webfetch", pattern: "*", action: "deny" },
+            { permission: "bash", pattern: "*", action: "deny" },
+            { permission: "todowrite", pattern: "*", action: "deny" },
+          ],
+        })
+
+        yield* resume("general")
+
+        expect(yield* sessions.get(child.id)).toMatchObject({
+          agent: "general",
+          permission: [
+            { permission: "webfetch", pattern: "*", action: "deny" },
+            { permission: "bash", pattern: "*", action: "deny" },
+            { permission: "task", pattern: "*", action: "deny" },
+          ],
+        })
+      }),
+    {
+      config: {
+        agent: {
+          reviewer: {
+            mode: "subagent",
+            permission: {
+              task: "allow",
+            },
+          },
+        },
+      },
+    },
+  )
+
   it.instance("execute asks by default and skips checks when bypassed", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
@@ -743,6 +825,112 @@ describe("tool.task", () => {
       expect(notification.parts[0]?.type).toBe("text")
       if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("second done")
     }),
+  )
+
+  background.instance(
+    "queued resumes refresh permissions from the latest subagent type",
+    () =>
+      Effect.gen(function* () {
+        const jobs = yield* BackgroundJob.Service
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const firstStarted = defer<void>()
+        const firstDone = defer<void>()
+        const secondStarted = defer<void>()
+        const secondDone = defer<void>()
+        const thirdStarted = defer<void>()
+        const seen: Session.Info[] = []
+        const promptOps: TaskPromptOps = {
+          ...stubOps(),
+          prompt: (input) => {
+            if (input.sessionID === chat.id) return Effect.succeed(reply(input, "injected"))
+            return Effect.gen(function* () {
+              seen.push(yield* sessions.get(input.sessionID).pipe(Effect.orDie))
+              if (seen.length === 1) {
+                firstStarted.resolve()
+                yield* Effect.promise(() => firstDone.promise)
+              } else if (seen.length === 2) {
+                secondStarted.resolve()
+                yield* Effect.promise(() => secondDone.promise)
+              } else {
+                thirdStarted.resolve()
+              }
+              return reply(input, `run ${seen.length}`)
+            })
+          },
+        }
+        const context = {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
+
+        const started = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "start investigation",
+            subagent_type: "general",
+            background: true,
+          },
+          context,
+        )
+        yield* Effect.promise(() => firstStarted.promise)
+
+        yield* def.execute(
+          {
+            description: "review findings",
+            prompt: "review the current findings",
+            subagent_type: "reviewer",
+            task_id: started.metadata.sessionId,
+          },
+          context,
+        )
+        yield* def.execute(
+          {
+            description: "continue investigation",
+            prompt: "continue the investigation",
+            subagent_type: "general",
+            task_id: started.metadata.sessionId,
+          },
+          context,
+        )
+
+        firstDone.resolve()
+        yield* Effect.promise(() => secondStarted.promise)
+        expect(seen[1]).toMatchObject({
+          agent: "reviewer",
+          permission: [{ permission: "todowrite", pattern: "*", action: "deny" }],
+        })
+
+        secondDone.resolve()
+        yield* Effect.promise(() => thirdStarted.promise)
+        expect(seen[2]).toMatchObject({
+          agent: "general",
+          permission: [{ permission: "task", pattern: "*", action: "deny" }],
+        })
+
+        const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 2_000 })
+        expect(waited.info?.status).toBe("completed")
+      }),
+    {
+      config: {
+        agent: {
+          reviewer: {
+            mode: "subagent",
+            permission: {
+              task: "allow",
+            },
+          },
+        },
+      },
+    },
   )
 
   background.instance("background tasks complete through the background job service", () =>
