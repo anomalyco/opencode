@@ -74,7 +74,7 @@ function LimitsGraph(props: { href: string }) {
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 1050, d: "150ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
-    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 4100, baseReq: 2050, d: "290ms" },
+    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 2050, d: "290ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
     { id: "hy3", name: "Hy3", req: 4300, d: "320ms" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 7600, d: "330ms" },
@@ -153,23 +153,12 @@ function LimitsGraph(props: { href: string }) {
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
-                    width={Math.max(0, x(ratio(m.baseReq ?? m.req)) - left)}
+                    width={Math.max(0, x(ratio(m.req)) - left)}
                     height={bh}
                     data-bar
                     data-kind="go"
                     data-model={m.id}
                   />
-                  {m.baseReq && (
-                    <rect
-                      x={x(ratio(m.baseReq)) + 2}
-                      y={gy(i()) - bh / 2}
-                      width={Math.max(0, x(ratio(m.req)) - x(ratio(m.baseReq)) - 2)}
-                      height={bh}
-                      data-bar
-                      data-kind="promo"
-                      data-model={m.id}
-                    />
-                  )}
                 </g>
               )}
             </For>
@@ -204,7 +193,6 @@ function LimitsGraph(props: { href: string }) {
               >
                 <span data-value>{m.req.toLocaleString()}</span>
                 <span data-name>{m.name}</span>
-                {m.baseReq && <span data-bonus>2x usage</span>}
               </span>
             )}
           </For>
