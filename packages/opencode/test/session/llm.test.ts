@@ -57,6 +57,14 @@ const it = testEffect(AppNodeBuilder.build(LayerNode.group([LLM.node, Provider.n
 // LLM.stream returns a Stream, not an Effect, so we can't use the serviceUse proxy.
 const drain = (input: LLM.StreamInput) => LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runDrain))
 
+const collect = (input: LLM.StreamInput) =>
+  LLM.Service.use((svc) =>
+    svc.stream(input).pipe(
+      Stream.runCollect,
+      Effect.map((events) => Array.from(events)),
+    ),
+  )
+
 // drainWith builds an isolated runtime so custom replacements fully own LLM and
 // its transitive deps.
 const drainWith = (layer: Layer.Layer<LLM.Service>, input: LLM.StreamInput) =>
@@ -1067,6 +1075,122 @@ describe("session.llm.stream", () => {
           expect(Cause.hasInterrupts(inner.cause)).toBe(true)
         }
         yield* Effect.promise(() => Promise.race([pending.requestAborted, timeout(500)]).catch(() => undefined))
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "qualifies truncated tool argument diagnostics and preserves other parse errors",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const invalidCall = (id: string, input: string) =>
+          Effect.gen(function* () {
+            const sessionID = SessionID.make(`session-test-tool-parse-${id}`)
+            const request = waitRequest(
+              "/chat/completions",
+              createEventResponse(
+                [
+                  {
+                    id: `chatcmpl-${id}`,
+                    object: "chat.completion.chunk",
+                    choices: [{ delta: { role: "assistant" } }],
+                  },
+                  {
+                    id: `chatcmpl-${id}`,
+                    object: "chat.completion.chunk",
+                    choices: [
+                      {
+                        delta: {
+                          tool_calls: [
+                            {
+                              index: 0,
+                              id: `call-${id}`,
+                              type: "function",
+                              function: { name: "lookup", arguments: input },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    id: `chatcmpl-${id}`,
+                    object: "chat.completion.chunk",
+                    choices: [{ delta: {}, finish_reason: "stop" }],
+                  },
+                ],
+                true,
+              ),
+            )
+
+            const events = yield* collect({
+              user: {
+                id: MessageID.make(`msg_user-tool-parse-${id}`),
+                sessionID,
+                role: "user",
+                time: { created: Date.now() },
+                agent: agent.name,
+                model: { providerID: ProviderV2.ID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+              },
+              sessionID,
+              model: resolved,
+              agent,
+              system: [],
+              messages: [{ role: "user", content: "Use lookup" }],
+              tools: {
+                invalid: tool({
+                  description: "Do not use",
+                  inputSchema: z.object({ tool: z.string(), error: z.string() }),
+                  execute: async () => ({ output: "invalid input" }),
+                }),
+                lookup: tool({
+                  description: "Lookup data",
+                  inputSchema: z.object({ query: z.string() }),
+                }),
+              },
+            })
+            const capture = yield* Effect.promise(() => request)
+            expect(JSON.stringify(capture.body.tools)).not.toContain('"name":"invalid"')
+            const call = events.find((event) => event.type === "tool-call" && event.name === "invalid")
+            if (call?.type !== "tool-call") throw new Error("invalid tool call event not found")
+            if (!call.input || typeof call.input !== "object" || !("error" in call.input)) {
+              throw new Error("invalid tool call diagnostic not found")
+            }
+            if (typeof call.input.error !== "string") throw new Error("invalid tool call diagnostic is not a string")
+            return call.input.error
+          })
+
+        const truncated = yield* invalidCall("truncated", '{"query":"unfinished')
+        expect(truncated).toContain("may have been truncated")
+        expect(truncated).toContain("This can happen when the output token limit")
+        expect(truncated).toContain("Original error:")
+        expect(truncated).toContain("Unterminated string")
+
+        const malformed = yield* invalidCall("malformed", '{"query":}')
+        expect(malformed).not.toContain("may have been truncated")
+        expect(malformed).not.toContain("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX")
+        expect(malformed).toContain("JSON")
       }),
     {
       config: () => ({
