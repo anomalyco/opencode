@@ -3,6 +3,7 @@ export * as Database from "./database"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { layer as sqliteLayer } from "#sqlite"
 import { Context, Effect, Layer } from "effect"
+import { sql } from "drizzle-orm"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
@@ -23,6 +24,9 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = yield* makeDatabase
+
+    const autoVacuum = yield* db.get<{ auto_vacuum: number }>(sql`PRAGMA auto_vacuum`)
+    if (autoVacuum?.auto_vacuum === 0) yield* db.run(sql`PRAGMA auto_vacuum = INCREMENTAL`)
 
     yield* db.run("PRAGMA journal_mode = WAL")
     yield* db.run("PRAGMA synchronous = NORMAL")
