@@ -408,6 +408,21 @@ export class BusyError extends Schema.TaggedErrorClass<BusyError>()("SessionBusy
   sessionID: SessionID,
 }) {}
 
+/**
+ * A message or part was named as the boundary of an operation that cannot use it as one.
+ *
+ * `operation` and `reason` are literal unions of one because a branch-closure record is currently
+ * the only rejected boundary and revert is the only operation that selects one. Both are kept as
+ * unions so a second case extends the schema rather than replacing it.
+ */
+export class BoundaryError extends Schema.TaggedErrorClass<BoundaryError>()("SessionBoundaryError", {
+  operation: Schema.Literals(["revert"]),
+  reason: Schema.Literals(["closure_record"]),
+  sessionID: SessionID,
+  messageID: MessageID,
+  partID: Schema.optional(PartID),
+}) {}
+
 export type NotFound = NotFoundError
 
 export interface Interface {

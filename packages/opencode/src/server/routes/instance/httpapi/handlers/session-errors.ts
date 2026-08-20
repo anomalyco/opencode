@@ -3,6 +3,7 @@ import { Session } from "@/session/session"
 import { SessionClosure } from "@/session/closure/coordinator"
 import { SessionMutation } from "@/session/closure/mutation"
 import { Effect } from "effect"
+import { HttpApiError } from "effect/unstable/httpapi"
 import * as ApiError from "../errors"
 
 /**
@@ -91,6 +92,24 @@ export function mapAdmission<A, E, R>(
 
 export function mapStorageNotFound<A, R>(self: Effect.Effect<A, StorageNotFoundError, R>) {
   return self.pipe(Effect.mapError((error) => ApiError.notFound(error.message)))
+}
+
+/**
+ * Maps a rejected operation boundary onto 400.
+ *
+ * The request named a message or part that cannot serve as the boundary of this operation, so it
+ * is malformed rather than conflicting: repeating it produces the same answer. Generic in the
+ * trailing error so it composes with the other mappers on the same seam.
+ */
+export function mapBoundary<A, E, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, Exclude<E, Session.BoundaryError> | HttpApiError.BadRequest, R> {
+  return self.pipe(
+    Effect.mapError((error) => {
+      if (error instanceof Session.BoundaryError) return new HttpApiError.BadRequest({})
+      return error as Exclude<E, Session.BoundaryError>
+    }),
+  )
 }
 
 // Generic in the trailing error so this composes with `mapAdmission`: a seam that takes admission
