@@ -5,9 +5,16 @@ import { Clock, Duration, Effect, Scope } from "effect"
 import { Config } from "../config.js"
 import { SessionSchema } from "../session/schema.js"
 
+// Providers that offer ephemeral implicit prompt caching benefit from keep-alive requests
+// sent within a short idle window.
+// See:
+//   - https://ai.google.dev/gemini-api/docs/caching
+//   - https://cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview
+// A 2.5-minute (150s) default interval refreshes ephemeral cache prefixes during idle pauses
+// when warming is enabled.
 const defaults = {
   prompt: "This is a keep-alive request. Do not perform any work or use tools. Reply with exactly: OK",
-  interval: Duration.minutes(4),
+  interval: Duration.seconds(150),
   duration: Duration.minutes(30),
 }
 

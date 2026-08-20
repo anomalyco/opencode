@@ -8,7 +8,7 @@ export class Info extends Schema.Class<Info>("Config.Warming")({
     description: "Prompt sent for keep-alive requests",
   }),
   interval: Schema.DurationFromString.pipe(optional).annotate({
-    description: 'Idle time between keep-alive requests (default: "4 minutes")',
+    description: 'Idle time between keep-alive requests (default: "2.5 minutes")',
   }),
   duration: Schema.DurationFromString.pipe(optional).annotate({
     description: 'Time after the last active request to keep a session warm (default: "30 minutes")',

@@ -335,14 +335,13 @@ See the [compaction guide](/compaction) for automatic context management.
 ### Session warming
 
 Keep recently active model sessions warm with periodic transient requests.
-Warming is disabled by default; set it to `true` to use the four-minute idle
-interval and 30-minute active window.
+Warming is disabled by default; set `"warming": true` to use the 2.5-minute idle interval and 30-minute active window.
 
 ```jsonc
 {
   "warming": {
     "prompt": "Do not perform any work. Reply with exactly: OK",
-    "interval": "4 minutes",
+    "interval": "2.5 minutes",
     "duration": "30 minutes",
   },
 }

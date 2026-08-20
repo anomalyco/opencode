@@ -13,12 +13,12 @@ describe("config warming", () => {
 
   test("decodes custom durations", () => {
     const warming = decode({
-      warming: { prompt: "Reply pong", interval: "2 minutes", duration: "1 hour" },
+      warming: { prompt: "Reply pong", interval: "2.5 minutes", duration: "1 hour" },
     }).warming
     expect(typeof warming).toBe("object")
     if (typeof warming !== "object") return
     expect(warming.prompt).toBe("Reply pong")
-    expect(warming.interval).toEqual(Duration.minutes(2))
+    expect(warming.interval).toEqual(Duration.seconds(150))
     expect(warming.duration).toEqual(Duration.hours(1))
   })
 })

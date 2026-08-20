@@ -3,11 +3,13 @@ title: "Session warming"
 ---
 
 Session warming sends periodic model requests for recently active sessions.
-This can preserve provider-side prompt caches or other short-lived session
-state while you pause between prompts.
+This can preserve provider-side prompt caches or other short-lived session state while you pause between prompts.
 
-Warming is disabled by default. Enable it with the default settings in any
-[OpenCode configuration file](/config):
+Providers such as [Gemini API](https://ai.google.dev/gemini-api/docs/caching) and [Google Cloud Vertex AI](https://cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview) offer automatic implicit prefix caching for frequent requests sent within a short idle window, as well as explicit cached content with longer configurable lifetimes.
+When session warming is enabled, OpenCode sends keep-alive requests during idle pauses to keep ephemeral cache prefixes active.
+
+Warming is disabled by default.
+Enable it with the default settings in any [OpenCode configuration file](/config):
 
 ```jsonc title="opencode.jsonc"
 {
@@ -16,10 +18,9 @@ Warming is disabled by default. Enable it with the default settings in any
 }
 ```
 
-With the defaults, OpenCode sends a warming request after a session has made no
-model request for four minutes. It repeats this while the session remains idle,
-but stops 30 minutes after the last non-warming request. New model activity
-starts a new 30-minute window.
+With the defaults, OpenCode sends a warming request after a session has made no model request for 2.5 minutes.
+It repeats this while the session remains idle, but stops 30 minutes after the last non-warming request.
+New model activity starts a new 30-minute window.
 
 ## Configuration
 
@@ -30,7 +31,7 @@ Use the object form to customize the prompt, idle interval, or active duration:
   "$schema": "https://opencode.ai/config.json",
   "warming": {
     "prompt": "Do not perform any work. Reply with exactly: OK",
-    "interval": "4 minutes",
+    "interval": "2.5 minutes",
     "duration": "30 minutes",
   },
 }
@@ -39,11 +40,11 @@ Use the object form to customize the prompt, idle interval, or active duration:
 | Field      | Default                | Description                                                                                             |
 | ---------- | ---------------------- | ------------------------------------------------------------------------------------------------------- |
 | `prompt`   | Keep-alive instruction | Prompt sent in each warming request. The default instructs the model to do no work and reply with `OK`. |
-| `interval` | `"4 minutes"`          | Idle time between warming requests.                                                                     |
+| `interval` | `"2.5 minutes"`        | Idle time between warming requests.                                                                     |
 | `duration` | `"30 minutes"`         | Maximum warming window after the latest non-warming model request.                                      |
 
-`interval` and `duration` accept duration strings such as `"30 seconds"`,
-`"4 minutes"`, or `"1 hour"`. Both must be finite and greater than zero.
+`interval` and `duration` accept duration strings such as `"30 seconds"`, `"2.5 minutes"`, `"4 minutes"`, or `"1 hour"`.
+Both must be finite and greater than zero.
 
 To disable warming explicitly:
 
