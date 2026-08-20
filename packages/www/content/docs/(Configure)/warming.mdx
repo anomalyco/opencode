@@ -6,7 +6,7 @@ Session warming sends periodic model requests for recently active sessions.
 This can preserve provider-side prompt caches or other short-lived session state while you pause between prompts.
 
 Providers such as [Gemini API](https://ai.google.dev/gemini-api/docs/caching) and [Google Cloud Vertex AI](https://cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview) offer automatic implicit prefix caching for frequent requests sent within a short idle window, as well as explicit cached content with longer configurable lifetimes.
-When session warming is enabled, OpenCode sends keep-alive requests during idle pauses to keep ephemeral cache prefixes active.
+When session warming is enabled, OpenCode sends keep-alive requests during idle pauses that can increase the chance that ephemeral cache prefixes remain available.
 
 Warming is disabled by default.
 Enable it with the default settings in any [OpenCode configuration file](/config):

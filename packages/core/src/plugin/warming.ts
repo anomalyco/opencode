@@ -10,8 +10,8 @@ import { SessionSchema } from "../session/schema.js"
 // See:
 //   - https://ai.google.dev/gemini-api/docs/caching
 //   - https://cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview
-// A 2.5-minute (150s) default interval refreshes ephemeral cache prefixes during idle pauses
-// when warming is enabled.
+// A 2.5-minute (150s) default interval can increase the chance that ephemeral cache prefixes
+// remain available during idle pauses when warming is enabled.
 const defaults = {
   prompt: "This is a keep-alive request. Do not perform any work or use tools. Reply with exactly: OK",
   interval: Duration.seconds(150),
