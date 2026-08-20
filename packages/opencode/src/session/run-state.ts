@@ -7,10 +7,23 @@ import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
+// Type-only: the evidence shape is the closure ports contract's to define, and importing it keeps
+// one definition rather than a structural copy that can silently drift. No runtime edge is created.
+import type { SessionClosurePorts as Ports } from "./closure/ports"
 
 export interface Interface {
   readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  /**
+   * Interrupt one session's Runner without `cancel`'s recursive background-job sweep.
+   *
+   * That sweep is a graph walk, and a finalizer running inside the work being torn down cannot
+   * perform one: the scope close that invoked the finalizer is awaiting it. Returns whether a
+   * Runner was present, so a stale or absent target stays distinguishable from one that stopped.
+   */
+  readonly interruptRunner: (sessionID: SessionID) => Effect.Effect<boolean>
+  /** Sessions holding a live Runner, reported per axis. Reads the Runner store, not a status projection. */
+  readonly listActive: () => Effect.Effect<readonly Ports.RunnerActivity[]>
   readonly ensureRunning: (
     sessionID: SessionID,
     onInterrupt: Effect.Effect<SessionV1.WithParts>,
@@ -85,6 +98,31 @@ const layer = Layer.effect(
       yield* existing.cancel
     })
 
+    const interruptRunner = Effect.fn("SessionRunState.interruptRunner")(function* (sessionID: SessionID) {
+      const data = yield* InstanceState.get(state)
+      const existing = data.runners.get(sessionID)
+      if (!existing) {
+        // Status parity with `cancel`'s no-Runner branch, and truthful on its own terms: a session
+        // with no Runner is idle. The `false` is what carries "nothing was interrupted" to the
+        // caller; the status write does not claim otherwise.
+        yield* status.set(sessionID, { type: "idle" })
+        return false
+      }
+      yield* existing.cancel
+      return true
+    })
+
+    const listActive = Effect.fn("SessionRunState.listActive")(function* () {
+      const data = yield* InstanceState.get(state)
+      return Array.from(data.runners, (entry) => ({ session: entry[0], tag: entry[1].state._tag }))
+        .filter((item) => item.tag !== "Idle")
+        .map((item) => ({
+          session: item.session,
+          running: item.tag === "Running" || item.tag === "ShellThenRun",
+          shell: item.tag === "Shell" || item.tag === "ShellThenRun",
+        }))
+    })
+
     const ensureRunning = Effect.fn("SessionRunState.ensureRunning")(function* (
       sessionID: SessionID,
       onInterrupt: Effect.Effect<SessionV1.WithParts>,
@@ -104,7 +142,7 @@ const layer = Layer.effect(
         .pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
     })
 
-    return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
+    return Service.of({ assertNotBusy, cancel, interruptRunner, listActive, ensureRunning, startShell })
   }),
 )
 
