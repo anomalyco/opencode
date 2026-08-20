@@ -333,21 +333,21 @@ describe("Catalog", () => {
           model.capabilities.output = ["text"]
           model.time.released = 3000
         })
-        catalog.model.update(providerID, Model.ID.make("older-flash"), (model) => {
-          model.family = Model.Family.make("gemini-flash")
+        catalog.model.update(providerID, Model.ID.make("older-luna"), (model) => {
+          model.family = Model.Family.make("gpt-luna")
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
           model.time.released = 1000
         })
-        catalog.model.update(providerID, Model.ID.make("newer-flash"), (model) => {
-          model.family = Model.Family.make("gemini-flash")
+        catalog.model.update(providerID, Model.ID.make("newer-luna"), (model) => {
+          model.family = Model.Family.make("gpt-luna")
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
           model.time.released = 2000
         })
       })
 
-      expect((yield* catalog.model.small(providerID))?.id).toBe(Model.ID.make("newer-flash"))
+      expect((yield* catalog.model.small(providerID))?.id).toBe(Model.ID.make("newer-luna"))
     }),
   )
 
