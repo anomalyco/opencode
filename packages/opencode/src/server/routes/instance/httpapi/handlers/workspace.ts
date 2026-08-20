@@ -2,6 +2,7 @@ import { listAdapters } from "@/control-plane/adapters"
 import { Workspace } from "@/control-plane/workspace"
 import * as InstanceState from "@/effect/instance-state"
 import { Vcs } from "@/project/vcs"
+import { SessionClosure } from "@/session/closure/coordinator"
 import { Cause, Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -77,6 +78,16 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
                 data: {
                   message: error.message,
                   reason: error.reason,
+                },
+              })
+            }
+            // These carry structured fields rather than a written message, so the generic tail
+            // below would report an empty one for the most likely way a warp now fails.
+            if (error instanceof SessionClosure.Failure || error instanceof SessionClosure.LocationError) {
+              return new ApiWorkspaceWarpError({
+                name: "WorkspaceWarpError",
+                data: {
+                  message: "Session warp could not close the previous local owner.",
                 },
               })
             }
