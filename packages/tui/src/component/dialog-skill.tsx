@@ -4,6 +4,7 @@ import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { createResource, createMemo, createSignal } from "solid-js"
 import { useDialog } from "../ui/dialog"
 import { usePathFormatter } from "../context/path-format"
+import { useTuiPaths } from "../context/runtime"
 import { useSDK } from "../context/sdk"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
@@ -15,7 +16,9 @@ export type DialogSkillProps = {
 export function skillSource(location: string, directory: string) {
   if (location === "<built-in>") return "Built-in"
   const relative = path.relative(directory, location)
-  if (relative === ".." || relative.startsWith(".." + path.sep)) return "Global"
+  // path.relative returns an absolute path when the two share no root - different
+  // Windows drives, a UNC share - and an absolute result is outside the project too.
+  if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) return "Global"
   return "Project"
 }
 
@@ -23,10 +26,14 @@ export function DialogSkill(props: DialogSkillProps) {
   const dialog = useDialog()
   const sdk = useSDK()
   const { theme } = useTheme()
+  const paths = useTuiPaths()
   const formatter = usePathFormatter()
   dialog.setSize("large")
 
-  const source = (location: string) => skillSource(location, formatter.path())
+  // Classify against the worktree, not the cwd: project skills are discovered from
+  // .opencode directories between the cwd and the worktree root, so a session started
+  // in a subdirectory would otherwise label its own project skills "Global".
+  const source = (location: string) => skillSource(location, paths.worktree || formatter.path())
 
   const [loadError, setLoadError] = createSignal<unknown>()
 

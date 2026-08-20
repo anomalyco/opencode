@@ -25,3 +25,17 @@ describe("skill source", () => {
     expect(skillSource(path.resolve("/home/user/project-other/skill/SKILL.md"), directory)).toBe("Global")
   })
 })
+
+describe("skill source on windows paths", () => {
+  // path.relative returns an absolute path when the two share no root, so these
+  // would fall through to "Project" without an isAbsolute guard.
+  test.skipIf(process.platform !== "win32")("classifies a skill on another drive as Global", () => {
+    expect(skillSource("C:\\Users\\me\\.config\\opencode\\skill\\review\\SKILL.md", "D:\\repos\\project")).toBe(
+      "Global",
+    )
+  })
+
+  test.skipIf(process.platform !== "win32")("classifies a skill on a UNC share as Global", () => {
+    expect(skillSource("\\\\server\\share\\skill\\SKILL.md", "C:\\repos\\project")).toBe("Global")
+  })
+})
