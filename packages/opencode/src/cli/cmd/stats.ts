@@ -169,7 +169,11 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
           .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed([])))
 
         const isTopLevel = !session.parentID
-        const totalCost = isTopLevel ? (yield* svc.totalCost(session.id)).cost : 0
+        const totalCost = isTopLevel
+          ? (yield* svc.totalCost(session.id).pipe(
+              Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } })),
+            )).cost
+          : 0
         const sessionCost = isTopLevel ? totalCost : (session.cost ?? 0)
         const sessionTokens = session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
         let sessionToolUsage: Record<string, number> = {}

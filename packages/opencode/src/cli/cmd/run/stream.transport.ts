@@ -787,7 +787,7 @@ function createLayer(input: StreamInput) {
 
           booting = false
           yield* drainBuffered()
-          yield* refreshCost.pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
+          yield* refreshCost().pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
 
           const sessions = [...state.subagent.tabs.keys()]
           if (sessions.length === 0) {
@@ -882,14 +882,15 @@ function createLayer(input: StreamInput) {
         }
 
         const refreshCost = Effect.fn("RunStreamTransport.refreshCost")(function* () {
-          const result = yield* Effect.promise(() =>
-            input.sdk.session.cost({ sessionID: input.sessionID }),
+          const children = yield* Effect.promise(() =>
+            input.sdk.session.children({ sessionID: input.sessionID }),
           ).pipe(
-            Effect.map((item) => item.data?.cost ?? 0),
-            Effect.orElseSucceed(() => 0),
+            Effect.map((item) => item.data ?? []),
+            Effect.orElseSucceed(() => [] as readonly { cost?: number }[]),
           )
-          if (result !== state.data.totalCost) {
-            state.data.totalCost = result
+          const childCost = children.reduce((sum, child) => sum + (child.cost ?? 0), 0)
+          if (childCost !== state.data.subagentCost) {
+            state.data.subagentCost = childCost
             syncFooter([])
           }
         })
@@ -964,7 +965,7 @@ function createLayer(input: StreamInput) {
           yield* mark(event)
 
           if (event.type === "message.updated" && event.properties.sessionID === input.sessionID) {
-            yield* refreshCost.pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
+            yield* refreshCost().pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
           }
         })
 

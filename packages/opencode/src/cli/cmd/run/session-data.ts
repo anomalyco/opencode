@@ -86,7 +86,7 @@ export type SessionData = {
   visible: Map<string, string>
   end: Set<string>
   echo: Map<string, Set<string>>
-  totalCost: number
+  subagentCost: number
 }
 
 export type SessionDataInput = {
@@ -125,7 +125,7 @@ export function createSessionData(
     visible: new Map(),
     end: new Set(),
     echo: new Map(),
-    totalCost: 0,
+    subagentCost: 0,
   }
 }
 
@@ -848,7 +848,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     const usage = formatUsage(
       info.tokens,
       input.limits[modelKey(info.providerID, info.modelID)],
-      data.totalCost > 0 ? data.totalCost : (typeof info.cost === "number" ? info.cost : undefined),
+      (typeof info.cost === "number" ? info.cost : 0) + data.subagentCost,
     )
     if (usage) {
       next = {
