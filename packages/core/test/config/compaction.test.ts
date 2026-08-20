@@ -26,11 +26,13 @@ import { host } from "../plugin/host"
 const model = LanguageModel.make({
   id: "test-model",
   provider: "test-provider",
-  route: OpenAIChat.route.with({ limits: { context: 100_000, output: 1_000 } }),
+  route: OpenAIChat.route,
 })
+const limit = { context: 100_000, output: 1_000 }
 const resolved = SessionRunnerModel.resolved(model, {
   capabilities: { tools: true, input: ["text"], output: ["text"] },
   cost: [],
+  limit,
 })
 const config = Config.testLayer()
 const it = testEffect(
@@ -148,7 +150,7 @@ const session = Session.Info.make({
 })
 const input = (tokens: number) => ({
   session,
-  model: resolved,
+  resolved,
   messages: [
     Schema.decodeUnknownSync(SessionMessage.Assistant)({
       id: SessionMessage.ID.make("msg_compaction_config"),

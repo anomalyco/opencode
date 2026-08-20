@@ -76,8 +76,10 @@ type Dependencies = {
 export type AutoInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
-  readonly model: SessionRunnerModel.Resolved
+  readonly resolved: SessionRunnerModel.Resolved
 }
+
+type RequiredInput = Pick<AutoInput, "messages" | "resolved">
 
 export type ManualInput = {
   readonly session: SessionSchema.Info
@@ -88,7 +90,7 @@ export type ManualInput = {
 
 type Plan = {
   readonly session: SessionSchema.Info
-  readonly model: SessionRunnerModel.Resolved
+  readonly resolved: SessionRunnerModel.Resolved
   readonly reason: SessionMessage.Compaction["reason"]
   readonly prompt: string
   readonly recent: string
@@ -101,7 +103,7 @@ export type Outcome =
   | Pick<SessionMessage.CompactionFailed, "status" | "error">
 
 export interface Interface extends State.Transformable<Draft> {
-  readonly required: (input: AutoInput) => boolean
+  readonly required: (input: RequiredInput) => boolean
   readonly compact: (input: AutoInput) => Effect.Effect<Outcome>
   readonly compactManual: (input: ManualInput) => Effect.Effect<Outcome>
 }
@@ -259,7 +261,7 @@ const make = (dependencies: Dependencies) => {
         : Effect.void,
     )
     const prepared = yield* dependencies.modelRequests.prepare({
-      scope: { session: plan.session, agentID: Agent.ID.make("compaction"), model: plan.model },
+      scope: { session: plan.session, agentID: Agent.ID.make("compaction"), model: plan.resolved },
       transcript: { system: [], messages: [Message.user(plan.prompt)] },
       contextHooks: false,
     })
@@ -278,7 +280,7 @@ const make = (dependencies: Dependencies) => {
           })
         }
         if (LLMEvent.is.stepFinish(event)) {
-          const step = SessionUsage.record(event.usage, plan.model.cost)
+          const step = SessionUsage.record(event.usage, plan.resolved.cost)
           usage = usage ? SessionUsage.add(usage, step) : step
         }
         return Effect.void
@@ -327,7 +329,7 @@ const make = (dependencies: Dependencies) => {
     if (content)
       return yield* execute({
         session: input.session,
-        model: input.model,
+        resolved: input.resolved,
         reason: "auto",
         ...content,
       })
@@ -338,20 +340,20 @@ const make = (dependencies: Dependencies) => {
       error,
     })
   })
-  const required = (input: AutoInput) => {
+  const required = (input: RequiredInput) => {
     const config = state.get()
     if (!config.auto) return false
-    const limits = input.model.model.route.defaults.limits
-    const context = limits?.context
-    if (context === undefined || context <= 0) return false
+    const limit = input.resolved.limit
+    const context = limit.context
+    if (context <= 0) return false
     const last = input.messages.findLast(
       (message): message is SessionMessage.Assistant & { tokens: NonNullable<SessionMessage.Assistant["tokens"]> } =>
         message.type === "assistant" && message.tokens !== undefined,
     )
     if (!last) return false
-    const output = Math.min(limits?.output ?? 0, OUTPUT_TOKEN_MAX)
+    const output = Math.min(limit.output, OUTPUT_TOKEN_MAX)
     const promptCeiling = Math.min(
-      limits?.input === undefined ? Number.POSITIVE_INFINITY : limits.input - config.buffer,
+      limit.input === undefined ? Number.POSITIVE_INFINITY : limit.input - config.buffer,
       context - Math.max(output, config.buffer),
     )
     const used =
@@ -381,7 +383,7 @@ const make = (dependencies: Dependencies) => {
     if ("status" in resolved) return resolved
     return yield* execute({
       session: input.session,
-      model: resolved,
+      resolved,
       reason: "manual",
       inputID: input.inputID,
       started: input.started,

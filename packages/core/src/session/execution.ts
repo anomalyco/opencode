@@ -21,7 +21,11 @@ export interface Interface {
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
-  /** Interrupt active work owned by this process. Idle interruption is a no-op. */
+  /**
+   * Interrupt active work owned by this process. Idle interruption is a no-op. Resolves once
+   * the interruption is accepted; cleanup settles asynchronously in the execution fiber.
+   * Compose with `awaitIdle` when settlement matters.
+   */
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<void>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
   readonly awaitIdle: (sessionID: SessionSchema.ID) => Effect.Effect<void>
@@ -141,6 +145,11 @@ export const layer = Layer.effect(
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
           // promotes them, and a control item behind a queued prompt waits its turn.
+          // Interruption acknowledges before cleanup settles, so this wake usually lands
+          // on the stopping execution's doorbell and starts the successor at settle.
+          // Reading the inbox concurrently with the dying drain is safe: delivery consumes
+          // rows inside uninterruptible publications, so a steer row is either still
+          // promotable here or was fully delivered and needs no resumption.
           const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
           if (next === undefined) return
           if (next.delivery === "steer" || next.type === "compaction" || next.type === "move")

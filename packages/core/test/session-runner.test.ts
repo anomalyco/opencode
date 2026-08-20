@@ -146,29 +146,20 @@ const modelTransport = Layer.succeed(
     closeAll: Effect.void,
   }),
 )
-const model = LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
+type ModelLimit = { readonly context: number; readonly input?: number; readonly output: number }
+const defaultModelLimit = { context: 200_000, output: 32_000 }
+const modelLimits = new Map<string, ModelLimit>()
+const testModel = (id: string, limit: ModelLimit = defaultModelLimit) => {
+  modelLimits.set(id, limit)
+  return LanguageModel.make({ id, provider: "fake", route: OpenAIChat.route })
+}
+const model = testModel("fake-model")
 const defaultSystem = SessionSystemPrompt.make([])
-const replacementModel = LanguageModel.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
-const compactModel = LanguageModel.make({
-  id: "compact",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 4_000, output: 50 } }),
-})
-const fullOutputModel = LanguageModel.make({
-  id: "full-output",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 262_144, output: 262_144 } }),
-})
-const undersizedContextModel = LanguageModel.make({
-  id: "undersized-context",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 1, output: 1_000 } }),
-})
-const recoveryModel = LanguageModel.make({
-  id: "recovery",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 20_000, output: 1_000 } }),
-})
+const replacementModel = testModel("replacement")
+const compactModel = testModel("compact", { context: 4_000, output: 50 })
+const fullOutputModel = testModel("full-output", { context: 262_144, output: 262_144 })
+const undersizedContextModel = testModel("undersized-context", { context: 1, output: 1_000 })
+const recoveryModel = testModel("recovery", { context: 20_000, output: 1_000 })
 
 test("calculates step cost using the matching context tier", () => {
   expect(
@@ -304,13 +295,15 @@ let currentModel = model
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: (session) =>
     modelResolveHook.pipe(
-      Effect.as(
-        SessionRunnerModel.resolved(session.model?.id === "replacement" ? replacementModel : currentModel, {
+      Effect.map(() => {
+        const selected = session.model?.id === "replacement" ? replacementModel : currentModel
+        return SessionRunnerModel.resolved(selected, {
           capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
           cost: [],
+          limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
           variant: session.model?.variant,
-        }),
-      ),
+        })
+      }),
     ),
 })
 const systemContextKey = Instructions.Key.make("test/context")

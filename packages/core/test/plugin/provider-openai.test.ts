@@ -224,6 +224,7 @@ describe("OpenAIPlugin", () => {
       const model = SessionRunnerModel.resolved(OpenAIResponses.route.model({ id: "gpt-5.5" }), {
         capabilities: { tools: true, input: ["text"], output: ["text"] },
         cost: [],
+        limit: { context: 200_000, output: 32_000 },
       })
       const program = Effect.gen(function* () {
         const requests = yield* SessionModelRequest.Service

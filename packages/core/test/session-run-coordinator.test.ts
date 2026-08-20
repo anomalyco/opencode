@@ -622,11 +622,75 @@ describe("SessionRunCoordinator", () => {
         yield* coordinator.wake("session")
         yield* Deferred.await(started)
         yield* coordinator.interrupt("session")
+        yield* coordinator.awaitIdle("session")
 
         expect(settled).toHaveLength(1)
         expect(settled[0] !== undefined && Exit.isFailure(settled[0]) && Cause.hasInterrupts(settled[0].cause)).toBe(
           true,
         )
+        expect(yield* coordinator.active).toEqual(new Set())
+      }),
+    ),
+  )
+
+  it.effect("acknowledges interruption before cleanup settles", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const cleanupStarted = yield* Deferred.make<void>()
+        const cleanupGate = yield* Deferred.make<void>()
+        const settled: Array<string | undefined> = []
+        const coordinator = yield* SessionRunCoordinator.make<string, never, string>({
+          drain: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.onInterrupt(() =>
+                Deferred.succeed(cleanupStarted, undefined).pipe(Effect.andThen(Deferred.await(cleanupGate))),
+              ),
+            ),
+          settled: (_key, _exit, reason) => Effect.sync(() => void settled.push(reason)),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(started)
+        // Interrupt resolves while the cleanup gate is still closed: acceptance, not settlement.
+        yield* coordinator.interrupt("session", "user")
+        expect(settled).toHaveLength(0)
+        expect(Array.from(yield* coordinator.active)).toEqual(["session"])
+        // Repeating the interrupt during cleanup stays an immediate no-op.
+        yield* coordinator.interrupt("session", "user")
+
+        yield* Deferred.await(cleanupStarted)
+        yield* Deferred.succeed(cleanupGate, undefined)
+        yield* coordinator.awaitIdle("session")
+
+        expect(settled).toEqual(["user"])
+        expect(yield* coordinator.active).toEqual(new Set())
+      }),
+    ),
+  )
+
+  it.effect("an interrupt during terminal settlement claims the recorded wake", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const settling = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        let drains = 0
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () => Effect.sync(() => void drains++),
+          settled: () => Deferred.succeed(settling, undefined).pipe(Effect.andThen(Deferred.await(release))),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(settling)
+        // The owner has exited; this wake lands on the settling execution's doorbell.
+        yield* coordinator.wake("session")
+        // The interrupt claims it: settle must not start a successor for the dead intent.
+        yield* coordinator.interrupt("session")
+        yield* Deferred.succeed(release, undefined)
+        yield* coordinator.awaitIdle("session")
+
+        expect(drains).toBe(1)
         expect(yield* coordinator.active).toEqual(new Set())
       }),
     ),

@@ -68,6 +68,8 @@ export interface Resolved {
   readonly capabilities: Capabilities
   /** Catalog pricing in dollars per million tokens. */
   readonly cost: Info["cost"]
+  /** Catalog token limits used by Core for context management. */
+  readonly limit: Info["limit"]
 }
 
 export interface Interface {
@@ -297,6 +299,7 @@ export const layer = Layer.effect(
         }),
         capabilities: selected.capabilities,
         cost: selected.cost,
+        limit: selected.limit,
       }
     })
     return Service.of({

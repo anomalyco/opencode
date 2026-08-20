@@ -143,6 +143,8 @@ type State = {
   closed: boolean
   initial: boolean
   rootActive: boolean
+  /** Bumped on every root execution lifecycle event; guards paints against stale acks. */
+  executionEpoch: number
   buffered?: ReplayBuffer
   errors: Set<string>
   pending: Map<string, FooterQueuedPrompt>
@@ -474,6 +476,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     closed: false,
     initial: true,
     rootActive: false,
+    executionEpoch: 0,
     errors: new Set(),
     pending: new Map(),
     admitted: new Set(),
@@ -511,6 +514,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     },
   })
   controller.signal.addEventListener("abort", () => subagents.close(), { once: true })
+
+  // The one "go idle" transition, shared by settlement, terminal events, and the
+  // interrupt ack so the flag and the paint cannot drift apart.
+  const paintIdle = (status: string) => {
+    state.rootActive = false
+    write([], { phase: "idle", status })
+  }
 
   const write = (commits: StreamCommit[], patch?: { phase?: "idle" | "running"; status?: string; usage?: string }) => {
     if (state.closed || controller.signal.aborted || input.footer.isClosed) return
@@ -790,8 +800,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   const settleSession = async (client: OpenCodeClient) => {
     await client.session.wait({ sessionID: input.sessionID }, { signal: controller.signal })
     for (const message of await projectedMessages(client, controller.signal)) renderMessage(message, true, true)
-    state.rootActive = false
-    write([], { phase: "idle", status: blockerStatus(state.view) })
+    paintIdle(blockerStatus(state.view))
     await input.footer.idle()
   }
 
@@ -1297,6 +1306,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.execution.started") {
+      state.executionEpoch++
       state.rootActive = true
       write([], { phase: "running" })
       return
@@ -1306,8 +1316,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       event.type === "session.execution.failed" ||
       event.type === "session.execution.interrupted"
     ) {
-      state.rootActive = false
-      write([], { phase: "idle", status: "" })
+      state.executionEpoch++
+      paintIdle("")
       const current = state.wait
       if (!current) return
       if (current.interrupted && event.type === "session.execution.interrupted" && event.data.reason === "user") {
@@ -1780,7 +1790,17 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (state.wait) state.wait.interrupted = true
-      await sdk.session.interrupt({ sessionID: input.sessionID, continue: true }).catch(() => {})
+      // Paint idle at the ack, not at settlement: the server accepts interruption immediately
+      // while cleanup finishes asynchronously, and the terminal execution event re-confirms.
+      // A failed request paints nothing, so the two-press gesture stays available for retry,
+      // and a lifecycle event racing the ack wins via the epoch guard.
+      const epoch = state.executionEpoch
+      await sdk.session.interrupt({ sessionID: input.sessionID, continue: true }).then(
+        () => {
+          if (state.executionEpoch === epoch) paintIdle(blockerStatus(state.view))
+        },
+        () => {},
+      )
     },
     selectSubagent(sessionID) {
       subagents.select(sdk, sessionID)
