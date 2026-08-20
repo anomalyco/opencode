@@ -9,7 +9,6 @@ import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { isExactRootFallback } from "@opencode-ai/util/session-title-fallback"
 import { llmClient } from "../effect/app-node-platform.js"
-import { Tool } from "../tool.js"
 import { SessionEvent } from "./event.js"
 import { SessionHistory } from "./history.js"
 import { SessionModelRequest } from "./model-request.js"
@@ -20,12 +19,6 @@ import { SessionStore } from "./store.js"
 
 const MAX_LENGTH = 100
 const titleChanged = Symbol("Session title changed")
-
-// Title generation carries no tools; prepare still requires a snapshot for hook reconciliation.
-const noTools: Tool.Snapshot = {
-  definitions: [],
-  execute: () => new Tool.Error({ message: "Tools are not available for title generation" }),
-}
 
 type Dependencies = {
   readonly bus: Bus.Interface
@@ -84,11 +77,12 @@ const make = (dependencies: Dependencies) => {
         : Effect.void,
     )
     const prepared = yield* dependencies.modelRequests.prepare({
-      scope: { session, agentID: agent.id, model: resolved, tools: noTools },
+      scope: { session, agentID: agent.id, model: resolved },
       transcript: {
         system: agent.system ? [SystemPart.make(agent.system)] : [],
         messages: [Message.user(firstUser.text)],
       },
+      contextHooks: false,
     })
     const streamed = yield* dependencies.llm.stream(prepared.request, prepared.options).pipe(
       Stream.runForEach((event) => {

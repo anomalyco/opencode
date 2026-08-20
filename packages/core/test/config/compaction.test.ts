@@ -28,6 +28,10 @@ const model = LanguageModel.make({
   provider: "test-provider",
   route: OpenAIChat.route.with({ limits: { context: 100_000, output: 1_000 } }),
 })
+const resolved = SessionRunnerModel.resolved(model, {
+  capabilities: { tools: true, input: ["text"], output: ["text"] },
+  cost: [],
+})
 const config = Config.testLayer()
 const it = testEffect(
   Layer.merge(
@@ -42,13 +46,7 @@ const it = testEffect(
       [
         SessionRunnerModel.node,
         Layer.mock(SessionRunnerModel.Service)({
-          resolve: () =>
-            Effect.succeed(
-              SessionRunnerModel.resolved(model, {
-                capabilities: { tools: true, input: ["text"], output: ["text"] },
-                cost: [],
-              }),
-            ),
+          resolve: () => Effect.succeed(resolved),
         }),
       ],
       [Config.node, config],
@@ -150,10 +148,7 @@ const session = Session.Info.make({
 })
 const input = (tokens: number) => ({
   session,
-  model: SessionRunnerModel.resolved(model, {
-    capabilities: { tools: true, input: ["text"], output: ["text"] },
-    cost: [],
-  }),
+  model: resolved,
   messages: [
     Schema.decodeUnknownSync(SessionMessage.Assistant)({
       id: SessionMessage.ID.make("msg_compaction_config"),

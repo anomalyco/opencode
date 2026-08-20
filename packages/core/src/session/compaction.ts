@@ -7,7 +7,6 @@ import { Context, Effect, Layer, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../effect/app-node-platform.js"
-import { Tool } from "../tool.js"
 import { SessionEvent } from "./event.js"
 import type { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
@@ -63,12 +62,6 @@ export type Settings = {
 
 export type Draft = {
   configure: (settings: Partial<Settings>) => void
-}
-
-// Compaction summaries carry no tools; prepare still requires a snapshot for hook reconciliation.
-const noTools: Tool.Snapshot = {
-  definitions: [],
-  execute: () => new Tool.Error({ message: "Tools are not available for compaction" }),
 }
 
 type Dependencies = {
@@ -266,8 +259,9 @@ const make = (dependencies: Dependencies) => {
         : Effect.void,
     )
     const prepared = yield* dependencies.modelRequests.prepare({
-      scope: { session: plan.session, agentID: Agent.ID.make("compaction"), model: plan.model, tools: noTools },
+      scope: { session: plan.session, agentID: Agent.ID.make("compaction"), model: plan.model },
       transcript: { system: [], messages: [Message.user(plan.prompt)] },
+      contextHooks: false,
     })
     yield* dependencies.llm.stream(prepared.request, prepared.options).pipe(
       Stream.runForEach((event) => {
@@ -347,14 +341,14 @@ const make = (dependencies: Dependencies) => {
   const required = (input: AutoInput) => {
     const config = state.get()
     if (!config.auto) return false
-    const context = input.model.model.route.defaults.limits?.context
+    const limits = input.model.model.route.defaults.limits
+    const context = limits?.context
     if (context === undefined || context <= 0) return false
     const last = input.messages.findLast(
       (message): message is SessionMessage.Assistant & { tokens: NonNullable<SessionMessage.Assistant["tokens"]> } =>
         message.type === "assistant" && message.tokens !== undefined,
     )
     if (!last) return false
-    const limits = input.model.model.route.defaults.limits
     const output = Math.min(limits?.output ?? 0, OUTPUT_TOKEN_MAX)
     const promptCeiling = Math.min(
       limits?.input === undefined ? Number.POSITIVE_INFINITY : limits.input - config.buffer,

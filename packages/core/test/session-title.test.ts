@@ -334,7 +334,7 @@ it.effect("retries after a failed title request", () =>
   }),
 )
 
-it.effect("applies session context hooks to title requests", () =>
+it.effect("keeps session context hooks away from title requests", () =>
   Effect.gen(function* () {
     requests = []
     titleStream = successfulTitle
@@ -346,6 +346,8 @@ it.effect("applies session context hooks to title requests", () =>
         agent.system = "You are a title generator."
       })
     })
+    // Conversation-shaping hooks must not observe housekeeping requests: title
+    // generation opts out of context hooks, so the transcript passes through unchanged.
     const hooks = yield* PluginHooks.Service
     yield* hooks.register("session", "context", (event) =>
       Effect.sync(() => {
@@ -360,10 +362,7 @@ it.effect("applies session context hooks to title requests", () =>
     yield* title.generateForFirstPrompt(sessionID)
 
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.system.map((part) => part.text)).toEqual([
-      "You are a title generator.",
-      "Keep titles in sentence case.",
-    ])
+    expect(requests[0]?.system.map((part) => part.text)).toEqual(["You are a title generator."])
   }),
 )
 
