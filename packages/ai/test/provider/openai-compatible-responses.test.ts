@@ -73,7 +73,7 @@ describe("Open Responses-compatible route", () => {
       expect(prepared.body.input).toEqual([
         { role: "user", content: [{ type: "input_text", text: "Before." }] },
         { role: "developer", content: "Operator update." },
-        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "After." }] },
       ])
     }),
   )
@@ -113,7 +113,7 @@ describe("Open Responses-compatible route", () => {
       )
 
       expect(prepared.body).toMatchObject({
-        input: [{ role: "assistant", content: [{ type: "output_text", text: "Unclassified." }] }],
+        input: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Unclassified." }] }],
       })
     }),
   )
@@ -154,11 +154,22 @@ describe("Open Responses-compatible route", () => {
         ),
       )
 
-      expect(response.message.content).toEqual([{ type: "text", text: "I can't help with that." }])
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "I can't help with that.",
+          providerMetadata: { openresponses: { itemId: "msg_refusal" } },
+        },
+      ])
 
       const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(prepared.body.input).toEqual([
-        { role: "assistant", content: [{ type: "output_text", text: "I can't help with that." }] },
+        {
+          type: "message",
+          id: "msg_refusal",
+          role: "assistant",
+          content: [{ type: "output_text", text: "I can't help with that." }],
+        },
       ])
     }),
   )

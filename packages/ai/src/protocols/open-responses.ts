@@ -93,6 +93,8 @@ export const InputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenResponsesInputContent) }),
   Schema.Struct({
+    type: Schema.tag("message"),
+    id: Schema.optionalKey(Schema.String),
     role: Schema.tag("assistant"),
     content: Schema.Array(OpenResponsesOutputText),
     phase: Schema.optionalKey(MessagePhase),
@@ -101,6 +103,7 @@ export const InputItem = Schema.Union([
   OpenResponsesItemReference,
   Schema.Struct({
     type: Schema.tag("function_call"),
+    id: Schema.optionalKey(Schema.String),
     call_id: Schema.String,
     name: Schema.String,
     arguments: Schema.String,
@@ -115,6 +118,8 @@ type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
 type LoweredInputItem =
   | OpenResponsesInputItem
   | {
+      readonly type: "message"
+      readonly id?: string
       readonly role: "assistant"
       readonly content: ReadonlyArray<{ readonly type: "output_text"; readonly text: string }>
       readonly phase?: MessagePhase | null
@@ -128,8 +133,6 @@ type OpenResponsesReasoningInput = {
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
-type OpenResponsesReasoningReplay = Omit<OpenResponsesReasoningInput, "id">
-
 export const Tool = Schema.Struct({
   type: Schema.tag("function"),
   name: Schema.String,
@@ -377,34 +380,42 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
     tool: (toolName) => ({ type: "function" as const, name: toolName }),
   })
 
-const lowerToolCall = (part: ToolCallPart): OpenResponsesInputItem => ({
-  type: "function_call",
-  call_id: part.id,
-  name: part.name,
-  arguments: ProviderShared.encodeJson(part.input),
-})
+const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
+  const metadata = providerMetadata?.[providerMetadataKey]
+  return ProviderShared.isRecord(metadata) && typeof metadata.itemId === "string" && metadata.itemId.length > 0
+    ? metadata.itemId
+    : undefined
+}
+
+const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {
+  const id = itemID(part.providerMetadata, providerMetadataKey)
+  return {
+    type: "function_call",
+    ...(id ? { id } : {}),
+    call_id: part.id,
+    name: part.name,
+    arguments: ProviderShared.encodeJson(part.input),
+  }
+}
 
 const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
   const metadata = part.providerMetadata?.[providerMetadataKey]
-  if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string" || metadata.itemId.length === 0)
-    return undefined
+  const id = itemID(part.providerMetadata, providerMetadataKey)
+  if (!ProviderShared.isRecord(metadata) || !id) return undefined
   const encryptedContent =
     typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
       ? metadata.reasoningEncryptedContent
       : undefined
   return {
     type: "reasoning",
-    id: metadata.itemId,
+    id,
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
     encrypted_content: encryptedContent,
   }
 }
 
 const hostedToolItemID = (part: ToolResultPart, providerMetadataKey: string) => {
-  const metadata = part.providerMetadata?.[providerMetadataKey]
-  return ProviderShared.isRecord(metadata) && typeof metadata.itemId === "string" && metadata.itemId.length > 0
-    ? metadata.itemId
-    : undefined
+  return itemID(part.providerMetadata, providerMetadataKey)
 }
 
 const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
@@ -489,24 +500,26 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
     if (message.role === "assistant") {
       const content: TextPart[] = []
-      const reasoningItems: Record<string, OpenResponsesReasoningReplay> = {}
+      const reasoningItems: Record<string, OpenResponsesReasoningInput> = {}
       const reasoningReferences = new Set<string>()
       const hostedToolReferences = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
-        const groups = content.reduce<Array<{ phase: MessagePhase | null | undefined; parts: TextPart[] }>>(
-          (groups, part) => {
-            const metadata = part.providerMetadata?.[providerMetadataKey]
-            const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase, extension) : undefined
-            const group = groups.at(-1)
-            if (group && group.phase === phase) group.parts.push(part)
-            else groups.push({ phase, parts: [part] })
-            return groups
-          },
-          [],
-        )
+        const groups = content.reduce<
+          Array<{ id: string | undefined; phase: MessagePhase | null | undefined; parts: TextPart[] }>
+        >((groups, part) => {
+          const metadata = part.providerMetadata?.[providerMetadataKey]
+          const id = itemID(part.providerMetadata, providerMetadataKey)
+          const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase, extension) : undefined
+          const group = groups.at(-1)
+          if (group && group.id === id && group.phase === phase) group.parts.push(part)
+          else groups.push({ id, phase, parts: [part] })
+          return groups
+        }, [])
         input.push(
           ...groups.map((group) => ({
+            type: "message" as const,
+            ...(group.id === undefined ? {} : { id: group.id }),
             role: "assistant" as const,
             content: group.parts.map((part) => ({ type: "output_text" as const, text: part.text })),
             ...(group.phase === undefined ? {} : { phase: group.phase }),
@@ -535,19 +548,14 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
               existing.encrypted_content = reasoning.encrypted_content
             continue
           }
-          const replay = {
-            type: reasoning.type,
-            summary: reasoning.summary,
-            encrypted_content: reasoning.encrypted_content,
-          }
-          reasoningItems[reasoning.id] = replay
-          input.push(replay)
+          reasoningItems[reasoning.id] = reasoning
+          input.push(reasoning)
           continue
         }
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part))
+          input.push(lowerToolCall(part, providerMetadataKey))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
@@ -727,7 +735,7 @@ const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepRe
   if (!event.delta) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   const phase = state.messagePhases[id]
-  const metadata = phase === undefined ? undefined : providerMetadata(state, { phase })
+  const metadata = providerMetadata(state, { itemId: id, ...(phase === undefined ? {} : { phase }) })
   const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, metadata)
   return [{ ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) }, events]
 }
@@ -956,7 +964,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
           state.lifecycle,
           events,
           item.id,
-          phase === undefined ? undefined : providerMetadata(state, { phase }),
+          providerMetadata(state, { itemId: item.id, ...(phase === undefined ? {} : { phase }) }),
         ),
         messageItems,
         messagePhases,
@@ -969,7 +977,11 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     if (!item.id || !item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
     const tools = state.tools[item.id]
       ? state.tools
-      : ToolStream.start(state.tools, item.id, { id: item.call_id, name: item.name })
+      : ToolStream.start(state.tools, item.id, {
+          id: item.call_id,
+          name: item.name,
+          providerMetadata: providerMetadata(state, { itemId: item.id }),
+        })
     const result =
       item.arguments === undefined
         ? yield* ToolStream.finish(state.id, tools, item.id)

@@ -263,7 +263,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.input).toEqual([
         { role: "user", content: [{ type: "input_text", text: "Before." }] },
         { role: "developer", content: "Operator update." },
-        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "After." }] },
       ])
     }),
   )
@@ -485,7 +485,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("continues store-false reasoning without replaying the output-only item ID", () =>
+  it.effect("continues store-false reasoning while retaining the output item ID", () =>
     Effect.gen(function* () {
       const firstInput = [{ role: "user", content: [{ type: "input_text", text: "Think" }] }]
       const request = { type: "response.create", model: "gpt-5.2", store: false, input: firstInput }
@@ -515,6 +515,7 @@ describe("OpenAI Responses route", () => {
           ...firstInput,
           {
             type: "reasoning",
+            id: "rs_1",
             summary: [{ type: "summary_text", text: "Thought" }],
             encrypted_content: "encrypted",
           },
@@ -1484,7 +1485,7 @@ describe("OpenAI Responses route", () => {
       expect(response.text).toBe("Hello!")
       expect(response.events).toEqual([
         { type: "step-start", index: 0 },
-        { type: "text-start", id: "msg_1" },
+        { type: "text-start", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
         { type: "text-delta", id: "msg_1", text: "Hello" },
         { type: "text-delta", id: "msg_1", text: "!" },
         { type: "text-end", id: "msg_1" },
@@ -1573,13 +1574,15 @@ describe("OpenAI Responses route", () => {
         {
           type: "text",
           text: "I can't help with that.",
-          providerMetadata: { openai: { phase: "final_answer" } },
+          providerMetadata: { openai: { itemId: "msg_refusal", phase: "final_answer" } },
         },
       ])
 
       const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(prepared.body.input).toEqual([
         {
+          type: "message",
+          id: "msg_refusal",
           role: "assistant",
           content: [{ type: "output_text", text: "I can't help with that." }],
           phase: "final_answer",
@@ -1643,33 +1646,39 @@ describe("OpenAI Responses route", () => {
         {
           type: "text",
           text: "Checking.",
-          providerMetadata: { openai: { phase: "commentary" } },
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
         },
         {
           type: "text",
           text: "Finished.",
-          providerMetadata: { openai: { phase: "final_answer" } },
+          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
         },
         {
           type: "text",
           text: "Unclassified.",
-          providerMetadata: { openai: { phase: null } },
+          providerMetadata: { openai: { itemId: "msg_null", phase: null } },
         },
       ])
 
       const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(prepared.body.input).toEqual([
         {
+          type: "message",
+          id: "msg_commentary",
           role: "assistant",
           content: [{ type: "output_text", text: "Checking." }],
           phase: "commentary",
         },
         {
+          type: "message",
+          id: "msg_final",
           role: "assistant",
           content: [{ type: "output_text", text: "Finished." }],
           phase: "final_answer",
         },
         {
+          type: "message",
+          id: "msg_null",
           role: "assistant",
           content: [{ type: "output_text", text: "Unclassified." }],
           phase: null,
@@ -1763,12 +1772,12 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.events.filter((event) => event.type.startsWith("text-"))).toEqual([
-        { type: "text-start", id: "msg_1" },
+        { type: "text-start", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
         { type: "text-delta", id: "msg_1", text: "First" },
-        { type: "text-end", id: "msg_1" },
-        { type: "text-start", id: "msg_2" },
+        { type: "text-end", id: "msg_1", providerMetadata: undefined },
+        { type: "text-start", id: "msg_2", providerMetadata: { openai: { itemId: "msg_2" } } },
         { type: "text-delta", id: "msg_2", text: "Second" },
-        { type: "text-end", id: "msg_2" },
+        { type: "text-end", id: "msg_2", providerMetadata: { openai: { itemId: "msg_2" } } },
       ])
     }),
   )
@@ -1800,7 +1809,7 @@ describe("OpenAI Responses route", () => {
       expect(response.events.filter((event) => event.type === "finish")).toHaveLength(1)
       expect(response.message.content).toEqual([
         { type: "reasoning", text: "thinking" },
-        { type: "text", text: "Hello" },
+        { type: "text", text: "Hello", providerMetadata: { openai: { itemId: "msg_1" } } },
       ])
     }),
   )
@@ -1961,6 +1970,7 @@ describe("OpenAI Responses route", () => {
                   { role: "user", content: [{ type: "input_text", text: "What changed?" }] },
                   {
                     type: "reasoning",
+                    id: "rs_1",
                     encrypted_content: "encrypted-state",
                     summary: [{ type: "summary_text", text: "Checked the previous diff." }],
                   },
@@ -1968,7 +1978,6 @@ describe("OpenAI Responses route", () => {
                   { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
                 ],
               })
-              expect(body.input[1]).not.toHaveProperty("id")
               return input.respond(
                 sseEvents(
                   { type: "response.output_text.delta", item_id: "msg_1", delta: "Parser now round-trips reasoning." },
@@ -2012,13 +2021,14 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body.input).toEqual([
-        { role: "assistant", content: [{ type: "output_text", text: "Before." }] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "Before." }] },
         {
           type: "reasoning",
+          id: "rs_1",
           encrypted_content: "encrypted-state",
           summary: [{ type: "summary_text", text: "Checked order." }],
         },
-        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "After." }] },
       ])
     }),
   )
@@ -2150,6 +2160,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.input).toEqual([
         {
           type: "reasoning",
+          id: "rs_1",
           encrypted_content: "encrypted-state",
           summary: [
             { type: "summary_text", text: "First" },
@@ -2282,6 +2293,17 @@ describe("OpenAI Responses route", () => {
           usage,
         },
       ])
+
+      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(prepared.body.input).toEqual([
+        {
+          type: "function_call",
+          id: "item_1",
+          call_id: "call_1",
+          name: "lookup",
+          arguments: '{"query":"weather"}',
+        },
+      ])
     }),
   )
 
@@ -2378,6 +2400,35 @@ describe("OpenAI Responses route", () => {
         raw: '{"query":"partial',
       })
       expect(response.finishReason.normalized).toBe("tool-calls")
+    }),
+  )
+
+  it.effect("retains function call item metadata when output_item.added is absent", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.done",
+                item: {
+                  type: "function_call",
+                  id: "item_1",
+                  call_id: "call_1",
+                  name: "lookup",
+                  arguments: '{"query":"weather"}',
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({
+        id: "call_1",
+        providerMetadata: { openai: { itemId: "item_1" } },
+      })
     }),
   )
 

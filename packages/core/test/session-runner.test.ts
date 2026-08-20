@@ -2857,11 +2857,17 @@ describe("SessionRunnerLLM", () => {
 
       yield* TestLLM.push(
         TestLLM.stop(
-          LLMEvent.textStart({ id: "commentary", providerMetadata: { openai: { phase: "commentary" } } }),
+          LLMEvent.textStart({
+            id: "commentary",
+            providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+          }),
           LLMEvent.textDelta({ id: "commentary", text: "Checking." }),
           LLMEvent.textEnd({
             id: "commentary",
-            providerMetadata: { openai: { phase: "commentary" }, anthropic: { ignored: true } },
+            providerMetadata: {
+              openai: { itemId: "msg_commentary", phase: "commentary" },
+              anthropic: { ignored: true },
+            },
           }),
         ),
       )
@@ -2872,7 +2878,7 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Check first" },
         {
           type: "assistant",
-          content: [{ type: "text", text: "Checking.", state: { phase: "commentary" } }],
+          content: [{ type: "text", text: "Checking.", state: { itemId: "msg_commentary", phase: "commentary" } }],
         },
       ])
 
@@ -2884,7 +2890,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "text",
           text: "Checking.",
-          providerMetadata: { openai: { phase: "commentary" } },
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
         },
       ])
     }),
