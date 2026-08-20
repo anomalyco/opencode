@@ -271,10 +271,7 @@ export const Event = Schema.StructWithRest(
     type: Schema.String,
     delta: Schema.optional(Schema.String),
     text: Schema.optional(Schema.String),
-    refusal: Schema.optional(Schema.String),
     item_id: Schema.optional(Schema.String),
-    output_index: Schema.optional(Schema.Number),
-    content_index: Schema.optional(Schema.Number),
     summary_index: Schema.optional(Schema.Number),
     item: Schema.optional(StreamItem),
     response: Schema.optional(
@@ -300,6 +297,20 @@ export const Event = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 export type Event = Schema.Schema.Type<typeof Event>
+
+const RefusalEvent = Schema.Union([
+  Schema.Struct({
+    type: Schema.tag("response.refusal.delta"),
+    item_id: Schema.String,
+    delta: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.tag("response.refusal.done"),
+    item_id: Schema.String,
+    refusal: Schema.String,
+  }),
+])
+const isRefusalEvent = Schema.is(RefusalEvent)
 
 export interface Extension {
   readonly id: string
@@ -730,35 +741,6 @@ const onOutputTextDone = (state: ParserState, event: Event, id: string): StepRes
   return [{ ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, id) }, events]
 }
 
-const refusalID = (event: Event) => `refusal:${event.item_id}:${event.content_index}`
-
-const messageMetadata = (
-  state: ParserState,
-  itemID: string,
-  phase: MessagePhase | null | undefined = state.messagePhases[itemID],
-) => (phase === undefined ? undefined : providerMetadata(state, { phase }))
-
-const onRefusalDelta = (state: ParserState, event: Event): StepResult => {
-  if (!event.item_id || !event.delta) return [state, NO_EVENTS]
-  const events: LLMEvent[] = []
-  const id = refusalID(event)
-  const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, messageMetadata(state, event.item_id))
-  return [{ ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) }, events]
-}
-
-const onRefusalDone = (state: ParserState, event: Event): StepResult => {
-  if (!event.item_id) return [state, NO_EVENTS]
-  const events: LLMEvent[] = []
-  const id = refusalID(event)
-  const metadata = messageMetadata(state, event.item_id)
-  const started =
-    state.lifecycle.text.has(id) || event.refusal === undefined
-      ? state.lifecycle
-      : Lifecycle.textDelta(Lifecycle.textStart(state.lifecycle, events, id, metadata), events, id, event.refusal)
-  if (state.messageItems.has(event.item_id)) return [{ ...state, lifecycle: started }, events]
-  return [{ ...state, lifecycle: Lifecycle.textEnd(started, events, id, metadata) }, events]
-}
-
 export const onReasoningDelta = (state: ParserState, event: Event, itemID: string): StepResult => {
   if (!event.delta) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
@@ -961,24 +943,21 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
   if (item.type === "message" && item.id) {
-    const itemID = item.id
     const itemPhase = state.messagePhase(item.phase)
-    const phase = itemPhase === undefined ? state.messagePhases[itemID] : itemPhase
+    const phase = itemPhase === undefined ? state.messagePhases[item.id] : itemPhase
     const events: LLMEvent[] = []
-    const metadata = phase === undefined ? undefined : providerMetadata(state, { phase })
-    const lifecycle = Array.from(state.lifecycle.text)
-      .filter((id) => id.startsWith(`refusal:${itemID}:`))
-      .reduce(
-        (lifecycle, id) => Lifecycle.textEnd(lifecycle, events, id, messageMetadata(state, itemID, phase)),
-        Lifecycle.textEnd(state.lifecycle, events, itemID, metadata),
-      )
     const messageItems = new Set(state.messageItems)
-    messageItems.delete(itemID)
-    const { [itemID]: _phase, ...messagePhases } = state.messagePhases
+    messageItems.delete(item.id)
+    const { [item.id]: _phase, ...messagePhases } = state.messagePhases
     return [
       {
         ...state,
-        lifecycle,
+        lifecycle: Lifecycle.textEnd(
+          state.lifecycle,
+          events,
+          item.id,
+          phase === undefined ? undefined : providerMetadata(state, { phase }),
+        ),
         messageItems,
         messagePhases,
       },
@@ -1101,17 +1080,11 @@ export const step = (state: ParserState, event: Event) => {
     )
   }
   if (event.type === "response.refusal.delta" || event.type === "response.refusal.done") {
-    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
-    if (event.output_index === undefined)
-      return ProviderShared.eventError(state.id, `${event.type} is missing output_index`)
-    if (event.content_index === undefined)
-      return ProviderShared.eventError(state.id, `${event.type} is missing content_index`)
-    if (event.type === "response.refusal.delta" && event.delta === undefined)
-      return ProviderShared.eventError(state.id, `${event.type} is missing delta`)
-    if (event.type === "response.refusal.done" && event.refusal === undefined)
-      return ProviderShared.eventError(state.id, `${event.type} is missing refusal`)
+    if (!isRefusalEvent(event)) return ProviderShared.eventError(state.id, `${event.type} is malformed`)
     return Effect.succeed(
-      event.type === "response.refusal.delta" ? onRefusalDelta(state, event) : onRefusalDone(state, event),
+      event.type === "response.refusal.delta"
+        ? onOutputTextDelta(state, event, event.item_id)
+        : onOutputTextDone(state, { ...event, text: event.refusal }, event.item_id),
     )
   }
   if (event.type === "response.reasoning.delta" || event.type === "response.reasoning_summary_text.delta") {

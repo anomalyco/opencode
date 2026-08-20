@@ -1588,12 +1588,10 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("rejects refusal events without standard content coordinates", () =>
+  it.effect("rejects malformed refusal events", () =>
     Effect.gen(function* () {
       const events = [
         { type: "response.refusal.delta", output_index: 0, content_index: 0, delta: "missing item" },
-        { type: "response.refusal.delta", item_id: "msg_1", content_index: 0, delta: "missing output" },
-        { type: "response.refusal.delta", item_id: "msg_1", output_index: 0, delta: "missing content" },
         { type: "response.refusal.delta", item_id: "msg_1", output_index: 0, content_index: 0 },
         { type: "response.refusal.done", item_id: "msg_1", output_index: 0, content_index: 0 },
       ]

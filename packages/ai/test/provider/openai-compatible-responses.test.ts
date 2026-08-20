@@ -137,8 +137,6 @@ describe("Open Responses-compatible route", () => {
               {
                 type: "response.refusal.done",
                 item_id: "msg_refusal",
-                output_index: 0,
-                content_index: 0,
                 refusal: "I can't help with that.",
               },
               {
