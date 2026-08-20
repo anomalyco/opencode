@@ -31,7 +31,9 @@ import { recordingPhysical } from "../lib/physical"
 import { testEffect } from "../lib/effect"
 import { SessionAdmission } from "@/session/closure/admission"
 import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionClosureDiscovery } from "@/session/closure/discovery"
 import { SessionClosureModel as Model } from "@/session/closure/model"
+import { SessionPhysical } from "@/session/physical-interrupt"
 import { renderOutput, type TaskSelectedReturn } from "@/session/task-return"
 
 // These fixtures reach the unattached path — the "root async" cases route through `attach()` ->
@@ -173,11 +175,16 @@ const layer = LayerNode.compile(
     Database.node,
     RuntimeFlags.node,
     Ripgrep.node,
+    SessionClosureDiscovery.node,
   ]),
   [
     // Every test in this file exercises attachment, which is reached only with the flag on.
     [RuntimeFlags.node, RuntimeFlags.layer({ experimentalBackgroundSubagents: true })],
     [Provider.node, providerLayer],
+    // Discovery needs a `SessionPhysical` to build. It is never invoked here: discovery stores each
+    // entry's `interrupt` as an unevaluated Effect, so reading `jobs` observes metadata without
+    // signalling anything. A recorder rather than the real service keeps it that way.
+    [SessionPhysical.node, Layer.succeed(SessionPhysical.Service, recordingPhysical())],
     // The background binder resolves whichever coordinator the layer provides, so the fake that
     // admits every bind must be the one it finds; otherwise every job is refused as
     // `refused_by_authority` and surfaces as a cancelled task.
@@ -1543,6 +1550,111 @@ describe("task attachment integration", () => {
       // suppression rather than a degradation. Treating it as a failure would turn a routine
       // cancellation into an acceptance-blocking one.
       expect(parent.current().failed).toBe(false)
+    }),
+  )
+})
+
+/**
+ * The seam between the Task tool and branch closure.
+ *
+ * `task.ts` writes `taskMessageId` and `taskCallId` into the background job's metadata; nothing else
+ * writes them, and `startExact` in `task.ts` is the only site that could. `closure/discovery.ts`
+ * reads exactly those two keys off `entry.info.metadata` to build a branch edge, and `closure/
+ * driver.ts` skips any edge carrying neither before it can record a coordinate — so a Task part
+ * whose coordinates are absent is never resolved, and cancelling its branch records an unknown
+ * outcome instead of settling the part.
+ *
+ * These tests run the producer and the consumer, not the fields between them. The closure suites
+ * that otherwise cover the driver set `taskMessage`/`taskCall` directly onto a discovery item, which
+ * is the right way to test the driver's own logic and cannot detect the producer being absent:
+ * they supply the value production is supposed to make. Removing the two lines from `task.ts` must
+ * turn these red.
+ */
+describe("task edge coordinates for branch closure", () => {
+  it.instance("an async task records the coordinates branch closure discovers it by", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const coordinator = yield* AttachmentCoordinator.make
+      const running = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const promptOps = basicOps({
+        attachments: coordinator,
+        prompt: (input) => {
+          if (input.sessionID === chat.id) return Effect.succeed(reply(input, "done"))
+          // Hold the child open so its job is still live when discovery enumerates.
+          return Deferred.succeed(running, undefined).pipe(
+            Effect.andThen(Deferred.await(release)),
+            Effect.as(reply(input, "child done")),
+          )
+        },
+      })
+
+      const callID = "call_edge_coordinates"
+      const started = yield* def.execute(
+        { description: "edge coordinates", prompt: "run", subagent_type: "general", async: true },
+        { ...context({ sessionID: chat.id, messageID: assistant.id, promptOps }), callID },
+      )
+      yield* Deferred.await(running)
+
+      // The consumer half: the shipped discovery capability, reading the job the producer started.
+      const discovery = yield* SessionClosureDiscovery.Service
+      const entries = yield* discovery.jobs
+      const edge = entries.find((item) => item.job === started.metadata.sessionId)
+
+      expect(edge).toBeDefined()
+      expect(edge?.taskMessage).toBe(assistant.id)
+      expect(edge?.taskCall).toBe(callID)
+      // The condition `driver.ts` applies before it will record a coordinate for this edge. Asserted
+      // as the driver states it, because this is what decides whether the Task part is resolvable at
+      // all — the two assertions above would still hold if the driver's guard changed shape.
+      expect(edge?.taskMessage === undefined && edge?.taskCall === undefined).toBe(false)
+
+      yield* Deferred.succeed(release, undefined)
+    }),
+  )
+
+  it.instance("a task started without a call id records the message and omits the call", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const coordinator = yield* AttachmentCoordinator.make
+      const running = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const promptOps = basicOps({
+        attachments: coordinator,
+        prompt: (input) => {
+          if (input.sessionID === chat.id) return Effect.succeed(reply(input, "done"))
+          return Deferred.succeed(running, undefined).pipe(
+            Effect.andThen(Deferred.await(release)),
+            Effect.as(reply(input, "child done")),
+          )
+        },
+      })
+
+      // `context()` supplies no `callID`, which is the ordinary case for a Task the model did not
+      // reach through a tool call.
+      const started = yield* def.execute(
+        { description: "no call id", prompt: "run", subagent_type: "general", async: true },
+        context({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+      )
+      yield* Deferred.await(running)
+
+      const discovery = yield* SessionClosureDiscovery.Service
+      const entries = yield* discovery.jobs
+      const edge = entries.find((item) => item.job === started.metadata.sessionId)
+
+      expect(edge).toBeDefined()
+      expect(edge?.taskMessage).toBe(assistant.id)
+      // Omitted rather than written `undefined`: discovery's shape check reports "no coordinate"
+      // instead of coercing one, so a missing call cannot widen what cancellation may claim.
+      expect(edge?.taskCall).toBeUndefined()
+      // One coordinate is still enough to pass the driver's guard, so the part stays resolvable.
+      expect(edge?.taskMessage === undefined && edge?.taskCall === undefined).toBe(false)
+
+      yield* Deferred.succeed(release, undefined)
     }),
   )
 })
