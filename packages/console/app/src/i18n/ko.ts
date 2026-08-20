@@ -268,6 +268,7 @@ export const dict = {
   "go.graph.freePill": "Big Pickle 및 무료 모델",
   "go.graph.go": "Go",
   "go.graph.label": "5시간당 요청 수",
+  "go.graph.limitedRegions": "일부 지역에서만 제공",
   "go.graph.usageLimits": "사용 한도",
   "go.graph.aria": "5시간당 요청 수: {{free}} 대 {{go}}",
 

@@ -270,6 +270,7 @@ export const dict = {
   "go.graph.freePill": "Big Pickle and free models",
   "go.graph.go": "Go",
   "go.graph.label": "Requests per 5 hour",
+  "go.graph.limitedRegions": "limited regions",
   "go.graph.tick": "{{n}}x",
   "go.graph.usageLimits": "Usage limits",
   "go.graph.aria": "Requests per 5h: {{free}} vs {{go}}",

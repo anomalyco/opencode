@@ -274,6 +274,7 @@ export const dict = {
   "go.graph.freePill": "Big Pickle e modelos gratuitos",
   "go.graph.go": "Go",
   "go.graph.label": "Requisições por 5 horas",
+  "go.graph.limitedRegions": "regiões limitadas",
   "go.graph.usageLimits": "Limites de uso",
   "go.graph.aria": "Requisições por 5h: {{free}} vs {{go}}",
 

@@ -272,6 +272,7 @@ export const dict = {
   "go.graph.freePill": "Big Pickle e modelli gratuiti",
   "go.graph.go": "Go",
   "go.graph.label": "Richieste ogni 5 ore",
+  "go.graph.limitedRegions": "regioni limitate",
   "go.graph.usageLimits": "Limiti di utilizzo",
   "go.graph.aria": "Richieste ogni 5h: {{free}} vs {{go}}",
 

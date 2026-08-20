@@ -273,6 +273,7 @@ export const dict = {
   "go.graph.freePill": "Big Pickle та безкоштовні моделі",
   "go.graph.go": "Go",
   "go.graph.label": "Запитів за 5 годин",
+  "go.graph.limitedRegions": "обмежені регіони",
   "go.graph.usageLimits": "Ліміти використання",
   "go.graph.aria": "Запитів за 5 год: {{free}} vs {{go}}",
 
