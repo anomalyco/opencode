@@ -2,10 +2,11 @@ export * as ToolOutput from "./tool-output.js"
 
 import path from "path"
 import type { Tool } from "@opencode-ai/schema/tool"
-import { Context, Duration, Effect, Layer, Option, Schedule } from "effect"
+import { Context, Duration, Effect, Layer, Schedule } from "effect"
 import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
+import { FileRetention } from "./file-retention.js"
 import { Identifier } from "./id/id.js"
 import { State } from "./state.js"
 
@@ -33,22 +34,14 @@ export interface Interface extends State.Transformable<Draft> {
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolOutput") {}
 
 const cleanup = Effect.fn("ToolOutput.cleanup")(function* (fs: FSUtil.Interface, directory: string) {
-  const cutoff = Date.now() - Duration.toMillis(RETENTION)
   const entries = yield* fs.readDirectory(directory).pipe(
     Effect.map((entries) => entries.filter((entry) => /^tool_[0-9a-f]{12}/.test(entry))),
     Effect.catch(() => Effect.succeed([])),
   )
-  yield* Effect.forEach(
-    entries,
-    (entry) =>
-      Effect.gen(function* () {
-        const file = path.join(directory, entry)
-        const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
-        const mtime = info && Option.getOrUndefined(info.mtime)
-        if (!mtime || mtime.getTime() >= cutoff) return
-        yield* fs.remove(file).pipe(Effect.catch(() => Effect.void))
-      }),
-    { concurrency: 8, discard: true },
+  yield* FileRetention.cleanup(
+    fs,
+    entries.map((entry) => path.join(directory, entry)),
+    RETENTION,
   )
 })
 

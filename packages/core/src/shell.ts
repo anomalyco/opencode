@@ -1,14 +1,16 @@
 export * as Shell from "./shell.js"
 
 import path from "path"
-import { Context, Deferred, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Context, Deferred, Duration, Effect, Fiber, Layer, Schema, Schedule, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
 import { AppProcess } from "@opencode-ai/util/process"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
+import { FileRetention } from "./file-retention.js"
 import { Location } from "./location.js"
 import { Global } from "@opencode-ai/util/global"
 import { ShellSelect } from "./shell/select.js"
@@ -21,9 +23,11 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.No
   id: Shell.ID,
 }) {}
 
-// Exited processes stay observable (status, exit code, retained output) until removed explicitly.
-// Cap retention so abandoned commands do not accumulate unbounded state and output files.
+// Keep recent exited processes observable in memory, including their file-backed output.
+// The process-local cap complements the time-based sweep, which also cleans files left by restarts.
 const EXITED_LIMIT = 25
+export const RETENTION = Duration.days(7)
+export const DIRECTORY = "shell"
 
 type Info = Shell.Info
 
@@ -67,6 +71,42 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Shell") {}
 
+export const cleanup = Effect.fn("Shell.cleanup")(function* () {
+  const fs = yield* FSUtil.Service
+  const global = yield* Global.Service
+  const directory = path.join(global.data, DIRECTORY)
+  const projects = yield* fs.readDirectoryEntries(directory).pipe(
+    Effect.map((entries) => entries.filter((entry) => entry.type === "directory")),
+    Effect.catch(() => Effect.succeed([])),
+  )
+  const files = yield* Effect.forEach(
+    projects,
+    (project) =>
+      fs.readDirectoryEntries(path.join(directory, project.name)).pipe(
+        Effect.map((entries) =>
+          entries.flatMap((entry) =>
+            entry.type === "file" && /^sh_[0-9a-f]{12}.*\.out$/.test(entry.name)
+              ? [path.join(directory, project.name, entry.name)]
+              : [],
+          ),
+        ),
+        Effect.catch(() => Effect.succeed([])),
+      ),
+    { concurrency: 8 },
+  )
+  yield* FileRetention.cleanup(fs, files.flat(), RETENTION)
+})
+
+const cleanupLayer = Layer.effectDiscard(
+  cleanup().pipe(Effect.repeat(Schedule.spaced(Duration.hours(1))), Effect.forkScoped),
+)
+
+const cleanupNode = makeGlobalNode({
+  name: "shell-output-cleanup",
+  layer: cleanupLayer,
+  deps: [FSUtil.node, Global.node],
+})
+
 const layer = () =>
   Layer.effect(
     Service,
@@ -83,7 +123,7 @@ const layer = () =>
       const sessions = new Map<string, Active>()
       const exitOrder: string[] = []
 
-      const outputDir = path.join(global.data, "shell", location.project.id)
+      const outputDir = path.join(global.data, DIRECTORY, location.project.id)
       const { mkdir, unlink } = yield* Effect.promise(() => import("fs/promises"))
       const { createWriteStream, createReadStream } = yield* Effect.promise(() => import("fs"))
       yield* Effect.promise(() => mkdir(outputDir, { recursive: true }))
@@ -358,5 +398,6 @@ export const node = makeLocationNode({
     Environment.node,
     PluginHooks.node,
     SessionEnvironment.node,
+    cleanupNode,
   ],
 })
