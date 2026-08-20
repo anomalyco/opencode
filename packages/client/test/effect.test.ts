@@ -111,7 +111,7 @@ test("event.subscribe exposes and decodes the native Effect event stream", async
   expect(Array.from(events).map((event) => event.type)).toEqual(["server.connected", "session.model.selected"])
   const durable = events[1]
   if (durable?.type !== "session.model.selected") throw new Error("Expected model event")
-  expect(DateTime.toEpochMillis(durable.created)).toBe(1_717_171_717_000)
+  expect(durable.created).toBe(1_717_171_717_000)
   expect(durable.durable).toEqual({ aggregateID: "ses_test", seq: 1, version: 1 })
 })
 
@@ -219,9 +219,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(logQueries[0]).toEqual({ after: "0" })
   const logged = Array.from(result.log)
   expect(logged.map((item) => item.type)).toEqual(["session.model.selected", "log.synced"])
-  expect(logged[0]?.type === "session.model.selected" && DateTime.toEpochMillis(logged[0].created)).toBe(
-    1_717_171_717_000,
-  )
+  expect(logged[0]?.type === "session.model.selected" && logged[0].created).toBe(1_717_171_717_000)
   expect(logged.at(-1)).toEqual(synced)
   expect(result.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
 })
