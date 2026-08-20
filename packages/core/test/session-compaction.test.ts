@@ -110,6 +110,13 @@ test("compaction describes tool media without embedding base64", () => {
   expect(serialized).not.toContain(base64)
 })
 
+test("compaction truncation does not split surrogate pairs", () => {
+  const prefix = "a".repeat(1_999)
+
+  expect(SessionCompaction.truncateToolOutput(`${prefix}😀suffix`)).toBe(`${prefix}😀\n[truncated]`)
+  expect(SessionCompaction.truncateToolOutput("😀".repeat(2_000))).toBe("😀".repeat(2_000))
+})
+
 test("compaction prompt requires the checkpoint headings in order", () => {
   const prompt = SessionCompaction.buildPrompt({ context: ["Conversation history"] })
   expect(prompt.match(/^#{2,3} .+$/gm)).toEqual([
