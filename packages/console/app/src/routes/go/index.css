@@ -597,6 +597,7 @@ body {
           white-space: nowrap;
 
           a {
+            color: inherit;
             pointer-events: auto;
           }
         }
