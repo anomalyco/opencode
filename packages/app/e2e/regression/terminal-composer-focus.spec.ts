@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode, checksum } from "@opencode-ai/util/encode"
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
@@ -8,12 +8,12 @@ const projectID = "proj_terminal_composer_focus"
 const sessionID = "ses_terminal_composer_focus"
 const ptyID = "pty_terminal_composer_focus"
 const newPtyID = "pty_terminal_composer_focus_new"
+const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
 test.beforeEach(async ({ page }) => {
   await mockOpenCodeServer(page, {
-    protocol: "v2",
     directory,
     project: {
       id: projectID,
@@ -71,13 +71,10 @@ test.beforeEach(async ({ page }) => {
     }),
   )
   await page.routeWebSocket(new RegExp(`/api/pty/${ptyID}/connect`), () => undefined)
-  await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-  })
 })
 
 test("routes typing to the composer unless the open terminal is focused", async ({ page }) => {
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, "Terminal composer focus")
 
   const composer = page.locator('[data-component="prompt-input"]')
@@ -116,7 +113,7 @@ test("keeps composer focus when a cached terminal finishes mounting", async ({ p
   })
   await seedCachedTerminal(page)
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`, { waitUntil: "commit" })
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`, { waitUntil: "commit" })
   await expectSessionTitle(page, "Terminal composer focus")
 
   const composer = page.locator('[data-component="prompt-input"]')
@@ -142,7 +139,7 @@ test("keeps newer composer focus while an explicit terminal open finishes", asyn
     await route.continue()
   })
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, "Terminal composer focus")
 
   const composer = page.locator('[data-component="prompt-input"]')
@@ -187,7 +184,7 @@ test("focuses a terminal created from the new-terminal button", async ({ page })
   )
   await page.routeWebSocket(new RegExp(`/api/pty/${newPtyID}/connect`), () => undefined)
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, "Terminal composer focus")
 
   const composer = page.locator('[data-component="prompt-input"]')
@@ -214,12 +211,18 @@ function seedCachedTerminal(page: Page) {
         }),
       )
     },
-    { terminalKey: `${base64Encode(directory)}/terminal.v1`, ptyID },
+    { terminalKey: terminalStorageKey(), ptyID },
   )
 }
 
+function terminalStorageKey() {
+  const dir = base64Encode(directory)
+  const head = dir.slice(0, 12).replace(/[^a-zA-Z0-9._-]/g, "-")
+  return `opencode.workspace.${head}.${checksum(dir) ?? "0"}.dat:workspace:terminal`
+}
+
 function ptyLocation() {
-  return { directory, project: { id: projectID, directory } }
+  return { directory, project: { id: projectID, directory, canonical: directory } }
 }
 
 function ptyInfo(id: string, title: string) {

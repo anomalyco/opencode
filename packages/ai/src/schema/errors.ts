@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
-import { ModelID, ProviderID, ProviderMetadata, RouteID } from "./ids.js"
+import { ModelID, ProviderID, RouteID } from "./ids.js"
+import { ProviderMetadata } from "./messages.js"
 
 export const ProviderFailureClassification = Schema.Literals(["context-overflow", "payload-too-large"])
 export type ProviderFailureClassification = typeof ProviderFailureClassification.Type
@@ -148,7 +149,7 @@ export const AIErrorReason = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("_tag"))
 export type AIErrorReason = Schema.Schema.Type<typeof AIErrorReason>
 
-export class AIError extends Schema.TaggedErrorClass<AIError>()("AI.Error", {
+export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
   module: Schema.String,
   method: Schema.String,
   reason: AIErrorReason,

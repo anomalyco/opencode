@@ -93,7 +93,7 @@ const userAttachmentContent = (files: readonly FileAttachment[]) => {
   })
 }
 
-const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const decodeToolInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 const providerMetadata = (
   provider: string,
@@ -227,7 +227,6 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       ]
     case "user":
       const content = [
-        ...(message.skills ?? []).map((skill) => Message.text(skill.text)),
         ...(message.text === "" ? [] : [Message.text(message.text)]),
         ...userAttachmentContent(message.files ?? []),
       ]

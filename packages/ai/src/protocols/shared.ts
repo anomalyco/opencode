@@ -41,12 +41,10 @@ export interface ToolAccumulator {
  * when at least one is defined. Returns `undefined` when neither input nor
  * output is known so routes don't publish a misleading `0`.
  *
- * Under the additive `AI.Usage` contract, `inputTokens` and `outputTokens`
- * are the non-cached input and visible output only. The provider-supplied
- * `total` is the source of truth when present; the computed fallback
- * under-counts cache and reasoning by design and exists mainly so
- * Anthropic-style providers (which don't surface a total) still get a
- * sensible aggregate on the input + output axes.
+ * Under the inclusive `AI.Usage` contract, `inputTokens` includes cached input
+ * and `outputTokens` includes reasoning. Protocol mappers normalize those
+ * inclusive values before calling this helper. The provider-supplied total is
+ * the source of truth when present; otherwise their sum is the canonical total.
  */
 export const totalTokens = (
   inputTokens: number | undefined,
@@ -67,7 +65,7 @@ export const totalTokens = (
  *
  * If `total` is `undefined`, returns `undefined` (we don't fabricate
  * counts). If `subtrahend` is `undefined`, returns `total` unchanged. The
- * provider-native breakdown stays available on `Usage.native` for debugging.
+ * provider-native breakdown stays available on `Usage.providerMetadata` for debugging.
  */
 export const subtractTokens = (total: number | undefined, subtrahend: number | undefined): number | undefined => {
   if (total === undefined) return undefined
@@ -155,59 +153,24 @@ export const wrappedSystemUpdate = Effect.fn("ProviderShared.wrappedSystemUpdate
 export const parseToolInput = (route: string, name: string, raw: string) =>
   parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`)
 
-export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
-export const VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"] as const
-export const AUDIO_MIMES = ["audio/wav", "audio/mp3", "audio/aiff", "audio/aac", "audio/ogg", "audio/flac"] as const
-export const PDF_MIMES = ["application/pdf"] as const
-export const MEDIA_MIMES = [...IMAGE_MIMES, ...VIDEO_MIMES, ...AUDIO_MIMES, ...PDF_MIMES] as const
-export const MAX_MEDIA_ENCODED_BYTES = 28 * 1024 * 1024
-export const MAX_MEDIA_DECODED_BYTES = 20 * 1024 * 1024
-
-const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
-
-export interface ValidatedMedia {
+export interface NormalizedMedia {
   readonly mime: string
   readonly base64: string
   readonly dataUrl: string
-  readonly bytes: Uint8Array
 }
 
-export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function* (
-  route: string,
-  part: MediaPart,
-  supportedMimes: ReadonlySet<string>,
-) {
+export const normalizeMedia = (part: MediaPart): NormalizedMedia => {
   const mime = part.mediaType.toLowerCase()
-  if (!supportedMimes.has(mime)) return yield* invalidRequest(`${route} does not support media type ${part.mediaType}`)
-
-  let base64: string
   if (typeof part.data !== "string") {
-    if (part.data.byteLength > MAX_MEDIA_DECODED_BYTES)
-      return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
-    base64 = Buffer.from(part.data).toString("base64")
-  } else if (part.data.startsWith("data:")) {
-    const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/s.exec(part.data)
-    if (!match) return yield* invalidRequest(`${route} media data URL must contain valid base64`)
-    if (match[1]!.toLowerCase() !== mime)
-      return yield* invalidRequest(`${route} media type ${part.mediaType} does not match data URL type ${match[1]}`)
-    base64 = match[2]!
-  } else {
-    base64 = part.data
+    const base64 = Buffer.from(part.data).toString("base64")
+    return { mime, base64, dataUrl: `data:${mime};base64,${base64}` }
   }
+  if (!part.data.startsWith("data:")) return { mime, base64: part.data, dataUrl: `data:${mime};base64,${part.data}` }
+  return { mime, base64: part.data.slice(part.data.indexOf(",") + 1), dataUrl: part.data }
+}
 
-  if (Buffer.byteLength(base64, "utf8") > MAX_MEDIA_ENCODED_BYTES)
-    return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_ENCODED_BYTES} byte encoded limit`)
-  if (!base64 || base64.length % 4 !== 0 || !base64Pattern.test(base64))
-    return yield* invalidRequest(`${route} media must contain valid base64`)
-  const bytes = Buffer.from(base64, "base64")
-  if (bytes.byteLength > MAX_MEDIA_DECODED_BYTES)
-    return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
-  if (bytes.toString("base64") !== base64) return yield* invalidRequest(`${route} media must contain canonical base64`)
-  return { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes } satisfies ValidatedMedia
-})
-
-export const validateToolFile = (route: string, part: Tool.FileContent, supportedMimes: ReadonlySet<string>) =>
-  validateMedia(route, { type: "media", mediaType: part.mime, data: part.uri, filename: part.name }, supportedMimes)
+export const normalizeToolFile = (part: Tool.FileContent) =>
+  normalizeMedia({ type: "media", mediaType: part.mime, data: part.uri, filename: part.name })
 
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
@@ -234,27 +197,24 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, and drops empty / `[DONE]` keep-alive events so the downstream
- * `decodeChunk` sees one JSON string per element. The SSE channel emits a
+ * decoder, and drops empty / `[DONE]` keep-alive events so the protocol event
+ * schema sees one JSON string per element. The SSE channel emits a
  * `Retry` control event on its error channel; we drop it here (we don't
- * implement client-driven retries) so the public error channel stays
- * `AIError`.
+ * implement client-driven retries). Decoder failures become provider output
+ * errors so the public error channel stays `AIError`.
  */
 export const sseFraming = (bytes: Stream.Stream<Uint8Array, AIError>): Stream.Stream<string, AIError> =>
   bytes.pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode()),
     Stream.catchTag("Retry", () => Stream.empty),
+    Stream.catchTag("SseError", (error) => Stream.fail(eventError("sse", error.message))),
     Stream.filter((event) => event.data.length > 0 && event.data !== "[DONE]"),
     Stream.map((event) => event.data),
   )
 
 /**
- * Canonical invalid-request constructor. Lift one-line `const invalid =
- * (message) => invalidRequest(message)` aliases out of every
- * route so the error constructor lives in one place. If we ever extend
- * `InvalidRequestReason` with route context or trace metadata, the change
- * lands here.
+ * Canonical invalid-request constructor shared by protocol lowering.
  */
 export const invalidRequest = (message: string) =>
   new AIError({

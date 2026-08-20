@@ -1,18 +1,18 @@
-import { For, splitProps, type ComponentProps } from "solid-js"
+import { createUniqueId, splitProps, type ComponentProps } from "solid-js"
 import "./session-progress-indicator-v2.css"
 
-const grid = 5
-const dot = 2
-const gap = 1
-const origin = 1.5
-const dots = Array.from({ length: grid * grid }, (_, index) => ({
-  index,
-  x: origin + (index % grid) * (dot + gap),
-  y: origin + Math.floor(index / grid) * (dot + gap),
-}))
+const frames = new URL("./session-progress-indicator-v2-1x.png", import.meta.url).href
+const dots = Array.from({ length: 25 }, (_, index) => {
+  const x = 1.5 + (index % 5) * 3
+  const y = 1.5 + Math.floor(index / 5) * 3
+  return `M${x} ${y}h2v2h-2z`
+}).join("")
 
 export function SessionProgressIndicatorV2(props: ComponentProps<"svg">) {
   const [local, rest] = splitProps(props, ["class", "classList", "width", "height"])
+  const id = createUniqueId()
+  const filter = `session-progress-indicator-filter-${id}`
+  const clip = `session-progress-indicator-clip-${id}`
   return (
     <svg
       {...rest}
@@ -26,7 +26,26 @@ export function SessionProgressIndicatorV2(props: ComponentProps<"svg">) {
       data-component="session-progress-indicator-v2"
       aria-hidden={rest["aria-hidden"] ?? "true"}
     >
-      <For each={dots}>{(cell) => <rect data-dot={cell.index} x={cell.x} y={cell.y} width={dot} height={dot} />}</For>
+      <defs>
+        <filter id={filter} filterUnits="userSpaceOnUse" x={0} y={0} width={16} height={16}>
+          <feFlood flood-color="currentColor" result="color" />
+          <feComposite in="color" in2="SourceAlpha" operator="in" />
+        </filter>
+        <clipPath id={clip}>
+          <path d={dots} />
+        </clipPath>
+      </defs>
+      <image
+        data-frame-content
+        href={frames}
+        x={0}
+        y={0}
+        width={16}
+        height={16}
+        filter={`url(#${filter})`}
+        clip-path={`url(#${clip})`}
+      />
+      <rect data-reduced-motion x={7.5} y={7.5} width={2} height={2} />
     </svg>
   )
 }

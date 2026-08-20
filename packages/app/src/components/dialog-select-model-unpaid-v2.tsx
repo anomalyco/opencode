@@ -1,8 +1,8 @@
-import { DialogBody, DialogHeader, DialogTitle, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
-import { Icon } from "@opencode-ai/ui/v2/icon"
+import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode-ai/ui/dialog"
+import { Badge } from "@opencode-ai/ui/badge"
+import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme } from "@opencode-ai/ui/theme"
 import { createMemo, onCleanup, onMount, type Component, For, Show } from "solid-js"
@@ -66,7 +66,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
   })
 
   return (
-    <DialogV2
+    <Dialog
       fit
       containerClass="!h-auto max-h-[calc(100vh_-_16px)] !w-[min(calc(100vw_-_16px),640px)]"
       class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
@@ -84,7 +84,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
             </div>
             <For each={freeModels()}>
               {(item) => (
-                <TooltipV2
+                <Tooltip
                   class="w-full"
                   placement="right-start"
                   gutter={6}
@@ -105,15 +105,15 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                     onClick={() => selectModel(item)}
                   >
                     <span class="min-w-0 truncate">{displayModelName(item.name)}</span>
-                    <Tag class="shrink-0">{language.t("model.tag.free")}</Tag>
+                    <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
                     <Show when={item.latest}>
-                      <Tag class="shrink-0">{language.t("model.tag.latest")}</Tag>
+                      <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
                     </Show>
                     <Show when={currentKey() === modelKey(item)}>
                       <Icon name="check" class="ml-auto size-4 shrink-0 text-v2-icon-icon-base" />
                     </Show>
                   </button>
-                </TooltipV2>
+                </Tooltip>
               )}
             </For>
           </div>
@@ -172,6 +172,6 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
           </div>
         </div>
       </DialogBody>
-    </DialogV2>
+    </Dialog>
   )
 }

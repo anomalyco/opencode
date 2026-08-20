@@ -1,9 +1,8 @@
-import type { LocalProject } from "@/context/layout"
-import { getProjectAvatarVariant } from "@/context/layout"
+import { getProjectAvatarVariant, type LocalProject } from "@/context/layout"
 import type { ServerConnection } from "@/context/servers"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
-import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 import { Show } from "solid-js"
 

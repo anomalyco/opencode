@@ -1,5 +1,3 @@
-import { createStore } from "solid-js/store"
-
 const provider = {
   all: [
     {
@@ -15,23 +13,6 @@ const provider = {
   ],
   connected: ["anthropic"],
   default: { anthropic: "claude-3-7-sonnet" },
-}
-
-const [store, setStore] = createStore({
-  provider,
-  session: [] as any[],
-  config: { permission: {} },
-})
-
-export function useServerSync() {
-  return {
-    data: {
-      provider,
-    },
-    child() {
-      return [store, setStore] as const
-    },
-  }
 }
 
 export function useQueryOptions() {

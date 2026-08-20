@@ -1,12 +1,11 @@
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { Persist, persisted } from "@/utils/persist"
 import type { SessionStatus } from "@opencode-ai/client/promise"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSessionLayout } from "./session-layout"
-import { useDialog } from "@opencode-ai/ui/context"
+import { useDialog, useI18n } from "@opencode-ai/ui/context"
 import { DialogUsageExceeded } from "@/components/dialog-usage-exceeded"
-import { useI18n } from "@opencode-ai/ui/context"
 
 const GO_UPSELL_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
 const GO_UPSELL_FREE_TIER_DONT_SHOW = "go_upsell_dont_show"
@@ -34,7 +33,7 @@ function goUpsellKeys(status: SessionStatus) {
 }
 
 export function useUsageExceededDialogs() {
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const dialog = useDialog()
   const { params } = useSessionLayout()
   const { t, locale } = useI18n()
@@ -52,13 +51,13 @@ export function useUsageExceededDialogs() {
 
   onCleanup(
     sdk().event.on("session.status", (evt) => {
-      if (evt.properties.sessionID !== params.id) return
-      if (evt.properties.status.type !== "retry") return
-      const { action } = evt.properties.status
+      if (evt.data.sessionID !== params.id) return
+      if (evt.data.status.type !== "retry") return
+      const { action } = evt.data.status
       if (!action) return
       if (dialog.active) return
 
-      const keys = goUpsellKeys(evt.properties.status)
+      const keys = goUpsellKeys(evt.data.status)
       if (!keys) return
 
       const seen = goUpsellState[keys.lastSeenAt]

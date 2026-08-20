@@ -72,6 +72,15 @@ export function host(overrides: Overrides = {}): Plugin.Context {
         resolve: () => Effect.die("unused integration.connection.resolve"),
       },
     },
+    mcp: overrides.mcp ?? {
+      list: () => Effect.die("unused mcp.list"),
+      add: () => Effect.die("unused mcp.add"),
+      remove: () => Effect.die("unused mcp.remove"),
+      connect: () => Effect.die("unused mcp.connect"),
+      disconnect: () => Effect.die("unused mcp.disconnect"),
+      transform: () => Effect.die("unused mcp.transform"),
+      reload: () => Effect.die("unused mcp.reload"),
+    },
     plugin: overrides.plugin ?? {
       list: () => Effect.die("unused plugin.list"),
     },
@@ -84,6 +93,12 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       list: () => Effect.die("unused skill.list"),
       transform: () => Effect.die("unused skill.transform"),
       reload: () => Effect.die("unused skill.reload"),
+    },
+    storage: overrides.storage ?? {
+      get: () => Effect.die("unused storage.get"),
+      set: () => Effect.die("unused storage.set"),
+      remove: () => Effect.die("unused storage.remove"),
+      scan: () => Effect.die("unused storage.scan"),
     },
     shell: overrides.shell ?? {
       hook: () => Effect.die("unused shell.hook"),

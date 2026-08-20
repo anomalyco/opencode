@@ -13,7 +13,7 @@ function ConnectProviderDialogStory() {
   onMount(open)
 
   return (
-    <Button variant="secondary" onClick={open}>
+    <Button variant="neutral" onClick={open}>
       Open connect provider dialog
     </Button>
   )
@@ -29,7 +29,7 @@ function ProviderConnectionDialogStory(props) {
   onMount(open)
 
   return (
-    <Button variant="secondary" onClick={open}>
+    <Button variant="neutral" onClick={open}>
       Open {props.provider} connection dialog
     </Button>
   )

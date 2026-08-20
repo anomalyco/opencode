@@ -11,8 +11,8 @@ import {
   partUpdated,
   session,
   sessionID,
+  renderedPartID,
   setupTimeline,
-  textPart,
   toolPart,
   userMessage,
 } from "./fixture"
@@ -27,7 +27,7 @@ test("adds a task child-session link without replacing the task row", async ({ p
     cpuRate: 4,
   })
   const regions = defineVisualRegions({
-    task: { selector: `[data-timeline-part-id="${taskID}"] [data-slot="collapsible-trigger"]` },
+    task: { selector: `[data-timeline-part-id="${renderedPartID(taskID)}"] [data-slot="collapsible-trigger"]` },
   })
   await startVisualProbe(page, regions)
   await timeline.send(
@@ -52,55 +52,4 @@ test("adds a task child-session link without replacing the task row", async ({ p
   await expect(
     page.locator(`a[href$="/session/${childID}"]`, { has: page.locator('[data-component="task-tool-card"]') }),
   ).toBeVisible()
-})
-
-test("changes generic tool arguments without replacing the row", async ({ page }, testInfo) => {
-  const toolID = "prt_generic_mutation"
-  const followingID = "prt_generic_mutation_following"
-  const timeline = await setupTimeline(page, {
-    messages: [
-      userMessage(),
-      assistantMessage(
-        [
-          toolPart(toolID, "mcp_probe", "running", { target: "one", count: 1 }),
-          textPart(followingID, "Following generic tool"),
-        ],
-        { completed: false },
-      ),
-    ],
-    cpuRate: 4,
-  })
-  const regions = defineVisualRegions({
-    tool: { selector: `[data-timeline-part-id="${toolID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
-    following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
-  })
-  await startVisualProbe(page, regions)
-  await timeline.send(
-    partUpdated(toolPart(toolID, "mcp_probe", "running", { target: "two", count: 2, mode: "deep" })),
-    200,
-  )
-  await timeline.send(
-    partUpdated(toolPart(toolID, "mcp_probe", "completed", { target: "two", count: 2, mode: "deep" })),
-    400,
-  )
-  const trace = await stopVisualProbe<keyof typeof regions>(page)
-  await reportVisualStability(
-    testInfo,
-    "generic-mutation",
-    trace,
-    visualPlan(
-      regions,
-      [
-        { type: "required", regions: ["tool", "following"] },
-        { type: "unique", regions: ["tool", "following"] },
-        { type: "stable", regions: ["tool", "following"] },
-        { type: "opacity", regions: "all" },
-        { type: "continuity", regions: "all" },
-        { type: "motion", regions: "all", maxPositionReversals: 0 },
-        { type: "label-stability", regions: "all" },
-        { type: "flow", regions: ["tool", "following"] },
-      ],
-      { perMarker: true },
-    ),
-  )
 })

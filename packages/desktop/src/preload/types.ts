@@ -1,115 +1,74 @@
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
-import type { UpdaterState } from "@opencode-ai/app/updater"
-import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
-export type {
-  WslDistroProbe,
-  WslInstalledDistro,
-  WslJob,
-  WslOnlineDistro,
-  WslOpencodeCheck,
-  WslRuntimeCheck,
-  WslServerConfig,
-  WslServerItem,
-  WslServerRuntime,
-  WslServersEvent,
-  WslServersState,
-} from "@opencode-ai/app/wsl/types"
-
-export type ServerReadyData = {
-  url: string
-  username: string | null
-  password: string | null
-}
+import {
+  Ipc,
+  type IpcEventListener,
+  type IpcEventSubscription,
+  type IpcInvokeMethod,
+  type IpcSendMethod,
+} from "../shared/ipc-contract"
 
 export type WslServersAPI = WslServersPlatform
 export type UpdaterAPI = {
-  subscribe: (cb: (state: UpdaterState) => void) => Promise<() => void>
-  check: () => Promise<UpdaterState>
-  install: () => Promise<void>
-}
-
-export type LinuxDisplayBackend = "wayland" | "auto"
-export type TitlebarTheme = {
-  mode: "light" | "dark"
-  scheme?: "system" | "light" | "dark"
-}
-export type FatalRendererError = {
-  error: string
-  url: string
-  version?: string
-  platform: string
-  os?: string
+  subscribe: (cb: IpcEventListener<typeof Ipc.updater.state>) => Promise<() => void>
+  check: IpcInvokeMethod<typeof Ipc.updater.check>
+  install: IpcInvokeMethod<typeof Ipc.updater.install>
 }
 
 export type ElectronAPI = {
-  killSidecar: () => Promise<void>
-  awaitInitialization: () => Promise<ServerReadyData>
+  awaitInitialization: IpcInvokeMethod<typeof Ipc.app.awaitInitialization>
   wslServers: WslServersAPI
   updater: UpdaterAPI
-  consumeInitialDeepLinks: () => Promise<string[]>
-  getDefaultServerUrl: () => Promise<string | null>
-  setDefaultServerUrl: (url: string | null) => Promise<void>
-  isFirstLaunchOnboardingPending: () => Promise<boolean>
-  finishFirstLaunchOnboarding: (createDefaultProject: boolean) => Promise<string | null>
-  isOldLayoutEligible: () => Promise<boolean>
-  getDisplayBackend: () => Promise<LinuxDisplayBackend | null>
-  setDisplayBackend: (backend: LinuxDisplayBackend | null) => Promise<void>
-  checkAppExists: (appName: string) => Promise<boolean>
-  resolveAppPath: (appName: string) => Promise<string | null>
-  storeGet: (name: string, key: string) => Promise<string | null>
-  storeSet: (name: string, key: string, value: string) => Promise<void>
-  storeDelete: (name: string, key: string) => Promise<void>
-  storeClear: (name: string) => Promise<void>
-  storeKeys: (name: string) => Promise<string[]>
-  storeLength: (name: string) => Promise<number>
-  draftGet: (key: string) => Promise<string | null>
-  draftSet: (key: string, value: string) => Promise<void>
-  draftDelete: (key: string) => Promise<void>
-  draftBlobPut: (data: ArrayBuffer) => Promise<string>
-  draftBlobGet: (id: string) => Promise<ArrayBuffer | null>
+  consumeInitialDeepLinks: IpcInvokeMethod<typeof Ipc.app.consumeInitialDeepLinks>
+  getDefaultServerUrl: IpcInvokeMethod<typeof Ipc.app.getDefaultServerUrl>
+  setDefaultServerUrl: IpcInvokeMethod<typeof Ipc.app.setDefaultServerUrl>
+  isFirstLaunchOnboardingPending: IpcInvokeMethod<typeof Ipc.app.isFirstLaunchOnboardingPending>
+  finishFirstLaunchOnboarding: IpcInvokeMethod<typeof Ipc.app.finishFirstLaunchOnboarding>
+  checkAppExists: IpcInvokeMethod<typeof Ipc.app.checkAppExists>
+  resolveAppPath: IpcInvokeMethod<typeof Ipc.app.resolveAppPath>
+  storeGet: IpcInvokeMethod<typeof Ipc.storage.get>
+  storeSet: IpcInvokeMethod<typeof Ipc.storage.set>
+  storeDelete: IpcInvokeMethod<typeof Ipc.storage.delete>
+  storeClear: IpcInvokeMethod<typeof Ipc.storage.clear>
+  storeKeys: IpcInvokeMethod<typeof Ipc.storage.keys>
+  storeLength: IpcInvokeMethod<typeof Ipc.storage.length>
+  draftGet: IpcInvokeMethod<typeof Ipc.drafts.get>
+  draftSet: IpcInvokeMethod<typeof Ipc.drafts.set>
+  draftDelete: IpcInvokeMethod<typeof Ipc.drafts.delete>
+  draftBlobPut: IpcInvokeMethod<typeof Ipc.drafts.putBlob>
+  draftBlobGet: IpcInvokeMethod<typeof Ipc.drafts.getBlob>
 
-  getWindowID: () => Promise<string>
-  onMenuCommand: (cb: (id: string) => void) => () => void
-  onDeepLink: (cb: (urls: string[]) => void) => () => void
+  getWindowID: IpcInvokeMethod<typeof Ipc.window.getId>
+  onMenuCommand: IpcEventSubscription<typeof Ipc.menu.command>
+  onDeepLink: IpcEventSubscription<typeof Ipc.app.deepLink>
 
-  openDirectoryPicker: (opts?: {
-    multiple?: boolean
-    title?: string
-    defaultPath?: string
-  }) => Promise<string | string[] | null>
-  openFilePicker: (opts?: {
-    multiple?: boolean
-    title?: string
-    defaultPath?: string
-    extensions?: string[]
-  }) => Promise<{ token: string; files: { path: string; name: string; size: number }[] } | null>
-  readPickedFile: (token: string, path: string) => Promise<ArrayBuffer>
-  releasePickedFiles: (token: string) => Promise<void>
+  openDirectoryPicker: IpcInvokeMethod<typeof Ipc.files.openDirectoryPicker>
+  openFilePicker: IpcInvokeMethod<typeof Ipc.files.openFilePicker>
+  readPickedFile: IpcInvokeMethod<typeof Ipc.files.readPickedFile>
+  releasePickedFiles: IpcInvokeMethod<typeof Ipc.files.releasePickedFiles>
   getPathForFile: (file: File) => string
-  saveFilePicker: (opts?: { title?: string; defaultPath?: string }) => Promise<string | null>
-  openExternal: (url: string) => void
-  openLocalFile: (url: string) => void
-  openPath: (path: string, app?: string) => Promise<void>
-  revealPath: (path: string) => Promise<boolean>
-  readClipboardImage: () => Promise<{ buffer: ArrayBuffer; width: number; height: number } | null>
-  getWindowFocused: () => Promise<boolean>
-  getWindowFullscreen: () => Promise<boolean>
-  onWindowFullscreenChanged: (cb: (fullscreen: boolean) => void) => () => void
-  setWindowFocus: () => Promise<void>
-  showWindow: () => Promise<void>
-  relaunch: () => void
-  getZoomFactor: () => Promise<number>
-  setZoomFactor: (factor: number) => Promise<void>
-  getPinchZoomEnabled: () => Promise<boolean>
-  setPinchZoomEnabled: (enabled: boolean) => Promise<void>
-  onPinchZoomEnabledChanged: (cb: (enabled: boolean) => void) => () => void
-  onZoomFactorChanged: (cb: (factor: number) => void) => () => void
-  setTitlebar: (theme: TitlebarTheme) => Promise<void>
-  runDesktopMenuAction: (action: DesktopMenuAction) => Promise<void>
-  setBackgroundColor: (color: string) => Promise<void>
-  exportDebugLogs: () => Promise<string>
-  setForceFocus: (enabled: boolean) => Promise<void>
-  recordFatalRendererError: (error: FatalRendererError) => Promise<void>
-  setNativeTranslations: (bundle: DesktopNativeBundle) => Promise<void>
+  saveFilePicker: IpcInvokeMethod<typeof Ipc.files.saveFilePicker>
+  openExternal: IpcSendMethod<typeof Ipc.files.openExternal>
+  openLocalFile: IpcSendMethod<typeof Ipc.files.openLocalFile>
+  openPath: IpcInvokeMethod<typeof Ipc.files.openPath>
+  revealPath: IpcInvokeMethod<typeof Ipc.files.revealPath>
+  readClipboardImage: IpcInvokeMethod<typeof Ipc.files.readClipboardImage>
+  getWindowFocused: IpcInvokeMethod<typeof Ipc.window.getFocused>
+  getWindowFullscreen: IpcInvokeMethod<typeof Ipc.window.getFullscreen>
+  onWindowFullscreenChanged: IpcEventSubscription<typeof Ipc.window.fullscreenChanged>
+  setWindowFocus: IpcInvokeMethod<typeof Ipc.window.setFocus>
+  showWindow: IpcInvokeMethod<typeof Ipc.window.show>
+  relaunch: IpcSendMethod<typeof Ipc.app.relaunch>
+  getZoomFactor: IpcInvokeMethod<typeof Ipc.window.getZoomFactor>
+  setZoomFactor: IpcInvokeMethod<typeof Ipc.window.setZoomFactor>
+  getPinchZoomEnabled: IpcInvokeMethod<typeof Ipc.window.getPinchZoomEnabled>
+  setPinchZoomEnabled: IpcInvokeMethod<typeof Ipc.window.setPinchZoomEnabled>
+  onPinchZoomEnabledChanged: IpcEventSubscription<typeof Ipc.window.pinchZoomEnabledChanged>
+  onZoomFactorChanged: IpcEventSubscription<typeof Ipc.window.zoomFactorChanged>
+  setTitlebar: IpcInvokeMethod<typeof Ipc.window.setTitlebar>
+  runDesktopMenuAction: IpcInvokeMethod<typeof Ipc.menu.runAction>
+  setBackgroundColor: IpcInvokeMethod<typeof Ipc.app.setBackgroundColor>
+  exportDebugLogs: IpcInvokeMethod<typeof Ipc.app.exportDebugLogs>
+  setForceFocus: IpcInvokeMethod<typeof Ipc.app.setForceFocus>
+  recordFatalRendererError: IpcInvokeMethod<typeof Ipc.app.recordFatalRendererError>
+  setNativeTranslations: IpcInvokeMethod<typeof Ipc.app.setNativeTranslations>
 }

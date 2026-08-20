@@ -660,7 +660,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.interrupt",
             summary: "Interrupt session execution",
             description:
-              "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable inbox work remains after interruption.",
+              "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
           }),
         ),
     )
@@ -690,6 +690,20 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           identifier: "v2.session.message",
           summary: "Get session message",
           description: "Retrieve one projected message owned by the Session.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.put("session.environment", "/api/session/:sessionID/environment", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({ variables: Schema.Record(Schema.String, Schema.String) }),
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.environment",
+          summary: "Set session environment",
+          description: "Replace the process environment used by local shell commands for this session.",
         }),
       ),
     )

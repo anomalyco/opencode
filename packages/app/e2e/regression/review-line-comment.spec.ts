@@ -1,11 +1,12 @@
 import { expect, test, type Page } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 
 const directory = "C:/OpenCode/ReviewLineCommentRegression"
 const sessionID = "ses_review_line_comment_regression"
 const title = "Review line comment regression"
+const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 test.beforeEach(async ({ page }) => {
   await openReview(page)
@@ -88,7 +89,6 @@ test("stages a submitted line comment in the prompt context", async ({ page }) =
 async function openReview(page: Page) {
   await page.setViewportSize({ width: 700, height: 900 })
   await mockOpenCodeServer(page, {
-    protocol: "v2",
     directory,
     project: {
       id: "proj_review_line_comment_regression",
@@ -123,30 +123,16 @@ async function openReview(page: Page) {
     pageMessages: () => ({
       items: [
         {
-          info: {
-            id: "msg_review_line_comment_regression",
-            sessionID,
-            role: "user",
-            time: { created: 1700000000000 },
-            summary: { diffs: [] },
-            agent: "build",
-            model: { providerID: "opencode", modelID: "test" },
-          },
-          parts: [
-            {
-              id: "prt_review_line_comment_regression",
-              sessionID,
-              messageID: "msg_review_line_comment_regression",
-              type: "text",
-              text: "Review this change.",
-            },
-          ],
+          id: "msg_review_line_comment_regression",
+          type: "user",
+          time: { created: 1700000000000 },
+          text: "Review this change.",
         },
       ],
     }),
   })
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
   const changes = page.getByRole("tab", { name: "Changes" })
   const diffResponse = page.waitForResponse(

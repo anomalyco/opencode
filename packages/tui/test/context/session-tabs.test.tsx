@@ -197,6 +197,32 @@ test("loads VCS metadata for each persisted tab location", async () => {
   }
 })
 
+test("loads location metadata when an open session moves", async () => {
+  const destination = `${directory}/moved-worktree`
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.locations.includes(directory) && setup.vcsLocations.includes(directory))
+    setup.emit({
+      id: "evt_moved",
+      created: 1,
+      type: "session.moved",
+      durable: { aggregateID: "first", seq: 1, version: 1 },
+      data: {
+        sessionID: "first",
+        location: { directory: destination },
+        projectID: "project",
+      },
+    })
+
+    await wait(() => setup.data.session.get("first")?.location.directory === destination)
+    await wait(() => setup.locations.includes(destination))
+    await wait(() => setup.vcsLocations.includes(destination))
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("stores session tabs for the current working directory by default", async () => {
   const setup = await renderSessionTabs("first")
 
@@ -208,6 +234,24 @@ test("stores session tabs for the current working directory by default", async (
     expect(Object.keys(stored.cwd)).toEqual([directory])
     expect(stored.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first"])
     expect(stored.cwd[directory].unread).toEqual({})
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("keeps scroll anchors for open session tabs", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.tabs.current() === "first")
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "first"))
+    setup.tabs.setScrollAnchor("first", { messageID: "msg_1", screenY: -3 })
+
+    expect(setup.tabs.scrollAnchor("first")).toEqual({ messageID: "msg_1", screenY: -3 })
+
+    setup.tabs.close("first")
+    await wait(() => setup.tabs.tabs().every((tab) => tab.sessionID !== "first"))
+    expect(setup.tabs.scrollAnchor("first")).toBeUndefined()
   } finally {
     await setup.destroy()
   }

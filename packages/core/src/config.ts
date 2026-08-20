@@ -47,7 +47,7 @@ export interface Interface {
   readonly changes: () => Stream.Stream<Watcher.Update>
 }
 
-export class UpdateError extends Schema.TaggedErrorClass<UpdateError>()("Config.UpdateError", {
+export class UpdateError extends Schema.TaggedError<UpdateError>()("Config.UpdateError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}
@@ -426,7 +426,7 @@ export const layer = (options?: Options) =>
       )
 
       return Service.of({
-        entries: Effect.fn("Config.entries")(function* () {
+        entries: Effect.fnUntraced(function* () {
           return configs
         }),
         update,

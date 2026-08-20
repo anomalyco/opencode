@@ -7,6 +7,7 @@ on:
       - ci
       - dev
       - beta
+      - v2
       - fix/npm-native-binary-install
       - snapshot-*
   workflow_dispatch:
@@ -32,7 +33,7 @@ permissions:
   packages: write
 
 env:
-  OPENCODE_CHANNEL: ${{ (github.ref_name == 'v2' && 'next') || '' }}
+  OPENCODE_CHANNEL: ${{ (github.ref_name == 'v2' && 'dev') || '' }}
 
 jobs:
   version:
@@ -44,6 +45,13 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun
+
+      - name: Deploy update service
+        if: github.ref_name == 'v2' || github.ref_name == 'beta'
+        working-directory: packages/updates
+        run: bun run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - name: Setup git committer
         id: committer
@@ -74,13 +82,16 @@ jobs:
   build-cli:
     needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
+    timeout-minutes: 30
+    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
         with:
           fetch-tags: true
 
       - uses: ./.github/actions/setup-bun
+        with:
+          bun-version: canary # Bun 1.4 until its stable release is published
 
       - name: Setup git committer
         id: committer
@@ -102,6 +113,7 @@ jobs:
         id: build
         run: ./packages/cli/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
         env:
+          BUN_COMPILE_RELEASE: canary
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           GH_REPO: ${{ needs.version.outputs.repo }}
@@ -185,7 +197,7 @@ jobs:
 
   build-node-cli:
     needs: version
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
+    if: github.repository == 'anomalyco/opencode' && false # Temporarily disabled
     strategy:
       fail-fast: false
       matrix:
@@ -335,6 +347,7 @@ jobs:
   build-electron:
     needs:
       - version
+      - sign-cli-macos
     if: github.repository == 'anomalyco/opencode' && github.ref_name != 'v2'
     continue-on-error: false
     env:
@@ -372,6 +385,12 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: github.ref_name == 'beta'
+        with:
+          name: opencode-preview-cli
+          path: packages/cli/dist
 
       - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
         if: runner.os == 'macOS'
@@ -431,6 +450,7 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+          OPENCODE_CLI_DIST: ${{ (github.ref_name == 'beta' && format('{0}/packages/cli/dist', github.workspace)) || '' }}
 
       - name: Build
         run: bun run build
@@ -447,6 +467,7 @@ jobs:
           VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+          OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
       - name: Package
         if: needs.version.outputs.release
@@ -569,13 +590,12 @@ jobs:
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'beta'
         with:
           name: opencode-preview-cli
           path: packages/cli/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'beta'
+        if: needs.build-node-cli.result == 'success'
         with:
           pattern: opencode-node-cli-*
           path: packages/cli/dist/node

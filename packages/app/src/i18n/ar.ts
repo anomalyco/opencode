@@ -508,21 +508,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "سطح المكتب {{version}}",
   "wsl.onboarding.versionMismatch": "لا يتطابق الإصدار المثبت مع إصدار تطبيق سطح المكتب.",
   "wsl.onboarding.adding": "جارٍ الإضافة...",
-  "help.tabs.toast.ariaLabel": "نقدّم علامات التبويب. نظّم عملك وجلساتك النشطة باستخدام علامات التبويب",
-  "help.tabs.toast.dismiss": "إغلاق معلومات علامات التبويب",
-  "help.tabs.title": "نقدّم علامات التبويب",
-  "help.tabs.description": "نظّم عملك وجلساتك النشطة باستخدام علامات التبويب",
-  "help.tabs.date": "14 يوليو",
-  "help.tabs.introduction": "أصبح OpenCode Desktop الآن قائمًا على علامات التبويب.",
-  "help.tabs.sessions":
-    "ابدأ جلسة جديدة في علامة تبويب، أو افتح جلسة حالية من أي من مشاريعك. افتح علامة تبويب جديدة عندما تبدأ عملاً جديدًا، وأغلقها عند الانتهاء.",
-  "help.tabs.organize":
-    "يسهّل إبقاء بضع علامات تبويب مفتوحة تنظيم جلساتك النشطة. أعد تسمية علامات التبويب بأسماء يسهل تذكرها إذا كنت تنوي إبقاءها مفتوحة.",
-  "help.tabs.home":
-    "ستجد جميع جلساتك ومشاريعك في شاشة الصفحة الرئيسية الجديدة. يؤدي تحديد جلسة إلى فتحها في علامة تبويب.",
-  "help.tabs.persistence": "عندما تعيد فتح التطبيق، تظل علامات تبويبك مفتوحة.",
-  "help.tabs.worktrees":
-    "لا يدعم التصميم الجديد أشجار عمل Git حتى الآن، وستتوفر قريبًا. لذلك، إذا كنت تفضل مواصلة استخدام التخطيط السابق، فيمكنك التبديل بين التخطيطات في الإعدادات. ضع في اعتبارك أن التخطيط الجديد سيصبح دائمًا خلال بضعة أسابيع.",
   "dialog.project.edit.title": "تحرير المشروع",
   "dialog.project.edit.name": "الاسم",
   "dialog.project.edit.icon": "أيقونة",
@@ -889,13 +874,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "توسيع أجزاء أداة edit",
   "settings.general.row.editToolPartsExpanded.description":
     "إظهار أجزاء أدوات edit و write و patch موسعة بشكل افتراضي في الشريط الزمني",
-  "settings.general.row.newInterface.title": "التخطيط الجديد",
-  "settings.general.row.newInterface.badge": "جديد",
-  "settings.general.row.newInterface.description":
-    "استخدم علامات التبويب الجديدة وتخطيط الصفحة الرئيسية. يمكنك التبديل بين التخطيطات لفترة محدودة.",
-  "settings.general.row.newInterfaceNotice.title": "أنت تستخدم الآن التخطيط الجديد",
-  "settings.general.row.newInterfaceNotice.description": "التخطيط السابق لم يعد متاحًا",
-  "settings.general.row.newInterfaceNotice.dismiss": "إهمال",
   "settings.general.row.pinchZoom.title": "التكبير بالمقاربة والمباعدة",
   "settings.general.row.pinchZoom.description":
     "السماح بإيماءات مقاربة الأصابع ومباعدتها على لوحة التعقب والتمرير مع الضغط على Ctrl للتكبير",

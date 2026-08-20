@@ -434,29 +434,32 @@ describe("Worktree", () => {
     }),
   )
 
-  it.live("refresh ignores stale git worktree registrations", () =>
-    Effect.gen(function* () {
-      const input = yield* setup()
-      const worktree = yield* Worktree.Service
-      const stale = abs(`${input.root.path}-worktree-stale`)
-      const target = abs(`${input.root.path}-worktree-after-stale`)
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(target, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
-      yield* Effect.promise(() => $`git worktree add --detach ${stale} HEAD`.cwd(input.root.path).quiet())
-      yield* Effect.promise(() => fs.rm(stale, { recursive: true, force: true }))
-      yield* Effect.promise(() => $`git worktree add --detach ${target} HEAD`.cwd(input.root.path).quiet())
+  it.live(
+    "refresh ignores stale git worktree registrations",
+    () =>
+      Effect.gen(function* () {
+        const input = yield* setup()
+        const worktree = yield* Worktree.Service
+        const stale = abs(`${input.root.path}-worktree-stale`)
+        const target = abs(`${input.root.path}-worktree-after-stale`)
+        yield* Effect.addFinalizer(() =>
+          Effect.promise(() => fs.rm(target, { recursive: true, force: true })).pipe(Effect.ignore),
+        )
+        yield* Effect.promise(() => $`git worktree add --detach ${stale} HEAD`.cwd(input.root.path).quiet())
+        yield* Effect.promise(() => fs.rm(stale, { recursive: true, force: true }))
+        yield* Effect.promise(() => $`git worktree add --detach ${target} HEAD`.cwd(input.root.path).quiet())
 
-      yield* worktree.refresh({ projectID: input.projectID })
+        yield* worktree.refresh({ projectID: input.projectID })
 
-      const discovered = abs(yield* Effect.promise(() => fs.realpath(target)))
-      expect(yield* stored(input.projectID)).toEqual(
-        [
-          { directory: input.sourceDirectory, strategy: null },
-          { directory: discovered, strategy: "git" },
-        ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
-      )
-    }),
+        const discovered = abs(yield* Effect.promise(() => fs.realpath(target)))
+        expect(yield* stored(input.projectID)).toEqual(
+          [
+            { directory: input.sourceDirectory, strategy: null },
+            { directory: discovered, strategy: "git" },
+          ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
+        )
+      }),
+    15_000,
   )
 
   it.live("refresh ignores existing directories that are no longer git checkouts", () =>

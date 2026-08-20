@@ -1,125 +1,48 @@
 import { DataProvider } from "@opencode-ai/session-ui/context"
-import { showToast } from "@/utils/toast"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, createResource, onCleanup, type ParentProps, Show } from "solid-js"
-import { useLanguage } from "@/context/language"
+import { useNavigate, useParams } from "@solidjs/router"
+import { createMemo, type ParentProps } from "solid-js"
 import { LocalProvider } from "@/context/local"
-import { SDKProvider } from "@/context/sdk"
-import { useSync } from "@/context/sync"
-import { decode64 } from "@/utils/base64"
-import { Schema } from "effect"
 import type { ServerConnection } from "@/context/servers"
 import { sessionHref } from "@/utils/session-route"
-import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
 
-export function DirectoryDataProvider(
+export function SessionUIProvider(
   props: ParentProps<{
     directory: string
-    draftID?: string
-    server?: ServerConnection.Key
+    server: ServerConnection.Key
   }>,
 ) {
-  const location = useLocation()
   const navigate = useNavigate()
   const params = useParams()
-  const sync = useSync()
-  const serverSync = useServerSync()
-  const language = useLanguage()
+  const data = useData()
   const directory = () => props.directory
-  const slug = createMemo(() => base64Encode(directory()))
-  const href = (sessionID: string) => {
-    if (props.server) return sessionHref(props.server, sessionID)
-    return `/${slug()}/session/${sessionID}`
-  }
+  const href = (sessionID: string) => sessionHref(props.server, sessionID)
   const navigateToSession = async (sessionID: string) => {
-    const session = serverSync.session
-    await Promise.allSettled([session.lineage.resolve(sessionID), session.sync(sessionID)])
+    await data.session.sync(sessionID).catch(() => undefined)
     navigate(href(sessionID))
   }
-
-  createEffect(() => {
-    // A draft lives at /new-session?draftId=… and has no directory segment to normalize.
-    if (props.draftID || props.server) return
-    const next = sync().data.path.directory
-    if (!next || next === directory()) return
-    const path = location.pathname.slice(slug().length + 1)
-    navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
-  })
-
-  createResource(
-    () => params.id,
-    (id) => serverSync.session.hydrate(id).catch(() => {}),
-  )
-
-  createEffect(() => {
-    const sessionID = params.id
-    if (!sessionID) return
-    serverSync.session.pin(sessionID)
-    onCleanup(() => serverSync.session.unpin(sessionID))
-  })
+  const sessionUIData = createMemo(() => ({
+    session: data.session.list(),
+    session_status: Object.fromEntries(
+      data.session
+        .list()
+        .map((session) => [
+          session.id,
+          data.session.status(session.id) === "running" ? ({ type: "busy" } as const) : ({ type: "idle" } as const),
+        ]),
+    ),
+    session_diff: {},
+  }))
 
   return (
-    <Show when={directory()} keyed>
-      {(directory) => (
-        <DataProvider
-          data={sync().data}
-          directory={directory}
-          sessionID={params.id}
-          onNavigateToSession={navigateToSession}
-          onSessionHref={href}
-        >
-          <LocalProvider>{props.children}</LocalProvider>
-        </DataProvider>
-      )}
-    </Show>
-  )
-}
-
-export const ProjectDirString = Schema.String.pipe(Schema.brand("ProjectDirString"))
-export type ProjectDirString = Schema.Schema.Type<typeof ProjectDirString>
-
-export function decodeDirectory(dir: string): ProjectDirString | undefined {
-  const decoded = decode64(dir)
-  if (!decoded) return
-  return ProjectDirString.make(decoded)
-}
-
-export default function Layout(props: ParentProps) {
-  const params = useParams()
-  const language = useLanguage()
-  const navigate = useNavigate()
-  let invalid = ""
-
-  const resolved = createMemo(() => {
-    if (!params.dir) return ""
-    return decodeDirectory(params.dir) ?? ""
-  })
-
-  createEffect(() => {
-    const dir = params.dir
-    if (!dir) return
-    if (resolved()) {
-      invalid = ""
-      return
-    }
-    if (invalid === dir) return
-    invalid = dir
-    showToast({
-      variant: "error",
-      title: language.t("common.requestFailed"),
-      description: language.t("directory.error.invalidUrl"),
-    })
-    navigate("/", { replace: true })
-  })
-
-  return (
-    <Show when={resolved()} keyed>
-      {(resolved) => (
-        <SDKProvider directory={resolved}>
-          <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-        </SDKProvider>
-      )}
-    </Show>
+    <DataProvider
+      data={sessionUIData()}
+      directory={directory()}
+      sessionID={params.id}
+      onNavigateToSession={navigateToSession}
+      onSessionHref={href}
+    >
+      <LocalProvider>{props.children}</LocalProvider>
+    </DataProvider>
   )
 }

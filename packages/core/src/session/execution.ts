@@ -1,7 +1,8 @@
 export * as SessionExecution from "./execution.js"
 
-import { Cause, Context, Effect, Exit, Layer, Stream } from "effect"
+import { Cause, Context, Effect, Exit, Layer } from "effect"
 import { Bus } from "../bus.js"
+import { Database } from "../database/database.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionEvent } from "./event.js"
@@ -11,6 +12,7 @@ import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
 import { toSessionError } from "./to-session-error.js"
 import { UserInterruptedError } from "./error.js"
+import { SessionInbox } from "./inbox.js"
 
 export interface Interface {
   /** Snapshots active execution owned by this process. */
@@ -20,7 +22,7 @@ export interface Interface {
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /** Interrupt active work owned by this process. Idle interruption is a no-op. */
-  readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<void>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
   readonly awaitIdle: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
@@ -28,7 +30,7 @@ export interface Interface {
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionExecution") {}
 
-type InterruptReason = "user" | "shutdown" | "superseded"
+type InterruptReason = "user" | "shutdown"
 
 export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
@@ -45,6 +47,7 @@ export const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
     const bus = yield* Bus.Service
+    const db = (yield* Database.Service).db
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -71,12 +74,13 @@ export const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       force: boolean,
       continuation?: SessionRunner.Continuation,
+      promotable: SessionInbox.Promotable = "input",
     ): Effect.Effect<void, SessionRunner.RunError> {
       return Effect.gen(function* () {
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
         const result = yield* SessionRunner.Service.use((runner) =>
-          runner.drain({ sessionID, force, continuation }),
+          runner.drain({ sessionID, force, continuation, promotable }),
         ).pipe(
           Effect.provide(locations.get(session.location)),
           Effect.tapCause((cause) =>
@@ -86,7 +90,7 @@ export const layer = Layer.effect(
           ),
         )
         if (result.type === "complete") return
-        return yield* drain(sessionID, false, result.continuation)
+        return yield* drain(sessionID, false, result.continuation, promotable)
       })
     }
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
@@ -95,7 +99,7 @@ export const layer = Layer.effect(
           sessionID,
           bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
         ),
-      drain: (sessionID, force) => drain(sessionID, force),
+      drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
         reportLifecycle(
@@ -107,8 +111,8 @@ export const layer = Layer.effect(
               return
             }
             if (outcome.type === "interrupted") {
-              // A user cancel (or a superseding execution) releases the claim: the turn must not
-              // resurrect at the next boot. Shutdown interruption keeps it for restart continuity.
+              // A user cancel releases the claim: the turn must not resurrect at the next
+              // boot. Shutdown interruption keeps it for restart continuity.
               yield* bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },
@@ -127,14 +131,21 @@ export const layer = Layer.effect(
           }),
         ),
     })
-    yield* bus.subscribe(SessionEvent.Moved).pipe(
-      Stream.runForEach((event) => coordinator.wake(event.data.sessionID)),
-      Effect.forkScoped,
-    )
 
     return Service.of({
       active: coordinator.active,
-      interrupt: (sessionID) => coordinator.interrupt(sessionID, "user"),
+      interrupt: (sessionID, options) =>
+        Effect.gen(function* () {
+          yield* coordinator.interrupt(sessionID, "user")
+          if (!options?.continue) return
+          // Resume steering input and between-turn control work from the interrupted
+          // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
+          // promotes them, and a control item behind a queued prompt waits its turn.
+          const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
+          if (next === undefined) return
+          if (next.delivery === "steer" || next.type === "compaction" || next.type === "move")
+            yield* coordinator.wake(sessionID, "steer")
+        }),
       resume: coordinator.run,
       wake: coordinator.wake,
       awaitIdle: coordinator.awaitIdle,
@@ -145,7 +156,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, LocationServiceMap.node, Bus.node],
+  deps: [SessionStore.node, LocationServiceMap.node, Bus.node, Database.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */

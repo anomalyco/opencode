@@ -75,7 +75,7 @@ import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
 import { ID } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { asc, desc, eq } from "drizzle-orm"
@@ -195,6 +195,29 @@ test("calculates step cost using the matching context tier", () => {
       { input: 80, output: 10, reasoning: 2, cache: { read: 20, write: 1 } },
     ),
   ).toBeCloseTo(0.0002926)
+})
+
+test("ignores malformed model cost fields", () => {
+  const costs = [
+    {
+      input: Money.USDPerMillionTokens.make(3),
+      output: Money.USDPerMillionTokens.make(15),
+      cache: {
+        read: Money.USDPerMillionTokens.make(0.3),
+        write: Money.USDPerMillionTokens.make(3.75),
+      },
+    },
+  ]
+  Object.assign(costs[0], { input: {} })
+
+  expect(
+    SessionUsage.calculateCost(costs, {
+      input: 1_000_000,
+      output: 100_000,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    }),
+  ).toBe(Money.USD.make(1.5))
 })
 
 test("does not apply an ineligible tier without base pricing", () => {
@@ -413,7 +436,7 @@ const execution = Layer.effect(
       active: coordinator.active,
       resume: coordinator.run,
       wake: coordinator.wake,
-      interrupt: coordinator.interrupt,
+      interrupt: (sessionID) => coordinator.interrupt(sessionID),
       awaitIdle: coordinator.awaitIdle,
     })
   }),
@@ -671,7 +694,7 @@ const replaySessionProjection = (id: Session.ID) =>
     yield* Effect.forEach(
       recorded.map((event) => ({
         id: event.id,
-        created: DateTime.makeUnsafe(event.created),
+        created: event.created,
         aggregateID: event.aggregate_id,
         seq: event.seq,
         type: event.type,
@@ -685,7 +708,7 @@ const replaySessionProjection = (id: Session.ID) =>
 type FragmentKind = "text" | "reasoning" | "tool input"
 
 type FragmentFixture = {
-  readonly delta: Event.Definition
+  readonly delta?: Event.Definition
   readonly completeEvents: LLMEvent[]
   readonly partialEvents: LLMEvent[]
   readonly expectedAssistant: unknown
@@ -747,7 +770,6 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
       ]
       const expectedContent = { type: "tool", id, state: { status: "streaming", input: text } }
       return {
-        delta: SessionEvent.Tool.Input.Delta,
         partialEvents,
         completeEvents: [...partialEvents, LLMEvent.toolInputEnd({ id, name: "echo" })],
         expectedAssistant: { type: "assistant", content: [expectedContent] },
@@ -766,20 +788,37 @@ const verifyEphemeralDeltas = (kind: FragmentKind) =>
     const expectedContext = [{ type: "user", text: prompt }, fixture.expectedAssistant]
     yield* admit(session, prompt)
     const bus = yield* Bus.Service
-    const live = yield* bus.subscribe(fixture.delta).pipe(Stream.take(32), Stream.runCollect, Effect.forkScoped)
+    const live = fixture.delta
+      ? yield* bus.subscribe(fixture.delta).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      : undefined
     yield* Effect.yieldNow
     yield* TestLLM.push(fixture.completeEvents)
 
     yield* session.resume(sessionID)
 
     const { db } = yield* Database.Service
-    const deltas = yield* db
-      .select({ type: EventTable.type })
-      .from(EventTable)
-      .where(eq(EventTable.type, Bus.versionedType(fixture.delta.type, 1)))
-      .all()
-      .pipe(Effect.orDie)
-    expect(Array.from(yield* Fiber.join(live))).toHaveLength(32)
+    const deltas = fixture.delta
+      ? yield* db
+          .select({ type: EventTable.type })
+          .from(EventTable)
+          .where(eq(EventTable.type, Bus.versionedType(fixture.delta.type, 1)))
+          .all()
+          .pipe(Effect.orDie)
+      : []
+    if (live) {
+      const streamed = Array.from(yield* Fiber.join(live))
+      expect(streamed).toHaveLength(1)
+      expect(
+        streamed
+          .map((event) => {
+            if (!event.data || typeof event.data !== "object" || !("delta" in event.data))
+              throw new Error("Expected delta event")
+            if (typeof event.data.delta !== "string") throw new Error("Expected string delta")
+            return event.data.delta
+          })
+          .join(""),
+      ).toBe(chunks.join(""))
+    }
     expect(deltas).toHaveLength(0)
     expect(yield* session.context(sessionID)).toMatchObject(expectedContext)
 
@@ -977,6 +1016,43 @@ describe("SessionRunnerLLM", () => {
           ],
         },
       ])
+    }),
+  )
+
+  it.effect("keeps WebSocket eligibility after model request hooks", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "model.request", (event) =>
+        Effect.sync(() => {
+          event.headers["x-model-request-hook"] = "active"
+        }),
+      )
+      yield* hooks.register("session", "http.request", () => Effect.die("Other-provider HTTP hook should not apply"), {
+        providerID: Provider.ID.githubCopilot,
+      })
+      const context = yield* SessionContext.Service
+      const modelRequests = yield* SessionModelRequest.Service
+      const selected = yield* context.select(sessionID)
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      yield* InstructionState.prepare(database.db, bus, selected.instructions, sessionID)
+      const loaded = yield* context.load(selected)
+
+      const prepared = yield* modelRequests.prepare({
+        scope: {
+          session: loaded.session,
+          agentID: loaded.agent.id,
+          model: loaded.model,
+          tools: loaded.tools,
+        },
+        transcript: { system: [], messages: [] },
+        webSocket: "session",
+      })
+
+      expect(prepared.request.http?.headers?.["x-model-request-hook"]).toBe("active")
+      // No forced HTTP middleware: the other-provider hook must not revoke eligibility.
+      expect(prepared.options.http).toBeUndefined()
     }),
   )
 
@@ -1390,6 +1466,44 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("keeps queued input parked across a mid-turn move", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      yield* admit(session, "Echo before moving")
+      yield* TestLLM.push(
+        TestLLM.tool("call-move", "echo", { text: "moving" }),
+        TestLLM.text("Done", "text-after-move"),
+        TestLLM.text("Handled queue", "text-after-queue"),
+      )
+      const tools = yield* blockTools()
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* tools.started
+      yield* session.prompt({ sessionID, text: "Queued for later", delivery: "queue", resume: false })
+      yield* SessionInbox.admit(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        item: {
+          type: "move",
+          payload: {
+            location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+            projectID: Project.ID.global,
+          },
+          delivery: "steer",
+        },
+      })
+
+      yield* tools.release
+      yield* Fiber.join(run)
+
+      // The resumed turn absorbs steers only; queued input waits for the turn to end.
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[1])).not.toContain("Queued for later")
+      expect(userTexts(requests[2])).toContain("Queued for later")
+    }),
+  )
+
   it.effect("seeds a fork with the parent's newest instruction values", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -1431,7 +1545,7 @@ describe("SessionRunnerLLM", () => {
       yield* Effect.forEach(
         recorded.map((event) => ({
           id: event.id,
-          created: DateTime.makeUnsafe(event.created),
+          created: event.created,
           aggregateID: event.aggregate_id,
           seq: event.seq,
           type: event.type,
@@ -3095,6 +3209,72 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("stops a steer-scoped drain before queued input", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
+      yield* session.prompt({ sessionID, text: "Steer now", resume: false })
+      yield* TestLLM.push(TestLLM.stop())
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+      expect(requests).toHaveLength(1)
+      expect(userTexts(requests[0])).toEqual(["Steer now"])
+      expect(yield* SessionInbox.has(db, sessionID, "steer")).toBe(false)
+      expect(yield* SessionInbox.has(db, sessionID, "queue")).toBe(true)
+    }),
+  )
+
+  it.effect("a steer-scoped drain runs a queued manual compaction next in line", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      const bus = yield* Bus.Service
+      // Admit without waking so the steer-scoped drain below is the first consumer.
+      const compaction = yield* SessionInbox.admitCompaction(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        delivery: "queue",
+      })
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+      // Control work is scope-independent between turns: the barrier is consumed
+      // even though the drain never promotes queued input.
+      expect(yield* SessionInbox.find(db, compaction.id)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+        error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+      })
+    }),
+  )
+
+  it.effect("a steer-scoped drain leaves a compaction parked behind a queued prompt", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      const bus = yield* Bus.Service
+      yield* session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
+      const compaction = yield* SessionInbox.admitCompaction(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        delivery: "queue",
+      })
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+      // Enqueue order holds: the queued prompt is next in line, so nothing runs.
+      expect(requests).toHaveLength(0)
+      expect(yield* SessionInbox.has(db, sessionID, "queue")).toBe(true)
+      expect(yield* SessionInbox.find(db, compaction.id)).toMatchObject({ id: compaction.id })
+    }),
+  )
+
   it.effect("promotes queued input after steering continuation ends", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -4042,13 +4222,49 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("persists raw finish reasons and provider state", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* TestLLM.push(
+        TestLLM.complete(
+          {
+            reason: { normalized: "stop", raw: "end_turn" },
+            providerMetadata: { openai: { responseId: "response-1", serviceTier: "priority" } },
+          },
+          LLMEvent.textStart({ id: "answer" }),
+          LLMEvent.textDelta({ id: "answer", text: "Complete" }),
+          LLMEvent.textEnd({ id: "answer" }),
+        ),
+      )
+
+      yield* runPrompt(session, "Keep provider finish details")
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        {
+          type: "assistant",
+          finish: "stop",
+          rawFinish: "end_turn",
+          providerState: { responseId: "response-1", serviceTier: "priority" },
+          content: [{ type: "text", text: "Complete" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("projects content-filter finishes as visible terminal failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* TestLLM.push(
         TestLLM.complete(
           {
-            reason: { normalized: "content-filter" },
+            reason: { normalized: "content-filter", raw: "SAFETY" },
+            providerMetadata: {
+              openai: {
+                responseId: "response-blocked",
+                refusal: { category: "safety", explanation: "Prompt blocked" },
+              },
+            },
             usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1 },
           },
           LLMEvent.textStart({ id: "partial" }),
@@ -4063,7 +4279,12 @@ describe("SessionRunnerLLM", () => {
         { type: "user" },
         {
           type: "assistant",
-          finish: "error",
+          finish: "content-filter",
+          rawFinish: "SAFETY",
+          providerState: {
+            responseId: "response-blocked",
+            refusal: { category: "safety", explanation: "Prompt blocked" },
+          },
           error: { type: "provider.content-filter" },
           cost: 0,
           tokens: { input: 8, output: 2, reasoning: 1, cache: { read: 0, write: 0 } },
@@ -5169,8 +5390,11 @@ describe("SessionRunnerLLM", () => {
   )
 
   for (const kind of fragmentKinds) {
-    it.effect(`broadcasts provider ${kind} deltas without storing projection rewrites`, () =>
-      verifyEphemeralDeltas(kind),
+    it.effect(
+      kind === "tool input"
+        ? "does not broadcast provider tool input deltas"
+        : `batches provider ${kind} deltas without storing projection rewrites`,
+      () => verifyEphemeralDeltas(kind),
     )
 
     it.effect(`durably closes partial ${kind} when the provider stream fails`, () => verifyPartialFlushOnFailure(kind))

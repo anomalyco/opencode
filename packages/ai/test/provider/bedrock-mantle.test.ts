@@ -75,7 +75,6 @@ describe("Amazon Bedrock Mantle provider", () => {
             }),
           ),
         ),
-        Effect.flip,
       )
 
       expect(seen).toEqual([{ url: "https://mantle.test/v1/chat/completions", authorization: "Bearer test-key" }])

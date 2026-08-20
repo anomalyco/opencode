@@ -505,20 +505,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "גרסת שולחן העבודה: {{version}}",
   "wsl.onboarding.versionMismatch": "הגרסה המותקנת אינה תואמת את גרסת האפליקציה לשולחן העבודה.",
   "wsl.onboarding.adding": "מוסיף...",
-  "help.tabs.toast.ariaLabel": "היכרות עם כרטיסיות. ארגן את העבודה וההפעלות הפעילות שלך עם כרטיסיות",
-  "help.tabs.toast.dismiss": "סגור מידע על כרטיסיות",
-  "help.tabs.title": "היכרות עם כרטיסיות",
-  "help.tabs.description": "ארגן את העבודה וההפעלות הפעילות שלך עם כרטיסיות",
-  "help.tabs.date": "14 ביולי",
-  "help.tabs.introduction": "OpenCode Desktop בנוי כעת סביב כרטיסיות.",
-  "help.tabs.sessions":
-    "התחל הפעלה חדשה בכרטיסייה, או פתח הפעלה קיימת מכל אחד מהפרויקטים שלך. פתח כרטיסייה חדשה כשאתה מתחיל משהו חדש, וסגור אותה כשתסיים.",
-  "help.tabs.organize":
-    "שמירה על מספר כרטיסיות פתוחות מקלה על ארגון ההפעלות הפעילות שלך. שנה את שמות הכרטיסיות למשהו בלתי נשכח אם אתה מתכנן לשמור אותן בסביבה.",
-  "help.tabs.home": "תמצא את כל ההפעלות והפרויקטים שלך במסך הבית החדש. בחירת הפעלה פותחת אותה בכרטיסייה.",
-  "help.tabs.persistence": "כאשר אתה פותח מחדש את האפליקציה, הכרטיסיות שלך עדיין פתוחות.",
-  "help.tabs.worktrees":
-    "העיצוב החדש עדיין אינו תומך בסביבות עבודה של Git, אך התמיכה תתווסף בקרוב. אם ברצונך להמשיך להשתמש בפריסה הקודמת, אפשר לעבור בין הפריסות בהגדרות. חשוב לזכור שהפריסה החדשה תהפוך לקבועה בעוד מספר שבועות.",
   "server.row.noUsername": "ללא שם משתמש",
   "dialog.project.edit.title": "ערוך פרויקט",
   "dialog.project.edit.name": "שם",
@@ -998,12 +984,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "הרחבת מקטעי כלי העריכה",
   "settings.general.row.editToolPartsExpanded.description":
     "הצג חלקי כלי עריכה, כתיבה ותיקון מורחבים כברירת מחדל בציר הזמן",
-  "settings.general.row.newInterface.title": "פריסה חדשה",
-  "settings.general.row.newInterface.badge": "חדש",
-  "settings.general.row.newInterface.description": "השתמש בכרטיסיות החדשות ובפריסת הבית. מעבר בין פריסות לזמן מוגבל.",
-  "settings.general.row.newInterfaceNotice.title": "אתה משתמש כעת בפריסה חדשה",
-  "settings.general.row.newInterfaceNotice.description": "הפריסה הקודמת אינה זמינה יותר",
-  "settings.general.row.newInterfaceNotice.dismiss": "סגור",
   "settings.general.row.pinchZoom.title": "שינוי גודל באמצעות צביטה",
   "settings.general.row.pinchZoom.description": "מתן אפשרות לשינוי גודל באמצעות צביטה במשטח המגע או גלילה עם Ctrl",
   "settings.general.row.wayland.title": "השתמש ב-Wayland מקורי",

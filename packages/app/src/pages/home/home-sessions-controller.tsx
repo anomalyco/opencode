@@ -3,12 +3,11 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { skipToken, useQuery } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
-import { produce } from "solid-js/store"
 import { useCommand } from "@/context/command"
 import {
   loadHomeSessionIndex,
+  mergeHomeSessionIndex,
   retainHomeSessions,
-  type HomeSessionEvents,
 } from "@/context/global-sync/home-session-index"
 import type { LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
@@ -18,7 +17,6 @@ import { compareSessionTime, displayName, errorMessage, projectForSession } from
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { pathKey } from "@/utils/path-key"
 import { showToast } from "@/utils/toast"
-import { Binary } from "@opencode-ai/core/util/binary"
 import { archiveHomeSession } from "../home-session-archive"
 import type { HomeController } from "./home-controller"
 
@@ -50,35 +48,15 @@ export function createHomeSessionsController(home: HomeController) {
   const projectByID = createMemo(
     () => new Map(home.project.list().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
-  const homeSessions = () => home.server.focusedSync()?.homeSessions
-  const sessionEventLoad = useQuery(() => {
-    const cache = homeSessions()
-    return {
-      queryKey: cache?.eventsKey ?? (["home", "session-events", "unselected"] as const),
-      queryFn: cache ? async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }) : skipToken,
-      initialData: { sequence: 0, entries: [] } satisfies HomeSessionEvents,
-      enabled: false,
-    }
-  })
   const sessionLoad = useQuery(() => {
-    const cache = homeSessions()
+    const ctx = home.server.focusedContext()
+    const conn = home.server.focused()
     return {
-      queryKey: cache?.indexKey ?? (["home", "session-index", "unselected"] as const),
-      enabled: !!cache && home.server.focusedContext()?.sdk.connection.status() === "connected",
-      queryFn:
-        cache && home.server.focusedContext()
-          ? async ({ signal }) => {
-              const ctx = home.server.focusedContext()!
-              const eventSequence = cache.eventSequence()
-              const index = await loadHomeSessionIndex(
-                (input, options) => ctx.sdk.api.session.list(input, options),
-                eventSequence,
-                signal,
-              )
-              cache.complete(eventSequence)
-              return index
-            }
-          : skipToken,
+      queryKey: ["home-sessions", conn] as const,
+      enabled: !!ctx && ctx.sdk.connection.status() === "connected",
+      queryFn: ctx
+        ? ({ signal }) => loadHomeSessionIndex((input, options) => ctx.sdk.api.session.list(input, options), signal)
+        : skipToken,
       retry: false,
       staleTime: 30_000,
       refetchOnMount: true,
@@ -86,9 +64,13 @@ export function createHomeSessionsController(home: HomeController) {
     }
   })
   const indexedSessions = createMemo(() => {
-    const cache = homeSessions()
-    if (!cache) return []
-    return retainHomeSessions(cache.sessions(sessionLoad.data, sessionEventLoad.data), HOME_SESSION_LIMIT, Date.now())
+    const ctx = home.server.focusedContext()
+    if (!ctx) return []
+    return retainHomeSessions(
+      mergeHomeSessionIndex(sessionLoad.data ?? [], ctx.data.session.list()),
+      HOME_SESSION_LIMIT,
+      Date.now(),
+    )
   })
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
@@ -112,7 +94,7 @@ export function createHomeSessionsController(home: HomeController) {
         const key = `${ServerConnection.key(conn)}\0${record.session.id}`
         if (prefetched.has(key)) return
         prefetched.add(key)
-        void untrack(() => ctx.sync.session.sync(record.session.id)).catch(() => {})
+        void untrack(() => ctx.data.session.sync(record.session.id)).catch(() => {})
       })
   })
 
@@ -179,7 +161,7 @@ export function createHomeSessionsController(home: HomeController) {
         const directory = project?.worktree ?? session.location.directory
         const ctx = home.server.focusedContext()
         if (!ctx) return
-        ctx.sync.session.remember(session)
+        ctx.data.session.remember(session)
         ctx.projects.open(directory)
         if (options?.background) {
           tabs.addSessionTab({ server: connKey, sessionId: session.id })
@@ -195,19 +177,12 @@ export function createHomeSessionsController(home: HomeController) {
         const conn = home.server.focused()
         const ctx = home.server.focusedContext()
         if (!conn || !ctx) return
-        const [, setStore] = ctx.sync.child(session.location.directory)
         await archiveHomeSession({
           server: ServerConnection.key(conn),
           session,
           // TODO: Restore archiving when the V2 client exposes a session archive API.
           archive: async (_sessionID) => Promise.reject(new Error("Session archiving is unavailable")),
-          remove: () =>
-            setStore(
-              produce((draft) => {
-                const match = Binary.search(draft.session, session.id, (item) => item.id)
-                if (match.found) draft.session.splice(match.index, 1)
-              }),
-            ),
+          remove() {},
           onError: (cause) =>
             showToast({
               title: language.t("common.requestFailed"),

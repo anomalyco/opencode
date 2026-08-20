@@ -7,7 +7,6 @@ import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
 import { AppProcess } from "@opencode-ai/util/process"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Config } from "./config.js"
 import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
 import { Location } from "./location.js"
@@ -15,8 +14,10 @@ import { Global } from "@opencode-ai/util/global"
 import { ShellSelect } from "./shell/select.js"
 import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
 import { PluginHooks } from "./plugin/hooks.js"
+import { SessionEnvironment } from "./session/environment.js"
+import { SessionSchema } from "./session/schema.js"
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Shell.NotFoundError", {
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
 }) {}
 
@@ -66,16 +67,17 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Shell") {}
 
-export const layer = (options?: ShellSelect.Options) =>
+const layer = () =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const location = yield* Location.Service
-      const config = yield* Config.Service
       const global = yield* Global.Service
+      const shell = yield* ShellSelect.Service
       const environment = yield* Environment.Service
       const hooks = yield* PluginHooks.Service
+      const environments = yield* SessionEnvironment.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       const sessions = new Map<string, Active>()
@@ -98,7 +100,7 @@ export const layer = (options?: ShellSelect.Options) =>
         }),
       )
 
-      const require = Effect.fn("Shell.require")(function* (id: Shell.ID) {
+      const require = Effect.fnUntraced(function* (id: Shell.ID) {
         const session = sessions.get(id)
         if (!session) return yield* new NotFoundError({ id })
         return session
@@ -143,14 +145,9 @@ export const layer = (options?: ShellSelect.Options) =>
         return session.info
       })
 
-      const resolve = () =>
-        config
-          .entries()
-          .pipe(Effect.map((entries) => ShellSelect.preferred(Config.latest(entries, "shell"), options, global.bin)))
+      const name = () => shell.preferred().pipe(Effect.map(ShellSelect.name))
 
-      const name = () => resolve().pipe(Effect.map(ShellSelect.name))
-
-      const output = Effect.fn("Shell.output")(function* (id: Shell.ID, input?: Shell.OutputInput) {
+      const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
         const session = yield* require(id)
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536
@@ -184,13 +181,18 @@ export const layer = (options?: ShellSelect.Options) =>
         input: Shell.CreateInput,
         before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
       ) {
+        const sessionID = input.metadata?.sessionID
+        const sessionEnvironment =
+          location.workspaceID === undefined && Schema.is(SessionSchema.ID)(sessionID)
+            ? yield* environments.get(sessionID)
+            : undefined
         const invocation: ShellCreateBefore = {
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout,
-          shell: yield* resolve(),
+          shell: yield* shell.preferred(),
           env: {
-            ...process.env,
+            ...(sessionEnvironment ?? process.env),
             TERM: "xterm-256color",
             OPENCODE_TERMINAL: "1",
           },
@@ -324,7 +326,7 @@ export const layer = (options?: ShellSelect.Options) =>
               runFork(
                 handle.exitCode.pipe(
                   Effect.flatMap((code) => finish("exited", code)),
-                  Effect.catch(() => Effect.void),
+                  Effect.catch(() => finish("exited")),
                 ),
               )
 
@@ -345,12 +347,16 @@ export const layer = (options?: ShellSelect.Options) =>
     }),
   )
 
-export function configured(options?: ShellSelect.Options) {
-  return makeLocationNode({
-    service: Service,
-    layer: layer(options),
-    deps: [Bus.node, Location.node, Config.node, Global.node, Environment.node, PluginHooks.node],
-  })
-}
-
-export const node = configured()
+export const node = makeLocationNode({
+  service: Service,
+  layer: layer(),
+  deps: [
+    Bus.node,
+    Location.node,
+    Global.node,
+    ShellSelect.node,
+    Environment.node,
+    PluginHooks.node,
+    SessionEnvironment.node,
+  ],
+})

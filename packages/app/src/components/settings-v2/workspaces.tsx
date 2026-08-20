@@ -1,21 +1,22 @@
 import type { Component } from "solid-js"
 import { For, Show, createMemo } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { useQuery } from "@tanstack/solid-query"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode-ai/ui/v2/dialog-v2"
-import { Icon } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode-ai/ui/dialog"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Menu } from "@opencode-ai/ui/menu"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { getFilename } from "@opencode-ai/util/path"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
 import { showToast } from "@/utils/toast"
 import { getRelativeTime } from "@/utils/time"
+import { sessionLabel } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { SettingsListV2 } from "./parts/list"
 import { InlineServerSelect } from "./parts/server-select"
@@ -37,6 +38,7 @@ import {
 } from "@/utils/workspace"
 import { listAllSessions } from "@/utils/session"
 import type { ServerScope } from "@/utils/server-scope"
+import { normalizeProjectInfo } from "@/context/global-sync/utils"
 import "./settings-v2.css"
 
 type Workspace = {
@@ -48,7 +50,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
-  const serverSync = useServerSync()
+  const data = useData()
   const tabs = useTabs()
   const platform = usePlatform()
   const [store, setStore] = createStore({
@@ -56,9 +58,22 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
     transaction: undefined as "confirm" | "running" | undefined,
   })
 
-  const workspaces = createMemo(() => workspaceInventory(serverSync.data.project))
+  const projectQuery = useQuery(() => ({
+    queryKey: [serverSDK.scope, "settings-workspace-projects"] as const,
+    queryFn: async () =>
+      Promise.all(
+        (await serverSDK.api.project.list()).map(async (project) => {
+          const worktrees = await serverSDK.api.worktree
+            .list({ projectID: project.id })
+            .catch(() => [{ directory: project.canonical }, ...project.sandboxes.map((directory) => ({ directory }))])
+          return normalizeProjectInfo({ ...project, worktrees })
+        }),
+      ),
+    refetchOnMount: "always",
+  }))
+  const workspaces = createMemo(() => workspaceInventory(projectQuery.data ?? []))
   const projects = createMemo(() =>
-    serverSync.data.project.filter((project) => managedWorkspaceDirectories(project).length > 0),
+    (projectQuery.data ?? []).filter((project) => managedWorkspaceDirectories(project).length > 0),
   )
   const projectName = (project: Project) => project.name || getFilename(project.worktree)
   const projectOptions = createMemo(() => [
@@ -71,18 +86,21 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   const filtered = createMemo(() => filterWorkspaceInventory(workspaces(), selectedProject()))
   const captureDeleteContext = () => {
     const sdk = serverSDK
-    return { sdk, sync: serverSync, server: ServerConnection.key(sdk.server), activeDirectory: props.activeDirectory }
+    return {
+      sdk,
+      data,
+      server: ServerConnection.key(sdk.server),
+      activeDirectory: props.activeDirectory,
+    }
   }
   const loadSessions = async (context = captureDeleteContext()) => {
     const fetched = await listAllSessions(context.sdk.api.session, { order: "desc" })
-    return mergeWorkspaceSessionInventory(
-      fetched,
-      Object.values(context.sync.session.data.info).filter((session): session is SessionInfo => !!session),
-    )
+    fetched.forEach(context.data.session.remember)
+    return mergeWorkspaceSessionInventory(fetched, context.data.session.list())
   }
   const sessionQuery = useQuery(() => ({
     queryKey: [serverSDK.scope, null, "settings-workspace-sessions"] as const,
-    queryFn: () => loadSessions(),
+    queryFn: () => loadSessions().then(() => Date.now()),
     refetchOnMount: "always",
   }))
   const sessionsByWorkspace = createMemo(
@@ -90,7 +108,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
       new Map(
         workspaces().map((workspace) => [
           pathKey(workspace.directory),
-          sessionQuery.isSuccess ? sessionsForWorkspace(sessionQuery.data ?? [], workspace.directory) : [],
+          sessionQuery.isSuccess ? sessionsForWorkspace(data.session.list(), workspace.directory) : [],
         ]),
       ),
   )
@@ -176,25 +194,8 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
         worktree: undefined,
       })
     })
-    clearWorkspaceTerminals(
-      workspace.directory,
-      preflight.sessions.map((session) => session.id),
-      platform,
-      context.sdk.scope,
-    )
-    context.sync.set(
-      "project",
-      produce((draft) => {
-        const project = draft.find((item) => item.id === workspace.project.id)
-        if (!project) return
-        project.sandboxes = (project.sandboxes ?? []).filter(
-          (directory) => pathKey(directory) !== pathKey(workspace.directory),
-        )
-        project.worktrees = project.worktrees.filter(
-          (worktree) => pathKey(worktree.directory) !== pathKey(workspace.directory),
-        )
-      }),
-    )
+    clearWorkspaceTerminals(workspace.directory, platform, context.sdk.scope)
+    await projectQuery.refetch()
   }
 
   let inspectionID = 0
@@ -272,33 +273,33 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
           </span>
           <div class="settings-v2-workspaces-toolbar-actions">
             <Show when={projects().length > 1}>
-              <MenuV2 placement="bottom-end" gutter={6}>
-                <MenuV2.Trigger class="flex h-6 max-w-48 items-center gap-1 rounded-sm px-2 text-13-medium hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed">
+              <Menu placement="bottom-end" gutter={6}>
+                <Menu.Trigger class="flex h-6 max-w-48 items-center gap-1 rounded-sm px-2 text-13-medium hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed">
                   <span class="min-w-0 truncate">
                     {projectOptions().find((option) => option.id === selectedProject())?.label}
                   </span>
                   <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-                </MenuV2.Trigger>
-                <MenuV2.Portal>
-                  <MenuV2.Content>
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content>
                     <For each={projectOptions()}>
                       {(option) => (
-                        <MenuV2.Item onSelect={() => setStore("project", option.id)}>
+                        <Menu.Item onSelect={() => setStore("project", option.id)}>
                           <span class="min-w-0 flex-1 truncate">{option.label}</span>
                           <Show when={selectedProject() === option.id}>
                             <Icon name="check" size="small" class="shrink-0" />
                           </Show>
-                        </MenuV2.Item>
+                        </Menu.Item>
                       )}
                     </For>
-                  </MenuV2.Content>
-                </MenuV2.Portal>
-              </MenuV2>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu>
             </Show>
             <Show when={filtered().length > 0}>
-              <MenuV2 placement="bottom-end" gutter={4}>
-                <MenuV2.Trigger
-                  as={IconButtonV2}
+              <Menu placement="bottom-end" gutter={4}>
+                <Menu.Trigger
+                  as={IconButton}
                   type="button"
                   variant="ghost-muted"
                   size="small"
@@ -306,16 +307,16 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
                   disabled={!!store.transaction}
                   icon={<Icon name="outline-dots" size="small" />}
                 />
-                <MenuV2.Portal>
-                  <MenuV2.Content>
-                    <MenuV2.Item onSelect={confirmDeleteAll}>
+                <Menu.Portal>
+                  <Menu.Content>
+                    <Menu.Item onSelect={confirmDeleteAll}>
                       <span class="settings-v2-workspaces-delete-all">
                         {language.t("settings.workspaces.deleteAll")}
                       </span>
-                    </MenuV2.Item>
-                  </MenuV2.Content>
-                </MenuV2.Portal>
-              </MenuV2>
+                    </Menu.Item>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu>
             </Show>
           </div>
         </div>
@@ -334,7 +335,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
                       <div class="settings-v2-workspaces-row-header">
                         <div class="settings-v2-workspaces-copy">
                           <div class="settings-v2-workspaces-main">
-                            <TooltipV2
+                            <Tooltip
                               value={workspace.directory}
                               placement="top-start"
                               contentClass="max-w-[calc(100vw-32px)] break-all"
@@ -347,24 +348,21 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
                               >
                                 {workspace.directory}
                               </span>
-                            </TooltipV2>
+                            </Tooltip>
                           </div>
                           <span class="settings-v2-workspaces-meta">{sessionCount(workspace)}</span>
                         </div>
                         <div class="settings-v2-workspaces-row-actions">
                           <Show when={lastActive(workspace)}>
                             {(value) => (
-                              <TooltipV2
-                                value={language.t("settings.workspaces.lastActiveSession")}
-                                placement="top-end"
-                              >
+                              <Tooltip value={language.t("settings.workspaces.lastActiveSession")} placement="top-end">
                                 <span tabIndex={0} class="settings-v2-workspaces-active">
                                   {value()}
                                 </span>
-                              </TooltipV2>
+                              </Tooltip>
                             )}
                           </Show>
-                          <IconButtonV2
+                          <IconButton
                             type="button"
                             variant="ghost-muted"
                             size="small"
@@ -382,7 +380,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
                           <For each={linked()}>
                             {(session) => (
                               <div class="settings-v2-workspaces-session">
-                                <span>{session.title}</span>
+                                <span>{sessionLabel(session)}</span>
                                 <Show when={sessionTime(session)}>
                                   {(time) => <span class="settings-v2-workspaces-session-time">{time()}</span>}
                                 </Show>
@@ -427,12 +425,12 @@ function DialogDeleteAllWorkspaces(props: { count: number; project: string; onDe
         />
       </DialogHeader>
       <DialogFooter>
-        <ButtonV2 type="button" variant="neutral" onClick={() => dialog.close()}>
+        <Button type="button" variant="neutral" onClick={() => dialog.close()}>
           {language.t("common.cancel")}
-        </ButtonV2>
-        <ButtonV2 type="button" variant="danger" onClick={remove}>
+        </Button>
+        <Button type="button" variant="danger" onClick={remove}>
           {language.t("settings.workspaces.deleteAll")}
-        </ButtonV2>
+        </Button>
       </DialogFooter>
     </Dialog>
   )
@@ -485,17 +483,17 @@ function DialogDeleteWorkspace(props: {
         />
       </DialogHeader>
       <DialogFooter>
-        <ButtonV2 type="button" variant="neutral" onClick={() => dialog.close()}>
+        <Button type="button" variant="neutral" onClick={() => dialog.close()}>
           {language.t("common.cancel")}
-        </ButtonV2>
-        <ButtonV2
+        </Button>
+        <Button
           type="button"
           variant="danger"
           disabled={status.isPending || status.isError || status.data?.result.active}
           onClick={remove}
         >
           {language.t("workspace.delete.button")}
-        </ButtonV2>
+        </Button>
       </DialogFooter>
     </Dialog>
   )

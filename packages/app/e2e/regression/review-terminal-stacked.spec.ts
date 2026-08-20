@@ -6,6 +6,7 @@ const directory = "C:/OpenCode/ReviewTerminalStacked"
 const projectID = "proj_review_terminal_stacked"
 const sessionID = "ses_review_terminal_stacked"
 const title = "Review terminal stacked"
+const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const branchDiffs = [
   fileDiff(".github/actions/setup-bun/action.yml", 7),
   ...Array.from({ length: 2_739 }, (_, index) =>
@@ -21,7 +22,6 @@ test("keeps the review tree and terminal sized when both panels are open", async
   test.setTimeout(120_000)
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
-    protocol: "v2",
     directory,
     project: {
       id: projectID,
@@ -124,15 +124,13 @@ test("keeps the review tree and terminal sized when both panels are open", async
   )
   await page.routeWebSocket("**/api/pty/pty_review_terminal/connect", () => undefined)
   await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
     localStorage.setItem(
       "opencode.global.dat:layout",
       JSON.stringify({ review: { diffStyle: "split", panelOpened: true } }),
     )
   })
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
-  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionReady(page, { server, sessionID, title })
   await expect(page.locator("#review-panel")).toBeVisible()
   await expectTree(page, 2_773, "action.yml")

@@ -149,7 +149,7 @@ export function normalize(input: unknown): Result {
     "agents",
     migratedAgents,
     nativeAgents,
-    isRecord(input.agent) || isRecord(input.mode) || isRecord(input.agents),
+    migratedSmallModel !== undefined || isRecord(input.agent) || isRecord(input.mode) || isRecord(input.agents),
     diagnostics,
   )
 

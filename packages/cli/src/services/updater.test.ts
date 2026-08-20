@@ -35,7 +35,8 @@ describe("updater", () => {
   test("accepts strict release version variants", () => {
     expect(action("v1.2.3", " 1.2.4\n", true)).toBe("upgrade")
     expect(action("1.2.3-alpha.1", "1.2.3-alpha.2", true)).toBe("upgrade")
-    expect(action("0.0.0-next-17403", "0.0.0-next-17403.2", true)).toBe("upgrade")
+    expect(action("0.0.0-dev-17403", "0.0.0-dev-17403.2", true)).toBe("upgrade")
+    expect(action("0.0.0-next-17403", "0.0.0-beta-17404", true)).toBe("upgrade")
     expect(action("1.2.3+old", "1.2.3+new", true)).toBe("none")
     expect(action("v1.2.3+old", "1.2.3", true)).toBe("none")
   })

@@ -43,9 +43,8 @@ function unwrapNamedError(error: unknown): unknown {
 }
 
 // Client-synthesized session not-found errors share one constructor and
-// predicate so the message contract cannot drift between the sync store
-// (server-session.ts), the route lineage (session-lineage.ts), and the
-// not-found fallback matching (session.tsx).
+// predicate so the message contract cannot drift between route session
+// resolution (session-resolution.ts) and not-found fallback matching (session.tsx).
 const sessionNotFoundMessage = (sessionID: string) => `Session not found: ${sessionID}`
 
 export function sessionNotFoundError(sessionID: string) {

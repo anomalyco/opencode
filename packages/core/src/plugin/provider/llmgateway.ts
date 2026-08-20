@@ -10,7 +10,7 @@ export const LLMGatewayPlugin = define({
     const configured = new Set((yield* integrations.list()).map((integration) => integration.id))
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (item.provider.disabled) continue
+        if (item.provider.activation === "disabled") continue
         if (!Provider.isAISDK(item.provider.package)) continue
         if (Provider.packageName(item.provider.package) !== "@ai-sdk/openai-compatible") continue
         if (item.provider.settings?.baseURL !== "https://api.llmgateway.io/v1") continue

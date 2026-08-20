@@ -6,11 +6,11 @@ import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionError } from "@opencode-ai/schema/session-error"
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Session.NotFoundError", {
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Session.NotFoundError", {
   sessionID: SessionSchema.ID,
 }) {}
 
-export class ForkEmptyError extends Schema.TaggedErrorClass<ForkEmptyError>()("Session.ForkEmptyError", {
+export class ForkEmptyError extends Schema.TaggedError<ForkEmptyError>()("Session.ForkEmptyError", {
   sessionID: SessionSchema.ID,
 }) {
   override get message() {
@@ -18,7 +18,7 @@ export class ForkEmptyError extends Schema.TaggedErrorClass<ForkEmptyError>()("S
   }
 }
 
-export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeError>()("Session.MessageDecodeError", {
+export class MessageDecodeError extends Schema.TaggedError<MessageDecodeError>()("Session.MessageDecodeError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {
@@ -27,7 +27,7 @@ export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeErr
   }
 }
 
-export class AgentNotFoundError extends Schema.TaggedErrorClass<AgentNotFoundError>()("Session.AgentNotFoundError", {
+export class AgentNotFoundError extends Schema.TaggedError<AgentNotFoundError>()("Session.AgentNotFoundError", {
   sessionID: SessionSchema.ID,
   agent: Agent.ID,
 }) {
@@ -36,7 +36,7 @@ export class AgentNotFoundError extends Schema.TaggedErrorClass<AgentNotFoundErr
   }
 }
 
-export class StepFailedError extends Schema.TaggedErrorClass<StepFailedError>()("Session.StepFailedError", {
+export class StepFailedError extends Schema.TaggedError<StepFailedError>()("Session.StepFailedError", {
   error: SessionError.Error,
 }) {
   override get message() {
@@ -44,7 +44,7 @@ export class StepFailedError extends Schema.TaggedErrorClass<StepFailedError>()(
   }
 }
 
-export class UserInterruptedError extends Schema.TaggedErrorClass<UserInterruptedError>()(
+export class UserInterruptedError extends Schema.TaggedError<UserInterruptedError>()(
   "Session.UserInterruptedError",
   {},
 ) {

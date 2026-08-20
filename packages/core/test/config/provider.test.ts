@@ -77,7 +77,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("defaults custom models to agent capabilities", () =>
+  it.effect("defaults custom model metadata", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.make("custom")
@@ -100,6 +100,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.capabilities).toEqual({ tools: true, input: ["text", "image"], output: ["text"] })
+      expect(model.limit).toEqual({ context: 200_000, output: 32_000 })
     }),
   )
 
@@ -342,7 +343,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           names: ["CUSTOM_API_KEY"],
         })
         expect((yield* integrations.get(Integration.ID.make("custom")))?.name).toBe("Renamed")
-        expect(provider.disabled).toBeUndefined()
+        expect(provider.activation).toBe("enabled")
         expect(provider.package).toBe("aisdk:custom-sdk")
         expect(provider.settings).toEqual({ baseURL: "https://example.test" })
         expect(provider.headers).toEqual({ first: "first", shared: "last", last: "last" })

@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 
 export const OpenAICompatiblePlugin = define({
-  id: "opencode.provider.openai-compatible",
+  id: "opencode.provider.openai.compatible",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.aisdk.hook(
       "sdk",

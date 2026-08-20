@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
+import fuzzysort from "fuzzysort"
 import os from "os"
 import path from "path"
 import { Deferred, Effect, Layer } from "effect"
@@ -122,5 +123,59 @@ describe("FileSystemSearch", () => {
         expect(scans).toBe(2)
       }).pipe(Effect.provide(layer), Effect.provide(TestClock.layer()), Effect.scoped),
     )
+  })
+
+  test("reuses location-owned fuzzy targets across index refreshes", async () => {
+    let scans = 0
+    const first = Effect.runSync(Deferred.make<void>())
+    const second = Effect.runSync(Deferred.make<void>())
+    const prepare = spyOn(fuzzysort, "prepare")
+    const cleanup = spyOn(fuzzysort, "cleanup")
+    const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+      [
+        Location.node,
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of(
+            location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-cache")) }),
+          ),
+        ),
+      ],
+      [
+        Ripgrep.node,
+        Layer.succeed(
+          Ripgrep.Service,
+          Ripgrep.Service.of({
+            find: (input) =>
+              Effect.gen(function* () {
+                scans++
+                const entry = FileSystem.Entry.make({ path: RelativePath.make("src/index.ts"), type: "file" })
+                if (input.onEntry) yield* input.onEntry(entry)
+                yield* Deferred.succeed(scans === 1 ? first : second, undefined)
+                return [entry]
+              }),
+            glob: () => Effect.succeed([]),
+            grep: () => Effect.succeed([]),
+          }),
+        ),
+      ],
+    ])
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        yield* Deferred.await(first)
+        yield* search.find({ query: "index", type: "file" })
+        yield* TestClock.adjust("10 seconds")
+        yield* search.find({ query: "index", type: "file" })
+        yield* Deferred.await(second)
+        yield* search.find({ query: "index", type: "file" })
+
+        expect(prepare).toHaveBeenCalledTimes(2)
+        expect(cleanup).toHaveBeenCalledTimes(3)
+      }).pipe(Effect.provide(layer), Effect.provide(TestClock.layer()), Effect.scoped),
+    )
+    prepare.mockRestore()
+    cleanup.mockRestore()
   })
 })

@@ -51,7 +51,7 @@ describe("InstructionBuiltIns", () => {
           `  Workspace root folder: ${projectDirectory}`,
           "  Is directory a git repo: yes",
           `  Platform: ${process.platform}`,
-          `  Use ${temporary} for temporary work outside the workspace; it already exists and is pre-approved for external directory access.`,
+          `  Prefer ${temporary} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
           "</env>",
           "",
           `Today's date: ${localDate(timestamp)}`,

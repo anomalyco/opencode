@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, startTransition } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -9,8 +9,9 @@ import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
 import { hasCustomAgent, resolveAgent } from "./local-agent"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
-import { useSDK } from "./sdk"
-import { useSync } from "./sync"
+import { useWorkspaceLocation } from "./location"
+import { useData } from "./server"
+import { normalizeAgentList } from "./global-sync/utils"
 import { useServerSDK } from "./server-sdk"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 
@@ -59,21 +60,25 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const params = useParams()
-    const sdk = useSDK()
-    const sync = useSync()
+    const sdk = useWorkspaceLocation()
+    const data = useData()
     const serverSDK = useServerSDK()
     const providers = useProviders(() => sdk().directory)
     const models = useModels()
     const settings = useSettings()
 
     const id = createMemo(() => params.id || undefined)
-    const list = createMemo(() => sync().data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))
+    const list = createMemo(() =>
+      normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []).filter(
+        (item) => item.mode !== "subagent" && !item.hidden,
+      ),
+    )
     const agentsVisible = createMemo(() => settings.visibility.customAgents() || hasCustomAgent(list()))
     const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
 
     const [saved, setSaved, , savedReady] = persisted(
       {
-        ...Persist.serverWorkspace(serverSDK.scope, sdk().directory, "model-selection", ["model-selection.v1"]),
+        ...Persist.serverWorkspace(serverSDK.scope, sdk().directory, "model-selection"),
         migrate,
       },
       createStore<Saved>({
@@ -148,14 +153,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       setStore("promoting", undefined)
     })
 
-    const configuredModel = () => {
-      const configured = sync().data.config.model
-      if (!configured) return
-      const [providerID, modelID] = configured.split("/")
-      const model = { providerID, modelID }
-      if (validModel(model)) return model
-    }
-
     const recentModel = () => {
       for (const item of models.recent.list()) {
         if (validModel(item)) return item
@@ -163,14 +160,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const defaultModel = () => {
-      const defaults = providers.default()
       for (const provider of providers.connected()) {
-        const configured = defaults[provider.id]
-        if (configured) {
-          const model = { providerID: provider.id, modelID: configured }
-          if (validModel(model)) return model
-        }
-
         const first = Object.values(provider.models)[0]
         if (!first) continue
         const model = { providerID: provider.id, modelID: first.id }
@@ -178,7 +168,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
-    const fallback = createMemo<ModelKey | undefined>(() => configuredModel() ?? recentModel() ?? defaultModel())
+    const fallback = createMemo<ModelKey | undefined>(() => recentModel() ?? defaultModel())
 
     const agent = {
       list,

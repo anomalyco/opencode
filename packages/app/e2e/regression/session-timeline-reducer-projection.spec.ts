@@ -4,6 +4,7 @@ import {
   completedAssistantInfo,
   messageUpdated,
   partUpdated,
+  renderedPartID,
   setupTimeline,
   shell,
   status,
@@ -23,11 +24,10 @@ test("groups singleton and separated context operations at correct boundaries", 
   ]
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
-  await expect(
-    page.locator('[data-timeline-part-ids="prt_boundary_01_read,prt_boundary_03_glob,prt_boundary_04_grep"]'),
-  ).toBeVisible()
+  await expect(page.locator('[data-timeline-part-ids="prt_boundary_01_read"]')).toBeVisible()
+  await expect(page.locator('[data-timeline-part-ids="prt_boundary_03_glob,prt_boundary_04_grep"]')).toBeVisible()
   await expect(page.locator('[data-timeline-part-ids="prt_boundary_06_list"]')).toBeVisible()
-  await expect(page.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(4)
+  await expect(page.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(5)
 })
 
 test("reducer-hardening: converges when idle arrives before final part and message completion", async ({ page }) => {
@@ -37,8 +37,10 @@ test("reducer-hardening: converges when idle arrives before final part and messa
   await timeline.send(status("busy"), 100)
   await timeline.send(status("idle"), 100)
   await timeline.send(partUpdated(textPart(textID, "Final after early idle")), 120)
-  await timeline.send(messageUpdated(completedAssistantInfo(assistant.info)), 250)
+  await timeline.send(messageUpdated(completedAssistantInfo(assistant)), 250)
 
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-  await expect(page.locator(`[data-timeline-part-id="${textID}"]`)).toContainText("Final after early idle")
+  await expect(page.locator(`[data-timeline-part-id="${renderedPartID(textID)}"]`)).toContainText(
+    "Final after early idle",
+  )
 })

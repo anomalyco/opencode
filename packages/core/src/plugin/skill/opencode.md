@@ -29,10 +29,41 @@ V1 documentation and syntax may be consulted only when the user explicitly
 asks about V1 or when needed as migration input. Outputs and recommendations
 must still use V2 unless the user specifically requests a V1 result.
 
-## [Configuration](https://opencode.ai/v2/docs/config)
+## [CLI](https://opencode.ai/v2/docs/cli)
 
-OpenCode configuration uses JSON or JSONC. Include the published schema so the
-user's editor can validate fields and provide autocomplete:
+For questions about the terminal interface, command-line invocation, `run`,
+`mini`, terminal providers, or other CLI behavior, fetch the
+[CLI guide](https://opencode.ai/v2/docs/cli) and the relevant page linked from
+that section.
+
+CLI and TUI preferences are separate from OpenCode's server and project
+configuration. They live in the global `~/.config/opencode/cli.json`, or
+`$XDG_CONFIG_HOME/opencode/cli.json` when `XDG_CONFIG_HOME` is set. There is no
+project-local CLI configuration. Most preferences can also be changed from the
+TUI by pressing `Ctrl+P` and selecting **Open settings**.
+
+Fetch the full [CLI configuration guide](https://opencode.ai/v2/docs/cli/config)
+before editing `cli.json`. It covers terminal-only settings such as themes,
+keybindings, terminal plugins, scrolling, attention alerts, diff presentation,
+and terminal integration. Do not put these settings in `opencode.json(c)`.
+
+### [Keybinds](https://opencode.ai/v2/docs/cli/keybinds)
+
+Configure keybindings under `keybinds` in `cli.json`. The leader key is the
+`keybinds.leader` entry; leader timing is configured separately under
+`leader.timeout`. Bindings can use a string, an array of strings, or an object
+when event behavior such as `preventDefault` is required. Disable a binding
+with `"none"` or `false`.
+
+Never guess a command ID, default binding, or accepted key syntax. Fetch the
+full [keybind reference](https://opencode.ai/v2/docs/cli/keybinds), which lists
+the current IDs and defaults, before answering or editing a binding.
+
+## [OpenCode configuration](https://opencode.ai/v2/docs/config)
+
+OpenCode's server and project configuration uses JSON or JSONC. Include the
+published schema so the user's editor can validate fields and provide
+autocomplete:
 
 ```jsonc
 {
@@ -55,6 +86,10 @@ Common configuration fields include `model`, `default_agent`, `permissions`,
 `agents`, `commands`, `plugins`, `providers`, `mcp`, `skills`, `instructions`,
 `references`, `formatter`, and `lsp`.
 
+This configuration is distinct from `cli.json`. Use the
+[CLI configuration guide](https://opencode.ai/v2/docs/cli/config) for terminal
+preferences, especially themes and keybindings.
+
 Do not guess field names or shapes. Fetch the V2 configuration guide and its
 linked topic guide as the source of truth, and preserve unrelated settings when
 editing an existing file. Keep the published `$schema` URL in configuration
@@ -63,12 +98,39 @@ examples, but do not fetch it to determine the V2 configuration shape.
 See the [full configuration guide](https://opencode.ai/v2/docs/config) for
 every field, examples, config locations, and links to dedicated feature guides.
 
+## [MCP servers](https://opencode.ai/v2/docs/mcp-servers)
+
+Configure MCP servers under `mcp.servers`. Prefer the CLI because it preserves
+unrelated configuration. Use `--global` when the user asks to set up a service
+for themselves without limiting it to the current project; omit it when they
+explicitly want project-local configuration.
+
+```sh
+opencode2 mcp add <name> --global --url <remote-url>
+opencode2 mcp list
+```
+
+Remote servers use OAuth by default. If `mcp list` reports that a server needs
+authentication, run the OAuth flow and then verify the connection:
+
+```sh
+opencode2 mcp auth <name>
+opencode2 mcp list
+```
+
+The auth command prints an authorization URL, waits for the browser redirect,
+and stores credentials outside the OpenCode configuration. Do not ask for or
+store an API key when the server supports OAuth. Use header-based credentials
+only when OAuth is unavailable or the user explicitly requires them, and use an
+environment substitution such as `{env:MCP_API_KEY}` instead of writing a
+secret into configuration.
+
 ## [V1 to V2 migration](https://opencode.ai/v2/docs/migrate-v1)
 
 For any request to migrate OpenCode configuration, agents, commands, skills,
 plugins, integrations, or other behavior from V1 to V2, read the full
 [migration guide](https://opencode.ai/v2/docs/migrate-v1) before acting. In
-the repository, its source is `packages/www/content/docs/(Get started)/migrate-v1.mdx`.
+the repository, its source is `packages/www/content/docs/migrate-v1.mdx`.
 
 V1 config files and `.opencode/` definitions are intended to remain compatible.
 The only intentional breaking changes are the server API and plugin API. Native

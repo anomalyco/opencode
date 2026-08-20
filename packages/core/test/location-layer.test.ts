@@ -16,6 +16,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
+import { MCP } from "@opencode-ai/core/mcp/index"
 import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -427,10 +428,18 @@ describe("LocationServiceMap", () => {
               ),
             )
             for (let attempt = 0; attempt < 100; attempt++) {
-              if ((yield* registry.list()).length === 0) break
+              if ((yield* registry.list()).some((plugin) => plugin.status === "failed")) break
               yield* Effect.sleep("20 millis")
             }
-            expect(yield* registry.list()).toEqual([])
+            expect(yield* registry.list()).toEqual([
+              {
+                id: Plugin.ID.make("failing-plugin"),
+                source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts") },
+                status: "failed",
+                error: expect.stringContaining("plugin failed"),
+                tui: false,
+              },
+            ])
 
             yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.agent"] })))
             for (let attempt = 0; attempt < 100; attempt++) {
@@ -510,7 +519,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  it.live("normalizes ref key shapes to one cached location graph", () =>
+  it.live("normalizes equivalent refs to one cached location graph", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -520,16 +529,20 @@ describe("LocationServiceMap", () => {
           Effect.gen(function* () {
             const locations = yield* LocationServiceMap.Service
             const directory = AbsolutePath.make(dir.path)
-            const absent = Location.Ref.make({ directory })
+            const alternate = AbsolutePath.make(directory.replaceAll("\\", "/"))
+            const absent = Location.Ref.make({ directory: alternate })
             const present = Location.Ref.make({ directory, workspaceID: undefined })
             // The two shapes are not structurally Equal: own-key sets differ.
             expect(Object.keys(absent)).toEqual(["directory"])
             expect(Object.keys(present)).toEqual(["directory", "workspaceID"])
             expect(Equal.equals(absent, present)).toBe(false)
+            if (process.platform === "win32") expect(absent.directory).not.toBe(present.directory)
 
             const first = yield* locations.contextEffect(absent)
             expect(yield* locations.contextEffect(present)).toBe(first)
-            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(1)
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
+              Location.Ref.make({ directory, workspaceID: undefined }),
+            ])
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)
@@ -802,6 +815,63 @@ describe("LocationServiceMap", () => {
           Effect.scoped,
           Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
         ),
+      ),
+    ),
+  )
+
+  itWithSdk.live("lets public plugins mutate configured and runtime MCP servers", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const url = "https://example.com/mcp"
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ mcp: { servers: { example: { type: "remote", url, disabled: true } } } }),
+            ),
+          )
+          const observed: Record<string, boolean | undefined> = {}
+          const sdk = yield* SdkPlugins.Service
+          yield* sdk.register(
+            EffectPlugin.define({
+              id: "mcp-codemode-policy",
+              effect: (ctx) =>
+                ctx.mcp
+                  .transform((mcp) => {
+                    for (const [name, server] of mcp.list()) {
+                      if (server.type !== "remote" || new URL(server.url).hostname !== "example.com") continue
+                      mcp.update(name, (current) => {
+                        current.codemode = false
+                        observed[name] = current.codemode
+                      })
+                    }
+                  })
+                  .pipe(Effect.asVoid),
+            }),
+          )
+
+          yield* Effect.gen(function* () {
+            const supervisor = yield* PluginSupervisor.Service
+            const mcp = yield* MCP.Service
+            yield* supervisor.flush
+            expect(observed.example).toBe(false)
+            yield* mcp.add("dynamic", {
+              type: "remote",
+              url: "https://example.com/dynamic",
+              disabled: true,
+            })
+            expect(observed.dynamic).toBe(false)
+            expect((yield* mcp.servers()).map((server) => String(server.name))).toEqual(["dynamic", "example"])
+          }).pipe(
+            Effect.scoped,
+            Effect.provide(
+              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
+            ),
+          )
+        }),
       ),
     ),
   )

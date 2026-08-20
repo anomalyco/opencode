@@ -2,9 +2,9 @@ import { spawn } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { createServer } from "node:net"
 import { app } from "electron"
-import { checkHealth } from "../server"
+import { checkHealth } from "../service/health"
 import { type WslCommandLine, resolveWslCli, shellEscape, wslArgs } from "./runtime"
-import { nativeT } from "../native-translations"
+import { nativeT } from "../native/translations"
 
 export type WslSidecar = {
   stop: () => Promise<void>

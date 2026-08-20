@@ -1,7 +1,7 @@
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { Badge } from "@opencode-ai/ui/badge"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { TextInput } from "@opencode-ai/ui/text-input"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import fuzzysort from "fuzzysort"
 import { type Component, For, Show, createMemo } from "solid-js"
@@ -61,7 +61,7 @@ export const SettingsServersV2: Component = () => {
         </div>
         <Show when={showSearch()}>
           <div class="settings-v2-tab-search">
-            <TextInputV2
+            <TextInput
               type="search"
               appearance="base"
               value={store.filter}
@@ -74,12 +74,12 @@ export const SettingsServersV2: Component = () => {
               aria-label={language.t("dialog.server.search.placeholder")}
             />
             <Show when={store.filter}>
-              <IconButtonV2
+              <IconButton
                 type="button"
                 variant="ghost-muted"
                 size="small"
                 class="settings-v2-tab-search-clear"
-                icon={<IconV2 name="close" size="large" class="text-v2-icon-icon-muted" />}
+                icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
                 onClick={() => setStore("filter", "")}
               />
             </Show>
@@ -126,7 +126,7 @@ export const SettingsServersV2: Component = () => {
                     </div>
                     <div class="settings-v2-servers-actions">
                       <Show when={controller.defaults.available() && isDefault()}>
-                        <Tag>{language.t("dialog.server.status.default")}</Tag>
+                        <Badge>{language.t("dialog.server.status.default")}</Badge>
                       </Show>
                       <ServerRowMenu server={item} domain={controller} onEdit={openEdit} />
                     </div>

@@ -1,7 +1,7 @@
-import type { Message, UserMessage } from "@/types"
+import type { SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
 import { createMemo, type Accessor } from "solid-js"
 import { useFile } from "@/context/file"
-import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
 import { same } from "@/utils/same"
 import { createSessionTabs } from "./helpers"
 import {
@@ -13,8 +13,8 @@ import {
 import { useSessionLayout } from "./session-layout"
 import { createSessionOwnership } from "./session-ownership"
 
-const emptyMessages: Message[] = []
-const emptyUserMessages: UserMessage[] = []
+const emptyMessages: SessionMessageInfo[] = []
+const emptyUserMessages: SessionMessageUser[] = []
 const idle = { type: "idle" as const }
 
 export function createSessionController(input: {
@@ -23,25 +23,25 @@ export function createSessionController(input: {
   fileBrowser?: (sessionID: string | undefined) => boolean
 }) {
   const file = useFile()
-  const sync = useSync()
+  const data = useData()
   const layout = useSessionLayout()
   const sessionID = createMemo(() => layout.params.id)
   const info = createMemo(() => {
     const id = sessionID()
-    return id ? sync().session.get(id) : undefined
+    return id ? data.session.get(id) : undefined
   })
   const parentID = createMemo(() => info()?.parentID)
   const parent = createMemo(() => {
     const id = parentID()
-    return id ? sync().session.get(id) : undefined
+    return id ? data.session.get(id) : undefined
   })
   const status = createMemo(() => {
     const id = sessionID()
-    return id ? (sync().data.session_status[id] ?? idle) : idle
+    return id && data.session.status(id) === "running" ? { type: "busy" as const } : idle
   })
   const messages = createMemo(() => {
     const id = sessionID()
-    return id ? (sync().data.message[id] ?? emptyMessages) : emptyMessages
+    return id ? data.session.message.list(id) : emptyMessages
   })
   const userMessages = createMemo(() => selectSessionUserMessages(messages()), emptyUserMessages, { equals: same })
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
@@ -75,7 +75,7 @@ export function createSessionController(input: {
       status,
       working: createMemo(() => {
         const id = sessionID()
-        return id ? sync().data.session_working(id) : false
+        return id ? data.session.status(id) === "running" : false
       }),
       revertMessageID,
     },

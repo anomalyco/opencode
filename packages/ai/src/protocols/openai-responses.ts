@@ -121,7 +121,8 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
         : yield* Effect.forEach(request.tools, (tool) =>
             lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
           ),
-    tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined,
+    tool_choice:
+      body.tool_choice ?? (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
   } satisfies OpenAIResponsesBody
 })
 
@@ -260,7 +261,7 @@ export const route = Route.make({
   endpoint,
   auth,
   transport,
-  defaults: { providerOptions: { openai: { store: false } } },
+  defaults: { providerOptions: { store: false } },
 })
 
 export * as OpenAIResponses from "./openai-responses.js"

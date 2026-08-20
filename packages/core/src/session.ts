@@ -40,6 +40,7 @@ import { SessionRevert } from "./session/revert.js"
 import { Session } from "@opencode-ai/schema/session"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Image } from "./image.js"
+import { PluginSupervisor } from "./plugin/supervisor-service.js"
 import { Mime } from "./mime.js"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { Event } from "@opencode-ai/schema/event"
@@ -51,6 +52,7 @@ import { Global } from "@opencode-ai/util/global"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { fileURLToPath } from "url"
+import { SessionEnvironment } from "./session/environment.js"
 
 // get project -> project.locations
 //
@@ -110,46 +112,46 @@ type ForkInput = {
 
 export { MessageDecodeError, NotFoundError }
 
-export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
+export class PromptConflictError extends Schema.TaggedError<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
-export class SyntheticConflictError extends Schema.TaggedErrorClass<SyntheticConflictError>()(
+export class SyntheticConflictError extends Schema.TaggedError<SyntheticConflictError>()(
   "Session.SyntheticConflictError",
   {
     sessionID: SessionSchema.ID,
     inputID: SessionMessage.ID,
   },
 ) {}
-export class AttachmentError extends Schema.TaggedErrorClass<AttachmentError>()("Session.AttachmentError", {
+export class AttachmentError extends Schema.TaggedError<AttachmentError>()("Session.AttachmentError", {
   uri: Schema.String,
   message: Schema.String,
 }) {}
-export class CompactionConflictError extends Schema.TaggedErrorClass<CompactionConflictError>()(
+export class CompactionConflictError extends Schema.TaggedError<CompactionConflictError>()(
   "Session.CompactionConflictError",
   {
     sessionID: SessionSchema.ID,
     inputID: SessionMessage.ID,
   },
 ) {}
-export class BusyError extends Schema.TaggedErrorClass<BusyError>()("Session.BusyError", {
+export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyError", {
   sessionID: SessionSchema.ID,
 }) {}
-export class InboxConflictError extends Schema.TaggedErrorClass<InboxConflictError>()("Session.InboxConflictError", {
+export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()("Session.InboxConflictError", {
   sessionID: SessionSchema.ID,
   inboxID: SessionMessage.ID,
 }) {}
 type InboxItemRef = { readonly sessionID: SessionSchema.ID; readonly inboxID: SessionMessage.ID }
-export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
+export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()("Session.SkillNotFoundError", {
   skill: Skill.ID,
 }) {}
 
-export class DestinationNotFoundError extends Schema.TaggedErrorClass<DestinationNotFoundError>()(
+export class DestinationNotFoundError extends Schema.TaggedError<DestinationNotFoundError>()(
   "Session.DestinationNotFoundError",
   { directory: AbsolutePath },
 ) {}
 
-export class DestinationNotDirectoryError extends Schema.TaggedErrorClass<DestinationNotDirectoryError>()(
+export class DestinationNotDirectoryError extends Schema.TaggedError<DestinationNotDirectoryError>()(
   "Session.DestinationNotDirectoryError",
   { directory: AbsolutePath },
 ) {}
@@ -165,6 +167,10 @@ export interface Interface {
     input: ForkInput,
   ) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError | ForkEmptyError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  readonly environment: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly variables?: SessionEnvironment.Variables
+  }) => Effect.Effect<SessionEnvironment.Variables | undefined, NotFoundError>
   readonly remove: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -304,6 +310,7 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
     const fs = yield* FSUtil.Service
     const jobs = yield* Job.Service
+    const environments = yield* SessionEnvironment.Service
     const scope = yield* Scope.Scope
     const activeShells = new Set<SessionSchema.ID>()
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
@@ -447,6 +454,11 @@ const layer = Layer.effect(
         if (!session) return yield* new NotFoundError({ sessionID })
         return session
       }),
+      environment: Effect.fn("Session.environment")(function* (input) {
+        yield* result.get(input.sessionID)
+        if (input.variables !== undefined) yield* environments.set(input.sessionID, input.variables)
+        return yield* environments.get(input.sessionID)
+      }),
       remove: Effect.fn("Session.remove")(function* (sessionID) {
         const session = yield* result.get(sessionID)
         yield* execution.interrupt(sessionID)
@@ -454,6 +466,7 @@ const layer = Layer.effect(
         yield* closeTransport(session)
         const children = yield* result.list({ parentID: sessionID })
         yield* Effect.forEach(children.data, (child) => result.remove(child.id), { concurrency: 1, discard: true })
+        yield* environments.clear(sessionID)
         yield* bus.publish(SessionEvent.Deleted, { sessionID })
         yield* bus.remove(sessionID)
       }),
@@ -567,7 +580,11 @@ const layer = Layer.effect(
             if (session.revert) yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
             // Resolved lazily so prompt admission only boots location services when an
             // image attachment actually needs the resizer.
-            const image = Image.Service.pipe(Effect.provide(locations.get(session.location)))
+            const image = Effect.gen(function* () {
+              const plugins = yield* PluginSupervisor.Service
+              yield* plugins.flush
+              return yield* Image.Service
+            }).pipe(Effect.provide(locations.get(session.location)))
             const skills = Skill.Service.pipe(Effect.provide(locations.get(session.location)))
             const prompt = yield* resolvePrompt(
               { text: input.text, files: input.files, agents: input.agents, skills: input.skills },
@@ -591,10 +608,9 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (
-              admitted.type !== "user" ||
-              !SessionInbox.equivalent(admitted, { sessionID: input.sessionID, item: admittedInput })
-            )
+            // First admission wins: same-session reuse is idempotent and ignores the
+            // retried payload, metadata, and delivery mode.
+            if (admitted.type !== "user" || admitted.sessionID !== input.sessionID)
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             if (input.resume !== false) {
               if (activeShells.has(admitted.sessionID)) return admitted
@@ -611,7 +627,11 @@ const layer = Layer.effect(
       }),
       command: Effect.fn("Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const commands = yield* Command.Service.pipe(Effect.provide(locations.get(session.location)))
+        const commands = yield* Effect.gen(function* () {
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush
+          return yield* Command.Service
+        }).pipe(Effect.provide(locations.get(session.location)))
         const command = yield* commands.get(input.command)
         if (!command)
           return yield* new Command.NotFoundError({
@@ -650,9 +670,16 @@ const layer = Layer.effect(
             activeShells.add(input.sessionID)
             yield* execution.awaitIdle(input.sessionID)
             const started = yield* Effect.gen(function* () {
+              const plugins = yield* PluginSupervisor.Service
+              yield* plugins.flush
               const shell = yield* Shell.Service
               return yield* shell
-                .create({ command: input.command, cwd: session.location.directory, timeout: 0 })
+                .create({
+                  command: input.command,
+                  cwd: session.location.directory,
+                  timeout: 0,
+                  metadata: { sessionID: input.sessionID },
+                })
                 .pipe(Effect.orDie)
             }).pipe(Effect.provide(locations.get(session.location)))
             yield* bus.publish(
@@ -763,7 +790,7 @@ const layer = Layer.effect(
           payload,
           delivery: input.delivery ?? "steer",
         })
-        const recovered = yield* SessionInbox.serialized(
+        yield* SessionInbox.serialized(
           input.sessionID,
           Effect.gen(function* () {
             const latest = yield* result.get(input.sessionID)
@@ -774,22 +801,16 @@ const layer = Layer.effect(
               )
               const moved = [SessionEvent.Moved, { sessionID: input.sessionID, ...payload }] as const
               const first = cancellations[0]
-              if (!first) {
-                yield* bus.publish(...moved)
-                return true
-              }
-              yield* bus.publishAll([first, ...cancellations.slice(1), moved])
-              return true
+              if (!first) return yield* bus.publish(...moved).pipe(Effect.asVoid)
+              return yield* bus.publishAll([first, ...cancellations.slice(1), moved])
             }
             yield* SessionInbox.admit(db, bus, {
               id: SessionMessage.ID.create(),
               sessionID: input.sessionID,
               item,
             })
-            return false
           }),
         )
-        if (recovered) return
         yield* execution.wake(input.sessionID)
       }),
       compact: Effect.fn("Session.compact")(function* (input) {
@@ -861,10 +882,9 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (
-              admitted.type !== "synthetic" ||
-              !SessionInbox.equivalent(admitted, { sessionID: input.sessionID, item: admittedInput })
-            )
+            // First admission wins: same-session reuse is idempotent and ignores the
+            // retried payload, metadata, and delivery mode.
+            if (admitted.type !== "synthetic" || admitted.sessionID !== input.sessionID)
               return yield* new SyntheticConflictError({ sessionID: input.sessionID, inputID })
             if (input.resume !== false && !(yield* result.get(input.sessionID)).revert)
               yield* execution.wake(input.sessionID)
@@ -873,31 +893,30 @@ const layer = Layer.effect(
         ),
       ),
       interrupt: Effect.fn("Session.interrupt")((sessionID, options) =>
-        Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* execution.interrupt(sessionID)
-            if (options?.continue && (yield* SessionInbox.has(db, sessionID, "any"))) yield* execution.wake(sessionID)
-          }),
-        ),
+        Effect.uninterruptible(execution.interrupt(sessionID, options)),
       ),
       revert: {
         stage: Effect.fn("Session.revert.stage")(function* (input) {
           const session = yield* result.get(input.sessionID)
           if ((yield* execution.active).has(input.sessionID))
             return yield* new BusyError({ sessionID: input.sessionID })
-          return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
-            Effect.provideService(Database.Service, database),
-            Effect.provideService(Bus.Service, bus),
-            Effect.provide(locations.get(session.location)),
-          )
+          return yield* Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush
+            return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
+              Effect.provideService(Database.Service, database),
+              Effect.provideService(Bus.Service, bus),
+            )
+          }).pipe(Effect.provide(locations.get(session.location)))
         }),
         clear: Effect.fn("Session.revert.clear")(function* (sessionID) {
           const session = yield* result.get(sessionID)
           if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          const revert = yield* SessionRevert.clear(session).pipe(
-            Effect.provideService(Bus.Service, bus),
-            Effect.provide(locations.get(session.location)),
-          )
+          const revert = yield* Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush
+            return yield* SessionRevert.clear(session).pipe(Effect.provideService(Bus.Service, bus))
+          }).pipe(Effect.provide(locations.get(session.location)))
           yield* execution.wake(sessionID)
           return revert
         }),
@@ -952,7 +971,6 @@ const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
       return Effect.succeed({
         id: skill.id,
         name: skill.name,
-        text: Skill.toModelOutput(skill, []),
         mention: attachment.mention,
       })
     })
@@ -1104,6 +1122,7 @@ export const node = makeGlobalNode({
   layer: layer.pipe(Layer.orDie),
   deps: [
     Job.node,
+    SessionEnvironment.node,
     Database.node,
     Bus.node,
     Project.node,

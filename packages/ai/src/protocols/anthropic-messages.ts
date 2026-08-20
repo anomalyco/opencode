@@ -16,7 +16,6 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderOptions,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
@@ -30,7 +29,6 @@ import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "anthropic-messages"
-const MEDIA_MIMES = new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES])
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 
@@ -53,9 +51,7 @@ export interface OptionsInput {
   readonly effort?: string
 }
 
-export type ProviderOptionsInput = ProviderOptions & {
-  readonly anthropic?: OptionsInput
-}
+export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
 // Request Body Schema
@@ -400,7 +396,7 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
 })
 
 const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: MediaPart) {
-  const media = yield* ProviderShared.validateMedia("Anthropic Messages", part, MEDIA_MIMES)
+  const media = ProviderShared.normalizeMedia(part)
   if (media.mime === "application/pdf")
     return {
       type: "document" as const,
@@ -410,6 +406,8 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: Me
         data: media.base64,
       },
     } satisfies AnthropicDocumentBlock
+  if (!media.mime.startsWith("image/"))
+    return yield* invalid(`Anthropic Messages does not support media type ${part.mediaType}`)
   return {
     type: "image" as const,
     source: {
@@ -436,10 +434,19 @@ const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
-// Mid-conversation system messages are a native Claude API feature only for
-// Opus 4.8. Other Anthropic models intentionally use the same visible wrapped-
-// user fallback as non-Anthropic routes rather than sending a role they reject.
-const supportsNativeSystemUpdates = (request: LLMRequest) => String(request.model.id) === "claude-opus-4-8"
+// Mid-conversation system messages became available with Opus 4.8 and version
+// 5 of the other supported Claude families. Treat later family versions as
+// compatible without assuming that every Anthropic Messages model is Claude.
+const supportsNativeSystemUpdates = (request: LLMRequest) => {
+  const match = /(?:^|[./])claude-(fable|haiku|mythos|opus|sonnet)-(\d+)(?:[.-](\d+))?/.exec(
+    String(request.model.id).toLowerCase(),
+  )
+  if (!match) return false
+  const major = Number(match[2])
+  if (match[1] !== "opus") return major >= 5
+  if (major !== 4) return major >= 5
+  return match[3] !== undefined && match[3].length <= 2 && Number(match[3]) >= 8
+}
 
 const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
   const last = message.content.at(-1)
@@ -583,7 +590,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 })
 
 const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (request: LLMRequest) {
-  const input = request.providerOptions?.anthropic
+  const input = request.providerOptions
   return {
     thinking: yield* resolveThinking(input?.thinking),
     effort: typeof input?.effort === "string" ? input.effort : undefined,
@@ -895,6 +902,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
 
   if (delta?.type === "input_json_delta" && event.index !== undefined) {
     if (!delta.partial_json) return [state, NO_EVENTS] satisfies StepResult
+    if (!state.tools[event.index]) return [state, NO_EVENTS] satisfies StepResult
     const result = ToolStream.appendExisting(
       ADAPTER,
       state.tools,
@@ -956,9 +964,12 @@ const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult =
   ]
 }
 
-const onMessageStop = (state: ParserState): StepResult => {
+const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (state: ParserState) {
+  const result = yield* ToolStream.finishAll(ADAPTER, state.tools)
   const events: LLMEvent[] = []
-  const lifecycle = Lifecycle.finish(state.lifecycle, events, {
+  const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+  events.push(...result.events)
+  const finished = Lifecycle.finish(lifecycle, events, {
     reason: state.pendingFinish?.reason ?? {
       normalized: "unknown",
       raw: undefined,
@@ -966,8 +977,8 @@ const onMessageStop = (state: ParserState): StepResult => {
     usage: state.usage,
     providerMetadata: state.pendingFinish?.providerMetadata,
   })
-  return [{ ...state, lifecycle }, events]
-}
+  return [{ ...state, lifecycle: finished, tools: result.tools }, events] satisfies StepResult
+})
 
 // Prefix `error.type` so overloads, rate limits, and quota errors are visible
 // even when the provider message is generic or empty.
@@ -991,7 +1002,7 @@ const step = (state: ParserState, event: AnthropicEvent) => {
   if (event.type === "content_block_delta") return onContentBlockDelta(state, event)
   if (event.type === "content_block_stop") return onContentBlockStop(state, event)
   if (event.type === "message_delta") return Effect.succeed(onMessageDelta(state, event))
-  if (event.type === "message_stop") return Effect.succeed(onMessageStop(state))
+  if (event.type === "message_stop") return onMessageStop(state)
   if (event.type === "error") return onError(event)
   return Effect.succeed<StepResult>([state, NO_EVENTS])
 }
@@ -1001,8 +1012,8 @@ const step = (state: ParserState, event: AnthropicEvent) => {
 // =============================================================================
 /**
  * The Anthropic Messages protocol — request body construction, body schema,
- * and the streaming-event state machine. Used by native Anthropic Cloud and
- * (once registered) Vertex Anthropic / Bedrock-hosted Anthropic passthrough.
+ * and the streaming-event state machine shared by Anthropic-compatible and
+ * Vertex-hosted Messages routes.
  */
 export const protocol = Protocol.make({
   id: ADAPTER,

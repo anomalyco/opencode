@@ -24,7 +24,7 @@ import { SessionMessageTable, SessionTable } from "./sql.js"
 export const Data = SessionTransfer.Data
 export type Data = SessionTransfer.Data
 
-export class ImportConflictError extends Schema.TaggedErrorClass<ImportConflictError>()(
+export class ImportConflictError extends Schema.TaggedError<ImportConflictError>()(
   "SessionTransfer.ImportConflictError",
   { sessionID: Session.ID },
 ) {}
@@ -207,7 +207,6 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
       skills: message.skills?.map((skill, index) => ({
         ...skill,
         name: Skill.Name.make(redact("skill-name", String(index), skill.name)),
-        text: redact("skill", String(index), skill.text),
         mention: skill.mention
           ? { ...skill.mention, text: redact("skill-mention", String(index), skill.mention.text) }
           : undefined,

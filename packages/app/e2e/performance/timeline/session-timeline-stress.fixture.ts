@@ -28,9 +28,22 @@ const directory = "C:/OpenCode/SmokeProject"
 const projectID = "proj_smoke_timeline"
 const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
-type MessageInfo = Record<string, unknown> & { id: string; role: "user" | "assistant" }
-type MessagePart = Record<string, unknown> & { id: string; type: string; text?: string; tool?: string }
-type Message = { info: MessageInfo; parts: MessagePart[] }
+type MessagePart = {
+  id: string
+  type: "text" | "reasoning" | "tool"
+  text?: string
+  time?: { start: number; end?: number }
+  callID?: string
+  tool?: string
+  state?: {
+    status: "completed"
+    input: Record<string, unknown>
+    output: string
+    title: unknown
+    metadata: Record<string, unknown>
+    time: { start: number; end: number }
+  }
+}
 
 function lorem(seed: number, length: number) {
   let out = ""
@@ -48,54 +61,59 @@ function id(prefix: string, value: number) {
   return `${prefix}_smoke_${String(value).padStart(4, "0")}`
 }
 
-function userMessage(sessionID: string, index: number, textLength: number, diffs: unknown[] = []): Message {
+function userMessage(_sessionID: string, index: number, textLength: number, diffs: unknown[] = []): SessionMessageInfo {
   const messageID = id("msg_user", index)
   return {
-    info: {
-      id: messageID,
-      sessionID,
-      role: "user",
-      time: { created: 1700000000000 + index * 10_000 },
-      summary: { diffs },
-      agent: "build",
-      model,
-    },
-    parts: [
-      {
-        id: id("prt_user_text", index),
-        sessionID,
-        messageID,
-        type: "text",
-        text: lorem(index, textLength),
-      },
-    ],
+    id: messageID,
+    type: "user",
+    time: { created: 1700000000000 + index * 10_000 },
+    text: lorem(index, textLength),
+    metadata: diffs.length ? { diffs: diffs as JsonValue } : undefined,
   }
 }
 
-function assistantMessage(sessionID: string, index: number, parentID: string, parts: MessagePart[]): Message {
+function assistantMessage(
+  _sessionID: string,
+  index: number,
+  _parentID: string,
+  parts: MessagePart[],
+): SessionMessageInfo {
   const messageID = id("msg_assistant", index)
   return {
-    info: {
-      id: messageID,
-      sessionID,
-      role: "assistant",
-      time: { created: 1700000000000 + index * 10_000 + 1_000, completed: 1700000000000 + index * 10_000 + 8_000 },
-      parentID,
-      modelID: model.modelID,
-      providerID: model.providerID,
-      mode: "build",
-      agent: "build",
-      path: { cwd: directory, root: directory },
-      cost: 0.01,
-      tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
-      variant: "max",
-      finish: "stop",
+    id: messageID,
+    type: "assistant",
+    time: { created: 1700000000000 + index * 10_000 + 1_000, completed: 1700000000000 + index * 10_000 + 8_000 },
+    model: { id: model.modelID, providerID: model.providerID, variant: model.variant },
+    agent: "build",
+    cost: 0.01,
+    tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
+    finish: "stop",
+    content: parts.map(messageContent),
+  }
+}
+
+function messageContent(part: MessagePart): SessionMessageAssistant["content"][number] {
+  if (part.type === "text") return { type: "text", text: part.text ?? "" }
+  if (part.type === "reasoning")
+    return {
+      type: "reasoning",
+      text: part.text ?? "",
+      time: part.time
+        ? { created: part.time.start, ...(part.time.end === undefined ? {} : { completed: part.time.end }) }
+        : undefined,
+    }
+  const state = part.state!
+  return {
+    type: "tool",
+    id: part.callID ?? part.id,
+    name: part.tool!,
+    time: { created: state.time.start, ran: state.time.start, completed: state.time.end },
+    state: {
+      status: "completed",
+      input: state.input as Record<string, JsonValue>,
+      content: [{ type: "text", text: state.output }],
+      metadata: state.metadata as Record<string, JsonValue>,
     },
-    parts: parts.map((part) => ({
-      ...part,
-      sessionID,
-      messageID,
-    })),
   }
 }
 
@@ -200,7 +218,7 @@ function code(seed: number, lines: number, width = 32) {
   ).join("\n")
 }
 
-function turn(index: number): Message[] {
+function turn(index: number): SessionMessageInfo[] {
   const diff = index % 9 === 0 ? [fileDiff(`src/generated/summary-${index}.ts`, index)] : []
   const user = userMessage(targetID, index, 100 + (index % 4) * 80, diff)
   const parts = [
@@ -241,7 +259,7 @@ function turn(index: number): Message[] {
       ? [toolPart(index, 12, "task", { description: "Inspect generated fixture", subagent_type: "explore" }, 160)]
       : []),
   ]
-  return [user, assistantMessage(targetID, index, user.info.id, parts)]
+  return [user, assistantMessage(targetID, index, user.id, parts)]
 }
 
 const targetMessages = Array.from({ length: 72 }, (_, index) => turn(index)).flat()
@@ -267,16 +285,10 @@ const childMessages = Array.from({ length: 4 }, (_, index) => [
   userMessage(childID, index + 2000, 120),
   assistantMessage(childID, index + 2000, id("msg_user", index + 2000), [textPart(index + 2000, 0, 240)]),
 ]).flat()
-
-function renderable(part: MessagePart) {
-  if (part.type === "tool" && part.tool === "todowrite") return false
-  if (part.type === "text") return !!part.text.trim()
-  if (part.type === "reasoning") return !!part.text.trim()
-  return part.type !== "step-start" && part.type !== "step-finish" && part.type !== "patch"
-}
-
-function orderedParts(message: Message) {
-  return message.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
+const messages: Record<string, SessionMessageInfo[]> = {
+  [sourceID]: sourceMessages,
+  [targetID]: targetMessages,
+  [childID]: childMessages,
 }
 
 export const fixture = {
@@ -333,37 +345,39 @@ export const fixture = {
   sourceID,
   targetID,
   childID,
-  messages: { [sourceID]: sourceMessages, [targetID]: targetMessages, [childID]: childMessages },
+  messages,
   expected: {
     sourceTitle: "Uncommitted changes inquiry",
     targetTitle: "Example Game: sample jump movement & sample physics analysis",
     childTitle: "Inspect child navigation",
-    sourceMessageIDs: sourceMessages
-      .filter((message) => message.info.role === "user")
-      .map((message) => message.info.id),
-    targetMessageIDs: targetMessages
-      .filter((message) => message.info.role === "user")
-      .map((message) => message.info.id),
-    childMessageIDs: childMessages.filter((message) => message.info.role === "user").map((message) => message.info.id),
-    targetPartIDs: targetMessages.flatMap((message) =>
-      orderedParts(message)
-        .filter(renderable)
-        .map((part) => part.id),
-    ),
+    sourceMessageIDs: sourceMessages.filter((message) => message.type === "user").map((message) => message.id),
+    targetMessageIDs: targetMessages.filter((message) => message.type === "user").map((message) => message.id),
+    childMessageIDs: childMessages.filter((message) => message.type === "user").map((message) => message.id),
+    targetPartIDs: targetMessages.flatMap((message) => {
+      if (message.type !== "assistant") return []
+      const ordinals = { text: 0, reasoning: 0 }
+      return message.content.flatMap((part) => {
+        if (part.type === "text") return part.text.trim() ? [`${message.id}:text:${ordinals.text++}`] : []
+        if (part.type === "reasoning")
+          return part.text.trim() ? [`${message.id}:reasoning:${ordinals.reasoning++}`] : []
+        return [part.id]
+      })
+    }),
   },
 }
 
 export function pageMessages(sessionID: string, limit: number, before?: string) {
-  const messages = fixture.messages[sessionID as keyof typeof fixture.messages] ?? []
+  const messages = fixture.messages[sessionID] ?? []
   const end = before
     ? Math.max(
         0,
-        messages.findIndex((message) => message.info.id === before),
+        messages.findIndex((message) => message.id === before),
       )
     : messages.length
   const start = Math.max(0, end - limit)
   return {
     items: messages.slice(start, end),
-    cursor: start > 0 ? messages[start]!.info.id : undefined,
+    cursor: start > 0 ? messages[start].id : undefined,
   }
 }
+import type { JsonValue, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"

@@ -10,7 +10,7 @@ import { configuredSettings } from "./configured.js"
 const providerID = Provider.ID.make("cloudflare-ai-gateway")
 
 export const CloudflareAIGatewayPlugin = define({
-  id: "opencode.provider.cloudflare-ai-gateway",
+  id: "opencode.provider.cloudflare.ai.gateway",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
     const form = iife(() => {
@@ -85,7 +85,7 @@ type GatewayConfig = {
   apiKey: string
 }
 
-const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 function gatewayConfig(options: Record<string, unknown>): GatewayConfig | undefined {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? stringOption(options, "accountId")

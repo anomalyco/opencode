@@ -40,6 +40,7 @@ export const Plugin = define({
       for (const [id, item] of configuredProviders(loaded.entries)) {
         const providerID = id
         catalog.provider.update(providerID, (provider) => {
+          provider.activation = "enabled"
           if (item.name !== undefined) provider.name = item.name
           if (item.package !== undefined) provider.package = item.package
           if (item.settings !== undefined) provider.settings = Provider.mergeOverlay(provider.settings, item.settings)

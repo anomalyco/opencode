@@ -1,6 +1,5 @@
 ---
 title: "Compaction"
-description: ""
 ---
 
 Compaction replaces the active model context from an older part of a session
@@ -34,14 +33,8 @@ second overflow after recovery is returned as an error.
 
 ## Manual compaction
 
-In the TUI, run:
-
-```text
-/compact
-```
-
-`/summarize` is an alias. The default keybind is `<leader>c`, configured as
-`session_compact`.
+Manual compaction is available through session interfaces. See the generated [API reference](/api) for the server
+operation.
 
 A manual request is durably admitted and wakes the session runner. It can
 compact short histories that would not trigger automatic compaction. If the
@@ -50,27 +43,10 @@ steered or queued prompts are promoted. Repeated requests while one is pending
 coalesce into that pending request. Whether compaction completes or fails, the
 barrier is then settled so later prompts can proceed.
 
-The CLI has no separate `compact` subcommand. Use the TUI command or the server
-API. For example:
-
-```bash
-opencode2 api v2.session.compact \
-  --param sessionID=ses_example \
-  --data '{}'
-```
-
-The equivalent raw request is:
-
-```bash
-opencode2 api post /api/session/ses_example/compact --data '{}'
-```
-
-`POST /api/session/:sessionID/compact` returns the admitted compaction input;
-it does not wait for summary generation. Clients can call
-`client.session.compact({ sessionID })` and then wait for the session or follow
-the `session.compaction.*` events. Supplying an optional message `id` makes an
-exact retry idempotent, but reusing an ID owned by another record returns a
-conflict.
+The server operation returns the admitted compaction input; it does not wait
+for summary generation. Clients can then wait for the session or follow the
+`session.compaction.*` events. Supplying an optional message `id` makes an exact
+retry idempotent, but reusing an ID owned by another record returns a conflict.
 
 ## Configuration
 

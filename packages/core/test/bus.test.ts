@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Schema, Stream } from "effect"
 import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
 import { Session } from "@opencode-ai/schema/session"
@@ -422,7 +422,7 @@ describe("Bus", () => {
       const { db } = yield* Database.Service
       const aggregateID = Event.ID.create()
 
-      yield* bus.publish(SyncMessage, { id: aggregateID, text: "first" })
+      const event = yield* bus.publish(SyncMessage, { id: aggregateID, text: "first" })
       const rows = yield* db
         .select()
         .from(EventTable)
@@ -433,6 +433,7 @@ describe("Bus", () => {
       expect(rows).toHaveLength(1)
       expect(rows[0]?.type).toBe(Bus.versionedType(SyncMessage.type, 1))
       expect(rows[0]?.aggregate_id).toBe(aggregateID)
+      expect(rows[0]?.created).toBe(event.created)
     }),
   )
 
@@ -706,7 +707,7 @@ describe("Bus", () => {
 
       yield* bus.replay({
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -726,7 +727,7 @@ describe("Bus", () => {
 
       yield* bus.replay({
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -763,7 +764,7 @@ describe("Bus", () => {
         const exit = yield* bus
           .replay({
             id: Event.ID.create(),
-            created: DateTime.makeUnsafe(0),
+            created: 0,
             type: Bus.versionedType(DurableMessage.type, 1),
             seq: 1,
             aggregateID: envelopeAggregateID,
@@ -797,7 +798,7 @@ describe("Bus", () => {
 
       yield* bus.replay({
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -806,7 +807,7 @@ describe("Bus", () => {
       const exit = yield* bus
         .replay({
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 5,
           aggregateID,
@@ -831,14 +832,14 @@ describe("Bus", () => {
 
       yield* bus.replay({
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(SessionEvent.InstructionsUpdated.type, 2),
         seq: 0,
         aggregateID,
         data: { sessionID: aggregateID, delta: { "core/context": "0".repeat(64) } },
       })
 
-      expect(received[0]?.created).toEqual(DateTime.makeUnsafe(0))
+      expect(received[0]?.created).toBe(0)
     }),
   )
 
@@ -867,7 +868,7 @@ describe("Bus", () => {
       const exit = yield* bus
         .replay({
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: "unknown.event.1",
           seq: 0,
           aggregateID: Event.ID.create(),
@@ -895,7 +896,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -915,7 +916,7 @@ describe("Bus", () => {
       const id = Event.ID.create()
       const replayed = {
         id,
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -972,7 +973,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -1001,7 +1002,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -1012,7 +1013,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 2,
           aggregateID,
@@ -1045,7 +1046,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -1058,7 +1059,7 @@ describe("Bus", () => {
         .replay(
           {
             id: Event.ID.create(),
-            created: DateTime.makeUnsafe(0),
+            created: 0,
             type: Bus.versionedType(DurableMessage.type, 1),
             seq: 1,
             aggregateID,
@@ -1080,7 +1081,7 @@ describe("Bus", () => {
       yield* bus.listen((event) => Effect.sync(() => received.push(event)))
       const replayed = {
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -1101,7 +1102,7 @@ describe("Bus", () => {
       const aggregateID = Session.ID.create()
       const replayed = {
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -1126,7 +1127,7 @@ describe("Bus", () => {
       const id = Event.ID.create()
       yield* bus.replay({
         id,
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -1136,7 +1137,7 @@ describe("Bus", () => {
       const exit = yield* bus
         .replay({
           id,
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -1159,7 +1160,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -1170,7 +1171,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -1232,7 +1233,7 @@ describe("Bus", () => {
 
       yield* bus.replay({
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,

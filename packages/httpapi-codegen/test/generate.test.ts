@@ -504,7 +504,7 @@ describe("HttpApiCodegen.generate", () => {
   })
 
   test("preserves optional keys in Promise error types", () => {
-    class OptionalError extends Schema.TaggedErrorClass<OptionalError>()(
+    class OptionalError extends Schema.TaggedError<OptionalError>()(
       "OptionalError",
       { message: Schema.String, detail: Schema.String.pipe(Schema.optional) },
       { httpApiStatus: 400 },
@@ -519,7 +519,7 @@ describe("HttpApiCodegen.generate", () => {
   })
 
   test("supports name-discriminated Promise errors", () => {
-    class NamedError extends Schema.ErrorClass<NamedError>("NamedError")(
+    class NamedError extends Schema.Error<NamedError>("NamedError")(
       { name: Schema.Literal("NamedError"), message: Schema.String },
       { httpApiStatus: 400 },
     ) {}
@@ -535,7 +535,7 @@ describe("HttpApiCodegen.generate", () => {
   })
 
   test("preserves reflected default error statuses", () => {
-    class MissingStatus extends Schema.TaggedErrorClass<MissingStatus>()("MissingStatus", {
+    class MissingStatus extends Schema.TaggedError<MissingStatus>()("MissingStatus", {
       message: Schema.String,
     }) {}
     const output = emitPromise(
@@ -579,10 +579,14 @@ describe("HttpApiCodegen.generate", () => {
     const Referenced = Schema.Struct({ value: Schema.String }).annotate({ identifier: "Referenced" })
     const output = emitPromise(
       compileContract(
-        api(
-          HttpApiEndpoint.get("get", "/session", {
-            success: Schema.Struct({ data: Referenced }),
-          }),
+        HttpApi.make("test").add(
+          HttpApiGroup.make("session")
+            .add(HttpApiEndpoint.get("get", "/session", { success: Schema.Struct({ data: Referenced }) }))
+            .add(
+              HttpApiEndpoint.get("list", "/sessions", {
+                success: Schema.Struct({ data: Schema.Array(Referenced) }),
+              }),
+            ),
         ),
       ),
     )
@@ -590,6 +594,21 @@ describe("HttpApiCodegen.generate", () => {
     const types = output.files.find((file) => file.path === "types.ts")?.content
     expect(types).toContain('export type Referenced = { readonly "value": string }')
     expect(types).toContain('export type SessionGetOutput = ({ readonly "data": Referenced })["data"]')
+    expect(types).not.toContain("Referenced1")
+  })
+
+  test("inlines shared anonymous Promise wire types", () => {
+    const Shared = Schema.Struct({ value: Schema.String })
+    const output = emitPromise(
+      compileContract(
+        api(HttpApiEndpoint.get("get", "/session", { success: Schema.Struct({ first: Shared, second: Shared }) })),
+      ),
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('readonly "first": ({ readonly "value": string })')
+    expect(types).toContain('readonly "second": ({ readonly "value": string })')
+    expect(types).not.toContain("export type Objects")
   })
 
   test("emits mutable Promise outputs without restricting inputs", () => {
@@ -645,6 +664,37 @@ describe("HttpApiCodegen.generate", () => {
 
     expect(types).toContain("export type ExampleName = string")
     expect(types).toContain("export type ExampleName2 = string")
+  })
+
+  test("keeps conflicting Promise reference identifiers distinct", () => {
+    const First = Schema.Struct({ value: Schema.String }).annotate({ identifier: "Shared" })
+    const Second = Schema.Struct({ value: Schema.Number }).annotate({ identifier: "Shared" })
+
+    const output = emitPromise(
+      compileContract(
+        api(HttpApiEndpoint.get("get", "/session", { success: Schema.Struct({ first: First, second: Second }) })),
+      ),
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('export type Shared = { readonly "value": string }')
+    expect(types).toContain('export type Shared1 = { readonly "value": number }')
+    expect(types).toContain('readonly "first": Shared, readonly "second": Shared1')
+  })
+
+  test("deduplicates equivalent Promise references with the same identifier", () => {
+    const First = Schema.String.annotate({ identifier: "Shared", description: "first" })
+    const Second = Schema.String.annotate({ identifier: "Shared", description: "second" })
+    const output = emitPromise(
+      compileContract(
+        api(HttpApiEndpoint.get("get", "/session", { success: Schema.Struct({ first: First, second: Second }) })),
+      ),
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain("export type Shared = string")
+    expect(types).not.toContain("export type Shared1")
+    expect(types).toContain('readonly "first": Shared, readonly "second": Shared')
   })
 
   test("emits Effect Json schemas as standalone Promise types", () => {
@@ -1347,6 +1397,19 @@ describe("HttpApiCodegen.generate", () => {
     ).toThrow("Effect schema requires authoritative import: session.get")
   })
 
+  test("rejects same-shape custom transformations", () => {
+    const Trimmed = Schema.String.pipe(
+      Schema.decodeTo(Schema.String, {
+        decode: SchemaGetter.transform((value) => value.trim()),
+        encode: SchemaGetter.transform((value) => value),
+      }),
+    )
+
+    expect(() => compile(api(HttpApiEndpoint.get("get", "/session", { success: Trimmed })))).toThrow(
+      "Effect schema requires authoritative import: session.get",
+    )
+  })
+
   test("rejects custom validation checks without portable metadata", () => {
     const Positive = Schema.Number.check(Schema.makeFilter((value) => (value > 0 ? undefined : "positive")))
 
@@ -1404,7 +1467,7 @@ describe("HttpApiCodegen.generate", () => {
   })
 
   test("preserves errors from server-only middleware", () => {
-    class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()("Unauthorized", {}) {}
+    class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}
     class Authorization extends HttpApiMiddleware.Service<Authorization>()("Authorization", {
       error: Unauthorized,
     }) {}
@@ -1415,12 +1478,12 @@ describe("HttpApiCodegen.generate", () => {
 
     expect(output.operations[0]).toBeDefined()
     expect(output.files.find((file) => file.path === "session.ts")?.content).toContain(
-      'extends Schema.TaggedErrorClass<Endpoint0Error0Class>("Unauthorized")',
+      'extends Schema.TaggedError<Endpoint0Error0Class>("Unauthorized")',
     )
   })
 
   test("preserves tagged error response statuses", () => {
-    class Missing extends Schema.TaggedErrorClass<Missing>()("Missing", {}) {}
+    class Missing extends Schema.TaggedError<Missing>()("Missing", {}) {}
     const output = compile(
       api(
         HttpApiEndpoint.get("get", "/session", {

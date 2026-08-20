@@ -511,21 +511,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "επιτραπέζιος υπολογιστής {{version}}",
   "wsl.onboarding.versionMismatch": "Η εγκατεστημένη έκδοση δεν ταιριάζει με την έκδοση της εφαρμογής για υπολογιστές.",
   "wsl.onboarding.adding": "Προσθήκη...",
-  "help.tabs.toast.ariaLabel": "Εισαγωγή καρτελών. Οργανώστε την εργασία και τις ενεργές συνεδρίες σας με καρτέλες",
-  "help.tabs.toast.dismiss": "Παράβλεψη πληροφοριών καρτελών",
-  "help.tabs.title": "Εισαγωγή καρτελών",
-  "help.tabs.description": "Οργανώστε την εργασία και τις ενεργές συνεδρίες σας με καρτέλες",
-  "help.tabs.date": "14 Ιουλίου",
-  "help.tabs.introduction": "OpenCode Η επιφάνεια εργασίας είναι πλέον χτισμένη γύρω από καρτέλες.",
-  "help.tabs.sessions":
-    "Ξεκινήστε μια νέα συνεδρία σε μια καρτέλα ή ανοίξτε μια υπάρχουσα περίοδο λειτουργίας από οποιοδήποτε από τα έργα σας. Ανοίξτε μια νέα καρτέλα όταν ξεκινάτε κάτι νέο και κλείστε την όταν τελειώσετε.",
-  "help.tabs.organize":
-    "Διατηρώντας μερικές καρτέλες ανοιχτές διευκολύνετε την οργάνωση των ενεργών συνεδριών σας. Μετονομάστε τις καρτέλες σε κάτι αξιομνημόνευτο, αν σκοπεύετε να τις διατηρήσετε.",
-  "help.tabs.home":
-    "Θα βρείτε όλες τις συνεδρίες και τα έργα σας στη νέα Αρχική οθόνη. Η επιλογή μιας συνεδρίας ανοίγει σε μια καρτέλα.",
-  "help.tabs.persistence": "Όταν ανοίγετε ξανά την εφαρμογή, οι καρτέλες σας είναι ακόμα ανοιχτές.",
-  "help.tabs.worktrees":
-    "Η νέα σχεδίαση δεν υποστηρίζει ακόμα Git Worktrees, θα είναι σύντομα διαθέσιμη. Επομένως, εάν προτιμάτε να συνεχίσετε να χρησιμοποιείτε την προηγούμενη διάταξη, μπορείτε να κάνετε εναλλαγή μεταξύ των διατάξεων στις Ρυθμίσεις. Απλώς έχετε κατά νου ότι η νέα διάταξη θα γίνει μόνιμη σε λίγες εβδομάδες.",
   "server.row.noUsername": "χωρίς όνομα χρήστη",
   "dialog.project.edit.title": "Επεξεργασία έργου",
   "dialog.project.edit.name": "Όνομα",
@@ -984,13 +969,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Ανάπτυξη τμημάτων εργαλείου επεξεργασίας",
   "settings.general.row.editToolPartsExpanded.description":
     "Εμφάνιση τμημάτων του εργαλείου επεξεργασίας, εγγραφής και ενημέρωσης κώδικα που έχουν αναπτυχθεί από προεπιλογή στη γραμμή χρόνου",
-  "settings.general.row.newInterface.title": "Νέα διάταξη",
-  "settings.general.row.newInterface.badge": "Νέο",
-  "settings.general.row.newInterface.description":
-    "Χρησιμοποιήστε τις νέες καρτέλες και τη διάταξη του σπιτιού. Εναλλαγή μεταξύ των διατάξεων για περιορισμένο χρονικό διάστημα.",
-  "settings.general.row.newInterfaceNotice.title": "Χρησιμοποιείτε τώρα νέα διάταξη",
-  "settings.general.row.newInterfaceNotice.description": "Η προηγούμενη διάταξη δεν είναι πλέον διαθέσιμη",
-  "settings.general.row.newInterfaceNotice.dismiss": "Παράβλεψη",
   "settings.general.row.pinchZoom.title": "Τσιμπήστε για μεγέθυνση",
   "settings.general.row.pinchZoom.description":
     "Να επιτρέπεται η μεγέθυνση των χειρονομιών τσιμπήματος και κύλισης Ctrl",

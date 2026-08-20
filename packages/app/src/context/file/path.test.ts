@@ -143,7 +143,7 @@ describe("encodeFilePath", () => {
     })
 
     test("should handle mixed separator path (Windows + Unix)", () => {
-      // This is what happens in build-request-parts.ts when concatenating paths
+      // This is what happens in build-prompt-request.ts when concatenating paths
       const mixedPath = "D:\\dev\\projects\\opencode/README.bs.md"
       const result = encodeFilePath(mixedPath)
       const fileUrl = `file://${result}`

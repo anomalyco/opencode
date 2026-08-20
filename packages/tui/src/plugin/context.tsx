@@ -1,3 +1,4 @@
+import type { PluginInfo } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createMarkdownCodeBlockRenderer, type MarkdownCodeBlockRenderer, type MarkdownOptions } from "@opentui/core"
 import {
@@ -5,6 +6,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createSignal,
   on,
   onCleanup,
   onMount,
@@ -12,15 +14,18 @@ import {
   type ParentProps,
 } from "solid-js"
 import path from "path"
-import { stat } from "fs/promises"
+import { readFile, stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import type { Page } from "@opencode-ai/plugin/tui/context"
+import { Hash } from "@opencode-ai/util/hash"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
 import { isDeepEqual } from "remeda"
 import "#runtime-plugin-support"
 import { useConfig } from "../config"
 import { useTuiLifecycle } from "../context/runtime"
+import { useClient } from "../context/client"
+import { useData } from "../context/data"
 import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
@@ -28,7 +33,7 @@ import { createSourceWatcher } from "./watch"
 import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
 export interface PackageResolver {
-  readonly resolve: (spec: string) => Promise<string | undefined>
+  readonly resolve: (spec: string, install?: boolean) => Promise<string | undefined>
 }
 
 type State =
@@ -74,6 +79,7 @@ type Registration = {
 type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "options"> & { enabled: boolean }
 
 const PluginContext = createContext<Value>()
+let sourceVersion = Date.now()
 
 export function combineMarkdownRenderers(
   sources: ReadonlyArray<Readonly<Record<string, MarkdownCodeBlockRenderer>>>,
@@ -90,12 +96,31 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const host = usePluginHost()
   const config = useConfig()
   const lifecycle = useTuiLifecycle()
+  const client = useClient()
+  const data = useData()
+  const [serverPlugins, setServerPlugins] = createSignal<
+    ReadonlyArray<
+      Extract<PluginInfo, { readonly status: "active" }> & { readonly source: { readonly type: "package" } }
+    >
+  >([])
   const directory = config.path ? path.dirname(config.path) : process.cwd()
   const [store, setStore] = createStore({
     ready: false,
     states: [] as ReadonlyArray<State>,
     registrations: {} as Record<string, Registration>,
   })
+  // One save can emit several watch events. Remember setup failures so those
+  // events do not repeatedly tear down and restore the last good generation.
+  const setupFailures = new Map<string, { version: string; options: Registration["options"]; error: string }>()
+  const sourceVersions = new Map<string, { digest: string; generation: number }>()
+  const sourceGeneration = async (entrypoint: string) => {
+    const digest = Hash.sha256(await readFile(new URL(entrypoint)))
+    const previous = sourceVersions.get(entrypoint)
+    if (previous?.digest === digest) return previous.generation
+    const generation = ++sourceVersion
+    sourceVersions.set(entrypoint, { digest, generation })
+    return generation
+  }
   const markdown = createMemo(() =>
     combineMarkdownRenderers(
       Object.values(store.registrations).flatMap((registration) =>
@@ -103,15 +128,18 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       ),
     ),
   )
+  const clearContributions = (id: string) => {
+    setStore("registrations", id, "routes", reconcileStore({}))
+    setStore("registrations", id, "slots", reconcileStore({}))
+    setStore("registrations", id, "markdown", reconcileStore({}))
+  }
 
   const activate = async (id: string) => {
     const item = store.registrations[id]
     if (!item) return false
     await deactivate(id)
     batch(() => {
-      setStore("registrations", id, "routes", reconcileStore({}))
-      setStore("registrations", id, "slots", reconcileStore({}))
-      setStore("registrations", id, "markdown", reconcileStore({}))
+      clearContributions(id)
       setStore("registrations", id, "cleanups", [])
     })
     const owned: Dispose[] = []
@@ -139,12 +167,17 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       },
     })
     const cleanup = await setup(item.plugin, context, owned).catch((error) => {
-      setStore("registrations", id, "routes", reconcileStore({}))
-      setStore("registrations", id, "slots", reconcileStore({}))
-      setStore("registrations", id, "markdown", reconcileStore({}))
+      clearContributions(id)
+      if (item.target)
+        setupFailures.set(item.target, {
+          version: item.version,
+          options: snapshotOptions(item.options),
+          error: errorMessage(error),
+        })
       throw error
     })
     if (cleanup) owned.push(async () => cleanup())
+    if (item.target && sameGeneration(setupFailures.get(item.target), item)) setupFailures.delete(item.target)
     batch(() => {
       setStore("registrations", id, "cleanups", owned)
       setStore("registrations", id, "active", true)
@@ -168,9 +201,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     await disposeAll(cleanups).finally(() =>
       batch(() => {
         if (store.registrations[id]) {
-          setStore("registrations", id, "routes", reconcileStore({}))
-          setStore("registrations", id, "slots", reconcileStore({}))
-          setStore("registrations", id, "markdown", reconcileStore({}))
+          clearContributions(id)
         }
         setStore("states", (items) =>
           items.map((state) =>
@@ -230,7 +261,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const npmFailures = new Map<string, string>()
   const reconcile = async () => {
     await Promise.all(props.directories.map(watcher.wait))
-    const entries = [...(await discoverTuiPlugins(props.directories)), ...(config.data.plugins ?? [])]
+    const entries = [
+      ...(await discoverTuiPlugins(props.directories)).map((entry) => ({ entry, install: true, server: false })),
+      ...serverPlugins().map((plugin) => ({ entry: plugin.source.package, install: false, server: true })),
+      ...(config.data.plugins ?? []).map((entry) => ({ entry, install: true, server: false })),
+    ]
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
@@ -238,7 +273,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     for (const plugin of builtins)
       desired.set(plugin.id, { plugin, source: "builtin", version: "builtin", enabled: true })
     const failures: State[] = []
-    for (const entry of entries) {
+    for (const source of entries) {
+      const entry = source.entry
       const target = typeof entry === "string" ? entry : entry.package
       if (target.startsWith("-")) {
         for (const item of desired.values()) if (matches(target.slice(1), item.plugin.id)) item.enabled = false
@@ -259,11 +295,14 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       const memo = local ? undefined : npmFailures.get(target)
       const resolved = memo
         ? { status: "failed" as const, error: memo }
-        : await resolvePlugin(target, local, options, previous, props.packages).catch((error) => ({
-            status: "failed" as const,
-            error: errorMessage(error),
-          }))
+        : await resolvePlugin(target, local, options, previous, props.packages, source.install, sourceGeneration).catch(
+            (error) => ({
+              status: "failed" as const,
+              error: errorMessage(error),
+            }),
+          )
       if (resolved.status === "unsupported") {
+        if (source.server) continue
         failures.push({ target, status: "unsupported" })
         continue
       }
@@ -275,17 +314,21 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
           status: "failed",
           error: previous?.active ? `${resolved.error} (previous version still active)` : resolved.error,
         })
-        if (previous)
-          desired.set(previous.plugin.id, {
-            plugin: previous.plugin,
-            source: previous.source,
-            target,
-            version: previous.version,
-            options: previous.options,
-            enabled: previous.active,
-          })
+        if (previous) desired.set(previous.plugin.id, toDesired(previous))
         continue
       }
+      const setupFailure = setupFailures.get(target)
+      if (setupFailure && sameGeneration(setupFailure, { version: resolved.version, options }) && previous) {
+        failures.push({
+          target,
+          id: previous.plugin.id,
+          status: "failed",
+          error: previous.active ? `${setupFailure.error} (previous version still active)` : setupFailure.error,
+        })
+        desired.set(previous.plugin.id, toDesired(previous))
+        continue
+      }
+      setupFailures.delete(target)
       desired.set(resolved.plugin.id, {
         plugin: resolved.plugin,
         source: "external",
@@ -318,11 +361,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
           // enabled derives from config directives alone, so config wins over
           // manual dialog toggles on every reconcile — the same semantics
           // config saves had before hot reload existed, just more frequent.
-          return (
-            registration.version !== item.version ||
-            !sameOptions(registration.options, item.options) ||
-            registration.active !== item.enabled
-          )
+          return !sameGeneration(registration, item) || registration.active !== item.enabled
         })
 
     // Swap: cleanup failures surface as a toast, never propagate, so one
@@ -331,22 +370,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     for (const id of changed) {
       const item = desired.get(id)!
       const registration = store.registrations[id]
-      const replaced =
-        !registration || registration.version !== item.version || !sameOptions(registration.options, item.options)
+      const replaced = !registration || !sameGeneration(registration, item)
       // Snapshot the running version before it is overwritten: an import
       // failure keeps last-good in the resolve phase, and a setup failure
       // must not cost the previous version either.
-      const fallback: Desired | undefined =
-        replaced && registration
-          ? {
-              plugin: registration.plugin,
-              source: registration.source,
-              target: registration.target,
-              version: registration.version,
-              options: registration.options,
-              enabled: registration.active,
-            }
-          : undefined
+      const fallback = replaced && registration ? toDesired(registration) : undefined
       if (replaced) {
         if (registration) await deactivateNoisily(id)
         // In-place replacement keeps the registration's key position, which
@@ -439,7 +467,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const resolved = createMemo(() => resolveSlots({ paths: new Set(Object.keys(mounted)), claims: claims() }))
   createEffect(
     on(
-      () => JSON.stringify(config.data.plugins ?? []),
+      () => JSON.stringify([serverPlugins(), config.data.plugins ?? []]),
       () => {
         npmFailures.clear()
         void enqueue(reconcile).then(
@@ -449,6 +477,29 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       },
     ),
   )
+  const syncServerPlugins = () =>
+    client.api.plugin
+      .list({ location: data.location.default() })
+      .then((response) =>
+        setServerPlugins(
+          response.data.filter(
+            (
+              plugin,
+            ): plugin is Extract<PluginInfo, { readonly status: "active" }> & {
+              readonly source: { readonly type: "package" }
+            } => plugin.status === "active" && plugin.tui && plugin.source.type === "package",
+          ),
+        ),
+      )
+      .catch(() => undefined)
+  createEffect(
+    on(
+      () => JSON.stringify(data.location.default()),
+      () => void syncServerPlugins(),
+    ),
+  )
+  onCleanup(client.event.on("plugin.updated", syncServerPlugins))
+  onCleanup(client.event.on("server.connected", syncServerPlugins))
   onMount(() => {
     let disposing: Promise<void> | undefined
     const dispose = () => {
@@ -523,21 +574,35 @@ async function resolvePlugin(
   options: Readonly<Record<string, any>> | undefined,
   previous: Registration | undefined,
   packages: PackageResolver,
+  install: boolean,
+  sourceGeneration: (entrypoint: string) => Promise<number>,
 ) {
   // Package entrypoints never change within a session, so a loaded previous
   // version needs no re-resolution (which could otherwise hit npm).
   if (!local && previous && sameOptions(previous.options, options))
     return { status: "unchanged" as const, plugin: previous.plugin, version: previous.version }
-  const entrypoint = local ? await resolveLocal(local) : await packages.resolve(spec)
+  const entrypoint = local ? await resolveLocal(local) : await packages.resolve(spec, install)
   if (!entrypoint) return { status: "unsupported" as const }
-  // The cache-busted specifier doubles as the version: unique per entrypoint
-  // and mtime, so equal versions mean an identical module.
-  const version = local ? freshSpecifier(entrypoint, (await stat(new URL(entrypoint))).mtimeMs) : entrypoint
-  if (previous && previous.version === version && sameOptions(previous.options, options))
-    return { status: "unchanged" as const, plugin: previous.plugin, version }
-  const mod: { readonly default?: unknown } = await import(version)
-  if (!isPlugin(mod.default)) throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
-  return { status: "loaded" as const, plugin: mod.default, version }
+  // Content remains stable across the several mtimes one save may expose to
+  // filesystem watchers, while the generation keeps reverted modules fresh.
+  let generation = local ? await sourceGeneration(entrypoint) : undefined
+  while (true) {
+    const version = generation === undefined ? entrypoint : freshSpecifier(entrypoint, generation)
+    if (previous && previous.version === version && sameOptions(previous.options, options))
+      return { status: "unchanged" as const, plugin: previous.plugin, version }
+    const mod: { readonly default?: unknown } = await import(version)
+    if (generation !== undefined) {
+      const observed = await sourceGeneration(entrypoint)
+      // In-place saves can change the file between hashing and import. Retry
+      // so setup always runs under the generation of the imported bytes.
+      if (generation !== observed) {
+        generation = observed
+        continue
+      }
+    }
+    if (!isPlugin(mod.default)) throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
+    return { status: "loaded" as const, plugin: mod.default, version }
+  }
 }
 
 function toRegistration(item: Desired): Registration {
@@ -546,7 +611,7 @@ function toRegistration(item: Desired): Registration {
     source: item.source,
     target: item.target,
     version: item.version,
-    options: item.options,
+    options: snapshotOptions(item.options),
     active: false,
     routes: {},
     slots: {},
@@ -555,8 +620,30 @@ function toRegistration(item: Desired): Registration {
   }
 }
 
+function toDesired(item: Registration): Desired {
+  return {
+    plugin: item.plugin,
+    source: item.source,
+    target: item.target,
+    version: item.version,
+    options: item.options,
+    enabled: item.active,
+  }
+}
+
 function sameOptions(a: Registration["options"], b: Registration["options"]) {
   return isDeepEqual(a ?? null, b ?? null)
+}
+
+function sameGeneration(
+  a: Pick<Registration, "version" | "options"> | undefined,
+  b: Pick<Registration, "version" | "options">,
+) {
+  return a?.version === b.version && sameOptions(a.options, b.options)
+}
+
+function snapshotOptions(options: Registration["options"]) {
+  return options ? structuredClone(unwrap(options)) : undefined
 }
 
 async function resolveLocal(url: URL) {

@@ -13,6 +13,8 @@ import { Provider } from "@opencode-ai/core/provider"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publish-llm-event"
+import { it } from "./lib/effect"
+import { TestClock } from "effect/testing"
 
 const sessionID = Session.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
@@ -201,6 +203,82 @@ test("reasoning state from start, empty delta, and end is merged", async () => {
   })
 })
 
+it.effect("batches text deltas and flushes pending text before the terminal event", () =>
+  Effect.gen(function* () {
+    const { published, publisher } = capture()
+    yield* Effect.forEach(
+      [
+        LLMEvent.textStart({ id: "text" }),
+        LLMEvent.textDelta({ id: "text", text: "one" }),
+        LLMEvent.textDelta({ id: "text", text: " two" }),
+        LLMEvent.textDelta({ id: "text", text: " three" }),
+      ],
+      publisher.publish,
+      { discard: true },
+    )
+
+    expect(published.filter((event) => event.type === "session.text.delta")).toHaveLength(0)
+    yield* TestClock.adjust("99 millis")
+    expect(published.filter((event) => event.type === "session.text.delta")).toHaveLength(0)
+    yield* TestClock.adjust("1 millis")
+    yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " four" }))
+    expect(published.filter((event) => event.type === "session.text.delta").map((event) => event.data)).toMatchObject([
+      { delta: "one two three four" },
+    ])
+
+    yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " five" }))
+    yield* publisher.publish(LLMEvent.textEnd({ id: "text" }))
+    expect(published.slice(-2).map((event) => event.type)).toEqual(["session.text.delta", "session.text.ended.1"])
+    expect(published.at(-2)?.data).toMatchObject({ delta: " five" })
+  }),
+)
+
+it.effect("batches reasoning deltas and flushes pending reasoning before the terminal event", () =>
+  Effect.gen(function* () {
+    const { published, publisher } = capture()
+    yield* Effect.forEach(
+      [
+        LLMEvent.reasoningStart({ id: "reasoning" }),
+        LLMEvent.reasoningDelta({ id: "reasoning", text: "one" }),
+        LLMEvent.reasoningDelta({ id: "reasoning", text: " two" }),
+        LLMEvent.reasoningDelta({ id: "reasoning", text: " three" }),
+        LLMEvent.reasoningEnd({ id: "reasoning" }),
+      ],
+      publisher.publish,
+      { discard: true },
+    )
+
+    expect(
+      published.filter((event) => event.type === "session.reasoning.delta").map((event) => event.data),
+    ).toMatchObject([{ delta: "one two three" }])
+    expect(published.slice(-2).map((event) => event.type)).toEqual([
+      "session.reasoning.delta",
+      "session.reasoning.ended.1",
+    ])
+  }),
+)
+
+test("tool input deltas are accumulated without being published", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.toolInputStart({ id: "call", name: "read" }),
+        LLMEvent.toolInputDelta({ id: "call", name: "read", text: '{"path":' }),
+        LLMEvent.toolInputDelta({ id: "call", name: "read", text: '"file.txt"}' }),
+        LLMEvent.toolInputEnd({ id: "call", name: "read" }),
+      ],
+      publisher.publish,
+      { discard: true },
+    ),
+  )
+
+  expect(published.some((event) => event.type === "session.tool.input.delta")).toBe(false)
+  expect(published.find((event) => event.type === "session.tool.input.ended.1")?.data).toMatchObject({
+    text: '{"path":"file.txt"}',
+  })
+})
+
 test("provider-executed tool metadata is flattened using the route key", async () => {
   const { published, publisher } = capture("openai")
   await Effect.runPromise(
@@ -275,7 +353,12 @@ test("content-filter finish retains failure evidence until step closeout", async
     publisher.publish(
       LLMEvent.stepFinish({
         index: 0,
-        reason: { normalized: "content-filter" },
+        reason: { normalized: "content-filter", raw: "refusal" },
+        providerMetadata: {
+          anthropic: {
+            stopDetails: { type: "refusal", category: "safety", explanation: "Blocked" },
+          },
+        },
         usage: {
           nonCachedInputTokens: 8,
           outputTokens: 3,
@@ -289,6 +372,10 @@ test("content-filter finish retains failure evidence until step closeout", async
   const settlement = publisher.record().finish
   expect(settlement).toMatchObject({
     finish: "content-filter",
+    rawFinish: "refusal",
+    providerState: {
+      stopDetails: { type: "refusal", category: "safety", explanation: "Blocked" },
+    },
     tokens: { input: 8, output: 2, reasoning: 1 },
   })
   if (!settlement) throw new Error("Expected content-filter settlement")
@@ -303,6 +390,11 @@ test("content-filter finish retains failure evidence until step closeout", async
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1", "session.step.failed.1"])
   expect(published.at(-1)?.data).toMatchObject({
     error: { type: "provider.content-filter", message: "Provider blocked the response" },
+    finish: "content-filter",
+    rawFinish: "refusal",
+    providerState: {
+      stopDetails: { type: "refusal", category: "safety", explanation: "Blocked" },
+    },
     cost: 1.25,
     tokens: { input: 8, output: 2, reasoning: 1 },
     snapshot: "tree-end",

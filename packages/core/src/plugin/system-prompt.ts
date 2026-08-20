@@ -33,7 +33,7 @@ export const Plugins = [OpenAIPlugin, GooglePlugin, AnthropicPlugin, KimiPlugin,
 
 function make(id: string, select: (modelID: string) => string | undefined) {
   return define({
-    id: `opencode.system-prompt.${id}`,
+    id: `opencode.prompt.${id}`,
     effect: Effect.fn(`SystemPromptPlugin.${id}`)(function* (ctx) {
       yield* ctx.session.hook("context", (event) =>
         Effect.gen(function* () {

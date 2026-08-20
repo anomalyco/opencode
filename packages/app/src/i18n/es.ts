@@ -541,22 +541,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "La versión instalada no coincide con la versión de la aplicación de escritorio.",
   "wsl.onboarding.adding": "Añadiendo...",
 
-  "help.tabs.toast.ariaLabel": "Presentamos las pestañas. Organiza tu trabajo y las sesiones activas con pestañas",
-  "help.tabs.toast.dismiss": "Descartar información sobre las pestañas",
-  "help.tabs.title": "Presentamos las pestañas",
-  "help.tabs.description": "Organiza tu trabajo y las sesiones activas con pestañas",
-  "help.tabs.date": "14 de julio",
-  "help.tabs.introduction": "OpenCode Desktop ahora se organiza en torno a pestañas.",
-  "help.tabs.sessions":
-    "Inicia una nueva sesión en una pestaña o abre una sesión existente de cualquiera de tus proyectos. Abre una pestaña nueva cuando empieces algo nuevo y ciérrala cuando termines.",
-  "help.tabs.organize":
-    "Mantener algunas pestañas abiertas facilita la organización de las sesiones activas. Cambia el nombre de las pestañas por uno fácil de recordar si piensas conservarlas.",
-  "help.tabs.home":
-    "Encontrarás todas tus sesiones y proyectos en la nueva pantalla Inicio. Al seleccionar una sesión, se abre en una pestaña.",
-  "help.tabs.persistence": "Cuando vuelvas a abrir la aplicación, las pestañas seguirán abiertas.",
-  "help.tabs.worktrees":
-    "El nuevo diseño aún no admite Git Worktrees, pero estarán disponibles pronto. Si prefieres seguir usando el diseño anterior, puedes cambiar de diseño en Ajustes. Ten en cuenta que el nuevo diseño será permanente dentro de unas semanas.",
-
   "dialog.project.edit.title": "Editar proyecto",
   "dialog.project.edit.name": "Nombre",
   "dialog.project.edit.icon": "Icono",
@@ -965,13 +949,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expandir partes de la herramienta de edición",
   "settings.general.row.editToolPartsExpanded.description":
     "Mostrar las partes de las herramientas de edición, escritura y parcheado expandidas por defecto en la línea de tiempo",
-  "settings.general.row.newInterface.title": "Nuevo diseño",
-  "settings.general.row.newInterface.badge": "Nuevo",
-  "settings.general.row.newInterface.description":
-    "Usa las nuevas pestañas y el diseño de la página de inicio. Durante un tiempo limitado, puedes cambiar entre los diseños.",
-  "settings.general.row.newInterfaceNotice.title": "Ahora estás usando el nuevo diseño",
-  "settings.general.row.newInterfaceNotice.description": "El diseño anterior ya no está disponible",
-  "settings.general.row.newInterfaceNotice.dismiss": "Descartar",
   "settings.general.row.pinchZoom.title": "Pellizcar para ampliar",
   "settings.general.row.pinchZoom.description":
     "Permitir ampliar con el gesto de pellizco del panel táctil y con Ctrl + desplazamiento",

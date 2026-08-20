@@ -1,37 +1,41 @@
-import { execFile } from "node:child_process"
-import { stat } from "node:fs/promises"
-import { basename, join } from "node:path"
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
+import { BrowserWindow, ipcMain } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 
-import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
-import { runDesktopMenuAction } from "./desktop-menu-actions"
-import { setForceFocus } from "./debug"
-import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
-import { getStore, removeStoreFileIfEmpty } from "./store"
 import {
-  getPinchZoomEnabled,
-  getWindowID,
-  openExternalURL,
-  openLocalFileURL,
-  setPinchZoomEnabled,
-  setTitlebar,
-  updateTitlebar,
-} from "./windows"
-import { createDesktopDraftStore } from "./draft-store"
-import { nativeT } from "./native-translations"
+  Ipc,
+  type FatalRendererError,
+  type IpcInvoke,
+  type IpcInvokeArgs,
+  type IpcInvokeResult,
+  type IpcSend,
+  type ServerReadyData,
+} from "../shared/ipc-contract"
+import { createFileCapabilities, openExternalURL, openLocalFileURL } from "./files"
+import { setForceFocus } from "./native/debug"
+import { runDesktopMenuAction } from "./native/menu-actions"
+import { createDesktopStorage } from "./storage"
+import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+import type { UpdaterIpc } from "./updater"
+import type { WslIpc } from "./wsl/ipc"
 
-const pickerFilters = (ext?: string[]) => {
-  if (!ext || ext.length === 0) return undefined
-  return [{ name: nativeT("desktop.dialog.files"), extensions: ext }]
+type MaybePromise<Value> = Value | Promise<Value>
+
+function handle<Channel extends keyof IpcInvoke>(
+  channel: Channel,
+  listener: (event: IpcMainInvokeEvent, ...args: IpcInvokeArgs<Channel>) => MaybePromise<IpcInvokeResult<Channel>>,
+) {
+  ipcMain.handle(channel, listener)
 }
 
-const pickedFiles = createPickedFileAuthorizations()
+function on<Channel extends keyof IpcSend>(
+  channel: Channel,
+  listener: (event: IpcMainEvent, ...args: IpcSend[Channel]) => void,
+) {
+  ipcMain.on(channel, listener)
+}
 
 type Deps = {
-  killSidecar: () => Promise<void> | void
   relaunch: () => void
   awaitInitialization: () => Promise<ServerReadyData>
   consumeInitialDeepLinks: () => Promise<string[]> | string[]
@@ -39,9 +43,6 @@ type Deps = {
   setDefaultServerUrl: (url: string | null) => Promise<void> | void
   isFirstLaunchOnboardingPending: () => Promise<boolean> | boolean
   finishFirstLaunchOnboarding: (createDefaultProject: boolean) => Promise<string | null> | string | null
-  isOldLayoutEligible: () => Promise<boolean> | boolean
-  getDisplayBackend: () => Promise<string | null>
-  setDisplayBackend: (backend: string | null) => Promise<void> | void
   checkAppExists: (appName: string) => Promise<boolean> | boolean
   resolveAppPath: (appName: string) => Promise<string | null>
   showUpdater: () => Promise<void> | void
@@ -52,38 +53,24 @@ type Deps = {
 }
 
 export function registerIpcHandlers(deps: Deps) {
-  const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
-  app.on("before-quit", () => drafts.flush())
-  app.once("will-quit", () => drafts.close())
-  app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
+  const files = createFileCapabilities()
+  const storage = createDesktopStorage()
 
-  ipcMain.handle("kill-sidecar", () => deps.killSidecar())
-  ipcMain.handle("await-initialization", () => deps.awaitInitialization())
-  ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
-  ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
-  ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>
-    deps.setDefaultServerUrl(url),
-  )
-  ipcMain.handle("is-first-launch-onboarding-pending", () => deps.isFirstLaunchOnboardingPending())
-  ipcMain.handle("finish-first-launch-onboarding", (_event: IpcMainInvokeEvent, createDefaultProject: boolean) =>
+  handle(Ipc.app.awaitInitialization, () => deps.awaitInitialization())
+  handle(Ipc.app.consumeInitialDeepLinks, () => deps.consumeInitialDeepLinks())
+  handle(Ipc.app.getDefaultServerUrl, () => deps.getDefaultServerUrl())
+  handle(Ipc.app.setDefaultServerUrl, (_event, url) => deps.setDefaultServerUrl(url))
+  handle(Ipc.app.isFirstLaunchOnboardingPending, () => deps.isFirstLaunchOnboardingPending())
+  handle(Ipc.app.finishFirstLaunchOnboarding, (_event, createDefaultProject) =>
     deps.finishFirstLaunchOnboarding(createDefaultProject),
   )
-  ipcMain.handle("is-old-layout-eligible", () => deps.isOldLayoutEligible())
-  ipcMain.handle("get-display-backend", () => deps.getDisplayBackend())
-  ipcMain.handle("set-display-backend", (_event: IpcMainInvokeEvent, backend: string | null) =>
-    deps.setDisplayBackend(backend),
-  )
-  ipcMain.handle("check-app-exists", (_event: IpcMainInvokeEvent, appName: string) => deps.checkAppExists(appName))
-  ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
-  ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
-  ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
-  ipcMain.handle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>
-    setForceFocus(event.sender, enabled),
-  )
-  ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
-    deps.recordFatalRendererError(error),
-  )
-  ipcMain.handle("set-native-translations", (event: IpcMainInvokeEvent, value: unknown) => {
+  handle(Ipc.app.checkAppExists, (_event, appName) => deps.checkAppExists(appName))
+  handle(Ipc.app.resolveAppPath, (_event, appName) => deps.resolveAppPath(appName))
+  handle(Ipc.app.setBackgroundColor, (_event, color) => deps.setBackgroundColor(color))
+  handle(Ipc.app.exportDebugLogs, () => deps.exportDebugLogs())
+  handle(Ipc.app.setForceFocus, (event, enabled) => setForceFocus(event.sender, enabled))
+  handle(Ipc.app.recordFatalRendererError, (_event, error) => deps.recordFatalRendererError(error))
+  handle(Ipc.app.setNativeTranslations, (event, value) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win || win.isDestroyed() || win.webContents !== event.sender || event.senderFrame !== event.sender.mainFrame) {
       throw new Error("Invalid native translation sender")
@@ -92,139 +79,32 @@ export function registerIpcHandlers(deps: Deps) {
     if (!bundle) throw new Error("Invalid native translation bundle")
     deps.setNativeTranslations(bundle)
   })
-  ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
-    try {
-      const store = getStore(name)
-      const value = store.get(key)
-      if (value === undefined || value === null) return null
-      return typeof value === "string" ? value : JSON.stringify(value)
-    } catch {
-      return null
-    }
+  handle(Ipc.storage.get, (_event, name, key) => {
+    return storage.get(name, key)
   })
-  ipcMain.handle("store-set", (_event: IpcMainInvokeEvent, name: string, key: string, value: string) => {
-    getStore(name).set(key, value)
-  })
-  ipcMain.handle("store-delete", (_event: IpcMainInvokeEvent, name: string, key: string) => {
-    getStore(name).delete(key)
-    void removeStoreFileIfEmpty(name)
-  })
-  ipcMain.handle("store-clear", (_event: IpcMainInvokeEvent, name: string) => {
-    getStore(name).clear()
-    void removeStoreFileIfEmpty(name)
-  })
-  ipcMain.handle("store-keys", (_event: IpcMainInvokeEvent, name: string) => {
-    const store = getStore(name)
-    return Object.keys(store.store)
-  })
-  ipcMain.handle("store-length", (_event: IpcMainInvokeEvent, name: string) => {
-    const store = getStore(name)
-    return Object.keys(store.store).length
-  })
-  ipcMain.handle("draft-get", (_event, key: string) => drafts.get(key))
-  ipcMain.handle("draft-set", (_event, key: string, value: string) => drafts.set(key, value))
-  ipcMain.handle("draft-delete", (_event, key: string) => drafts.set(key, null))
-  ipcMain.handle("draft-blob-put", (_event, data: ArrayBuffer) => drafts.putBlob(new Uint8Array(data)))
-  ipcMain.handle("draft-blob-get", (_event, id: string) => {
-    const data = drafts.getBlob(id)
-    return data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
-  })
+  handle(Ipc.storage.set, (_event, name, key, value) => storage.set(name, key, value))
+  handle(Ipc.storage.delete, (_event, name, key) => storage.deleteValue(name, key))
+  handle(Ipc.storage.clear, (_event, name) => storage.clear(name))
+  handle(Ipc.storage.keys, (_event, name) => storage.keys(name))
+  handle(Ipc.storage.length, (_event, name) => storage.length(name))
+  handle(Ipc.drafts.get, (_event, key) => storage.drafts.get(key))
+  handle(Ipc.drafts.set, (_event, key, value) => storage.drafts.set(key, value))
+  handle(Ipc.drafts.delete, (_event, key) => storage.drafts.set(key, null))
+  handle(Ipc.drafts.putBlob, (_event, data) => storage.drafts.putBlob(data))
+  handle(Ipc.drafts.getBlob, (_event, id) => storage.drafts.getBlob(id))
 
-  ipcMain.handle(
-    "open-directory-picker",
-    async (_event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
-      const result = await dialog.showOpenDialog({
-        properties: ["openDirectory", ...(opts?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
-        title: opts?.title ?? nativeT("desktop.dialog.chooseFolder"),
-        defaultPath: opts?.defaultPath,
-      })
-      if (result.canceled) return null
-      return opts?.multiple ? result.filePaths : result.filePaths[0]
-    },
-  )
+  handle(Ipc.files.openDirectoryPicker, (_event, options) => files.openDirectoryPicker(options))
+  handle(Ipc.files.openFilePicker, (event, options) => files.openFilePicker(event.sender.id, options))
+  handle(Ipc.files.readPickedFile, (event, token, path) => files.readPickedFile(event.sender.id, token, path))
+  handle(Ipc.files.releasePickedFiles, (event, token) => files.releasePickedFiles(event.sender.id, token))
+  handle(Ipc.files.saveFilePicker, (_event, options) => files.saveFilePicker(options))
+  on(Ipc.files.openExternal, (_event, url) => openExternalURL(url))
+  on(Ipc.files.openLocalFile, (_event, url) => openLocalFileURL(url))
+  handle(Ipc.files.openPath, (_event, path, app) => files.openPath(path, app))
+  handle(Ipc.files.revealPath, (_event, path) => files.revealPath(path))
+  handle(Ipc.files.readClipboardImage, () => files.readClipboardImage())
 
-  ipcMain.handle(
-    "open-file-picker",
-    async (
-      event: IpcMainInvokeEvent,
-      opts?: { multiple?: boolean; title?: string; defaultPath?: string; extensions?: string[] },
-    ) => {
-      const result = await dialog.showOpenDialog({
-        properties: ["openFile", ...(opts?.multiple ? ["multiSelections" as const] : [])],
-        title: opts?.title ?? nativeT("desktop.dialog.chooseFile"),
-        defaultPath: opts?.defaultPath,
-        filters: pickerFilters(opts?.extensions),
-      })
-      if (result.canceled) return null
-      const files = await Promise.all(
-        result.filePaths.map(async (filePath) => ({
-          path: filePath,
-          name: basename(filePath),
-          size: (await stat(filePath)).size,
-        })),
-      )
-      assertAttachmentBudget(files)
-      const token = pickedFiles.add(event.sender.id, result.filePaths)
-      return { token, files }
-    },
-  )
-
-  ipcMain.handle("read-picked-file", async (event: IpcMainInvokeEvent, token: string, filePath: string) => {
-    return pickedFiles.read(event.sender.id, token, filePath)
-  })
-
-  ipcMain.handle("release-picked-files", (event: IpcMainInvokeEvent, token: string) => {
-    pickedFiles.release(event.sender.id, token)
-  })
-
-  ipcMain.handle(
-    "save-file-picker",
-    async (_event: IpcMainInvokeEvent, opts?: { title?: string; defaultPath?: string }) => {
-      const result = await dialog.showSaveDialog({
-        title: opts?.title ?? nativeT("desktop.dialog.saveFile"),
-        defaultPath: opts?.defaultPath,
-      })
-      if (result.canceled) return null
-      return result.filePath ?? null
-    },
-  )
-
-  ipcMain.on("open-external", (_event: IpcMainEvent, url: string) => {
-    openExternalURL(url)
-  })
-
-  ipcMain.on("open-local-file", (_event: IpcMainEvent, url: string) => {
-    openLocalFileURL(url)
-  })
-
-  ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
-    if (!app) return shell.openPath(path)
-    await new Promise<void>((resolve, reject) => {
-      const [cmd, args] =
-        process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
-      execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
-    })
-  })
-
-  ipcMain.handle("reveal-path", async (_event: IpcMainInvokeEvent, path: string) => {
-    const exists = await stat(path).then(
-      () => true,
-      () => false,
-    )
-    if (!exists) return false
-    shell.showItemInFolder(path)
-    return true
-  })
-
-  ipcMain.handle("read-clipboard-image", () => {
-    const image = clipboard.readImage()
-    if (image.isEmpty()) return null
-    const buffer = image.toPNG().buffer
-    const size = image.getSize()
-    return { buffer, width: size.width, height: size.height }
-  })
-
-  ipcMain.handle("get-window-id", (event: IpcMainInvokeEvent) => {
+  handle(Ipc.window.getId, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) throw new Error("Window not found")
     const id = getWindowID(win)
@@ -232,47 +112,47 @@ export function registerIpcHandlers(deps: Deps) {
     return id
   })
 
-  ipcMain.handle("get-window-focused", (event: IpcMainInvokeEvent) => {
+  handle(Ipc.window.getFocused, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return win?.isFocused() ?? false
   })
 
-  ipcMain.handle("get-window-fullscreen", (event: IpcMainInvokeEvent) => {
+  handle(Ipc.window.getFullscreen, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return win?.isFullScreen() ?? false
   })
 
-  ipcMain.handle("set-window-focus", (event: IpcMainInvokeEvent) => {
+  handle(Ipc.window.setFocus, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     win?.focus()
   })
 
-  ipcMain.handle("show-window", (event: IpcMainInvokeEvent) => {
+  handle(Ipc.window.show, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     win?.show()
   })
 
-  ipcMain.on("relaunch", () => {
+  on(Ipc.app.relaunch, () => {
     deps.relaunch()
   })
 
-  ipcMain.handle("get-zoom-factor", (event: IpcMainInvokeEvent) => event.sender.getZoomFactor())
-  ipcMain.handle("set-zoom-factor", (event: IpcMainInvokeEvent, factor: number) => {
+  handle(Ipc.window.getZoomFactor, (event) => event.sender.getZoomFactor())
+  handle(Ipc.window.setZoomFactor, (event, factor) => {
     event.sender.setZoomFactor(factor)
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
     updateTitlebar(win)
   })
-  ipcMain.handle("get-pinch-zoom-enabled", () => getPinchZoomEnabled())
-  ipcMain.handle("set-pinch-zoom-enabled", (_event: IpcMainInvokeEvent, enabled: boolean) => {
+  handle(Ipc.window.getPinchZoomEnabled, () => getPinchZoomEnabled())
+  handle(Ipc.window.setPinchZoomEnabled, (_event, enabled) => {
     setPinchZoomEnabled(enabled)
   })
-  ipcMain.handle("set-titlebar", (event: IpcMainInvokeEvent, theme: TitlebarTheme) => {
+  handle(Ipc.window.setTitlebar, (event, theme) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
     setTitlebar(win, theme)
   })
-  ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
+  handle(Ipc.menu.runAction, (event, action) => {
     runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action, {
       checkForUpdates: () => void deps.showUpdater(),
       relaunch: deps.relaunch,
@@ -280,10 +160,25 @@ export function registerIpcHandlers(deps: Deps) {
   })
 }
 
-export function sendMenuCommand(win: BrowserWindow, id: string) {
-  win.webContents.send("menu-command", id)
+export function registerUpdaterIpcHandlers(updater: UpdaterIpc) {
+  handle(Ipc.updater.subscribe, (event) => updater.subscribe(event.sender))
+  handle(Ipc.updater.unsubscribe, (event) => updater.unsubscribe(event.sender.id))
+  handle(Ipc.updater.check, () => updater.check())
+  handle(Ipc.updater.install, () => updater.install())
 }
 
-export function sendDeepLinks(win: BrowserWindow, urls: string[]) {
-  win.webContents.send("deep-link", urls)
+export function registerWslIpcHandlers(wsl: WslIpc) {
+  handle(Ipc.wsl.subscribe, (event) => wsl.subscribe(event.sender))
+  handle(Ipc.wsl.unsubscribe, (event) => wsl.unsubscribe(event.sender.id))
+  handle(Ipc.wsl.getState, () => wsl.getState())
+  handle(Ipc.wsl.probeRuntime, () => wsl.probeRuntime())
+  handle(Ipc.wsl.refreshDistros, () => wsl.refreshDistros())
+  handle(Ipc.wsl.installWsl, () => wsl.installWsl())
+  handle(Ipc.wsl.installDistro, (_event, value) => wsl.installDistro(value))
+  handle(Ipc.wsl.probeAddable, (_event, value) => wsl.probeAddable(value))
+  handle(Ipc.wsl.installOpencode, (_event, value) => wsl.installOpencode(value))
+  handle(Ipc.wsl.openTerminal, (_event, value) => wsl.openTerminal(value))
+  handle(Ipc.wsl.addServer, (_event, value) => wsl.addServer(value))
+  handle(Ipc.wsl.removeServer, (_event, value) => wsl.removeServer(value))
+  handle(Ipc.wsl.startServer, (_event, value) => wsl.startServer(value))
 }

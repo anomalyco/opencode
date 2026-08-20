@@ -512,21 +512,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "работен плот {{version}}",
   "wsl.onboarding.versionMismatch": "Инсталираната версия не съответства на версията на настолното приложение.",
   "wsl.onboarding.adding": "Добавяне...",
-  "help.tabs.toast.ariaLabel": "Представяме ви раздели. Организирайте работата и активните си сесии с раздели",
-  "help.tabs.toast.dismiss": "Отхвърляне на информация за раздели",
-  "help.tabs.title": "Представяме ви раздели",
-  "help.tabs.description": "Организирайте работата и активните си сесии с раздели",
-  "help.tabs.date": "14 юли",
-  "help.tabs.introduction": "OpenCode Desktop вече е изграден около раздели.",
-  "help.tabs.sessions":
-    "Започнете нова сесия в раздел или отворете съществуваща сесия от някой от вашите проекти. Отворете нов раздел, когато започвате нещо ново, и го затворете, когато сте готови.",
-  "help.tabs.organize":
-    "Поддържането на няколко раздела отворени улеснява организирането на вашите активни сесии. Преименувайте раздели на нещо запомнящо се, ако планирате да ги запазите.",
-  "help.tabs.home":
-    "Ще намерите всичките си сесии и проекти на новия начален екран. Избирането на сесия я отваря в раздел.",
-  "help.tabs.persistence": "Когато отворите отново приложението, вашите раздели са все още отворени.",
-  "help.tabs.worktrees":
-    "Новият дизайн все още не поддържа Git Worktrees, идва скоро. Така че, ако предпочитате да продължите да използвате предишното оформление, можете да превключвате между оформления в Настройки. Само имайте предвид, че новото оформление ще стане постоянно след няколко седмици.",
   "server.row.noUsername": "няма потребителско име",
   "dialog.project.edit.title": "Редактиране на проекта",
   "dialog.project.edit.name": "Име",
@@ -979,13 +964,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Разгънете части за редактиране на инструмента",
   "settings.general.row.editToolPartsExpanded.description":
     "Показване на части от инструмента за редактиране, писане и корекция, разширени по подразбиране във времевата линия",
-  "settings.general.row.newInterface.title": "Ново оформление",
-  "settings.general.row.newInterface.badge": "Нов",
-  "settings.general.row.newInterface.description":
-    "Използвайте новите раздели и началното оформление. Превключвайте между оформления за ограничено време.",
-  "settings.general.row.newInterfaceNotice.title": "Вече използвате ново оформление",
-  "settings.general.row.newInterfaceNotice.description": "Предишното оформление вече не е налично",
-  "settings.general.row.newInterfaceNotice.dismiss": "Отхвърляне",
   "settings.general.row.pinchZoom.title": "Щипнете, за да увеличите",
   "settings.general.row.pinchZoom.description":
     "Разрешаване на жестове с щипване и Ctrl-превъртане на тракпада за мащабиране",

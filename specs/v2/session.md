@@ -37,7 +37,7 @@ The public interrupt operation verifies that the durable Session exists. An unkn
 
 `sessions.active()` snapshots busy periods currently owned by this process. Durable execution events and claims are historical and recovery records, not proof that this process is still live.
 
-Execution commits a write-ahead claim when a process-local busy period starts. Success, failure, and user interruption release the claim; shutdown interruption and unclean process death preserve it. On startup, managed Node and fetch runtimes resume claimed top-level Sessions, append a durable continuation instruction, and count recovery attempts. Recovery is bounded per claimed execution but does not guarantee exactly-once provider requests or tool effects. See [Session restart recovery](./session-restart-continuation.md).
+Execution commits a write-ahead claim when a process-local busy period starts. Success, failure, and user interruption release the claim; shutdown interruption and unclean process death preserve it. On startup, managed Node and fetch runtimes resume claimed top-level Sessions, append a durable continuation instruction, and count recovery attempts. Recovery is bounded per claimed execution but does not guarantee exactly-once provider requests or tool effects.
 
 ## One Step May Have Several Physical Attempts
 

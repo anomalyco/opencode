@@ -1,37 +1,30 @@
 import type { Page, Route } from "@playwright/test"
-import type {
-  JsonValue,
-  PromptAgentAttachment,
-  PromptFileAttachment,
-  SessionMessageAssistant,
-  SessionMessageInfo,
-  SessionStructuredError,
-} from "@opencode-ai/client/promise"
-
-const emptyList = new Set(["/skill", "/command", "/lsp", "/formatter", "/vcs/status", "/vcs/diff"])
-const emptyObject = new Set(["/global/config", "/config", "/provider/auth", "/mcp", "/experimental/resource"])
+import type { JsonValue, OpenCodeEvent, SessionMessageInfo } from "@opencode-ai/client/promise"
 
 export interface MockServerConfig {
-  protocol?: "v1" | "v2"
   provider: unknown | (() => unknown)
   integrationMethods?: Record<string, unknown[]>
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
-  onInstanceDispose?: () => void
   directory: string
   project: unknown
   sessions: ({ id: string } & Record<string, unknown>)[]
-  pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
+  pageMessages: (
+    sessionId: string,
+    limit: number,
+    before?: string,
+  ) => {
+    items: SessionMessageInfo[]
+    cursor?: string
+  }
   vcsDiff?: unknown[]
   messageDelay?: number
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
-  message?: (sessionID: string, messageID: string) => unknown
+  message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
   onMessage?: (input: { sessionID: string; messageID: string }) => void
-  events?: () => unknown[]
+  events?: () => OpenCodeEvent[]
   eventRetry?: number
-  todos?: (sessionID: string) => unknown[]
   permissions?: unknown[] | (() => unknown[])
-  questions?: unknown[] | (() => unknown[])
   forms?: unknown[] | (() => unknown[])
   fileList?: (path: string) => unknown | Promise<unknown>
   fileContent?: (path: string) => unknown | Promise<unknown>
@@ -46,10 +39,11 @@ type MockStreamWindow = Window & {
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const cursors = new Map<string, string>()
+  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   let nextCursor = 0
 
   await page.addInitScript(
-    ({ port, retry }) => {
+    ({ server, retry }) => {
       const host = window as MockStreamWindow
       if (host.__testSseTransport || host.__mockServerStream) return
       const originalFetch = window.fetch.bind(window)
@@ -74,7 +68,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
         const url = new URL(request.url)
-        if (url.port !== port || url.pathname !== "/api/event") return originalFetch(request)
+        if (url.origin !== server || url.pathname !== "/api/event") return originalFetch(request)
         state.connections += 1
         const id = state.connections
         let ended = false
@@ -114,7 +108,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       }
       Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
     },
-    { port: process.env.PLAYWRIGHT_SERVER_PORT ?? "4096", retry: config.eventRetry },
+    { server, retry: config.eventRetry },
   )
 
   if (config.events) {
@@ -125,10 +119,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       if (batch.length === 0) return
       pump.busy = true
       void page
-        .evaluate(
-          (payloads) => (window as MockStreamWindow).__mockServerStream?.push(payloads),
-          batch.map(currentEvent),
-        )
+        .evaluate((payloads) => (window as MockStreamWindow).__mockServerStream?.push(payloads), batch as unknown[])
         .catch(() => {})
         .finally(() => {
           pump.busy = false
@@ -136,87 +127,33 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }, 50)
     page.on("close", () => clearInterval(timer))
   }
-  const staticRoutes: Record<string, unknown> = {
-    "/path": {
-      state: config.directory,
-      config: config.directory,
-      worktree: config.directory,
-      directory: config.directory,
-      home: "C:/OpenCode",
-    },
-    "/project": [config.project],
-    "/project/current": config.project,
-    "/agent": [{ name: "build", mode: "primary" }],
-    "/vcs": { branch: "main", default_branch: "main" },
-    "/session": config.sessions,
-  }
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     const targetPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
     const appPort = new URL(
       process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
     ).port
-    if (url.port !== targetPort && url.port !== appPort) return route.fallback()
+    if (url.origin !== server && url.port !== appPort) return route.fallback()
 
     const path = url.pathname
-    if (path === "/global/event" || path === "/event" || path === "/api/event") {
+    if (path === "/api/event") {
       const events = config.events?.()
       return sse(
         route,
-        path === "/api/event"
-          ? [{ id: "evt_mock_connected", type: "server.connected", data: {} }, ...(events?.map(currentEvent) ?? [])]
-          : [
-              ...(path === "/global/event"
-                ? [{ payload: { id: "evt_mock_connected", type: "server.connected", properties: {} } }]
-                : []),
-              ...(events ?? []),
-            ],
+        [{ id: "evt_mock_connected", type: "server.connected", data: {} }, ...(events ?? [])],
         config.eventRetry,
       )
     }
-    if (path === "/global/health")
-      return config.protocol === "v2" ? json(route, {}, undefined, 404) : json(route, { healthy: true })
     if (path === "/api/health") return json(route, { healthy: true, version: "2.0.0", pid: 1 })
-    if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: true })
-    if (path === "/provider") return json(route, providerConfig(config))
-    if (path === "/provider/auth") return json(route, config.integrationMethods ?? {})
-    const legacyAuth = path.match(/^\/auth\/([^/]+)$/)?.[1]
-    if (legacyAuth && route.request().method() === "PUT") {
-      config.onConnectKey?.({ integrationID: legacyAuth, body: route.request().postDataJSON() })
-      return json(route, true)
-    }
-    if (path === "/instance/dispose" && route.request().method() === "POST") {
-      config.onInstanceDispose?.()
-      return json(route, true)
-    }
-    if (path === "/permission")
-      return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
-    if (path === "/question")
-      return json(route, typeof config.questions === "function" ? config.questions() : (config.questions ?? []))
-    if (path === "/session/status")
-      return json(
-        route,
-        typeof config.sessionStatus === "function" ? config.sessionStatus() : (config.sessionStatus ?? {}),
-      )
-    if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
-    if (path === "/file" && config.fileList)
-      return json(route, await config.fileList(url.searchParams.get("path") ?? ""))
-    if (path === "/file/content" && config.fileContent)
-      return json(route, await config.fileContent(url.searchParams.get("path") ?? ""))
-    if (path === "/find/file" && config.findFiles)
-      return json(
-        route,
-        await config.findFiles({
-          query: url.searchParams.get("query") ?? "",
-          dirs: url.searchParams.get("dirs") ?? undefined,
-          limit: url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : undefined,
-        }),
-      )
     if (path === "/api/reference")
       return json(route, {
         location: {
           directory: config.directory,
-          project: { id: (config.project as { id?: string }).id, directory: config.directory },
+          project: {
+            id: (config.project as { id?: string }).id,
+            directory: config.directory,
+            canonical: config.directory,
+          },
         },
         data: [],
       })
@@ -245,6 +182,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, { location: location(config), data: currentDefaultModel(providerConfig(config)) })
     if (path === "/api/integration") return json(route, { location: location(config), data: [] })
     if (path === "/api/command") return json(route, { location: location(config), data: [] })
+    if (path === "/api/skill") return json(route, { location: location(config), data: [] })
     if (path === "/api/plugin") return json(route, { location: location(config), data: [] })
     if (path === "/api/mcp") return json(route, { location: location(config), data: [] })
     if (path === "/api/mcp/resource")
@@ -277,7 +215,11 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       ])
     }
     if (path === "/api/project/current")
-      return json(route, { id: (config.project as { id?: string }).id, directory: config.directory })
+      return json(route, {
+        id: (config.project as { id?: string }).id,
+        directory: config.directory,
+        canonical: config.directory,
+      })
     const worktree = path.match(/^\/api\/worktree\/([^/]+)$/)?.[1]
     if (worktree && route.request().method() === "GET")
       return json(route, [
@@ -303,18 +245,13 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           currentPermission,
         ),
       })
-    if (path === "/api/question/request")
-      return json(route, {
-        location: location(config),
-        data: typeof config.questions === "function" ? config.questions() : (config.questions ?? []),
-      })
     if (path === "/api/form/request")
       return json(route, {
         location: location(config),
         data: typeof config.forms === "function" ? config.forms() : (config.forms ?? []),
       })
     if (path === "/api/vcs")
-      return json(route, { location: location(config), data: { branch: "main", defaultBranch: "main" } })
+      return json(route, { location: location(config), data: { branch: { current: "main", default: "main" } } })
     if (path === "/api/vcs/status") return json(route, { location: location(config), data: [] })
     if (path === "/api/vcs/diff") return json(route, { location: location(config), data: config.vcsDiff ?? [] })
     if (path === "/api/fs/list" && config.fileList)
@@ -352,10 +289,26 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           : entries,
       })
     }
-    if (path === "/api/pty/shells") return json(route, { location: location(config), data: [] })
+    if (path === "/api/shell" && route.request().method() === "GET")
+      return json(route, { location: location(config), data: [] })
     if (/^\/api\/pty\/[^/]+\/connect-token$/.test(path))
       return json(route, { location: location(config), data: { ticket: "e2e-ticket", expires_in: 60 } })
     if (path === "/api/session") {
+      if (route.request().method() === "POST") {
+        const payload = route.request().postDataJSON() as Record<string, unknown>
+        const created = currentSession(
+          {
+            id: "ses_mock_created",
+            projectID: (config.project as { id?: string }).id,
+            title: typeof payload.title === "string" ? payload.title : "New session",
+            parentID: typeof payload.parentID === "string" ? payload.parentID : undefined,
+          },
+          config.directory,
+        )
+        config.sessions.push(created)
+        return json(route, { data: created })
+      }
+      if (route.request().method() !== "GET") return route.fallback()
       const directory = url.searchParams.get("directory")
       const parentID = url.searchParams.get("parentID")
       const limit = Number(url.searchParams.get("limit") ?? 50)
@@ -365,7 +318,11 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           const location = session.location as { directory?: string } | undefined
           return !directory || location?.directory === directory || session.directory === directory
         })
-        .filter((session) => parentID !== "null" || session.parentID === undefined)
+        .filter((session) => {
+          if (parentID === null) return true
+          if (parentID === "null") return session.parentID === undefined
+          return session.parentID === parentID
+        })
         .filter((session) => {
           const search = url.searchParams.get("search")?.toLowerCase()
           return (
@@ -375,7 +332,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
               .includes(search)
           )
         })
-      const ordered = url.searchParams.get("order") === "asc" ? sessions.toReversed() : sessions
+      const ordered = url.searchParams.get("order") === "asc" ? sessions : sessions.toReversed()
       const data = ordered.slice(offset, offset + limit)
       const next = offset + limit < ordered.length ? String(offset + limit) : undefined
       return json(route, {
@@ -398,9 +355,6 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (/^\/api\/session\/[^/]+\/shell$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
-    if (/^\/api\/session\/[^/]+\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") {
-      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
-    }
     const sessionForm = path.match(/^\/api\/session\/([^/]+)\/form$/)?.[1]
     if (sessionForm && route.request().method() === "GET") {
       const forms = typeof config.forms === "function" ? config.forms() : (config.forms ?? [])
@@ -413,15 +367,18 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     if (/^\/api\/session\/[^/]+\/inbox$/.test(path) && route.request().method() === "GET")
       return json(route, { data: [] })
+    const sessionPermission = path.match(/^\/api\/session\/([^/]+)\/permission$/)?.[1]
+    if (sessionPermission && route.request().method() === "GET") {
+      const permissions = typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])
+      return json(route, {
+        data: permissions.map(currentPermission).filter((permission) => permission.sessionID === sessionPermission),
+      })
+    }
     if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
-    if (/^\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST")
-      return json(route, true)
-    if (/^\/session\/[^/]+\/permissions\/[^/]+$/.test(path) && route.request().method() === "POST")
-      return json(route, true)
     if (
-      /^\/api\/session\/[^/]+\/(archive|rename|interrupt|revert\/clear|revert\/commit)$/.test(path) &&
+      /^\/api\/session\/[^/]+\/(rename|interrupt|revert\/clear|revert\/commit)$/.test(path) &&
       route.request().method() === "POST"
     ) {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
@@ -429,10 +386,6 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (/^\/api\/session\/[^/]+$/.test(path) && route.request().method() === "DELETE") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
-    if (emptyObject.has(path)) return json(route, {})
-    if (emptyList.has(path)) return json(route, [])
-    if (path in staticRoutes) return json(route, staticRoutes[path])
-
     const currentSessionMatch = path.match(/^\/api\/session\/([^/]+)$/)
     if (currentSessionMatch) {
       const session = config.sessions.find((item) => item.id === currentSessionMatch[1])
@@ -442,69 +395,37 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       })
     }
 
-    const currentMessageMatch = path.match(/^\/api\/session\/([^/]+)\/message\/([^/]+)$/)
-    if (currentMessageMatch) {
-      config.onMessage?.({ sessionID: currentMessageMatch[1]!, messageID: currentMessageMatch[2]! })
-      if (config.messageDelay !== undefined) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
-      const message = config.message?.(currentMessageMatch[1]!, currentMessageMatch[2]!)
-      if (message === undefined) return json(route, { error: "Message not found" }, undefined, 404)
-      return json(route, { data: currentMessage(message) })
-    }
-
-    const sessionMatch = path.match(/^\/session\/([^/]+)$/)
-    if (sessionMatch) return json(route, config.sessions.find((session) => session.id === sessionMatch[1]) ?? {})
-
-    const projectMatch = path.match(/^\/project\/([^/]+)$/)
-    if (projectMatch) return json(route, config.project)
-
-    const messageMatch = path.match(/^\/session\/([^/]+)\/message\/([^/]+)$/)
+    const messageMatch = path.match(/^\/api\/session\/([^/]+)\/message\/([^/]+)$/)
     if (messageMatch) {
       config.onMessage?.({ sessionID: messageMatch[1]!, messageID: messageMatch[2]! })
       if (config.messageDelay !== undefined) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
-      const message = config.message?.(messageMatch[1]!, messageMatch[2]!)
+      const message =
+        config.message?.(messageMatch[1]!, messageMatch[2]!) ??
+        config.pageMessages(messageMatch[1]!, Number.MAX_SAFE_INTEGER).items.find((item) => item.id === messageMatch[2])
       if (message === undefined) return json(route, { error: "Message not found" }, undefined, 404)
-      return json(route, message)
+      return json(route, { data: message })
     }
 
-    const todoMatch = path.match(/^\/session\/([^/]+)\/todo$/)
-    if (todoMatch) return json(route, config.todos?.(todoMatch[1]!) ?? [])
-    if (/^\/session\/[^/]+\/(children|diff)$/.test(path)) return json(route, [])
-
-    const currentMessagesMatch = path.match(/^\/api\/session\/([^/]+)\/message$/)
-    if (currentMessagesMatch) {
-      const token = url.searchParams.get("cursor") ?? undefined
-      const before = token ? cursors.get(token) : undefined
-      if (token && !before) return json(route, { error: "Invalid cursor" }, undefined, 400)
-      config.onMessages?.({ sessionID: currentMessagesMatch[1], before, phase: "start" })
-      await config.beforeMessagesResponse?.({ sessionID: currentMessagesMatch[1]!, before })
-      if (config.messageDelay !== undefined) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
-      const pageData = config.pageMessages(currentMessagesMatch[1], Number(url.searchParams.get("limit") ?? 50), before)
-      config.onMessages?.({ sessionID: currentMessagesMatch[1], before, phase: "end" })
-      const cursor = pageData.cursor ? `cursor_${++nextCursor}` : undefined
-      if (cursor) cursors.set(cursor, pageData.cursor!)
-      return json(route, {
-        data: pageData.items.map(currentMessage).reverse(),
-        cursor: { next: cursor },
-      })
-    }
-
-    const messagesMatch = path.match(/^\/session\/([^/]+)\/message$/)
+    const messagesMatch = path.match(/^\/api\/session\/([^/]+)\/message$/)
     if (messagesMatch) {
-      const token = url.searchParams.get("before") ?? undefined
+      const token = url.searchParams.get("cursor") ?? undefined
       const before = token ? cursors.get(token) : undefined
       if (token && !before) return json(route, { error: "Invalid cursor" }, undefined, 400)
       config.onMessages?.({ sessionID: messagesMatch[1], before, phase: "start" })
       await config.beforeMessagesResponse?.({ sessionID: messagesMatch[1]!, before })
       if (config.messageDelay !== undefined) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
-      const pageData = config.pageMessages(messagesMatch[1], Number(url.searchParams.get("limit") ?? 80), before)
+      const pageData = config.pageMessages(messagesMatch[1], Number(url.searchParams.get("limit") ?? 50), before)
       config.onMessages?.({ sessionID: messagesMatch[1], before, phase: "end" })
-      if (!pageData.cursor) return json(route, pageData.items)
-      const cursor = `cursor_${++nextCursor}`
-      cursors.set(cursor, pageData.cursor)
-      return json(route, pageData.items, { "x-next-cursor": cursor })
+      const cursor = pageData.cursor ? `cursor_${++nextCursor}` : undefined
+      if (cursor) cursors.set(cursor, pageData.cursor!)
+      return json(route, {
+        data: url.searchParams.get("order") === "asc" ? pageData.items : pageData.items.toReversed(),
+        cursor: { next: cursor },
+      })
     }
 
-    if (url.port === targetPort && targetPort !== appPort) return json(route, {})
+    if (url.port === targetPort && targetPort !== appPort)
+      return json(route, { error: `Unhandled mock route: ${path}` }, undefined, 404)
     return route.fallback()
   })
 }
@@ -522,13 +443,21 @@ function providerConfig(config: MockServerConfig) {
 
 function currentProviders(value: unknown) {
   if (!record(value) || !Array.isArray(value.all)) return Array.isArray(value) ? value : []
-  return value.all
-    .filter(record)
-    .flatMap((provider) =>
-      typeof provider.id === "string" && typeof provider.name === "string"
-        ? [{ id: provider.id, name: provider.name, package: provider.id }]
-        : [],
-    )
+  const connected = new Set(
+    Array.isArray(value.connected) ? value.connected.filter((id) => typeof id === "string") : [],
+  )
+  return value.all.filter(record).flatMap((provider) =>
+    typeof provider.id === "string" && typeof provider.name === "string"
+      ? [
+          {
+            id: provider.id,
+            name: provider.name,
+            package: provider.id,
+            activation: connected.has(provider.id) ? "enabled" : "auto",
+          },
+        ]
+      : [],
+  )
 }
 
 function currentModels(value: unknown) {
@@ -584,7 +513,7 @@ function currentDefaultModel(value: unknown) {
 function currentPermission(value: unknown) {
   const permission = value as Record<string, unknown>
   if (permission.action) return permission
-  const tool = permission.tool as { messageID?: string; callID?: string } | undefined
+  const tool = permission.tool as { messageID?: string; callID?: string; id?: string } | undefined
   return {
     id: permission.id,
     sessionID: permission.sessionID,
@@ -593,7 +522,9 @@ function currentPermission(value: unknown) {
     save: permission.always,
     metadata: permission.metadata,
     source:
-      tool?.messageID && tool.callID ? { type: "tool", messageID: tool.messageID, callID: tool.callID } : undefined,
+      tool?.messageID && (tool.id || tool.callID)
+        ? { type: "tool", messageID: tool.messageID, id: tool.id ?? tool.callID }
+        : undefined,
   }
 }
 
@@ -632,202 +563,6 @@ export function currentSession(session: { id: string } & Record<string, unknown>
     subpath: session.subpath ?? session.path,
     revert: session.revert,
   }
-}
-
-export function currentMessage(value: unknown): SessionMessageInfo {
-  if (isCurrentMessage(value)) return value
-  if (!record(value) || !record(value.info) || !Array.isArray(value.parts)) throw new Error("Invalid message fixture")
-
-  const info = value.info
-  const parts = value.parts.filter(record)
-  if (typeof info.id !== "string" || !record(info.time) || typeof info.time.created !== "number")
-    throw new Error("Invalid legacy message fixture")
-
-  const time = {
-    created: info.time.created,
-    ...(typeof info.time.completed === "number" ? { completed: info.time.completed } : {}),
-  }
-  if (info.role === "user") {
-    return {
-      id: info.id,
-      type: "user",
-      time: { created: time.created },
-      text: parts
-        .flatMap((part) => (part.type === "text" && typeof part.text === "string" ? [part.text] : []))
-        .join("\n"),
-      files: parts.flatMap((part) => (part.type === "file" ? legacyFile(part) : [])),
-      agents: parts.flatMap((part) => (part.type === "agent" ? legacyAgent(part) : [])),
-    }
-  }
-  if (info.role !== "assistant") throw new Error("Invalid legacy message role")
-
-  return {
-    id: info.id,
-    type: "assistant",
-    time,
-    agent: typeof info.agent === "string" ? info.agent : typeof info.mode === "string" ? info.mode : "build",
-    model: {
-      id: typeof info.modelID === "string" ? info.modelID : "model",
-      providerID: typeof info.providerID === "string" ? info.providerID : "provider",
-      ...(typeof info.variant === "string" ? { variant: info.variant } : {}),
-    },
-    content: parts.flatMap((part) => legacyAssistantContent(part, time.created)),
-    ...(typeof info.cost === "number" ? { cost: info.cost } : {}),
-    ...(tokens(info.tokens) ? { tokens: tokens(info.tokens) } : {}),
-    ...(structuredError(info.error) ? { error: structuredError(info.error) } : {}),
-    ...(finish(info.finish) ? { finish: finish(info.finish) } : {}),
-  }
-}
-
-function isCurrentMessage(value: unknown): value is SessionMessageInfo {
-  return record(value) && typeof value.id === "string" && typeof value.type === "string" && !record(value.info)
-}
-
-function legacyFile(part: Record<string, unknown>): PromptFileAttachment[] {
-  if (typeof part.mime !== "string" || typeof part.url !== "string") return []
-  const data = part.url.match(/^data:[^,]*;base64,(.*)$/)?.[1] ?? ""
-  const source = record(part.source) ? part.source : undefined
-  const sourceText = source && record(source.text) ? source.text : undefined
-  const mention = mentionFrom(sourceText)
-  const uri = source?.type === "resource" && typeof source.uri === "string" ? source.uri : part.url
-  return [
-    {
-      data,
-      mime: part.mime,
-      source: part.url.startsWith("data:") ? { type: "inline" } : { type: "uri", uri },
-      ...(typeof part.filename === "string" ? { name: part.filename } : {}),
-      ...(mention ? { mention } : {}),
-    },
-  ]
-}
-
-function legacyAgent(part: Record<string, unknown>): PromptAgentAttachment[] {
-  if (typeof part.name !== "string") return []
-  const mention = mentionFrom(record(part.source) ? part.source : undefined)
-  return [{ name: part.name, ...(mention ? { mention } : {}) }]
-}
-
-function mentionFrom(value: Record<string, unknown> | undefined) {
-  if (!value || typeof value.value !== "string" || typeof value.start !== "number" || typeof value.end !== "number")
-    return
-  return { text: value.value, start: value.start, end: value.end }
-}
-
-function legacyAssistantContent(part: Record<string, unknown>, created: number): SessionMessageAssistant["content"] {
-  if (part.type === "text" && typeof part.text === "string")
-    return [
-      { type: "text", text: part.text, ...(jsonRecord(part.metadata) ? { state: jsonRecord(part.metadata) } : {}) },
-    ]
-  if (part.type === "reasoning" && typeof part.text === "string") {
-    const time = record(part.time) ? part.time : undefined
-    return [
-      {
-        type: "reasoning",
-        text: part.text,
-        ...(jsonRecord(part.metadata) ? { state: jsonRecord(part.metadata) } : {}),
-        ...(time && typeof time.start === "number"
-          ? {
-              time: {
-                created: time.start,
-                ...(typeof time.end === "number" ? { completed: time.end } : {}),
-              },
-            }
-          : {}),
-      },
-    ]
-  }
-  if (part.type !== "tool" || typeof part.id !== "string" || typeof part.tool !== "string" || !record(part.state))
-    return []
-
-  const state = part.state
-  const time = record(state.time) ? state.time : undefined
-  const toolTime = {
-    created: time && typeof time.start === "number" ? time.start : created,
-    ...(time && typeof time.start === "number" ? { ran: time.start } : {}),
-    ...(time && typeof time.end === "number" ? { completed: time.end } : {}),
-  }
-  const input = jsonRecord(state.input) ?? {}
-  const metadata = jsonRecord(state.metadata)
-  const base = {
-    type: "tool" as const,
-    id: typeof part.callID === "string" ? part.callID : part.id,
-    name: part.tool,
-    time: toolTime,
-    ...(typeof part.executed === "boolean" ? { executed: part.executed } : {}),
-    ...(jsonRecord(part.providerState) ? { providerState: jsonRecord(part.providerState) } : {}),
-    ...(jsonRecord(part.providerResultState) ? { providerResultState: jsonRecord(part.providerResultState) } : {}),
-  }
-  if (state.status === "pending")
-    return [
-      {
-        ...base,
-        state: { status: "streaming", input: typeof state.raw === "string" ? state.raw : JSON.stringify(input) },
-      },
-    ]
-  if (state.status === "completed")
-    return [
-      {
-        ...base,
-        state: {
-          status: "completed",
-          input,
-          content: [{ type: "text", text: typeof state.output === "string" ? state.output : "" }],
-          ...(metadata ? { metadata } : {}),
-        },
-      },
-    ]
-  if (state.status === "error")
-    return [
-      {
-        ...base,
-        state: {
-          status: "error",
-          input,
-          error: structuredError(state.error) ?? { type: "ToolError", message: "Tool failed" },
-          ...(metadata ? { metadata } : {}),
-        },
-      },
-    ]
-  return [{ ...base, state: { status: "running", input, metadata: metadata ?? {} } }]
-}
-
-function structuredError(value: unknown): SessionStructuredError | undefined {
-  if (typeof value === "string") return { type: "Error", message: value }
-  if (!record(value)) return
-  if (typeof value.type === "string" && typeof value.message === "string")
-    return { type: value.type, message: value.message }
-  if (typeof value.name !== "string" || !record(value.data) || typeof value.data.message !== "string") return
-  return { type: value.name, message: value.data.message }
-}
-
-function tokens(value: unknown): SessionMessageAssistant["tokens"] | undefined {
-  if (!record(value) || !record(value.cache)) return
-  if (
-    typeof value.input !== "number" ||
-    typeof value.output !== "number" ||
-    typeof value.reasoning !== "number" ||
-    typeof value.cache.read !== "number" ||
-    typeof value.cache.write !== "number"
-  )
-    return
-  return {
-    input: value.input,
-    output: value.output,
-    reasoning: value.reasoning,
-    cache: { read: value.cache.read, write: value.cache.write },
-  }
-}
-
-function finish(value: unknown): SessionMessageAssistant["finish"] | undefined {
-  if (
-    value === "stop" ||
-    value === "length" ||
-    value === "tool-calls" ||
-    value === "content-filter" ||
-    value === "error" ||
-    value === "unknown"
-  )
-    return value
 }
 
 function jsonRecord(value: unknown): Record<string, JsonValue> | undefined {
@@ -870,19 +605,4 @@ function sse(route: Route, events?: unknown[], retry?: number) {
     contentType: "text/event-stream",
     body: `${retry === undefined ? "" : `retry: ${retry}\n\n`}${events?.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") || ": ok\n\n"}`,
   })
-}
-
-function currentEvent(input: unknown) {
-  if (!input || typeof input !== "object" || !("payload" in input)) return input
-  const envelope = input as { directory?: string; payload?: unknown }
-  if (!envelope.payload || typeof envelope.payload !== "object") return input
-  const payload = envelope.payload as { id?: string; type?: string; properties?: unknown }
-  if (!payload.type) return input
-  return {
-    id: payload.id ?? `evt_mock_${Date.now()}`,
-    created: Date.now(),
-    type: payload.type,
-    data: payload.properties ?? {},
-    location: envelope.directory && envelope.directory !== "global" ? { directory: envelope.directory } : undefined,
-  }
 }

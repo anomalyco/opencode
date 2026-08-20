@@ -1,4 +1,4 @@
-import type { FileContent } from "@opencode-ai/sdk/v2"
+import type { PresentationFileContent } from "../presentation"
 
 export type MediaKind = "image" | "audio" | "svg"
 
@@ -9,7 +9,7 @@ type MediaValue = unknown
 
 function mediaRecord(value: unknown) {
   if (!value || typeof value !== "object") return
-  return value as Partial<FileContent> & {
+  return value as Partial<PresentationFileContent> & {
     content?: unknown
     encoding?: unknown
     mimeType?: unknown

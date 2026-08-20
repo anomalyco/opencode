@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 
@@ -7,6 +7,7 @@ const directory = "C:/OpenCode/ReviewImageFlashRegression"
 const sessionID = "ses_review_image_flash_regression"
 const title = "Review image flash regression"
 const imageFile = "assets/preview.png"
+const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 test("clicking an image file in the v2 review pane does not blank the panel", async ({ page }) => {
   await openReview(page)
@@ -26,9 +27,6 @@ test("clicking an image file in the v2 review pane does not blank the panel", as
 
 async function openReview(page: Page) {
   await page.setViewportSize({ width: 960, height: 900 })
-  await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-  })
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -112,30 +110,16 @@ async function openReview(page: Page) {
     pageMessages: () => ({
       items: [
         {
-          info: {
-            id: "msg_review_image_flash_regression",
-            sessionID,
-            role: "user",
-            time: { created: 1700000000000 },
-            summary: { diffs: [] },
-            agent: "build",
-            model: { providerID: "opencode", modelID: "test" },
-          },
-          parts: [
-            {
-              id: "prt_review_image_flash_regression",
-              sessionID,
-              messageID: "msg_review_image_flash_regression",
-              type: "text",
-              text: "Review this change.",
-            },
-          ],
+          id: "msg_review_image_flash_regression",
+          type: "user",
+          time: { created: 1700000000000 },
+          text: "Review this change.",
         },
       ],
     }),
   })
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
   await page.getByRole("button", { name: "Toggle review" }).click()
   await expectAppVisible(page.locator('#review-panel [data-component="session-review-v2"]'))

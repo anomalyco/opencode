@@ -26,7 +26,7 @@ const PermissionParams = {
   ),
 }
 
-export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
+const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
   description: "OpenCode 2.0 preview command line interface",
   params: {
     ...ServerParams,
@@ -70,7 +70,7 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       description: "Debugging and troubleshooting tools",
       commands: [
         Spec.make("agents", { description: "List all agents" }),
-        Spec.make("config", { description: "Show resolved configuration" }),
+        Spec.make("config", { description: "List configuration sources" }),
       ],
     }),
     Spec.make("console", {
@@ -85,12 +85,37 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       ],
     }),
     Spec.make("auth", {
-      description: "Manage authentication",
+      description: "manage AI providers and credentials",
       commands: [
-        Spec.make("login", {
-          description: "Log in to a well-known authentication provider",
+        Spec.make("list", {
+          description: "list providers and credentials",
           params: {
-            url: Argument.string("url").pipe(Argument.withDescription("Well-known provider URL")),
+            ...ServerParams,
+            format: Flag.choice("format", ["default", "json"]).pipe(
+              Flag.withDescription("Output format"),
+              Flag.withDefault("default"),
+            ),
+          },
+        }),
+        Spec.make("login", {
+          description: "log in to a provider",
+          params: {
+            ...ServerParams,
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Integration ID, name, or well-known provider URL"),
+              Argument.optional,
+            ),
+            method: Flag.string("method").pipe(Flag.withDescription("Authentication method ID"), Flag.optional),
+          },
+        }),
+        Spec.make("logout", {
+          description: "log out from a configured provider",
+          params: {
+            ...ServerParams,
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Integration ID or name"),
+              Argument.optional,
+            ),
           },
         }),
       ],
@@ -134,7 +159,29 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     }),
     Spec.make("plugin", {
       description: "Manage plugins",
-      commands: [Spec.make("list", { description: "List active plugins" })],
+      commands: [
+        Spec.make("list", {
+          description: "List plugins",
+          params: {
+            builtin: Flag.boolean("builtin").pipe(
+              Flag.withDescription("Include built-in server plugins"),
+              Flag.withDefault(false),
+            ),
+          },
+        }),
+        Spec.make("add", {
+          description: "Install a plugin and add it to the global configuration",
+          params: {
+            package: Argument.string("package").pipe(Argument.withDescription("npm registry package specifier")),
+          },
+        }),
+        Spec.make("remove", {
+          description: "Remove a plugin from global configuration",
+          params: {
+            package: Argument.string("package").pipe(Argument.withDescription("configured package specifier")),
+          },
+        }),
+      ],
     }),
     Spec.make("models", {
       description: "List all available models",
@@ -144,11 +191,7 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       description: "Export session data as JSON",
       params: {
         ...ServerParams,
-        session: Flag.string("session").pipe(
-          Flag.withAlias("s"),
-          Flag.withDescription("Session ID to export to stdout"),
-          Flag.optional,
-        ),
+        session: Argument.string("session").pipe(Argument.withDescription("Session ID to export"), Argument.optional),
         sanitize: Flag.boolean("sanitize").pipe(
           Flag.withDescription("Redact sensitive transcript and file data"),
           Flag.withDefault(false),
@@ -253,15 +296,36 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
         Spec.make("stop", { description: "Stop the background server" }),
         Spec.make("get", {
           description: "Get service configuration",
-          params: { key: Argument.string("key").pipe(Argument.optional) },
+          params: {
+            key: Argument.string("key").pipe(Argument.withDescription("Service setting or env"), Argument.optional),
+            name: Argument.string("name").pipe(
+              Argument.withDescription("Environment variable name"),
+              Argument.optional,
+            ),
+          },
         }),
         Spec.make("set", {
           description: "Set service configuration",
-          params: { key: Argument.string("key"), value: Argument.string("value") },
+          params: {
+            key: Argument.string("key").pipe(Argument.withDescription("Service setting or env")),
+            value: Argument.string("value").pipe(
+              Argument.withDescription("Setting value or environment variable name"),
+            ),
+            nestedValue: Argument.string("env-value").pipe(
+              Argument.withDescription("Environment variable value"),
+              Argument.optional,
+            ),
+          },
         }),
         Spec.make("unset", {
           description: "Unset service configuration",
-          params: { key: Argument.string("key") },
+          params: {
+            key: Argument.string("key").pipe(Argument.withDescription("Service setting or env")),
+            name: Argument.string("name").pipe(
+              Argument.withDescription("Environment variable name"),
+              Argument.optional,
+            ),
+          },
         }),
       ],
     }),
@@ -277,3 +341,5 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     }),
   ],
 })
+
+export const Commands = Root

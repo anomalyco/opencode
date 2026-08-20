@@ -38,7 +38,7 @@ const snapshotConfig = `[core]
 export const TreeID = Schema.String.pipe(Schema.brand("Git.TreeID"))
 export type TreeID = typeof TreeID.Type
 
-export class OperationError extends Schema.TaggedErrorClass<OperationError>()("Git.OperationError", {
+export class OperationError extends Schema.TaggedError<OperationError>()("Git.OperationError", {
   operation: Schema.Literals([
     "clone",
     "fetch",
@@ -61,7 +61,7 @@ export class Worktree extends Schema.Class<Worktree>("Git.Worktree")({
   kind: Schema.Literals(["main", "linked"]),
 }) {}
 
-export class WorktreeError extends Schema.TaggedErrorClass<WorktreeError>()("Git.WorktreeError", {
+export class WorktreeError extends Schema.TaggedError<WorktreeError>()("Git.WorktreeError", {
   operation: Schema.Literals(["create", "remove", "list"]),
   message: Schema.String,
   directory: Schema.optional(AbsolutePath),

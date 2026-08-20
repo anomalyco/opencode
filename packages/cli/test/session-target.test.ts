@@ -55,6 +55,26 @@ describe("session target resolver", () => {
     expect(target.session.id).toBe("ses_implicit")
   })
 
+  test("attaches the terminal environment to the resolved local Session", async () => {
+    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const selected = session("ses_resume", "/session")
+    spyOn(client.session, "get").mockResolvedValue(selected)
+    spyOn(client.location, "get").mockResolvedValue(location("/session"))
+    const environment = spyOn(client.session, "environment").mockResolvedValue()
+
+    await resolveSessionTarget({
+      client,
+      session: selected.id,
+      environment: { PATH: "/terminal/bin" },
+      prepare,
+    })
+
+    expect(environment).toHaveBeenCalledWith({
+      sessionID: selected.id,
+      variables: { PATH: "/terminal/bin" },
+    })
+  })
+
   test("prepares a fresh Session at the server Location before creation", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
     const order: string[] = []

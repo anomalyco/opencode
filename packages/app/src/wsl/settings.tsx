@@ -1,9 +1,9 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { Badge } from "@opencode-ai/ui/badge"
+import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Menu } from "@opencode-ai/ui/menu"
 import { useMutation } from "@tanstack/solid-query"
 import fuzzysort from "fuzzysort"
 import { type Accessor, For, Show, createMemo } from "solid-js"
@@ -32,22 +32,22 @@ export function AddServerMenu(props: { onAddServer: () => void }) {
     <Show
       when={platform.wslServers}
       fallback={
-        <ButtonV2 variant="ghost-muted" icon="plus" onClick={props.onAddServer}>
+        <Button variant="ghost-muted" icon="plus" onClick={props.onAddServer}>
           {language.t("dialog.server.add.button")}
-        </ButtonV2>
+        </Button>
       }
     >
-      <MenuV2 gutter={4} modal={false} placement="bottom-end">
-        <MenuV2.Trigger as={ButtonV2} variant="ghost-muted" icon="plus">
+      <Menu gutter={4} modal={false} placement="bottom-end">
+        <Menu.Trigger as={Button} variant="ghost-muted" icon="plus">
           {language.t("dialog.server.add.button")}
-        </MenuV2.Trigger>
-        <MenuV2.Portal>
-          <MenuV2.Content>
-            <MenuV2.Item onSelect={props.onAddServer}>{language.t("dialog.server.add.button")}</MenuV2.Item>
-            <MenuV2.Item onSelect={openAddWsl}>{language.t("wsl.server.add")}</MenuV2.Item>
-          </MenuV2.Content>
-        </MenuV2.Portal>
-      </MenuV2>
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Item onSelect={props.onAddServer}>{language.t("dialog.server.add.button")}</Menu.Item>
+            <Menu.Item onSelect={openAddWsl}>{language.t("wsl.server.add")}</Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
     </Show>
   )
 }
@@ -113,54 +113,52 @@ export function WslServerSettings(props: {
               </div>
               <div class="settings-v2-servers-actions">
                 <Show when={props.domain.defaults.available() && props.domain.defaults.key() === key}>
-                  <Tag>{language.t("dialog.server.status.default")}</Tag>
+                  <Badge>{language.t("dialog.server.status.default")}</Badge>
                 </Show>
                 <Show when={opencodeAction()}>
                   {(label) => (
-                    <ButtonV2
+                    <Button
                       size="small"
                       disabled={busy() || request.isPending}
                       onClick={() => api && request.mutate(() => api.installOpencode(item.config.distro))}
                     >
                       {busy() ? language.t("wsl.server.updating") : language.t(label())}
-                    </ButtonV2>
+                    </Button>
                   )}
                 </Show>
-                <MenuV2 gutter={4} modal={false} placement="bottom-end">
-                  <MenuV2.Trigger
-                    as={IconButtonV2}
+                <Menu gutter={4} modal={false} placement="bottom-end">
+                  <Menu.Trigger
+                    as={IconButton}
                     variant="ghost-muted"
                     size="small"
-                    icon={<IconV2 name="outline-dots" />}
+                    icon={<Icon name="outline-dots" />}
                     aria-label={language.t("common.moreOptions")}
                   />
-                  <MenuV2.Portal>
-                    <MenuV2.Content>
-                      <MenuV2.Group>
-                        <MenuV2.GroupLabel>{language.t("wsl.server.menu.label")}</MenuV2.GroupLabel>
+                  <Menu.Portal>
+                    <Menu.Content>
+                      <Menu.Group>
+                        <Menu.GroupLabel>{language.t("wsl.server.menu.label")}</Menu.GroupLabel>
                         <Show when={wslRuntimeRetryable(item.runtime)}>
-                          <MenuV2.Item onSelect={() => api && request.mutate(() => api.startServer(key))}>
+                          <Menu.Item onSelect={() => api && request.mutate(() => api.startServer(key))}>
                             {language.t("wsl.server.retryStart")}
-                          </MenuV2.Item>
+                          </Menu.Item>
                         </Show>
                         <Show when={props.domain.defaults.available() && props.domain.defaults.key() !== key}>
-                          <MenuV2.Item onSelect={() => props.domain.defaults.set(key)}>
+                          <Menu.Item onSelect={() => props.domain.defaults.set(key)}>
                             {language.t("dialog.server.menu.default")}
-                          </MenuV2.Item>
+                          </Menu.Item>
                         </Show>
                         <Show when={props.domain.defaults.available() && props.domain.defaults.key() === key}>
-                          <MenuV2.Item onSelect={() => props.domain.defaults.set(null)}>
+                          <Menu.Item onSelect={() => props.domain.defaults.set(null)}>
                             {language.t("dialog.server.menu.defaultRemove")}
-                          </MenuV2.Item>
+                          </Menu.Item>
                         </Show>
-                        <MenuV2.Separator />
-                        <MenuV2.Item onSelect={() => remove(key)}>
-                          {language.t("dialog.server.menu.delete")}
-                        </MenuV2.Item>
-                      </MenuV2.Group>
-                    </MenuV2.Content>
-                  </MenuV2.Portal>
-                </MenuV2>
+                        <Menu.Separator />
+                        <Menu.Item onSelect={() => remove(key)}>{language.t("dialog.server.menu.delete")}</Menu.Item>
+                      </Menu.Group>
+                    </Menu.Content>
+                  </Menu.Portal>
+                </Menu>
               </div>
             </div>
           )

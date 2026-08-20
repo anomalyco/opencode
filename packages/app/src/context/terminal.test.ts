@@ -1,8 +1,11 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
 import { ServerScope } from "@/utils/server-scope"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { Persist } from "@/utils/persist"
+import type { Platform } from "./platform"
 
 let getWorkspaceTerminalCacheKey: typeof import("./terminal").getWorkspaceTerminalCacheKey
-let getLegacyTerminalStorageKeys: (dir: string, legacySessionID?: string) => string[]
+let clearWorkspaceTerminals: typeof import("./terminal").clearWorkspaceTerminals
 let migrateTerminalState: (value: unknown) => unknown
 
 beforeAll(async () => {
@@ -20,7 +23,7 @@ beforeAll(async () => {
   }))
   const mod = await import("./terminal")
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
-  getLegacyTerminalStorageKeys = mod.getLegacyTerminalStorageKeys
+  clearWorkspaceTerminals = mod.clearWorkspaceTerminals
   migrateTerminalState = mod.migrateTerminalState
 })
 
@@ -34,18 +37,27 @@ describe("getWorkspaceTerminalCacheKey", () => {
       "ssh:debian\u0000/repo\u0000__workspace__",
     )
   })
-})
 
-describe("getLegacyTerminalStorageKeys", () => {
-  test("keeps workspace storage path when no legacy session id", () => {
-    expect(getLegacyTerminalStorageKeys("/repo")).toEqual(["/repo/terminal.v1"])
-  })
+  test("clears the current workspace terminal store", () => {
+    const removed: { storage?: string; key: string }[] = []
+    const platform: Platform = {
+      platform: "desktop",
+      windowID: "window",
+      openExternal: () => undefined,
+      restart: async () => undefined,
+      notify: async () => undefined,
+      openDirectoryPickerDialog: async () => null,
+      storage: (storage) => ({
+        getItem: () => null,
+        setItem: () => undefined,
+        removeItem: (key) => void removed.push({ storage, key }),
+      }),
+    }
 
-  test("includes legacy session path before workspace path", () => {
-    expect(getLegacyTerminalStorageKeys("/repo", "session-123")).toEqual([
-      "/repo/terminal/session-123.v1",
-      "/repo/terminal.v1",
-    ])
+    clearWorkspaceTerminals("C:/repo", platform)
+
+    const target = Persist.workspace(base64Encode("C:/repo"), "terminal")
+    expect(removed).toEqual([{ storage: target.storage, key: target.key }])
   })
 })
 

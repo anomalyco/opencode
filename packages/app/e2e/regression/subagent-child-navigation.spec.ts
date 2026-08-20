@@ -1,4 +1,5 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
+import type { OpenCodeEvent, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
@@ -11,8 +12,6 @@ const parentTitle = "Parent session"
 const childTitle = "Subagent child session"
 // Child session pages derive their heading from the task part that spawned them.
 const taskDescription = "Inspect child navigation"
-
-type EventPayload = { directory: string; payload: Record<string, unknown> }
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
@@ -27,7 +26,7 @@ test("navigates to a subagent child session missing from the session list", asyn
   await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
 })
 
-test("keeps the parent visible while child lineage resolves", async ({ page }) => {
+test("keeps the parent visible while the child session resolves", async ({ page }) => {
   await setup(page)
   const requested = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
@@ -52,14 +51,18 @@ test("keeps the parent visible while child lineage resolves", async ({ page }) =
 })
 
 test("shows the not found fallback when the viewed session is deleted", async ({ page }) => {
-  const events: EventPayload[] = []
+  const events: OpenCodeEvent[] = []
   await setup(page, () => events.splice(0, 1))
   await openChildFromParent(page)
   await expectSessionTitle(page, taskDescription)
 
   events.push({
-    directory,
-    payload: { type: "session.deleted", properties: { info: childSession() } },
+    id: "evt_session_deleted",
+    created: 1700000003000,
+    type: "session.deleted",
+    durable: { aggregateID: childID, seq: 1, version: 2 },
+    location: { directory },
+    data: { sessionID: childID },
   })
 
   await expect(page.getByText("This session cannot be found")).toBeVisible()
@@ -67,7 +70,7 @@ test("shows the not found fallback when the viewed session is deleted", async ({
   await expect(page.getByRole("heading", { name: taskDescription })).toHaveCount(0)
 })
 
-async function setup(page: Page, events?: () => EventPayload[]) {
+async function setup(page: Page, events?: () => OpenCodeEvent[]) {
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -142,60 +145,36 @@ function childSession() {
   return session(childID, childTitle, 1700000001000, { parentID })
 }
 
-function parentMessages() {
+function parentMessages(): SessionMessageInfo[] {
   const userID = "msg_user_0001"
   const assistantID = "msg_assistant_0001"
   return [
     {
-      info: {
-        id: userID,
-        sessionID: parentID,
-        role: "user",
-        time: { created: 1700000000000 },
-        agent: "build",
-        model: { providerID: "opencode", modelID: "claude-opus-4-6" },
-      },
-      parts: [
-        {
-          id: "prt_user_text_0001",
-          sessionID: parentID,
-          messageID: userID,
-          type: "text",
-          text: "Delegate work to a subagent",
-        },
-      ],
+      id: userID,
+      type: "user",
+      time: { created: 1700000000000 },
+      text: "Delegate work to a subagent",
     },
     {
-      info: {
-        id: assistantID,
-        sessionID: parentID,
-        role: "assistant",
-        time: { created: 1700000001000, completed: 1700000002000 },
-        parentID: userID,
-        modelID: "claude-opus-4-6",
-        providerID: "opencode",
-        mode: "build",
-        agent: "build",
-        path: { cwd: directory, root: directory },
-        cost: 0.01,
-        tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
-        finish: "stop",
-      },
-      parts: [
+      id: assistantID,
+      type: "assistant",
+      time: { created: 1700000001000, completed: 1700000002000 },
+      model: { id: "claude-opus-4-6", providerID: "opencode" },
+      agent: "build",
+      cost: 0.01,
+      tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
+      finish: "stop",
+      content: [
         {
-          id: "prt_tool_task_0001",
-          sessionID: parentID,
-          messageID: assistantID,
           type: "tool",
-          callID: "call_task_0001",
-          tool: "task",
+          id: "call_task_0001",
+          name: "task",
+          time: { created: 1700000001000, ran: 1700000001000, completed: 1700000002000 },
           state: {
             status: "completed",
             input: { description: taskDescription, subagent_type: "explore" },
-            output: "Subagent finished",
-            title: taskDescription,
+            content: [{ type: "text", text: "Subagent finished" }],
             metadata: { sessionId: childID },
-            time: { start: 1700000001000, end: 1700000002000 },
           },
         },
       ],
@@ -207,7 +186,6 @@ async function configurePage(page: Page) {
   const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   await page.addInitScript(
     ({ directory, server, sessionId }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({

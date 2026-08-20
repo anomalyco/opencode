@@ -41,6 +41,7 @@ import {
   useTuiApp,
   useTuiPaths,
   useTuiStartup,
+  useTuiTerminalEnvironment,
   type TuiApp,
 } from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
@@ -185,6 +186,7 @@ export type TuiInput = {
   args: Args
   config: Config.Interface
   packages: PackageResolver
+  environment?: Readonly<Record<string, string>>
   terminalHandoff?: () => Promise<
     | {
         readonly renderer: CliRenderer
@@ -332,6 +334,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                   : process.env.DISPLAY
                                     ? "x11"
                                     : undefined,
+                                variables: input.environment,
                               }}
                             >
                               <TuiStartupProvider
@@ -480,6 +483,17 @@ function App(props: { pair?: DialogPairCredentials }) {
   const promptRef = usePromptRef()
   const plugins = usePlugin()
   const clipboard = useClipboard()
+  const terminalEnvironment = useTuiTerminalEnvironment()
+  createEffect(() => {
+    if (client.connection.status() !== "connected") return
+    if (route.data.type !== "session") return
+    const session = data.session.get(route.data.sessionID)
+    if (!session) return
+    if (session.location.workspaceID !== undefined || terminalEnvironment.variables === undefined) return
+    void client.api.session
+      .environment({ sessionID: session.id, variables: terminalEnvironment.variables })
+      .catch(toast.error)
+  })
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
   })
@@ -550,7 +564,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const offSelectionKeys = keymap.intercept(
     "key",
     ({ event }) => {
-      if (config.data.terminal?.copy_on_select ?? process.platform !== "win32") return
+      if ((config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select") return
       Selection.handleSelectionKey(renderer, toast, event, clipboard)
     },
     { priority: 1 },
@@ -571,12 +585,12 @@ function App(props: { pair?: DialogPairCredentials }) {
     renderer.clearSelection()
   }
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
-  const copyOnSelectEnabled = () => config.data.terminal?.copy_on_select ?? process.platform !== "win32"
+  const copyOnSelectEnabled = () =>
+    (config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
   const tabsVertical = () =>
     config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, preferredTabsWidth())
-  const tabsVisible = () =>
-    sessionTabs.enabled() && (sessionTabs.tabs().length > 0 || sessionTabs.newTab()) && route.data.type !== "plugin"
+  const tabsVisible = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
   const verticalTabsVisible = () => tabsVisible() && tabsVertical()
 
   createEffect(() => {

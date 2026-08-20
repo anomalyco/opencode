@@ -595,7 +595,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       {
         id: "session.queued_prompts",
         title: "View queued prompts",
-        group: "Session",
+        group: "Prompt",
         run: openQueuedMenu,
       },
     ],

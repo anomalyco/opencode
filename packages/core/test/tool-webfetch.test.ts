@@ -23,6 +23,8 @@ const webFetchToolNode = makeLocationNode({
 })
 
 const sessionID = Session.ID.make("ses_webfetch_test")
+const webFetchUserAgent =
+  "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OpenCode-User/1.0; +https://opencode.ai"
 const requests: Array<{ readonly url: string; readonly headers: Record<string, string> }> = []
 const assertions: Permission.AssertInput[] = []
 let respond = (_request: HttpClientRequest.HttpClientRequest) =>
@@ -184,28 +186,6 @@ describe("WebFetchTool helpers", () => {
     expect(WebFetchTool.convertHTMLToMarkdown(`<p>~~~</p><p><strong></strong>content</p><p>~~~</p>`)).toBe(
       `\\~\\~\\~\n\ncontent\n\n\\~\\~\\~`,
     )
-  })
-
-  test("parses malformed tag prefixes in linear time without a regex prepass", () => {
-    const small = "<a".repeat(250_000)
-    const large = "<a".repeat(1_000_000)
-    const start = Bun.nanoseconds()
-    WebFetchTool.convertHTMLToMarkdown(small)
-    const smallDuration = Bun.nanoseconds() - start
-    const next = Bun.nanoseconds()
-    WebFetchTool.convertHTMLToMarkdown(large)
-    const largeDuration = Bun.nanoseconds() - next
-    expect(largeDuration).toBeLessThan(smallDuration * 10)
-  })
-
-  test("caps escaped prose and backtick-heavy pre output at the webfetch response ceiling", () => {
-    const prose = `<p>${"*".repeat(WebFetchTool.MAX_RESPONSE_BYTES)}</p>`
-    const code = `<pre>${"`".repeat(WebFetchTool.MAX_RESPONSE_BYTES - 11)}</pre>`
-    const proseOutput = WebFetchTool.convertHTMLToMarkdown(prose)
-    const codeOutput = WebFetchTool.convertHTMLToMarkdown(code)
-    expect(Buffer.byteLength(proseOutput)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
-    expect(Buffer.byteLength(codeOutput)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
-    expect(codeOutput.startsWith("~~~\n")).toBe(true)
   })
 
   test("does not confuse source NUL text with buffered code", () => {
@@ -398,7 +378,17 @@ describe("WebFetchTool registration", () => {
       expect(assertions).toMatchObject([
         { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text", timeout: 4 } },
       ])
-      expect(requests).toMatchObject([{ url, headers: { accept: expect.stringContaining("text/plain;q=1.0") } }])
+      expect(requests).toMatchObject([
+        {
+          url,
+          headers: {
+            accept: "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1",
+            "accept-language": "en-US,en;q=0.9",
+            "user-agent": webFetchUserAgent,
+          },
+        },
+      ])
+      expect(requests[0]?.headers).not.toHaveProperty("sec-fetch-mode")
     }),
   )
 
@@ -419,15 +409,23 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
-  live.effect("follows redirects while approving only the requested URL", () =>
-    Effect.acquireUseRelease(
+  live.effect("follows redirects while approving only the requested URL", () => {
+    const received: Array<Record<string, string | null>> = []
+    return Effect.acquireUseRelease(
       Effect.sync(() =>
         Bun.serve({
           port: 0,
-          fetch: (request) =>
-            new URL(request.url).pathname === "/redirect"
-              ? new Response("", { status: 302, headers: { location: "/target" } })
-              : new Response("redirected", { headers: { "content-type": "text/plain" } }),
+          fetch: (request) => {
+            received.push({
+              accept: request.headers.get("accept"),
+              "accept-language": request.headers.get("accept-language"),
+              "sec-fetch-mode": request.headers.get("sec-fetch-mode"),
+              "user-agent": request.headers.get("user-agent"),
+            })
+            if (new URL(request.url).pathname === "/redirect")
+              return new Response("", { status: 302, headers: { location: "/target" } })
+            return new Response("redirected", { headers: { "content-type": "text/plain" } })
+          },
         }),
       ),
       (server) =>
@@ -443,10 +441,18 @@ describe("WebFetchTool registration", () => {
           expect(assertions).toMatchObject([
             { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
           ])
+          expect(received).toEqual(
+            Array.from({ length: 2 }, () => ({
+              accept: "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1",
+              "accept-language": "en-US,en;q=0.9",
+              "sec-fetch-mode": null,
+              "user-agent": webFetchUserAgent,
+            })),
+          )
         }),
       (server) => Effect.promise(() => server.stop(true)),
-    ),
-  )
+    )
+  })
 
   it.effect("rejects non-HTTP schemes before permission or transport", () =>
     Effect.gen(function* () {
@@ -571,7 +577,7 @@ describe("WebFetchTool registration", () => {
         content: [{ type: "text", text: "ok" }],
       })
       expect(requests).toHaveLength(2)
-      expect(requests[0]?.headers["user-agent"]).toContain("Mozilla/5.0")
+      expect(requests[0]?.headers["user-agent"]).toBe(webFetchUserAgent)
       expect(requests[1]?.headers["user-agent"]).toBe("opencode")
     }),
   )

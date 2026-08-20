@@ -1,9 +1,16 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { Event } from "@opencode-ai/schema/event"
-import { SessionStatusEvent } from "@opencode-ai/schema/session-status-event"
-import { SessionV1 } from "@opencode-ai/schema/session-v1"
-import type { SessionInfo, SessionMessageInfo, SessionStatus } from "@opencode-ai/client/promise"
-import type { AssistantMessage, Message, Part, ToolPart, ToolState, UserMessage } from "../../../src/types"
+import { base64Encode } from "@opencode-ai/util/encode"
+import type {
+  JsonValue,
+  OpenCodeEvent,
+  SessionInfo,
+  SessionMessageAssistant,
+  SessionMessageInfo,
+  SessionMessageUser,
+  SessionStatus,
+  SessionStructuredError,
+} from "@opencode-ai/client/promise"
+import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { expect, type Page } from "@playwright/test"
 import { Schema } from "effect"
 import { mockOpenCodeServer } from "../../utils/mock-server"
@@ -18,50 +25,80 @@ export const assistantID = "msg_1001_timeline_assistant"
 export const title = "Timeline visual stability"
 export const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
+const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+const tokens = { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } }
+
 type Session = SessionInfo
-type GlobalEvent = {
-  directory: string
-  project?: string
-  workspace?: string
-  payload: {
-    id: string
-    type: string
-    properties: Record<string, unknown>
-  }
+type TextSeed = {
+  id: string
+  type: "text"
+  text: string
+  messageID?: string
+}
+type FileSeed = {
+  id: string
+  type: "file"
+  mime: string
+  filename?: string
+  url: string
+  source?: { type: string; path?: string; text?: { value: string; start: number; end: number } }
+}
+type AgentSeed = {
+  id: string
+  type: "agent"
+  name: string
+  source?: { value: string; start: number; end: number }
+}
+type ReasoningSeed = {
+  id: string
+  type: "reasoning"
+  text: string
+  time?: { start: number; end?: number }
+  metadata?: Record<string, unknown>
+  messageID?: string
+}
+type ToolSeed = {
+  id: string
+  type: "tool"
+  callID: string
+  tool: string
+  messageID?: string
+  executed?: boolean
+  providerState?: Record<string, unknown>
+  providerResultState?: Record<string, unknown>
+  state:
+    | { status: "pending"; input: Record<string, unknown>; raw: string }
+    | {
+        status: "running"
+        input: Record<string, unknown>
+        title?: string
+        metadata: Record<string, unknown>
+        time: { start: number }
+      }
+    | {
+        status: "completed"
+        input: Record<string, unknown>
+        output: string
+        title: string
+        metadata: Record<string, unknown>
+        time: { start: number; end: number }
+      }
+    | {
+        status: "error"
+        input: Record<string, unknown>
+        error: string
+        metadata: Record<string, unknown>
+        time: { start: number; end: number }
+      }
 }
 
-type TimelineProperties = {
-  "message.updated": { sessionID: string; info: Message }
-  "message.removed": { sessionID: string; messageID: string }
-  "message.part.updated": { sessionID: string; part: Part; time: number }
-  "message.part.removed": { sessionID: string; messageID: string; partID: string }
-  "message.part.delta": { sessionID: string; messageID: string; partID: string; field: string; delta: string }
-  "session.status": { sessionID: string; status: SessionStatus }
-}
-type TimelinePayload = {
-  [Type in keyof TimelineProperties]: { id: string; type: Type; properties: TimelineProperties[Type] }
-}[keyof TimelineProperties]
-
-type DeepReadonly<Value> = Value extends readonly unknown[]
-  ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
-  : Value extends object
-    ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
-    : Value
-
-export type TimelineEvent = DeepReadonly<Omit<GlobalEvent, "payload"> & { payload: TimelinePayload }>
-export type EventPayload = TimelineEvent
-export type ToolStatus = ToolState["status"]
-export type TimelineMessage = { info: UserMessage; parts: Part[] } | { info: AssistantMessage; parts: Part[] }
-
-type UserPart = Extract<Part, { type: "text" | "file" | "agent" | "subtask" }>
-type AssistantPart = Exclude<Part, { type: "agent" | "subtask" }>
-type OwnedPart<Owner extends Message["role"]> = Owner extends "user" ? UserPart : AssistantPart
-export type PartSeed<Owner extends Message["role"]> =
-  OwnedPart<Owner> extends infer Candidate
-    ? Candidate extends Part
-      ? Omit<Candidate, "sessionID" | "messageID">
-      : never
-    : never
+export type TimelineMessage = SessionMessageUser | SessionMessageAssistant
+export type TimelineEvent = OpenCodeEvent | readonly OpenCodeEvent[]
+export type EventPayload = OpenCodeEvent
+export type ToolStatus = ToolSeed["state"]["status"]
+export type PartSeed<Owner extends "user" | "assistant"> = Owner extends "user"
+  ? TextSeed | FileSeed | AgentSeed
+  : TextSeed | ReasoningSeed | ToolSeed
 
 type ToolOptions<State extends ToolStatus> = State extends "pending"
   ? { output?: never; title?: never; metadata?: never; error?: never }
@@ -71,26 +108,19 @@ type ToolOptions<State extends ToolStatus> = State extends "pending"
       ? { error?: string; metadata?: Record<string, unknown>; output?: never; title?: never }
       : { output?: string; title?: string; metadata?: Record<string, unknown>; error?: never }
 
-const decodeOptions = { errors: "all", onExcessProperty: "error" } as const
-const decodeMessage = Schema.decodeUnknownSync(SessionV1.WithParts)
-const decodePart = Schema.decodeUnknownSync(SessionV1.Part)
-const decodeStatus = Schema.decodeUnknownSync(SessionStatusEvent.Info)
-const timelineEventSchema = Schema.Union([
-  eventSchema("message.updated", SessionV1.Event.MessageUpdated.data),
-  eventSchema("message.removed", SessionV1.Event.MessageRemoved.data),
-  eventSchema("message.part.updated", SessionV1.Event.PartUpdated.data),
-  eventSchema("message.part.removed", SessionV1.Event.PartRemoved.data),
-  eventSchema("message.part.delta", SessionV1.Event.PartDelta.data),
-  eventSchema("session.status", SessionStatusEvent.Status.data),
-])
-const decodeEvent = Schema.decodeUnknownSync(timelineEventSchema)
+type PartRef = { messageID: string; type: "text" | "reasoning" | "tool"; ordinal?: number }
+const partRefs = new Map<string, PartRef>()
+const nextOrdinals = new Map<string, { text: number; reasoning: number }>()
+const startedParts = new Set<string>()
+const toolStates = new Map<string, ToolStatus>()
 let eventSequence = 0
+let durableSequence = -1
 
 export async function setupTimeline(
   page: Page,
   input: {
     messages?: TimelineMessage[]
-    currentMessages?: SessionMessageInfo[]
+    sessionMessages?: SessionMessageInfo[]
     sessionStatus?: Record<string, SessionStatus>
     settings?: Record<string, boolean>
     sessions?: Session[]
@@ -103,40 +133,26 @@ export async function setupTimeline(
     seedHistory?: boolean
   } = {},
 ) {
+  eventSequence = 0
+  durableSequence = -1
   const sessions = input.sessions ?? [session()]
   const messages =
-    input.currentMessages ??
+    input.sessionMessages ??
     validateTimelineMessages([
       ...(input.seedHistory ? historyMessages(18) : []),
       ...(input.messages ?? [userMessage(), assistantMessage()]),
     ])
-  const active = messages.findLast((message) =>
-    "info" in message ? message.info.role === "assistant" : message.type === "assistant",
-  )
-  const initialStatus = decodeStatus(
-    active &&
-      ("info" in active
-        ? active.info.role === "assistant" && active.info.time.completed === undefined
-        : active.type === "assistant" && active.time.completed === undefined)
-      ? { type: "busy" }
-      : { type: "idle" },
-    decodeOptions,
-  )
-  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
-  const transport = await installSseTransport<EventPayload>(page, {
-    server,
-    retry: input.eventRetry ?? 20,
-  })
+  const active = messages.findLast((message) => message.type === "assistant")
+  const initialStatus: SessionStatus =
+    active?.type === "assistant" && active.time.completed === undefined ? { type: "busy" } : { type: "idle" }
+  const transport = await installSseTransport(page, { server, retry: input.eventRetry ?? 20 })
   await mockOpenCodeServer(page, {
-    protocol: "v2",
     directory,
     project: project(),
     provider: provider(),
     sessions,
     sessionStatus: input.sessionStatus ?? { [sessionID]: initialStatus },
-    pageMessages: () => ({
-      items: messages,
-    }),
+    pageMessages: () => ({ items: messages }),
   })
   await page.addInitScript((settings) => {
     localStorage.setItem(
@@ -151,9 +167,6 @@ export async function setupTimeline(
         },
       }),
     )
-    if (settings.newLayoutDesigns === false) {
-      localStorage.setItem("app-version.v1", JSON.stringify({ version: "1.17.20" }))
-    }
   }, input.settings ?? {})
   if (input.locale) {
     await page.addInitScript((locale) => {
@@ -172,7 +185,7 @@ export async function setupTimeline(
       mobile: false,
     })
   }
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionReady(page, { server, sessionID, title })
   await transport.waitForConnection()
   if (input.cpuRate && input.cpuRate > 1) {
@@ -182,15 +195,25 @@ export async function setupTimeline(
 
   return {
     transport,
-    async send(event: TimelineEvent, delay = 0) {
-      const valid = validateTimelineEvent(event)
-      await transport.send(valid, { marker: describeEvent(valid) })
+    async send(input: TimelineEvent, delay = 0) {
+      const events = timelineEvents(input)
+      if (events.length === 1) await transport.send(events[0]!, { marker: describeEvent(events[0]!) })
+      if (events.length > 1)
+        await transport.burst(
+          events,
+          events.map((item) => ({ marker: describeEvent(item) })),
+        )
       if (delay) await page.waitForTimeout(delay)
     },
     async sendAll(sequence: { event: TimelineEvent; delay: number }[]) {
       for (const item of sequence) {
-        const valid = validateTimelineEvent(item.event)
-        await transport.send(valid, { marker: describeEvent(valid) })
+        const events = timelineEvents(item.event)
+        if (events.length === 1) await transport.send(events[0]!, { marker: describeEvent(events[0]!) })
+        if (events.length > 1)
+          await transport.burst(
+            events,
+            events.map((event) => ({ marker: describeEvent(event) })),
+          )
         await page.waitForTimeout(item.delay)
       }
     },
@@ -210,72 +233,63 @@ export async function setupTimeline(
       )
     },
     async waitForPart(partID: string) {
-      const part = page.locator(`[data-timeline-part-id="${partID}"]`)
+      const part = page.locator(`[data-timeline-part-id="${renderedPartID(partID)}"]`)
       await expect(part).toHaveCount(1)
       await expect(part).toBeVisible()
     },
   }
 }
 
-function describeEvent(event: EventPayload) {
-  if (event.payload.type === "message.part.updated") {
-    const part = event.payload.properties.part
-    return [
-      event.payload.type,
-      part.id,
-      part.type === "tool" ? part.tool : part.type,
-      part.type === "tool" ? part.state.status : undefined,
-    ]
-      .filter(Boolean)
-      .join(":")
-  }
-  if (event.payload.type === "session.status") {
-    const status = event.payload.properties.status
-    return [event.payload.type, status.type, status.type === "retry" ? status.attempt : undefined]
-      .filter((value) => value !== undefined)
-      .join(":")
-  }
-  return event.payload.type
+function timelineEvents(input: TimelineEvent) {
+  return (Array.isArray(input) ? input : [input]).map(validateTimelineEvent)
 }
 
-export function event<const Type extends TimelinePayload["type"]>(
-  type: Type,
-  properties: Extract<TimelinePayload, { type: Type }>["properties"],
-): TimelineEvent
-export function event(type: TimelinePayload["type"], properties: TimelinePayload["properties"]): TimelineEvent {
-  return validateTimelineEvent({
-    directory,
-    payload: { id: `evt_timeline_${String(++eventSequence).padStart(4, "0")}`, type, properties },
-  })
+function describeEvent(event: OpenCodeEvent) {
+  if (event.type.startsWith("session.tool.")) {
+    const data = event.data as { id?: string }
+    return [event.type, data.id].filter(Boolean).join(":")
+  }
+  return event.type
 }
 
-export function validateTimelineEvent(input: unknown): TimelineEvent {
-  return decodeEvent(input, decodeOptions) as TimelineEvent
+export function event(
+  type: "session.status",
+  data: Extract<OpenCodeEvent, { type: "session.status" }>["data"],
+): OpenCodeEvent {
+  return makeEvent(type, data)
+}
+
+export function validateTimelineEvent(input: unknown): OpenCodeEvent {
+  if (!input || typeof input !== "object") throw new Error("Timeline event must be an object")
+  if (!("type" in input) || typeof input.type !== "string") throw new Error("Timeline event requires a type")
+  const definition = EventManifest.ServerDefinitions.find((definition) => definition.type === input.type)
+  if (!definition) throw new Error(`Unknown timeline event: ${input.type}`)
+  return Schema.decodeUnknownSync(definition)(input) as OpenCodeEvent
 }
 
 export function validateTimelineMessages(input: readonly TimelineMessage[]): TimelineMessage[] {
-  input.forEach((message) => decodeMessage(message, decodeOptions))
-  const messages = [...input]
+  const messages = input.map((message): TimelineMessage => {
+    const decoded = Schema.decodeUnknownSync(SessionMessage.Info)(message)
+    if (decoded.type !== "user" && decoded.type !== "assistant")
+      throw new Error(`Unsupported timeline message type: ${decoded.type}`)
+    return message
+  })
   const messageIDs = new Set<string>()
-  const partIDs = new Set<string>()
-  const users = new Set(messages.filter((message) => message.info.role === "user").map((message) => message.info.id))
-
+  let parentID: string | undefined
   messages.forEach((message) => {
-    if (messageIDs.has(message.info.id))
-      throw new Error(`Timeline fixture has duplicate message ID: ${message.info.id}`)
-    messageIDs.add(message.info.id)
-    if (message.info.role === "assistant" && !users.has(message.info.parentID))
-      throw new Error(`Timeline assistant ${message.info.id} must reference a parent user in the fixture`)
-    message.parts.forEach((part) => {
-      if (part.sessionID !== message.info.sessionID || part.messageID !== message.info.id)
-        throw new Error(`Timeline part ${part.id} ownership does not match message ${message.info.id}`)
-      if (message.info.role === "user" && !["text", "file", "agent", "subtask"].includes(part.type))
-        throw new Error(`Timeline user message ${message.info.id} cannot own ${part.type} part ${part.id}`)
-      if (message.info.role === "assistant" && ["agent", "subtask"].includes(part.type))
-        throw new Error(`Timeline assistant message ${message.info.id} cannot own ${part.type} part ${part.id}`)
-      if (partIDs.has(part.id)) throw new Error(`Timeline fixture has duplicate part ID: ${part.id}`)
-      partIDs.add(part.id)
-    })
+    if (messageIDs.has(message.id)) throw new Error(`Timeline fixture has duplicate message ID: ${message.id}`)
+    messageIDs.add(message.id)
+    if (message.type === "user") parentID = message.id
+    if (message.type === "assistant") {
+      const expected = typeof message.metadata?.parentID === "string" ? message.metadata.parentID : parentID
+      if (!expected || expected !== parentID)
+        throw new Error(`Timeline assistant ${message.id} must reference a parent user in the fixture`)
+      message.content.forEach((part) => {
+        if (part.type !== "tool") return
+        if (partRefs.has(part.id) && partRefs.get(part.id)?.messageID !== message.id)
+          throw new Error(`Timeline fixture has duplicate part ID: ${part.id}`)
+      })
+    }
   })
   return messages
 }
@@ -337,55 +351,146 @@ export function historyMessages(count: number): TimelineMessage[] {
   }).flat()
 }
 
-export function partUpdated(part: Part | PartSeed<"assistant">) {
-  const owned = "messageID" in part ? part : { ...part, sessionID, messageID: assistantID }
-  decodePart(owned, decodeOptions)
-  return event("message.part.updated", {
-    sessionID,
-    part: owned,
-    time: 1700000002000,
-  })
+export function partUpdated(part: PartSeed<"assistant">): readonly OpenCodeEvent[] {
+  const messageID = part.messageID ?? assistantID
+  const started = startedParts.has(part.id)
+  const ref = partRef(part.id, messageID, part.type)
+  if (part.type === "text") {
+    startedParts.add(part.id)
+    return [
+      ...(started
+        ? []
+        : [makeEvent("session.text.started", { sessionID, assistantMessageID: messageID, ordinal: ref.ordinal! })]),
+      makeEvent("session.text.ended", {
+        sessionID,
+        assistantMessageID: messageID,
+        ordinal: ref.ordinal!,
+        text: part.text,
+      }),
+    ]
+  }
+  if (part.type === "reasoning") {
+    startedParts.add(part.id)
+    return [
+      ...(started
+        ? []
+        : [
+            makeEvent("session.reasoning.started", {
+              sessionID,
+              assistantMessageID: messageID,
+              ordinal: ref.ordinal!,
+              state: jsonRecord(part.metadata),
+            }),
+          ]),
+      makeEvent("session.reasoning.ended", {
+        sessionID,
+        assistantMessageID: messageID,
+        ordinal: ref.ordinal!,
+        text: part.text,
+        state: jsonRecord(part.metadata),
+      }),
+    ]
+  }
+  return toolEvents(part, messageID)
+}
+
+export function renderedPartID(partID: string) {
+  const ref = partRefs.get(partID)
+  if (!ref || ref.type === "tool") return partID
+  return `${ref.messageID}:${ref.type}:${ref.ordinal}`
 }
 
 export function partDelta(partID: string, delta: string, messageID = assistantID) {
-  return event("message.part.delta", { sessionID, messageID, partID, field: "text", delta })
+  const ref = partRefs.get(partID)
+  if (!ref || ref.type !== "text" || ref.ordinal === undefined) throw new Error(`Unknown text part: ${partID}`)
+  return makeEvent("session.text.delta", {
+    sessionID,
+    assistantMessageID: messageID,
+    ordinal: ref.ordinal,
+    delta,
+  })
 }
 
-export function messageUpdated(info: Message) {
-  return event("message.updated", { sessionID, info })
+export function messageUpdated(info: SessionMessageAssistant) {
+  if (info.error)
+    return makeEvent("session.step.failed", {
+      sessionID,
+      assistantMessageID: info.id,
+      error: info.error,
+      cost: info.cost,
+      tokens: info.tokens,
+    })
+  return makeEvent("session.step.ended", {
+    sessionID,
+    assistantMessageID: info.id,
+    finish: info.finish ?? "stop",
+    cost: info.cost ?? 0,
+    tokens: info.tokens ?? tokens,
+  })
 }
 
 export function status(type: SessionStatus["type"], attempt = 1) {
-  return event("session.status", {
+  if (type === "busy") return makeEvent("session.execution.started", { sessionID })
+  if (type === "idle") return makeEvent("session.execution.succeeded", { sessionID })
+  return makeEvent("session.retry.scheduled", {
     sessionID,
-    status: type === "retry" ? { type, attempt, message: "Rate limited", next: 1700000010000 } : { type },
+    assistantMessageID: assistantID,
+    attempt,
+    at: 1700000010000,
+    error: { type: "provider.error", message: "Rate limited" },
+  })
+}
+
+export function stepStarted(message: SessionMessageAssistant) {
+  return makeEvent("session.step.started", {
+    sessionID,
+    assistantMessageID: message.id,
+    agent: message.agent,
+    model: message.model,
   })
 }
 
 export function userMessage(
   parts?: PartSeed<"user">[],
-  input: { id?: string; summary?: UserMessage["summary"]; created?: number } = {},
-): Extract<TimelineMessage, { info: { role: "user" } }> {
+  input: { id?: string; summary?: unknown; created?: number } = {},
+): SessionMessageUser {
   const id = input.id ?? userID
   const seeds = parts ?? [userText("Build the timeline stability matrix.", { id: `prt_${id}_text` })]
-  const message = {
-    info: {
-      id,
-      sessionID,
-      role: "user",
-      time: { created: input.created ?? 1700000000000 },
-      summary: input.summary ?? { diffs: [] },
-      agent: "build",
-      model,
-    },
-    parts: seeds.map((part) => ({
-      ...part,
-      sessionID,
-      messageID: id,
-    })),
-  } satisfies Extract<TimelineMessage, { info: { role: "user" } }>
-  decodeMessage(message, decodeOptions)
-  return message
+  return {
+    id,
+    type: "user",
+    time: { created: input.created ?? 1700000000000 },
+    text: seeds.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
+    files: seeds.flatMap((part) => {
+      if (part.type !== "file") return []
+      const mention = part.source?.text
+        ? { text: part.source.text.value, start: part.source.text.start, end: part.source.text.end }
+        : undefined
+      return [
+        {
+          data: part.url.match(/^data:[^,]*;base64,(.*)$/)?.[1] ?? "",
+          mime: part.mime,
+          source: part.url.startsWith("data:")
+            ? ({ type: "inline" } as const)
+            : ({ type: "uri", uri: part.source?.path ?? part.url } as const),
+          ...(part.filename ? { name: part.filename } : {}),
+          ...(mention ? { mention } : {}),
+        },
+      ]
+    }),
+    agents: seeds.flatMap((part) => {
+      if (part.type !== "agent") return []
+      return [
+        {
+          name: part.name,
+          ...(part.source
+            ? { mention: { text: part.source.value, start: part.source.start, end: part.source.end } }
+            : {}),
+        },
+      ]
+    }),
+    ...(input.summary === undefined ? {} : { metadata: { summary: input.summary as JsonValue } }),
+  }
 }
 
 export function assistantMessage(
@@ -394,49 +499,43 @@ export function assistantMessage(
     id?: string
     parentID?: string
     completed?: boolean
-    error?: AssistantMessage["error"]
+    error?: SessionStructuredError
     created?: number
   } = {},
-): Extract<TimelineMessage, { info: { role: "assistant" } }> {
+): SessionMessageAssistant {
+  if (input.error && (typeof input.error.type !== "string" || typeof input.error.message !== "string"))
+    throw new Error("Invalid assistant error")
   const id = input.id ?? assistantID
-  const message = {
-    info: {
-      id,
-      sessionID,
-      role: "assistant",
-      time: {
-        created: input.created ?? 1700000001000,
-        ...(input.completed === false ? {} : { completed: (input.created ?? 1700000001000) + 1_000 }),
-      },
-      parentID: input.parentID ?? userID,
-      modelID: model.modelID,
-      providerID: model.providerID,
-      mode: "build",
-      agent: "build",
-      path: { cwd: directory, root: directory },
-      cost: 0.01,
-      tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
-      variant: "max",
-      ...(input.error ? { error: input.error } : {}),
-    },
-    parts: parts.map((part) => ({ ...part, sessionID, messageID: id })),
-  } satisfies Extract<TimelineMessage, { info: { role: "assistant" } }>
-  decodeMessage(message, decodeOptions)
-  return message
+  const created = input.created ?? 1700000001000
+  const ordinals = { text: 0, reasoning: 0 }
+  const content = parts.map((part) => messageContent(part, id, ordinals))
+  nextOrdinals.set(id, ordinals)
+  return {
+    id,
+    type: "assistant",
+    metadata: { parentID: input.parentID ?? userID },
+    time: { created, ...(input.completed === false ? {} : { completed: created + 1_000 }) },
+    model: { id: model.modelID, providerID: model.providerID, variant: model.variant },
+    agent: "build",
+    content,
+    cost: 0.01,
+    tokens,
+    ...(input.completed === false ? {} : { finish: "stop" as const }),
+    ...(input.error ? { error: input.error } : {}),
+  }
 }
 
-export function userText(
-  text: string,
-  input: Partial<Omit<Extract<PartSeed<"user">, { type: "text" }>, "type" | "text">> = {},
-): Extract<PartSeed<"user">, { type: "text" }> {
+export function userText(text: string, input: Partial<Omit<TextSeed, "type" | "text">> = {}): TextSeed {
   return { id: "prt_user_text", type: "text", text, ...input }
 }
 
-export function textPart(id: string, text: string): Extract<PartSeed<"assistant">, { type: "text" }> {
+export function textPart(id: string, text: string): TextSeed {
+  partRef(id, assistantID, "text")
   return { id, type: "text", text }
 }
 
-export function reasoningPart(id: string, text: string): Extract<PartSeed<"assistant">, { type: "reasoning" }> {
+export function reasoningPart(id: string, text: string): ReasoningSeed {
+  partRef(id, assistantID, "reasoning")
   return { id, type: "reasoning", text, time: { start: 1700000001000 } }
 }
 
@@ -446,35 +545,35 @@ export function toolPart(
   state: "pending",
   input: Record<string, unknown>,
   options?: ToolOptions<"pending">,
-): Omit<ToolPart, "sessionID" | "messageID">
+): ToolSeed
 export function toolPart(
   id: string,
   tool: string,
   state: "running",
   input: Record<string, unknown>,
   options?: ToolOptions<"running">,
-): Omit<ToolPart, "sessionID" | "messageID">
+): ToolSeed
 export function toolPart(
   id: string,
   tool: string,
   state: "completed",
   input: Record<string, unknown>,
   options?: ToolOptions<"completed">,
-): Omit<ToolPart, "sessionID" | "messageID">
+): ToolSeed
 export function toolPart(
   id: string,
   tool: string,
   state: "error",
   input: Record<string, unknown>,
   options?: ToolOptions<"error">,
-): Omit<ToolPart, "sessionID" | "messageID">
+): ToolSeed
 export function toolPart(
   id: string,
   tool: string,
   state: ToolStatus,
   input: Record<string, unknown>,
   options: ToolOptions<ToolStatus> = {},
-): Omit<ToolPart, "sessionID" | "messageID"> {
+): ToolSeed {
   const base = { id, type: "tool" as const, callID: id, tool }
   if (state === "pending") return { ...base, state: { status: state, input, raw: "" } }
   if (state === "running")
@@ -512,12 +611,7 @@ export function toolPart(
   }
 }
 
-export function shell(
-  id: string,
-  state: ToolStatus,
-  output = "",
-  command = `echo ${id}`,
-): Omit<ToolPart, "sessionID" | "messageID"> {
+export function shell(id: string, state: ToolStatus, output = "", command = `echo ${id}`): ToolSeed {
   if (state === "pending") return toolPart(id, "bash", state, { command })
   if (state === "running")
     return toolPart(id, "bash", state, { command }, { title: command, metadata: { command, output } })
@@ -526,7 +620,7 @@ export function shell(
   return toolPart(id, "bash", state, { command }, { title: command, output, metadata: { command, output } })
 }
 
-export function completedAssistantInfo(info: AssistantMessage): AssistantMessage {
+export function completedAssistantInfo(info: SessionMessageAssistant): SessionMessageAssistant {
   return { ...info, time: { ...info.time, completed: 1700000003000 } }
 }
 
@@ -554,16 +648,200 @@ export function session(input: Partial<Session> = {}): Session {
   }
 }
 
-function eventSchema<
-  const Type extends TimelinePayload["type"],
-  const Properties extends Schema.Codec<unknown, unknown>,
->(type: Type, properties: Properties) {
-  return Schema.Struct({
-    directory: Schema.String,
-    project: Schema.optional(Schema.String),
-    workspace: Schema.optional(Schema.String),
-    payload: Schema.Struct({ id: Event.ID, type: Schema.Literal(type), properties }),
-  })
+function messageContent(
+  part: PartSeed<"assistant">,
+  messageID: string,
+  ordinals: { text: number; reasoning: number },
+): SessionMessageAssistant["content"][number] {
+  if (part.type === "tool") {
+    partRefs.set(part.id, { messageID, type: part.type })
+    toolStates.set(part.callID, part.state.status)
+  } else {
+    partRefs.set(part.id, { messageID, type: part.type, ordinal: ordinals[part.type]++ })
+    startedParts.add(part.id)
+  }
+  if (part.type === "text") return { type: "text", text: part.text }
+  if (part.type === "reasoning")
+    return {
+      type: "reasoning",
+      text: part.text,
+      state: jsonRecord(part.metadata),
+      time: part.time
+        ? { created: part.time.start, ...(part.time.end === undefined ? {} : { completed: part.time.end }) }
+        : undefined,
+    }
+  const state = part.state
+  const time = "time" in state ? state.time : undefined
+  const completed = state.status === "completed" || state.status === "error" ? state.time.end : undefined
+  const base = {
+    type: "tool" as const,
+    id: part.callID,
+    name: part.tool,
+    time: {
+      created: time?.start ?? 1700000001000,
+      ...(time?.start === undefined ? {} : { ran: time.start }),
+      ...(completed === undefined ? {} : { completed }),
+    },
+    ...(part.executed === undefined ? {} : { executed: part.executed }),
+    ...(part.providerState ? { providerState: jsonRecord(part.providerState) } : {}),
+    ...(part.providerResultState ? { providerResultState: jsonRecord(part.providerResultState) } : {}),
+  }
+  if (state.status === "pending") return { ...base, state: { status: "streaming", input: state.raw } }
+  if (state.status === "running")
+    return {
+      ...base,
+      state: { status: "running", input: jsonRecord(state.input), metadata: jsonRecord(state.metadata) },
+    }
+  if (state.status === "error")
+    return {
+      ...base,
+      state: {
+        status: "error",
+        input: jsonRecord(state.input),
+        error: { type: "ToolError", message: state.error },
+        metadata: jsonRecord(state.metadata),
+      },
+    }
+  return {
+    ...base,
+    state: {
+      status: "completed",
+      input: jsonRecord(state.input),
+      content: [{ type: "text", text: state.output }],
+      metadata: jsonRecord(state.metadata),
+    },
+  }
+}
+
+function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[] {
+  const previous = toolStates.get(part.callID)
+  if (previous === "completed" || previous === "error") return []
+
+  const events: OpenCodeEvent[] = []
+  if (!previous) {
+    events.push(
+      makeEvent("session.tool.input.started", {
+        sessionID,
+        assistantMessageID: messageID,
+        id: part.callID,
+        name: part.tool,
+      }),
+    )
+  }
+  if (part.state.status === "pending") {
+    toolStates.set(part.callID, part.state.status)
+    return events
+  }
+  if (!previous || previous === "pending") {
+    events.push(
+      makeEvent("session.tool.input.ended", {
+        sessionID,
+        assistantMessageID: messageID,
+        id: part.callID,
+        text: JSON.stringify(part.state.input),
+      }),
+      makeEvent("session.tool.called", {
+        sessionID,
+        assistantMessageID: messageID,
+        id: part.callID,
+        input: part.state.input,
+        executed: part.executed ?? true,
+        state: jsonRecord(part.providerState),
+      }),
+    )
+  }
+  if (part.state.status === "running") {
+    if (previous === "running" || Object.keys(part.state.metadata).length)
+      events.push(
+        makeEvent("session.tool.progress", {
+          sessionID,
+          assistantMessageID: messageID,
+          id: part.callID,
+          metadata: jsonRecord(part.state.metadata),
+        }),
+      )
+    toolStates.set(part.callID, part.state.status)
+    return events
+  }
+  if (part.state.status === "error") {
+    events.push(
+      makeEvent("session.tool.failed", {
+        sessionID,
+        assistantMessageID: messageID,
+        id: part.callID,
+        error: { type: "ToolError", message: part.state.error },
+        metadata: jsonRecord(part.state.metadata),
+        executed: part.executed ?? true,
+        resultState: jsonRecord(part.providerResultState),
+      }),
+    )
+    toolStates.set(part.callID, part.state.status)
+    return events
+  }
+  events.push(
+    makeEvent("session.tool.success", {
+      sessionID,
+      assistantMessageID: messageID,
+      id: part.callID,
+      content: [{ type: "text", text: part.state.output }],
+      metadata: jsonRecord(part.state.metadata),
+      executed: part.executed ?? true,
+      resultState: jsonRecord(part.providerResultState),
+    }),
+  )
+  toolStates.set(part.callID, part.state.status)
+  return events
+}
+
+function partRef(id: string, messageID: string, type: PartRef["type"]): PartRef {
+  const current = partRefs.get(id)
+  if (current) return current
+  if (type === "tool") {
+    const ref = { messageID, type } satisfies PartRef
+    partRefs.set(id, ref)
+    return ref
+  }
+  const next = nextOrdinals.get(messageID) ?? { text: 0, reasoning: 0 }
+  const ref = { messageID, type, ordinal: next[type]++ } satisfies PartRef
+  nextOrdinals.set(messageID, next)
+  partRefs.set(id, ref)
+  return ref
+}
+
+function makeEvent<Type extends OpenCodeEvent["type"]>(
+  type: Type,
+  data: Extract<OpenCodeEvent, { type: Type }>["data"],
+): OpenCodeEvent {
+  const id = `evt_timeline_${String(++eventSequence).padStart(4, "0")}`
+  const base = { id, created: 1700000002000 + eventSequence, type, data, location: { directory } }
+  const definition = EventManifest.ServerDefinitions.find((definition) => definition.type === type)
+  if (!definition) throw new Error(`Unknown timeline event: ${type}`)
+  const input =
+    definition.durability === "durable"
+      ? {
+          ...base,
+          durable: { aggregateID: sessionID, seq: ++durableSequence, version: definition.durable.version },
+        }
+      : base
+  return Schema.decodeUnknownSync(definition)(input) as unknown as OpenCodeEvent
+}
+
+function jsonRecord(value: Record<string, unknown> | undefined): Record<string, JsonValue> {
+  if (!value) return {}
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, item]) => {
+      const next = jsonValue(item)
+      return next === undefined ? [] : [[key, next]]
+    }),
+  )
+}
+
+function jsonValue(value: unknown): JsonValue | undefined {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value
+  if (typeof value === "number") return Number.isFinite(value) ? value : null
+  if (Array.isArray(value)) return value.map((item) => jsonValue(item) ?? null)
+  if (!value || typeof value !== "object") return
+  return jsonRecord(value as Record<string, unknown>)
 }
 
 function provider() {

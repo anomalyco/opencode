@@ -1,10 +1,10 @@
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon } from "@opencode-ai/ui/v2/icon"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Keybind } from "@opencode-ai/ui/keybind"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import type { ReferenceInfo } from "@opencode-ai/client/promise"
 import { createEffect, createMemo, on, Show } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
@@ -22,8 +22,8 @@ import { useLayout } from "@/context/layout"
 import { usePermission } from "@/context/permission"
 import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
-import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
+import { useWorkspaceLocation } from "@/context/location"
+import { useData } from "@/context/server"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { showToast } from "@/utils/toast"
 import { PromptInputV2, type PromptInputV2Suggestion } from "@opencode-ai/session-ui/v2/prompt-input"
@@ -40,7 +40,7 @@ export type PromptInputV2ComposerProps = {
   accentSubmit?: boolean
 }
 
-export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "submission">
+export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
 }
@@ -81,8 +81,8 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
 }
 
 export function usePromptInputV2Controller(props: PromptInputV2ControllerProps): PromptInputV2ComposerController {
-  const sdk = useSDK()
-  const sync = useSync()
+  const sdk = useWorkspaceLocation()
+  const data = useData()
   const files = useFile()
   const layout = useLayout()
   const comments = useComments()
@@ -113,8 +113,8 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       return [...result, path]
     }, [])
   })
-  const info = createMemo(() => (props.controls.session.id ? sync().session.get(props.controls.session.id) : undefined))
-  const working = createMemo(() => sync().data.session_working(props.controls.session.id ?? ""))
+  const info = createMemo(() => (props.controls.session.id ? data.session.get(props.controls.session.id) : undefined))
+  const working = createMemo(() => data.session.status(props.controls.session.id ?? "") === "running")
   const attachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -197,37 +197,39 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     if (!id) return permission.isAutoAcceptingDirectory(sdk().directory)
     return permission.isAutoAccepting(id, sdk().directory)
   })
-  const submission = createPromptSubmit({
-    prompt,
-    info,
-    imageAttachments: attachments,
-    commentCount,
-    autoAccept: accepting,
-    mode,
-    working,
-    editor: () => editor,
-    queueScroll: () => requestAnimationFrame(() => editor?.scrollIntoView({ block: "nearest" })),
-    promptLength,
-    addToHistory: (value, mode) => controller.addHistory(value, mode),
-    resetHistoryNavigation: () => controller.resetHistory(),
-    setMode: (next) => controller.dispatch({ type: next === "shell" ? "mode.shell" : "mode.normal" }),
-    setPopover: (popover) => {
-      if (!popover) controller.dispatch({ type: "popover.close" })
-    },
-    newSessionWorktree: () => props.newSessionWorktree,
-    onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
-    shouldQueue: props.shouldQueue,
-    onQueue: props.onQueue,
-    onAbort: props.onAbort,
-    onSubmit: props.onSubmit,
-    model: props.controls.model.selection,
-  })
+  const submission =
+    props.submission ??
+    createPromptSubmit({
+      prompt,
+      info,
+      imageAttachments: attachments,
+      commentCount,
+      autoAccept: accepting,
+      mode,
+      working,
+      editor: () => editor,
+      queueScroll: () => requestAnimationFrame(() => editor?.scrollIntoView({ block: "nearest" })),
+      promptLength,
+      addToHistory: (value, mode) => controller.addHistory(value, mode),
+      resetHistoryNavigation: () => controller.resetHistory(),
+      setMode: (next) => controller.dispatch({ type: next === "shell" ? "mode.shell" : "mode.normal" }),
+      setPopover: (popover) => {
+        if (!popover) controller.dispatch({ type: "popover.close" })
+      },
+      newSessionWorktree: () => props.newSessionWorktree,
+      onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
+      shouldQueue: props.shouldQueue,
+      onQueue: props.onQueue,
+      onAbort: props.onAbort,
+      onSubmit: props.onSubmit,
+      model: props.controls.model.selection,
+    })
 
   const referenceDescription = (reference: ReferenceInfo) =>
     reference.source.type === "git" ? reference.source.repository : reference.source.path
   const references = createMemo(() =>
-    sync()
-      .data.reference.filter((reference) => !reference.hidden)
+    (data.location.reference.list({ directory: sdk().directory }) ?? [])
+      .filter((reference) => !reference.hidden)
       .map((reference) => ({
         id: `reference:${reference.name}`,
         kind: "reference" as const,
@@ -246,7 +248,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       })),
   )
   const resources = createMemo(() =>
-    Object.values(sync().data.mcp_resource).map((resource) => ({
+    (data.location.mcp.resource.list({ directory: sdk().directory }) ?? []).map((resource) => ({
       id: `resource:${resource.server}:${resource.uri}`,
       kind: "resource" as const,
       label: `@${resource.name}`,
@@ -292,7 +294,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     })),
   ])
   const slashCommands = createMemo(() => [
-    ...sync().data.command.map((item) => ({
+    ...(data.location.command.list({ directory: sdk().directory }) ?? []).map((item) => ({
       id: `custom.${item.name}`,
       trigger: item.name,
       title: item.name,
@@ -352,7 +354,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       dialog.show(() => <ImagePreview src={attachment.blob.url} alt={attachment.filename} />),
     openContext(key) {
       const item = controller.contextItem(key)
-      if (item) openComment(item, props, sync, layout, files, comments)
+      if (item) openComment(item, props, layout, files, comments)
     },
     onEditor(element) {
       editor = element as HTMLDivElement
@@ -501,20 +503,20 @@ function PromptInputV2ModelControl(props: {
   )
   return (
     <Show when={!props.loading}>
-      <TooltipV2
+      <Tooltip
         placement="top"
         gutter={4}
         value={
           <>
             {props.title}
-            <KeybindV2 keys={props.keybind} variant="neutral" />
+            <Keybind keys={props.keybind} variant="neutral" />
           </>
         }
       >
         <Show
           when={props.paid}
           fallback={
-            <ButtonV2
+            <Button
               data-action="prompt-model"
               data-control-type="dialog"
               variant="ghost-muted"
@@ -525,13 +527,13 @@ function PromptInputV2ModelControl(props: {
               onClick={props.onUnpaidClick}
             >
               {content()}
-            </ButtonV2>
+            </Button>
           }
         >
           <ModelSelectorPopoverV2
             model={props.model}
             trigger={(triggerProps) => (
-              <ButtonV2
+              <Button
                 {...triggerProps}
                 variant="ghost-muted"
                 size="normal"
@@ -542,12 +544,12 @@ function PromptInputV2ModelControl(props: {
                 data-control-type="popover"
               >
                 {content()}
-              </ButtonV2>
+              </Button>
             )}
             onClose={props.onClose}
           />
         </Show>
-      </TooltipV2>
+      </Tooltip>
     </Show>
   )
 }
@@ -555,7 +557,6 @@ function PromptInputV2ModelControl(props: {
 function openComment(
   item: { path: string; commentID?: string; commentOrigin?: "review" | "file" },
   props: PromptInputV2ControllerProps,
-  sync: ReturnType<typeof useSync>,
   layout: ReturnType<typeof useLayout>,
   files: ReturnType<typeof useFile>,
   comments: ReturnType<typeof useComments>,
@@ -573,9 +574,7 @@ function openComment(
       })
     })
   }
-  const diffs = props.controls.session.id ? sync().data.session_diff[props.controls.session.id] : undefined
-  const review =
-    item.commentOrigin === "review" || (item.commentOrigin !== "file" && diffs?.some((diff) => diff.file === item.path))
+  const review = item.commentOrigin === "review"
   if (!props.controls.session.reviewPanel.opened()) props.controls.session.reviewPanel.open()
   if (review) {
     layout.fileTree.setTab("changes")

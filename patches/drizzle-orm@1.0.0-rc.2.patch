@@ -1,0 +1,42 @@
+diff --git a/cache/core/cache-effect.cjs b/cache/core/cache-effect.cjs
+--- a/cache/core/cache-effect.cjs
++++ b/cache/core/cache-effect.cjs
+@@ -103,1 +103,1 @@
+-var EffectCacheError = class extends effect_Schema.TaggedErrorClass()("EffectCacheError", { cause: effect_Schema.Unknown }) {
++var EffectCacheError = class extends effect_Schema.TaggedError()("EffectCacheError", { cause: effect_Schema.Unknown }) {
+diff --git a/cache/core/cache-effect.js b/cache/core/cache-effect.js
+--- a/cache/core/cache-effect.js
++++ b/cache/core/cache-effect.js
+@@ -97,1 +97,1 @@
+-var EffectCacheError = class extends Schema.TaggedErrorClass()("EffectCacheError", { cause: Schema.Unknown }) {
++var EffectCacheError = class extends Schema.TaggedError()("EffectCacheError", { cause: Schema.Unknown }) {
+diff --git a/effect-core/errors.cjs b/effect-core/errors.cjs
+--- a/effect-core/errors.cjs
++++ b/effect-core/errors.cjs
+@@ -8,1 +8,1 @@
+-var EffectDrizzleError = class extends effect_Schema.TaggedErrorClass()("EffectDrizzleError", {
++var EffectDrizzleError = class extends effect_Schema.TaggedError()("EffectDrizzleError", {
+@@ -14,1 +14,1 @@
+-var EffectDrizzleQueryError = class EffectDrizzleQueryError extends effect_Schema.TaggedErrorClass()("EffectDrizzleQueryError", {
++var EffectDrizzleQueryError = class EffectDrizzleQueryError extends effect_Schema.TaggedError()("EffectDrizzleQueryError", {
+@@ -28,1 +28,1 @@
+-var EffectTransactionRollbackError = class extends effect_Schema.TaggedErrorClass()("EffectTransactionRollbackError", {}) {
++var EffectTransactionRollbackError = class extends effect_Schema.TaggedError()("EffectTransactionRollbackError", {}) {
+@@ -32,1 +32,1 @@
+-var MigratorInitError = class extends effect_Schema.TaggedErrorClass()("MigratorInitError", { exitCode: effect_Schema.Literals(["databaseMigrations", "localMigrations"]) }) {
++var MigratorInitError = class extends effect_Schema.TaggedError()("MigratorInitError", { exitCode: effect_Schema.Literals(["databaseMigrations", "localMigrations"]) }) {
+diff --git a/effect-core/errors.js b/effect-core/errors.js
+--- a/effect-core/errors.js
++++ b/effect-core/errors.js
+@@ -5,1 +5,1 @@
+-var EffectDrizzleError = class extends Schema.TaggedErrorClass()("EffectDrizzleError", {
++var EffectDrizzleError = class extends Schema.TaggedError()("EffectDrizzleError", {
+@@ -11,1 +11,1 @@
+-var EffectDrizzleQueryError = class EffectDrizzleQueryError extends Schema.TaggedErrorClass()("EffectDrizzleQueryError", {
++var EffectDrizzleQueryError = class EffectDrizzleQueryError extends Schema.TaggedError()("EffectDrizzleQueryError", {
+@@ -25,1 +25,1 @@
+-var EffectTransactionRollbackError = class extends Schema.TaggedErrorClass()("EffectTransactionRollbackError", {}) {
++var EffectTransactionRollbackError = class extends Schema.TaggedError()("EffectTransactionRollbackError", {}) {
+@@ -29,1 +29,1 @@
+-var MigratorInitError = class extends Schema.TaggedErrorClass()("MigratorInitError", { exitCode: Schema.Literals(["databaseMigrations", "localMigrations"]) }) {
++var MigratorInitError = class extends Schema.TaggedError()("MigratorInitError", { exitCode: Schema.Literals(["databaseMigrations", "localMigrations"]) }) {

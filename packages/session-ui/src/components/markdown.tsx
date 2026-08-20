@@ -1,6 +1,6 @@
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import morphdom from "morphdom"
-import { checksum } from "@opencode-ai/core/util/encode"
+import { checksum } from "@opencode-ai/util/encode"
 import {
   type ComponentProps,
   createEffect,
@@ -12,9 +12,9 @@ import {
   splitProps,
 } from "solid-js"
 import { isServer, render } from "solid-js/web"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { canReusePendingBlock, completedProjection } from "./markdown-projection"
 import type { Block, Projection } from "./markdown-stream"
 import {
@@ -31,6 +31,7 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { renderMermaidSvg } from "./markdown-mermaid"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -132,20 +133,20 @@ function createCopyButton(labels: CopyLabels) {
 function MarkdownCopyButton(props: { labels: CopyLabels; copied: boolean }) {
   const label = () => (props.copied ? props.labels.copied : props.labels.copy)
   return (
-    <TooltipV2 placement="top" value={label()}>
-      <IconButtonV2
+    <Tooltip placement="top" value={label()}>
+      <IconButton
         type="button"
         size="normal"
         variant="ghost-muted"
         aria-label={label()}
         icon={
           <>
-            <IconV2 name="outline-copy" data-copy-icon />
-            <IconV2 name="check" data-check-icon />
+            <Icon name="outline-copy" data-copy-icon />
+            <Icon name="check" data-check-icon />
           </>
         }
       />
-    </TooltipV2>
+    </Tooltip>
   )
 }
 
@@ -190,12 +191,6 @@ function codeLanguage(block: HTMLPreElement) {
 }
 
 function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
-  if (!document.body.hasAttribute("data-new-layout")) {
-    delete wrapper.dataset.language
-    delete wrapper.dataset.codeKind
-    return
-  }
-
   if (language) wrapper.dataset.language = language
   else delete wrapper.dataset.language
 
@@ -233,6 +228,47 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
     disposeCopyButton(button)
     button.remove()
   }
+}
+
+function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: boolean) {
+  if (!code.classList.contains("language-mermaid")) {
+    clearMermaid(wrapper)
+    return
+  }
+
+  const source = code.textContent ?? ""
+  if (!source) return
+  const diagram = wrapper.querySelector('[data-component="markdown-mermaid"]') ?? document.createElement("div")
+  diagram.setAttribute("data-component", "markdown-mermaid")
+  if (!diagram.parentElement) wrapper.appendChild(diagram)
+  wrapper.dataset.mermaidPending = "true"
+  const input = complete ? source : source.slice(0, source.lastIndexOf("\n") + 1)
+  if (!input) return
+  const attempt = `${complete ? "complete" : "streaming"}:${input.length}`
+  if (wrapper.dataset.mermaidAttempt === attempt) return
+  wrapper.dataset.mermaidAttempt = attempt
+  void renderMermaidSvg(input)
+    .then((svg) => {
+      if (!svg) {
+        if (complete && code.textContent === source) clearMermaid(wrapper)
+        return
+      }
+      if (!(code.textContent ?? "").startsWith(input)) return
+      diagram.innerHTML = svg
+      delete wrapper.dataset.mermaidPending
+      wrapper.dataset.mermaidReady = "true"
+    })
+    .catch(() => {
+      if (!complete || code.textContent !== source) return
+      clearMermaid(wrapper)
+    })
+}
+
+function clearMermaid(wrapper: HTMLElement) {
+  delete wrapper.dataset.mermaidAttempt
+  delete wrapper.dataset.mermaidPending
+  delete wrapper.dataset.mermaidReady
+  wrapper.querySelector('[data-component="markdown-mermaid"]')?.remove()
 }
 
 function markCodeLinks(root: HTMLDivElement) {
@@ -274,12 +310,14 @@ function markInlineCode(root: HTMLDivElement) {
   }
 }
 
-function decorate(root: HTMLDivElement, labels: CopyLabels) {
+function decorate(root: HTMLDivElement, labels: CopyLabels, complete: boolean) {
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
+    const wrapper = block.parentElement
+    const code = block.querySelector("code")
+    if (wrapper instanceof HTMLElement && code instanceof HTMLElement) decorateMermaid(wrapper, code, complete)
   }
-  if (!document.body.hasAttribute("data-new-layout")) return
   markInlineCode(root)
   markCodeLinks(root)
 }
@@ -605,7 +643,7 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   next.dataset.markdownHash = block.hash
   next.style.display = "contents"
   next.innerHTML = block.html
-  decorate(next, labels)
+  decorate(next, labels, block.mode === "full")
 
   if (!(current instanceof HTMLDivElement)) {
     container.appendChild(next)
@@ -675,6 +713,7 @@ function updateCodeBlock(
       unstable: block.unstable,
       raw: block.raw,
     })
+    if (wrapper instanceof HTMLElement) decorateMermaid(wrapper, code, block.complete)
     return
   }
 
@@ -689,6 +728,7 @@ function updateCodeBlock(
   pre.appendChild(codeElement)
   wrapper.appendChild(pre)
   wrapper.appendChild(createCopyButton(labels))
+  decorateMermaid(wrapper, codeElement, block.complete)
   next.appendChild(wrapper)
   renderedCodeTokens.set(next, {
     language: block.language,

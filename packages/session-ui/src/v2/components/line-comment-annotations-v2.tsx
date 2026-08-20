@@ -10,8 +10,7 @@ import {
 } from "../../components/line-comment-annotations"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { cloneSelectedLineRange, formatSelectedLineLabel } from "../../pierre/selection-bridge"
-import { LineCommentEditorV2, LineCommentV2 } from "@opencode-ai/ui/v2/line-comment-v2"
-import type { LineCommentEditorV2Mention } from "@opencode-ai/ui/v2/line-comment-v2"
+import { LineCommentEditor, LineComment, type LineCommentEditorMention } from "@opencode-ai/ui/line-comment"
 
 type LineCommentControllerV2Props<T extends LineCommentShape> = {
   comments: Accessor<T[]>
@@ -24,7 +23,7 @@ type LineCommentControllerV2Props<T extends LineCommentShape> = {
   onDelete?: (comment: T) => void
   renderCommentActions?: (comment: T, controls: { edit: VoidFunction; remove: VoidFunction }) => JSX.Element
   editSubmitLabel?: string
-  mention?: LineCommentEditorV2Mention
+  mention?: LineCommentEditorMention
 }
 
 type CommentProps = {
@@ -45,7 +44,7 @@ type DraftProps = {
   onSubmit: (value: string) => void
   cancelLabel?: string
   submitLabel?: string
-  mention?: LineCommentEditorV2Mention
+  mention?: LineCommentEditorMention
 }
 
 function lineCommentElementV2(view: Accessor<CommentProps>) {
@@ -60,12 +59,12 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
           onClick={view().onClick}
           onMouseEnter={view().onMouseEnter}
         >
-          <LineCommentV2 comment={view().comment} selection={view().selection} actions={view().actions} />
+          <LineComment comment={view().comment} selection={view().selection} actions={view().actions} />
         </div>
       }
     >
       <div data-prevent-autofocus="" data-comment-id={view().id} onMouseDown={(event) => event.stopPropagation()}>
-        <LineCommentEditorV2
+        <LineCommentEditor
           value={view().editor!.value}
           selection={view().editor!.selection}
           onInput={view().editor!.onInput}
@@ -83,7 +82,7 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
 function lineCommentDraftElementV2(view: Accessor<DraftProps>) {
   return (
     <div data-prevent-autofocus="" onMouseDown={(event) => event.stopPropagation()}>
-      <LineCommentEditorV2
+      <LineCommentEditor
         value={view().value}
         selection={view().selection}
         onInput={view().onInput}

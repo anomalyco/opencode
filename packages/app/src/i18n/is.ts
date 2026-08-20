@@ -513,20 +513,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "skrifborð {{version}}",
   "wsl.onboarding.versionMismatch": "Uppsett útgáfa passar ekki við útgáfu skrifborðsforritsins.",
   "wsl.onboarding.adding": "Bætir við...",
-  "help.tabs.toast.ariaLabel": "Við kynnum Tab. Skipuleggðu vinnu þína og virkar lotur með flipa",
-  "help.tabs.toast.dismiss": "Hunsa upplýsingar Tab",
-  "help.tabs.title": "Við kynnum Tab",
-  "help.tabs.description": "Skipuleggðu vinnu þína og virkar lotur með flipa",
-  "help.tabs.date": "14. júlí",
-  "help.tabs.introduction": "OpenCode Desktop er nú byggt í kringum flipa.",
-  "help.tabs.sessions":
-    "Byrjaðu nýja lotu í flipa eða opnaðu fyrirliggjandi lotu úr einhverju verkefnanna þinna. Opnaðu nýjan flipa þegar þú ert að byrja á einhverju nýju og lokaðu honum þegar þú ert búinn.",
-  "help.tabs.organize":
-    "Með því að hafa nokkra flipa opna er auðveldara að skipuleggja virku seturnar þínar. Endurnefndu flipa á eftirminnilegan hátt ef þú ætlar að geyma þá.",
-  "help.tabs.home": "Þú finnur allar lotur og verkefni á nýja Home skjánum. Með því að velja lotu opnast það í flipa.",
-  "help.tabs.persistence": "Þegar þú opnar forritið aftur eru fliparnir þínir enn opnir.",
-  "help.tabs.worktrees":
-    "Nýja hönnunin styður ekki Git Worktrees ennþá, hún kemur fljótlega. Þannig að ef þú vilt halda áfram að nota fyrra útlitið geturðu skipt á milli útlita í stillingum. Hafðu bara í huga að nýja skipulagið verður varanlegt eftir nokkrar vikur.",
   "server.row.noUsername": "ekkert notendanafn",
   "dialog.project.edit.title": "Breyta verkefni",
   "dialog.project.edit.name": "Nafn",
@@ -970,13 +956,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Stækkaðu breytingaverkfærahluta",
   "settings.general.row.editToolPartsExpanded.description":
     "Sýna breytinga-, skrifa- og plástraverkfæri hluta sjálfgefið stækkað á tímalínunni",
-  "settings.general.row.newInterface.title": "Nýtt skipulag",
-  "settings.general.row.newInterface.badge": "Nýtt",
-  "settings.general.row.newInterface.description":
-    "Notaðu nýju flipana og heimilisútlitið. Skiptu á milli útlita í takmarkaðan tíma.",
-  "settings.general.row.newInterfaceNotice.title": "Þú ert núna að nota nýtt skipulag",
-  "settings.general.row.newInterfaceNotice.description": "Fyrra skipulagið er ekki lengur tiltækt",
-  "settings.general.row.newInterfaceNotice.dismiss": "Segja frá",
   "settings.general.row.pinchZoom.title": "Klíptu til að þysja",
   "settings.general.row.pinchZoom.description": "Leyfðu að klípa og Ctrl-fletta bendingar til að þysja",
   "settings.general.row.wayland.title": "Notaðu innfæddan Wayland",

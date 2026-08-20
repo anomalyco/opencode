@@ -5,16 +5,14 @@ import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
 import { Button } from "@opencode-ai/ui/button"
+import { Badge } from "@opencode-ai/ui/badge"
+import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { Tag } from "@opencode-ai/ui/tag"
-import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Icon } from "@opencode-ai/ui/v2/icon"
-import { Tag as TagV2 } from "@opencode-ai/ui/v2/badge-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Menu } from "@opencode-ai/ui/menu"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { decode64 } from "@/utils/base64"
@@ -81,6 +79,7 @@ const ModelList: Component<{
       }}
       itemWrapper={(item, node) => (
         <Tooltip
+          appearance="standard"
           class="w-full"
           placement="right-start"
           gutter={12}
@@ -101,10 +100,10 @@ const ModelList: Component<{
         <div class="w-full flex items-center gap-x-2 text-13-regular">
           <span class="truncate">{i.name}</span>
           <Show when={isFree(i.provider.id, i.cost)}>
-            <Tag>{language.t("model.tag.free")}</Tag>
+            <Badge appearance="standard">{language.t("model.tag.free")}</Badge>
           </Show>
           <Show when={i.latest}>
-            <Tag>{language.t("model.tag.latest")}</Tag>
+            <Badge appearance="standard">{language.t("model.tag.latest")}</Badge>
           </Show>
         </div>
       )}
@@ -193,21 +192,19 @@ export function ModelSelectorPopover(props: {
             class="p-1"
             action={
               <div class="flex items-center gap-1">
-                <Tooltip placement="top" value={language.t("command.provider.connect")}>
+                <Tooltip appearance="standard" placement="top" value={language.t("command.provider.connect")}>
                   <IconButton
-                    icon="plus-small"
+                    icon={<Icon name="plus-small" />}
                     variant="ghost"
-                    iconSize="normal"
                     class="size-6"
                     aria-label={language.t("command.provider.connect")}
                     onClick={handleConnectProvider}
                   />
                 </Tooltip>
-                <Tooltip placement="top" value={language.t("dialog.model.manage")}>
+                <Tooltip appearance="standard" placement="top" value={language.t("dialog.model.manage")}>
                   <IconButton
-                    icon="sliders"
+                    icon={<Icon name="sliders" />}
                     variant="ghost"
-                    iconSize="normal"
                     class="size-6"
                     aria-label={language.t("dialog.model.manage")}
                     onClick={handleManage}
@@ -373,10 +370,10 @@ function ModelSelectorPopoverV2View(props: {
   })
 
   return (
-    <MenuV2 open={store.open} modal={false} placement="top-start" gutter={6} onOpenChange={setOpen}>
-      <MenuV2.Trigger as={props.trigger} />
-      <MenuV2.Portal>
-        <MenuV2.Content
+    <Menu open={store.open} modal={false} placement="top-start" gutter={6} onOpenChange={setOpen}>
+      <Menu.Trigger as={props.trigger} />
+      <Menu.Portal>
+        <Menu.Content
           ref={(element: HTMLDivElement) => (contentRef = element)}
           class="w-[284px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 !p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none"
           onPointerDownOutside={dismiss.preventTriggerRestore}
@@ -449,14 +446,14 @@ function ModelSelectorPopoverV2View(props: {
               >
                 <For each={groups()}>
                   {(group) => (
-                    <MenuV2.Group>
-                      <MenuV2.GroupLabel class="gap-2 px-3">
+                    <Menu.Group>
+                      <Menu.GroupLabel class="gap-2 px-3">
                         <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
-                      </MenuV2.GroupLabel>
-                      <MenuV2.RadioGroup value={props.current}>
+                      </Menu.GroupLabel>
+                      <Menu.RadioGroup value={props.current}>
                         <For each={group.items}>
                           {(item) => (
-                            <TooltipV2
+                            <Tooltip
                               class="w-full"
                               placement="right-start"
                               gutter={6}
@@ -470,7 +467,7 @@ function ModelSelectorPopoverV2View(props: {
                                 />
                               }
                             >
-                              <MenuV2.RadioItem
+                              <Menu.RadioItem
                                 value={modelKey(item)}
                                 data-option-key={modelKey(item)}
                                 data-selected-model={props.current === modelKey(item) ? true : undefined}
@@ -484,17 +481,17 @@ function ModelSelectorPopoverV2View(props: {
                               >
                                 <span class="min-w-0 truncate leading-5">{item.name}</span>
                                 <Show when={isFree(item.provider.id, item.cost)}>
-                                  <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
+                                  <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
                                 </Show>
                                 <Show when={item.latest}>
-                                  <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
+                                  <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
                                 </Show>
-                              </MenuV2.RadioItem>
-                            </TooltipV2>
+                              </Menu.RadioItem>
+                            </Tooltip>
                           )}
                         </For>
-                      </MenuV2.RadioGroup>
-                    </MenuV2.Group>
+                      </Menu.RadioGroup>
+                    </Menu.Group>
                   )}
                 </For>
               </Show>
@@ -502,7 +499,7 @@ function ModelSelectorPopoverV2View(props: {
           </ScrollView>
           <div class="h-px bg-v2-border-border-muted" />
           <div class="flex flex-col p-0.5">
-            <MenuV2.Item
+            <Menu.Item
               data-option-key={manageKey}
               classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === manageKey }}
               onMouseEnter={() => {
@@ -513,11 +510,11 @@ function ModelSelectorPopoverV2View(props: {
             >
               <Icon name="outline-sliders" size="small" />
               <span class="min-w-0 flex-1 truncate leading-5">{language.t("dialog.model.manage")}</span>
-            </MenuV2.Item>
+            </Menu.Item>
           </div>
-        </MenuV2.Content>
-      </MenuV2.Portal>
-    </MenuV2>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
   )
 }
 
@@ -540,18 +537,19 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
   }
 
   return (
-    <Dialog
-      title={language.t("dialog.model.select.title")}
-      action={
+    <Dialog>
+      <DialogHeader hideClose>
+        <DialogTitle>{language.t("dialog.model.select.title")}</DialogTitle>
         <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={provider}>
           {language.t("command.provider.connect")}
         </Button>
-      }
-    >
-      <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
-      <Button variant="ghost" class="ml-3 mt-5 mb-6 text-text-base self-start" onClick={manage}>
-        {language.t("dialog.model.manage")}
-      </Button>
+      </DialogHeader>
+      <DialogBody>
+        <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
+        <Button variant="ghost" class="ml-3 mt-5 mb-6 text-text-base self-start" onClick={manage}>
+          {language.t("dialog.model.manage")}
+        </Button>
+      </DialogBody>
     </Dialog>
   )
 }

@@ -29,7 +29,7 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
-export class CancelledError extends Schema.TaggedErrorClass<CancelledError>()("QuestionTool.CancelledError", {}) {
+export class CancelledError extends Schema.TaggedError<CancelledError>()("QuestionTool.CancelledError", {}) {
   override get message() {
     return "The user dismissed this question"
   }

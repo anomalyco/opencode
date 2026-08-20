@@ -1,8 +1,7 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Icon } from "@opencode-ai/ui/v2/icon"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { WordmarkV2 } from "@opencode-ai/ui/v2/wordmark-v2"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Wordmark } from "@opencode-ai/ui/wordmark"
 import { Show, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
@@ -16,8 +15,7 @@ import {
 } from "@/components/prompt-project-selector"
 import { StatusPopoverV2 } from "@/components/status-popover"
 import { useLanguage } from "@/context/language"
-import { useSDK } from "@/context/sdk"
-import { useServerSync } from "@/context/server-sync"
+import { useWorkspaceLocation } from "@/context/location"
 import { useProviders } from "@/hooks/use-providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { Persist, persisted } from "@/utils/persist"
@@ -48,7 +46,7 @@ export function NewSessionView(props: {
       >
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
+            <Wordmark class="h-auto w-full text-v2-background-bg-inverse" />
             <div class="mt-8 flex flex-col gap-8">
               <PromptInputV2Composer controller={props.input} accentSubmit={props.workspace.selection.workspace()} />
               <Show when={props.project.empty()}>
@@ -60,7 +58,11 @@ export function NewSessionView(props: {
                   <Show
                     when={props.workspace.bar.visible()}
                     fallback={
-                      <PromptGitStatus branch={props.workspace.bar.branch()} noGit={!props.workspace.project.git()} />
+                      <PromptGitStatus
+                        branch={props.workspace.bar.branch()}
+                        noGit={!props.workspace.project.git()}
+                        class="ms-1"
+                      />
                     }
                   >
                     <PromptWorkspaceSelector
@@ -93,7 +95,7 @@ export function NewSessionStatus(props: { mount: HTMLElement | null; visible: bo
       {(mount) => (
         <Portal mount={mount}>
           <Show when={props.visible}>
-            <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
+            <Tooltip appearance="standard" placement="bottom" value={language.t("status.popover.trigger")}>
               <StatusPopoverV2 />
             </Tooltip>
           </Show>
@@ -106,8 +108,7 @@ export function NewSessionStatus(props: { mount: HTMLElement | null; visible: bo
 function ProviderTip() {
   const language = useLanguage()
   const dialog = useDialog()
-  const sdk = useSDK()
-  const serverSync = useServerSync()
+  const sdk = useWorkspaceLocation()
   const providers = useProviders(() => sdk().directory)
   const [persistedState, setPersistedState, , persistedReady] = persisted(
     Persist.global("new-session.provider-tip"),
@@ -115,7 +116,7 @@ function ProviderTip() {
   )
   const visible = createMemo(
     () =>
-      serverSync.child(sdk().directory)[0].provider_ready &&
+      providers.ready() &&
       persistedReady() &&
       providers.paid().length === 0 &&
       Date.now() - persistedState.dismissedAt >= providerTipDismissalDuration,
@@ -151,7 +152,7 @@ function ProviderTip() {
               <Icon name="chevron-down" size="small" class="-rotate-90" />
             </span>
           </button>
-          <TooltipV2
+          <Tooltip
             class="hover-reveal absolute left-full top-0 flex h-6 w-7 items-center justify-end delay-0 duration-0 group-hover/provider-tip:delay-[250ms] group-hover/provider-tip:duration-150 group-hover/provider-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
             placement="top"
             openDelay={1000}
@@ -165,7 +166,7 @@ function ProviderTip() {
             >
               <Icon name="xmark-small" />
             </button>
-          </TooltipV2>
+          </Tooltip>
         </div>
       </div>
     </Show>

@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { expect, test } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
@@ -81,10 +81,6 @@ test("expands a folder whose path has a trailing Windows separator", async ({ pa
 
   await page.addInitScript(
     ({ directory, server, sessionID }) => {
-      localStorage.setItem(
-        "settings.v3",
-        JSON.stringify({ general: { newLayoutDesigns: true, shouldDisplayTabsToast: false } }),
-      )
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({

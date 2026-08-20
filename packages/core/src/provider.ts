@@ -25,7 +25,7 @@ type Json = Schema.Schema.Type<typeof Schema.Json>
 const JsonRecord = Schema.Record(Schema.String, Schema.Json)
 const decodeJsonRecord = Schema.decodeUnknownSync(JsonRecord)
 
-export class LoadError extends Schema.TaggedErrorClass<LoadError>()("Provider.LoadError", {
+export class LoadError extends Schema.TaggedError<LoadError>()("Provider.LoadError", {
   package: Schema.String,
   cause: Schema.Defect(),
 }) {}
@@ -48,6 +48,17 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode-ai/ai/providers/azure/chat", () => import("@opencode-ai/ai/providers/azure/chat")],
   ["@opencode-ai/ai/providers/azure/responses", () => import("@opencode-ai/ai/providers/azure/responses")],
   ["@opencode-ai/ai/providers/google", () => import("@opencode-ai/ai/providers/google")],
+  ["@opencode-ai/ai/providers/google-vertex", () => import("@opencode-ai/ai/providers/google-vertex")],
+  ["@opencode-ai/ai/providers/google-vertex/gemini", () => import("@opencode-ai/ai/providers/google-vertex/gemini")],
+  ["@opencode-ai/ai/providers/google-vertex/chat", () => import("@opencode-ai/ai/providers/google-vertex/chat")],
+  [
+    "@opencode-ai/ai/providers/google-vertex/responses",
+    () => import("@opencode-ai/ai/providers/google-vertex/responses"),
+  ],
+  [
+    "@opencode-ai/ai/providers/google-vertex/messages",
+    () => import("@opencode-ai/ai/providers/google-vertex/messages"),
+  ],
   ["@opencode-ai/ai/providers/openai", () => import("@opencode-ai/ai/providers/openai")],
   ["@opencode-ai/ai/providers/openai/chat", () => import("@opencode-ai/ai/providers/openai/chat")],
   ["@opencode-ai/ai/providers/openai/responses", () => import("@opencode-ai/ai/providers/openai/responses")],

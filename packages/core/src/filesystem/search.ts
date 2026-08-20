@@ -23,6 +23,32 @@ export type Options = typeof Options.Type
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem/Search") {}
 
 const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
+type Prepared = ReturnType<typeof fuzzysort.prepare>
+
+function emptyIndex() {
+  return { files: new Map<string, Prepared>(), directories: new Map<string, Prepared>() }
+}
+
+function search(index: ReturnType<typeof emptyIndex>, input: FileSystem.FindInput) {
+  const items =
+    input.type === "file"
+      ? Array.from(index.files.values())
+      : input.type === "directory"
+        ? Array.from(index.directories.values())
+        : [...index.files.values(), ...index.directories.values()]
+  const result = fuzzysort.go(input.query, items, { limit: input.limit ?? 50 })
+  // Targets are owned by the current location index. The only global fuzzysort
+  // state left is its query cache, which must not retain every query forever.
+  fuzzysort.cleanup()
+  return result.map((item) => {
+    const relative = item.target
+    const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
+    return FileSystem.Entry.make({
+      path: RelativePath.make(relative),
+      type,
+    })
+  })
+}
 
 export const ripgrepLayer = Layer.effect(
   Service,
@@ -32,12 +58,13 @@ export const ripgrepLayer = Layer.effect(
     const scope = yield* Scope.Scope
     const clock = yield* Clock.Clock
     const home = Protected.isHome(location.directory)
-    let index = { files: [] as string[], directories: new Set<string>() }
+    let index = emptyIndex()
     let initialized = false
     let settledAt = Number.NEGATIVE_INFINITY
     let refreshing = false
     const scan = Effect.gen(function* () {
-      const next = { files: [] as string[], directories: new Set<string>() }
+      const next = emptyIndex()
+      const previous = index
       if (!initialized) index = next
       yield* ripgrep.find({
         cwd: location.directory,
@@ -46,11 +73,13 @@ export const ripgrepLayer = Layer.effect(
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
         onEntry: (entry) =>
           Effect.sync(() => {
-            next.files.push(entry.path)
+            next.files.set(entry.path, previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path))
             const parts = entry.path.split("/")
-            parts
-              .slice(0, -1)
-              .forEach((_, offset) => next.directories.add(parts.slice(0, offset + 1).join("/") + path.sep))
+            parts.slice(0, -1).forEach((_, offset) => {
+              const directory = parts.slice(0, offset + 1).join("/") + path.sep
+              if (!next.directories.has(directory))
+                next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
+            })
           }),
       })
       index = next
@@ -74,20 +103,7 @@ export const ripgrepLayer = Layer.effect(
       find: (input) =>
         Effect.gen(function* () {
           yield* refresh
-          const items =
-            input.type === "file"
-              ? index.files
-              : input.type === "directory"
-                ? Array.from(index.directories)
-                : [...index.files, ...index.directories]
-          return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
-            const relative = item.target
-            const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
-            return FileSystem.Entry.make({
-              path: RelativePath.make(relative),
-              type,
-            })
-          })
+          return search(index, input)
         }),
     })
   }),

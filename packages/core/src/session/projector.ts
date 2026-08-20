@@ -162,8 +162,8 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       tokens_reasoning: 0,
       tokens_cache_read: 0,
       tokens_cache_write: 0,
-      time_created: DateTime.toEpochMillis(event.created),
-      time_updated: DateTime.toEpochMillis(event.created),
+      time_created: event.created,
+      time_updated: event.created,
     })
     .onConflictDoNothing()
     .returning({ sessionID: SessionTable.id })
@@ -411,8 +411,8 @@ const layer = Layer.effectDiscard(
             agent: event.data.agent,
             model: event.data.model,
             version: event.data.version,
-            time_created: DateTime.toEpochMillis(event.created),
-            time_updated: DateTime.toEpochMillis(event.created),
+            time_created: event.created,
+            time_updated: event.created,
           })
           .onConflictDoNothing()
           .returning({ sessionID: SessionTable.id })
@@ -431,7 +431,7 @@ const layer = Layer.effectDiscard(
             path: event.data.subpath,
             ...(event.data.projectID ? { project_id: event.data.projectID } : {}),
             workspace_id: event.data.location.workspaceID ? Workspace.ID.make(event.data.location.workspaceID) : null,
-            time_updated: DateTime.toEpochMillis(event.created),
+            time_updated: event.created,
           })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
@@ -487,7 +487,7 @@ const layer = Layer.effectDiscard(
         yield* run(db, event)
         yield* db
           .update(SessionTable)
-          .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.created) })
+          .set({ agent: event.data.agent, time_updated: event.created })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
@@ -498,7 +498,7 @@ const layer = Layer.effectDiscard(
         yield* run(db, event)
         yield* db
           .update(SessionTable)
-          .set({ model: event.data.model, time_updated: DateTime.toEpochMillis(event.created) })
+          .set({ model: event.data.model, time_updated: event.created })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
@@ -507,7 +507,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Renamed, (event) =>
       db
         .update(SessionTable)
-        .set({ title: event.data.title, time_updated: DateTime.toEpochMillis(event.created) })
+        .set({ title: event.data.title, time_updated: event.created })
         .where(eq(SessionTable.id, event.data.sessionID))
         .run()
         .pipe(Effect.orDie),
@@ -535,7 +535,7 @@ const layer = Layer.effectDiscard(
                 files: input.payload.files,
                 agents: input.payload.agents,
                 skills: input.payload.skills,
-                time: { created: event.created },
+                time: { created: DateTime.makeUnsafe(event.created) },
               }
             : {
                 id: input.id,
@@ -543,7 +543,7 @@ const layer = Layer.effectDiscard(
                 text: input.payload.text,
                 description: input.payload.description,
                 metadata: input.payload.metadata,
-                time: { created: event.created },
+                time: { created: DateTime.makeUnsafe(event.created) },
               },
         )
       }),
@@ -561,7 +561,7 @@ const layer = Layer.effectDiscard(
         })
         yield* db
           .update(SessionTable)
-          .set({ time_updated: DateTime.toEpochMillis(event.created) })
+          .set({ time_updated: event.created })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
@@ -640,7 +640,7 @@ const layer = Layer.effectDiscard(
           .update(SessionTable)
           .set({
             revert: { ...revert, files: revert.files ? [...revert.files] : undefined },
-            time_updated: DateTime.toEpochMillis(event.created),
+            time_updated: event.created,
           })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
@@ -650,7 +650,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.RevertEvent.Cleared, (event) =>
       db
         .update(SessionTable)
-        .set({ revert: null, time_updated: DateTime.toEpochMillis(event.created) })
+        .set({ revert: null, time_updated: event.created })
         .where(eq(SessionTable.id, event.data.sessionID))
         .run()
         .pipe(Effect.orDie, Effect.asVoid),
@@ -685,7 +685,7 @@ const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         yield* db
           .update(SessionTable)
-          .set({ revert: null, time_updated: DateTime.toEpochMillis(event.created) })
+          .set({ revert: null, time_updated: event.created })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)

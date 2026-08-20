@@ -86,7 +86,8 @@ function provide(node: Spec.Any, handlers: ReadonlyArray<LazyHandler>): Provided
     ? node.spec.pipe(
         Command.withHandler((input) =>
           Effect.gen(function* () {
-            yield* Effect.flatMap(Effect.promise(handler.load), (module) => module.default(input))
+            const module = yield* Effect.promise(handler.load)
+            return yield* module.default(input)
           }),
         ),
       )

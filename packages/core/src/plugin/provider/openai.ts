@@ -190,13 +190,6 @@ export const OpenAIPlugin = define({
     })
     yield* load()
     yield* ctx.catalog.transform((evt) => {
-      for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
-        if (Provider.packageName(item.provider.package) !== "@ai-sdk/openai") continue
-        evt.provider.update(item.provider.id, (provider) => {
-          provider.package = "@opencode-ai/ai/providers/openai"
-        })
-      }
       if (!chatgpt) return
       const item = evt.provider.get(Provider.ID.openai)
       if (!item) return
@@ -229,6 +222,18 @@ export const OpenAIPlugin = define({
         })
       }
     })
+    yield* ctx.session.hook(
+      "model.request",
+      (evt) =>
+        Effect.sync(() => {
+          if (!chatgpt) return
+          if (evt.baseURL && URL.canParse(evt.baseURL) && new URL(evt.baseURL).origin === "https://api.openai.com")
+            evt.baseURL = codexBaseURL
+          evt.headers.originator = "opencode"
+          evt.headers["session-id"] = evt.sessionID
+        }),
+      { providerID: Provider.ID.openai },
+    )
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
     yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),

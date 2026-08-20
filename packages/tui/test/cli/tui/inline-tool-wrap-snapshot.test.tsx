@@ -4,6 +4,7 @@ import { testRender, type JSX } from "@opentui/solid"
 import {
   InlineToolRow,
   executeCallSummary,
+  genericToolSummary,
   isBackgroundSubagent,
   parseApplyPatchFiles,
   parseDiagnostics,
@@ -197,6 +198,21 @@ describe("TUI inline tool wrapping", () => {
     expect(
       executeCallSummary({ tool: "session.prompt", status: "completed", input: { text: "first line\nsecond line" } }),
     ).toBe("↳ session.prompt [text=first line second line]")
+  })
+
+  test("summarizes generic tool arguments on one line", () => {
+    expect(
+      genericToolSummary("demo_search_catalog", {
+        query: "wireless keyboard",
+        limit: 8,
+        includeArchived: false,
+        filters: { category: "accessories" },
+      }),
+    ).toBe("demo_search_catalog [query=wireless keyboard, limit=8, includeArchived=false]")
+    expect(genericToolSummary("demo_get_weather", { city: "Tokyo", units: "celsius" })).toBe(
+      "demo_get_weather [city=Tokyo, units=celsius]",
+    )
+    expect(genericToolSummary("demo_refresh", {})).toBe("demo_refresh")
   })
 
   test("ignores diagnostics with malformed nested ranges", () => {

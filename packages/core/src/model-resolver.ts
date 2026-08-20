@@ -2,13 +2,7 @@ export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { LanguageModel } from "@opencode-ai/ai"
-// ast-grep-ignore: no-star-import
-import * as AnthropicMessages from "@opencode-ai/ai/protocols/anthropic-messages"
-// ast-grep-ignore: no-star-import
-import * as OpenAICompatibleChat from "@opencode-ai/ai/protocols/openai-compatible-chat"
-// ast-grep-ignore: no-star-import
-import * as OpenAIResponses from "@opencode-ai/ai/protocols/openai-responses"
-import { Auth, type AnyRoute } from "@opencode-ai/ai/route"
+import { Auth } from "@opencode-ai/ai/route"
 import { Context, Effect, Layer, Schema } from "effect"
 import { produce } from "immer"
 import { AISDK } from "./aisdk.js"
@@ -20,7 +14,7 @@ import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
 import { Npm } from "@opencode-ai/util/npm"
 import { Provider } from "./provider.js"
 
-export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
+export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
   {
     providerID: Provider.ID,
@@ -33,7 +27,7 @@ export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnav
   }
 }
 
-export class UnsupportedPackageError extends Schema.TaggedErrorClass<UnsupportedPackageError>()(
+export class UnsupportedPackageError extends Schema.TaggedError<UnsupportedPackageError>()(
   "SessionRunnerModel.UnsupportedPackageError",
   {
     providerID: Provider.ID,
@@ -46,7 +40,7 @@ export class UnsupportedPackageError extends Schema.TaggedErrorClass<Unsupported
   }
 }
 
-export class UnresolvedProviderVariablesError extends Schema.TaggedErrorClass<UnresolvedProviderVariablesError>()(
+export class UnresolvedProviderVariablesError extends Schema.TaggedError<UnresolvedProviderVariablesError>()(
   "SessionRunnerModel.UnresolvedProviderVariablesError",
   {
     providerID: Provider.ID,
@@ -82,47 +76,6 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelResolver") {}
-
-const apiKey = (model: Info, credential?: Credential.Value) => {
-  if (credential?.type === "key") return Auth.value(credential.key)
-  if (credential?.type === "oauth") return Auth.value(credential.access)
-  const value = model.settings?.apiKey
-  if (typeof value === "string") return Auth.value(value)
-  return undefined
-}
-
-const withDefaults = (model: Info, route: AnyRoute) =>
-  route.with({
-    provider: model.providerID,
-    endpoint: typeof model.settings?.baseURL === "string" ? { baseURL: model.settings.baseURL } : undefined,
-    headers: providerHeaders(model),
-    providerOptions: providerOptions(model),
-    http: model.body === undefined ? undefined : { body: model.body },
-    limits: { context: model.limit.context, input: model.limit.input, output: model.limit.output },
-  })
-
-const providerHeaders = (model: Info) => {
-  const packageName = Provider.packageName(model.package)
-  const generated = new Map<string, string>()
-  if (packageName === "@ai-sdk/openai" && typeof model.settings?.organization === "string")
-    generated.set("OpenAI-Organization", model.settings.organization)
-  if (packageName === "@ai-sdk/openai" && typeof model.settings?.project === "string")
-    generated.set("OpenAI-Project", model.settings.project)
-  if (packageName === "@ai-sdk/anthropic" && typeof model.settings?.authToken === "string")
-    generated.set("Authorization", `Bearer ${model.settings.authToken}`)
-  return Provider.mergeHeaders(generated.size === 0 ? undefined : Object.fromEntries(generated), model.headers)
-}
-
-const providerOptions = (model: Info): { readonly [key: string]: { readonly [key: string]: unknown } } | undefined => {
-  if (!Provider.isAISDK(model.package) || model.settings === undefined) return undefined
-  const { apiKey: _, baseURL: _baseURL, ...settings } = model.settings
-  if (Object.keys(settings).length === 0) return undefined
-  const packageName = Provider.packageName(model.package)
-  if (packageName === "@ai-sdk/openai") return { openai: settings }
-  if (packageName === "@ai-sdk/anthropic") return { anthropic: settings }
-  if (packageName === "@ai-sdk/openai-compatible") return { openai: settings }
-  return undefined
-}
 
 export const withVariant = (
   model: Info,
@@ -170,37 +123,14 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
 ) {
   const resolved = prepareRuntimeModel(model, credential)
   const packageName = Provider.packageName(resolved.package)
-  const key = apiKey(resolved, credential)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
-
-  if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/openai") {
-    const runtime = yield* prepareProviderModel(resolved)
-    return withDefaults(runtime, OpenAIResponses.route)
-      .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-      .model({ id: runtime.modelID ?? runtime.id, compatibility: runtime.compatibility })
-  }
-  if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/anthropic") {
-    const runtime = yield* prepareProviderModel(resolved)
-    return withDefaults(runtime, AnthropicMessages.route)
-      .with({ auth: key === undefined ? Auth.none : Auth.header("x-api-key", key) })
-      .model({ id: runtime.modelID ?? runtime.id, compatibility: runtime.compatibility })
-  }
-  if (
-    Provider.isAISDK(resolved.package) &&
-    packageName === "@ai-sdk/openai-compatible" &&
-    typeof resolved.settings?.baseURL === "string"
-  ) {
-    const runtime = yield* prepareProviderModel(resolved)
-    return withDefaults(runtime, OpenAICompatibleChat.route)
-      .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-      .model({ id: runtime.modelID ?? runtime.id, compatibility: runtime.compatibility })
-  }
   const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
   const mapping = Provider.isAISDK(resolved.package)
     ? AISDKNative.map({
         packageName,
         settings: configured,
         modelID: resolved.modelID ?? resolved.id,
+        providerID: resolved.providerID,
       })
     : undefined
   const native = mapping?.package ?? resolved.package
@@ -265,19 +195,6 @@ function validateProviderVariables(
   if (typeof baseURL !== "string") return Effect.succeed(resolved)
   const failure = unresolvedProviderVariables(model, baseURL)
   return failure ? Effect.fail(failure) : Effect.succeed(resolved)
-}
-
-function prepareProviderModel(model: Info): Effect.Effect<Info, UnresolvedProviderVariablesError> {
-  if (!model.settings) return Effect.succeed(model)
-  return prepareProviderSettings(model, model.settings).pipe(
-    Effect.map((settings) =>
-      settings === model.settings
-        ? model
-        : produce(model, (draft) => {
-            draft.settings = settings
-          }),
-    ),
-  )
 }
 
 function prepareProviderSettings(
@@ -358,17 +275,21 @@ export const layer = Layer.effect(
       const connection = yield* integrations.connection.active(
         provider?.integrationID ?? Integration.ID.make(selected.providerID),
       )
-      const model = yield* resolveModel(
-        selected,
-        variant,
-        connection ? yield* integrations.connection.resolve(connection) : undefined,
-        {
-          loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
-          loadAISDK: (model) => aisdk.model(model),
-        },
-      )
+      const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
+      const runtimeInfo = yield* withVariant(selected, variant)
+      const model = yield* fromCatalogModel(runtimeInfo, credential, {
+        loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
+        loadAISDK: (model) => aisdk.model(model),
+      })
+      const runtime =
+        provider?.activation === "enabled" &&
+        credential === undefined &&
+        !hasConfiguredAuth(runtimeInfo) &&
+        usesAPIKeyAuth(runtimeInfo.package)
+          ? LanguageModel.update(model, { route: model.route.with({ auth: Auth.none }) })
+          : model
       return {
-        model,
+        model: runtime,
         ref: Ref.make({
           id: selected.id,
           providerID: selected.providerID,
@@ -398,6 +319,35 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+function hasConfiguredAuth(model: Info) {
+  return [model.settings?.apiKey, model.settings?.authToken, model.settings?.accessToken].some(
+    (value) => typeof value === "string" && value !== "",
+  )
+}
+
+function usesAPIKeyAuth(packageName: string | undefined) {
+  const name = Provider.packageName(packageName)
+  return (
+    name === "@ai-sdk/openai" ||
+    name === "@ai-sdk/anthropic" ||
+    name === "@ai-sdk/openai-compatible" ||
+    name === "@ai-sdk/google" ||
+    name === "@ai-sdk/xai" ||
+    name === "@openrouter/ai-sdk-provider" ||
+    name === "@ai-sdk/azure" ||
+    name === "@opencode-ai/ai/providers/openai" ||
+    name?.startsWith("@opencode-ai/ai/providers/openai/") === true ||
+    name === "@opencode-ai/ai/providers/anthropic" ||
+    name === "@opencode-ai/ai/providers/anthropic-compatible" ||
+    name === "@opencode-ai/ai/providers/openai-compatible" ||
+    name === "@opencode-ai/ai/providers/google" ||
+    name === "@opencode-ai/ai/providers/xai" ||
+    name === "@opencode-ai/ai/providers/openrouter" ||
+    name === "@opencode-ai/ai/providers/azure" ||
+    name?.startsWith("@opencode-ai/ai/providers/azure/") === true
+  )
+}
 
 export const node = makeLocationNode({
   service: Service,

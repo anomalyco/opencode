@@ -12,10 +12,8 @@ test("invalidates disconnected data and synchronizes after the handshake", () =>
       connected: () => calls.push("connected"),
     })
 
-    connection.handleEvent({ type: "server.connected", directory: "global" })
+    connection.handleEvent({ type: "server.connected" })
     expect(calls).toContain("connected")
-    connection.handleEvent({ type: "server.connected", directory: "/repo" })
-    expect(calls.filter((call) => call === "connected")).toHaveLength(1)
     setStatus("connected")
     return dispose
   })

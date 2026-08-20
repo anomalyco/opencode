@@ -1,6 +1,6 @@
 export * as Bus from "./bus.js"
 
-import { Cause, Context, DateTime, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { Cause, Clock, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
@@ -47,13 +47,13 @@ export const reserveSequence = Effect.fn("Bus.reserveSequence")(function* (
 export type SerializedEvent = {
   readonly id: Event.ID
   readonly type: string
-  readonly created?: DateTime.Utc
+  readonly created?: number
   readonly seq: number
   readonly aggregateID: string
   readonly data: Record<string, unknown>
 }
 
-export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDurableEventError>()(
+export class InvalidDurableEventError extends Schema.TaggedError<InvalidDurableEventError>()(
   "Bus.InvalidDurableEvent",
   {
     type: Schema.String,
@@ -74,7 +74,7 @@ const decodeSerializedEvent = (event: SerializedEvent): Event.Payload => {
   }
   return {
     id: event.id,
-    created: event.created ?? DateTime.makeUnsafe(0),
+    created: event.created ?? 0,
     type: definition.type,
     durable: envelope(event.aggregateID, event.seq, definition.durable.version),
     data: Schema.decodeUnknownSync(definition.data)(event.data),
@@ -283,7 +283,7 @@ export function configured(options?: Options) {
                               if (
                                 stored?.id === event.id &&
                                 stored.type === versionedType(definition.type, durable.version) &&
-                                stored.created === DateTime.toEpochMillis(event.created ?? DateTime.makeUnsafe(0)) &&
+                                stored.created === (event.created ?? 0) &&
                                 isDeepStrictEqual(stored.data, encoded)
                               ) {
                                 if (input.ownerID && row?.ownerID == null) {
@@ -358,7 +358,7 @@ export function configured(options?: Options) {
                                     id: event.id,
                                     aggregate_id: aggregateID,
                                     seq,
-                                    created: DateTime.toEpochMillis(event.created ?? DateTime.makeUnsafe(0)),
+                                    created: event.created ?? 0,
                                     type: versionedType(definition.type, durable.version),
                                     data: encoded,
                                   },
@@ -455,7 +455,7 @@ export function configured(options?: Options) {
               definition,
               {
                 id: options?.id ?? Event.ID.create(),
-                created: yield* DateTime.now,
+                created: yield* Clock.currentTimeMillis,
                 ...(options?.metadata ? { metadata: options.metadata } : {}),
                 type: definition.type,
                 ...(location ? { location } : {}),
@@ -491,7 +491,7 @@ export function configured(options?: Options) {
                   commit: options?.commit,
                   event: {
                     id: options?.id ?? Event.ID.create(),
-                    created: yield* DateTime.now,
+                    created: yield* Clock.currentTimeMillis,
                     ...(options?.metadata ? { metadata: options.metadata } : {}),
                     type: definition.type,
                     ...(location ? { location } : {}),
@@ -571,7 +571,7 @@ export function configured(options?: Options) {
                                 id: event.id,
                                 aggregate_id: aggregateID,
                                 seq,
-                                created: DateTime.toEpochMillis(event.created),
+                                created: event.created,
                                 type: versionedType(item.definition.type, item.definition.durable.version),
                                 data: encoded,
                               })
@@ -619,7 +619,7 @@ export function configured(options?: Options) {
                 Effect.gen(function* () {
                   const payload = {
                     id: event.id,
-                    created: event.created ?? DateTime.makeUnsafe(0),
+                    created: event.created ?? 0,
                     type: definition.type,
                     data: Schema.decodeUnknownSync(definition.data)(event.data),
                   } as Event.Payload
@@ -733,7 +733,7 @@ export function configured(options?: Options) {
                 return [
                   decodeSerializedEvent({
                     id: event.id,
-                    created: DateTime.makeUnsafe(event.created),
+                    created: event.created,
                     aggregateID: event.aggregate_id,
                     seq: event.seq,
                     type: event.type,

@@ -86,6 +86,7 @@ function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
     const info = {
       id: providerID,
       name: item.name,
+      activation: "auto",
       package: Provider.aisdk(item.npm),
       ...(item.api ? { settings: { baseURL: item.api } } : {}),
     } satisfies Provider.Info

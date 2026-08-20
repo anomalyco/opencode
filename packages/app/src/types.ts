@@ -1,25 +1,9 @@
-import type {
-  EventSubscribeOutput,
-  FileDiffInfo,
-  ProjectListOutput,
-  WorktreeDirectory,
-} from "@opencode-ai/client/promise"
-import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
+import type { FileDiffInfo, ProjectListOutput, WorktreeDirectory } from "@opencode-ai/client/promise"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & {
   worktree: string
   worktrees: WorktreeDirectory[]
 }
-
-type CurrentEvent = EventSubscribeOutput extends infer Item
-  ? Item extends { type: infer Type extends string; data: infer Data }
-    ? { type: Type; properties: Data }
-    : never
-  : never
-
-export type Event = CurrentEvent
-
-export type EventSessionError = Extract<Event, { type: "session.execution.failed" }>
 
 type MessageError =
   | { name: "ProviderAuthError"; data: { providerID: string; message: string } }
@@ -272,9 +256,83 @@ export type Agent = {
   steps?: number
 }
 
-export type Provider = NormalizedProviderListResponse["all"] extends Map<string, infer Item> ? Item : never
-export type Model = Provider["models"][string]
-export type ProviderListResponse = NormalizedProviderListResponse
+export type Model = {
+  id: string
+  providerID: string
+  api: {
+    id: string
+    url: string
+    npm: string
+  }
+  name: string
+  family?: string
+  capabilities: {
+    temperature: boolean
+    reasoning: boolean
+    attachment: boolean
+    toolcall: boolean
+    input: {
+      text: boolean
+      audio: boolean
+      image: boolean
+      video: boolean
+      pdf: boolean
+    }
+    output: {
+      text: boolean
+      audio: boolean
+      image: boolean
+      video: boolean
+      pdf: boolean
+    }
+    interleaved: boolean | { field: "reasoning" | "reasoning_content" | "reasoning_details" }
+  }
+  cost: {
+    input: number
+    output: number
+    cache: {
+      read: number
+      write: number
+    }
+    tiers?: {
+      input: number
+      output: number
+      cache: { read: number; write: number }
+      tier: { type: "context"; size: number }
+    }[]
+    experimentalOver200K?: {
+      input: number
+      output: number
+      cache: { read: number; write: number }
+    }
+  }
+  limit: {
+    context: number
+    input?: number
+    output: number
+  }
+  status: "alpha" | "beta" | "deprecated" | "active"
+  options: Record<string, unknown>
+  headers: Record<string, string>
+  release_date: string
+  variants?: Record<string, Record<string, unknown>>
+}
+
+export type Provider = {
+  id: string
+  name: string
+  source: "env" | "config" | "custom" | "api"
+  env: string[]
+  key?: string
+  options: Record<string, unknown>
+  models: Record<string, Model>
+}
+
+export type ProviderListResponse = {
+  all: Map<string, Provider>
+  default: Record<string, string>
+  connected: string[]
+}
 
 export type ProviderAuthResponse = Record<string, unknown>
 

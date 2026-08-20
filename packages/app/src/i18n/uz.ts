@@ -511,21 +511,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "ish stoli {{version}}",
   "wsl.onboarding.versionMismatch": "Oʻrnatilgan versiya ish stoli ilovasi versiyasiga mos kelmaydi.",
   "wsl.onboarding.adding": "Qo'shilmoqda...",
-  "help.tabs.toast.ariaLabel": "Tablar bilan tanishtirish. Yorliqlar bilan ish va faol seanslaringizni tashkil qiling",
-  "help.tabs.toast.dismiss": "Yorliqlar ma'lumotlarini o'chirish",
-  "help.tabs.title": "Tablar bilan tanishtirish",
-  "help.tabs.description": "Yorliqlar bilan ish va faol seanslaringizni tashkil qiling",
-  "help.tabs.date": "14 iyul",
-  "help.tabs.introduction": "OpenCode Desktop endi yorliqlar atrofida qurilgan.",
-  "help.tabs.sessions":
-    "Yorliqda yangi seansni boshlang yoki loyihalaringizdan mavjud sessiyani oching. Yangi ishni boshlaganingizda yangi varaqni oching va ish tugagach, uni yoping.",
-  "help.tabs.organize":
-    "Bir nechta yorliqlarni ochiq saqlash sizning faol seanslaringizni tashkil qilishni osonlashtiradi. Yorliqlar nomlarini esda qolarli qilib o'zgartiring, agar siz ularni atrofingizda saqlamoqchi bo'lsangiz.",
-  "help.tabs.home":
-    "Siz barcha seanslaringiz va loyihalaringizni yangi Home ekranida topasiz. Seansni tanlash uni yorliqda ochadi.",
-  "help.tabs.persistence": "Ilovani qayta ochganingizda, yorliqlaringiz hali ham ochiq.",
-  "help.tabs.worktrees":
-    "Yangi dizayn hali Git Worktrees-ni qo'llab-quvvatlamaydi, u tez orada chiqadi. Shunday qilib, agar siz avvalgi tartibdan foydalanishni davom ettirmoqchi boʻlsangiz, Sozlamalar orqali tartiblar oʻrtasida almashishingiz mumkin. Shuni yodda tutingki, yangi tartib bir necha hafta ichida doimiy bo'ladi.",
   "server.row.noUsername": "foydalanuvchi nomi yo'q",
   "dialog.project.edit.title": "Loyihani tahrirlash",
   "dialog.project.edit.name": "Ism",
@@ -980,13 +965,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Tahrirlash vositasi qismlarini kengaytiring",
   "settings.general.row.editToolPartsExpanded.description":
     "Vaqt jadvalida sukut boʻyicha kengaytirilgan tahrirlash, yozish va tuzatish vositalari qismlarini koʻrsatish",
-  "settings.general.row.newInterface.title": "Yangi tartib",
-  "settings.general.row.newInterface.badge": "Yangi",
-  "settings.general.row.newInterface.description":
-    "Yangi yorliqlar va uy tartibidan foydalaning. Cheklangan vaqt uchun tartiblar o'rtasida almashinish.",
-  "settings.general.row.newInterfaceNotice.title": "Siz hozir yangi tartibdan foydalanmoqdasiz",
-  "settings.general.row.newInterfaceNotice.description": "Oldingi tartib endi mavjud emas",
-  "settings.general.row.newInterfaceNotice.dismiss": "Rad etish",
   "settings.general.row.pinchZoom.title": "Kattalashtirish uchun chimchilang",
   "settings.general.row.pinchZoom.description":
     "Kattalashtirish uchun trekpadni chimchilash va Ctrl-aylantirish imo-ishoralariga ruxsat bering",

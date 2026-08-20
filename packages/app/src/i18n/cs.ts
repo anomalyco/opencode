@@ -509,21 +509,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "desktop {{version}}",
   "wsl.onboarding.versionMismatch": "Nainstalovaná verze neodpovídá verzi aplikace pro stolní počítače.",
   "wsl.onboarding.adding": "Přidávání...",
-  "help.tabs.toast.ariaLabel": "Představujeme karty. Uspořádejte si práci a aktivní relace pomocí karet",
-  "help.tabs.toast.dismiss": "Zavřít informace o kartách",
-  "help.tabs.title": "Představujeme karty",
-  "help.tabs.description": "Uspořádejte si práci a aktivní relace pomocí karet",
-  "help.tabs.date": "14. července",
-  "help.tabs.introduction": "OpenCode Plocha je nyní postavena na kartách.",
-  "help.tabs.sessions":
-    "Začněte novou relaci na kartě nebo otevřete existující relaci z libovolného z vašich projektů. Když začínáte s něčím novým, otevřete novou kartu a po dokončení ji zavřete.",
-  "help.tabs.organize":
-    "Ponechání několika otevřených karet usnadňuje organizaci aktivních relací. Přejmenujte karty na něco zapamatovatelného, ​​pokud si je plánujete ponechat.",
-  "help.tabs.home":
-    "Všechny relace a projekty najdete na nové domovské obrazovce. Výběrem relace ji otevřete na kartě.",
-  "help.tabs.persistence": "Když aplikaci znovu otevřete, vaše karty jsou stále otevřené.",
-  "help.tabs.worktrees":
-    "Nový design zatím nepodporuje Git Worktrees, brzy bude k dispozici. Pokud tedy chcete pokračovat v používání předchozího rozložení, můžete mezi rozloženími přepínat v Nastavení. Jen mějte na paměti, že nové rozložení se za několik týdnů stane trvalým.",
   "server.row.noUsername": "žádné uživatelské jméno",
   "dialog.project.edit.title": "Upravit projekt",
   "dialog.project.edit.name": "Jméno",
@@ -975,13 +960,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Rozbalte části nástroje pro úpravy",
   "settings.general.row.editToolPartsExpanded.description":
     "Ve výchozím nastavení zobrazit na časové ose rozbalené části nástroje pro úpravy, zápis a opravy",
-  "settings.general.row.newInterface.title": "Nové rozložení",
-  "settings.general.row.newInterface.badge": "Nové",
-  "settings.general.row.newInterface.description":
-    "Použijte nové karty a domovské rozvržení. Přepínejte mezi rozvrženími po omezenou dobu.",
-  "settings.general.row.newInterfaceNotice.title": "Nyní používáte nové rozvržení",
-  "settings.general.row.newInterfaceNotice.description": "Předchozí rozložení již není k dispozici",
-  "settings.general.row.newInterfaceNotice.dismiss": "Odmítnout",
   "settings.general.row.pinchZoom.title": "Stažením prstů přiblížíte",
   "settings.general.row.pinchZoom.description": "Povolit přiblížení pomocí gest trackpadu a gesta Ctrl posouvání",
   "settings.general.row.wayland.title": "Použít nativní Wayland",

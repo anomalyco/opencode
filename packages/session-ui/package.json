@@ -25,6 +25,7 @@
     "./v2/prompt-input/types": "./src/v2/components/prompt-input/types.ts"
   },
   "scripts": {
+    "generate:progress-indicator": "bun script/generate-session-progress-indicator.ts",
     "typecheck": "tsgo -b",
     "test": "bun test src --only-failures"
   },
@@ -39,9 +40,8 @@
   "dependencies": {
     "@kobalte/core": "catalog:",
     "@opencode-ai/client": "workspace:*",
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/sdk": "file:../app/vendor/opencode-ai-sdk-1.18.8-dev.tgz",
     "@opencode-ai/ui": "workspace:*",
+    "@opencode-ai/util": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/stream": "catalog:",
     "@solid-primitives/event-listener": "2.4.5",
@@ -53,6 +53,7 @@
     "fuzzysort": "catalog:",
     "luxon": "catalog:",
     "marked": "catalog:",
+    "mermaid": "11.16.1",
     "morphdom": "2.7.8",
     "motion": "12.34.5",
     "remeda": "catalog:",

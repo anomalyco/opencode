@@ -1,6 +1,6 @@
 import { Component, createMemo } from "solid-js"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { Select } from "@opencode-ai/ui/select"
+import { TextInput } from "@opencode-ai/ui/text-input"
 import { useLanguage } from "@/context/language"
 import { ExternalLink } from "../external-link"
 import { SettingsListV2 } from "./parts/list"
@@ -42,7 +42,7 @@ const FontSetting: Component<{
   return (
     <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
       <div class="w-full sm:w-[220px]">
-        <TextInputV2
+        <TextInput
           data-action={config().action}
           type="text"
           appearance="base"
@@ -83,8 +83,7 @@ export const SettingsAppearanceV2: Component = () => {
               title={language.t("settings.general.row.colorScheme.title")}
               description={language.t("settings.general.row.colorScheme.description")}
             >
-              <SelectV2
-                appearance="inline"
+              <Select
                 data-action="settings-color-scheme"
                 options={schemeOptions}
                 current={schemeOptions.find((option) => option === appearance.scheme.current())}
@@ -110,8 +109,7 @@ export const SettingsAppearanceV2: Component = () => {
                 </>
               }
             >
-              <SelectV2
-                appearance="inline"
+              <Select
                 data-action="settings-theme"
                 options={appearance.theme.options()}
                 current={appearance.theme.current()}

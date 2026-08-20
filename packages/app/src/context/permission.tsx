@@ -1,10 +1,11 @@
 import { createEffect, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { PermissionRequest } from "@opencode-ai/client/promise"
 import { Persist, persisted } from "@/utils/persist"
 import type { ServerSDK } from "@/context/server-sdk"
 import type { ServerSync } from "./server-sync"
+import type { Data } from "@opencode-ai/client/solid"
 import { useParams, useSearchParams } from "@solidjs/router"
 import { decode64 } from "@/utils/base64"
 import { useGlobal } from "./global"
@@ -12,12 +13,13 @@ import { ServerConnection, useServers } from "./servers"
 import { type DraftTab, useTabs } from "./tabs"
 import { useSettings } from "./settings"
 import { requireServerKey } from "@/utils/session-route"
-import type { ServerScope } from "@/utils/server-scope"
+import { ServerScope } from "@/utils/server-scope"
 import {
   acceptKey,
   directoryAcceptKey,
   isDirectoryAutoAccepting,
   autoRespondsPermission,
+  relocateAutoAccept,
   sessionAutoAccept,
 } from "./permission-auto-respond"
 import { useServer } from "./server"
@@ -52,12 +54,11 @@ function hasPermissionPromptRules(permission: unknown) {
   return Object.values(config).some(isNonAllowRule)
 }
 
-type PermissionEvent = Parameters<Parameters<ServerSDK["event"]["listen"]>[0]>[0]
-
-export function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }) {
+export function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync; data: Data }) {
   const [store, setStore, _, ready] = persisted(
     {
-      ...Persist.serverGlobal(input.sdk.scope, "permission", ["permission.v3"]),
+      ...Persist.serverGlobal(input.sdk.scope, "permission"),
+      ...(input.sdk.scope === ServerScope.local ? { previousKey: "permission.v3" } : {}),
       migrate(value) {
         if (!value || typeof value !== "object" || Array.isArray(value)) return value
 
@@ -141,14 +142,19 @@ export function createServerPermissionState(input: { sdk: ServerSDK; sync: Serve
     })
   }
 
-  function sessions(directory?: string) {
-    const info = Object.values(input.sync.session.data.info).filter((session) => !!session)
-    if (!directory) return info
-    return [...info, ...input.sync.child(directory, { bootstrap: false })[0].session]
+  function sessions(_directory?: string) {
+    return input.data.session.list()
+  }
+
+  function autoAccept(directory?: string) {
+    if (!directory) return store.autoAccept
+    const next = relocateAutoAccept(store.autoAccept, sessions(directory), directory)
+    if (next !== store.autoAccept) setStore("autoAccept", reconcile(next))
+    return next
   }
 
   function isAutoAccepting(sessionID: string, directory?: string) {
-    return autoRespondsPermission(store.autoAccept, sessions(directory), { sessionID }, directory)
+    return autoRespondsPermission(autoAccept(directory), sessions(directory), { sessionID }, directory)
   }
 
   function isAutoAcceptingDirectory(directory: string) {
@@ -156,20 +162,25 @@ export function createServerPermissionState(input: { sdk: ServerSDK; sync: Serve
   }
 
   function shouldAutoRespond(permission: PermissionRequest, directory?: string) {
-    return autoRespondsPermission(store.autoAccept, sessions(directory), permission, directory)
+    return autoRespondsPermission(autoAccept(directory), sessions(directory), permission, directory)
   }
 
   function isPending(permission: PermissionRequest) {
-    const pending = input.sync.session.data.permission[permission.sessionID]
+    const pending = input.data.session.permission.list(permission.sessionID)
     return pending === undefined || pending.some((item) => item.id === permission.id)
   }
 
   async function shouldAutoRespondResolved(permission: PermissionRequest, directory?: string) {
-    const override = sessionAutoAccept(store.autoAccept, sessions(directory), permission, directory)
+    const override = sessionAutoAccept(autoAccept(directory), sessions(directory), permission, directory)
     if (override !== undefined) return override
-    if (input.sync.session.lineage.peek(permission.sessionID)) return shouldAutoRespond(permission, directory)
-    const lineage = await input.sync.session.lineage.resolve(permission.sessionID).catch(() => undefined)
-    if (meta.disposed || !lineage) return false
+    const loaded = new Set<string>()
+    while (!loaded.has(input.data.session.root(permission.sessionID))) {
+      const root = input.data.session.root(permission.sessionID)
+      loaded.add(root)
+      if (input.data.session.get(root)) break
+      await input.data.session.sync(root).catch(() => undefined)
+    }
+    if (meta.disposed || !input.data.session.get(permission.sessionID)) return false
     return shouldAutoRespond(permission, directory)
   }
 
@@ -191,20 +202,14 @@ export function createServerPermissionState(input: { sdk: ServerSDK; sync: Serve
     return next
   }
 
-  const handlePermission = (e: PermissionEvent) => {
-    const event = e.details
-    if (event?.type !== "permission.asked") return
-    void respondPending(event.properties, e.name)
-  }
-
-  const unsubscribe = input.sdk.event.listen((event) => {
+  const unsubscribe = input.sdk.event.on("permission.asked", (event) => {
     if (ready()) {
-      handlePermission(event)
+      void respondPending(event.data, event.location?.directory)
       return
     }
     void ready.promise?.then(() => {
       if (meta.disposed) return
-      handlePermission(event)
+      void respondPending(event.data, event.location?.directory)
     })
   })
   onCleanup(() => {

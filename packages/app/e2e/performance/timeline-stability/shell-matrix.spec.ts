@@ -9,6 +9,7 @@ import {
 import {
   assistantMessage,
   partUpdated,
+  renderedPartID,
   setupTimeline,
   shell,
   textPart,
@@ -68,13 +69,16 @@ for (const profile of profiles) {
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
     await waitForVisualSettle(page, [
-      `[data-timeline-part-id="${shellID}"]`,
-      `[data-timeline-part-id="${followingID}"]`,
+      `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+      `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
     ])
     const regions = defineVisualRegions({
-      shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+      shell: {
+        selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+        closest: '[data-timeline-row="AssistantPart"]',
+      },
       following: {
-        selector: `[data-timeline-part-id="${followingID}"]`,
+        selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
@@ -120,10 +124,19 @@ test("keeps following row stable when a collapsed shell receives 50 lines", asyn
     cpuRate: 4,
     seedHistory: true,
   })
-  await waitForVisualSettle(page, [`[data-timeline-part-id="${shellID}"]`, `[data-timeline-part-id="${followingID}"]`])
+  await waitForVisualSettle(page, [
+    `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+    `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
+  ])
   const regions = defineVisualRegions({
-    shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
-    following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+    shell: {
+      selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+      closest: '[data-timeline-row="AssistantPart"]',
+    },
+    following: {
+      selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
+      closest: '[data-timeline-row="AssistantPart"]',
+    },
   })
   await startVisualProbe(page, regions)
   await timeline.send(partUpdated(shell(shellID, "running", lines(50))), 240)
@@ -164,10 +177,19 @@ test("keeps rows stable when a running shell becomes an error", async ({ page },
     cpuRate: 4,
     seedHistory: true,
   })
-  await waitForVisualSettle(page, [`[data-timeline-part-id="${shellID}"]`, `[data-timeline-part-id="${followingID}"]`])
+  await waitForVisualSettle(page, [
+    `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+    `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
+  ])
   const regions = defineVisualRegions({
-    shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
-    following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+    shell: {
+      selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+      closest: '[data-timeline-row="AssistantPart"]',
+    },
+    following: {
+      selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
+      closest: '[data-timeline-row="AssistantPart"]',
+    },
   })
   await startVisualProbe(page, regions)
   await timeline.send(
@@ -215,16 +237,20 @@ test("keeps rows stable when later text arrives before shell output", async ({ p
     cpuRate: 4,
     seedHistory: true,
   })
-  await waitForVisualSettle(page, [`[data-timeline-part-id="${shellID}"]`])
+  const following = textPart(followingID, "Later assistant content arrived before shell output.")
+  await waitForVisualSettle(page, [`[data-timeline-part-id="${renderedPartID(shellID)}"]`])
   const regions = defineVisualRegions({
-    shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+    shell: {
+      selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+      closest: '[data-timeline-row="AssistantPart"]',
+    },
     following: {
-      selector: `[data-timeline-part-id="${followingID}"]`,
+      selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
       closest: '[data-timeline-row="AssistantPart"]',
     },
   })
   await startVisualProbe(page, regions)
-  await timeline.send(partUpdated(textPart(followingID, "Later assistant content arrived before shell output.")), 240)
+  await timeline.send(partUpdated(following), 240)
   await timeline.send(partUpdated(shell(shellID, "running", lines(20))), 300)
   await timeline.send(partUpdated(shell(shellID, "completed", lines(20))), 600)
   const trace = await stopVisualProbe<keyof typeof regions>(page)

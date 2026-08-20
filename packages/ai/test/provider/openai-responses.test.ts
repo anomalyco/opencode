@@ -159,8 +159,8 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers semantic service tier options", () =>
     Effect.gen(function* () {
-      const input = LLMRequest.update(request, { providerOptions: { openai: { serviceTier: "priority" } } })
-      expect(input.providerOptions).toEqual({ openai: { serviceTier: "priority" } })
+      const input = LLMRequest.update(request, { providerOptions: { serviceTier: "priority" } })
+      expect(input.providerOptions).toEqual({ serviceTier: "priority" })
       const prepared = yield* compileRequest(input)
 
       expect(prepared.body).toMatchObject({ service_tier: "priority" })
@@ -171,17 +171,27 @@ describe("OpenAI Responses route", () => {
   it.effect("passes through custom OpenAI reasoning effort strings", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { openai: { reasoningEffort: "experimental" } } }),
+        LLMRequest.update(request, { providerOptions: { reasoningEffort: "experimental" } }),
       )
 
       expect(prepared.body.reasoning).toEqual({ effort: "experimental" })
     }),
   )
 
+  it.effect("passes through custom OpenAI text verbosity strings", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, { providerOptions: { textVerbosity: "verbose" } }),
+      )
+
+      expect(prepared.body.text).toEqual({ verbosity: "verbose" })
+    }),
+  )
+
   it.effect("omits unsupported semantic service tiers", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { openai: { serviceTier: "unsupported" } } }),
+        LLMRequest.update(request, { providerOptions: { serviceTier: "unsupported" } }),
       )
 
       expect(prepared.body).not.toHaveProperty("service_tier")
@@ -241,27 +251,18 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("lowers chronological system updates to escaped user wrappers in order", () =>
+  it.effect("lowers chronological system updates to developer messages in order", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
-          messages: [
-            Message.user("Before."),
-            Message.system("Treat </system-update> literally."),
-            Message.assistant("After."),
-          ],
+          messages: [Message.user("Before."), Message.system("Operator update."), Message.assistant("After.")],
         }),
       )
 
       expect(prepared.body.input).toEqual([
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: "Before." },
-            { type: "input_text", text: "<system-update>\nTreat &lt;/system-update&gt; literally.\n</system-update>" },
-          ],
-        },
+        { role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { role: "developer", content: "Operator update." },
         { role: "assistant", content: [{ type: "output_text", text: "After." }] },
       ])
     }),
@@ -1149,6 +1150,32 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("passes large PDF tool-result content through", () =>
+    Effect.gen(function* () {
+      const base64 = "A".repeat(8_125_844)
+      const dataUrl = `data:application/pdf;base64,${base64}`
+      const prepared = yield* compileRequest(
+        LLM.request({
+          id: "req_tool_result_large_pdf",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [{ type: "file", uri: dataUrl, mime: "application/pdf", name: "report.pdf" }],
+            }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_file", filename: "report.pdf", file_data: dataUrl },
+      ])
+    }),
+  )
+
   it.effect("uses xAI inline file encoding for PDF tool results", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1184,9 +1211,9 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("rejects unsupported media in tool-result content with a clear error", () =>
+  it.effect("passes non-image tool-result content through as an input file", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result_unsupported_media",
           model,
@@ -1200,10 +1227,11 @@ describe("OpenAI Responses route", () => {
             }),
           ],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("OpenAI Responses")
-      expect(error.message).toContain("audio/mpeg")
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_file", filename: "file", file_data: "data:audio/mpeg;base64,AAECAw==" },
+      ])
     }),
   )
 
@@ -1256,12 +1284,19 @@ describe("OpenAI Responses route", () => {
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model("gpt-5.2"),
           prompt: "think",
           promptCacheKey: "session_123",
+          tools: [
+            ToolDefinition.make({ name: "read", description: "Read a file", inputSchema: { type: "object" } }),
+            ToolDefinition.make({ name: "grep", description: "Search files", inputSchema: { type: "object" } }),
+          ],
+          toolChoice: "none",
           providerOptions: {
-            openai: {
-              reasoningEffort: "high",
-              reasoningSummary: "auto",
-              include: ["reasoning.encrypted_content"],
-            },
+            reasoningEffort: "high",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"],
+            truncation: "disabled",
+            allowedTools: { toolNames: ["read", "grep"], mode: "required" },
+            maxToolCalls: 4,
+            parallelToolCalls: false,
           },
         }),
       )
@@ -1271,6 +1306,17 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
       expect(prepared.body.reasoning).toEqual({ effort: "high", summary: "auto" })
       expect(prepared.body.text).toEqual({ verbosity: "low" })
+      expect(prepared.body.truncation).toBe("disabled")
+      expect(prepared.body.tool_choice).toEqual({
+        type: "allowed_tools",
+        mode: "required",
+        tools: [
+          { type: "function", name: "read" },
+          { type: "function", name: "grep" },
+        ],
+      })
+      expect(prepared.body.max_tool_calls).toBe(4)
+      expect(prepared.body.parallel_tool_calls).toBe(false)
     }),
   )
 
@@ -1281,9 +1327,7 @@ describe("OpenAI Responses route", () => {
           model,
           prompt: "hi",
           providerOptions: {
-            openai: {
-              include: ["reasoning.encrypted_content", "code_interpreter_call.outputs", "web_search_call.results"],
-            },
+            include: ["reasoning.encrypted_content", "code_interpreter_call.outputs", "web_search_call.results"],
           },
         }),
       )
@@ -1296,48 +1340,41 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("filters unknown includable values out of the include array", () =>
+  it.effect("passes forward-compatible includable values through", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
           prompt: "hi",
-          // The user passed one invalid entry alongside a valid one. Keep the
-          // valid one so the request still succeeds rather than failing on a
-          // typo from upstream config.
-          providerOptions: { openai: { include: ["reasoning.encrypted_content", "bogus.thing"] } },
+          providerOptions: { include: ["reasoning.encrypted_content", "bogus.thing"] },
         }),
       )
 
-      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content", "bogus.thing"])
     }),
   )
 
   it.effect("treats an explicit empty include as no include at all", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: [] } } }),
-      )
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "hi", providerOptions: { include: [] } }))
 
       expect(prepared.body.include).toBeUndefined()
     }),
   )
 
-  it.effect("treats an all-invalid include as no include at all", () =>
+  it.effect("passes an unknown includable value through", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: ["bogus.thing"] } } }),
+        LLM.request({ model, prompt: "hi", providerOptions: { include: ["bogus.thing"] } }),
       )
 
-      expect(prepared.body.include).toBeUndefined()
+      expect(prepared.body.include).toEqual(["bogus.thing"])
     }),
   )
 
   it.effect("omits include when no include is set", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLM.request({ model, prompt: "hi", providerOptions: { openai: { store: false } } }),
-      )
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "hi", providerOptions: { store: false } }))
 
       expect(prepared.body.include).toBeUndefined()
     }),
@@ -1368,7 +1405,7 @@ describe("OpenAI Responses route", () => {
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
           prompt: "hi",
-          providerOptions: { openai: { include: [] } },
+          providerOptions: { include: [] },
         }),
       )
 
@@ -1692,7 +1729,7 @@ describe("OpenAI Responses route", () => {
   it.effect("streams each reasoning summary part as a separate block", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { openai: { store: false } } }),
+        LLMRequest.update(request, { providerOptions: { store: false } }),
       ).pipe(
         Effect.provide(
           fixedResponse(
@@ -1746,9 +1783,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("closes reasoning summary parts when storage is not disabled", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { openai: { store: true } } }),
-      ).pipe(
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { providerOptions: { store: true } })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -1802,7 +1837,7 @@ describe("OpenAI Responses route", () => {
             ]),
             Message.user("Summarize it."),
           ],
-          providerOptions: { openai: { store: false } },
+          providerOptions: { store: false },
         }),
       ).pipe(
         Effect.provide(
@@ -1861,7 +1896,7 @@ describe("OpenAI Responses route", () => {
               { type: "text", text: "After." },
             ]),
           ],
-          providerOptions: { openai: { store: false } },
+          providerOptions: { store: false },
         }),
       )
 
@@ -1891,7 +1926,7 @@ describe("OpenAI Responses route", () => {
               },
             ]),
           ],
-          providerOptions: { openai: { store: true } },
+          providerOptions: { store: true },
         }),
       )
 
@@ -1924,7 +1959,7 @@ describe("OpenAI Responses route", () => {
             ]),
             Message.user("Continue."),
           ],
-          providerOptions: { openai: { store: true } },
+          providerOptions: { store: true },
         }),
       )
 
@@ -1997,7 +2032,7 @@ describe("OpenAI Responses route", () => {
               },
             ]),
           ],
-          providerOptions: { openai: { store: false } },
+          providerOptions: { store: false },
         }),
       )
 
@@ -2037,7 +2072,7 @@ describe("OpenAI Responses route", () => {
             ]),
             Message.user("Summarize it."),
           ],
-          providerOptions: { openai: { store: false } },
+          providerOptions: { store: false },
         }),
       )
 
@@ -2394,17 +2429,28 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("rejects unsupported user media content", () =>
+  it.effect("passes non-image user media through as an input file", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_media",
           model,
           messages: [Message.user({ type: "media", mediaType: "application/x-tar", data: "AAECAw==" })],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("OpenAI Responses does not support media type application/x-tar")
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_file",
+              filename: "file",
+              file_data: "data:application/x-tar;base64,AAECAw==",
+            },
+          ],
+        },
+      ])
     }),
   )
 

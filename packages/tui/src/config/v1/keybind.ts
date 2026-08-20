@@ -163,7 +163,7 @@ export const Definitions = {
   display_thinking: keybind("none", "Toggle thinking blocks visibility"),
 
   prompt_submit: keybind("none", "Submit prompt"),
-  prompt_queue: keybind("alt+return", "Queue prompt"),
+  prompt_queue: keybind("<leader>return", "Queue prompt"),
   prompt_editor_context_clear: keybind("none", "Clear editor context"),
   prompt_images_view: keybind("<leader>i", "View image attachments"),
   prompt_skills: keybind("none", "Open skill selector"),

@@ -35,6 +35,7 @@ import { toSessionError } from "../to-session-error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionUsage } from "../usage.js"
 import { ToolOutput } from "../../tool-output.js"
+import { PluginSupervisor } from "../../plugin/supervisor.js"
 import { Tool } from "../../tool.js"
 import { PromptCacheDiagnostics } from "../prompt-cache-diagnostics.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
@@ -118,6 +119,7 @@ const layer = Layer.effect(
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
+    const plugins = yield* PluginSupervisor.Service
     const title = yield* SessionTitle.Service
     const toolOutput = yield* ToolOutput.Service
     const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
@@ -158,25 +160,39 @@ const layer = Layer.effect(
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
       readonly continuation?: Continuation
+      readonly promotable?: SessionInbox.Promotable
     }) {
       let force = input.force
       let continuation = input.continuation
-      if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, "any")))
+      const promotable = input.promotable ?? "input"
+      if (!force && !continuation && !(yield* eligible(input.sessionID, promotable)))
         return { type: "complete" as const }
+      yield* plugins.flush
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
-        if (yield* runPendingCompaction(input.sessionID)) {
+        // Between-turn control items run under any drain scope: scope gates which user
+        // input may promote, not whether admitted housekeeping runs. Enqueue order still
+        // holds — a control item behind a queued prompt is not the next eligible item.
+        if (yield* runPendingCompaction(input.sessionID, "input")) {
           force = false
           continue
         }
         if (yield* runPendingMove(input.sessionID, "input")) return { type: "moved" as const }
-        if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, "input")))
+        if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
           return { type: "complete" as const }
-        const result = yield* runSteps(input.sessionID, continuation)
+        const result = yield* runSteps(input.sessionID, continuation, promotable)
         if (result.type === "moved") return result
         force = false
         continuation = undefined
       }
+    })
+
+    /** Work this drain may perform: scoped input, or a between-turn control item next in line. */
+    const eligible = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, promotable: SessionInbox.Promotable) {
+      if (yield* SessionInbox.has(db, sessionID, promotable)) return true
+      if (promotable === "input") return false
+      const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
+      return next?.type === "compaction" || next?.type === "move"
     })
 
     /**
@@ -185,14 +201,15 @@ const layer = Layer.effect(
      */
     const runSteps = Effect.fn("SessionRunner.runSteps")(function* (
       sessionID: SessionSchema.ID,
-      continuation?: Continuation,
+      continuation: Continuation | undefined,
+      drainPromotable: SessionInbox.Promotable,
     ) {
-      // Fresh work may promote queued input; later steps absorb steers only.
-      let promotable: SessionInbox.Promotable = continuation ? "steer" : "input"
+      // Fresh work may promote queued input; resumed turns and later steps absorb steers only.
+      let promotable: SessionInbox.Promotable = continuation ? "steer" : drainPromotable
       let step = continuation?.step ?? 1
       let next = continuation
       while (true) {
-        if (yield* runPendingCompaction(sessionID)) continue
+        if (yield* runPendingCompaction(sessionID, "steer")) continue
         if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
         const result = yield* runStep(sessionID, promotable, step)
         next = result.needsContinuation ? { step: result.step + 1 } : undefined
@@ -374,6 +391,8 @@ const layer = Layer.effect(
             sessionID: session.id,
             assistantMessageID: yield* publisher.startAssistant(),
             finish: finish.finish,
+            rawFinish: finish.rawFinish,
+            providerState: finish.providerState,
             ...stepUsage(finish),
             ...end,
           })
@@ -556,8 +575,7 @@ const layer = Layer.effect(
             // A local call or malformed tool input requires another model step, unless
             // this step already exhausted the agent's allowance.
             needsContinuation:
-              !stepLimitReached &&
-              record.calls.some((call) => !call.providerExecuted && (call.called || call.settled)),
+              !stepLimitReached && record.calls.some((call) => !call.providerExecuted && (call.called || call.settled)),
             step: currentStep,
           })
         }),
@@ -567,14 +585,14 @@ const layer = Layer.effect(
     /** Executes a previously admitted manual compaction request, if one is pending. */
     const runPendingCompaction = Effect.fn("SessionRunner.runPendingCompaction")(function* (
       sessionID: SessionSchema.ID,
+      promotable: SessionInbox.Promotable,
     ) {
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const pending = yield* SessionInbox.serialized(
             sessionID,
             Effect.gen(function* () {
-              const selected =
-                (yield* SessionInbox.nextSteer(db, sessionID)) ?? (yield* SessionInbox.nextQueued(db, sessionID))
+              const selected = yield* SessionInbox.nextPromotable(db, sessionID, promotable)
               if (selected?.type !== "compaction") return
               yield* bus.publishAll([
                 [SessionEvent.InboxDelivered, { sessionID, inboxID: selected.id }],
@@ -616,9 +634,7 @@ const layer = Layer.effect(
       return yield* SessionInbox.serialized(
         sessionID,
         Effect.gen(function* () {
-          const pending =
-            (yield* SessionInbox.nextSteer(db, sessionID)) ??
-            (promotable === "input" ? yield* SessionInbox.nextQueued(db, sessionID) : undefined)
+          const pending = yield* SessionInbox.nextPromotable(db, sessionID, promotable)
           if (pending?.type !== "move") return false
           yield* modelTransport.close(sessionID)
           yield* bus.publishAll([
@@ -694,6 +710,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
+    PluginSupervisor.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,

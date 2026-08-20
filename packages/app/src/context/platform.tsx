@@ -68,9 +68,6 @@ type PlatformBase = {
   /** Prompt drafts, history, and their blobs. */
   draftStore?: DraftStore
 
-  /** Stable platform window identity for window-scoped persistence */
-  windowID?: string
-
   /** Application-global desktop updater */
   updater?: UpdaterPlatform
 
@@ -85,12 +82,6 @@ type PlatformBase = {
 
   /** Manage WSL sidecar servers (Electron on Windows only) */
   wslServers?: WslServersPlatform
-
-  /** Get the preferred display backend (desktop only) */
-  getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null
-
-  /** Set the preferred display backend (desktop only) */
-  setDisplayBackend?(backend: DisplayBackend): Promise<void>
 
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
@@ -125,15 +116,15 @@ type PlatformBase = {
 
 export type Platform = PlatformBase &
   (
-    | { platform: "web"; os?: never }
+    | { platform: "web"; os?: never; windowID?: never }
     | {
         platform: "desktop"
         os?: DesktopOS
+        /** Stable platform window identity for window-scoped persistence */
+        windowID: string
         openDirectoryPickerDialog(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>
       }
   )
-
-export type DisplayBackend = "auto" | "wayland"
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
   name: "Platform",

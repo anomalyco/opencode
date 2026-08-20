@@ -5,7 +5,7 @@ import type { DesktopTheme } from "../src/theme/types"
 
 const themePath = import.meta.dir + "/../src/theme/themes/oc-2.json"
 const theme = (await Bun.file(themePath).json()) as DesktopTheme
-const css = await Bun.file(import.meta.dir + "/../src/v2/styles/theme.css").text()
+const css = await Bun.file(import.meta.dir + "/../src/styles/tokens/theme.css").text()
 
 const light = { ...V2_PRIMITIVES_DEFAULT, ...readTokens("light") }
 const dark = { ...V2_PRIMITIVES_DEFAULT, ...readTokens("dark") }

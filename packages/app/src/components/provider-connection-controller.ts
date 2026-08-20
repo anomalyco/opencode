@@ -1,9 +1,7 @@
 import type { FormAnswer, IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode-ai/client/promise"
-import { useQueryClient } from "@tanstack/solid-query"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
-import { pathKey } from "@/utils/path-key"
+import { useData } from "@/context/server"
 import { createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 
@@ -18,8 +16,7 @@ export function createProviderConnectionController(options: {
 }) {
   const language = useLanguage()
   const serverSDK = useServerSDK()
-  const serverSync = useServerSync()
-  const queryClient = useQueryClient()
+  const data = useData()
   const location = () => {
     const directory = options.directory()
     return directory ? { directory } : undefined
@@ -118,10 +115,15 @@ export function createProviderConnectionController(options: {
   }
   const finish = async () => {
     cancelPolling()
-    const directory = options.directory()
-    await queryClient
-      .refetchQueries(serverSync.queryOptions.providers(directory ? pathKey(directory) : null))
-      .catch(() => undefined)
+    const ref = location()
+    data.location.integration.invalidate(ref)
+    data.location.provider.invalidate(ref)
+    data.location.model.invalidate(ref)
+    await Promise.all([
+      data.location.integration.sync(ref),
+      data.location.provider.sync(ref),
+      data.location.model.sync(ref),
+    ]).catch(() => undefined)
     if (polling.disposed) return
     options.onComplete()
   }

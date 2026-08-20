@@ -11,7 +11,9 @@ import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Form } from "@opencode-ai/core/form"
 import { Integration } from "@opencode-ai/core/integration"
+import { KV } from "@opencode-ai/core/kv"
 import { Location } from "@opencode-ai/core/location"
+import { MCP } from "@opencode-ai/core/mcp/index"
 import { Npm } from "@opencode-ai/util/npm"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
@@ -24,11 +26,13 @@ import { Tool } from "@opencode-ai/core/tool"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
+import { emptyMcpLayer } from "../fixture/mcp"
 
 const npmLayer = Layer.succeed(
   Npm.Service,
   Npm.Service.of({
     add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+    resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
     which: () => Effect.succeed(undefined),
   }),
 )
@@ -49,6 +53,8 @@ export const PluginTestLayer = LayerNode.compile(
     Catalog.node,
     Command.node,
     Integration.node,
+    KV.node,
+    MCP.node,
     PluginRuntime.node,
     PluginHooks.node,
     Reference.node,
@@ -63,5 +69,6 @@ export const PluginTestLayer = LayerNode.compile(
     [Location.node, tempLocationLayer],
     [Npm.node, npmLayer],
     [Config.node, Config.testLayer()],
+    [MCP.node, emptyMcpLayer],
   ],
 ) as unknown as Layer.Layer<unknown, never>

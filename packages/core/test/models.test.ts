@@ -47,6 +47,7 @@ const fixtureSnapshot = [
     info: {
       id: Provider.ID.make("acme"),
       name: "Acme",
+      activation: "auto",
       package: Provider.aisdk("@ai-sdk/openai-compatible"),
     },
     models: [
@@ -109,6 +110,7 @@ const fixture2Snapshot = [
     info: {
       id: Provider.ID.make("beta"),
       name: "Beta",
+      activation: "auto",
       package: Provider.aisdk("@ai-sdk/openai-compatible"),
     },
     models: [

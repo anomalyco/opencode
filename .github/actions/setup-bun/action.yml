@@ -1,6 +1,10 @@
 name: "Setup Bun"
 description: "Setup Bun with caching and install dependencies"
 inputs:
+  bun-version:
+    description: "Bun version to install instead of the root packageManager version"
+    required: false
+    default: ""
   install-flags:
     description: "Additional flags to pass to 'bun install'"
     required: false
@@ -20,19 +24,22 @@ runs:
       shell: bash
       run: |
         if [ "$RUNNER_ARCH" = "X64" ]; then
-          V=$(node -p "require('./package.json').packageManager.split('@')[1]")
+          V="${{ inputs.bun-version }}"
+          if [ -z "$V" ]; then V=$(node -p "require('./package.json').packageManager.split('@')[1]"); fi
+          TAG=$([ "$V" = "canary" ] && echo "canary" || echo "bun-v${V}")
           case "$RUNNER_OS" in
             macOS)   OS=darwin ;;
             Linux)   OS=linux ;;
             Windows) OS=windows ;;
           esac
-          echo "url=https://github.com/oven-sh/bun/releases/download/bun-v${V}/bun-${OS}-x64-baseline.zip" >> "$GITHUB_OUTPUT"
+          echo "url=https://github.com/oven-sh/bun/releases/download/${TAG}/bun-${OS}-x64-baseline.zip" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Setup Bun
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       with:
-        bun-version-file: ${{ !steps.bun-url.outputs.url && 'package.json' || '' }}
+        bun-version: ${{ !steps.bun-url.outputs.url && inputs.bun-version || '' }}
+        bun-version-file: ${{ !steps.bun-url.outputs.url && !inputs.bun-version && 'package.json' || '' }}
         bun-download-url: ${{ steps.bun-url.outputs.url }}
 
     - name: Get cache directory

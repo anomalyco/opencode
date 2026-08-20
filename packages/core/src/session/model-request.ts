@@ -13,6 +13,7 @@ import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
 import { SessionModelHeaders } from "./model-headers.js"
+import { SessionModelHook } from "./model-hook.js"
 import { SessionModelHttp } from "./model-http.js"
 import { SessionModelTransport } from "./model-transport.js"
 import { SessionPromptCacheKey } from "./prompt-cache-key.js"
@@ -237,19 +238,25 @@ export const layer = Layer.effect(
           return [[name, { ...tool, description: definition.description, inputSchema: definition.input }] as const]
         }),
       )
-      const request = LLM.request({
-        model,
-        http: {
-          headers: SessionModelHeaders.make(session, app),
-        },
-        promptCacheKey: SessionPromptCacheKey.make(session.id),
-        system: context.system,
-        messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
-        tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
-        toolChoice: input.toolChoice,
-      })
+      const request = yield* SessionModelHook.apply(
+        hooks,
+        { sessionID: session.id, agent: input.scope.agentID, model: resolved.ref },
+        LLM.request({
+          model,
+          http: {
+            headers: SessionModelHeaders.make(session, app),
+          },
+          // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
+          promptCacheKey: SessionPromptCacheKey.make(session.fork?.sessionID ?? session.id),
+          system: context.system,
+          messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
+          tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
+          toolChoice: input.toolChoice,
+        }),
+      )
       const webSocketEligible =
-        !(yield* hooks.has("session", "http.request")) && !(yield* hooks.has("session", "http.response"))
+        !(yield* hooks.has("session", "http.request", resolved.ref.providerID)) &&
+        !(yield* hooks.has("session", "http.response", resolved.ref.providerID))
       const http = webSocketEligible
         ? undefined
         : SessionModelHttp.middleware(hooks, {
@@ -263,7 +270,7 @@ export const layer = Layer.effect(
         webSocket &&
         webSocketEligible &&
         resolved.ref.providerID === Provider.ID.openai &&
-        model.route.id === "openai-responses"
+        request.model.route.id === "openai-responses"
           ? { webSocket: transport.bind(session.id) }
           : {}),
       }

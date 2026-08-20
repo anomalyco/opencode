@@ -2,13 +2,13 @@ import { For, Show, createEffect, createMemo, onCleanup, onMount, type Component
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { showToast } from "@/utils/toast"
 import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode-ai/client/promise"
 import { useLanguage } from "@/context/language"
-import { useSDK } from "@/context/sdk"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useServerSDK } from "@/context/server-sdk"
@@ -68,7 +68,6 @@ function Option(props: {
 }
 
 export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () => void }> = (props) => {
-  const sdk = useSDK()
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const cacheKey = ScopedKey.from(serverSDK.scope, props.request.id)
@@ -238,7 +237,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   const replyMutation = useMutation(() => ({
     mutationFn: (answer: FormAnswer) =>
-      sdk().api.form.reply({ sessionID: props.request.sessionID, formID: props.request.id, answer }),
+      serverSDK.api.form.reply({ sessionID: props.request.sessionID, formID: props.request.id, answer }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -250,7 +249,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk().api.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
+    mutationFn: () => serverSDK.api.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -501,19 +500,14 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                   </For>
                 </div>
               </Show>
-              <button
-                type="button"
-                data-component="icon-button"
-                data-icon="chevron-down"
-                data-size="normal"
-                data-variant="ghost"
+              <IconButton
+                icon={<Icon name="chevron-down" size="small" />}
+                variant="ghost"
                 disabled={sending()}
                 style={{ transform: `rotate(${hidden() * 180}deg)` }}
                 onClick={store.minimized ? restore : minimize}
                 aria-label={language.t(store.minimized ? "session.question.restore" : "session.question.minimize")}
-              >
-                <Icon name="chevron-down" size="small" />
-              </button>
+              />
             </div>
           </>
         }
@@ -524,12 +518,12 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
             </Button>
             <div data-slot="question-footer-actions">
               <Show when={store.tab > 0}>
-                <Button variant="secondary" size="large" disabled={sending()} onClick={back}>
+                <Button variant="neutral" size="large" disabled={sending()} onClick={back}>
                   {language.t("ui.common.back")}
                 </Button>
               </Show>
               <Button
-                variant={last() ? "primary" : "secondary"}
+                variant={last() ? "contrast" : "neutral"}
                 size="large"
                 disabled={sending()}
                 onClick={next}

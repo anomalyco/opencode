@@ -1,9 +1,7 @@
 import type { FileNode } from "@/types"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 
-type WatcherEvent = {
-  type: string
-  properties: unknown
-}
+type WatcherEvent = Extract<OpenCodeEvent, { type: "filesystem.changed" }>
 
 type WatcherOps = {
   normalize: (input: string) => string
@@ -16,15 +14,7 @@ type WatcherOps = {
 }
 
 export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
-  if (event.type !== "filesystem.changed") return
-  const props =
-    typeof event.properties === "object" && event.properties ? (event.properties as Record<string, unknown>) : undefined
-  const rawPath = typeof props?.file === "string" ? props.file : undefined
-  const kind = typeof props?.event === "string" ? props.event : undefined
-  if (!rawPath) return
-  if (!kind) return
-
-  const path = ops.normalize(rawPath)
+  const path = ops.normalize(event.data.file)
   if (!path) return
   if (path.startsWith(".git/")) return
 
@@ -32,20 +22,12 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
     ops.loadFile(path)
   }
 
-  if (kind === "change") {
-    const dir = (() => {
-      if (path === "") return ""
-      const node = ops.node(path)
-      if (node?.type !== "directory") return
-      return path
-    })()
-    if (dir === undefined) return
-    if (!ops.isDirLoaded(dir)) return
-    ops.refreshDir(dir)
+  if (event.data.event === "change") {
+    if (ops.node(path)?.type !== "directory") return
+    if (!ops.isDirLoaded(path)) return
+    ops.refreshDir(path)
     return
   }
-  if (kind !== "add" && kind !== "unlink") return
-
   const parent = path.split("/").slice(0, -1).join("/")
   if (!ops.isDirLoaded(parent)) return
 

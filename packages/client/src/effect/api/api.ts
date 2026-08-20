@@ -20,7 +20,6 @@ import type { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import type { Schema } from "effect"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import type { Shell } from "@opencode-ai/schema/shell"
-import type { DateTime } from "effect"
 import type { Provider } from "@opencode-ai/schema/provider"
 import type { Integration } from "@opencode-ai/schema/integration"
 import type { Form } from "@opencode-ai/schema/form"
@@ -42,13 +41,8 @@ import type { Config } from "@opencode-ai/schema/config"
 export type Endpoint0_0Output = { readonly healthy: true; readonly version: string; readonly pid: number }
 export type HealthGetOperation<E = never> = () => Effect.Effect<Endpoint0_0Output, E>
 
-export type Endpoint0_1Input = { readonly instanceID: string }
-export type Endpoint0_1Output = { readonly accepted: boolean }
-export type HealthStopOperation<E = never> = (input: Endpoint0_1Input) => Effect.Effect<Endpoint0_1Output, E>
-
 export interface HealthApi<E = never> {
   readonly get: HealthGetOperation<E>
-  readonly stop: HealthStopOperation<E>
 }
 
 export type Endpoint1_0Output = { readonly urls: ReadonlyArray<string> }
@@ -316,7 +310,7 @@ export type Endpoint5_31Output =
   | (
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.created"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -336,7 +330,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.agent.selected"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -349,7 +343,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.model.selected"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -362,7 +356,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.moved"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -376,7 +370,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.renamed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -385,7 +379,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.deleted"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -394,7 +388,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.forked"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -410,7 +404,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.inbox.delivered"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -419,7 +413,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.inbox.enqueued"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -432,7 +426,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.inbox.cancelled"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -441,7 +435,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.inbox.delivery.changed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -454,7 +448,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.execution.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -463,7 +457,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.execution.succeeded"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -472,7 +466,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.execution.failed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -484,7 +478,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.execution.interrupted"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -493,7 +487,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.instructions.updated"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -506,7 +500,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.synthetic"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -520,7 +514,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.skill.activated"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -534,7 +528,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.shell.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -543,7 +537,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.shell.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -561,7 +555,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.step.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -576,7 +570,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.step.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -585,6 +579,8 @@ export type Endpoint5_31Output =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
+            readonly rawFinish?: string | undefined
+            readonly providerState?: SessionMessage.ProviderState | undefined
             readonly cost: number & Brand.Brand<"Money.USD">
             readonly tokens: {
               readonly input: number
@@ -598,7 +594,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.step.failed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -607,6 +603,9 @@ export type Endpoint5_31Output =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly finish?: "content-filter" | undefined
+            readonly rawFinish?: string | undefined
+            readonly providerState?: SessionMessage.ProviderState | undefined
             readonly cost?: (number & Brand.Brand<"Money.USD">) | undefined
             readonly tokens?:
               | {
@@ -622,7 +621,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.text.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -635,7 +634,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.text.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -650,7 +649,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.reasoning.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -664,7 +663,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.reasoning.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -679,7 +678,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.input.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -693,7 +692,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.input.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -707,7 +706,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.called"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -723,7 +722,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.success"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -759,7 +758,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.failed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -798,7 +797,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.retry.scheduled"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -813,7 +812,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.compaction.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -827,7 +826,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.compaction.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -841,7 +840,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.compaction.failed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -855,7 +854,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.revert.staged"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -864,7 +863,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.revert.cleared"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -873,7 +872,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.revert.committed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -882,7 +881,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.usage.recorded"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -914,6 +913,10 @@ export type SessionBackgroundOperation<E = never> = (input: Endpoint5_33Input) =
 export type Endpoint5_34Input = { readonly sessionID: Session.ID; readonly messageID: SessionMessage.ID }
 export type Endpoint5_34Output = SessionMessage.Info
 export type SessionMessageOperation<E = never> = (input: Endpoint5_34Input) => Effect.Effect<Endpoint5_34Output, E>
+
+export type Endpoint5_35Input = { readonly sessionID: Session.ID; readonly variables: { readonly [x: string]: string } }
+export type Endpoint5_35Output = void
+export type SessionEnvironmentOperation<E = never> = (input: Endpoint5_35Input) => Effect.Effect<Endpoint5_35Output, E>
 
 export interface SessionApi<E = never> {
   readonly list: SessionListOperation<E>
@@ -959,6 +962,7 @@ export interface SessionApi<E = never> {
   readonly interrupt: SessionInterruptOperation<E>
   readonly background: SessionBackgroundOperation<E>
   readonly message: SessionMessageOperation<E>
+  readonly environment: SessionEnvironmentOperation<E>
 }
 
 export type Endpoint6_0Input = {

@@ -32,8 +32,8 @@ benchmark("samples cached session repaint after the click", async ({ page, repor
 
   await installCachedRepaintProbe(page, {
     targetHref: stressSessionHref(fixture.targetID),
-    destination: fixture.messages[fixture.targetID].map((message) => message.info.id),
-    source: fixture.messages[fixture.sourceID].map((message) => message.info.id),
+    destination: fixture.messages[fixture.targetID].map((message) => message.id),
+    source: fixture.messages[fixture.sourceID].map((message) => message.id),
     last: fixture.expected.targetMessageIDs.at(-1)!,
     windowMs: 1_000,
   })

@@ -102,6 +102,35 @@ describe("Catalog", () => {
     }).pipe(Effect.provide(localCatalogLayer))
   })
 
+  it.effect("makes an explicitly enabled provider available without a connection", () => {
+    const integrationID = Integration.ID.make("gateway")
+    const providerID = Provider.ID.make("remote")
+    const localCatalogLayer = Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
+        [Location.node, locationLayer],
+      ]),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.integrationID = integrationID
+          provider.settings = { baseURL: "https://gateway.example.com/v1" }
+        }),
+      )
+      expect(yield* catalog.provider.available()).toEqual([])
+
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.activation = "enabled"
+        }),
+      )
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
+    }).pipe(Effect.provide(localCatalogLayer))
+  })
+
   it.effect("projects environment connections without a catalog plugin", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -278,7 +307,7 @@ describe("Catalog", () => {
       const fallbackModel = Model.ID.make("fallback")
       yield* catalog.transform((catalog) => {
         catalog.provider.update(disabledProvider, (provider) => {
-          provider.disabled = true
+          provider.activation = "disabled"
         })
         catalog.model.update(disabledProvider, disabledModel, () => {})
         catalog.provider.update(enabledProvider, () => {})

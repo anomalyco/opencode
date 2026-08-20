@@ -2,9 +2,9 @@ import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import * as pty from "@lydell/node-pty"
-import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "../../preload/types"
-import { parseCliVersion } from "../cli-version"
-import { nativeT } from "../native-translations"
+import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "@opencode-ai/app/wsl/types"
+import { nativeT } from "../native/translations"
+import { parseCliVersion } from "../service/cli-version"
 
 export type WslCommandLine = {
   stream: "stdout" | "stderr"

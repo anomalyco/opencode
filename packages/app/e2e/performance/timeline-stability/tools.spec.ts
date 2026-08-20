@@ -12,6 +12,7 @@ import {
   partUpdated,
   session,
   sessionID,
+  renderedPartID,
   setupTimeline,
   status,
   textPart,
@@ -48,8 +49,8 @@ test.describe("timeline tool state stability", () => {
     })
     await timeline.send(status("busy"), 120)
     for (const id of ids) await timeline.waitForPart(`prt_state_${id}`)
-    await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
-    await expect(page.locator(`[data-timeline-part-id="${todoID}"]`)).toHaveCount(0)
+    await expect(page.locator(`[data-timeline-part-id="${renderedPartID(questionID)}"]`)).toHaveCount(0)
+    await expect(page.locator(`[data-timeline-part-id="${renderedPartID(todoID)}"]`)).toHaveCount(0)
 
     const regionIDs = [
       "prt_state_webfetch",
@@ -104,8 +105,10 @@ test.describe("timeline tool state stability", () => {
         { type: "label-stability", regions: "all" },
       ]),
     )
-    await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toContainText("Keep it stable")
-    await expect(page.locator(`[data-timeline-part-id="${todoID}"]`)).toHaveCount(0)
+    await expect(page.locator(`[data-timeline-part-id="${renderedPartID(questionID)}"]`)).toContainText(
+      "Keep it stable",
+    )
+    await expect(page.locator(`[data-timeline-part-id="${renderedPartID(todoID)}"]`)).toHaveCount(0)
     await expect(
       page.locator(`a[href$="/session/${childID}"]`, { has: page.locator('[data-component="task-tool-card"]') }),
     ).toBeVisible()
@@ -145,7 +148,7 @@ test.describe("timeline tool state stability", () => {
       },
       context: { selector: groupSelector, closest: '[data-timeline-row="AssistantPart"]' },
       following: {
-        selector: '[data-timeline-part-id="prt_ctx_following"]',
+        selector: `[data-timeline-part-id="${renderedPartID("prt_ctx_following")}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
@@ -194,5 +197,5 @@ function questionInput() {
 }
 
 function toolRegion(id: string) {
-  return { selector: `[data-timeline-part-id="${id}"]`, closest: '[data-timeline-row="AssistantPart"]' }
+  return { selector: `[data-timeline-part-id="${renderedPartID(id)}"]`, closest: '[data-timeline-row="AssistantPart"]' }
 }

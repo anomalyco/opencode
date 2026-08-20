@@ -507,20 +507,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "töölaud {{version}}",
   "wsl.onboarding.versionMismatch": "Installitud versioon ei ühti töölauarakenduse versiooniga.",
   "wsl.onboarding.adding": "Lisamine...",
-  "help.tabs.toast.ariaLabel": "Tutvustame vahekaarte. Korraldage oma tööd ja aktiivseid seansse vahekaartide abil",
-  "help.tabs.toast.dismiss": "Loobu vahelehtede teabest",
-  "help.tabs.title": "Tutvustame vahekaarte",
-  "help.tabs.description": "Korraldage oma tööd ja aktiivseid seansse vahekaartide abil",
-  "help.tabs.date": "14. juuli",
-  "help.tabs.introduction": "OpenCode Töölaud on nüüd üles ehitatud vahekaartide ümber.",
-  "help.tabs.sessions":
-    "Alustage vahekaardil uut seanssi või avage mis tahes projektist olemasolev seanss. Kui alustate midagi uut, avage uus vaheleht ja sulgege see, kui olete lõpetanud.",
-  "help.tabs.organize":
-    "Mõne vahelehe avatuna hoidmine muudab aktiivsete seansside korraldamise lihtsamaks. Nimetage vahekaardid ümber millekski meeldejäävaks, kui kavatsete need alles jätta.",
-  "help.tabs.home": "Kõik seansid ja projektid leiate uuelt avalehelt. Seansi valimine avab selle vahekaardil.",
-  "help.tabs.persistence": "Kui avate rakenduse uuesti, on teie vahelehed endiselt avatud.",
-  "help.tabs.worktrees":
-    "Uus disain ei toeta veel Git tööpuud, see on peagi saadaval. Seega, kui eelistate jätkata eelmise paigutuse kasutamist, saate seadetes küljendusi vahetada. Pidage vaid meeles, et uus paigutus muutub mõne nädala pärast püsivaks.",
   "server.row.noUsername": "kasutajanime pole",
   "dialog.project.edit.title": "Redigeeri projekti",
   "dialog.project.edit.name": "Nimi",
@@ -965,13 +951,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Laiendage tööriista osade redigeerimist",
   "settings.general.row.editToolPartsExpanded.description":
     "Kuva ajaskaalal vaikimisi laiendatud redigeerimis-, kirjutamis- ja paigatööriistade osad",
-  "settings.general.row.newInterface.title": "Uus paigutus",
-  "settings.general.row.newInterface.badge": "Uus",
-  "settings.general.row.newInterface.description":
-    "Kasutage uusi vahekaarte ja avalehe paigutust. Lülituge piiratud aja jooksul paigutuste vahel.",
-  "settings.general.row.newInterfaceNotice.title": "Kasutate nüüd uut paigutust",
-  "settings.general.row.newInterfaceNotice.description": "Eelmine paigutus pole enam saadaval",
-  "settings.general.row.newInterfaceNotice.dismiss": "Loobu",
   "settings.general.row.pinchZoom.title": "Suumimiseks näpistage",
   "settings.general.row.pinchZoom.description": "Lubage suumimiseks puuteplaadi kokkusurumine ja Ctrl-kerimine",
   "settings.general.row.wayland.title": "Kasuta omakeelset Wayland",

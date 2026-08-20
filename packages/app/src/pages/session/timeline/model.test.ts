@@ -1,23 +1,40 @@
 import { describe, expect, test } from "bun:test"
-import type { AssistantMessage, Message, UserMessage } from "@/types"
+import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
 import { isTimelineReady, loadOlderTimeline, selectUserMessages, selectVisibleUserMessages } from "./model"
 
-const user = (id: string) => ({ id, role: "user" }) as UserMessage
-const assistant = (id: string) => ({ id, role: "assistant" }) as AssistantMessage
+const user = (id: string): SessionMessageUser => ({ id, type: "user", text: id, time: { created: 1 } })
+const assistant = (id: string): SessionMessageAssistant => ({
+  id,
+  type: "assistant",
+  agent: "build",
+  model: { id: "model", providerID: "provider" },
+  content: [],
+  time: { created: 1 },
+})
 
 describe("timeline model", () => {
   test("selects users and applies the revert boundary", () => {
-    const messages: Message[] = [user("msg_z"), assistant("msg_a"), user("msg_b"), user("msg_c")]
+    const messages: SessionMessageInfo[] = [user("msg_a"), assistant("msg_ab"), user("msg_b"), user("msg_c")]
     const users = selectUserMessages(messages)
 
-    expect(users.map((message) => message.id)).toEqual(["msg_z", "msg_b", "msg_c"])
-    expect(selectVisibleUserMessages(users, "msg_b").map((message) => message.id)).toEqual(["msg_z"])
+    expect(users.map((message) => message.id)).toEqual(["msg_a", "msg_b", "msg_c"])
+    expect(selectVisibleUserMessages(users, "msg_b").map((message) => message.id)).toEqual(["msg_a"])
+    expect(selectVisibleUserMessages(users.slice(2), "msg_b")).toEqual([])
     expect(selectVisibleUserMessages(users)).toBe(users)
   })
 
   test("waits for an assistant-only load to hydrate its user root", () => {
-    expect(isTimelineReady([assistant("msg_2")], true)).toBe(false)
-    expect(isTimelineReady([user("msg_1"), assistant("msg_2")], true)).toBe(true)
+    const currentAssistant = {
+      id: "msg_2",
+      type: "assistant",
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+      content: [],
+      time: { created: 2 },
+    } satisfies SessionMessageInfo
+    const currentUser = { id: "msg_1", type: "user", text: "hello", time: { created: 1 } } satisfies SessionMessageInfo
+    expect(isTimelineReady([currentAssistant], true)).toBe(false)
+    expect(isTimelineReady([currentUser, currentAssistant], true)).toBe(true)
     expect(isTimelineReady([], false)).toBe(true)
   })
 

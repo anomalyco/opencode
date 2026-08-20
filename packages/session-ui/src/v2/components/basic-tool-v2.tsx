@@ -1,7 +1,7 @@
 import { Collapsible } from "@kobalte/core/collapsible"
 import { type ComponentProps, type JSX, For, Show, createMemo, splitProps } from "solid-js"
-import { DiffChanges } from "@opencode-ai/ui/v2/diff-changes-v2"
-import { TextShimmerV2 } from "@opencode-ai/ui/v2/text-shimmer-v2"
+import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import "./basic-tool-v2.css"
 
 function ChevronIcon() {
@@ -91,7 +91,7 @@ export function BasicToolV2(props: BasicToolV2Props) {
             {(title) => (
               <>
                 <span data-slot="basic-tool-v2-title">
-                  <TextShimmerV2 text={title().title} active={pending()} />
+                  <TextShimmer text={title().title} active={pending()} />
                 </span>
                 <Show when={!pending() && title().subtitle}>
                   <span data-slot="basic-tool-v2-sep" aria-hidden="true">

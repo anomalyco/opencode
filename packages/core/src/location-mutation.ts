@@ -65,7 +65,7 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
 
-    const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
+    const resolve = Effect.fnUntraced(function* (input: ResolveInput) {
       const absolute = path.resolve(location.directory, input.path)
       if (FSUtil.contains(location.directory, absolute)) {
         return {
@@ -76,9 +76,11 @@ const layer = Layer.effect(
       const type =
         input.kind === "directory"
           ? "Directory"
-          : (yield* fs
-              .stat(absolute)
-              .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined))))?.type
+          : input.kind === "file"
+            ? "File"
+            : (yield* fs
+                .stat(absolute)
+                .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined))))?.type
       const externalDirectory = type === "Directory" ? absolute : path.dirname(absolute)
       const externalResource = slash(path.join(externalDirectory, "*"))
       return {

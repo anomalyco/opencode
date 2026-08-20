@@ -15,7 +15,6 @@ import {
 } from "./session-timeline-stream-probe"
 
 type TimelineStreamOptions = {
-  newLayoutDesigns?: boolean
   reviewDiffs?: boolean
   reviewPane?: boolean
 }
@@ -45,34 +44,27 @@ benchmark.describe("performance: session timeline streaming", () => {
     report(result.metrics, result.context)
   })
 
-  benchmark("streams assistant text in v2 with review pane closed", async ({ page, report }) => {
+  benchmark("streams assistant text with review diffs and pane closed", async ({ page, report }) => {
     benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 420_000) + 60_000)
-    const result = await runTimelineStreamBenchmark(page, { newLayoutDesigns: true })
+    const result = await runTimelineStreamBenchmark(page, { reviewDiffs: true })
     report(result.metrics, result.context)
   })
 
-  benchmark("streams assistant text in v2 with review diffs and pane closed", async ({ page, report }) => {
+  benchmark("streams assistant text with review pane open", async ({ page, report }) => {
     benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 420_000) + 60_000)
-    const result = await runTimelineStreamBenchmark(page, { newLayoutDesigns: true, reviewDiffs: true })
-    report(result.metrics, result.context)
-  })
-
-  benchmark("streams assistant text in v2 with review pane open", async ({ page, report }) => {
-    benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 420_000) + 60_000)
-    const result = await runTimelineStreamBenchmark(page, { newLayoutDesigns: true, reviewPane: true })
+    const result = await runTimelineStreamBenchmark(page, { reviewPane: true })
     report(result.metrics, result.context)
   })
 })
 
 benchmark.describe("performance: review pane", () => {
-  benchmark("loads v2 review diffs and switches active files", async ({ page, report }) => {
+  benchmark("loads review diffs and switches active files", async ({ page, report }) => {
     benchmark.setTimeout(240_000)
     const historyTurns = Number(process.env.REVIEW_PANE_HISTORY_TURNS ?? 72)
     const diffs = createReviewDiffs()
     const fixture = await setupTimelineBenchmark(page, {
       historyTurns,
       eventBatch: 1,
-      newLayoutDesigns: true,
       vcsDiff: diffs,
     })
 
@@ -112,7 +104,6 @@ async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOpt
   const fixture = await setupTimelineBenchmark(page, {
     historyTurns,
     eventBatch,
-    newLayoutDesigns: options.newLayoutDesigns,
     // Turn diffs exercise timeline data cost; the pane-open scenario serves the same
     // diffs through the default git mode so it works across review implementations.
     turnDiffs: options.reviewDiffs ? diffs : undefined,
@@ -173,7 +164,6 @@ async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOpt
       queuedDeltas: deltas.length,
       historyTurns,
       eventBatch,
-      newLayoutDesigns: options.newLayoutDesigns === true,
       reviewPane: options.reviewPane === true ? "open" : "closed",
       reviewDiffs: diffs?.length ?? 0,
     },

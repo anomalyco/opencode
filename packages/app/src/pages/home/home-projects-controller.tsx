@@ -25,7 +25,7 @@ export function createHomeProjectsController(home: HomeController) {
   const serverManagement = useServerActionsController()
   const global = useGlobal()
   const [_state, setState, _, ready] = persisted(
-    Persist.global("home.servers", ["home.servers.v1"]),
+    Persist.global("home.servers"),
     createStore({ collapsed: {} as Record<string, boolean> }),
   )
   const [state] = createResource(

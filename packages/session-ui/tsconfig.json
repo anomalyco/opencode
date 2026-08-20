@@ -15,6 +15,5 @@
     "strict": true,
     "types": ["vite/client", "bun"]
   },
-  "exclude": ["**/*.stories.*", "**/*.mdx"],
-  "references": [{ "path": "../core" }]
+  "exclude": ["**/*.stories.*", "**/*.mdx"]
 }

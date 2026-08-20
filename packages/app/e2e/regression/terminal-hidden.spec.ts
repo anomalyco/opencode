@@ -6,6 +6,7 @@ const directory = "C:/OpenCode/HiddenTerminalRegression"
 const projectID = "proj_hidden_terminal_regression"
 const sessionID = "ses_hidden_terminal_regression"
 const title = "Hidden terminal regression"
+const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 test("unmounts the terminal panel while it is hidden", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 })
@@ -91,7 +92,7 @@ test("unmounts the terminal panel while it is hidden", async ({ page }) => {
   )
   await page.routeWebSocket("**/api/pty/pty_hidden_terminal/connect", () => undefined)
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
 
   await page.keyboard.press("Control+Backquote")

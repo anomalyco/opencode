@@ -12,7 +12,6 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderOptions,
   type ProviderMetadata,
   type TextPart,
   type ToolCallPart,
@@ -24,7 +23,6 @@ import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
 
 const ADAPTER = "gemini"
-const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
 // Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
 const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -68,9 +66,7 @@ export interface OptionsInput {
   }
 }
 
-export type ProviderOptionsInput = ProviderOptions & {
-  readonly gemini?: OptionsInput
-}
+export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
 // Request Body Schema
@@ -93,7 +89,7 @@ const GeminiFunctionCallPart = Schema.Struct({
   functionCall: Schema.Struct({
     id: Schema.optional(Schema.String),
     name: Schema.String,
-    args: Schema.Unknown,
+    args: Schema.optional(Schema.Unknown),
   }),
   thoughtSignature: Schema.optional(Schema.String),
 })
@@ -167,6 +163,7 @@ const GeminiGenerationConfig = Schema.Struct({
 const GeminiBodyFields = {
   cachedContent: Schema.optional(Schema.String),
   contents: Schema.Array(GeminiContent),
+  labels: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   safetySettings: optionalArray(GeminiSafetySetting),
   serviceTier: Schema.optional(Schema.String),
   systemInstruction: Schema.optional(GeminiSystemInstruction),
@@ -191,8 +188,19 @@ const GeminiCandidate = Schema.Struct({
   finishReason: Schema.optional(Schema.String),
 })
 
+const GeminiPromptFeedback = Schema.StructWithRest(
+  Schema.Struct({
+    blockReason: Schema.optional(Schema.String),
+    blockReasonMessage: Schema.optional(Schema.String),
+    safetyRatings: Schema.optional(Schema.Unknown),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+type GeminiPromptFeedback = Schema.Schema.Type<typeof GeminiPromptFeedback>
+
 const GeminiEvent = Schema.Struct({
   candidates: optionalArray(GeminiCandidate),
+  promptFeedback: Schema.optional(GeminiPromptFeedback),
   usageMetadata: Schema.optional(GeminiUsage),
 })
 type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
@@ -201,6 +209,7 @@ interface ParserState {
   readonly finishReason?: string
   readonly hasToolCalls: boolean
   readonly nextToolCallId: number
+  readonly promptFeedback?: GeminiPromptFeedback
   readonly usage?: Usage
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignature?: string
@@ -248,7 +257,7 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
 
 const lowerUserPart = Effect.fn("Gemini.lowerUserPart")(function* (part: TextPart | MediaPart) {
   if (part.type === "text") return { text: part.text }
-  const media = yield* ProviderShared.validateMedia("Gemini", part, MEDIA_MIMES)
+  const media = ProviderShared.normalizeMedia(part)
   return { inlineData: { mimeType: media.mime, data: media.base64 } }
 })
 
@@ -353,7 +362,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       const media: GeminiInlineDataPart[] = []
       for (const item of content) {
         if (item.type === "text") continue
-        const value = yield* ProviderShared.validateToolFile("Gemini", item, MEDIA_MIMES)
+        const value = ProviderShared.normalizeToolFile(item)
         media.push({ inlineData: { mimeType: value.mime, data: value.base64 } })
       }
       parts.push({
@@ -375,7 +384,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 })
 
 const resolveOptions = (request: LLMRequest) => {
-  const input = request.providerOptions?.gemini
+  const input = request.providerOptions
   const value = input?.thinkingConfig
   const thinkingConfig = {
     thinkingBudget:
@@ -504,32 +513,37 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
   return "unknown"
 }
 
-const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
-  state.finishReason || state.usage
-    ? (() => {
-        const events: LLMEvent[] = []
-        const lifecycle = state.reasoningSignature
-          ? Lifecycle.reasoningEnd(
-              state.lifecycle,
-              events,
-              "reasoning-0",
-              googleMetadata({ thoughtSignature: state.reasoningSignature }),
-            )
-          : state.lifecycle
-        Lifecycle.finish(lifecycle, events, {
-          reason: {
-            normalized: mapFinishReason(state.finishReason, state.hasToolCalls),
-            raw: state.finishReason,
-          },
-          usage: state.usage,
-        })
-        return events
-      })()
-    : []
+const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
+  const promptBlockReason = state.finishReason === undefined ? state.promptFeedback?.blockReason : undefined
+  const finishReason = state.finishReason ?? promptBlockReason
+  if (finishReason === undefined && state.usage === undefined) return []
+
+  const events: LLMEvent[] = []
+  const lifecycle = state.reasoningSignature
+    ? Lifecycle.reasoningEnd(
+        state.lifecycle,
+        events,
+        "reasoning-0",
+        googleMetadata({ thoughtSignature: state.reasoningSignature }),
+      )
+    : state.lifecycle
+  Lifecycle.finish(lifecycle, events, {
+    reason: {
+      normalized:
+        promptBlockReason === undefined ? mapFinishReason(finishReason, state.hasToolCalls) : "content-filter",
+      raw: finishReason,
+    },
+    usage: state.usage,
+    providerMetadata:
+      state.promptFeedback === undefined ? undefined : googleMetadata({ promptFeedback: state.promptFeedback }),
+  })
+  return events
+}
 
 const step = (state: ParserState, event: GeminiEvent) => {
   const nextState = {
     ...state,
+    promptFeedback: event.promptFeedback ?? state.promptFeedback,
     usage: event.usageMetadata ? (mapUsage(event.usageMetadata) ?? state.usage) : state.usage,
   }
   const candidate = event.candidates?.[0]
@@ -570,7 +584,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
     }
 
     if ("functionCall" in part) {
-      const input = part.functionCall.args
+      const input = part.functionCall.args === undefined ? {} : part.functionCall.args
       const id = `tool_${nextToolCallId++}`
       const metadata = {
         ...(part.functionCall.id === undefined ? {} : { functionCallId: part.functionCall.id }),
@@ -613,8 +627,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
 // =============================================================================
 /**
  * The Gemini protocol — request body construction, body schema, and the
- * streaming-event state machine. Used by Google AI Studio Gemini and (once
- * registered) Vertex Gemini.
+ * streaming-event state machine shared by Google AI Studio and Vertex Gemini.
  */
 export const protocol = Protocol.make({
   id: ADAPTER,

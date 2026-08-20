@@ -6,8 +6,6 @@ import { HttpApiClient } from "effect/unstable/httpapi"
 import { ClientApi } from "../../contract"
 import type {
   Endpoint0_0Output,
-  Endpoint0_1Input,
-  Endpoint0_1Output,
   Endpoint1_0Output,
   Endpoint2_0Input,
   Endpoint2_0Output,
@@ -86,6 +84,8 @@ import type {
   Endpoint5_33Output,
   Endpoint5_34Input,
   Endpoint5_34Output,
+  Endpoint5_35Input,
+  Endpoint5_35Output,
   Endpoint6_0Input,
   Endpoint6_0Output,
   Endpoint7_0Input,
@@ -246,12 +246,7 @@ const preserveStream =
 const Endpoint0_0 = (raw: RawClient["server.health"]) => () =>
   preserveEffect<Endpoint0_0Output>()(raw["health.get"]({}).pipe(Effect.mapError(mapClientError)))
 
-const Endpoint0_1 = (raw: RawClient["server.health"]) => (input: Endpoint0_1Input) =>
-  preserveEffect<Endpoint0_1Output>()(
-    raw["health.stop"]({ payload: { instanceID: input["instanceID"] } }).pipe(Effect.mapError(mapClientError)),
-  )
-
-const adaptGroup0 = (raw: RawClient["server.health"]) => ({ get: Endpoint0_0(raw), stop: Endpoint0_1(raw) })
+const adaptGroup0 = (raw: RawClient["server.health"]) => ({ get: Endpoint0_0(raw) })
 
 const Endpoint1_0 = (raw: RawClient["server.server"]) => () =>
   preserveEffect<Endpoint1_0Output>()(raw["server.get"]({}).pipe(Effect.mapError(mapClientError)))
@@ -610,6 +605,14 @@ const Endpoint5_34 = (raw: RawClient["server.session"]) => (input: Endpoint5_34I
     ),
   )
 
+const Endpoint5_35 = (raw: RawClient["server.session"]) => (input: Endpoint5_35Input) =>
+  preserveEffect<Endpoint5_35Output>()(
+    raw["session.environment"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { variables: input["variables"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroup5 = (raw: RawClient["server.session"]) => ({
   list: Endpoint5_0(raw),
   create: Endpoint5_1(raw),
@@ -639,6 +642,7 @@ const adaptGroup5 = (raw: RawClient["server.session"]) => ({
   interrupt: Endpoint5_32(raw),
   background: Endpoint5_33(raw),
   message: Endpoint5_34(raw),
+  environment: Endpoint5_35(raw),
 })
 
 const Endpoint6_0 = (raw: RawClient["server.message"]) => (input: Endpoint6_0Input) =>

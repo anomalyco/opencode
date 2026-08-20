@@ -9,6 +9,7 @@ import {
 import {
   assistantMessage,
   partUpdated,
+  renderedPartID,
   setupTimeline,
   textPart,
   toolPart,
@@ -43,11 +44,17 @@ for (const profile of profiles) {
       settings: { editToolPartsExpanded: true },
       cpuRate: 4,
     })
-    await waitForVisualSettle(page, [`[data-timeline-part-id="${partID}"]`, `[data-timeline-part-id="${followingID}"]`])
+    await waitForVisualSettle(page, [
+      `[data-timeline-part-id="${renderedPartID(partID)}"]`,
+      `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
+    ])
     const regions = defineVisualRegions({
-      tool: { selector: `[data-timeline-part-id="${partID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+      tool: {
+        selector: `[data-timeline-part-id="${renderedPartID(partID)}"]`,
+        closest: '[data-timeline-row="AssistantPart"]',
+      },
       following: {
-        selector: `[data-timeline-part-id="${followingID}"]`,
+        selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })

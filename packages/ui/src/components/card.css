@@ -58,7 +58,7 @@
     gap: var(--card-gap);
   }
 
-  :where([data-slot="card-title"]) [data-component="icon"] {
+  :where([data-slot="card-title"]) [data-slot="icon-svg"] {
     color: var(--card-accent);
   }
 
@@ -71,7 +71,7 @@
     flex: 0 0 auto;
   }
 
-  :where([data-slot="card-title-icon"][data-placeholder]) [data-component="icon"] {
+  :where([data-slot="card-title-icon"][data-placeholder]) [data-slot="icon-svg"] {
     color: var(--v2-text-text-faint);
   }
 
@@ -90,26 +90,5 @@
 
   :where([data-card="actions"], [data-slot="card-actions"]) {
     padding-left: var(--card-indent);
-  }
-}
-
-body:not([data-new-layout]) [data-component="card"] {
-  color: var(--text-strong);
-  --card-accent: var(--icon-active);
-
-  :where([data-card="title"], [data-slot="card-title"]) {
-    color: var(--text-strong);
-  }
-
-  :where([data-slot="card-title-icon"][data-placeholder]) [data-component="icon"] {
-    color: var(--text-weak);
-  }
-
-  :where([data-card="description"], [data-slot="card-description"]) {
-    color: var(--text-base);
-  }
-
-  &[data-variant="error"] {
-    --card-accent: var(--icon-critical-base) !important;
   }
 }

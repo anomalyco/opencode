@@ -1,8 +1,7 @@
 import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
-import { useSync } from "@/context/sync"
-import { checksum } from "@opencode-ai/core/util/encode"
-import { findLast } from "@opencode-ai/core/util/array"
+import { useData } from "@/context/server"
+import { checksum } from "@opencode-ai/util/encode"
 import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
@@ -11,24 +10,15 @@ import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { File } from "@opencode-ai/session-ui/file"
 import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import type { Message, Part, UserMessage } from "@/types"
+import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
+import { useServerSDK } from "@/context/server-sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { getSessionContext } from "./session-context-metrics"
-import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
 import { createSessionContextFormatter } from "./session-context-format"
-
-const BREAKDOWN_COLOR: Record<SessionContextBreakdownKey, string> = {
-  system: "var(--syntax-info)",
-  user: "var(--syntax-success)",
-  assistant: "var(--syntax-property)",
-  tool: "var(--syntax-warning)",
-  other: "var(--syntax-comment)",
-}
 
 function Stat(props: { label: string; value: JSX.Element }) {
   return (
@@ -39,12 +29,11 @@ function Stat(props: { label: string; value: JSX.Element }) {
   )
 }
 
-function RawMessageContent(props: { message: Message; getParts: (id: string) => Part[]; onRendered: () => void }) {
+function RawMessageContent(props: { message: SessionMessageInfo; onRendered: () => void }) {
   const file = createMemo(() => {
-    const parts = props.getParts(props.message.id)
-    const contents = JSON.stringify({ message: props.message, parts }, null, 2)
+    const contents = JSON.stringify(props.message, null, 2)
     return {
-      name: `${props.message.role}-${props.message.id}.json`,
+      name: `${props.message.type}-${props.message.id}.json`,
       contents,
       cacheKey: checksum(contents),
     }
@@ -62,8 +51,7 @@ function RawMessageContent(props: { message: Message; getParts: (id: string) => 
 }
 
 function RawMessage(props: {
-  message: Message
-  getParts: (id: string) => Part[]
+  message: SessionMessageInfo
   onRendered: () => void
   time: (value: number | undefined) => string
 }) {
@@ -73,7 +61,7 @@ function RawMessage(props: {
         <Accordion.Trigger>
           <div class="flex items-center justify-between gap-2 w-full">
             <div class="min-w-0 truncate">
-              {props.message.role} <span class="text-text-base">• {props.message.id}</span>
+              {props.message.type} <span class="text-text-base">• {props.message.id}</span>
             </div>
             <div class="flex items-center gap-3">
               <div class="shrink-0 text-12-regular text-text-weak">{props.time(props.message.time.created)}</div>
@@ -84,49 +72,32 @@ function RawMessage(props: {
       </StickyAccordionHeader>
       <Accordion.Content class="bg-background-base">
         <div class="p-3">
-          <RawMessageContent message={props.message} getParts={props.getParts} onRendered={props.onRendered} />
+          <RawMessageContent message={props.message} onRendered={props.onRendered} />
         </div>
       </Accordion.Content>
     </Accordion.Item>
   )
 }
 
-const emptyMessages: Message[] = []
-const emptyUserMessages: UserMessage[] = []
+const emptyMessages: SessionMessageInfo[] = []
 
 export function SessionContextTab() {
-  const sync = useSync()
+  const data = useData()
   const language = useLanguage()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const providers = useProviders(() => sdk().directory)
   const { params, view } = useSessionLayout()
 
-  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
+  const info = createMemo(() => (params.id ? data.session.get(params.id) : undefined))
 
   const messages = createMemo(
     () => {
       const id = params.id
       if (!id) return emptyMessages
-      return (sync().data.message[id] ?? []) as Message[]
+      return data.session.message.list(id)
     },
     emptyMessages,
-    { equals: same },
-  )
-
-  const userMessages = createMemo(
-    () => messages().filter((m) => m.role === "user") as UserMessage[],
-    emptyUserMessages,
-    { equals: same },
-  )
-
-  const visibleUserMessages = createMemo(
-    () => {
-      const revert = info()?.revert?.messageID
-      if (!revert) return userMessages()
-      const boundary = userMessages().findIndex((message) => message.id === revert)
-      return boundary < 0 ? userMessages() : userMessages().slice(0, boundary)
-    },
-    emptyUserMessages,
     { equals: same },
   )
 
@@ -138,7 +109,28 @@ export function SessionContextTab() {
       }),
   )
 
-  const ctx = createMemo(() => getSessionContext(messages(), [...providers.all().values()]))
+  const ctx = createMemo(() => {
+    const message = messages().findLast((item) => item.type === "assistant" && !!item.tokens)
+    if (message?.type !== "assistant" || !message.tokens) return
+    const provider = providers.all().get(message.model.providerID)
+    const model = provider?.models[message.model.id]
+    const total =
+      message.tokens.input +
+      message.tokens.output +
+      message.tokens.reasoning +
+      message.tokens.cache.read +
+      message.tokens.cache.write
+    return {
+      message,
+      tokens: message.tokens,
+      providerLabel: provider?.name ?? message.model.providerID,
+      modelLabel: model?.name ?? message.model.id,
+      limit: model?.limit.context,
+      input: message.tokens.input,
+      total,
+      usage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+    }
+  })
   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
 
   const cost = createMemo(() => {
@@ -147,8 +139,8 @@ export function SessionContextTab() {
 
   const counts = createMemo(() => {
     const all = messages()
-    const user = all.reduce((count, x) => count + (x.role === "user" ? 1 : 0), 0)
-    const assistant = all.reduce((count, x) => count + (x.role === "assistant" ? 1 : 0), 0)
+    const user = all.reduce((count, message) => count + (message.type === "user" ? 1 : 0), 0)
+    const assistant = all.reduce((count, message) => count + (message.type === "assistant" ? 1 : 0), 0)
     return {
       all: all.length,
       user,
@@ -157,8 +149,7 @@ export function SessionContextTab() {
   })
 
   const systemPrompt = createMemo(() => {
-    const msg = findLast(visibleUserMessages(), (m) => !!m.system)
-    const system = msg?.system
+    const system = messages().findLast((message) => message.type === "system")?.text
     if (!system) return
     const trimmed = system.trim()
     if (!trimmed) return
@@ -177,30 +168,6 @@ export function SessionContextTab() {
     return c.modelLabel
   })
 
-  const breakdown = createMemo(
-    on(
-      () => [ctx()?.message.id, ctx()?.input, messages().length, systemPrompt()],
-      () => {
-        const c = ctx()
-        if (!c?.input) return []
-        return estimateSessionContextBreakdown({
-          messages: messages(),
-          parts: sync().data.part as Record<string, Part[] | undefined>,
-          input: c.input,
-          systemPrompt: systemPrompt(),
-        })
-      },
-    ),
-  )
-
-  const breakdownLabel = (key: SessionContextBreakdownKey) => {
-    if (key === "system") return language.t("context.breakdown.system")
-    if (key === "user") return language.t("context.breakdown.user")
-    if (key === "assistant") return language.t("context.breakdown.assistant")
-    if (key === "tool") return language.t("context.breakdown.tool")
-    return language.t("context.breakdown.other")
-  }
-
   const stats = [
     { label: "context.stats.session", value: () => info()?.title ?? params.id ?? "—" },
     { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.intl()) },
@@ -210,12 +177,11 @@ export function SessionContextTab() {
     { label: "context.stats.totalTokens", value: () => formatter().number(ctx()?.total) },
     { label: "context.stats.usage", value: () => formatter().percent(ctx()?.usage) },
     { label: "context.stats.inputTokens", value: () => formatter().number(ctx()?.input) },
-    { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.message.tokens.output) },
-    { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.message.tokens.reasoning) },
+    { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.tokens.output) },
+    { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.tokens.reasoning) },
     {
       label: "context.stats.cacheTokens",
-      value: () =>
-        `${formatter().number(ctx()?.message.tokens.cache.read)} / ${formatter().number(ctx()?.message.tokens.cache.write)}`,
+      value: () => `${formatter().number(ctx()?.tokens.cache.read)} / ${formatter().number(ctx()?.tokens.cache.write)}`,
     },
     { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.intl()) },
     { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.intl()) },
@@ -230,7 +196,7 @@ export function SessionContextTab() {
     try {
       const data = await fetchSessionExport({
         sessionID,
-        api: sdk().api,
+        api: serverSDK.api,
       })
       const filename = sessionExportFilename(data.info)
       downloadSessionExport(filename, data)
@@ -252,8 +218,6 @@ export function SessionContextTab() {
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
-  const getParts = (id: string) => (sync().data.part[id] ?? []) as Part[]
-
   const restoreScroll = () => {
     const el = scroll
     if (!el) return
@@ -314,37 +278,6 @@ export function SessionContextTab() {
           </For>
         </div>
 
-        <Show when={breakdown().length > 0}>
-          <div class="flex flex-col gap-2">
-            <div class="text-12-regular text-text-weak">{language.t("context.breakdown.title")}</div>
-            <div class="h-2 w-full rounded-full bg-surface-base overflow-hidden flex">
-              <For each={breakdown()}>
-                {(segment) => (
-                  <div
-                    class="h-full"
-                    style={{
-                      width: `${segment.width}%`,
-                      "background-color": BREAKDOWN_COLOR[segment.key],
-                    }}
-                  />
-                )}
-              </For>
-            </div>
-            <div class="flex flex-wrap gap-x-3 gap-y-1">
-              <For each={breakdown()}>
-                {(segment) => (
-                  <div class="flex items-center gap-1 text-11-regular text-text-weak">
-                    <div class="size-2 rounded-sm" style={{ "background-color": BREAKDOWN_COLOR[segment.key] }} />
-                    <div>{breakdownLabel(segment.key)}</div>
-                    <div class="text-text-weaker">{segment.percent.toLocaleString(language.intl())}%</div>
-                  </div>
-                )}
-              </For>
-            </div>
-            <div class="hidden text-11-regular text-text-weaker">{language.t("context.breakdown.note")}</div>
-          </div>
-        </Show>
-
         <Show when={systemPrompt()}>
           {(prompt) => (
             <div class="flex flex-col gap-2">
@@ -371,9 +304,7 @@ export function SessionContextTab() {
           </div>
           <Accordion multiple>
             <For each={messages()}>
-              {(message) => (
-                <RawMessage message={message} getParts={getParts} onRendered={restoreScroll} time={formatter().time} />
-              )}
+              {(message) => <RawMessage message={message} onRendered={restoreScroll} time={formatter().time} />}
             </For>
           </Accordion>
         </div>

@@ -1,6 +1,5 @@
 ---
 title: "References"
-description: ""
 ---
 
 References give OpenCode named access to directories outside the current
@@ -122,10 +121,10 @@ are logged and do not stop other references from loading.
 
 `description` tells agents when a reference is relevant. References with a
 description are included in agent instructions with their alias and resolved
-path. References without one remain available in `@` autocomplete but are not
-advertised automatically.
+path. References without one remain available to clients but are not advertised
+automatically.
 
-Set `hidden` to `true` to remove a reference from TUI `@` autocomplete:
+Set `hidden` to `true` to remove a reference from interactive client selectors:
 
 ```jsonc
 {
@@ -139,22 +138,15 @@ Set `hidden` to `true` to remove a reference from TUI `@` autocomplete:
 }
 ```
 
-`hidden` controls only autocomplete visibility. It does not remove the
+`hidden` controls only interactive visibility. It does not remove the
 reference from the reference API or agent instructions when a description is
 present.
 
 ## Use references
 
-Type `@` in the TUI and select a reference alias to attach its root directory:
-
-```text
-Compare the current implementation with @effect
-```
-
-The attachment provides a non-recursive listing of the root's immediate files
-and directories. V2 currently attaches references by root alias;
-`@alias/path` is not a reference-specific file browser. Ask the agent to
-inspect a particular path when more detail is needed.
+Clients can attach a reference by its root alias. The attachment provides a
+non-recursive listing of the root's immediate files and directories. Ask the
+agent to inspect a particular path when more detail is needed.
 
 References do not grant extra tool permissions. Access outside the active
 Location remains subject to the agent's normal tool rules and the
@@ -169,7 +161,7 @@ applicable edit permission.
 | `repository`  | No       | Required | Remote Git repository                         |
 | `branch`      | No       | Optional | Branch to fetch and check out                 |
 | `description` | Optional | Optional | Guidance describing when agents should use it |
-| `hidden`      | Optional | Optional | Hide it from TUI `@` autocomplete             |
+| `hidden`      | Optional | Optional | Hide it from interactive client selectors     |
 
 An alias cannot be empty or contain `/`, `\`, whitespace, a backtick, or a
 comma.

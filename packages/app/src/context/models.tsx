@@ -24,7 +24,7 @@ function modelKey(model: ModelKey) {
 
 const createModelsPersistedState = () => {
   const [store, setStore, _, ready] = persisted(
-    Persist.global("model", ["model.v1"]),
+    Persist.global("model"),
     createStore<Store>({
       user: [],
       recent: [],

@@ -4,7 +4,7 @@ import { ToolError, toolError } from "../tool-error.js"
 import { isRecord, own } from "./spec.js"
 import type { AppliedAuth, Credential, Plan, SecurityScheme } from "./types.js"
 
-const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const maxErrorBodyChars = 1_024
 const maxResponseBodyBytes = 50 * 1024 * 1024
 

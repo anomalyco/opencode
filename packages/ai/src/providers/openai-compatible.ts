@@ -19,6 +19,7 @@ export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
   readonly baseURL: string
   readonly provider?: string
+  readonly providerOptions?: OpenAIProviderOptionsInput
 }
 
 export type FamilyModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
@@ -75,6 +76,7 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     limits: settings.limits,
     provider: settings.provider,
+    providerOptions: settings.providerOptions,
   }).model(modelID)
 
 export const baseten = define(profiles.baseten)

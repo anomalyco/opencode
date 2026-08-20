@@ -43,6 +43,8 @@ type UserContent = Extract<LanguageModelV3Message, { role: "user" }>["content"]
 type AssistantContent = Extract<LanguageModelV3Message, { role: "assistant" }>["content"]
 type ToolResultContent = Extract<AssistantContent[number], { type: "tool-result" }>
 
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+
 export interface SDKEvent {
   readonly model: Info
   readonly package: string
@@ -146,7 +148,7 @@ function prepareOptions(model: Info, pkg: string) {
     }
 
     if (typeof opts.body === "string" && model.body !== undefined) {
-      const decoded = Option.getOrUndefined(Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(opts.body))
+      const decoded = Option.getOrUndefined(decodeJson(opts.body))
       if (Schema.is(Schema.Record(Schema.String, Schema.Json))(decoded)) {
         opts.body = JSON.stringify(Provider.mergeOverlay(decoded, model.body))
       }
@@ -163,7 +165,7 @@ function prepareOptions(model: Info, pkg: string) {
   return options
 }
 
-export class InitError extends Schema.TaggedErrorClass<InitError>()("AISDK.InitError", {
+export class InitError extends Schema.TaggedError<InitError>()("AISDK.InitError", {
   providerID: Provider.ID,
   cause: Schema.Defect(),
 }) {}
@@ -305,12 +307,6 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
   const optionKey = providerOptionKey(packageName, info.providerID)
-  const providerOptions = (() => {
-    if (projected.settings === undefined) return
-    if (packageName === "@ai-sdk/gateway") return gatewayProviderOptions(info.modelID ?? info.id, projected.settings)
-    if (packageName === "@ai-sdk/azure") return { openai: projected.settings, azure: projected.settings }
-    return { [optionKey]: projected.settings }
-  })()
   const route: AnyRoute = {
     id: `ai-sdk:${packageName}`,
     provider: ProviderID.make(info.providerID),
@@ -333,11 +329,11 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
               headers: info.headers,
             },
       limits: { context: info.limit.context, input: info.limit.input, output: info.limit.output },
-      providerOptions,
+      providerOptions: projected.settings,
     },
     body: {
       schema: Schema.Unknown,
-      from: (request) => Effect.succeed(callOptions(request)),
+      from: (request) => Effect.succeed(callOptions(request, packageName, info.modelID ?? info.id, optionKey)),
     },
     with: () => route,
     model: (input) =>
@@ -412,7 +408,12 @@ function mapBodyToProviderOptions(model: Info, packageName: string) {
   }
 }
 
-function callOptions(request: LLMRequest): LanguageModelV3CallOptions {
+function callOptions(
+  request: LLMRequest,
+  packageName: string | undefined,
+  modelID: ID,
+  optionKey: string,
+): LanguageModelV3CallOptions {
   return {
     prompt: prompt(request),
     maxOutputTokens: request.generation?.maxTokens,
@@ -426,7 +427,7 @@ function callOptions(request: LLMRequest): LanguageModelV3CallOptions {
     tools: request.tools.map(tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.http?.headers,
-    providerOptions: providerOptions(request.providerOptions),
+    providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
   }
 }
 
@@ -435,7 +436,22 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
     .map((part) => part.text)
     .filter(Boolean)
     .join("\n\n")
-  const messages = request.messages.flatMap(message)
+  const pending: UserContent = []
+  const messages = request.messages.flatMap((input, index) => {
+    if (input.role !== "tool") return message(input)
+    const lowered = toolMessage(input)
+    pending.push(...lowered.media)
+    if (request.messages[index + 1]?.role === "tool" || pending.length === 0) return lowered.messages
+    const media = [...pending]
+    pending.length = 0
+    return [
+      ...lowered.messages,
+      {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: "Attached media from tool result:" }, ...media],
+      },
+    ]
+  })
   if (!system.length) return messages
   return [{ role: "system", content: system }, ...messages]
 }
@@ -443,15 +459,51 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
 function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[] {
   switch (input.role) {
     case "system":
-      return [{ role: "system", content: input.content.flatMap(text).join("\n\n") }]
+      // The initial privileged prompt lives in `request.system` and is prepended above. A system message here is a
+      // chronological instruction update, but opaque AI SDK providers do not uniformly allow the system role after
+      // conversation history, so preserve its position using the safe wrapped-user fallback.
+      return [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: ProviderShared.wrapSystemUpdate(input.content.filter((part) => part.type === "text")),
+            },
+          ],
+        },
+      ]
     case "user":
       return [{ role: "user", content: input.content.flatMap(userPart) }]
     case "assistant":
       return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
-    case "tool": {
-      const content = input.content.flatMap(toolResultPart)
-      return content.length ? [{ role: "tool", content }] : []
-    }
+    case "tool":
+      return toolMessage(input).messages
+  }
+}
+
+function toolMessage(input: LLMRequest["messages"][number]) {
+  const media: UserContent = []
+  const content = input.content.flatMap((part) => {
+    if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part)
+    const value = part.result.value.filter((item) => {
+      if (item.type !== "file") return true
+      if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
+      const data = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(item.uri)?.[1] ?? item.uri
+      media.push({ type: "file", mediaType: item.mime, data, filename: item.name })
+      return false
+    })
+    return toolResultPart({
+      ...part,
+      result:
+        value.length === 0
+          ? { type: "text", value: "Media attached in the following user message." }
+          : { ...part.result, value },
+    })
+  })
+  return {
+    messages: content.length ? ([{ role: "tool", content }] satisfies LanguageModelV3Message[]) : [],
+    media,
   }
 }
 
@@ -473,7 +525,7 @@ function assistantPart(part: ContentPart): AssistantContent {
     case "media":
       return [{ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename }]
     case "reasoning":
-      return [{ type: "reasoning", text: part.text, providerOptions: providerOptions(part.providerMetadata) }]
+      return [{ type: "reasoning", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "tool-call":
       return [
         {
@@ -482,7 +534,7 @@ function assistantPart(part: ContentPart): AssistantContent {
           toolName: part.name,
           input: part.input,
           providerExecuted: part.providerExecuted,
-          providerOptions: providerOptions(part.providerMetadata),
+          providerOptions: metadataProviderOptions(part.providerMetadata),
         },
       ]
     case "tool-result":
@@ -498,7 +550,7 @@ function toolResultPart(part: ContentPart): ToolResultContent[] {
       toolCallId: part.id,
       toolName: part.name,
       output: toolOutput(part.result),
-      providerOptions: providerOptions(part.providerMetadata),
+      providerOptions: metadataProviderOptions(part.providerMetadata),
     },
   ]
 }
@@ -542,7 +594,20 @@ function toolChoice(input: LLMRequest["toolChoice"]): LanguageModelV3ToolChoice 
   return { type: input.type }
 }
 
-function providerOptions(input: LLMRequest["providerOptions"]): SharedV3ProviderOptions | undefined {
+function requestProviderOptions(
+  input: LLMRequest["providerOptions"],
+  packageName: string | undefined,
+  modelID: ID,
+  optionKey: string,
+): SharedV3ProviderOptions | undefined {
+  if (!input) return undefined
+  const options = jsonObject(input)
+  if (packageName === "@ai-sdk/gateway") return gatewayProviderOptions(modelID, options)
+  if (packageName === "@ai-sdk/azure") return { openai: options, azure: options }
+  return { [optionKey]: options }
+}
+
+function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3ProviderOptions | undefined {
   if (!input) return undefined
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
 }

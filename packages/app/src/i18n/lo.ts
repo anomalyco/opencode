@@ -507,20 +507,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "ເດັສທັອບ {{version}}",
   "wsl.onboarding.versionMismatch": "ເວີຊັນທີ່ຕິດຕັ້ງບໍ່ກົງກັບເວີຊັນຂອງແອັບ desktop.",
   "wsl.onboarding.adding": "ກຳລັງເພີ່ມ...",
-  "help.tabs.toast.ariaLabel": "ແນະນຳແຖບ. ຈັດລະບຽບການເຮັດວຽກແລະກອງປະຊຸມການເຄື່ອນໄຫວຂອງທ່ານດ້ວຍແຖບ",
-  "help.tabs.toast.dismiss": "ປິດຂໍ້ມູນແຖບ",
-  "help.tabs.title": "ແນະນຳແຖບ",
-  "help.tabs.description": "ຈັດກອງປະຊຸມການເຮັດວຽກ ແລະການເຄື່ອນໄຫວຂອງທ່ານດ້ວຍແຖບ",
-  "help.tabs.date": "ກໍລະກົດ 14",
-  "help.tabs.introduction": "OpenCode Desktop ຕອນນີ້ຖືກສ້າງຂຶ້ນໃນແຖບຕ່າງໆ.",
-  "help.tabs.sessions":
-    "ເລີ່ມເຊດຊັນໃໝ່ໃນແຖບໃດໜຶ່ງ, ຫຼືເປີດເຊດຊັນທີ່ມີຢູ່ແລ້ວຈາກໂຄງການໃດໆກໍຕາມຂອງເຈົ້າ. ເປີດແຖບໃໝ່ເມື່ອທ່ານເລີ່ມອັນໃໝ່, ແລະປິດມັນເມື່ອທ່ານສຳເລັດ.",
-  "help.tabs.organize":
-    "ການເປີດບາງແຖບເຮັດໃຫ້ມັນງ່າຍຂຶ້ນໃນການຈັດກອງປະຊຸມທີ່ມີການເຄື່ອນໄຫວຂອງທ່ານ. ປ່ຽນຊື່ແຖບເປັນສິ່ງທີ່ໜ້າຈົດຈຳ ຖ້າທ່ານວາງແຜນທີ່ຈະຮັກສາພວກມັນໄວ້.",
-  "help.tabs.home": "ທ່ານຈະພົບເຫັນເຊດຊັນ ແລະໂຄງການທັງໝົດຂອງທ່ານໃນໜ້າຈໍຫຼັກໃໝ່. ການເລືອກເຊດຊັນຈະເປີດມັນຢູ່ໃນແຖບ.",
-  "help.tabs.persistence": "ເມື່ອທ່ານເປີດແອັບຄືນໃໝ່, ແຖບຂອງທ່ານຍັງເປີດຢູ່.",
-  "help.tabs.worktrees":
-    "ການອອກແບບໃໝ່ຍັງບໍ່ຮອງຮັບ Git Worktrees ເທື່ອ, ມັນຈະມາໃນໄວໆນີ້. ສະນັ້ນຖ້າທ່ານຕ້ອງການສືບຕໍ່ໃຊ້ໂຄງຮ່າງກ່ອນໜ້າ, ທ່ານສາມາດສະຫຼັບລະຫວ່າງການຈັດວາງໃນການຕັ້ງຄ່າ. ພຽງແຕ່ຈື່ໄວ້ວ່າຮູບແບບໃຫມ່ຈະກາຍເປັນຖາວອນໃນສອງສາມອາທິດ.",
   "server.row.noUsername": "ບໍ່ມີຊື່ຜູ້ໃຊ້",
   "dialog.project.edit.title": "ແກ້ໄຂໂຄງການ",
   "dialog.project.edit.name": "ຊື່",
@@ -962,12 +948,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "ຂະຫຍາຍພາກສ່ວນເຄື່ອງມືແກ້ໄຂ",
   "settings.general.row.editToolPartsExpanded.description":
     "ສະ​ແດງ​ການ​ແກ້​ໄຂ, ຂຽນ, ແລະ​ການ​ແກ້​ໄຂ​ສ່ວນ​ເຄື່ອງ​ມື​ທີ່​ຂະ​ຫຍາຍ​ໂດຍ​ຄ່າ​ເລີ່ມ​ຕົ້ນ​ໃນ​ໄລ​ຍະ​ເວ​ລາ",
-  "settings.general.row.newInterface.title": "ໂຄງຮ່າງໃໝ່",
-  "settings.general.row.newInterface.badge": "ໃໝ່",
-  "settings.general.row.newInterface.description": "ໃຊ້ແຖບໃໝ່ ແລະຮູບແບບໜ້າຫຼັກ. ສະຫຼັບລະຫວ່າງໂຄງຮ່າງເປັນເວລາຈຳກັດ.",
-  "settings.general.row.newInterfaceNotice.title": "ຕອນນີ້ທ່ານກຳລັງໃຊ້ໂຄງຮ່າງໃໝ່",
-  "settings.general.row.newInterfaceNotice.description": "ຮູບແບບກ່ອນໜ້ານີ້ບໍ່ມີແລ້ວ",
-  "settings.general.row.newInterfaceNotice.dismiss": "ປິດ",
   "settings.general.row.pinchZoom.title": "ບີບເພື່ອຊູມ",
   "settings.general.row.pinchZoom.description": "ອະ​ນຸ​ຍາດ​ໃຫ້​ການ pinch trackpad ແລະ gestures Ctrl-scroll ເພື່ອຊູມ",
   "settings.general.row.wayland.title": "ໃຊ້ Wayland ພື້ນເມືອງ",

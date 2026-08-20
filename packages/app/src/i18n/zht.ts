@@ -534,21 +534,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "已安裝版本與桌面應用程式版本不符。",
   "wsl.onboarding.adding": "新增中...",
 
-  "help.tabs.toast.ariaLabel": "分頁功能介紹。使用分頁整理工作和進行中的工作階段",
-  "help.tabs.toast.dismiss": "關閉分頁功能資訊",
-  "help.tabs.title": "分頁功能介紹",
-  "help.tabs.description": "使用分頁整理工作和進行中的工作階段",
-  "help.tabs.date": "7 月 14 日",
-  "help.tabs.introduction": "OpenCode Desktop 現在以分頁為核心。",
-  "help.tabs.sessions":
-    "在分頁中開始新的工作階段，或從任一專案開啟現有的工作階段。開始新工作時請開啟新分頁，完成後再將其關閉。",
-  "help.tabs.organize":
-    "同時開啟幾個分頁，可讓進行中的工作階段更容易整理。如果打算保留分頁，請將其重新命名為容易記住的名稱。",
-  "help.tabs.home": "你可以在新的首頁找到所有工作階段和專案。選取工作階段即可在分頁中開啟。",
-  "help.tabs.persistence": "重新開啟應用程式時，分頁仍會保持開啟。",
-  "help.tabs.worktrees":
-    "新版設計尚未支援 Git Worktrees，此功能即將推出。如果你偏好繼續使用先前的版面，可以在設定中切換版面。請留意，新版面將在幾週後成為永久版面。",
-
   "dialog.project.edit.title": "編輯專案",
   "dialog.project.edit.name": "名稱",
   "dialog.project.edit.icon": "圖示",
@@ -932,12 +917,6 @@ export const dict = {
   "settings.general.row.shellToolPartsExpanded.description": "在時間軸中預設展開 shell 工具區塊",
   "settings.general.row.editToolPartsExpanded.title": "展開 edit 工具區塊",
   "settings.general.row.editToolPartsExpanded.description": "在時間軸中預設展開 edit、write 和 patch 工具區塊",
-  "settings.general.row.newInterface.title": "新版面",
-  "settings.general.row.newInterface.badge": "新",
-  "settings.general.row.newInterface.description": "使用新的分頁和首頁版面。在限定時間內可切換版面。",
-  "settings.general.row.newInterfaceNotice.title": "你現在使用的是新版面",
-  "settings.general.row.newInterfaceNotice.description": "先前的版面已無法使用",
-  "settings.general.row.newInterfaceNotice.dismiss": "忽略",
   "settings.general.row.pinchZoom.title": "雙指縮放",
   "settings.general.row.pinchZoom.description": "允許使用觸控板雙指開合和 Ctrl-捲動手勢縮放",
   "settings.general.row.wayland.title": "使用原生 Wayland",

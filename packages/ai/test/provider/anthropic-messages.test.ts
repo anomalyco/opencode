@@ -63,7 +63,8 @@ describe("Anthropic Messages route", () => {
       const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: {
-            anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+            thinking: { type: "adaptive", display: "summarized" },
+            effort: "low",
           },
         }),
       )
@@ -79,17 +80,17 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 1_024 } } },
+          providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
         }),
       )
       const legacy = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "enabled", budget_tokens: 2_048 } } },
+          providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
         }),
       )
       const disabled = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "disabled" } } },
+          providerOptions: { thinking: { type: "disabled" } },
         }),
       )
 
@@ -103,7 +104,7 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const error = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "enabled" } } },
+          providerOptions: { thinking: { type: "enabled" } },
         }),
       ).pipe(Effect.flip)
 
@@ -136,6 +137,33 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("supports native chronological system updates on documented and later Claude family versions", () =>
+    Effect.gen(function* () {
+      const ids = [
+        "claude-opus-4-8",
+        "claude-opus-5-1",
+        "claude-sonnet-5",
+        "claude-haiku-5-1",
+        "claude-fable-6",
+        "anthropic/claude-mythos-7.2",
+      ]
+
+      const prepared = yield* Effect.forEach(ids, (id) =>
+        compileRequest(
+          LLM.request({
+            model: AnthropicMessages.route
+              .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+              .model({ id }),
+            messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
+            cache: "none",
+          }),
+        ),
+      )
+
+      expect(prepared.map((item) => item.body.messages[1]?.role)).toEqual(ids.map(() => "system"))
+    }),
+  )
+
   it.effect("lowers chronological system updates to wrapped user text for unsupported Anthropic models", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -160,6 +188,34 @@ describe("Anthropic Messages route", () => {
         },
         { role: "assistant", content: [{ type: "text", text: "After." }] },
       ])
+    }),
+  )
+
+  it.effect("does not infer native system update support for older or undocumented Claude families", () =>
+    Effect.gen(function* () {
+      const ids = [
+        "claude-opus-4-7",
+        "claude-opus-4-20250514",
+        "claude-sonnet-4-9",
+        "claude-haiku-4-9",
+        "custom-model-7",
+      ]
+
+      const prepared = yield* Effect.forEach(ids, (id) =>
+        compileRequest(
+          LLM.request({
+            model: AnthropicMessages.route
+              .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+              .model({ id }),
+            messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
+            cache: "none",
+          }),
+        ),
+      )
+
+      expect(prepared.map((item) => item.body.messages.some((message) => message.role === "system"))).toEqual(
+        ids.map(() => false),
+      )
     }),
   )
 
@@ -399,7 +455,7 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects unsupported media in tool-result content with a clear error", () =>
+  it.effect("rejects tool-result media that cannot be lowered", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
         LLM.request({
@@ -418,8 +474,7 @@ describe("Anthropic Messages route", () => {
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("Anthropic Messages")
-      expect(error.message).toContain("audio/mpeg")
+      expect(error.message).toContain("Anthropic Messages does not support media type audio/mpeg")
     }),
   )
 
@@ -953,6 +1008,63 @@ describe("Anthropic Messages route", () => {
           usage,
         },
       ])
+    }),
+  )
+
+  it.effect("ignores tool input deltas without a matching tool start", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+              { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hello" } },
+              {
+                type: "content_block_delta",
+                index: 1,
+                delta: { type: "input_json_delta", partial_json: '{"query":"orphaned"}' },
+              },
+              { type: "content_block_stop", index: 0 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.toolCalls).toEqual([])
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("settles pending tool calls at message_stop", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "tool_use", id: "call_1", name: "lookup" },
+              },
+              {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "input_json_delta", partial_json: '{"query":"weather"}' },
+              },
+              { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { query: "weather" } }])
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_use" })
     }),
   )
 

@@ -42,7 +42,7 @@ test("invalidates global and active catalogs after connection", async () => {
     load: async () => {},
   })
 
-  catalog.handleEvent({ type: "server.connected", directory: "global" })
+  catalog.handleEvent({ type: "server.connected" })
   await Bun.sleep(0)
 
   expect(queryClient.getQueryState(global)?.isInvalidated).toBe(true)
