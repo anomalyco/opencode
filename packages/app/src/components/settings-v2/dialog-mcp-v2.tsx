@@ -6,13 +6,13 @@ import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { type Component, For, Show, createMemo, createSignal } from "solid-js"
+import { type Accessor, type Component, For, Show, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { McpTestResult } from "@opencode-ai/sdk/v2/client"
 import { useLanguage } from "@/context/language"
-import { useSync } from "@/context/sync"
-import { useMcpSave } from "@/context/mcp"
+import { useServerSync } from "@/context/server-sync"
 import type { McpServerConfig } from "@/context/server-sync"
+import { showToast } from "@/utils/toast"
 import "./settings-v2.css"
 
 type ServerType = "local" | "remote"
@@ -53,11 +53,12 @@ export const DialogMcpV2: Component<{
   mode: "add" | "edit"
   name?: string
   config?: McpServerConfig
+  directory: Accessor<string | undefined>
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
-  const sync = useSync()
-  const save = useMcpSave()
+  const serverSync = useServerSync()
+  const [saving, setSaving] = createSignal(false)
 
   const [form, setForm] = createStore<FormState>({
     name: props.name ?? "",
@@ -111,10 +112,19 @@ export const DialogMcpV2: Component<{
   const runTest = async () => {
     const config = validate()
     if (!config) return
+    const dir = props.directory()
+    if (!dir) {
+      showToast({
+        variant: "error",
+        title: language.t("dialog.mcp.form.test"),
+        description: language.t("settings.mcp.noWorkspace"),
+      })
+      return
+    }
     setTesting(true)
     setTestResult(undefined)
     try {
-      const result = await sync().mcp.test(form.name.trim() || "test", config)
+      const result = await serverSync().mcp.test(dir, form.name.trim() || "test", config)
       setTestResult(result)
     } catch (error) {
       setTestResult({
@@ -132,11 +142,31 @@ export const DialogMcpV2: Component<{
   const submit = async () => {
     const config = validate()
     if (!config) return
-    await save.mutateAsync({ name: form.name.trim(), config })
-    dialog.close()
+    const dir = props.directory()
+    if (!dir) {
+      showToast({
+        variant: "error",
+        title: language.t("settings.mcp.toast.saveFailed"),
+        description: language.t("settings.mcp.noWorkspace"),
+      })
+      return
+    }
+    setSaving(true)
+    try {
+      await serverSync().mcp.save(dir, form.name.trim(), config)
+      dialog.close()
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: language.t("settings.mcp.toast.saveFailed"),
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const busy = createMemo(() => testing() || save.isPending)
+  const busy = createMemo(() => testing() || saving())
 
   return (
     <Dialog fit class="settings-v2-server-dialog">

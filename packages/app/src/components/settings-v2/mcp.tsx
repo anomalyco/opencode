@@ -6,12 +6,12 @@ import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import fuzzysort from "fuzzysort"
-import { type Component, For, Show, createMemo } from "solid-js"
+import { type Accessor, type Component, For, Show, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
-import { useSync } from "@/context/sync"
-import { useMcpRemove, useMcpSave, useMcpToggle } from "@/context/mcp"
+import { useServerSync } from "@/context/server-sync"
 import type { McpServerConfig } from "@/context/server-sync"
+import { showToast } from "@/utils/toast"
 import { DialogMcpV2 } from "./dialog-mcp-v2"
 import { SettingsListV2 } from "./parts/list"
 import "./settings-v2.css"
@@ -30,24 +30,31 @@ function isConfigured(entry: ConfigEntry | undefined): entry is McpServerConfig 
   return !!entry && typeof entry === "object" && "type" in entry
 }
 
-export const SettingsMcpV2: Component = () => {
+export const SettingsMcpV2: Component<{ directory: Accessor<string | undefined> }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
-  const sync = useSync()
-  const save = useMcpSave()
-  const remove = useMcpRemove()
-  const toggle = useMcpToggle()
+  const serverSync = useServerSync()
   const [store, setStore] = createStore({ filter: "" })
+  const [busy, setBusy] = createSignal(false)
 
-  const liveStatus = (name: string) => sync().data.mcp?.[name]?.status
+  // MCP config is global, but test/connect need an instance to run against. Fall
+  // back to the first open project when the settings dialog has no active directory.
+  const directory = createMemo(() => props.directory() ?? serverSync().data.project?.[0]?.worktree)
 
   const servers = createMemo(() => {
-    const config = (sync().data.config.mcp ?? {}) as Record<string, ConfigEntry>
+    const config = (serverSync().data.config.mcp ?? {}) as Record<string, ConfigEntry>
     return Object.entries(config)
       .filter(([, entry]) => isConfigured(entry))
       .map(([name, entry]) => ({ name, config: entry as McpServerConfig }))
       .sort((a, b) => a.name.localeCompare(b.name))
   })
+
+  const statusMap = createMemo(() => {
+    const dir = directory()
+    if (!dir) return {} as Record<string, { status?: string }>
+    return serverSync().child(dir, { mcp: true })[0].mcp ?? {}
+  })
+  const liveStatus = (name: string) => statusMap()[name]?.status
 
   const showSearch = createMemo(() => servers().length > 1)
 
@@ -58,9 +65,29 @@ export const SettingsMcpV2: Component = () => {
     return fuzzysort.go(query, items, { keys: [(item) => item.name] }).map((result) => result.obj)
   })
 
-  const openAdd = () => dialog.push(() => <DialogMcpV2 mode="add" />)
+  const run = async (fn: (dir: string) => Promise<unknown>, failKey: string) => {
+    const dir = directory()
+    if (!dir) {
+      showToast({ variant: "error", title: language.t(failKey), description: language.t("settings.mcp.noWorkspace") })
+      return
+    }
+    setBusy(true)
+    try {
+      await fn(dir)
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: language.t(failKey),
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openAdd = () => dialog.push(() => <DialogMcpV2 mode="add" directory={directory} />)
   const openEdit = (name: string, config: McpServerConfig) =>
-    dialog.push(() => <DialogMcpV2 mode="edit" name={name} config={config} />)
+    dialog.push(() => <DialogMcpV2 mode="edit" name={name} config={config} directory={directory} />)
 
   const statusLabel = (name: string) => {
     const status = liveStatus(name)
@@ -68,11 +95,14 @@ export const SettingsMcpV2: Component = () => {
     return key ? language.t(key) : undefined
   }
 
-  const summary = (config: McpServerConfig) =>
-    config.type === "local" ? config.command.join(" ") : config.url
+  const summary = (config: McpServerConfig) => (config.type === "local" ? config.command.join(" ") : config.url)
 
   const toggleEnabled = (name: string, config: McpServerConfig) =>
-    save.mutate({ name, config: { ...config, enabled: config.enabled === false } })
+    run((dir) => serverSync().mcp.save(dir, name, { ...config, enabled: config.enabled === false }), "settings.mcp.toast.saveFailed")
+
+  const removeServer = (name: string) => run((dir) => serverSync().mcp.remove(dir, name), "settings.mcp.toast.removeFailed")
+
+  const authenticate = (name: string) => run((dir) => serverSync().mcp.toggle(dir, name), "common.requestFailed")
 
   return (
     <>
@@ -145,30 +175,22 @@ export const SettingsMcpV2: Component = () => {
                     </div>
                     <div class="settings-v2-mcp-row-actions">
                       <Show when={liveStatus(item.name) === "needs_auth"}>
-                        <ButtonV2
-                          variant="outline"
-                          disabled={toggle.isPending}
-                          onClick={() => toggle.mutate(item.name)}
-                        >
+                        <ButtonV2 variant="outline" disabled={busy()} onClick={() => authenticate(item.name)}>
                           {language.t("settings.mcp.menu.authenticate")}
                         </ButtonV2>
                       </Show>
                       <Switch
                         checked={enabled()}
-                        disabled={save.isPending}
+                        disabled={busy()}
                         hideLabel
                         onChange={() => toggleEnabled(item.name, item.config)}
                       >
                         {language.t("dialog.mcp.form.enabled")}
                       </Switch>
-                      <ButtonV2 variant="neutral" onClick={() => openEdit(item.name, item.config)}>
+                      <ButtonV2 variant="neutral" disabled={busy()} onClick={() => openEdit(item.name, item.config)}>
                         {language.t("settings.mcp.menu.edit")}
                       </ButtonV2>
-                      <ButtonV2
-                        variant="danger"
-                        disabled={remove.isPending}
-                        onClick={() => remove.mutate(item.name)}
-                      >
+                      <ButtonV2 variant="danger" disabled={busy()} onClick={() => removeServer(item.name)}>
                         {language.t("settings.mcp.menu.remove")}
                       </ButtonV2>
                     </div>

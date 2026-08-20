@@ -1080,6 +1080,7 @@ export const dict = {
   "settings.mcp.description": "Add, edit, and test Model Context Protocol servers. Changes are saved to the same config used by the CLI.",
   "settings.mcp.add": "Add server",
   "settings.mcp.empty": "No MCP servers configured yet.",
+  "settings.mcp.noWorkspace": "Open a project to test or save MCP servers.",
   "settings.mcp.search.placeholder": "Search MCP servers",
   "settings.mcp.type.local": "Local",
   "settings.mcp.type.remote": "Remote",
