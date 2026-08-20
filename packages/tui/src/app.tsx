@@ -1,6 +1,6 @@
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
-import { Deferred, Effect } from "effect"
+import { Effect, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/util/global"
@@ -276,13 +276,13 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             .forEach((result) => log("error", "Failed to dispose TUI resource", { error: result.reason }))
         }),
       )
-      const shutdown = yield* Deferred.make<unknown>()
+      const shutdown = yield* Latch.make()
       const onSighup = () => destroyRenderer(renderer)
       yield* Effect.acquireRelease(
         Effect.sync(() => process.on("SIGHUP", onSighup)),
         () => Effect.sync(() => process.off("SIGHUP", onSighup)),
       )
-      renderer.once("destroy", () => Deferred.doneUnsafe(shutdown, Effect.void))
+      renderer.once("destroy", () => shutdown.openUnsafe())
       yield* Effect.tryPromise(async () => {
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
@@ -445,7 +445,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
           renderer.requestRender()
         }
       })
-      yield* Deferred.await(shutdown)
+      yield* shutdown.await
       return { epilogue: exit.epilogue, reason: exit.reason }
     }),
   )
