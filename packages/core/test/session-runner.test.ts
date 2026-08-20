@@ -146,36 +146,20 @@ const modelTransport = Layer.succeed(
     closeAll: Effect.void,
   }),
 )
-const model = LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
-const defaultSystem = SessionSystemPrompt.make([])
-const replacementModel = LanguageModel.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
-const compactModel = LanguageModel.make({
-  id: "compact",
-  provider: "fake",
-  route: OpenAIChat.route,
-})
-const fullOutputModel = LanguageModel.make({
-  id: "full-output",
-  provider: "fake",
-  route: OpenAIChat.route,
-})
-const undersizedContextModel = LanguageModel.make({
-  id: "undersized-context",
-  provider: "fake",
-  route: OpenAIChat.route,
-})
-const recoveryModel = LanguageModel.make({
-  id: "recovery",
-  provider: "fake",
-  route: OpenAIChat.route,
-})
-const modelLimit = (selected: LanguageModel) => {
-  if (selected === compactModel) return { context: 4_000, output: 50 }
-  if (selected === fullOutputModel) return { context: 262_144, output: 262_144 }
-  if (selected === undersizedContextModel) return { context: 1, output: 1_000 }
-  if (selected === recoveryModel) return { context: 20_000, output: 1_000 }
-  return { context: 200_000, output: 32_000 }
+type ModelLimit = { readonly context: number; readonly input?: number; readonly output: number }
+const defaultModelLimit = { context: 200_000, output: 32_000 }
+const modelLimits = new Map<string, ModelLimit>()
+const testModel = (id: string, limit: ModelLimit = defaultModelLimit) => {
+  modelLimits.set(id, limit)
+  return LanguageModel.make({ id, provider: "fake", route: OpenAIChat.route })
 }
+const model = testModel("fake-model")
+const defaultSystem = SessionSystemPrompt.make([])
+const replacementModel = testModel("replacement")
+const compactModel = testModel("compact", { context: 4_000, output: 50 })
+const fullOutputModel = testModel("full-output", { context: 262_144, output: 262_144 })
+const undersizedContextModel = testModel("undersized-context", { context: 1, output: 1_000 })
+const recoveryModel = testModel("recovery", { context: 20_000, output: 1_000 })
 
 test("calculates step cost using the matching context tier", () => {
   expect(
@@ -316,7 +300,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
         return SessionRunnerModel.resolved(selected, {
           capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
           cost: [],
-          limit: modelLimit(selected),
+          limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
           variant: session.model?.variant,
         })
       }),
