@@ -59,6 +59,7 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     summary_files: info.summary?.files,
     summary_diffs: info.summary?.diffs ? [...info.summary.diffs] : undefined,
     metadata: info.metadata,
+    ephemeral: info.ephemeral ?? false,
     cost: info.cost ?? 0,
     tokens_input: (info.tokens ?? { input: 0 }).input,
     tokens_output: (info.tokens ?? { output: 0 }).output,
@@ -101,7 +102,11 @@ function applyUsage(
       tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning * sign}`,
       tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read * sign}`,
       tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write * sign}`,
-      time_updated: sql`${SessionTable.time_updated}`,
+      // Usage updates preserve time_updated so streaming activity does not
+      // reorder session lists. Ephemeral sessions are excluded from lists and
+      // reaped by staleness, so for them this acts as a liveness heartbeat
+      // that keeps long active runs ahead of the startup sweep.
+      time_updated: sql`CASE WHEN ${SessionTable.ephemeral} THEN ${Date.now()} ELSE ${SessionTable.time_updated} END`,
     })
     .where(eq(SessionTable.id, sessionID))
     .run()

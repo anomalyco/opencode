@@ -7,6 +7,9 @@ import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Database } from "@opencode-ai/core/database/database"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { eq } from "drizzle-orm"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -25,6 +28,7 @@ const it = testEffect(
       SessionProjector.node,
       CrossSpawnSpawner.node,
       InstanceStore.node,
+      Database.node,
     ]),
     [
       [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces: false })],
@@ -280,6 +284,70 @@ describe("Session", () => {
 
       expect(created.metadata).toBeUndefined()
       expect(saved.metadata).toBeUndefined()
+    }),
+  )
+})
+
+describe("ephemeral sessions", () => {
+  it.instance("are excluded from lists but retrievable by id", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({ title: "ephemeral", ephemeral: true }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const saved = yield* session.get(created.id)
+
+      expect(created.ephemeral).toBe(true)
+      expect(saved.ephemeral).toBe(true)
+      expect((yield* session.list()).map((info) => info.id)).not.toContain(created.id)
+      expect((yield* session.listGlobal()).map((info) => info.id)).not.toContain(created.id)
+    }),
+  )
+
+  it.instance("children inherit ephemerality from their parent", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const parent = yield* Effect.acquireRelease(session.create({ ephemeral: true }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const child = yield* session.create({ parentID: parent.id })
+
+      expect(child.ephemeral).toBe(true)
+      expect((yield* session.listGlobal()).map((info) => info.id)).not.toContain(child.id)
+    }),
+  )
+
+  it.instance("sweep removes stale families and spares live ones", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const { db } = yield* Database.Service
+      const cutoff = Date.now() - 60_000
+      const backdate = (id: SessionID) =>
+        db
+          .update(SessionTable)
+          .set({ time_updated: cutoff - 1000 })
+          .where(eq(SessionTable.id, id))
+          .run()
+      const stale = yield* session.create({ ephemeral: true })
+      const live = yield* Effect.acquireRelease(session.create({ ephemeral: true }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const parent = yield* session.create({ ephemeral: true })
+      const child = yield* session.create({ parentID: parent.id })
+      yield* backdate(stale.id)
+      yield* backdate(parent.id)
+
+      // Stale root goes; live root and the family with a fresh child stay.
+      yield* SessionNs.sweepEphemeral(db, session, cutoff)
+      expect(Exit.isFailure(yield* session.get(stale.id).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isSuccess(yield* session.get(live.id).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isSuccess(yield* session.get(parent.id).pipe(Effect.exit))).toBe(true)
+
+      // Once the whole family is stale it is swept, children included.
+      yield* backdate(child.id)
+      yield* SessionNs.sweepEphemeral(db, session, cutoff)
+      expect(Exit.isFailure(yield* session.get(parent.id).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* session.get(child.id).pipe(Effect.exit))).toBe(true)
     }),
   )
 })

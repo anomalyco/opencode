@@ -19,7 +19,8 @@ import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
-import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInputTable, SessionMessageTable, SessionTable, MessageTable } from "@opencode-ai/core/session/sql"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Location } from "@opencode-ai/core/location"
@@ -562,6 +563,75 @@ describe("SessionProjector", () => {
           time: { created },
         }),
       ])
+    }),
+  )
+
+  it.effect("usage projection heartbeats time_updated for ephemeral sessions only", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      const ephemeral = SessionV2.ID.make("ses_heartbeat_ephemeral")
+      const durable = SessionV2.ID.make("ses_heartbeat_durable")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      const base = {
+        project_id: Project.ID.global,
+        slug: "test",
+        directory: "/project",
+        title: "test",
+        version: "test",
+        time_created: 0,
+        time_updated: 0,
+      }
+      yield* db
+        .insert(SessionTable)
+        .values([
+          { ...base, id: ephemeral, ephemeral: true },
+          { ...base, id: durable },
+        ])
+        .run()
+      const message = (sessionID: SessionV2.ID, id: string) => ({
+        id: SessionV1.MessageID.make(id),
+        session_id: sessionID,
+        time_created: 0,
+        data: { role: "user", time: { created: 0 } } as (typeof MessageTable.$inferInsert)["data"],
+      })
+      yield* db
+        .insert(MessageTable)
+        .values([message(ephemeral, "msg_heartbeat_e"), message(durable, "msg_heartbeat_d")])
+        .run()
+      const stepFinish = (sessionID: SessionV2.ID, messageID: string, partID: string): SessionV1.StepFinishPart => ({
+        id: SessionV1.PartID.make(partID),
+        messageID: SessionV1.MessageID.make(messageID),
+        sessionID,
+        type: "step-finish",
+        reason: "stop",
+        cost: 0.01,
+        tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+
+      yield* events.publish(SessionV1.Event.PartUpdated, {
+        sessionID: ephemeral,
+        part: stepFinish(ephemeral, "msg_heartbeat_e", "prt_heartbeat_e"),
+        time: 1,
+      })
+      yield* events.publish(SessionV1.Event.PartUpdated, {
+        sessionID: durable,
+        part: stepFinish(durable, "msg_heartbeat_d", "prt_heartbeat_d"),
+        time: 1,
+      })
+
+      const rows = yield* db
+        .select({ id: SessionTable.id, time_updated: SessionTable.time_updated, cost: SessionTable.cost })
+        .from(SessionTable)
+        .all()
+      const byID = new Map(rows.map((row) => [row.id, row]))
+      expect(byID.get(ephemeral)?.time_updated).toBeGreaterThan(0)
+      expect(byID.get(durable)?.time_updated).toBe(0)
+      expect(byID.get(ephemeral)?.cost).toBeCloseTo(0.01)
+      expect(byID.get(durable)?.cost).toBeCloseTo(0.01)
     }),
   )
 })
