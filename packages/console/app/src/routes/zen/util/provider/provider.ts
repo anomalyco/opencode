@@ -208,7 +208,11 @@ export function createStreamPartConverter(from: ZenData.Format, to: ZenData.Form
 
     if (to === "anthropic") return toAnthropicChunk(raw)
     if (to === "openai") return toOpenaiChunk(raw)
-    if (to === "oa-compat") return toOaCompatibleChunk(raw)
+    if (to === "oa-compat") {
+      const result = toOaCompatibleChunk(raw)
+      const finished = raw.choices.some((choice) => choice.finish_reason != null)
+      return from === "openai" && finished ? `${result}\n\ndata: [DONE]` : result
+    }
   }
 }
 
