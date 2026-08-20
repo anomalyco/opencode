@@ -274,6 +274,7 @@ export const dict = {
   "go.graph.freePill": "Big Pickle ve ücretsiz modeller",
   "go.graph.go": "Go",
   "go.graph.label": "5 saat başına istekler",
+  "go.graph.limitedRegions": "sınırlı bölgeler",
   "go.graph.usageLimits": "Kullanım limitleri",
   "go.graph.aria": "5 saatlik istekler: {{free}} vs {{go}}",
 
@@ -683,6 +684,7 @@ export const dict = {
     'Go modellerini kullanmak için opencode yapılandırmanızda "OpenCode Go"\'yu sağlayıcı olarak seçin.',
   "workspace.lite.providers.title": "Sağlayıcılar",
   "workspace.lite.providers.description": "Yönlendirme için hangi sağlayıcıların kullanılacağını kontrol edin.",
+  "workspace.lite.providers.allowTraining": "İstek verileriyle eğitilen modellere izin ver",
   "workspace.lite.providers.useChina": "Çin'de barındırılan modelleri etkinleştir",
   "workspace.lite.black.message":
     "Şu anda OpenCode Black abonesisiniz veya bekleme listesindesiniz. Go'ya geçmek istiyorsanız lütfen önce aboneliğinizi iptal edin.",

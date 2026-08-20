@@ -9,6 +9,7 @@ describe("inference stat normalization", () => {
     expect(normalizeInferenceModel("mimo-v2.5-free")).toBe("mimo-v2.5")
     expect(normalizeInferenceModel("nemotron-3-super-free")).toBe("nemotron-3-super")
     expect(normalizeInferenceModel("mimo-v2.5-free:global")).toBe("mimo-v2.5")
+    expect(normalizeInferenceModel("hy3-preview:free")).toBe("hy3-preview")
   })
 
   test("maps normalized model ids to public authors", () => {
@@ -23,6 +24,7 @@ describe("inference stat normalization", () => {
     expect(modelAuthor("kimi-k2.6")).toBe("moonshot")
     expect(modelAuthor("mimo-v2-omni")).toBe("xiaomi")
     expect(modelAuthor("minimax-m2.7")).toBe("minimax")
+    expect(modelAuthor("muse-spark-1.2-contributor")).toBe("meta")
     expect(modelAuthor("nemotron-3-super-free")).toBe("nvidia")
     expect(modelAuthor("qwen3.7-max")).toBe("qwen")
     expect(modelAuthor("alpha-gpt-next")).toBeUndefined()
@@ -31,6 +33,7 @@ describe("inference stat normalization", () => {
   test("uses provider.model to resolve opencode route providers", () => {
     expect(statModel("big-pickle", "claude-sonnet-4-5")).toBe("claude-sonnet-4-5")
     expect(statModel("big-pickle", "gpt-5-free")).toBe("gpt-5")
+    expect(statModel("big-pickle", "xiaomi/mimo-v2.5")).toBe("mimo-v2.5")
     expect(statModel("big-pickle", "")).toBe("unknown")
     expect(statProvider("big-pickle", "claude-sonnet-4-5", "opencode")).toBe("anthropic")
     expect(statProvider("big-pickle", "gpt-5", "opencode")).toBe("openai")
@@ -65,6 +68,9 @@ describe("inference stat normalization", () => {
       { provider: "openai" },
     ])
     expect(toProviderAggregate(aggregate("big-pickle", "opencode"))).toMatchObject([{ provider: "unknown" }])
+    expect(toProviderAggregate(aggregate("muse-spark-1.2-contributor", "unknown"))).toMatchObject([
+      { provider: "meta" },
+    ])
   })
 
   test("geo aggregates never keep opencode or big-pickle dimensions", () => {
@@ -97,7 +103,13 @@ describe("inference stat normalization", () => {
     expect(queries[6]).toContain("'2026-08-12' AS period_key")
     expect(queries[0]).toContain('FROM "inference"."generation"')
     expect(queries[0]).toContain("event_type = 'generation.completed'")
-    expect(queries[0]).toContain("product = 'go'")
+    expect(queries[0]).toContain("AND (product = 'go' OR (lower(COALESCE(model_tier, '')) = 'free'")
+    expect(queries[0]).toContain("COALESCE(NULLIF(lower(model_tier), ''), '') AS raw_tier")
+    expect(queries[0]).toContain("WHEN lower(COALESCE(raw_tier, '')) = 'free'")
+    expect(queries[0]).toContain("regexp_replace(NULLIF(route_model, ''), '^.*/', '')")
+    expect(queries[0]).toContain("OR lower(raw_model) IN ('gpt-5-nano', 'grok-code', 'big-pickle')")
+    expect(queries[0]).toContain("OR lower(raw_model) LIKE '%-free'")
+    expect(queries[0]).toContain("THEN 'Free'")
     expect(queries[0]).toContain("LIMIT 10000")
     expect(queries[0]).toContain("approx_distinct(session) AS sessions")
     expect(queries[1]).toContain("'geo_model' ELSE 'geo'")
