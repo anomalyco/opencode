@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm"
 
 export const UPSERT_CHUNK_SIZE = 500
+export const DATA_SITE_TIERS = ["Go", "go", "Free", "free"]
 const DAY_MS = 86_400_000
 
 export type StatGrain = "day" | "week"
@@ -276,7 +277,12 @@ export function weightedAverage(
 }
 
 export function normalizeTier(value: string) {
-  if (value === "Paid") return "Zen"
+  const normalized = value.toLowerCase()
+  if (normalized === "paid" || normalized === "zen") return "Zen"
+  if (normalized === "go") return "Go"
+  if (normalized === "free") return "Free"
+  if (normalized === "enterprise") return "Enterprise"
+  if (normalized === "all") return "all"
   return value
 }
 
