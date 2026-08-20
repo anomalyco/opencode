@@ -13,12 +13,13 @@ import type { LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/servers"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
-import { compareSessionTime, displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
+import { errorMessage, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { pathKey } from "@/utils/path-key"
 import { showToast } from "@/utils/toast"
 import { archiveHomeSession } from "../home-session-archive"
 import type { HomeController } from "./home-controller"
+import { buildHomeSessionRecords } from "./home-sessions-model"
 
 const HOME_SESSION_LIMIT = 64
 export type HomeSessionRecord = {
@@ -42,11 +43,19 @@ export function createHomeSessionsController(home: HomeController) {
   const language = useLanguage()
   const projectDirectories = createMemo(() => {
     const project = home.project.selected()
-    if (!project) return home.project.list().flatMap(directories)
+    if (!project) return
     return directories(project)
   })
   const projectByID = createMemo(
     () => new Map(home.project.list().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
+  )
+  const projectMetadataByID = createMemo(
+    () =>
+      new Map(
+        (home.server.focusedSync()?.data.project ?? []).map(
+          (project) => [project.id, { ...project, expanded: false }] as const,
+        ),
+      ),
   )
   const sessionLoad = useQuery(() => {
     const ctx = home.server.focusedContext()
@@ -78,6 +87,7 @@ export function createHomeSessionsController(home: HomeController) {
       projectDirectories,
       projects: home.project.list,
       projectByID,
+      projectMetadataByID,
     }),
   )
   const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
@@ -200,30 +210,6 @@ export function createHomeSessionsController(home: HomeController) {
 
 function directories(project: LocalProject) {
   return [project.worktree, ...(project.sandboxes ?? [])]
-}
-
-function buildHomeSessionRecords(input: {
-  sessions: () => SessionInfo[]
-  projectDirectories: () => string[]
-  projects: () => LocalProject[]
-  projectByID: () => Map<string, LocalProject>
-}) {
-  const directories = new Set(input.projectDirectories().map(pathKey))
-  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.location.directory)))
-  return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
-    .sort(compareSessionTime)
-    .flatMap((session) => {
-      const directory = pathKey(session.location.directory)
-      const project =
-        input
-          .projects()
-          .find(
-            (item) =>
-              pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-          ) ?? projectForSession(session, input.projects(), input.projectByID())
-      if (!project) return []
-      return { session, project, projectName: displayName(project) }
-    })
 }
 
 export function homeSessionSearchKey(record: HomeSessionRecord) {
