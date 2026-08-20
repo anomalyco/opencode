@@ -148,10 +148,10 @@ const layer = () =>
 
       const removeSession = Effect.fnUntraced(function* (id: Shell.ID) {
         const session = sessions.get(id)
-        if (!session) return
-        sessions.delete(id)
         const index = exitOrder.indexOf(id)
         if (index !== -1) exitOrder.splice(index, 1)
+        if (!session) return
+        sessions.delete(id)
         if (session.timeoutFiber) yield* Fiber.interrupt(session.timeoutFiber)
         // Unblock any wait still pending when the command is removed before it terminated.
         yield* Deferred.fail(session.done, new NotFoundError({ id }))
