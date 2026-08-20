@@ -18,7 +18,7 @@ export const RETIRED_STAT_MODELS = ["big-pickle"]
 export const RETIRED_STAT_PROVIDERS = ["opencode"]
 
 export function normalizeInferenceModel(value: string | undefined) {
-  return (value || "unknown").replace(/(-free|:global)+$/, "") || "unknown"
+  return (value || "unknown").replace(/(-free|:free|:global)+$/, "") || "unknown"
 }
 
 export function modelAuthor(value: string | undefined) {
@@ -30,7 +30,8 @@ export function modelAuthor(value: string | undefined) {
 
 export function statModel(model: string | undefined, providerModel: string | undefined) {
   const normalized = normalizeInferenceModel(model)
-  if (RETIRED_STAT_MODELS.includes(normalized.toLowerCase())) return normalizeInferenceModel(providerModel)
+  if (RETIRED_STAT_MODELS.includes(normalized.toLowerCase()))
+    return normalizeInferenceModel(providerModel?.split("/").at(-1))
   return normalized
 }
 
