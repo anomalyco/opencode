@@ -64,6 +64,68 @@ describe("structured-output.OutputFormat", () => {
   })
 })
 
+// Regression tests for https://github.com/anomalyco/opencode/issues/26929
+//
+// OutputFormatText and OutputFormatJsonSchema were declared with Schema.Class,
+// which only encodes genuine class instances.  When a format object is
+// persisted onto a user message and read back out of MessageTable, the row's
+// data column holds a plain object (message-v2.ts info() spreads row.data).
+// The GET /session/:id/message endpoint validates its response against
+// Schema.Array(SessionV1.WithParts), so re-encoding the stored format through
+// Schema.Class failed with a 400 — one bad message rejected the entire array.
+//
+// These tests verify that plain objects round-trip through encode, which is
+// the condition the HTTP response path requires.
+describe("structured-output.OutputFormat.encode (regression for #26929)", () => {
+  const encodeFormat = Schema.encodeUnknownExit(SessionV1.Format)
+
+  test("encodes text format from a plain object", () => {
+    const result = encodeFormat({ type: "text" })
+    expect(Exit.isSuccess(result)).toBe(true)
+    if (Exit.isSuccess(result)) {
+      expect(result.value).toEqual({ type: "text" })
+    }
+  })
+
+  test("encodes json_schema format from a plain object with retryCount", () => {
+    const result = encodeFormat({
+      type: "json_schema",
+      schema: { type: "object", properties: { name: { type: "string" } } },
+      retryCount: 2,
+    })
+    expect(Exit.isSuccess(result)).toBe(true)
+    if (Exit.isSuccess(result)) {
+      const value = result.value as any
+      expect(value.type).toBe("json_schema")
+      expect(value.retryCount).toBe(2)
+    }
+  })
+
+  test("encodes json_schema format from a plain object without retryCount", () => {
+    // Messages persisted without an explicit retryCount should still encode.
+    // The decoding default fills in retryCount on decode, but encode must
+    // tolerate its absence (the DB row may not have it).
+    const result = encodeFormat({
+      type: "json_schema",
+      schema: { type: "object" },
+    })
+    expect(Exit.isSuccess(result)).toBe(true)
+  })
+
+  test("round-trips json_schema format through decode then encode", () => {
+    const original = {
+      type: "json_schema" as const,
+      schema: { type: "object", properties: { markdown_text: { type: "string" } } },
+    }
+    const decoded = decodeFormat(original)
+    expect(Exit.isSuccess(decoded)).toBe(true)
+    if (Exit.isSuccess(decoded)) {
+      const encoded = encodeFormat(decoded.value)
+      expect(Exit.isSuccess(encoded)).toBe(true)
+    }
+  })
+})
+
 describe("structured-output.StructuredOutputError", () => {
   test("creates error with message and retries", () => {
     const error = new SessionV1.StructuredOutputError({
