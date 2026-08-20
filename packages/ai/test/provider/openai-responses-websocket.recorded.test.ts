@@ -16,7 +16,7 @@ import { decodeJson } from "../../src/protocols/shared.js"
 import { weatherRuntimeTool, weatherTool, weatherToolName } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-4.1-mini")
+const model = configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-5.5")
 const recorded = recordedTests({
   prefix: "openai-responses-websocket",
   provider: "openai",
@@ -114,7 +114,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
         system: "Call get_weather once, then reply exactly: Paris is sunny.",
         prompt: "What is the weather in Paris?",
         tools: [weatherTool],
-        generation: { maxTokens: 50, temperature: 0 },
+        generation: { maxTokens: 50 },
         cache: "none",
       })
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
@@ -150,7 +150,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
         model,
         system: "Follow the user's exact reply instruction.",
         prompt: "Reply exactly: Alpha.",
-        generation: { maxTokens: 30, temperature: 0 },
+        generation: { maxTokens: 30 },
         cache: "none",
       })
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
@@ -185,7 +185,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
         model,
         system: "Follow the user's exact reply instruction.",
         prompt: "Reply exactly: Ready.",
-        generation: { maxTokens: 30, temperature: 0 },
+        generation: { maxTokens: 30 },
         cache: "none",
       })
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })

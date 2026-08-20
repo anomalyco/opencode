@@ -4,7 +4,7 @@
     "provider": "openai",
     "protocol": "openai-responses",
     "transport": "websocket",
-    "model": "gpt-4.1-mini",
+    "model": "gpt-5.5",
     "tags": [
       "prefix:openai-responses-websocket",
       "provider:openai",
@@ -23,13 +23,16 @@
         "sequence": 0,
         "url": "wss://api.openai.com/v1/responses",
         "protocols": [],
-        "close": { "code": 1000, "reason": "" }
+        "close": {
+          "code": 1000,
+          "reason": ""
+        }
       },
       "events": [
         {
           "direction": "client",
           "kind": "text",
-          "body": "{\"type\":\"response.create\",\"model\":\"gpt-4.1-mini\",\"input\":[{\"role\":\"system\",\"content\":\"Call get_weather once, then reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"What is the weather in Paris?\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}],\"store\":false,\"max_output_tokens\":50,\"temperature\":0}"
+          "body": "{\"type\":\"response.create\",\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Call get_weather once, then reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"What is the weather in Paris?\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}],\"store\":false,\"max_output_tokens\":50,\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"text\":{\"verbosity\":\"low\"}}"
         },
         {
           "direction": "server",
@@ -59,7 +62,7 @@
         {
           "direction": "client",
           "kind": "text",
-          "body": "{\"type\":\"response.create\",\"model\":\"gpt-4.1-mini\",\"input\":[{\"type\":\"function_call_output\",\"call_id\":\"call_ws_weather\",\"output\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}],\"store\":false,\"max_output_tokens\":50,\"temperature\":0,\"previous_response_id\":\"resp_ws_tool_1\"}"
+          "body": "{\"type\":\"response.create\",\"model\":\"gpt-5.5\",\"input\":[{\"type\":\"function_call_output\",\"call_id\":\"call_ws_weather\",\"output\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}],\"store\":false,\"max_output_tokens\":50,\"previous_response_id\":\"resp_ws_tool_1\",\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"text\":{\"verbosity\":\"low\"}}"
         },
         {
           "direction": "server",
