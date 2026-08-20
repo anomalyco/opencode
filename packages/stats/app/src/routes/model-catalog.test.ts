@@ -5,7 +5,7 @@ mock.module("@solidjs/router", () => ({ query: (load: () => unknown) => load }))
 const { buildModelCatalog, findModelCatalogEntry } = await import("./model-catalog")
 
 describe("model catalog pricing", () => {
-  test("prefers OpenCode pricing over a zero-cost coding plan with the same model id", () => {
+  test("prefers OpenCode Go pricing over a zero-cost coding plan with the same model id", () => {
     const catalog = buildModelCatalog(
       {
         models: {
