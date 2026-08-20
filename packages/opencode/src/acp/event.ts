@@ -24,6 +24,7 @@ import {
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
 type GlobalEventEnvelope = {
+  directory?: string
   payload?: Event
 }
 type GlobalEventStream = {
@@ -69,6 +70,7 @@ export class Subscription {
     this.disconnected()
     for (const resolve of this.connectionWaiters) resolve()
     this.connectionWaiters.clear()
+    this.permission.stop()
   }
 
   async runUntilIdle<A>(sessionId: string, request: () => Promise<A>) {
@@ -90,18 +92,21 @@ export class Subscription {
     }
   }
 
-  async handle(event: Event) {
+  async handle(event: Event, directory?: string) {
     switch (event.type) {
       case "session.status":
         if (event.properties.status.type === "idle") this.idle(event.properties.sessionID)
         return
       case "permission.asked":
-        this.permission.handle(event)
+        this.permission.handle(event, directory)
         return
       case "message.part.updated":
         return this.handlePartUpdated(event)
       case "message.part.delta":
         return this.handlePartDelta(event)
+      case "session.deleted":
+        this.permission.forgetSession(event.properties.sessionID)
+        return
     }
   }
 
@@ -160,7 +165,7 @@ export class Subscription {
     for await (const event of events.stream) {
       if (this.abort.signal.aborted) return
       if (!event.payload) continue
-      await this.handle(event.payload).catch(() => {})
+      await this.handle(event.payload, event.directory).catch(() => {})
     }
   }
 

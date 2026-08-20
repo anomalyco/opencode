@@ -1239,6 +1239,116 @@ describe("run stream transport", () => {
     }
   })
 
+  test("continues bootstrap with partial descendants when one branch fails", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const trace = mock((_type: string, _data?: unknown) => {})
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        children: async ({ sessionID }) => {
+          if (sessionID === "session-1") return ok([child("child-1")])
+          throw new Error("child lookup unavailable")
+        },
+        permissions: async () =>
+          ok([
+            {
+              id: "perm-partial",
+              sessionID: "child-1",
+              permission: "edit",
+              patterns: ["src/partial.ts"],
+              metadata: {},
+              always: [],
+            },
+          ]),
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+      trace: { write: trace },
+    })
+
+    try {
+      const state = await waitFor(() => {
+        const item = ui.events.findLast((event) => event.type === "stream.subagent")
+        const state = item?.type === "stream.subagent" ? item.state : undefined
+        return state?.permissions.some((permission) => permission.id === "perm-partial") ? state : undefined
+      })
+      expect(state.tabs).toEqual([expect.objectContaining({ sessionID: "child-1" })])
+      expect(trace).toHaveBeenCalledWith("bootstrap.descendants.partial", {
+        failures: ["child-1"],
+        descendants: ["child-1"],
+      })
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("bootstraps blockers from a grandchild session", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        children: async ({ sessionID }) => {
+          if (sessionID === "session-1") return ok([child("child-1")])
+          if (sessionID === "child-1") return ok([child("grandchild-1")])
+          return ok([])
+        },
+        permissions: async () =>
+          ok([
+            {
+              id: "perm-grandchild",
+              sessionID: "grandchild-1",
+              permission: "edit",
+              patterns: ["src/nested.ts"],
+              metadata: {},
+              always: [],
+            },
+          ]),
+        questions: async () =>
+          ok([
+            {
+              id: "question-grandchild",
+              sessionID: "grandchild-1",
+              questions: [
+                {
+                  question: "Which file?",
+                  header: "File",
+                  options: [{ label: "nested.ts", description: "Use the nested file." }],
+                  multiple: false,
+                },
+              ],
+            },
+          ]),
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      const state = await waitFor(() => {
+        const item = ui.events.findLast((event) => event.type === "stream.subagent")
+        const state = item?.type === "stream.subagent" ? item.state : undefined
+        return state?.permissions.some((permission) => permission.id === "perm-grandchild") &&
+          state.questions.some((question) => question.id === "question-grandchild")
+          ? state
+          : undefined
+      })
+
+      expect(state.tabs).toEqual([expect.objectContaining({ sessionID: "grandchild-1" })])
+      expect(state.permissions[0]?.sessionID).toBe("grandchild-1")
+      expect(state.questions[0]?.sessionID).toBe("grandchild-1")
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
   test("bootstraps child tabs and resumed blocker input", async () => {
     const src = eventFeed()
     const ui = footer()
