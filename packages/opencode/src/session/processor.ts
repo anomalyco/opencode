@@ -31,6 +31,8 @@ export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
   readonly message: SessionV1.Assistant
+  readonly latestUsage: () => Usage | undefined
+  readonly attemptedToolCall: () => boolean
   readonly updateToolCall: (
     toolCallID: string,
     update: (part: SessionV1.ToolPart) => SessionV1.ToolPart,
@@ -72,6 +74,8 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  latestUsage: Usage | undefined
+  attemptedToolCall: boolean
 }
 
 type StreamEvent = LLMEvent
@@ -111,6 +115,8 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        latestUsage: undefined,
+        attemptedToolCall: false,
       }
       let aborted = false
 
@@ -314,22 +320,32 @@ const layer = Layer.effect(
 
           case "tool-input-start":
             if (ctx.assistantMessage.summary) {
+              ctx.attemptedToolCall = true
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
             yield* ensureToolCall(value)
             return
 
           case "tool-input-delta":
+            if (ctx.assistantMessage.summary) {
+              ctx.attemptedToolCall = true
+              throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
+            }
             yield* ensureToolCall(value)
             return
 
           case "tool-input-end": {
+            if (ctx.assistantMessage.summary) {
+              ctx.attemptedToolCall = true
+              throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
+            }
             yield* ensureToolCall(value)
             return
           }
 
           case "tool-call": {
             if (ctx.assistantMessage.summary) {
+              ctx.attemptedToolCall = true
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
             yield* ensureToolCall(value)
@@ -433,6 +449,7 @@ const layer = Layer.effect(
             return
 
           case "step-finish": {
+            if (value.usage) ctx.latestUsage = value.usage
             const completedSnapshot = yield* snapshot.track()
             yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
             const usage = Session.getUsage({
@@ -532,6 +549,7 @@ const layer = Layer.effect(
             return
 
           case "finish":
+            if (value.usage) ctx.latestUsage = value.usage
             return
         }
       })
@@ -686,6 +704,8 @@ const layer = Layer.effect(
         get message() {
           return ctx.assistantMessage
         },
+        latestUsage: () => ctx.latestUsage,
+        attemptedToolCall: () => ctx.attemptedToolCall,
         updateToolCall,
         completeToolCall,
         process,
