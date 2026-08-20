@@ -121,6 +121,7 @@ const TRANSCRIPT_BACKFILL_CHUNK = 60
 type PendingAction = "steer" | "queue" | "cancel"
 
 const context = createContext<{
+  /** Content width: terminal width minus vertical tabs, sidebar, and padding. */
   width: number
   /**
    * Shared reactive terminal size. Transcript-row components must read this
@@ -1130,6 +1131,11 @@ export function Session(props: { verticalTabsWidth: number }) {
     ),
   )
 
+  // Memoized per axis so width readers do not re-run on height-only resizes
+  // (dimensions() is one object signal with identity equality) and vice versa.
+  const terminalWidth = createMemo(() => dimensions().width)
+  const terminalHeight = createMemo(() => dimensions().height)
+
   return (
     <context.Provider
       value={{
@@ -1138,10 +1144,10 @@ export function Session(props: { verticalTabsWidth: number }) {
         },
         terminal: {
           get width() {
-            return dimensions().width
+            return terminalWidth()
           },
           get height() {
-            return dimensions().height
+            return terminalHeight()
           },
         },
         sessionID: route.sessionID,
