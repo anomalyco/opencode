@@ -186,6 +186,7 @@ describe("step-finish token propagation via event", () => {
         }
 
         yield* session.updatePart(partInput)
+        partInput.cost = 1
         const receivedPart = yield* awaitDeferred(received, "timed out waiting for message.part.updated")
 
         expect(receivedPart.type).toBe("step-finish")

@@ -636,7 +636,9 @@ const layer: Layer.Layer<
       Effect.gen(function* () {
         yield* events.publish(SessionV1.Event.PartUpdated, {
           sessionID: part.sessionID,
-          part: structuredClone(part),
+          // Parts reuse large immutable output strings while replacing mutable
+          // top-level fields. Isolate those updates without copying the payload.
+          part: { ...part },
           time: Date.now(),
         })
         return part
