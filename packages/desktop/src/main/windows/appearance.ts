@@ -2,11 +2,11 @@ import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../../ui/src/theme/themes/oc-2.json"
 import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
-import { join } from "node:path"
+import type { Path } from "effect"
 import { type TitlebarTheme } from "../../shared/ipc-contract"
 import { WindowFullscreenChanged, WindowPinchZoomChanged, WindowZoomChanged } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
-import { developmentResourcesRoot, preloadPath } from "../paths"
+import type { DesktopPaths } from "../paths"
 import { PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 
@@ -22,11 +22,11 @@ const maxZoomLevel = 10
 const minZoomLevel = 0.2
 let backgroundColor: string | undefined
 
-export function windowAppearance() {
+export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) {
   const mode = tone()
   return {
     title: "OpenCode",
-    icon: iconPath(),
+    icon: iconPath(path, paths),
     backgroundColor: backgroundColor ?? oc2Background[mode],
     ...(process.platform === "darwin"
       ? {
@@ -42,7 +42,7 @@ export function windowAppearance() {
         }
       : {}),
     webPreferences: {
-      preload: preloadPath,
+      preload: paths.preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -50,9 +50,9 @@ export function windowAppearance() {
   }
 }
 
-export function setDockIcon() {
+export function setDockIcon(path: Path.Path, paths: DesktopPaths.Resolved) {
   if (process.platform !== "darwin") return
-  const icon = nativeImage.createFromPath(join(iconsDir(), "dock.png"))
+  const icon = nativeImage.createFromPath(path.join(iconsDir(path, paths), "dock.png"))
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
@@ -119,12 +119,14 @@ export function wireFullscreen(win: BrowserWindow) {
   win.on("leave-full-screen", () => send(false))
 }
 
-function iconsDir() {
-  return app.isPackaged ? join(process.resourcesPath, "icons") : join(developmentResourcesRoot, "icons")
+function iconsDir(path: Path.Path, paths: DesktopPaths.Resolved) {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "icons")
+    : path.join(paths.developmentResourcesRoot, "icons")
 }
 
-function iconPath() {
-  return join(iconsDir(), `icon.${process.platform === "win32" ? "ico" : "png"}`)
+function iconPath(path: Path.Path, paths: DesktopPaths.Resolved) {
+  return path.join(iconsDir(path, paths), `icon.${process.platform === "win32" ? "ico" : "png"}`)
 }
 
 function tone() {

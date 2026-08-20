@@ -3,7 +3,6 @@
 export function createWindowRegistry<W>(persistence: {
   read: () => unknown
   write: (ids: string[]) => void
-  cleanup: (id: string) => void
 }) {
   const windows = new Map<string, W>()
   let quitting = false
@@ -39,9 +38,9 @@ export function createWindowRegistry<W>(persistence: {
       // forgets a window. Closing the last window quits the app and fires
       // `closed` before `before-quit`, so treat it as a quit and keep the id
       // for restore on next launch.
-      if (quitting || windows.size === 0) return
+      if (quitting || windows.size === 0) return false
       persistence.write(persisted().filter((item) => item !== id))
-      persistence.cleanup(id)
+      return true
     },
   }
 }

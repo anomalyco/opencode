@@ -1,20 +1,21 @@
 import { Service } from "@opencode-ai/client/service"
 import { execFile } from "node:child_process"
-import { existsSync } from "node:fs"
-import { chmod, copyFile, mkdir, readdir, rename, rm } from "node:fs/promises"
-import { dirname, join } from "node:path"
 import { promisify } from "node:util"
 import { app } from "electron"
+import { Effect, FileSystem, Path } from "effect"
 import { parseCliVersion } from "./cli-version"
-import { developmentResourcesRoot } from "../paths"
+import { DesktopPaths } from "../paths"
 
 const execFileAsync = promisify(execFile)
-type Logger = {
-  log(message: string, meta?: Record<string, unknown>): void
-  error(message: string, meta?: Record<string, unknown>): void
-}
 
-export async function startBackgroundCli(logger: Logger) {
+export const startBackgroundCli = Effect.fn("BackgroundService.start")(function* () {
+  return yield* start().pipe(Effect.orDie)
+})
+
+const start = Effect.fn("BackgroundService.startInternal")(function* () {
+  const path = yield* Path.Path
+  const context = yield* Effect.context()
+  const runFork = Effect.runForkWith(context)
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
   const developmentVersion = process.env.OPENCODE_VERSION ?? "local"
@@ -31,24 +32,27 @@ export async function startBackgroundCli(logger: Logger) {
         ],
         binary: undefined,
       }
-    : await resolveBundledCli(isolated, logger)
+    : yield* resolveBundledCli(isolated)
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
-  const service = await Service.ensure({
-    file:
-      isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-        ? join(app.getPath("userData"), "opencode", "service-local.json")
-        : undefined,
-    version: cli.version,
-    command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
-    onStart: (reason, previousVersion) => logger.log("v2 CLI background service starting", { reason, previousVersion }),
-  })
+  const service = yield* Effect.tryPromise(() =>
+    Service.ensure({
+      file:
+        isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+          ? path.join(app.getPath("userData"), "opencode", "service-local.json")
+          : undefined,
+      version: cli.version,
+      command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
+      onStart: (reason, previousVersion) =>
+        runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
+    }),
+  )
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
-  logger.log("v2 CLI background service ready", {
+  yield* Effect.logInfo("v2 CLI background service ready", {
     username: service.auth.username,
     version: cli.version,
     ...endpoint(service.url),
   })
-  if (isolated && cli.binary) await cleanCliStages(cli.binary, logger)
+  if (isolated && cli.binary) yield* cleanCliStages(cli.binary)
   return {
     url: service.url,
     username: service.auth.username,
@@ -62,73 +66,80 @@ export async function startBackgroundCli(logger: Logger) {
             output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT,
           },
   }
-}
+})
 
-async function resolveBundledCli(isolated: boolean, logger: Logger) {
+const resolveBundledCli = Effect.fn("BackgroundService.resolveBundledCli")(function* (isolated: boolean) {
+  const path = yield* Path.Path
+  const paths = yield* DesktopPaths.resolve
   const bundled = app.isPackaged
-    ? join(process.resourcesPath, executableName())
-    : join(developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
-  logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
-  const version = parseCliVersion(await run(bundled, ["--version"], logger))
-  const binary = app.isPackaged || isolated ? await installCli(bundled, version, logger) : bundled
+    ? path.join(process.resourcesPath, executableName())
+    : path.join(paths.developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
+  yield* Effect.logInfo("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
+  const version = parseCliVersion(yield* run(bundled, ["--version"]))
+  const binary = app.isPackaged || isolated ? yield* installCli(bundled, version) : bundled
   return { version, binary, command: [binary] }
-}
+})
 
-async function cleanCliStages(binary: string, logger: Logger) {
-  const current = dirname(binary)
-  const root = dirname(current)
-  await Promise.all(
-    (await readdir(root, { withFileTypes: true }))
-      .filter((entry) => entry.isDirectory() && join(root, entry.name) !== current)
-      .map((entry) =>
-        rm(join(root, entry.name), { recursive: true, force: true }).catch((error) =>
-          logger.error("failed to clean staged v2 CLI", { path: join(root, entry.name), error }),
-        ),
-      ),
+const cleanCliStages = Effect.fn("BackgroundService.cleanCliStages")(function* (binary: string) {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const current = path.dirname(binary)
+  const root = path.dirname(current)
+  const entries = yield* fs.readDirectory(root)
+  yield* Effect.forEach(
+    entries,
+    Effect.fnUntraced(function* (entry) {
+      const target = path.join(root, entry)
+      if (target === current) return
+      const stat = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (stat?.type !== "Directory") return
+      yield* fs.remove(target, { recursive: true, force: true }).pipe(
+        Effect.catch((error) => Effect.logError("failed to clean staged v2 CLI", { path: target, error })),
+      )
+    }),
+    { concurrency: "unbounded" },
   )
-}
+})
 
-async function installCli(source: string, version: string, logger: Logger) {
-  const directory = join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"))
-  const destination = join(directory, executableName())
-  if (existsSync(destination)) {
-    logger.log("v2 CLI staged executable reused", { path: destination, version })
+const installCli = Effect.fn("BackgroundService.installCli")(function* (source: string, version: string) {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const directory = path.join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"))
+  const destination = path.join(directory, executableName())
+  if (yield* fs.exists(destination)) {
+    yield* Effect.logInfo("v2 CLI staged executable reused", { path: destination, version })
     return destination
   }
 
   const temp = destination + `.${process.pid}.tmp`
-  await mkdir(directory, { recursive: true })
-  await copyFile(source, temp)
-  if (process.platform !== "win32") await chmod(temp, 0o755)
-  await rename(temp, destination).catch(async (error) => {
-    await rm(temp, { force: true })
-    throw error
-  })
-  logger.log("v2 CLI executable staged", { source, path: destination, version })
+  yield* fs.makeDirectory(directory, { recursive: true })
+  yield* fs.copyFile(source, temp)
+  if (process.platform !== "win32") yield* fs.chmod(temp, 0o755)
+  yield* fs
+    .rename(temp, destination)
+    .pipe(Effect.catch((error) => fs.remove(temp, { force: true }).pipe(Effect.andThen(Effect.fail(error)))))
+  yield* Effect.logInfo("v2 CLI executable staged", { source, path: destination, version })
   return destination
-}
+})
 
-async function run(binary: string, args: string[], logger: Logger) {
-  logger.log("v2 CLI command started", { binary, args })
-  return execFileAsync(binary, args, { windowsHide: true }).then(
-    (result) => {
-      const stdout = result.stdout.trim()
-      const stderr = result.stderr.trim()
-      logger.log("v2 CLI command completed", { args, stdout, stderr })
-      return stdout
-    },
-    (error: unknown) => {
+const run = Effect.fn("BackgroundService.run")(function* (binary: string, args: string[]) {
+  yield* Effect.logInfo("v2 CLI command started", { binary, args })
+  const result = yield* Effect.tryPromise(() => execFileAsync(binary, args, { windowsHide: true })).pipe(
+    Effect.tapError((error) => {
       const output = error as { stdout?: string; stderr?: string }
-      logger.error("v2 CLI command failed", {
+      return Effect.logError("v2 CLI command failed", {
         args,
         error: error instanceof Error ? error.message : String(error),
         stdout: output.stdout?.trim() ?? "",
         stderr: output.stderr?.trim() ?? "",
       })
-      throw error
-    },
+    }),
   )
-}
+  const stdout = result.stdout.trim()
+  const stderr = result.stderr.trim()
+  yield* Effect.logInfo("v2 CLI command completed", { args, stdout, stderr })
+  return stdout
+})
 
 function endpoint(url: string | undefined) {
   if (!url || !URL.canParse(url)) return {}

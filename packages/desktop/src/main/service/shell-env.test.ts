@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { NodePath } from "@effect/platform-node"
+import { Effect } from "effect"
 
 import { isNushell, mergeShellEnv, parseShellEnv, resolveUserShell } from "./shell-env"
 
@@ -42,9 +44,10 @@ describe("shell env", () => {
   })
 
   test("isNushell handles path and binary name", () => {
-    expect(isNushell("nu")).toBe(true)
-    expect(isNushell("/opt/homebrew/bin/nu")).toBe(true)
-    expect(isNushell("C:\\Program Files\\nu.exe")).toBe(true)
-    expect(isNushell("/bin/zsh")).toBe(false)
+    const check = (shell: string) => Effect.runSync(isNushell(shell).pipe(Effect.provide(NodePath.layer)))
+    expect(check("nu")).toBe(true)
+    expect(check("/opt/homebrew/bin/nu")).toBe(true)
+    expect(check("C:\\Program Files\\nu.exe")).toBe(true)
+    expect(check("/bin/zsh")).toBe(false)
   })
 })

@@ -1,19 +1,26 @@
 import { app, dialog } from "electron"
 import type { BrowserWindow } from "electron"
-import { exportDebugLogs, writeLog } from "../native/logging"
+import { Effect } from "effect"
+import { scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { safeWindowURL } from "./state"
 import { createUnresponsiveSampler } from "./unresponsive"
 
-export function wireWindowRecovery(win: BrowserWindow, name: string, relaunch: () => void) {
+export function wireWindowRecovery(
+  win: BrowserWindow,
+  name: string,
+  relaunch: () => void,
+  exportDebugLogs: () => Promise<string>,
+  runFork: (effect: Effect.Effect<void>) => unknown,
+) {
   let showing = false
-  const sampler = createUnresponsiveSampler(win, name)
+  const sampler = createUnresponsiveSampler(win, name, runFork)
 
   type RecoveryAction = "relaunch" | "export-logs" | "keep-waiting" | "quit"
   const handle = async (action: RecoveryAction | undefined, wait: boolean) => {
     if (action === "export-logs") {
       const sampling = sampler.stopAndFlush()
-      await exportDebugLogs().catch((error) => writeLog("main", "failed to export debug logs", { error }, "error"))
+      await exportDebugLogs().catch((error) => runFork(Effect.logError("failed to export debug logs", { error })))
       if (wait && sampling) sampler.start()
       return true
     }
@@ -68,11 +75,19 @@ export function wireWindowRecovery(win: BrowserWindow, name: string, relaunch: (
     validatedURL: string,
     isMainFrame: boolean,
   ) => {
-    writeLog(
-      "window",
-      "renderer load failed",
-      { window: name, event, errorCode, errorDescription, validatedURL, currentURL: safeWindowURL(win), isMainFrame },
-      "error",
+    runFork(
+      scoped(
+        "window",
+        Effect.logError("renderer load failed", {
+          window: name,
+          event,
+          errorCode,
+          errorDescription,
+          validatedURL,
+          currentURL: safeWindowURL(win),
+          isMainFrame,
+        }),
+      ),
     )
     if (!isMainFrame || errorCode === -3) return
     void show(
@@ -95,7 +110,12 @@ export function wireWindowRecovery(win: BrowserWindow, name: string, relaunch: (
   })
   win.webContents.on("render-process-gone", (_event, details) => {
     sampler.stopAndFlush()
-    writeLog("window", "renderer process gone", { window: name, currentURL: safeWindowURL(win), details }, "error")
+    runFork(
+      scoped(
+        "window",
+        Effect.logError("renderer process gone", { window: name, currentURL: safeWindowURL(win), details }),
+      ),
+    )
     void show(
       nativeT("desktop.recovery.terminated"),
       nativeT("desktop.recovery.terminated.detail", {
@@ -107,20 +127,27 @@ export function wireWindowRecovery(win: BrowserWindow, name: string, relaunch: (
     )
   })
   win.on("unresponsive", () => {
-    writeLog("window", "renderer unresponsive", { window: name, currentURL: safeWindowURL(win) }, "error")
+    runFork(
+      scoped(
+        "window",
+        Effect.logError("renderer unresponsive", { window: name, currentURL: safeWindowURL(win) }),
+      ),
+    )
     sampler.start()
     void show(nativeT("desktop.recovery.unresponsive"), nativeT("desktop.recovery.unresponsive.detail"), true)
   })
   win.on("responsive", () => {
-    writeLog("window", "renderer responsive", { window: name, currentURL: safeWindowURL(win) }, "error")
+    runFork(
+      scoped("window", Effect.logError("renderer responsive", { window: name, currentURL: safeWindowURL(win) })),
+    )
     sampler.stopAndFlush()
   })
   win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
     if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
-      writeLog("pty", "console", { window: name, level, message, line, sourceId })
+      runFork(scoped("pty", Effect.logInfo("console", { window: name, level, message, line, sourceId })))
     }
   })
   win.webContents.on("preload-error", (_event, path, error) => {
-    writeLog("preload", "preload error", { window: name, preloadPath: path, error }, "error")
+    runFork(scoped("preload", Effect.logError("preload error", { window: name, preloadPath: path, error })))
   })
 }

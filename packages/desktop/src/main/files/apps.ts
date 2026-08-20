@@ -1,103 +1,100 @@
 import { execFile } from "node:child_process"
-import { access, readFile, readdir } from "node:fs/promises"
-import { dirname, extname, join } from "node:path"
 import util from "node:util"
+import { Effect, FileSystem, Path } from "effect"
 
 const execFilePromise = util.promisify(execFile)
 
-const exists = (path: string) =>
-  access(path)
-    .then(() => true)
-    .catch(() => false)
-
-export function checkAppExists(appName: string) {
+export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function* (appName: string) {
   if (process.platform === "win32") return true
   if (process.platform === "linux") return true
-  return checkMacosApp(appName)
-}
+  return yield* checkMacosApp(appName)
+})
 
-export function resolveAppPath(appName: string) {
+export const resolveAppPath = Effect.fn("DesktopFiles.resolveAppPath")(function* (appName: string) {
   if (process.platform !== "win32") return appName
-  return resolveWindowsAppPath(appName)
-}
+  return yield* resolveWindowsAppPath(appName)
+})
 
-async function checkMacosApp(appName: string) {
+const checkMacosApp = Effect.fn("DesktopFiles.checkMacosApp")(function* (appName: string) {
+  const fs = yield* FileSystem.FileSystem
   const locations = [`/Applications/${appName}.app`, `/System/Applications/${appName}.app`]
 
   const home = process.env.HOME
   if (home) locations.push(`${home}/Applications/${appName}.app`)
 
   for (const location of locations) {
-    if (await exists(location)) return true
+    if (yield* exists(fs, location)) return true
   }
 
-  return execFilePromise("which", [appName])
-    .then(() => true)
-    .catch(() => false)
-}
+  return yield* Effect.tryPromise(() => execFilePromise("which", [appName])).pipe(
+    Effect.as(true),
+    Effect.catch(() => Effect.succeed(false)),
+  )
+})
 
-async function resolveWindowsAppPath(appName: string): Promise<string | null> {
-  let output: string
-  try {
-    output = await execFilePromise("where", [appName]).then((r) => r.stdout.toString())
-  } catch {
-    return null
-  }
+const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(function* (appName: string) {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const result = yield* Effect.tryPromise(() => execFilePromise("where", [appName])).pipe(
+    Effect.catch(() => Effect.succeed(undefined)),
+  )
+  if (!result) return null
 
-  const paths = output
+  const paths = result.stdout
+    .toString()
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
 
-  const hasExt = (path: string, ext: string) => extname(path).toLowerCase() === `.${ext}`
+  const hasExt = (value: string, ext: string) => path.extname(value).toLowerCase() === `.${ext}`
 
   const exe = paths.find((path) => hasExt(path, "exe"))
   if (exe) return exe
 
-  const resolveCmd = async (path: string) => {
-    const content = await readFile(path, "utf8")
+  const resolveCmd = Effect.fnUntraced(function* (file: string) {
+    const content = yield* fs.readFileString(file)
     for (const token of content.split('"').map((value: string) => value.trim())) {
       const lower = token.toLowerCase()
       if (!lower.includes(".exe")) continue
 
       const index = lower.indexOf("%~dp0")
       if (index >= 0) {
-        const base = dirname(path)
+        const base = path.dirname(file)
         const suffix = token.slice(index + 5)
         const resolved = suffix
           .replace(/\//g, "\\")
           .split("\\")
           .filter((part: string) => part && part !== ".")
           .reduce((current: string, part: string) => {
-            if (part === "..") return dirname(current)
-            return join(current, part)
+            if (part === "..") return path.dirname(current)
+            return path.join(current, part)
           }, base)
 
-        if (await exists(resolved)) return resolved
+        if (yield* exists(fs, resolved)) return resolved
       }
 
-      if (await exists(token)) return token
+      if (yield* exists(fs, token)) return token
     }
 
     return null
-  }
+  })
 
-  for (const path of paths) {
-    if (hasExt(path, "cmd") || hasExt(path, "bat")) {
-      const resolved = await resolveCmd(path)
+  for (const file of paths) {
+    if (hasExt(file, "cmd") || hasExt(file, "bat")) {
+      const resolved = yield* resolveCmd(file)
       if (resolved) return resolved
     }
 
-    if (!extname(path)) {
-      const cmd = `${path}.cmd`
-      if (await exists(cmd)) {
-        const resolved = await resolveCmd(cmd)
+    if (!path.extname(file)) {
+      const cmd = `${file}.cmd`
+      if (yield* exists(fs, cmd)) {
+        const resolved = yield* resolveCmd(cmd)
         if (resolved) return resolved
       }
 
-      const bat = `${path}.bat`
-      if (await exists(bat)) {
-        const resolved = await resolveCmd(bat)
+      const bat = `${file}.bat`
+      if (yield* exists(fs, bat)) {
+        const resolved = yield* resolveCmd(bat)
         if (resolved) return resolved
       }
     }
@@ -110,27 +107,31 @@ async function resolveWindowsAppPath(appName: string): Promise<string | null> {
     .join("")
 
   if (key) {
-    for (const path of paths) {
-      const dirs = [dirname(path), dirname(dirname(path)), dirname(dirname(dirname(path)))]
+    for (const file of paths) {
+      const dirs = [path.dirname(file), path.dirname(path.dirname(file)), path.dirname(path.dirname(path.dirname(file)))]
       for (const dir of dirs) {
-        try {
-          for (const entry of await readdir(dir)) {
-            const candidate = join(dir, entry)
-            if (!hasExt(candidate, "exe")) continue
-            const stem = entry.replace(/\.exe$/i, "")
-            const name = stem
-              .split("")
-              .filter((value: string) => /[a-z0-9]/i.test(value))
-              .map((value: string) => value.toLowerCase())
-              .join("")
-            if (name.includes(key) || key.includes(name)) return candidate
-          }
-        } catch {
-          continue
+        const entries = yield* fs.readDirectory(dir).pipe(Effect.catch(() => Effect.succeed([])))
+        for (const entry of entries) {
+          const candidate = path.join(dir, entry)
+          if (!hasExt(candidate, "exe")) continue
+          const stem = entry.replace(/\.exe$/i, "")
+          const name = stem
+            .split("")
+            .filter((value: string) => /[a-z0-9]/i.test(value))
+            .map((value: string) => value.toLowerCase())
+            .join("")
+          if (name.includes(key) || key.includes(name)) return candidate
         }
       }
     }
   }
 
   return paths[0] ?? null
+})
+
+function exists(fs: FileSystem.FileSystem, path: string) {
+  return fs.access(path).pipe(
+    Effect.as(true),
+    Effect.catch(() => Effect.succeed(false)),
+  )
 }

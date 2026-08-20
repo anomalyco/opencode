@@ -1,11 +1,16 @@
 import type { BrowserWindow } from "electron"
-import { writeLog } from "../native/logging"
+import { Effect } from "effect"
+import { scoped } from "../native/logging"
 import { safeWindowURL } from "./state"
 
 const sampleInterval = 1000
 const samplePeriod = 15000
 
-export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
+export function createUnresponsiveSampler(
+  win: BrowserWindow,
+  name: string,
+  runFork: (effect: Effect.Effect<void>) => unknown,
+) {
   let sampleTimer: ReturnType<typeof setTimeout> | undefined
   let stopTimer: ReturnType<typeof setTimeout> | undefined
   let sampling = false
@@ -28,7 +33,7 @@ export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
   const collect = async () => {
     if (!active()) return
     const stack = await win.webContents.mainFrame.collectJavaScriptCallStack().catch((error) => {
-      writeLog("window", "failed to collect unresponsive sample", { window: name, error }, "error")
+      runFork(scoped("window", Effect.logError("failed to collect unresponsive sample", { window: name, error })))
       return undefined
     })
     if (!active()) return
@@ -51,7 +56,7 @@ export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
       ...entries.map((entry) => `<${entry[1]}> ${entry[0]}`),
       `Total Samples: ${total}`,
     ].join("\n")
-    writeLog("window", message, undefined, "error")
+    runFork(scoped("window", Effect.logError(message)))
     samples.clear()
     return wasSampling
   }

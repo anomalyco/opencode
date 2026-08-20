@@ -1,9 +1,9 @@
 import { net, protocol } from "electron"
 import type { BrowserWindow } from "electron"
-import { isAbsolute, relative, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
-import { writeLog } from "../native/logging"
-import { rendererRoot } from "../paths"
+import { Effect } from "effect"
+import type { Path } from "effect"
+import { scoped } from "../native/logging"
 
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
@@ -22,20 +22,24 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
-export function registerRendererProtocol() {
+export function registerRendererProtocol(
+  path: Path.Path,
+  rendererRoot: string,
+  runFork: (effect: Effect.Effect<void>) => unknown,
+) {
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
   protocol.handle(rendererProtocol, async (request) => {
     const url = new URL(request.url)
     if (url.host !== rendererHost) {
-      writeLog("protocol", "rejected host", { url: request.url }, "warn")
+      runFork(scoped("protocol", Effect.logWarning("rejected host", { url: request.url })))
       return new Response("Not found", { status: 404 })
     }
 
-    const file = resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
-    const rel = relative(rendererRoot, file)
-    if (rel.startsWith("..") || isAbsolute(rel)) {
-      writeLog("protocol", "rejected path", { url: request.url, file }, "warn")
+    const file = path.resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
+    const rel = path.relative(rendererRoot, file)
+    if (rel.startsWith("..") || path.isAbsolute(rel)) {
+      runFork(scoped("protocol", Effect.logWarning("rejected path", { url: request.url, file })))
       return new Response("Not found", { status: 404 })
     }
 
@@ -43,16 +47,21 @@ export function registerRendererProtocol() {
       const range = request.headers.get("range")
       const response = await net.fetch(pathToFileURL(file).toString(), { headers: range ? { range } : undefined })
       if (response.status >= 400) {
-        writeLog(
-          "protocol",
-          "fetch failed",
-          { url: request.url, file, status: response.status, statusText: response.statusText },
-          "error",
+        runFork(
+          scoped(
+            "protocol",
+            Effect.logError("fetch failed", {
+              url: request.url,
+              file,
+              status: response.status,
+              statusText: response.statusText,
+            }),
+          ),
         )
       }
       return addDocumentPolicy(response, file)
     } catch (error) {
-      writeLog("protocol", "fetch error", { url: request.url, file, error }, "error")
+      runFork(scoped("protocol", Effect.logError("fetch error", { url: request.url, file, error })))
       return new Response("Not found", { status: 404 })
     }
   })

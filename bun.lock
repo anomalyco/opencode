@@ -414,6 +414,7 @@
       "name": "@opencode-ai/desktop",
       "version": "1.18.15",
       "dependencies": {
+        "@effect/platform-node": "catalog:",
         "@zip.js/zip.js": "2.7.62",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",

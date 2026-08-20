@@ -1,5 +1,4 @@
 import type { BrowserWindow } from "electron"
-import { openExternalURL } from "../files"
 import { addRendererHeaders, isRendererUrl, upsertHeader } from "./protocol"
 
 const rendererPermissions = new Set(["clipboard-sanitized-write", "notifications"])
@@ -18,7 +17,7 @@ export function allowRendererPermissions(win: BrowserWindow) {
   })
 }
 
-export function wireNavigationPolicy(win: BrowserWindow) {
+export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: string) => unknown) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
     return { action: "deny" }

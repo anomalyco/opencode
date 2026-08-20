@@ -1,9 +1,12 @@
 import windowState from "electron-window-state"
 import { randomUUID } from "node:crypto"
-import { rmSync } from "node:fs"
-import { join } from "node:path"
 import { app, BrowserWindow } from "electron"
-import { removeStoreFile, getStore } from "../storage/store"
+import { Effect } from "effect"
+import type { FileSystem, Path } from "effect"
+import { openExternalURL } from "../files"
+import { scoped } from "../native/logging"
+import type { DesktopPaths } from "../paths"
+import { forgetStore, getStore } from "../storage/store"
 import { WINDOW_IDS_KEY } from "../storage/keys"
 import {
   getBackgroundColor,
@@ -26,10 +29,6 @@ const windowIDs = new WeakMap<BrowserWindow, string>()
 const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
-  cleanup: (id) => {
-    rmSync(join(app.getPath("userData"), windowStateFile(id)), { force: true })
-    removeStoreFile(windowDataFile(id))
-  },
 })
 let relaunchHandler = () => {
   setAppQuitting()
@@ -49,7 +48,11 @@ export {
 }
 
 export function setRelaunchHandler(handler: () => void) {
+  const previous = relaunchHandler
   relaunchHandler = handler
+  return () => {
+    if (relaunchHandler === handler) relaunchHandler = previous
+  }
 }
 
 export function setAppQuitting(quitting = true) {
@@ -68,12 +71,20 @@ export function getLastFocusedWindow() {
   return win
 }
 
-export function restoreMainWindows() {
-  const ids = registry.persisted()
-  return (ids.length ? ids : [randomUUID()]).map((id) => createMainWindow(id))
+export interface Dependencies {
+  readonly fs: FileSystem.FileSystem
+  readonly path: Path.Path
+  readonly paths: DesktopPaths.Resolved
+  readonly runFork: (effect: Effect.Effect<void>) => unknown
+  readonly exportDebug: () => Promise<string>
 }
 
-export function createMainWindow(id: string = randomUUID()) {
+export function restoreMainWindows(deps: Dependencies) {
+  const ids = registry.persisted()
+  return (ids.length ? ids : [randomUUID()]).map((id) => createMainWindow(deps, id))
+}
+
+export function createMainWindow(deps: Dependencies, id: string = randomUUID()) {
   const state = windowState({ file: windowStateFile(id), defaultWidth: 1280, defaultHeight: 800 })
   const win = new BrowserWindow({
     x: state.x,
@@ -82,15 +93,15 @@ export function createMainWindow(id: string = randomUUID()) {
     height: state.height,
     show: false,
     autoHideMenuBar: true,
-    ...windowAppearance(),
+    ...windowAppearance(deps.path, deps.paths),
   })
 
   allowRendererPermissions(win)
-  wireWindowRecovery(win, id, () => relaunchHandler())
-  wireNavigationPolicy(win)
+  wireWindowRecovery(win, id, () => relaunchHandler(), deps.exportDebug, deps.runFork)
+  wireNavigationPolicy(win, (url) => deps.runFork(openExternalURL(url)))
   wireRendererHeaders(win)
   state.manage(win)
-  registerWindow(win, id)
+  registerWindow(deps, win, id)
   wireFullscreen(win)
   loadWindow(win, "index.html")
   wireZoom(win)
@@ -98,13 +109,25 @@ export function createMainWindow(id: string = randomUUID()) {
   return win
 }
 
-function registerWindow(win: BrowserWindow, id: string) {
+function registerWindow(deps: Dependencies, win: BrowserWindow, id: string) {
   windowIDs.set(win, id)
   registry.register(id, win)
   win.on("focus", () => registry.focused(id))
   // Windows emits session-end, but not before-quit, during shutdown and logoff.
   win.on("session-end", () => registry.setQuitting())
-  win.on("closed", () => registry.closed(id))
+  win.on("closed", () => {
+    if (!registry.closed(id)) return
+    const data = windowDataFile(id)
+    deps.runFork(
+      Effect.gen(function* () {
+        yield* deps.fs.remove(deps.path.join(app.getPath("userData"), windowStateFile(id)), { force: true })
+        yield* deps.fs.remove(deps.path.join(app.getPath("userData"), data), { force: true })
+      }).pipe(
+        Effect.tap(() => Effect.sync(() => forgetStore(data))),
+        Effect.catch((error) => scoped("window", Effect.logError("failed to clean window files", { id, error }))),
+      ),
+    )
+  })
 }
 
 function windowStateFile(id: string) {

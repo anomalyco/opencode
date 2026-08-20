@@ -12,8 +12,6 @@ import { nativeT } from "../native/translations"
 import { WSL_SERVERS_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 import {
-  installWslCli,
-  installWslDistro,
   installWslRuntimeElevated,
   listInstalledWslDistros,
   listOnlineWslDistros,
@@ -43,10 +41,11 @@ type ControllerLogger = {
 type WslServersControllerOptions = {
   cli: WslCliBuild
   spawnSidecar: SpawnSidecar
+  installCli: (distro: string, cli: WslCliBuild) => Promise<void>
+  installDistro: (distro: string) => Promise<void>
   logger?: ControllerLogger
   readServers?: () => WslServerConfig[]
   writeServers?: (servers: WslServerConfig[]) => void
-  installCli?: typeof installWslCli
   probeDistro?: typeof probeWslDistro
   resolveCli?: typeof resolveWslCli
   readCliVersion?: typeof readWslCliVersion
@@ -62,6 +61,8 @@ export function createWslServersController(options: WslServersControllerOptions)
   let state: WslServersState = initialState()
   const listeners = new Set<(event: WslServersEvent) => void>()
   const sidecars = new Map<string, RunningSidecar>()
+  const starts = new Map<string, symbol>()
+  let closed = false
   const readServers = options.readServers ?? readPersistedServers
   const writeServers = options.writeServers ?? writePersistedServers
   const probeDistro = options.probeDistro ?? probeWslDistro
@@ -159,10 +160,18 @@ export function createWslServersController(options: WslServersControllerOptions)
     const item = state.servers.find((x) => x.config.id === id)
     if (!item) return
     await stopServer(id)
+    if (closed) return
+    const token = Symbol()
+    starts.set(id, token)
     setRuntime(id, { kind: "starting" })
     options.logger?.log("wsl sidecar starting", { id, distro: item.config.distro })
     try {
       const sidecar = await options.spawnSidecar(item.config.distro)
+      if (starts.get(id) !== token) {
+        await sidecar.stop()
+        return
+      }
+      starts.delete(id)
       sidecars.set(id, sidecar)
       setRuntime(id, {
         kind: "ready",
@@ -180,6 +189,8 @@ export function createWslServersController(options: WslServersControllerOptions)
       void refreshCliCheckSafely(id, item.config.distro)
       options.logger?.log("wsl sidecar ready", { id, distro: item.config.distro, url: sidecar.url })
     } catch (error) {
+      if (starts.get(id) !== token) return
+      starts.delete(id)
       const message = error instanceof Error ? error.message : String(error)
       setRuntime(id, { kind: "failed", message })
       options.logger?.error("wsl sidecar failed to start", { id, distro: item.config.distro, message })
@@ -187,6 +198,7 @@ export function createWslServersController(options: WslServersControllerOptions)
   }
 
   const stopServer = async (id: string) => {
+    starts.delete(id)
     const existing = sidecars.get(id)
     if (!existing) return
     sidecars.delete(id)
@@ -213,6 +225,7 @@ export function createWslServersController(options: WslServersControllerOptions)
     },
 
     startConfiguredServers() {
+      closed = false
       refreshFromStore()
       void refreshCliChecks()
       state.servers.forEach((item) => void startServer(item.config.id))
@@ -244,7 +257,7 @@ export function createWslServersController(options: WslServersControllerOptions)
 
     async installDistro(distro: string) {
       await runJob({ kind: "install-distro", distro, startedAt: Date.now() }, async () => {
-        await installWslDistro(distro)
+        await options.installDistro(distro)
         const distros = await refreshDistroLists()
         const probe = await probeDistro(distro)
         setState({
@@ -263,7 +276,7 @@ export function createWslServersController(options: WslServersControllerOptions)
       await runJob({ kind: "install-opencode", distro, startedAt: Date.now() }, async () => {
         const id = state.servers.find((item) => item.config.distro === distro)?.config.id
         if (id) await stopServer(id)
-        await (options.installCli ?? installWslCli)(distro, options.cli)
+        await options.installCli(distro, options.cli)
         requireMatchingCli(await refreshCliCheck(distro), options.cli.version)
         if (id) await startServer(id)
       })
@@ -304,6 +317,8 @@ export function createWslServersController(options: WslServersControllerOptions)
     startServer,
 
     async stopServers() {
+      closed = true
+      starts.clear()
       await Promise.all([...sidecars.values()].map((sidecar) => sidecar.stop()))
       sidecars.clear()
     },

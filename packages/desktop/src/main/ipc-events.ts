@@ -4,22 +4,20 @@ import type { DesktopEvent } from "../shared/ipc-rpc/events"
 
 const queues = new Map<number, Queue.Queue<DesktopEvent>>()
 
-export function bindIpcEvents(senderId: number) {
-  const queue = Effect.runSync(Queue.unbounded<DesktopEvent>())
+export const bindIpcEvents = Effect.fn("IpcEvents.bind")(function* (senderId: number) {
+  const queue = yield* Queue.unbounded<DesktopEvent>()
+  const previous = queues.get(senderId)
   queues.set(senderId, queue)
-  return () => {
+  if (previous) yield* Queue.shutdown(previous)
+  return Effect.fnUntraced(function* () {
     if (queues.get(senderId) === queue) queues.delete(senderId)
-  }
-}
+    yield* Queue.shutdown(queue)
+  })()
+})
 
 export function ipcEventStream(senderId: number) {
-  return Stream.unwrap(
-    Effect.gen(function* () {
-      const queue = queues.get(senderId) ?? (yield* Queue.unbounded<DesktopEvent>())
-      if (!queues.has(senderId)) queues.set(senderId, queue)
-      return Stream.fromQueue(queue)
-    }),
-  )
+  const queue = queues.get(senderId)
+  return queue ? Stream.fromQueue(queue) : Stream.empty
 }
 
 export function emitIpcEvent(sender: WebContents, event: DesktopEvent) {

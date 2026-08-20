@@ -10,13 +10,14 @@ import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 
 import { UPDATER_ENABLED } from "../constants"
-import { openExternalURL } from "../files"
 import { runDesktopMenuAction } from "./menu-actions"
 import { nativeT } from "./translations"
 
 type Deps = {
   trigger: (id: string) => void
   checkForUpdates: () => void
+  createWindow: () => void
+  openExternal: (url: string) => void
   relaunch: () => void
 }
 
@@ -59,12 +60,13 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
     item.click = () =>
       runDesktopMenuAction(BrowserWindow.getFocusedWindow(), action, {
         checkForUpdates: deps.checkForUpdates,
+        createWindow: deps.createWindow,
         relaunch: deps.relaunch,
       })
   }
   if (entry.href) {
     const href = entry.href
-    item.click = () => openExternalURL(href)
+    item.click = () => deps.openExternal(href)
   }
 
   return item

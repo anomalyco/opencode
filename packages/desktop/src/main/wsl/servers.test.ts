@@ -77,6 +77,33 @@ test("stops a running WSL server before replacing its CLI", async () => {
   await controller.stopServers()
 })
 
+test("stops a sidecar that finishes starting after shutdown", async () => {
+  persistedServers = [{ id: "wsl:Debian", distro: "Debian" }]
+  const stopped: string[] = []
+  let resolveSidecar: ((sidecar: Awaited<ReturnType<ControllerOptions["spawnSidecar"]>>) => void) | undefined
+  const controller = createWslServersController(
+    testControllerOptions({
+      spawnSidecar: () => new Promise((resolve) => (resolveSidecar = resolve)),
+    }),
+  )
+  controller.startConfiguredServers()
+  await waitFor(() => controller.getState().servers[0]?.runtime.kind === "starting")
+
+  await controller.stopServers()
+  resolveSidecar?.({
+    stop: async () => {
+      stopped.push("stop")
+    },
+    onExit: () => undefined,
+    url: "http://127.0.0.1:4096",
+    username: "opencode",
+    password: "secret",
+  })
+  await waitFor(() => stopped.length === 1)
+
+  expect(stopped).toEqual(["stop"])
+})
+
 test("probes addable distros in parallel before checking OpenCode", async () => {
   persistedServers = []
   const started: string[] = []
@@ -148,6 +175,8 @@ async function waitFor(check: () => boolean) {
 function testControllerOptions(overrides: Partial<ControllerOptions> = {}): ControllerOptions {
   return {
     cli: { version: "0.0.0-dev-16365" },
+    installCli: async () => undefined,
+    installDistro: async () => undefined,
     spawnSidecar: async () => ({
       stop: async () => undefined,
       onExit: () => undefined,

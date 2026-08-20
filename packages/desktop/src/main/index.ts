@@ -1,97 +1,75 @@
+import { NodeFileSystem, NodePath, NodeRuntime } from "@effect/platform-node"
 import { app } from "electron"
-import { Deferred, Effect, Fiber } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import type { ServerReadyData } from "../shared/ipc-contract"
-import { checkAppExists, resolveAppPath } from "./files/apps"
-import { registerIpcHandlers } from "./ipc"
+import { Ipc } from "./ipc"
 import {
   acquireApplicationLock,
   configureApplication,
   loadProxyEnvironment,
   preferApplicationEnvironment,
+  prepareApplicationEnvironment,
   prepareDesktop,
 } from "./lifecycle/environment"
-import { createApplicationLifecycle } from "./lifecycle"
-import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "./lifecycle/onboarding"
-import { exportDebugLogs, startNetworkLogging, writeLog } from "./native/logging"
-import { createMenu, sendMenuCommand } from "./native/menu"
-import { setNativeTranslations } from "./native/translations"
+import { ApplicationLifecycle } from "./lifecycle"
+import { initializeFirstLaunchOnboarding } from "./lifecycle/onboarding"
+import { Shutdown } from "./lifecycle/shutdown"
+import { DesktopLogging } from "./native/logging"
 import { startBackgroundCli } from "./service/background-service"
-import { forwardInitializationFailure } from "./service/initialization"
-import { getDefaultServerUrl, setDefaultServerUrl } from "./service/server-settings"
-import { createUpdaterIpc, setupAutoUpdater, showUpdaterDialog, startAutoUpdater } from "./updater"
-import { getLastFocusedWindow, setBackgroundColor } from "./windows"
-import { startWsl } from "./wsl/start"
-import { createDeferredWslIpc } from "./wsl/ipc"
+import { Updater } from "./updater"
 
-const main = Effect.gen(function* () {
-  const logger = configureApplication()
-  if (!acquireApplicationLock()) return
-  preferApplicationEnvironment(logger)
-  const lifecycle = createApplicationLifecycle(logger)
-  const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
-
+const runApplication = Effect.gen(function* () {
+  yield* initializeFirstLaunchOnboarding(app.getPath("userData"))
+  yield* prepareApplicationEnvironment
+  yield* preferApplicationEnvironment
   yield* Effect.promise(() => app.whenReady())
-  yield* prepareDesktop(logger)
-
-  const updater = setupAutoUpdater(lifecycle.prepareToRestart)
-  const updaterIpc = createUpdaterIpc(updater)
-  const wslIpc = createDeferredWslIpc()
-  const menu = {
-    trigger: (id: string) => {
-      const win = getLastFocusedWindow()
-      if (win) sendMenuCommand(win, id)
-    },
-    checkForUpdates: () => void showUpdaterDialog(updater),
-    relaunch: lifecycle.relaunch,
-  }
-  const ipcDeps: Parameters<typeof registerIpcHandlers>[0] = {
-    relaunch: lifecycle.relaunch,
-    awaitInitialization: Effect.fnUntraced(
-      function* () {
-        logger.log("awaiting server ready")
-        const result = yield* Deferred.await(serverReady)
-        logger.log("server ready", { url: result.url })
-        return result
-      },
-      (effect) => Effect.runPromise(effect),
-    ),
-    consumeInitialDeepLinks: lifecycle.consumeInitialDeepLinks,
-    getDefaultServerUrl,
-    setDefaultServerUrl,
-    isFirstLaunchOnboardingPending,
-    finishFirstLaunchOnboarding,
-    checkAppExists,
-    resolveAppPath: async (appName) => resolveAppPath(appName),
-    showUpdater: () => showUpdaterDialog(updater),
-    setBackgroundColor,
-    exportDebugLogs,
-    recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
-    setNativeTranslations: (bundle) => {
-      if (setNativeTranslations(bundle)) createMenu(menu)
-    },
-  }
-  yield* Effect.promise(() => registerIpcHandlers(ipcDeps, updaterIpc, wslIpc.ipc))
-  startAutoUpdater(updater)
-  yield* Effect.promise(() => startNetworkLogging())
-
-  const loadingTask = yield* Effect.gen(function* () {
-    loadProxyEnvironment(logger)
-    logger.log("starting v2 background service")
-    const background = yield* Effect.promise(() => startBackgroundCli(logger))
-    const wsl = yield* Effect.promise(() => startWsl(background, logger))
-    wslIpc.set(wsl.ipc)
-    wsl.start()
-    lifecycle.setWslShutdown(wsl.stop)
-    yield* Deferred.succeed(serverReady, {
-      url: background.url,
-      username: background.username,
-      password: background.password,
-    })
-    logger.log("loading task finished")
-  }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)
-
-  yield* Fiber.await(loadingTask)
-  if (lifecycle.restoreWindows().length) createMenu(menu)
+  yield* prepareDesktop
+  yield* runDesktop.pipe(Effect.provide(Updater.layer))
 })
 
-Effect.runFork(main)
+const runDesktop = Effect.gen(function* () {
+  const logging = yield* DesktopLogging.Service
+  yield* logging.startNetwork
+  yield* loadProxyEnvironment
+  yield* Effect.logInfo("starting v2 background service")
+  const loading = yield* startBackgroundCli().pipe(Effect.exit)
+  const initialization = Exit.isSuccess(loading)
+    ? Effect.succeed({
+        url: loading.value.url,
+        username: loading.value.username,
+        password: loading.value.password,
+      } satisfies ServerReadyData)
+    : Effect.failCause(loading.cause).pipe(Effect.orDie)
+
+  yield* runIpc(Exit.isSuccess(loading)).pipe(
+    Effect.provide(Ipc.layer(initialization, Exit.isSuccess(loading) ? loading.value : undefined)),
+  )
+})
+
+const runIpc = Effect.fn("Desktop.runIpc")(function* (loaded: boolean) {
+  const lifecycle = yield* ApplicationLifecycle.Service
+  const ipc = yield* Ipc.registerIpcHandlers
+  if (loaded) yield* Effect.logInfo("loading task finished")
+  if (lifecycle.restoreWindows().length) ipc.installMenu()
+  yield* Effect.callback<void>((resume) => {
+    const quit = () => resume(Effect.void)
+    app.once("will-quit", quit)
+    return Effect.sync(() => app.off("will-quit", quit))
+  })
+})
+
+const platform = Layer.merge(DesktopLogging.layer, Shutdown.layer).pipe(
+  Layer.provideMerge(Layer.merge(NodeFileSystem.layer, NodePath.layer)),
+)
+
+const main = Effect.gen(function* () {
+  if (!acquireApplicationLock()) return
+  yield* configureApplication()
+  yield* runApplication
+})
+
+main.pipe(
+  Effect.provide(ApplicationLifecycle.layer.pipe(Layer.provideMerge(platform))),
+  Effect.scoped,
+  NodeRuntime.runMain,
+)

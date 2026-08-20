@@ -1,40 +1,42 @@
 import { Effect } from "effect"
 import { FileRpcs } from "../../shared/ipc-rpc"
-import { createFileCapabilities, openExternalURL, openLocalFileURL } from "../files"
+import { DesktopFiles, openExternalURL, openLocalFileURL } from "../files"
 import { IpcPortHandoff } from "../ipc-transport"
 import { sender } from "./context"
 
-export function fileHandlers(files: ReturnType<typeof createFileCapabilities>) {
-  return FileRpcs.toLayer(
-    Effect.gen(function* () {
-      const handoff = yield* IpcPortHandoff
-      return FileRpcs.of({
-        FilesOpenDirectoryPicker: ({ options }) => Effect.promise(() => files.openDirectoryPicker(options)),
-        FilesOpenFilePicker: ({ options }, context) =>
-          Effect.promise(() =>
-            files.openFilePicker(
-              sender(handoff, context).id,
-              options ? { ...options, extensions: options.extensions && [...options.extensions] } : undefined,
-            ),
-          ),
-        FilesReadPickedFile: ({ token, path }, context) =>
-          Effect.promise(
-            async () => new Uint8Array(await files.readPickedFile(sender(handoff, context).id, token, path)),
-          ),
-        FilesReleasePickedFiles: ({ token }, context) =>
-          Effect.sync(() => files.releasePickedFiles(sender(handoff, context).id, token)),
-        FilesSaveFilePicker: ({ options }) => Effect.promise(() => files.saveFilePicker(options)),
-        FilesOpenExternal: ({ url }) => Effect.sync(() => openExternalURL(url)),
-        FilesOpenLocalFile: ({ url }) => Effect.sync(() => openLocalFileURL(url)),
-        FilesOpenPath: ({ path, application }) =>
-          Effect.promise(async () => (await files.openPath(path, application)) ?? null),
-        FilesRevealPath: ({ path }) => Effect.promise(() => files.revealPath(path)),
-        FilesReadClipboardImage: () =>
-          Effect.sync(() => {
-            const image = files.readClipboardImage()
-            return image ? { ...image, buffer: new Uint8Array(image.buffer) } : null
-          }),
-      })
-    }),
-  )
-}
+export const fileHandlers = FileRpcs.toLayer(
+  Effect.gen(function* () {
+    const files = yield* DesktopFiles.Service
+    const handoff = yield* IpcPortHandoff
+    return FileRpcs.of({
+      FilesOpenDirectoryPicker: ({ options }) => files.openDirectoryPicker(options),
+      FilesOpenFilePicker: ({ options }, context) =>
+        files
+          .openFilePicker(
+            sender(handoff, context).id,
+            options ? { ...options, extensions: options.extensions && [...options.extensions] } : undefined,
+          )
+          .pipe(Effect.orDie),
+      FilesReadPickedFile: ({ token, path }, context) =>
+        files
+          .readPickedFile(sender(handoff, context).id, token, path)
+          .pipe(Effect.map((buffer) => new Uint8Array(buffer)), Effect.orDie),
+      FilesReleasePickedFiles: ({ token }, context) =>
+        Effect.sync(() => files.releasePickedFiles(sender(handoff, context).id, token)),
+      FilesSaveFilePicker: ({ options }) => files.saveFilePicker(options),
+      FilesOpenExternal: ({ url }) => openExternalURL(url),
+      FilesOpenLocalFile: ({ url }) => openLocalFileURL(url),
+      FilesOpenPath: ({ path, application }) =>
+        files.openPath(path, application).pipe(
+          Effect.map((result) => result ?? null),
+          Effect.orDie,
+        ),
+      FilesRevealPath: ({ path }) => files.revealPath(path),
+      FilesReadClipboardImage: () =>
+        Effect.sync(() => {
+          const image = files.readClipboardImage()
+          return image ? { ...image, buffer: new Uint8Array(image.buffer) } : null
+        }),
+    })
+  }),
+)

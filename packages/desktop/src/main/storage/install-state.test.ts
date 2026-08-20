@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { hasExistingAppState } from "./install-state"
 
-const file = (name: string) => ({ name, isDirectory: () => false })
-const directory = (name: string) => ({ name, isDirectory: () => true })
+const file = (name: string) => ({ name, directory: false })
+const directory = (name: string) => ({ name, directory: true })
 
 describe("hasExistingAppState", () => {
   test("ignores files Electron may create on a fresh install", () => {

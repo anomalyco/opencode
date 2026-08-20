@@ -1,10 +1,13 @@
+export * as Ipc from "./ipc"
+
 import { app, BrowserWindow, MessageChannelMain } from "electron"
-import { Layer, ManagedRuntime } from "effect"
+import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
+import type { ServerReadyData } from "../shared/ipc-contract"
 import { DesktopRpcs } from "../shared/ipc-rpc"
 import { IpcTransportPort } from "../shared/ipc-transport"
-import { createFileCapabilities } from "./files"
-import { appHandlers, type AppHandlerDeps } from "./ipc-handlers/app"
+import { DesktopFiles, openExternalURL } from "./files"
+import { appHandlers } from "./ipc-handlers/app"
 import { eventHandlers } from "./ipc-handlers/events"
 import { fileHandlers } from "./ipc-handlers/files"
 import { menuHandlers } from "./ipc-handlers/menu"
@@ -13,31 +16,51 @@ import { updaterHandlers } from "./ipc-handlers/updater"
 import { windowHandlers } from "./ipc-handlers/window"
 import { wslHandlers } from "./ipc-handlers/wsl"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
-import { createDesktopStorage } from "./storage"
-import type { UpdaterIpc } from "./updater"
-import type { WslIpc } from "./wsl/ipc"
+import { ApplicationLifecycle } from "./lifecycle"
+import { createMenu, sendMenuCommand } from "./native/menu"
+import { Initialization } from "./service/initialization"
+import { DesktopStorage } from "./storage"
+import { Updater } from "./updater"
+import { getLastFocusedWindow } from "./windows"
+import { Wsl } from "./wsl/start"
 
-type Deps = AppHandlerDeps & {
-  showUpdater: () => Promise<void> | void
-}
-
-export async function registerIpcHandlers(deps: Deps, updater: UpdaterIpc, wsl: WslIpc) {
+export function layer(initialization: Effect.Effect<ServerReadyData>, cli?: Wsl.Cli) {
+  const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer(cli)).pipe(
+    Layer.provideMerge(Initialization.layer(initialization)),
+  )
   const handlers = Layer.mergeAll(
-    appHandlers(deps),
-    storageHandlers(createDesktopStorage()),
-    fileHandlers(createFileCapabilities()),
+    appHandlers,
+    storageHandlers,
+    fileHandlers,
     windowHandlers,
-    menuHandlers(deps),
-    updaterHandlers(updater),
-    wslHandlers(wsl),
+    menuHandlers,
+    updaterHandlers,
+    wslHandlers,
     eventHandlers,
   )
-  const live = RpcServer.layer(DesktopRpcs, { disableFatalDefects: true }).pipe(
+  return RpcServer.layer(DesktopRpcs, { disableFatalDefects: true }).pipe(
     Layer.provide(handlers),
     Layer.provideMerge(IpcServerProtocolLive),
+    Layer.provideMerge(services),
   )
-  const runtime = ManagedRuntime.make(live)
-  const handoff = await runtime.runPromise(IpcPortHandoff)
+}
+
+export const registerIpcHandlers = Effect.gen(function* () {
+  const handoff = yield* IpcPortHandoff
+  const lifecycle = yield* ApplicationLifecycle.Service
+  const updater = yield* Updater.Service
+  const context = yield* Effect.context()
+  const runFork = Effect.runForkWith(context)
+  const menu = {
+    trigger: (id: string) => {
+      const win = getLastFocusedWindow()
+      if (win) sendMenuCommand(win, id)
+    },
+    checkForUpdates: () => runFork(updater.show),
+    createWindow: lifecycle.createWindow,
+    openExternal: (url: string) => runFork(openExternalURL(url)),
+    relaunch: lifecycle.relaunch,
+  }
   const wire = (_event: Electron.Event, win: BrowserWindow) => {
     win.webContents.on("did-finish-load", () => {
       if (win.isDestroyed() || win.webContents.isDestroyed()) return
@@ -46,10 +69,12 @@ export async function registerIpcHandlers(deps: Deps, updater: UpdaterIpc, wsl: 
       win.webContents.postMessage(IpcTransportPort, null, [channel.port2])
     })
   }
-  app.on("browser-window-created", wire)
-  BrowserWindow.getAllWindows().forEach((win) => wire({} as Electron.Event, win))
-  app.once("will-quit", () => {
-    app.off("browser-window-created", wire)
-    void runtime.dispose()
+  yield* Effect.sync(() => {
+    app.on("browser-window-created", wire)
+    BrowserWindow.getAllWindows().forEach((win) => wire({} as Electron.Event, win))
   })
-}
+  yield* Effect.addFinalizer(() => Effect.sync(() => app.off("browser-window-created", wire)))
+  return {
+    installMenu: () => createMenu(menu),
+  }
+})

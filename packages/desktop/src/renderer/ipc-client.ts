@@ -28,6 +28,7 @@ const ClientProtocolLive = Layer.unwrap(Effect.promise(() => port).pipe(Effect.m
 const ClientLive = Layer.effect(DesktopClient, RpcClient.make(DesktopRpcs)).pipe(Layer.provide(ClientProtocolLive))
 const runtime = ManagedRuntime.make(ClientLive)
 const listeners = new Map<EventTag, Set<(value: unknown) => void>>()
+window.addEventListener("pagehide", () => void runtime.dispose(), { once: true })
 
 runtime.runFork(
   Effect.gen(function* () {

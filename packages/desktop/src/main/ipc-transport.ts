@@ -10,7 +10,7 @@ type PortBinding = {
   readonly parser: RpcSerialization.Parser
   readonly onMessage: (event: Electron.MessageEvent) => void
   readonly onClose: () => void
-  readonly unbindEvents: () => void
+  readonly unbindEvents: Effect.Effect<void>
 }
 
 type Handoff = {
@@ -33,9 +33,11 @@ export const IpcServerProtocolLive = Layer.unwrap(
           const serialization = yield* RpcSerialization.RpcSerialization
           const disconnects = yield* Queue.unbounded<number>()
           const inbound = yield* Queue.unbounded<readonly [number, RpcMessage.FromClientEncoded]>()
+          const context = yield* Effect.context()
+          const runFork = Effect.runForkWith(context)
           let nextClientId = 0
 
-          const disconnect = (id: number) => {
+          const disconnect = Effect.fnUntraced(function* (id: number) {
             const binding = bindings.get(id)
             if (!binding) return
             bindings.delete(id)
@@ -43,14 +45,14 @@ export const IpcServerProtocolLive = Layer.unwrap(
             binding.port.off("message", binding.onMessage)
             binding.port.off("close", binding.onClose)
             binding.sender.off("destroyed", binding.onClose)
-            binding.unbindEvents()
+            yield* binding.unbindEvents
             binding.port.close()
             Queue.offerUnsafe(disconnects, id)
-          }
+          })
 
-          const bind = (sender: WebContents, port: MessagePortMain) => {
+          const bind = Effect.fnUntraced(function* (sender: WebContents, port: MessagePortMain) {
             const previous = senderBindings.get(sender.id)
-            if (previous !== undefined) disconnect(previous)
+            if (previous !== undefined) yield* disconnect(previous)
             if (sender.isDestroyed()) {
               port.close()
               return
@@ -69,25 +71,26 @@ export const IpcServerProtocolLive = Layer.unwrap(
                 return
               }
             }
-            const onClose = () => disconnect(id)
-            const binding = { id, sender, port, parser, onMessage, onClose, unbindEvents: bindIpcEvents(sender.id) }
+            const onClose = () => runFork(disconnect(id))
+            const unbindEvents = yield* bindIpcEvents(sender.id)
+            const binding = { id, sender, port, parser, onMessage, onClose, unbindEvents }
             bindings.set(id, binding)
             senderBindings.set(sender.id, id)
             port.on("message", onMessage)
             port.on("close", onClose)
             sender.once("destroyed", onClose)
             port.start()
-          }
+          })
 
           yield* Stream.fromQueue(handoffs).pipe(
-            Stream.runForEach(([sender, port]) => Effect.sync(() => bind(sender, port))),
+            Stream.runForEach(([sender, port]) => bind(sender, port)),
             Effect.forkScoped,
           )
           yield* Stream.fromQueue(inbound).pipe(
             Stream.runForEach(([id, message]) => (bindings.has(id) ? writeRequest(id, message) : Effect.void)),
             Effect.forkScoped,
           )
-          yield* Effect.addFinalizer(() => Effect.sync(() => [...bindings.keys()].forEach(disconnect)))
+          yield* Effect.addFinalizer(() => Effect.forEach([...bindings.keys()], disconnect, { discard: true }))
 
           return {
             disconnects,
@@ -98,7 +101,7 @@ export const IpcServerProtocolLive = Layer.unwrap(
                 const encoded = binding.parser.encode(response)
                 if (encoded !== undefined) binding.port.postMessage(encoded)
               }),
-            end: (clientId) => Effect.sync(() => disconnect(clientId)),
+            end: disconnect,
             clientIds: Effect.sync(() => new Set(bindings.keys())),
             initialMessage: Effect.succeed(Option.none()),
             supportsAck: true,

@@ -1,15 +1,18 @@
 import { app, autoUpdater } from "electron"
 import pkg from "electron-updater"
-import { getLogger } from "../native/logging"
+import { Effect } from "effect"
 import { setAppQuitting } from "../windows"
 import type { UpdaterPlatform } from "./controller"
 
 const updateClient = pkg.autoUpdater
 const restartTimeout = 10_000
 
-export function createUpdaterPlatform(logger: ReturnType<typeof getLogger>): UpdaterPlatform {
-  configureUpdater(logger)
-  autoUpdater.on("before-quit-for-update", () => setAppQuitting())
+export function createUpdaterPlatform(
+  runFork: (effect: Effect.Effect<void>) => unknown,
+): UpdaterPlatform & { readonly dispose: () => void } {
+  configureUpdater(runFork)
+  const beforeQuit = () => setAppQuitting()
+  autoUpdater.on("before-quit-for-update", beforeQuit)
 
   return {
     async checkForUpdate() {
@@ -18,23 +21,31 @@ export function createUpdaterPlatform(logger: ReturnType<typeof getLogger>): Upd
       return result.updateInfo.version
     },
     stageUpdate,
-    installAndRestart: () => installAndRestart(logger),
+    installAndRestart: () => installAndRestart(runFork),
+    dispose: () => autoUpdater.off("before-quit-for-update", beforeQuit),
   }
 }
 
-function configureUpdater(logger: ReturnType<typeof getLogger>) {
-  updateClient.logger = logger
+function configureUpdater(runFork: (effect: Effect.Effect<void>) => unknown) {
+  updateClient.logger = {
+    info: (...args) => runFork(Effect.logInfo(...args)),
+    warn: (...args) => runFork(Effect.logWarning(...args)),
+    error: (...args) => runFork(Effect.logError(...args)),
+    debug: (...args) => runFork(Effect.logDebug(...args)),
+  }
   updateClient.channel = "latest"
   updateClient.allowPrerelease = false
   updateClient.allowDowngrade = true
   updateClient.autoDownload = false
   updateClient.autoInstallOnAppQuit = process.platform === "darwin"
-  logger.log("auto updater configured", {
-    channel: updateClient.channel,
-    allowPrerelease: updateClient.allowPrerelease,
-    allowDowngrade: updateClient.allowDowngrade,
-    currentVersion: app.getVersion(),
-  })
+  runFork(
+    Effect.logInfo("auto updater configured", {
+      channel: updateClient.channel,
+      allowPrerelease: updateClient.allowPrerelease,
+      allowDowngrade: updateClient.allowDowngrade,
+      currentVersion: app.getVersion(),
+    }),
+  )
 }
 
 function stageUpdate() {
@@ -60,10 +71,10 @@ function stageUpdate() {
   })
 }
 
-function installAndRestart(logger: ReturnType<typeof getLogger>) {
+function installAndRestart(runFork: (effect: Effect.Effect<void>) => unknown) {
   return new Promise<never>((_resolve, reject) => {
     const timeout = setTimeout(() => {
-      logger.error("update restart did not start")
+      runFork(Effect.logError("update restart did not start"))
       fail(new Error())
     }, restartTimeout)
     const started = () => {

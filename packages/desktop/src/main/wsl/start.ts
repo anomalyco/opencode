@@ -1,47 +1,70 @@
-import { createWslIpc } from "./ipc"
+export * as Wsl from "./start"
 
-type Cli = {
+import { Context, Effect, FileSystem, Layer, Path } from "effect"
+import { Shutdown } from "../lifecycle/shutdown"
+import { WslIpc } from "./ipc"
+
+export type Cli = {
   version: string
   wslBuild?: { script: string; output: string }
 }
 
-type Logger = {
-  log(message: string, meta?: unknown): void
-  error(message: string, meta?: unknown): void
+export interface Interface extends WslIpc.Interface {
+  readonly stop: Effect.Effect<void>
 }
 
-export async function startWsl(cli: Cli, logger: Logger) {
-  if (process.platform !== "win32") return { ipc: createWslIpc(), start: () => {}, stop: async () => {} }
+export class Service extends Context.Service<Service, Interface>()("opencode/desktop/Wsl") {}
 
-  const { createWslServersController } = await import("./servers")
-  const { spawnWslSidecar } = await import("./sidecar")
+export const layer = (cli?: Cli) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const wsl = cli ? yield* makeWsl(cli) : { ...WslIpc.create(), stop: Effect.void }
+      const shutdown = yield* Shutdown.Service
+      const removeShutdown = yield* shutdown.add(wsl.stop)
+      yield* Effect.addFinalizer(() => Effect.sync(removeShutdown).pipe(Effect.andThen(wsl.stop)))
+      return Service.of(wsl)
+    }),
+  )
+
+const makeWsl = Effect.fn("Wsl.make")(function* (cli: Cli) {
+  if (process.platform !== "win32") return { ...WslIpc.create(), stop: Effect.void }
+
+  const { createWslServersController } = yield* Effect.promise(() => import("./servers"))
+  const { spawnWslSidecar } = yield* Effect.promise(() => import("./sidecar"))
+  const { installWslCli, installWslDistro } = yield* Effect.promise(() => import("./runtime"))
+  const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>()
+  const run = Effect.runPromiseWith(context)
+  const runFork = Effect.runForkWith(context)
   const local = cli.wslBuild
   const controller = createWslServersController({
     cli: { version: cli.version },
+    installDistro: (distro) => run(installWslDistro(distro)),
     installCli: local
       ? async (distro) => {
           const { buildLocalWslCli } = await import("./local")
-          const { installWslCli } = await import("./runtime")
-          await installWslCli(distro, {
-            version: cli.version,
-            binary: await buildLocalWslCli({ ...local, version: cli.version }),
-          })
+          await run(
+            Effect.gen(function* () {
+              const binary = yield* buildLocalWslCli({ ...local, version: cli.version })
+              yield* installWslCli(distro, { version: cli.version, binary })
+            }),
+          )
         }
-      : undefined,
-    spawnSidecar: async (distro) => {
-      logger.log("spawning wsl sidecar", { distro })
+      : (distro, build) => run(installWslCli(distro, build)),
+    spawnSidecar: (distro) => {
+      runFork(Effect.logInfo("spawning wsl sidecar", { distro }))
       return spawnWslSidecar(distro, {
-        onLine: (line) => logger.log("wsl sidecar", { distro, stream: line.stream, text: line.text }),
+        onLine: (line) => runFork(Effect.logInfo("wsl sidecar", { distro, stream: line.stream, text: line.text })),
       })
     },
     logger: {
-      log: (message, meta) => logger.log(message, meta),
-      error: (message, meta) => logger.error(message, meta),
+      log: (message, meta) => runFork(Effect.logInfo(message, meta)),
+      error: (message, meta) => runFork(Effect.logError(message, meta)),
     },
   })
+  controller.startConfiguredServers()
   return {
-    ipc: createWslIpc(controller),
-    start: () => controller.startConfiguredServers(),
-    stop: () => controller.stopServers(),
-  }
-}
+    ...WslIpc.create(controller),
+    stop: Effect.tryPromise(() => controller.stopServers()).pipe(Effect.orDie),
+  } satisfies Interface
+})

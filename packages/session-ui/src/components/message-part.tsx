@@ -2752,7 +2752,6 @@ ToolRegistry.register({
 
     const trigger = () => (
       <div data-slot="skill-tool-trigger" class="flex min-w-0 items-center gap-1.5">
-        <Icon name="post-skill" size="small" class="shrink-0 text-v2-icon-icon-muted" />
         <span
           data-slot="skill-tool-label"
           class="shrink-0 text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
