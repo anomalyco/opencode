@@ -98,7 +98,7 @@ const cancelInputs = (payload: unknown): readonly CancelInput[] => {
   })
 }
 
-export const ID = "participant_cp021_attachment" as Model.ParticipantID
+export const ID = "participant_task_attachment" as Model.ParticipantID
 
 export const make = (coordinator: AttachmentCoordinator.Interface): Ports.Participant => {
   // Every exchange invalidates the preceding proof even when no attachment fact changed. Only
