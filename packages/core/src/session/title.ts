@@ -48,6 +48,61 @@ const isUntitled = (session: SessionSchema.Info) =>
     time: { created: DateTime.toEpochMillis(session.time.created) },
   })
 
+const attempt = Effect.fn("SessionTitle.attempt")(function* (
+  dependencies: Dependencies,
+  input: {
+    readonly session: SessionSchema.Info
+    readonly agent: Agent.Info
+    readonly text: string
+    readonly model: SessionRunnerModel.Resolved
+  },
+) {
+  const chunks: string[] = []
+  let failed = false
+  let usage: SessionUsage.Recorded | undefined
+  const recordUsage = Effect.suspend(() =>
+    usage
+      ? dependencies.bus.publish(SessionEvent.UsageRecorded, {
+          sessionID: input.session.id,
+          source: "title",
+          ...usage,
+        })
+      : Effect.void,
+  )
+  const prepared = yield* dependencies.modelRequests.prepare({
+    scope: { session: input.session, agentID: input.agent.id, model: input.model },
+    transcript: {
+      system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],
+      messages: [Message.user(input.text)],
+    },
+    contextHooks: false,
+  })
+  const streamed = yield* dependencies.llm.stream(prepared.request, prepared.options).pipe(
+    Stream.runForEach((event) => {
+      if (LLMEvent.is.providerError(event)) failed = true
+      if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+      if (LLMEvent.is.stepFinish(event)) {
+        const step = SessionUsage.record(event.usage, input.model.cost)
+        usage = usage ? SessionUsage.add(usage, step) : step
+      }
+      return Effect.void
+    }),
+    Effect.as(true),
+    Effect.catchTag("AI.Error", () => Effect.succeed(false)),
+    Effect.onInterrupt(() => recordUsage.pipe(Effect.asVoid)),
+  )
+  yield* recordUsage
+  if (!streamed || failed) return
+  return chunks
+    .join("")
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+})
+
+const sameModel = (left: SessionRunnerModel.Resolved, right: SessionRunnerModel.Resolved) =>
+  left.ref.providerID === right.ref.providerID && left.ref.id === right.ref.id && left.ref.variant === right.ref.variant
+
 const make = (dependencies: Dependencies) => {
   const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (
     db: Database.Interface["db"],
@@ -62,75 +117,20 @@ const make = (dependencies: Dependencies) => {
     const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
     if (!agent) return
     const primary = yield* dependencies.models.resolve(session).pipe(Effect.catch(() => Effect.succeed(undefined)))
-    const preferred = yield* Effect.gen(function* () {
-      if (agent.model)
-        return yield* dependencies.models
-          .resolve({ ...session, model: agent.model })
+    const small = agent.model || !primary ? undefined : yield* dependencies.catalog.model.small(primary.ref.providerID)
+    const preferredRef = agent.model ?? (small && Model.Ref.make({ providerID: small.providerID, id: small.id }))
+    const preferred = preferredRef
+      ? yield* dependencies.models
+          .resolve({ ...session, model: preferredRef })
           .pipe(Effect.catch(() => Effect.succeed(undefined)))
-      if (!primary) return
-      const candidate = yield* dependencies.catalog.model.small(primary.ref.providerID)
-      if (!candidate) return
-      return yield* dependencies.models
-        .resolve({
-          ...session,
-          model: Model.Ref.make({ providerID: candidate.providerID, id: candidate.id }),
-        })
-        .pipe(Effect.catch(() => Effect.succeed(undefined)))
-    })
-    const attempt = Effect.fn("SessionTitle.attempt")(function* (resolved: SessionRunnerModel.Resolved) {
-      const chunks: string[] = []
-      let failed = false
-      let usage: SessionUsage.Recorded | undefined
-      const recordUsage = Effect.suspend(() =>
-        usage
-          ? dependencies.bus.publish(SessionEvent.UsageRecorded, {
-              sessionID: session.id,
-              source: "title",
-              ...usage,
-            })
-          : Effect.void,
-      )
-      const prepared = yield* dependencies.modelRequests.prepare({
-        scope: { session, agentID: agent.id, model: resolved },
-        transcript: {
-          system: agent.system ? [SystemPart.make(agent.system)] : [],
-          messages: [Message.user(firstUser.text)],
-        },
-        contextHooks: false,
-      })
-      const streamed = yield* dependencies.llm.stream(prepared.request, prepared.options).pipe(
-        Stream.runForEach((event) => {
-          if (LLMEvent.is.providerError(event)) failed = true
-          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
-          if (LLMEvent.is.stepFinish(event)) {
-            const step = SessionUsage.record(event.usage, resolved.cost)
-            usage = usage ? SessionUsage.add(usage, step) : step
-          }
-          return Effect.void
-        }),
-        Effect.as(true),
-        Effect.catchTag("AI.Error", () => Effect.succeed(false)),
-        Effect.onInterrupt(() => recordUsage.pipe(Effect.asVoid)),
-      )
-      yield* recordUsage
-      if (!streamed || failed) return
-      return chunks
-        .join("")
-        .split("\n")
-        .map((line) => line.trim())
-        .find((line) => line.length > 0)
-    })
-    const first = preferred ?? primary
-    if (!first) return
+      : undefined
+    const selected = preferred ?? primary
+    if (!selected) return
+    const generated = yield* attempt(dependencies, { session, agent, text: firstUser.text, model: selected })
+    const fallback = primary && !sameModel(selected, primary) ? primary : undefined
     const title =
-      (yield* attempt(first)) ??
-      (primary &&
-      preferred &&
-      (preferred.ref.providerID !== primary.ref.providerID ||
-        preferred.ref.id !== primary.ref.id ||
-        preferred.ref.variant !== primary.ref.variant)
-        ? yield* attempt(primary)
-        : undefined)
+      generated ??
+      (fallback ? yield* attempt(dependencies, { session, agent, text: firstUser.text, model: fallback }) : undefined)
     if (!title) return
     const expectedSequence = (yield* Bus.latestSequence(db, sessionID)) + 1
     const current = yield* dependencies.store.get(sessionID)
