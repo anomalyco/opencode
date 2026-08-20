@@ -147,6 +147,9 @@ export const layer = Layer.effect(
           // promotes them, and a control item behind a queued prompt waits its turn.
           // Interruption acknowledges before cleanup settles, so this wake usually lands
           // on the stopping execution's doorbell and starts the successor at settle.
+          // Reading the inbox concurrently with the dying drain is safe: delivery consumes
+          // rows inside uninterruptible publications, so a steer row is either still
+          // promotable here or was fully delivered and needs no resumption.
           const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
           if (next === undefined) return
           if (next.delivery === "steer" || next.type === "compaction" || next.type === "move")

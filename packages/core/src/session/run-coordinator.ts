@@ -30,13 +30,13 @@ export interface Coordinator<Key, E, Reason = never> {
  * with this execution's exit.
  */
 type Execution<E, Reason> = {
-  readonly done: Deferred.Deferred<void, E>
   /**
-   * Settlement signal that always resolves successfully. Idleness waiters must not share
-   * `done`: an interrupted execution's exit interrupts suspended waiters as it resumes them,
-   * and a waiter's synchronous unregistration can starve later waiters of their resume.
+   * Resolves with the execution's exit as a success value. Success-valued on purpose:
+   * completing a Deferred with an interrupted exit interrupts suspended waiters as it
+   * resumes them, and can starve later waiters of their resume entirely
+   * (Effect-TS/effect#7364). Joiners flatten the exit; idleness waiters just await.
    */
-  readonly idle: Deferred.Deferred<void>
+  readonly done: Deferred.Deferred<Exit.Exit<void, E>>
   owner?: Fiber.Fiber<void>
   scope: Promotable
   pendingWake?: Promotable
@@ -84,8 +84,7 @@ export const make = <Key, E, Reason = never>(options: {
 
     const start = (key: Key, force: boolean, scope: Promotable) => {
       const execution: Execution<E, Reason> = {
-        done: Deferred.makeUnsafe<void, E>(),
-        idle: Deferred.makeUnsafe<void>(),
+        done: Deferred.makeUnsafe<Exit.Exit<void, E>>(),
         scope,
         stopping: false,
       }
@@ -115,8 +114,7 @@ export const make = <Key, E, Reason = never>(options: {
     const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>) => {
       if (execution.pendingWake) start(key, false, execution.pendingWake)
       else executions.delete(key)
-      Deferred.doneUnsafe(execution.done, exit)
-      Deferred.doneUnsafe(execution.idle, Exit.void)
+      Deferred.doneUnsafe(execution.done, Exit.succeed(exit))
     }
 
     const run = (key: Key): Effect.Effect<void, E> =>
@@ -124,10 +122,10 @@ export const make = <Key, E, Reason = never>(options: {
         const execution = executions.get(key)
         if (execution !== undefined) {
           // A stopping execution refuses joiners: wait out its cleanup, then run fresh.
-          if (execution.stopping) return Deferred.await(execution.idle).pipe(Effect.andThen(run(key)))
-          return Deferred.await(execution.done)
+          if (execution.stopping) return Deferred.await(execution.done).pipe(Effect.andThen(run(key)))
+          return Deferred.await(execution.done).pipe(Effect.flatten)
         }
-        return Deferred.await(start(key, true, "input").done)
+        return Deferred.await(start(key, true, "input").done).pipe(Effect.flatten)
       })
 
     const wake = (key: Key, scope: Promotable = "input") =>
@@ -144,7 +142,14 @@ export const make = <Key, E, Reason = never>(options: {
     const interrupt = (key: Key, reason?: Reason): Effect.Effect<void> =>
       Effect.suspend(() => {
         const execution = executions.get(key)
-        if (execution?.owner === undefined || execution.stopping) return Effect.void
+        if (execution === undefined || execution.stopping) return Effect.void
+        if (execution.owner === undefined) {
+          // Settlement window: the owner exited but the settled hook has not finished. The
+          // terminal outcome is already decided, so no reason attaches — but the interrupt
+          // still claims the recorded wakes so settle does not start a dead-intent successor.
+          execution.pendingWake = undefined
+          return Effect.void
+        }
         execution.stopping = true
         // Wakes recorded so far belong to the interrupted intent; the interrupt claims them.
         // Wakes arriving during cleanup are new admissions and restart normally at settle.
@@ -162,7 +167,7 @@ export const make = <Key, E, Reason = never>(options: {
       Effect.suspend(() => {
         const execution = executions.get(key)
         if (execution === undefined) return Effect.void
-        return Deferred.await(execution.idle).pipe(Effect.andThen(awaitIdle(key)))
+        return Deferred.await(execution.done).pipe(Effect.andThen(awaitIdle(key)))
       })
 
     return { active: Effect.sync(() => new Set(executions.keys())), run, wake, interrupt, awaitIdle }

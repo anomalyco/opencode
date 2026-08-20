@@ -670,6 +670,32 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
+  it.effect("an interrupt during terminal settlement claims the recorded wake", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const settling = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        let drains = 0
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () => Effect.sync(() => void drains++),
+          settled: () => Deferred.succeed(settling, undefined).pipe(Effect.andThen(Deferred.await(release))),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(settling)
+        // The owner has exited; this wake lands on the settling execution's doorbell.
+        yield* coordinator.wake("session")
+        // The interrupt claims it: settle must not start a successor for the dead intent.
+        yield* coordinator.interrupt("session")
+        yield* Deferred.succeed(release, undefined)
+        yield* coordinator.awaitIdle("session")
+
+        expect(drains).toBe(1)
+        expect(yield* coordinator.active).toEqual(new Set())
+      }),
+    ),
+  )
+
   it.effect("trampolines synchronous self-waking execution", () =>
     Effect.scoped(
       Effect.gen(function* () {
