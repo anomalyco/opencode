@@ -9,6 +9,7 @@ import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
 import { safeWebContentsURL } from "../windows/state"
 import { createMainWindow, getLastFocusedWindow, restoreMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import { acquireApplicationLock, configureApplication } from "./environment"
 import { Shutdown } from "./shutdown"
 
 export interface Interface {
@@ -21,7 +22,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/ApplicationLifecycle") {}
 
-export const layer = Layer.effect(
+const runtime = Layer.effect(
   Service,
   Effect.gen(function* () {
     const logging = yield* DesktopLogging.Service
@@ -144,5 +145,15 @@ export const layer = Layer.effect(
         return restoreWindows()
       },
     })
+  }),
+)
+
+const platform = Layer.merge(DesktopLogging.layer, Shutdown.layer)
+
+export const layer = Layer.unwrap(
+  Effect.gen(function* () {
+    if (!acquireApplicationLock()) return yield* Effect.interrupt
+    yield* configureApplication()
+    return runtime.pipe(Layer.provideMerge(platform))
   }),
 )

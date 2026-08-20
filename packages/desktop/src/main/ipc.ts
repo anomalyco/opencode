@@ -3,7 +3,6 @@ export * as Ipc from "./ipc"
 import { app, BrowserWindow, MessageChannelMain } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
-import type { ServerReadyData } from "../shared/ipc-contract"
 import { DesktopRpcs } from "../shared/ipc-rpc"
 import { IpcTransportPort } from "../shared/ipc-transport"
 import { DesktopFiles, openExternalURL } from "./files"
@@ -18,32 +17,27 @@ import { wslHandlers } from "./ipc-handlers/wsl"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
 import { createMenu, sendMenuCommand } from "./native/menu"
-import { Initialization } from "./service/initialization"
 import { DesktopStorage } from "./storage"
 import { Updater } from "./updater"
 import { getLastFocusedWindow } from "./windows"
 import { Wsl } from "./wsl/start"
 
-export function layer(initialization: Effect.Effect<ServerReadyData>, cli?: Wsl.Cli) {
-  const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer(cli)).pipe(
-    Layer.provideMerge(Initialization.layer(initialization)),
-  )
-  const handlers = Layer.mergeAll(
-    appHandlers,
-    storageHandlers,
-    fileHandlers,
-    windowHandlers,
-    menuHandlers,
-    updaterHandlers,
-    wslHandlers,
-    eventHandlers,
-  )
-  return RpcServer.layer(DesktopRpcs, { disableFatalDefects: true }).pipe(
-    Layer.provide(handlers),
-    Layer.provideMerge(IpcServerProtocolLive),
-    Layer.provideMerge(services),
-  )
-}
+const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer)
+const handlers = Layer.mergeAll(
+  appHandlers,
+  storageHandlers,
+  fileHandlers,
+  windowHandlers,
+  menuHandlers,
+  updaterHandlers,
+  wslHandlers,
+  eventHandlers,
+)
+export const layer = RpcServer.layer(DesktopRpcs, { disableFatalDefects: true }).pipe(
+  Layer.provide(handlers),
+  Layer.provideMerge(IpcServerProtocolLive),
+  Layer.provideMerge(services),
+)
 
 export const registerIpcHandlers = Effect.gen(function* () {
   const handoff = yield* IpcPortHandoff

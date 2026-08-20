@@ -1,71 +1,91 @@
-import { describe, expect, test } from "bun:test"
-import { createUpdaterController, type UpdaterReadyRecord } from "./controller"
+import { afterEach, describe, expect, test } from "bun:test"
+import { Effect, ManagedRuntime } from "effect"
+import { type Dependencies, layerWith, Service } from "./index"
 
-// Drives the controller the way the app does: start or check, observe the states
-// the renderer sees, then install like a button click. `calls` records the platform
+const dispose: Array<() => Promise<void>> = []
+
+afterEach(async () => {
+  await Promise.all(dispose.splice(0).map((run) => run()))
+})
+
+// Drives the updater the way the app does: start or check, then install like a button click. `calls` records the platform
 // operations in order; installs record the staged version they would apply.
 function setup(input?: {
   currentVersion?: string
-  ready?: UpdaterReadyRecord
+  ready?: { version: string }
   latest?: () => string
   stage?: () => Promise<void>
   install?: () => Promise<never>
 }) {
   const calls: string[] = []
-  const states: string[] = []
   let ready = input?.ready
-  const controller = createUpdaterController({
+  const dependencies: Dependencies = {
     currentVersion: input?.currentVersion ?? "1.0.0",
     platform: {
-      async checkForUpdate() {
-        calls.push("check")
-        return input?.latest?.() ?? "2.0.0"
-      },
-      async stageUpdate() {
+      checkForUpdate: Effect.try({
+        try: () => {
+          calls.push("check")
+          return input?.latest?.() ?? "2.0.0"
+        },
+        catch: (error) => error,
+      }),
+      stageUpdate: Effect.tryPromise(async () => {
         calls.push("download")
         await input?.stage?.()
-      },
-      installAndRestart() {
+      }),
+      installAndRestart: Effect.suspend(() => {
         calls.push(`install:${ready?.version}`)
-        return input?.install?.() ?? new Promise<never>(() => {})
-      },
+        return Effect.tryPromise({
+          try: () => input?.install?.() ?? new Promise<never>(() => {}),
+          catch: (error) => error,
+        })
+      }),
+      dispose: () => {},
     },
-    lifecycle: {
-      async prepareToRestart() {
-        calls.push("prepare")
-      },
-    },
+    prepareToRestart: Effect.sync(() => {
+      calls.push("prepare")
+    }),
     persistence: {
-      get: () => ready,
-      set: (value) => {
-        ready = value
-      },
-      clear: () => {
+      get: Effect.sync(() => ready),
+      set: (value) =>
+        Effect.sync(() => {
+          ready = value
+        }),
+      clear: Effect.sync(() => {
         ready = undefined
-      },
+      }),
     },
-  })
-  controller.subscribe((state) => states.push(state.status))
-  return { controller, calls, states, getReady: () => ready }
+  }
+  const runtime = ManagedRuntime.make(layerWith(dependencies))
+  dispose.push(() => runtime.dispose())
+  const run = <A, E>(effect: (updater: Service) => Effect.Effect<A, E>) =>
+    runtime.runPromise(Service.pipe(Effect.flatMap(effect)))
+  const updater = {
+    start: () => run((updater) => updater.started),
+    check: () => run((updater) => updater.check),
+    install: () => run((updater) => updater.install),
+    installFork: () => runtime.runFork(Service.pipe(Effect.flatMap((updater) => updater.install))),
+    getState: () => run((updater) => updater.state),
+  }
+  return { updater, calls, getReady: () => ready }
 }
 
-describe("updater controller", () => {
+describe("updater", () => {
   test("stages an update found at launch and shows it as ready", async () => {
     const app = setup()
 
-    await app.controller.start()
+    await app.updater.start()
 
-    expect(app.states).toEqual(["idle", "checking", "downloading", "ready"])
-    expect(app.controller.getState()).toEqual({ status: "ready", version: "2.0.0" })
+    expect(await app.updater.getState()).toEqual({ status: "ready", version: "2.0.0" })
     expect(app.getReady()).toEqual({ version: "2.0.0" })
   })
 
   test("reports up to date and clears the record once the update is installed", async () => {
     const app = setup({ currentVersion: "2.0.0", ready: { version: "2.0.0" } })
 
-    await app.controller.start()
+    await app.updater.start()
 
-    expect(app.states).toEqual(["idle", "checking", "up-to-date"])
+    expect(await app.updater.getState()).toEqual({ status: "up-to-date" })
     expect(app.calls).toEqual(["check"])
     expect(app.getReady()).toBeUndefined()
   })
@@ -73,38 +93,38 @@ describe("updater controller", () => {
   test("revalidates a persisted target through the updater cache on launch", async () => {
     const app = setup({ ready: { version: "2.0.0" } })
 
-    await app.controller.start()
+    await app.updater.start()
 
     expect(app.calls).toEqual(["check", "download"])
-    expect(app.controller.getState()).toEqual({ status: "ready", version: "2.0.0" })
+    expect(await app.updater.getState()).toEqual({ status: "ready", version: "2.0.0" })
   })
 
   test("concurrent checks share one platform check", async () => {
     const app = setup()
 
-    await Promise.all([app.controller.check(), app.controller.check(), app.controller.check()])
+    await Promise.all([app.updater.check(), app.updater.check(), app.updater.check()])
 
     expect(app.calls).toEqual(["check", "download"])
   })
 
   test("clicking install twice checks once and installs the staged version once", async () => {
     const app = setup()
-    await app.controller.start()
+    await app.updater.start()
 
-    void app.controller.install()
-    void app.controller.install()
+    app.updater.installFork()
+    app.updater.installFork()
 
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(app.calls).toEqual(["check", "download", "check", "prepare", "install:2.0.0"])
-    expect(app.controller.getState()).toEqual({ status: "installing", version: "2.0.0" })
+    expect(await app.updater.getState()).toEqual({ status: "installing", version: "2.0.0" })
   })
 
   test("ignores checks while an installation is in progress", async () => {
     const app = setup()
-    await app.controller.start()
-    void app.controller.install()
+    await app.updater.start()
+    app.updater.installFork()
 
-    await app.controller.check()
+    await app.updater.check()
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(app.calls).toEqual(["check", "download", "check", "prepare", "install:2.0.0"])
@@ -113,15 +133,15 @@ describe("updater controller", () => {
   test("clicking install downloads and installs a newer release", async () => {
     let latest = "2.0.0"
     const app = setup({ latest: () => latest })
-    await app.controller.start()
+    await app.updater.start()
 
     latest = "3.0.0"
-    void app.controller.install()
+    app.updater.installFork()
 
-    expect(app.controller.getState()).toEqual({ status: "installing", version: "2.0.0" })
+    expect(await app.updater.getState()).toEqual({ status: "installing", version: "2.0.0" })
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(app.calls).toEqual(["check", "download", "check", "download", "prepare", "install:3.0.0"])
-    expect(app.controller.getState()).toEqual({ status: "installing", version: "3.0.0" })
+    expect(await app.updater.getState()).toEqual({ status: "installing", version: "3.0.0" })
   })
 
   test("clicking install uses the staged release when the final check fails", async () => {
@@ -132,29 +152,27 @@ describe("updater controller", () => {
         return "2.0.0"
       },
     })
-    await app.controller.start()
+    await app.updater.start()
 
     offline = true
-    void app.controller.install()
+    app.updater.installFork()
 
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(app.calls).toEqual(["check", "download", "check", "prepare", "install:2.0.0"])
-    expect(app.controller.getState()).toEqual({ status: "installing", version: "2.0.0" })
+    expect(await app.updater.getState()).toEqual({ status: "installing", version: "2.0.0" })
   })
 
   test("later checks stay silent while ready and pick up newer versions", async () => {
     let latest = "2.0.0"
     const app = setup({ latest: () => latest })
-    await app.controller.start()
+    await app.updater.start()
 
-    await app.controller.check()
+    await app.updater.check()
     // Nothing new was published: the install button never hid.
-    expect(app.states).toEqual(["idle", "checking", "downloading", "ready"])
 
     latest = "3.0.0"
-    await app.controller.check()
-    expect(app.states).toEqual(["idle", "checking", "downloading", "ready", "ready"])
-    expect(app.controller.getState()).toEqual({ status: "ready", version: "3.0.0" })
+    await app.updater.check()
+    expect(await app.updater.getState()).toEqual({ status: "ready", version: "3.0.0" })
     expect(app.getReady()).toEqual({ version: "3.0.0" })
   })
 
@@ -166,13 +184,12 @@ describe("updater controller", () => {
         return "2.0.0"
       },
     })
-    await app.controller.start()
+    await app.updater.start()
 
     offline = true
-    await app.controller.check()
+    await app.updater.check()
 
-    expect(app.states).toEqual(["idle", "checking", "downloading", "ready"])
-    expect(app.controller.getState()).toEqual({ status: "ready", version: "2.0.0" })
+    expect(await app.updater.getState()).toEqual({ status: "ready", version: "2.0.0" })
     expect(app.getReady()).toEqual({ version: "2.0.0" })
   })
 
@@ -189,19 +206,19 @@ describe("updater controller", () => {
         })
       },
     })
-    await app.controller.start()
+    await app.updater.start()
 
     latest = "3.0.0"
     slowStage = true
-    const refresh = app.controller.check()
+    const refresh = app.updater.check()
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    void app.controller.install()
-    expect(app.controller.getState()).toEqual({ status: "installing", version: "2.0.0" })
+    app.updater.installFork()
+    expect(await app.updater.getState()).toEqual({ status: "installing", version: "2.0.0" })
 
     releaseStage()
     await refresh
-    expect(app.controller.getState()).toEqual({ status: "installing", version: "3.0.0" })
+    expect(await app.updater.getState()).toEqual({ status: "installing", version: "3.0.0" })
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(app.calls).toEqual(["check", "download", "check", "download", "prepare", "install:3.0.0"])
   })
@@ -215,14 +232,14 @@ describe("updater controller", () => {
         return new Promise<never>(() => {})
       },
     })
-    await app.controller.start()
+    await app.updater.start()
 
-    await expect(app.controller.install()).rejects.toThrow("install failed")
-    expect(app.controller.getState()).toEqual({ status: "ready", version: "2.0.0" })
+    await expect(app.updater.install()).rejects.toThrow("install failed")
+    expect(await app.updater.getState()).toEqual({ status: "ready", version: "2.0.0" })
 
-    void app.controller.install()
+    app.updater.installFork()
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(attempts).toBe(2)
-    expect(app.controller.getState()).toEqual({ status: "installing", version: "2.0.0" })
+    expect(await app.updater.getState()).toEqual({ status: "installing", version: "2.0.0" })
   })
 })

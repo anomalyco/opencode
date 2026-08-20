@@ -11,16 +11,17 @@ export function wireWindowRecovery(
   name: string,
   relaunch: () => void,
   exportDebugLogs: () => Promise<string>,
-  runFork: (effect: Effect.Effect<void>) => unknown,
 ) {
   let showing = false
-  const sampler = createUnresponsiveSampler(win, name, runFork)
+  const sampler = createUnresponsiveSampler(win, name)
 
   type RecoveryAction = "relaunch" | "export-logs" | "keep-waiting" | "quit"
   const handle = async (action: RecoveryAction | undefined, wait: boolean) => {
     if (action === "export-logs") {
       const sampling = sampler.stopAndFlush()
-      await exportDebugLogs().catch((error) => runFork(Effect.logError("failed to export debug logs", { error })))
+      await exportDebugLogs().catch((error) =>
+        Effect.runFork(Effect.logError("failed to export debug logs", { error })),
+      )
       if (wait && sampling) sampler.start()
       return true
     }
@@ -75,7 +76,7 @@ export function wireWindowRecovery(
     validatedURL: string,
     isMainFrame: boolean,
   ) => {
-    runFork(
+    Effect.runFork(
       scoped(
         "window",
         Effect.logError("renderer load failed", {
@@ -110,7 +111,7 @@ export function wireWindowRecovery(
   })
   win.webContents.on("render-process-gone", (_event, details) => {
     sampler.stopAndFlush()
-    runFork(
+    Effect.runFork(
       scoped(
         "window",
         Effect.logError("renderer process gone", { window: name, currentURL: safeWindowURL(win), details }),
@@ -127,27 +128,24 @@ export function wireWindowRecovery(
     )
   })
   win.on("unresponsive", () => {
-    runFork(
-      scoped(
-        "window",
-        Effect.logError("renderer unresponsive", { window: name, currentURL: safeWindowURL(win) }),
-      ),
+    Effect.runFork(
+      scoped("window", Effect.logError("renderer unresponsive", { window: name, currentURL: safeWindowURL(win) })),
     )
     sampler.start()
     void show(nativeT("desktop.recovery.unresponsive"), nativeT("desktop.recovery.unresponsive.detail"), true)
   })
   win.on("responsive", () => {
-    runFork(
+    Effect.runFork(
       scoped("window", Effect.logError("renderer responsive", { window: name, currentURL: safeWindowURL(win) })),
     )
     sampler.stopAndFlush()
   })
   win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
     if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
-      runFork(scoped("pty", Effect.logInfo("console", { window: name, level, message, line, sourceId })))
+      Effect.runFork(scoped("pty", Effect.logInfo("console", { window: name, level, message, line, sourceId })))
     }
   })
   win.webContents.on("preload-error", (_event, path, error) => {
-    runFork(scoped("preload", Effect.logError("preload error", { window: name, preloadPath: path, error })))
+    Effect.runFork(scoped("preload", Effect.logError("preload error", { window: name, preloadPath: path, error })))
   })
 }

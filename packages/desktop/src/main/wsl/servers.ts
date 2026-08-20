@@ -8,6 +8,7 @@ import type {
   WslServersEvent,
   WslServersState,
 } from "@opencode-ai/app/wsl/types"
+import { Effect } from "effect"
 import { nativeT } from "../native/translations"
 import { WSL_SERVERS_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
@@ -33,17 +34,11 @@ type RunningSidecar = {
 
 type SpawnSidecar = (distro: string) => Promise<RunningSidecar>
 
-type ControllerLogger = {
-  log: (message: string, meta?: unknown) => void
-  error: (message: string, meta?: unknown) => void
-}
-
 type WslServersControllerOptions = {
   cli: WslCliBuild
   spawnSidecar: SpawnSidecar
   installCli: (distro: string, cli: WslCliBuild) => Promise<void>
   installDistro: (distro: string) => Promise<void>
-  logger?: ControllerLogger
   readServers?: () => WslServerConfig[]
   writeServers?: (servers: WslServerConfig[]) => void
   probeDistro?: typeof probeWslDistro
@@ -51,13 +46,17 @@ type WslServersControllerOptions = {
   readCliVersion?: typeof readWslCliVersion
 }
 
-export type WslServersController = ReturnType<typeof createWslServersController>
+export type WslServersController = Effect.Success<ReturnType<typeof createWslServersController>>
 
 export function wslServerIdForDistro(distro: string) {
   return `wsl:${distro}`
 }
 
-export function createWslServersController(options: WslServersControllerOptions) {
+export const createWslServersController = Effect.fn("WslServers.make")(function* (
+  options: WslServersControllerOptions,
+) {
+  const context = yield* Effect.context()
+  const runFork = Effect.runForkWith(context)
   let state: WslServersState = initialState()
   const listeners = new Set<(event: WslServersEvent) => void>()
   const sidecars = new Map<string, RunningSidecar>()
@@ -143,7 +142,7 @@ export function createWslServersController(options: WslServersControllerOptions)
   const refreshCliCheckSafely = (id: string, distro: string) => {
     return refreshCliCheck(distro).catch((error) => {
       const message = error instanceof Error ? error.message : String(error)
-      options.logger?.error("wsl CLI check failed", { id, distro, message })
+      runFork(Effect.logError("wsl CLI check failed", { id, distro, message }))
     })
   }
 
@@ -164,7 +163,7 @@ export function createWslServersController(options: WslServersControllerOptions)
     const token = Symbol()
     starts.set(id, token)
     setRuntime(id, { kind: "starting" })
-    options.logger?.log("wsl sidecar starting", { id, distro: item.config.distro })
+    runFork(Effect.logInfo("wsl sidecar starting", { id, distro: item.config.distro }))
     try {
       const sidecar = await options.spawnSidecar(item.config.distro)
       if (starts.get(id) !== token) {
@@ -184,16 +183,16 @@ export function createWslServersController(options: WslServersControllerOptions)
         sidecars.delete(id)
         const message = startupFailure(code, signal)
         setRuntime(id, { kind: "failed", message })
-        options.logger?.error("wsl sidecar exited", { id, distro: item.config.distro, code, signal })
+        runFork(Effect.logError("wsl sidecar exited", { id, distro: item.config.distro, code, signal }))
       })
       void refreshCliCheckSafely(id, item.config.distro)
-      options.logger?.log("wsl sidecar ready", { id, distro: item.config.distro, url: sidecar.url })
+      runFork(Effect.logInfo("wsl sidecar ready", { id, distro: item.config.distro, url: sidecar.url }))
     } catch (error) {
       if (starts.get(id) !== token) return
       starts.delete(id)
       const message = error instanceof Error ? error.message : String(error)
       setRuntime(id, { kind: "failed", message })
-      options.logger?.error("wsl sidecar failed to start", { id, distro: item.config.distro, message })
+      runFork(Effect.logError("wsl sidecar failed to start", { id, distro: item.config.distro, message }))
     }
   }
 
@@ -323,7 +322,7 @@ export function createWslServersController(options: WslServersControllerOptions)
       sidecars.clear()
     },
   }
-}
+})
 
 function initialState(): WslServersState {
   return {

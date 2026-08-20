@@ -74,7 +74,6 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
 export const prepareDesktop = Effect.gen(function* () {
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
-  const context = yield* Effect.context()
   yield* cleanupStoreFiles(app.getPath("userData")).pipe(
     Effect.tap((result) =>
       result.deleted.length === 0
@@ -85,7 +84,7 @@ export const prepareDesktop = Effect.gen(function* () {
   )
   if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
     app.setAsDefaultProtocolClient("opencode")
-  registerRendererProtocol(path, paths.rendererRoot, Effect.runForkWith(context))
+  registerRendererProtocol(path, paths.rendererRoot)
   setDockIcon(path, paths)
 })
 

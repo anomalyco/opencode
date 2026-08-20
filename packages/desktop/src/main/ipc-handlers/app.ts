@@ -11,7 +11,7 @@ import { setNativeTranslations } from "../native/translations"
 import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../lifecycle/onboarding"
-import { Initialization } from "../service/initialization"
+import { BackgroundService } from "../service/background-service"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
 import { Updater } from "../updater"
 import { getLastFocusedWindow, setBackgroundColor } from "../windows"
@@ -21,13 +21,13 @@ export const appHandlers = AppRpcs.toLayer(
   Effect.gen(function* () {
     const handoff = yield* IpcPortHandoff
     const lifecycle = yield* ApplicationLifecycle.Service
-    const initialization = yield* Initialization.Service
+    const background = yield* BackgroundService.Service
     const updater = yield* Updater.Service
     const logging = yield* DesktopLogging.Service
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
     return AppRpcs.of({
-      AppAwaitInitialization: () => initialization.await,
+      AppAwaitInitialization: () => background.connection,
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
       AppGetDefaultServerUrl: () => Effect.sync(getDefaultServerUrl),
       AppSetDefaultServerUrl: ({ url }) => Effect.sync(() => setDefaultServerUrl(url)),

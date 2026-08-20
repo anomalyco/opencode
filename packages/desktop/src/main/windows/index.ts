@@ -102,7 +102,7 @@ export function createMainWindow(deps: Dependencies, id: string = randomUUID()) 
   })
 
   allowRendererPermissions(win)
-  wireWindowRecovery(win, id, () => relaunchHandler(), deps.exportDebug, deps.runFork)
+  wireWindowRecovery(win, id, () => relaunchHandler(), deps.exportDebug)
   wireNavigationPolicy(win, (url) => deps.runFork(openExternalURL(url)))
   wireRendererHeaders(win)
   state.manage(win)
@@ -117,7 +117,7 @@ export function createMainWindow(deps: Dependencies, id: string = randomUUID()) 
     if (!contentReady || !appliedTheme || revealed || win.isDestroyed()) return
     revealed = true
     win.show()
-    deps.runFork(Effect.logInfo("main window visible", { window: id }))
+    Effect.runFork(Effect.logInfo("main window visible", { window: id }))
   }
   const ready = () => {
     contentReady = true

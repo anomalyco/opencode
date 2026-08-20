@@ -6,11 +6,7 @@ import { safeWindowURL } from "./state"
 const sampleInterval = 1000
 const samplePeriod = 15000
 
-export function createUnresponsiveSampler(
-  win: BrowserWindow,
-  name: string,
-  runFork: (effect: Effect.Effect<void>) => unknown,
-) {
+export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
   let sampleTimer: ReturnType<typeof setTimeout> | undefined
   let stopTimer: ReturnType<typeof setTimeout> | undefined
   let sampling = false
@@ -33,7 +29,9 @@ export function createUnresponsiveSampler(
   const collect = async () => {
     if (!active()) return
     const stack = await win.webContents.mainFrame.collectJavaScriptCallStack().catch((error) => {
-      runFork(scoped("window", Effect.logError("failed to collect unresponsive sample", { window: name, error })))
+      Effect.runFork(
+        scoped("window", Effect.logError("failed to collect unresponsive sample", { window: name, error })),
+      )
       return undefined
     })
     if (!active()) return
@@ -56,7 +54,7 @@ export function createUnresponsiveSampler(
       ...entries.map((entry) => `<${entry[1]}> ${entry[0]}`),
       `Total Samples: ${total}`,
     ].join("\n")
-    runFork(scoped("window", Effect.logError(message)))
+    Effect.runFork(scoped("window", Effect.logError(message)))
     samples.clear()
     return wasSampling
   }

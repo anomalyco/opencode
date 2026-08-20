@@ -2,31 +2,14 @@ import { app, autoUpdater } from "electron"
 import pkg from "electron-updater"
 import { Effect } from "effect"
 import { setAppQuitting } from "../windows"
-import type { UpdaterPlatform } from "./controller"
+import type { Platform } from "./index"
 
 const updateClient = pkg.autoUpdater
 const restartTimeout = 10_000
 
-export function createUpdaterPlatform(
-  runFork: (effect: Effect.Effect<void>) => unknown,
-): UpdaterPlatform & { readonly dispose: () => void } {
-  configureUpdater(runFork)
-  const beforeQuit = () => setAppQuitting()
-  autoUpdater.on("before-quit-for-update", beforeQuit)
-
-  return {
-    async checkForUpdate() {
-      const result = await updateClient.checkForUpdates()
-      if (!result?.isUpdateAvailable) return
-      return result.updateInfo.version
-    },
-    stageUpdate,
-    installAndRestart: () => installAndRestart(runFork),
-    dispose: () => autoUpdater.off("before-quit-for-update", beforeQuit),
-  }
-}
-
-function configureUpdater(runFork: (effect: Effect.Effect<void>) => unknown) {
+export const make = Effect.gen(function* () {
+  const context = yield* Effect.context()
+  const runFork = Effect.runForkWith(context)
   updateClient.logger = {
     info: (...args) => runFork(Effect.logInfo(...args)),
     warn: (...args) => runFork(Effect.logWarning(...args)),
@@ -38,15 +21,36 @@ function configureUpdater(runFork: (effect: Effect.Effect<void>) => unknown) {
   updateClient.allowDowngrade = true
   updateClient.autoDownload = false
   updateClient.autoInstallOnAppQuit = process.platform === "darwin"
-  runFork(
-    Effect.logInfo("auto updater configured", {
-      channel: updateClient.channel,
-      allowPrerelease: updateClient.allowPrerelease,
-      allowDowngrade: updateClient.allowDowngrade,
-      currentVersion: app.getVersion(),
+  yield* Effect.logInfo("auto updater configured", {
+    channel: updateClient.channel,
+    allowPrerelease: updateClient.allowPrerelease,
+    allowDowngrade: updateClient.allowDowngrade,
+    currentVersion: app.getVersion(),
+  })
+  const beforeQuit = () => setAppQuitting()
+  autoUpdater.on("before-quit-for-update", beforeQuit)
+
+  return {
+    checkForUpdate: Effect.tryPromise({
+      try: async () => {
+        const result = await updateClient.checkForUpdates()
+        return result?.isUpdateAvailable ? result.updateInfo.version : undefined
+      },
+      catch: (error) => error,
     }),
-  )
-}
+    stageUpdate: Effect.tryPromise({
+      try: async () => {
+        await stageUpdate()
+      },
+      catch: (error) => error,
+    }),
+    installAndRestart: Effect.tryPromise({
+      try: installAndRestart,
+      catch: (error) => error,
+    }),
+    dispose: () => autoUpdater.off("before-quit-for-update", beforeQuit),
+  } satisfies Platform
+})
 
 function stageUpdate() {
   if (process.platform !== "darwin") return updateClient.downloadUpdate()
@@ -71,10 +75,10 @@ function stageUpdate() {
   })
 }
 
-function installAndRestart(runFork: (effect: Effect.Effect<void>) => unknown) {
+function installAndRestart() {
   return new Promise<never>((_resolve, reject) => {
     const timeout = setTimeout(() => {
-      runFork(Effect.logError("update restart did not start"))
+      Effect.runFork(Effect.logError("update restart did not start"))
       fail(new Error())
     }, restartTimeout)
     const started = () => {

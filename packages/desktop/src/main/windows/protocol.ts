@@ -22,24 +22,20 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
-export function registerRendererProtocol(
-  path: Path.Path,
-  rendererRoot: string,
-  runFork: (effect: Effect.Effect<void>) => unknown,
-) {
+export function registerRendererProtocol(path: Path.Path, rendererRoot: string) {
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
   protocol.handle(rendererProtocol, async (request) => {
     const url = new URL(request.url)
     if (url.host !== rendererHost) {
-      runFork(scoped("protocol", Effect.logWarning("rejected host", { url: request.url })))
+      Effect.runFork(scoped("protocol", Effect.logWarning("rejected host", { url: request.url })))
       return new Response("Not found", { status: 404 })
     }
 
     const file = path.resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
     const rel = path.relative(rendererRoot, file)
     if (rel.startsWith("..") || path.isAbsolute(rel)) {
-      runFork(scoped("protocol", Effect.logWarning("rejected path", { url: request.url, file })))
+      Effect.runFork(scoped("protocol", Effect.logWarning("rejected path", { url: request.url, file })))
       return new Response("Not found", { status: 404 })
     }
 
@@ -47,7 +43,7 @@ export function registerRendererProtocol(
       const range = request.headers.get("range")
       const response = await net.fetch(pathToFileURL(file).toString(), { headers: range ? { range } : undefined })
       if (response.status >= 400) {
-        runFork(
+        Effect.runFork(
           scoped(
             "protocol",
             Effect.logError("fetch failed", {
@@ -61,7 +57,7 @@ export function registerRendererProtocol(
       }
       return addDocumentPolicy(response, file)
     } catch (error) {
-      runFork(scoped("protocol", Effect.logError("fetch error", { url: request.url, file, error })))
+      Effect.runFork(scoped("protocol", Effect.logError("fetch error", { url: request.url, file, error })))
       return new Response("Not found", { status: 404 })
     }
   })
