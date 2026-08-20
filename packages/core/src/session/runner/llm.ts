@@ -89,7 +89,15 @@ const classifyToolExits = (
     .flatMap((cause) => {
       if (Cause.hasInterrupts(cause)) return []
       const reasons = cause.reasons.flatMap(
-        (reason): Array<Cause.Reason<never>> => (Cause.isFailReason(reason) ? [] : [reason]),
+        (reason): Array<Cause.Reason<never>> =>
+          Cause.isFailReason(reason)
+            ? isDecline(reason.error)
+              ? []
+              : // A typed failure here broke the ExecuteError contract (the per-fiber
+                // `catchTag("Tool.Error")` consumes honest ones). Surfacing it as a defect
+                // keeps it from being dropped, which would leave its call unsettled forever.
+                [Cause.makeDieReason(reason.error)]
+            : [reason],
       )
       return reasons.length > 0 ? [Cause.fromReasons(reasons)] : []
     })
