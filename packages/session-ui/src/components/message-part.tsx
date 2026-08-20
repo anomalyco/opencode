@@ -65,6 +65,7 @@ import { partDefaultOpen } from "./part-default-open"
 import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
+import { formatTaskSubtitle } from "./message-part-task"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
 async function writeClipboard(text: string): Promise<boolean> {
@@ -1994,9 +1995,7 @@ ToolRegistry.register({
         typeof props.input.description === "string" && props.input.description
           ? props.input.description
           : childSessionId()
-      if (!value) return value
-      if (props.metadata.background === true) return `${value} (background)`
-      return value
+      return formatTaskSubtitle(value, props.metadata.background === true)
     })
     const running = createMemo(() => props.status === "pending" || props.status === "running")
 

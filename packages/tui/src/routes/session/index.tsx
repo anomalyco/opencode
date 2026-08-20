@@ -1020,7 +1020,7 @@ export function Session() {
       },
     },
     {
-      title: "Background subagents",
+      title: "Make subagents async",
       value: "session.background",
       category: "Session",
       hidden: true,
@@ -1526,7 +1526,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
             >
               <span style={{ fg: theme.textMuted }}> · </span>
               {backgroundShortcut()}
-              <span style={{ fg: theme.textMuted }}> background</span>
+              <span style={{ fg: theme.textMuted }}> async</span>
             </Show>
           </text>
         </box>
@@ -2321,7 +2321,7 @@ export function formatSubagentToolcalls(count: number) {
 }
 
 export function formatSubagentTitle(agent: string, description: string, background: boolean) {
-  return `${agent} Task${background ? " (background)" : ""} — ${description}`
+  return `${agent} Task${background ? " (async)" : ""} — ${description}`
 }
 
 export function formatSubagentRetry(attempt: number, message: string) {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readPartText } from "./message-part-text"
+import { formatTaskSubtitle } from "./message-part-task"
 
 describe("readPartText", () => {
   test("returns empty string when accum is undefined and part text is undefined", () => {
@@ -24,5 +25,17 @@ describe("readPartText", () => {
 
   test("trims leading and trailing whitespace", () => {
     expect(readPartText(undefined, { id: "part_1", text: "\n  body  \n" })).toBe("body")
+  })
+})
+
+describe("formatTaskSubtitle", () => {
+  test("renders async vocabulary from retained background metadata", () => {
+    expect(formatTaskSubtitle("Inspect renderer", true)).toBe("Inspect renderer (async)")
+  })
+
+  test("leaves synchronous and absent subtitles unchanged", () => {
+    expect(formatTaskSubtitle("Inspect renderer", false)).toBe("Inspect renderer")
+    expect(formatTaskSubtitle(undefined, true)).toBeUndefined()
+    expect(formatTaskSubtitle("", true)).toBe("")
   })
 })
