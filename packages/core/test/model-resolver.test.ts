@@ -346,6 +346,7 @@ describe("ModelResolver", () => {
         const resolver = yield* ModelResolver.Service
         const resolved = yield* resolver.resolveModel(selected)
 
+        expect(resolved.limit).toEqual(selected.limit)
         const headers = yield* resolved.model.route.auth.apply({
           request: LLM.request({ model: resolved.model, prompt: "Hello" }),
           method: "POST",

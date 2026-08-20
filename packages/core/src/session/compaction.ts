@@ -1,6 +1,6 @@
 export * as SessionCompaction from "./compaction.js"
 
-import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest, type LanguageModel } from "@opencode-ai/ai"
+import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
@@ -18,7 +18,6 @@ import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { toSessionError } from "./to-session-error.js"
 import { Token } from "../util/token.js"
-import type { Info, Ref } from "../model.js"
 import { SessionUsage } from "./usage.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { Agent } from "../agent.js"
@@ -83,9 +82,7 @@ type Dependencies = {
 export type AutoInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
-  readonly model: LanguageModel
-  readonly ref: Ref
-  readonly cost: Info["cost"]
+  readonly resolved: SessionRunnerModel.Resolved
 }
 
 export type ManualInput = {
@@ -95,13 +92,11 @@ export type ManualInput = {
   readonly started?: boolean
 }
 
-type RequiredInput = Omit<AutoInput, "ref">
+type RequiredInput = Pick<AutoInput, "messages" | "resolved">
 
 type Plan = {
   readonly session: SessionSchema.Info
-  readonly model: LanguageModel
-  readonly ref: Ref
-  readonly cost: Info["cost"]
+  readonly resolved: SessionRunnerModel.Resolved
   readonly reason: SessionMessage.Compaction["reason"]
   readonly prompt: string
   readonly recent: string
@@ -273,9 +268,9 @@ const make = (dependencies: Dependencies) => {
     )
     const request = yield* SessionModelHook.apply(
       dependencies.hooks,
-      { sessionID: plan.session.id, agent: Agent.ID.make("compaction"), model: plan.ref },
+      { sessionID: plan.session.id, agent: Agent.ID.make("compaction"), model: plan.resolved.ref },
       LLM.request({
-        model: plan.model,
+        model: plan.resolved.model,
         promptCacheKey: SessionPromptCacheKey.make(plan.session.id),
         http: { headers: SessionModelHeaders.make(plan.session, dependencies.app) },
         messages: [Message.user(plan.prompt)],
@@ -287,7 +282,7 @@ const make = (dependencies: Dependencies) => {
         http: SessionModelHttp.middleware(dependencies.hooks, {
           sessionID: plan.session.id,
           agent: Agent.ID.make("compaction"),
-          model: plan.ref,
+          model: plan.resolved.ref,
         }),
       })
       .pipe(
@@ -305,7 +300,7 @@ const make = (dependencies: Dependencies) => {
             })
           }
           if (LLMEvent.is.stepFinish(event)) {
-            const step = SessionUsage.record(event.usage, plan.cost)
+            const step = SessionUsage.record(event.usage, plan.resolved.cost)
             usage = usage ? SessionUsage.add(usage, step) : step
           }
           return Effect.void
@@ -354,9 +349,7 @@ const make = (dependencies: Dependencies) => {
     if (content)
       return yield* execute({
         session: input.session,
-        model: input.model,
-        ref: input.ref,
-        cost: input.cost,
+        resolved: input.resolved,
         reason: "auto",
         ...content,
       })
@@ -370,17 +363,17 @@ const make = (dependencies: Dependencies) => {
   const required = (input: RequiredInput) => {
     const config = state.get()
     if (!config.auto) return false
-    const context = input.model.route.defaults.limits?.context
-    if (context === undefined || context <= 0) return false
+    const limit = input.resolved.limit
+    const context = limit.context
+    if (context <= 0) return false
     const last = input.messages.findLast(
       (message): message is SessionMessage.Assistant & { tokens: NonNullable<SessionMessage.Assistant["tokens"]> } =>
         message.type === "assistant" && message.tokens !== undefined,
     )
     if (!last) return false
-    const limits = input.model.route.defaults.limits
-    const output = Math.min(limits?.output ?? 0, OUTPUT_TOKEN_MAX)
+    const output = Math.min(limit.output, OUTPUT_TOKEN_MAX)
     const promptCeiling = Math.min(
-      limits?.input === undefined ? Number.POSITIVE_INFINITY : limits.input - config.buffer,
+      limit.input === undefined ? Number.POSITIVE_INFINITY : limit.input - config.buffer,
       context - Math.max(output, config.buffer),
     )
     const used =
@@ -410,9 +403,7 @@ const make = (dependencies: Dependencies) => {
     if ("status" in resolved) return resolved
     return yield* execute({
       session: input.session,
-      model: resolved.model,
-      ref: resolved.ref,
-      cost: resolved.cost,
+      resolved,
       reason: "manual",
       inputID: input.inputID,
       started: input.started,

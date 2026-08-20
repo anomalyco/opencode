@@ -291,7 +291,7 @@ const layer = Layer.effect(
       const model = resolved.model
       // Make room: history must fit the context window before the call. A pending manual
       // compaction owns this instead; the runner executes it between steps.
-      const compactionInput = { session, messages: loaded.messages, model, ref: resolved.ref, cost: resolved.cost }
+      const compactionInput = { session, messages: loaded.messages, resolved }
       if (compaction.required(compactionInput)) {
         const compacted = yield* compaction.compact(compactionInput)
         if (compacted.status === "completed")

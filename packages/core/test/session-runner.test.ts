@@ -152,23 +152,30 @@ const replacementModel = LanguageModel.make({ id: "replacement", provider: "fake
 const compactModel = LanguageModel.make({
   id: "compact",
   provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 4_000, output: 50 } }),
+  route: OpenAIChat.route,
 })
 const fullOutputModel = LanguageModel.make({
   id: "full-output",
   provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 262_144, output: 262_144 } }),
+  route: OpenAIChat.route,
 })
 const undersizedContextModel = LanguageModel.make({
   id: "undersized-context",
   provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 1, output: 1_000 } }),
+  route: OpenAIChat.route,
 })
 const recoveryModel = LanguageModel.make({
   id: "recovery",
   provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 20_000, output: 1_000 } }),
+  route: OpenAIChat.route,
 })
+const modelLimit = (selected: LanguageModel) => {
+  if (selected === compactModel) return { context: 4_000, output: 50 }
+  if (selected === fullOutputModel) return { context: 262_144, output: 262_144 }
+  if (selected === undersizedContextModel) return { context: 1, output: 1_000 }
+  if (selected === recoveryModel) return { context: 20_000, output: 1_000 }
+  return { context: 200_000, output: 32_000 }
+}
 
 test("calculates step cost using the matching context tier", () => {
   expect(
@@ -304,13 +311,15 @@ let currentModel = model
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: (session) =>
     modelResolveHook.pipe(
-      Effect.as(
-        SessionRunnerModel.resolved(session.model?.id === "replacement" ? replacementModel : currentModel, {
+      Effect.map(() => {
+        const selected = session.model?.id === "replacement" ? replacementModel : currentModel
+        return SessionRunnerModel.resolved(selected, {
           capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
           cost: [],
+          limit: modelLimit(selected),
           variant: session.model?.variant,
-        }),
-      ),
+        })
+      }),
     ),
 })
 const systemContextKey = Instructions.Key.make("test/context")
