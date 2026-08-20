@@ -61,7 +61,7 @@ export const Parameters = Schema.Struct({
   }),
   timeout: Schema.optional(Schema.Number).annotate({
     description:
-      "Optional timeout in milliseconds for the foreground subagent. If the subagent does not complete within this duration it is cancelled and the tool returns a <task_error> block so the calling agent can retry with a larger timeout, narrow the scope, or fall back. Defaults to the value of OPENCODE_EXPERIMENTAL_TASK_DEFAULT_TIMEOUT_MS, or 10 minutes when unset.",
+      "Optional timeout in milliseconds for the foreground subagent. If the subagent does not complete within this duration it is cancelled and the tool returns a <task_error> block so the calling agent can retry with a larger timeout, narrow the scope, or fall back. Set to 0 to wait indefinitely. Defaults to the value of OPENCODE_EXPERIMENTAL_TASK_DEFAULT_TIMEOUT_MS, or 10 minutes when unset.",
   }),
 })
 
@@ -313,18 +313,20 @@ export const TaskTool = Tool.define(
         return backgroundResult()
       }
 
+      if (params.timeout !== undefined && params.timeout < 0) {
+        return yield* Effect.fail(
+          new Error(
+            `Invalid timeout value: ${params.timeout}. Timeout must be a non-negative number of milliseconds (0 waits indefinitely).`,
+          ),
+        )
+      }
+      const taskTimeoutMs = params.timeout ?? flags.taskDefaultTimeoutMs ?? TASK_DEFAULT_TIMEOUT_MS
+
       const runCancel = yield* EffectBridge.make()
       const cancel = ops.cancel(nextSession.id)
 
       function onAbort() {
         runCancel.fork(cancel)
-      }
-
-      const taskTimeoutMs = params.timeout ?? flags.taskDefaultTimeoutMs ?? TASK_DEFAULT_TIMEOUT_MS
-      if (params.timeout !== undefined && params.timeout < 0) {
-        return yield* Effect.fail(
-          new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number of milliseconds.`),
-        )
       }
 
       return yield* Effect.acquireUseRelease(
@@ -347,10 +349,15 @@ export const TaskTool = Tool.define(
                 output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
               }
             })
-            const outcome = yield* Effect.raceFirst(
-              inner.pipe(Effect.map((output) => ({ kind: "result" as const, output }))),
-              Effect.sleep(`${taskTimeoutMs} millis`).pipe(Effect.as({ kind: "timeout" as const })),
-            )
+            const raced = inner.pipe(Effect.map((output) => ({ kind: "result" as const, output })))
+            // 0 means wait indefinitely: no timeout branch enters the race.
+            const outcome =
+              taskTimeoutMs === 0
+                ? yield* raced
+                : yield* Effect.raceFirst(
+                    raced,
+                    Effect.sleep(`${taskTimeoutMs} millis`).pipe(Effect.as({ kind: "timeout" as const })),
+                  )
             if (outcome.kind === "timeout") {
               yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
               return {
@@ -361,7 +368,7 @@ export const TaskTool = Tool.define(
                   "",
                   "<task_error>",
                   `Subagent "${params.subagent_type}" did not complete within ${taskTimeoutMs}ms and was cancelled.`,
-                  `If this task legitimately needs more time, retry with a larger 'timeout' value (in milliseconds) or narrow the task scope.`,
+                  `If this task legitimately needs more time, retry with a larger 'timeout' value (in milliseconds), set 'timeout' to 0 to wait indefinitely, or narrow the task scope.`,
                   `If the subagent appears stalled (provider or network hang), do not retry indefinitely; report what you have to the user.`,
                   "</task_error>",
                 ].join("\n"),
