@@ -2185,6 +2185,39 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("finalizes a pending function call at response completion", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          type: "response.output_item.added",
+          item: { type: "function_call", id: "item_1", call_id: "call_1", name: "lookup", arguments: "" },
+        },
+        { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.filter((event) => LLMEvent.is.toolInputEnd(event) || LLMEvent.is.toolCall(event))).toEqual(
+        [
+          {
+            type: "tool-input-end",
+            id: "call_1",
+            name: "lookup",
+            providerMetadata: { openai: { itemId: "item_1" } },
+          },
+          {
+            type: "tool-call",
+            id: "call_1",
+            name: "lookup",
+            input: {},
+            providerExecuted: undefined,
+            providerMetadata: { openai: { itemId: "item_1" } },
+          },
+        ],
+      )
+      expect(response.finishReason.normalized).toBe("tool-calls")
+    }),
+  )
+
   it.effect("emits malformed final function arguments as an unexecuted tool error", () =>
     Effect.gen(function* () {
       const body = sseEvents(

@@ -1006,11 +1006,19 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onResponseFinish = (state: ParserState, event: Event): StepResult => {
-  const events: LLMEvent[] = []
+const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (state: ParserState, event: Event) {
+  // Some compatible providers omit output_item.done even after completing the response.
+  const pending =
+    event.type === "response.completed"
+      ? yield* ToolStream.finishAll(state.id, state.tools)
+      : { tools: state.tools, events: NO_EVENTS }
+  const events: LLMEvent[] = [...pending.events]
+  const hasFunctionCall =
+    pending.events.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
+    state.hasFunctionCall
   const lifecycle = Lifecycle.finish(state.lifecycle, events, {
     reason: {
-      normalized: mapFinishReason(event, state.hasFunctionCall),
+      normalized: mapFinishReason(event, hasFunctionCall),
       raw: event.response?.incomplete_details?.reason,
     },
     usage: mapUsage(event.response?.usage, state.providerMetadataKey),
@@ -1022,8 +1030,8 @@ const onResponseFinish = (state: ParserState, event: Event): StepResult => {
           })
         : undefined,
   })
-  return [{ ...state, lifecycle }, events]
-}
+  return [{ ...state, lifecycle, hasFunctionCall, tools: pending.tools }, events] satisfies StepResult
+})
 
 // Build a single human-readable message from whatever the provider supplied.
 // When both code and message are present, prefix the code so consumers see
@@ -1092,8 +1100,7 @@ export const step = (state: ParserState, event: Event) => {
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
     return onOutputItemDone(state, event)
   }
-  if (event.type === "response.completed" || event.type === "response.incomplete")
-    return Effect.succeed(onResponseFinish(state, event))
+  if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
   if (event.type === "response.failed") return providerError(state, event, `${state.name} response failed`)
   if (event.type === "error")
     return decodeKnownErrorEvent(event).pipe(
