@@ -289,7 +289,7 @@ describe("query keys", () => {
         calls.push(input)
         return {
           location: {},
-          data: [{ name: "review", template: "Review files" /* source: "command" as const */ }],
+          data: [{ name: "review", template: "Review files" /* source: "command" */ }],
         }
       },
     } as unknown as CommandApi
@@ -298,6 +298,30 @@ describe("query keys", () => {
 
     expect(calls).toEqual([{ location: { directory: "/repo" } }])
     expect(result).toEqual([{ name: "review", template: "Review files" /* source: "command" */ }])
+  })
+
+  test("preserves slashes in command model IDs for legacy servers", async () => {
+    const localApi = {
+      list: async () => ({ location: {}, data: [] }),
+    } as unknown as CommandApi
+
+    const legacy = {
+      command: {
+        list: async () => ({
+          data: [
+            { name: "test", template: "Test", description: "", agent: "build", model: "openrouter/openrouter/free", subtask: false },
+            { name: "test2", template: "Test2", description: "", agent: "build", model: "openrouter/anthropic/claude-sonnet-4.6", subtask: false },
+          ],
+        }),
+      },
+    } as unknown as OpencodeClient
+
+    const result = await loadCommands("/repo", localApi, legacy, Promise.resolve("v1"))
+
+    expect(result).toEqual([
+      { name: "test", template: "Test", description: "", agent: "build", model: { providerID: "openrouter", id: "openrouter/free" }, subtask: false },
+      { name: "test2", template: "Test2", description: "", agent: "build", model: { providerID: "openrouter", id: "anthropic/claude-sonnet-4.6" }, subtask: false },
+    ])
   })
 
   test("loads projects from the current endpoint", async () => {
