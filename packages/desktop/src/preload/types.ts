@@ -38,6 +38,7 @@ export type ElectronAPI = {
   draftBlobGet: IpcInvokeMethod<typeof Ipc.drafts.getBlob>
 
   getWindowID: IpcInvokeMethod<typeof Ipc.window.getId>
+  themeReady: IpcInvokeMethod<typeof Ipc.window.themeReady>
   onMenuCommand: IpcEventSubscription<typeof Ipc.menu.command>
   onDeepLink: IpcEventSubscription<typeof Ipc.app.deepLink>
 

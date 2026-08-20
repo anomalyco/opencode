@@ -15,7 +15,14 @@ import { createFileCapabilities, openExternalURL, openLocalFileURL } from "./fil
 import { setForceFocus } from "./native/debug"
 import { runDesktopMenuAction } from "./native/menu-actions"
 import { createDesktopStorage } from "./storage"
-import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+import {
+  getPinchZoomEnabled,
+  getWindowID,
+  setPinchZoomEnabled,
+  setTitlebar,
+  setWindowThemeReady,
+  updateTitlebar,
+} from "./windows"
 import type { UpdaterIpc } from "./updater"
 import type { WslIpc } from "./wsl/ipc"
 
@@ -112,6 +119,12 @@ export function registerIpcHandlers(deps: Deps) {
     return id
   })
 
+  handle(Ipc.window.themeReady, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) throw new Error("Window not found")
+    setWindowThemeReady(win)
+  })
+
   handle(Ipc.window.getFocused, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return win?.isFocused() ?? false
@@ -165,6 +178,10 @@ export function registerUpdaterIpcHandlers(updater: UpdaterIpc) {
   handle(Ipc.updater.unsubscribe, (event) => updater.unsubscribe(event.sender.id))
   handle(Ipc.updater.check, () => updater.check())
   handle(Ipc.updater.install, () => updater.install())
+}
+
+export function registerWslInitialization(ready: Promise<void>) {
+  handle(Ipc.wsl.awaitInitialization, () => ready)
 }
 
 export function registerWslIpcHandlers(wsl: WslIpc) {

@@ -55,6 +55,7 @@ import type {
   RunPrompt,
   RunProvider,
   RunReference,
+  RunTuiConfig,
 } from "./types"
 import type { RunTheme } from "./theme"
 
@@ -92,6 +93,7 @@ type RunFooterViewProps = {
   subagent?: () => FooterSubagentState
   queuedPrompts?: () => FooterQueuedPrompt[]
   theme: () => RunTheme
+  tuiConfig: RunTuiConfig
   mono: boolean
   miniSettings: () => MiniSettings
   history?: () => RunPrompt[]
@@ -733,6 +735,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                         <Match when={active().type === "prompt" && route().type === "composer"}>
                           <RunPromptBody
                             theme={theme}
+                            cursorStyle={props.tuiConfig.cursor}
                             background={() => runTheme().background}
                             placeholder={composer.placeholder}
                             onSubmit={composer.onSubmit}

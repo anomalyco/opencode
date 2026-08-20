@@ -5,6 +5,7 @@ import {
   AppBaseProviders,
   AppInterface,
   PlatformProvider,
+  preloadRoute,
   ServerConnection,
   useCommand,
   useLanguage,
@@ -13,9 +14,8 @@ import {
 } from "@opencode-ai/app"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
-import { createEffect, createMemo, createResource, Show } from "solid-js"
+import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
 import type { ElectronAPI } from "../preload/types"
-import { MigrationStatus } from "./migration-status"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform, type DesktopWindowState } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
@@ -25,6 +25,8 @@ import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
+
+const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
 
 export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; version: string }) {
   const [windowState] = createResource(() => props.api.getWindowID().then((id) => ({ id, version: props.version })))
@@ -37,9 +39,11 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
 
 function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; windowState: DesktopWindowState }) {
   const platform = createDesktopPlatform(props.api, props.windowState, props.updater)
+  const initialUrl = getLastActiveUrl(props.windowState.id)
   const [sidecar] = createResource(() => props.api.awaitInitialization())
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(() => preloadStoredLocale(platform))
+  const [route] = createResource(() => preloadRoute(initialUrl))
   const router = (routerProps: BaseRouterProps) => (
     <DesktopMemoryRouter {...routerProps} windowID={props.windowState.id} />
   )
@@ -47,9 +51,7 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
   function ReadyApp() {
     const wslServers = useWslServers()
     const language = useLanguage()
-    const ready = createMemo(
-      () => !defaultServer.loading && !sidecar.loading && !locale.loading && !wslServers.isLoading,
-    )
+    const ready = createMemo(() => !defaultServer.loading && !sidecar.loading && !locale.loading && !route.loading)
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
       const list: ServerConnection.Any[] = []
@@ -79,13 +81,15 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
             <AppInterface defaultServer={key} servers={servers()} router={router}>
               <DesktopFirstLaunchOnboarding
                 api={props.api}
-                initialUrl={getLastActiveUrl(props.windowState.id)}
+                initialUrl={initialUrl}
                 serverKey={key}
               />
               <DesktopEffects api={props.api} />
-              <Show when={initializationData(sidecar)} keyed>
-                {(server) => <MigrationStatus server={server} />}
-              </Show>
+              <Suspense fallback={null}>
+                <Show when={initializationData(sidecar)} keyed>
+                  {(server) => <MigrationStatus server={server} />}
+                </Show>
+              </Suspense>
             </AppInterface>
           )}
         </Show>
@@ -98,6 +102,7 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
       <AppBaseProviders
         locale={locale.latest}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
+        onThemeApplied={() => void props.api.themeReady()}
       >
         <Show when={true}>{(_) => <ReadyApp />}</Show>
       </AppBaseProviders>

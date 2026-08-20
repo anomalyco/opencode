@@ -28,7 +28,7 @@ const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
-  route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
+  route: OpenAIChat.route,
 })
 let requests: LLMRequest[] = []
 const client = Layer.mock(LLMClient.Service)({

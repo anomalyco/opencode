@@ -73,7 +73,7 @@ describe("Open Responses-compatible route", () => {
       expect(prepared.body.input).toEqual([
         { role: "user", content: [{ type: "input_text", text: "Before." }] },
         { role: "developer", content: "Operator update." },
-        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "After." }] },
       ])
     }),
   )
@@ -113,8 +113,64 @@ describe("Open Responses-compatible route", () => {
       )
 
       expect(prepared.body).toMatchObject({
-        input: [{ role: "assistant", content: [{ type: "output_text", text: "Unclassified." }] }],
+        input: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Unclassified." }] }],
       })
+    }),
+  )
+
+  it.effect("preserves standard refusal content as ordinary assistant text", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Unsafe request" })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                output_index: 0,
+                item: { type: "message", id: "msg_refusal", content: [] },
+              },
+              {
+                type: "response.refusal.done",
+                item_id: "msg_refusal",
+                refusal: "I can't help with that.",
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: {
+                  type: "message",
+                  id: "msg_refusal",
+                  content: [{ type: "refusal", refusal: "I can't help with that." }],
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "I can't help with that.",
+          providerMetadata: { openresponses: { itemId: "msg_refusal" } },
+        },
+      ])
+
+      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(prepared.body.input).toEqual([
+        {
+          type: "message",
+          id: "msg_refusal",
+          role: "assistant",
+          content: [{ type: "output_text", text: "I can't help with that." }],
+        },
+      ])
     }),
   )
 
@@ -126,6 +182,10 @@ describe("Open Responses-compatible route", () => {
         providerOptions: {
           reasoningEffort: "low",
           store: true,
+          metadata: { environment: "test" },
+          safetyIdentifier: "user_123",
+          streamOptions: { includeObfuscation: false },
+          topLogprobs: 3,
           truncation: "auto",
           allowedTools: { toolNames: ["lookup"] },
           maxToolCalls: 2,
@@ -136,6 +196,7 @@ describe("Open Responses-compatible route", () => {
         LLM.request({
           model,
           prompt: "Think.",
+          generation: { presencePenalty: 0.2, frequencyPenalty: -0.1 },
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       )
@@ -143,6 +204,12 @@ describe("Open Responses-compatible route", () => {
       expect(prepared.body).toMatchObject({
         reasoning: { effort: "low" },
         store: true,
+        metadata: { environment: "test" },
+        safety_identifier: "user_123",
+        stream_options: { include_obfuscation: false },
+        top_logprobs: 3,
+        presence_penalty: 0.2,
+        frequency_penalty: -0.1,
         truncation: "auto",
         tool_choice: {
           type: "allowed_tools",

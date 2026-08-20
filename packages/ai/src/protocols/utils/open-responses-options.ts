@@ -47,9 +47,17 @@ export const AllowedTools = Schema.Struct({
 })
 export type AllowedTools = typeof AllowedTools.Type
 
+export const StreamOptions = Schema.Struct({
+  includeObfuscation: Schema.optional(Schema.Boolean),
+})
+
 export const Options = Schema.Struct({
   instructions: Schema.optional(Schema.String),
   store: Schema.optional(Schema.Boolean),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  safetyIdentifier: Schema.optional(Schema.String),
+  streamOptions: Schema.optional(StreamOptions),
+  topLogprobs: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 20 }))),
   reasoningEffort: Schema.optional(ReasoningEffort),
   reasoningSummary: Schema.optional(Schema.Literals(["auto", "concise", "detailed"])),
   include: Schema.optional(Schema.Array(ResponseIncludableSchema)),

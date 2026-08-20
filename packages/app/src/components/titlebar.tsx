@@ -241,7 +241,11 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                     sessionId: activeSession.id,
                   }
                   const model = tabs.stateValue<PromptSession>(sessionTab, "prompt")?.model.current()
-                  tabs.newDraft({ server: sessionTab.server, directory: activeSession.location.directory }, "", model)
+                  void tabs.newDraft(
+                    { server: sessionTab.server, directory: activeSession.location.directory },
+                    "",
+                    model,
+                  )
                   return
                 }
                 case "draft": {
@@ -249,7 +253,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   if (activeTab?.type !== "draft") return
 
                   const model = tabs.stateValue<PromptSession>(activeTab, "prompt")?.model.current()
-                  tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
+                  void tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
                   return
                 }
                 case "home": {
@@ -263,7 +267,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                     projects?.list().find((item) => item.worktree === projects.last()) ??
                     projects?.list()[0]
                   if (conn && project) {
-                    tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                    void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
                     return
                   }
                 }
@@ -467,11 +471,14 @@ function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () =
     )
   }
 
+  const label = channel && ["local", "beta", "dev"].includes(channel) ? channel.toUpperCase() : undefined
   return (
-    <Show when={["local", "beta", "dev"].includes(channel)}>
-      <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-        {channel.toUpperCase()}
-      </div>
+    <Show when={label}>
+      {(value) => (
+        <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
+          {value()}
+        </div>
+      )}
     </Show>
   )
 }

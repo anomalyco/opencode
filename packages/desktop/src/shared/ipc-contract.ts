@@ -50,6 +50,7 @@ export const Ipc = {
   },
   window: {
     getId: "get-window-id",
+    themeReady: "window-theme-ready",
     getFocused: "get-window-focused",
     getFullscreen: "get-window-fullscreen",
     fullscreenChanged: "window-fullscreen-changed",
@@ -75,6 +76,7 @@ export const Ipc = {
     state: "updater-state",
   },
   wsl: {
+    awaitInitialization: "wsl-servers-await-initialization",
     subscribe: "wsl-servers-subscribe",
     unsubscribe: "wsl-servers-unsubscribe",
     getState: "wsl-servers-get-state",
@@ -178,6 +180,7 @@ export type IpcInvoke = {
   [Ipc.files.readClipboardImage]: { args: []; result: ClipboardImage | null }
 
   [Ipc.window.getId]: { args: []; result: string }
+  [Ipc.window.themeReady]: { args: []; result: void }
   [Ipc.window.getFocused]: { args: []; result: boolean }
   [Ipc.window.getFullscreen]: { args: []; result: boolean }
   [Ipc.window.setFocus]: { args: []; result: void }
@@ -194,6 +197,7 @@ export type IpcInvoke = {
   [Ipc.updater.check]: { args: []; result: UpdaterState }
   [Ipc.updater.install]: { args: []; result: void }
 
+  [Ipc.wsl.awaitInitialization]: { args: []; result: void }
   [Ipc.wsl.subscribe]: { args: []; result: void }
   [Ipc.wsl.unsubscribe]: { args: []; result: void }
   [Ipc.wsl.getState]: { args: []; result: WslServersState }

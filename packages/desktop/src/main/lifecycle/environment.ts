@@ -35,11 +35,11 @@ export function configureApplication() {
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
   const appID = app.isPackaged ? appIDs[CHANNEL] : "ai.opencode.desktop.dev"
-  const onboardingRoot = createOnboardingTestRoot()
+  const testRoot = createTestRoot()
   app.setName(app.isPackaged ? appNames[CHANNEL] : "OpenCode Dev")
   app.setAppUserModelId(appID)
-  app.setPath("userData", onboardingRoot ? join(onboardingRoot, "desktop") : join(app.getPath("appData"), appID))
-  if (onboardingRoot) app.setPath("sessionData", join(onboardingRoot, "session"))
+  app.setPath("userData", testRoot ? join(testRoot, "desktop") : join(app.getPath("appData"), appID))
+  if (testRoot) app.setPath("sessionData", join(testRoot, "session"))
 
   initializeFirstLaunchOnboarding(app.getPath("userData"))
   const logger = initLogging()
@@ -48,14 +48,15 @@ export function configureApplication() {
   logger.log("app starting", {
     version: VERSION,
     packaged: app.isPackaged,
-    onboardingTest: Boolean(onboardingRoot),
+    onboardingTest: testOnboarding,
   })
 
   loadProxyEnvironment(logger)
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
-  if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
+  if (!app.isPackaged)
+    app.commandLine.appendSwitch("remote-debugging-port", process.env.OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT ?? "9222")
   return logger
 }
 
@@ -88,7 +89,8 @@ export function prepareDesktop(logger: DesktopLogger) {
       ),
       Effect.catch((error) => Effect.sync(() => logger.warn("failed to clean scoped store files", error))),
     )
-    app.setAsDefaultProtocolClient("opencode")
+    if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
+      app.setAsDefaultProtocolClient("opencode")
     registerRendererProtocol()
     setDockIcon()
   })
@@ -105,14 +107,18 @@ export function loadProxyEnvironment(logger: DesktopLogger) {
   }
 }
 
-function createOnboardingTestRoot() {
-  if (!testOnboarding) return undefined
-  const root = join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
-  rmSync(root, { recursive: true, force: true })
+function createTestRoot() {
+  const root = testOnboarding
+    ? join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+    : app.isPackaged
+      ? undefined
+      : process.env.OPENCODE_DESKTOP_TEST_ROOT
+  if (!root) return undefined
+  if (testOnboarding) rmSync(root, { recursive: true, force: true })
   ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
     mkdirSync(join(root, dir), { recursive: true }),
   )
-  process.env.OPENCODE_DB = ":memory:"
+  if (testOnboarding) process.env.OPENCODE_DB = ":memory:"
   process.env.XDG_DATA_HOME = join(root, "data")
   process.env.XDG_CONFIG_HOME = join(root, "config")
   process.env.XDG_CACHE_HOME = join(root, "cache")

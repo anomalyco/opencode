@@ -139,6 +139,48 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("keeps system updates separate from function responses", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "done", resultType: "text" }),
+            Message.system("Update."),
+            Message.system("Later update."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [{ functionCall: { id: undefined, name: "lookup", args: { query: "weather" } } }],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                id: undefined,
+                name: "lookup",
+                response: { name: "lookup", content: "done" },
+              },
+            },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            { text: "<system-update>\nUpdate.\n</system-update>" },
+            { text: "<system-update>\nLater update.\n</system-update>" },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("prepares multimodal user input and tool history", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

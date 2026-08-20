@@ -6,21 +6,22 @@ import { getLogger } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { getStore } from "../storage/store"
 import { createUpdaterController, type UpdaterController, type UpdaterReadyRecord } from "./controller"
-import { createUpdaterPlatform } from "./platform"
 
 const key = "ready"
 
-export function setupAutoUpdater(prepareToRestart: () => Promise<void>) {
+export async function setupAutoUpdater(prepareToRestart: () => Promise<void>) {
   const logger = getLogger()
   const store = getStore("opencode.updater")
+  const platform = UPDATER_ENABLED ? (await import("./platform")).createUpdaterPlatform(logger) : undefined
   return createUpdaterController({
     currentVersion: app.getVersion(),
-    platform: UPDATER_ENABLED ? createUpdaterPlatform(logger) : undefined,
+    platform,
     lifecycle: { prepareToRestart },
     persistence: {
       get() {
         const value = store.get(key)
-        if (!value || typeof value !== "object" || !("version" in value) || typeof value.version !== "string") return
+        if (!value || typeof value !== "object" || !("version" in value) || typeof value.version !== "string")
+          return undefined
         return { version: value.version } satisfies UpdaterReadyRecord
       },
       set: (value) => store.set(key, value),

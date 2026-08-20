@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { rmSync } from "node:fs"
 import { join } from "node:path"
 import { app, BrowserWindow } from "electron"
+import { writeLog } from "../native/logging"
 import { removeStoreFile, getStore } from "../storage/store"
 import { WINDOW_IDS_KEY } from "../storage/keys"
 import {
@@ -23,6 +24,7 @@ import { wireWindowRecovery } from "./recovery"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
 const windowIDs = new WeakMap<BrowserWindow, string>()
+const themeReady = new WeakMap<BrowserWindow, () => void>()
 const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
@@ -68,6 +70,10 @@ export function getLastFocusedWindow() {
   return win
 }
 
+export function setWindowThemeReady(win: BrowserWindow) {
+  themeReady.get(win)?.()
+}
+
 export function restoreMainWindows() {
   const ids = registry.persisted()
   return (ids.length ? ids : [randomUUID()]).map((id) => createMainWindow(id))
@@ -92,16 +98,28 @@ export function createMainWindow(id: string = randomUUID()) {
   state.manage(win)
   registerWindow(win, id)
   wireFullscreen(win)
-  loadWindow(win, "index.html")
   wireZoom(win)
+  let contentReady = false
+  let appliedTheme = false
   let revealed = false
   const reveal = () => {
-    if (revealed || win.isDestroyed()) return
+    if (!contentReady || !appliedTheme || revealed || win.isDestroyed()) return
     revealed = true
     win.show()
+    writeLog("window", "main window visible", { window: id })
   }
-  win.once("ready-to-show", reveal)
-  if (process.platform === "linux") win.webContents.once("did-finish-load", reveal)
+  const ready = () => {
+    contentReady = true
+    reveal()
+  }
+  themeReady.set(win, () => {
+    appliedTheme = true
+    reveal()
+  })
+  win.once("ready-to-show", ready)
+  if (process.platform === "linux") win.webContents.once("did-finish-load", ready)
+  win.once("closed", () => themeReady.delete(win))
+  loadWindow(win, "index.html")
   return win
 }
 

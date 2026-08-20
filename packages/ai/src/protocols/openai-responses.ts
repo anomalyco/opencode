@@ -42,6 +42,8 @@ const OpenAIResponsesToolChoice = Schema.Union([
 
 const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({
+    type: Schema.tag("message"),
+    id: Schema.optionalKey(Schema.String),
     role: Schema.tag("assistant"),
     content: Schema.Array(Schema.Struct({ type: Schema.tag("output_text"), text: Schema.String })),
     phase: Schema.optionalKey(Schema.NullOr(OpenResponses.MessagePhase)),

@@ -270,21 +270,20 @@ describe("request option precedence", () => {
     ),
   )
 
-  it.effect("uses model output limits after route limits and before call maxTokens", () =>
+  it.effect("uses the Anthropic default before call maxTokens", () =>
     Effect.gen(function* () {
       const route = AnthropicMessages.route.with({
         endpoint: { baseURL: "https://api.anthropic.test/v1/" },
         auth: Auth.header("x-api-key", "test"),
-        limits: { output: 128 },
       })
-      const model = route.model({ id: "claude-sonnet-4-5", defaults: { limits: { output: 64 } } })
+      const model = route.model({ id: "claude-sonnet-4-5" })
       const withoutMaxTokens = yield* compileRequest(LLM.request({ model, prompt: "Say hello.", cache: "none" }))
       const withMaxTokens = yield* compileRequest(
-        LLM.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 32 } }),
+        LLM.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 8_000 } }),
       )
 
-      expect(withoutMaxTokens.body.max_tokens).toBe(64)
-      expect(withMaxTokens.body.max_tokens).toBe(32)
+      expect(withoutMaxTokens.body.max_tokens).toBe(32_000)
+      expect(withMaxTokens.body.max_tokens).toBe(8_000)
     }),
   )
 })

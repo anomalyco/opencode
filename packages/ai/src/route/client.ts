@@ -16,7 +16,6 @@ import {
   LLMRequest,
   LLMResponse,
   LanguageModel,
-  LanguageModelLimits,
   LLMEvent,
   InvalidProviderOutputReason,
   ProviderID,
@@ -74,7 +73,6 @@ export type RouteRoutedLanguageModelInput = Omit<LanguageModel.Input, "route">
 
 export interface RouteDefaults {
   readonly headers?: Record<string, string>
-  readonly limits?: LanguageModelLimits
   readonly generation?: GenerationOptions
   readonly providerOptions?: ProviderOptions
   readonly http?: HttpOptions
@@ -82,7 +80,6 @@ export interface RouteDefaults {
 
 export interface RouteDefaultsInput {
   readonly headers?: Record<string, string>
-  readonly limits?: LanguageModelLimits.Input
   readonly generation?: GenerationOptions.Input
   readonly providerOptions?: ProviderOptions
   readonly http?: HttpOptions.Input
@@ -119,7 +116,6 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
     ...base,
     ...patch,
     headers,
-    limits: patch.limits === undefined ? base?.limits : LanguageModelLimits.make(patch.limits),
     generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
     providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
     http: mergeHttpOptions(

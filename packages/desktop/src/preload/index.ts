@@ -34,29 +34,36 @@ const updaterHandler = (state: UpdaterState) => {
   updaterState = state
   updaterCallbacks.forEach((callback) => callback(state))
 }
+type WslInvoke = Exclude<
+  (typeof Ipc.wsl)[keyof typeof Ipc.wsl],
+  typeof Ipc.wsl.awaitInitialization | typeof Ipc.wsl.event
+>
+function invokeWsl<Channel extends WslInvoke>(channel: Channel, ...args: IpcInvokeArgs<Channel>) {
+  return invoke(Ipc.wsl.awaitInitialization).then(() => invoke(channel, ...args))
+}
 
 const api: ElectronAPI = {
   awaitInitialization: () => invoke(Ipc.app.awaitInitialization),
   wslServers: {
-    getState: () => invoke(Ipc.wsl.getState),
+    getState: () => invokeWsl(Ipc.wsl.getState),
     subscribe: (cb) => {
       const dispose = listen(Ipc.wsl.event, cb)
-      void invoke(Ipc.wsl.subscribe)
+      const subscribed = invokeWsl(Ipc.wsl.subscribe)
       return () => {
         dispose()
-        void invoke(Ipc.wsl.unsubscribe)
+        void subscribed.then(() => invokeWsl(Ipc.wsl.unsubscribe))
       }
     },
-    probeRuntime: () => invoke(Ipc.wsl.probeRuntime),
-    refreshDistros: () => invoke(Ipc.wsl.refreshDistros),
-    installWsl: () => invoke(Ipc.wsl.installWsl),
-    installDistro: (name) => invoke(Ipc.wsl.installDistro, name),
-    probeAddable: (distros) => invoke(Ipc.wsl.probeAddable, distros),
-    installOpencode: (name) => invoke(Ipc.wsl.installOpencode, name),
-    openTerminal: (name) => invoke(Ipc.wsl.openTerminal, name),
-    addServer: (distro) => invoke(Ipc.wsl.addServer, distro),
-    removeServer: (id) => invoke(Ipc.wsl.removeServer, id),
-    startServer: (id) => invoke(Ipc.wsl.startServer, id),
+    probeRuntime: () => invokeWsl(Ipc.wsl.probeRuntime),
+    refreshDistros: () => invokeWsl(Ipc.wsl.refreshDistros),
+    installWsl: () => invokeWsl(Ipc.wsl.installWsl),
+    installDistro: (name) => invokeWsl(Ipc.wsl.installDistro, name),
+    probeAddable: (distros) => invokeWsl(Ipc.wsl.probeAddable, distros),
+    installOpencode: (name) => invokeWsl(Ipc.wsl.installOpencode, name),
+    openTerminal: (name) => invokeWsl(Ipc.wsl.openTerminal, name),
+    addServer: (distro) => invokeWsl(Ipc.wsl.addServer, distro),
+    removeServer: (id) => invokeWsl(Ipc.wsl.removeServer, id),
+    startServer: (id) => invokeWsl(Ipc.wsl.startServer, id),
   },
   updater: {
     subscribe: async (cb) => {
@@ -100,6 +107,7 @@ const api: ElectronAPI = {
   draftBlobGet: (id) => invoke(Ipc.drafts.getBlob, id),
 
   getWindowID: () => invoke(Ipc.window.getId),
+  themeReady: () => invoke(Ipc.window.themeReady),
   onMenuCommand: (cb) => listen(Ipc.menu.command, cb),
   onDeepLink: (cb) => listen(Ipc.app.deepLink, cb),
 

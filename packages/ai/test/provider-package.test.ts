@@ -43,7 +43,6 @@ describe("provider package entrypoints", () => {
       baseURL: "https://provider.example.test/v1",
       headers: { "x-application": "opencode" },
       body: { service_tier: "priority" },
-      limits: { context: 200_000, output: 64_000 },
     }
     const openrouter = OpenRouter.model("anthropic/claude-sonnet-4", {
       ...settings,
@@ -58,7 +57,6 @@ describe("provider package entrypoints", () => {
       expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
       expect(selected.route.defaults.headers).toEqual(settings.headers)
       expect(selected.route.defaults.http?.body).toEqual(settings.body)
-      expect(selected.route.defaults.limits).toEqual(settings.limits)
     }
     expect(openrouter.route.defaults.providerOptions).toEqual({ usage: true })
     expect(xai.route.defaults.providerOptions).toMatchObject({ reasoningEffort: "high", store: false })
@@ -70,14 +68,12 @@ describe("provider package entrypoints", () => {
       baseURL: "https://api.openai.test/v1",
       headers: { "x-application": "opencode" },
       body: { service_tier: "priority" },
-      limits: { context: 200_000, output: 64_000 },
       unrelatedInheritedSetting: true,
     })
 
     expect(selected.route.id).toBe("openai-responses")
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ service_tier: "priority" })
-    expect(selected.route.defaults.limits).toEqual({ context: 200_000, output: 64_000 })
   })
 
   test("maps OpenAI-compatible Responses settings onto the executable model", async () => {
@@ -88,7 +84,6 @@ describe("provider package entrypoints", () => {
       provider: "example",
       headers: { "x-application": "opencode" },
       body: { service_tier: "priority" },
-      limits: { context: 200_000, output: 64_000 },
       providerOptions: { reasoningEffort: "low", store: true },
     })
 
@@ -100,7 +95,6 @@ describe("provider package entrypoints", () => {
     })
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ service_tier: "priority" })
-    expect(selected.route.defaults.limits).toEqual({ context: 200_000, output: 64_000 })
     expect(selected.route.defaults.providerOptions).toEqual({ reasoningEffort: "low", store: true })
   })
 
@@ -112,7 +106,6 @@ describe("provider package entrypoints", () => {
       provider: "example",
       headers: { "x-application": "opencode" },
       body: { metadata: { user_id: "user_1" } },
-      limits: { context: 200_000, output: 64_000 },
       providerOptions: { effort: "low" },
     })
 
@@ -124,7 +117,6 @@ describe("provider package entrypoints", () => {
     })
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ metadata: { user_id: "user_1" } })
-    expect(selected.route.defaults.limits).toEqual({ context: 200_000, output: 64_000 })
     expect(selected.route.defaults.providerOptions).toEqual({ effort: "low" })
   })
 
@@ -185,7 +177,6 @@ describe("provider package entrypoints", () => {
       resourceName: "opencode-test",
       headers: { "x-application": "opencode" },
       body: { service_tier: "priority" },
-      limits: { context: 200_000, output: 64_000 },
     }
 
     const responses = AzureResponses.model("deployment", settings)
@@ -196,7 +187,6 @@ describe("provider package entrypoints", () => {
     expect(responses.route.endpoint.baseURL).toBe("https://opencode-test.openai.azure.com/openai/v1")
     expect(responses.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(responses.route.defaults.http?.body).toEqual({ service_tier: "priority" })
-    expect(responses.route.defaults.limits).toEqual({ context: 200_000, output: 64_000 })
     expect(chat.route.id).toBe("azure-openai-chat")
   })
 
@@ -228,7 +218,6 @@ describe("provider package entrypoints", () => {
       baseURL: "https://generativelanguage.test/v1beta",
       headers: { "x-application": "opencode" },
       body: { safetySettings: [] },
-      limits: { context: 1_000_000, output: 65_536 },
       providerOptions: { thinkingConfig: { thinkingBudget: 1_024 } },
     })
 
@@ -236,7 +225,6 @@ describe("provider package entrypoints", () => {
     expect(selected.route.endpoint.baseURL).toBe("https://generativelanguage.test/v1beta")
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ safetySettings: [] })
-    expect(selected.route.defaults.limits).toEqual({ context: 1_000_000, output: 65_536 })
     expect(selected.route.defaults.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
   })
 
@@ -250,7 +238,6 @@ describe("provider package entrypoints", () => {
       apiKey: "fixture",
       headers: { "x-application": "opencode" },
       body: { safetySettings: [] },
-      limits: { context: 1_000_000, output: 65_536 },
     })
     const messages = GoogleVertexMessages.model("claude-sonnet-4-6", {
       accessToken: "fixture",
@@ -274,7 +261,6 @@ describe("provider package entrypoints", () => {
     expect(gemini.route.endpoint.baseURL).toBe("https://aiplatform.googleapis.com/v1/publishers/google")
     expect(gemini.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(gemini.route.defaults.http?.body).toEqual({ safetySettings: [] })
-    expect(gemini.route.defaults.limits).toEqual({ context: 1_000_000, output: 65_536 })
     expect(
       GoogleVertex.model("gemini-3.5-flash", {
         accessToken: "fixture",

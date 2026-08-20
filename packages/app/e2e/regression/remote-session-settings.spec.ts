@@ -19,7 +19,7 @@ test("session settings use the remote server context", async ({ page }) => {
   await configureServers(page)
 
   await page.goto(`/server/${base64Encode(serverB)}/session/${sessionB.id}`)
-  await expect(page.getByText(sessionB.title).first()).toBeVisible()
+  await expect(page.getByRole("heading", { name: sessionB.title, exact: true })).toBeVisible()
   await page.keyboard.press("Control+,")
 
   const dialog = page.locator(".settings-v2-dialog")
@@ -61,7 +61,7 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
 
   const hrefB = `/server/${base64Encode(serverB)}/session/${sessionB.id}`
   await page.goto(`/server/${base64Encode(serverA)}/session/${sessionA.id}`)
-  await expect(page.getByText(sessionA.title).first()).toBeVisible()
+  await expect(page.getByRole("heading", { name: sessionA.title, exact: true })).toBeVisible()
   await page.keyboard.press("Control+,")
   const autoAccept = page.locator(".settings-v2-dialog").locator('[data-action="settings-auto-accept-permissions"]')
   await autoAccept.locator('[data-slot="switch-control"]').click()
@@ -78,7 +78,7 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
 
   await page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefB}"])`).click()
   await expect(page).toHaveURL(new RegExp(`${hrefB.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
-  await expect(page.getByText(sessionB.title).first()).toBeVisible()
+  await expect(page.getByRole("heading", { name: sessionB.title, exact: true })).toBeVisible()
   await transport.waitForConnection()
 
   await transport.send({
@@ -208,7 +208,7 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
       return json(route, [
         {
           id: remote ? sessionB.projectID : "project-server-a",
-          worktree: directory,
+          canonical: directory,
           vcs: "git",
           time: { created: 1, updated: 1 },
           sandboxes: [],
@@ -216,7 +216,7 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
       ])
     }
     if (url.pathname === "/api/project/current")
-      return json(route, { id: remote ? sessionB.projectID : "project-server-a", directory })
+      return json(route, { id: remote ? sessionB.projectID : "project-server-a", directory, canonical: directory })
     if (url.pathname === "/api/session")
       return json(route, { data: sessions.map((session) => currentSession(session)), cursor: {} })
     if (url.pathname === "/api/session/active") return json(route, { data: {} })
@@ -237,7 +237,7 @@ function session(id: string, directory: string, title: string) {
     id,
     slug: id,
     projectID: `project-${id}`,
-    directory,
+    location: { directory },
     title,
     version: "dev",
     time: { created: 1, updated: 1 },

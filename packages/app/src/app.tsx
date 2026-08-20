@@ -1,12 +1,10 @@
 import "@/index.css"
-import * as Sentry from "@sentry/solid"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { File } from "@opencode-ai/session-ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
+import { type BaseRouterProps, Route, Router, useParams } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import {
   type Component,
@@ -20,30 +18,37 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
-import { CommentsProvider } from "@/context/comments"
-import { FileProvider } from "@/context/file"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, UiI18nBridge, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
-import { ModelsProvider } from "@/context/models"
 import { usePlatform } from "@/context/platform"
-import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServersProvider } from "@/context/servers"
 import { SettingsProvider } from "@/context/settings"
-import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
-import { LocationProvider } from "@/context/location"
+import { TabsProvider } from "@/context/tabs"
 import { WslServersProvider } from "@/wsl/context"
-import { SessionUIProvider } from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { requireServerKey } from "./utils/session-route"
 
-import { TargetSessionRouteContent } from "@/pages/session"
 import { Home } from "@/pages/home"
 import { ServerProvider } from "./context/server"
 
-const NewSession = lazy(() => import("@/pages/new-session"))
+const File = lazy(() => import("@opencode-ai/session-ui/file").then((module) => ({ default: module.File })))
+const loadDraftRoute = () => Promise.all([import("@/pages/draft-route"), File.preload()]).then(([module]) => module)
+const loadSessionRoute = () => Promise.all([import("@/pages/session"), File.preload()]).then(([module]) => module)
+const DraftRoute = lazy(() => loadDraftRoute().then((module) => ({ default: module.DraftRoute })))
+const TargetSessionRouteContent = lazy(() =>
+  loadSessionRoute().then((module) => ({ default: module.TargetSessionRouteContent })),
+)
+
+export function preloadRoute(url: string) {
+  const pathname = url.split(/[?#]/, 1)[0]
+  if (pathname === "/new-session") return DraftRoute.preload().then(() => undefined)
+  if (/^\/server\/[^/]+\/session\/[^/]+$/.test(pathname))
+    return TargetSessionRouteContent.preload().then(() => undefined)
+  return Promise.resolve()
+}
 
 function TargetServerRoute(props: ParentProps) {
   const params = useParams<{ serverKey: string }>()
@@ -56,45 +61,6 @@ function TargetServerRoute(props: ParentProps) {
     // Owns the server-identity remount. Session changes must not remount this subtree.
     <Show when={conn()} keyed>
       {(conn) => <ServerProvider conn={conn}>{props.children}</ServerProvider>}
-    </Show>
-  )
-}
-
-function DraftRoute() {
-  const [search] = useSearchParams<{ draftId?: string }>()
-  const tabs = useTabs()
-  return (
-    <Show
-      when={tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)}
-      keyed
-      fallback={tabs.ready() && <Navigate href="/" />}
-    >
-      {(draft) => <ResolvedDraftRoute draft={draft} />}
-    </Show>
-  )
-}
-
-function ResolvedDraftRoute(props: { draft: DraftTab }) {
-  const global = useGlobal()
-  const conn = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === props.draft.server))
-
-  return (
-    <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
-      <Show when={conn()} keyed>
-        {(conn) => (
-          <ServerProvider conn={conn}>
-            <ModelsProvider directory={props.draft.directory}>
-              <LocationProvider directory={props.draft.directory}>
-                <SessionUIProvider directory={props.draft.directory} server={props.draft.server}>
-                  <DraftProviders>
-                    <NewSession draftId={props.draft.draftID} />
-                  </DraftProviders>
-                </SessionUIProvider>
-              </LocationProvider>
-            </ModelsProvider>
-          </ServerProvider>
-        )}
-      </Show>
     </Show>
   )
 }
@@ -167,22 +133,11 @@ function AppLayout(props: ParentProps) {
   )
 }
 
-// The draft page only renders the prompt composer, so it drops TerminalProvider.
-// FileProvider and CommentsProvider stay because PromptInput uses file search and comment context.
-function DraftProviders(props: ParentProps) {
-  return (
-    <FileProvider>
-      <PromptProvider>
-        <CommentsProvider>{props.children}</CommentsProvider>
-      </PromptProvider>
-    </FileProvider>
-  )
-}
-
 export function AppBaseProviders(
   props: ParentProps<{
     locale?: Locale
     onNativeTranslations?: Parameters<typeof LanguageProvider>[0]["onNativeTranslations"]
+    onThemeApplied?: () => void
   }>,
 ) {
   return (
@@ -191,13 +146,14 @@ export function AppBaseProviders(
       <ThemeProvider
         onThemeApplied={(_, mode, scheme) => {
           void window.api?.setTitlebar?.({ mode, scheme })
+          props.onThemeApplied?.()
         }}
       >
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>
           <UiI18nBridge>
             <ErrorBoundary
               fallback={(error) => {
-                Sentry.captureException(error)
+                void import("@sentry/solid").then(({ captureException }) => captureException(error))
                 return <ErrorPage error={error} />
               }}
             >

@@ -1,13 +1,14 @@
-import { Show, Suspense, type ParentProps } from "solid-js"
+import { lazy, Show, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DebugBar } from "@/components/debug-bar"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
 import { ToastRegion } from "@/utils/toast"
 
+const DebugBar = lazy(() => import("@/components/debug-bar").then((module) => ({ default: module.DebugBar })))
+
 export default function Layout(props: ParentProps) {
   const platform = usePlatform()
-  const [state, setState] = createStore({ debugTools: true })
+  const [state, setState] = createStore({ debugTools: false })
 
   const update: TitlebarUpdate = {
     get version() {
@@ -41,7 +42,9 @@ export default function Layout(props: ParentProps) {
         <Suspense>{props.children}</Suspense>
       </main>
       <Show when={import.meta.env.DEV && state.debugTools}>
-        <DebugBar inline />
+        <Suspense>
+          <DebugBar inline />
+        </Suspense>
       </Show>
       <ToastRegion />
     </div>

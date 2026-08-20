@@ -200,6 +200,5 @@ export const model: ProviderPackage.Definition<Settings, OpenRouterProviderOptio
     baseURL: settings.baseURL,
     headers: settings.headers,
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
     providerOptions: settings.providerOptions,
   }).model(modelID)

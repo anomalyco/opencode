@@ -81,7 +81,6 @@ type Dictionary = Record<string, string>
 type Drift = ReturnType<typeof findDrift>
 type Domain = { name: string; source: string; target: string; drift: Drift }
 
-const desktopLocales = new Set<Locale>(locales)
 const root = path.resolve(import.meta.dir, "..")
 
 export function parseTranslationArgs(args: string[]) {
@@ -116,11 +115,7 @@ export function parseTranslationArgs(args: string[]) {
 }
 
 export function targetFiles(locale: Locale) {
-  return [
-    `packages/app/src/i18n/${locale}.ts`,
-    `packages/ui/src/i18n/${locale}.ts`,
-    ...(desktopLocales.has(locale) ? [`packages/desktop/src/renderer/i18n/${locale}.ts`] : []),
-  ]
+  return [`packages/app/src/i18n/${locale}.ts`, `packages/ui/src/i18n/${locale}.ts`]
 }
 
 export function glossaryFile(locale: Locale) {

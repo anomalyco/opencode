@@ -2,7 +2,6 @@ import { MainLogger } from "electron-log"
 import log from "electron-log/main.js"
 import { app, crashReporter, netLog, shell } from "electron"
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
-import { ZipWriter, BlobWriter, BlobReader } from "@zip.js/zip.js"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
 import { VERSION } from "../constants"
@@ -185,6 +184,7 @@ function collect(dir: string, prefix: string): Entry[] {
 }
 
 async function writeZip(output: string, entries: Entry[]) {
+  const { BlobReader, BlobWriter, ZipWriter } = await import("@zip.js/zip.js")
   const writer = new ZipWriter(new BlobWriter("application/zip"))
   for (const entry of entries) {
     const data = entry.data ?? readFileSync(entry.path!)

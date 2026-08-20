@@ -309,7 +309,7 @@ Included providers: OpenAI, Anthropic, Google (Gemini), Google Vertex Gemini and
 
 ### Package-like entrypoints
 
-Native catalog integrations load provider behavior through package-like entrypoints. These are export paths from the same `@opencode-ai/ai` npm package, not independently published packages. Each entrypoint exports the same `model(modelID, settings)` contract, and `settings` contains serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
+Native catalog integrations load provider behavior through package-like entrypoints. These are export paths from the same `@opencode-ai/ai` npm package, not independently published packages. Each entrypoint exports the same `model(modelID, settings)` contract, and `settings` contains serializable provider configuration plus common `headers` and `body` overlays.
 
 ```ts
 import { model } from "@opencode-ai/ai/providers/openai/responses"
@@ -317,7 +317,6 @@ import { model } from "@opencode-ai/ai/providers/openai/responses"
 const selected = model("gpt-5", {
   apiKey: process.env.OPENAI_API_KEY,
   headers: { "x-application": "opencode" },
-  limits: { context: 200_000, output: 64_000 },
 })
 ```
 

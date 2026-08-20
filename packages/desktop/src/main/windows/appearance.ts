@@ -5,7 +5,7 @@ import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
 import { join } from "node:path"
 import { Ipc, sendIpcEvent, type TitlebarTheme } from "../../shared/ipc-contract"
 import { developmentResourcesRoot, preloadPath } from "../paths"
-import { PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
+import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 
 const oc2Theme = oc2ThemeJson as DesktopTheme
@@ -22,10 +22,12 @@ let backgroundColor: string | undefined
 
 export function windowAppearance() {
   const mode = tone()
+  const storedBackground = getStore().get(BACKGROUND_COLOR_KEY)
   return {
     title: "OpenCode",
     icon: iconPath(),
-    backgroundColor: backgroundColor ?? oc2Background[mode],
+    backgroundColor:
+      backgroundColor ?? (typeof storedBackground === "string" ? storedBackground : undefined) ?? oc2Background[mode],
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hidden" as const,
@@ -56,6 +58,7 @@ export function setDockIcon() {
 
 export function setBackgroundColor(color: string) {
   backgroundColor = color
+  getStore().set(BACKGROUND_COLOR_KEY, color)
   BrowserWindow.getAllWindows().forEach((win) => {
     win.setBackgroundColor(color)
     if (process.platform === "darwin") win.invalidateShadow()
@@ -63,7 +66,8 @@ export function setBackgroundColor(color: string) {
 }
 
 export function getBackgroundColor() {
-  return backgroundColor
+  const stored = getStore().get(BACKGROUND_COLOR_KEY)
+  return backgroundColor ?? (typeof stored === "string" ? stored : undefined)
 }
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {

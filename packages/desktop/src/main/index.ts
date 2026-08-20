@@ -2,7 +2,12 @@ import { app } from "electron"
 import { Deferred, Effect, Fiber } from "effect"
 import type { ServerReadyData } from "../shared/ipc-contract"
 import { checkAppExists, resolveAppPath } from "./files/apps"
-import { registerIpcHandlers, registerUpdaterIpcHandlers, registerWslIpcHandlers } from "./ipc"
+import {
+  registerIpcHandlers,
+  registerUpdaterIpcHandlers,
+  registerWslInitialization,
+  registerWslIpcHandlers,
+} from "./ipc"
 import {
   acquireApplicationLock,
   configureApplication,
@@ -26,13 +31,17 @@ const main = Effect.gen(function* () {
   const logger = configureApplication()
   if (!acquireApplicationLock()) return
   preferApplicationEnvironment(logger)
+  loadProxyEnvironment(logger)
   const lifecycle = createApplicationLifecycle(logger)
   const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
+  const wslReady = Promise.withResolvers<void>()
+  logger.log("starting v2 background service")
+  const backgroundTask = yield* Effect.promise(() => startBackgroundCli(logger)).pipe(Effect.forkChild)
 
   yield* Effect.promise(() => app.whenReady())
   yield* prepareDesktop(logger)
 
-  const updater = setupAutoUpdater(lifecycle.prepareToRestart)
+  const updater = yield* Effect.promise(() => setupAutoUpdater(lifecycle.prepareToRestart))
   const menu = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
@@ -68,27 +77,35 @@ const main = Effect.gen(function* () {
     },
   })
   registerUpdaterIpcHandlers(createUpdaterIpc(updater))
+  registerWslInitialization(wslReady.promise)
   startAutoUpdater(updater)
   yield* Effect.promise(() => startNetworkLogging())
 
   const loadingTask = yield* Effect.gen(function* () {
-    loadProxyEnvironment(logger)
-    logger.log("starting v2 background service")
-    const background = yield* Effect.promise(() => startBackgroundCli(logger))
-    const wsl = yield* Effect.promise(() => startWsl(background, logger))
-    registerWslIpcHandlers(wsl.ipc)
-    wsl.start()
-    lifecycle.setWslShutdown(wsl.stop)
+    const background = yield* Fiber.join(backgroundTask)
     yield* Deferred.succeed(serverReady, {
       url: background.url,
       username: background.username,
       password: background.password,
     })
     logger.log("loading task finished")
+
+    void startWsl(background, logger).then(
+      (wsl) => {
+        registerWslIpcHandlers(wsl.ipc)
+        lifecycle.setWslShutdown(wsl.stop)
+        wsl.start()
+        wslReady.resolve()
+      },
+      (error) => {
+        logger.error("failed to start WSL manager", { error })
+        wslReady.reject(error)
+      },
+    )
   }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)
 
-  yield* Fiber.await(loadingTask)
   if (lifecycle.restoreWindows().length) createMenu(menu)
+  yield* Fiber.await(loadingTask)
 })
 
 Effect.runFork(main)

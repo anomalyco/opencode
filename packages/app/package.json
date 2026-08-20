@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./desktop": "./src/desktop.ts",
     "./desktop-menu": "./src/desktop-menu.ts",
     "./i18n/desktop-native": "./src/i18n/desktop-native.ts",
     "./updater": "./src/updater.ts",
@@ -28,14 +29,15 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report e2e/playwright-report",
     "test:stability": "bun test ./e2e/performance/unit/visual-stability.test.ts && playwright test --config e2e/performance/timeline-stability/playwright.config.ts",
-    "test:bench": "bun test ./e2e/performance/unit && playwright test --config e2e/performance/playwright.config.ts"
+    "test:bench": "bun test ./e2e/performance/unit && playwright test --config e2e/performance/playwright.config.ts",
+    "test:bench:devex": "bun test ./e2e/performance/unit/desktop-startup.test.ts && playwright test --config e2e/performance/devex/playwright.config.ts"
   },
   "license": "MIT",
   "devDependencies": {
     "@happy-dom/global-registrator": "20.0.11",
     "@playwright/test": "catalog:",
     "@sentry/vite-plugin": "catalog:",
-    "@tailwindcss/vite": "catalog:",
+    "@tailwindcss/vite": "4.3.3",
     "@tsconfig/bun": "1.0.9",
     "@types/bun": "catalog:",
     "@types/luxon": "catalog:",
@@ -44,9 +46,9 @@
     "happy-dom": "20.11.1",
     "tw-animate-css": "1.4.0",
     "typescript": "catalog:",
-    "vite": "catalog:",
+    "vite": "8.2.1",
     "vite-plugin-icons-spritesheet": "3.0.1",
-    "vite-plugin-solid": "catalog:"
+    "vite-plugin-solid": "2.11.14"
   },
   "dependencies": {
     "@corvu/drawer": "catalog:",
@@ -85,6 +87,6 @@
     "solid-js": "catalog:",
     "solid-list": "catalog:",
     "solid-presence": "0.2.0",
-    "tailwindcss": "catalog:"
+    "tailwindcss": "4.3.3"
   }
 }

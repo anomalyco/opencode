@@ -236,7 +236,6 @@ describe("ModelResolver", () => {
         endpoint: { baseURL: "https://openai.example/v1" },
         defaults: {
           headers: { "x-test": "header" },
-          limits: { context: 100, input: 80, output: 20 },
           http: { body: { custom_extension: { enabled: true } } },
         },
       })
@@ -785,7 +784,6 @@ describe("ModelResolver", () => {
                   region: "test",
                   headers: { "x-package": "header" },
                   body: { custom: true },
-                  limits: { context: 100, output: 20 },
                 })
                 return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
               },
@@ -913,7 +911,6 @@ describe("ModelResolver", () => {
                     baseURL: "https://provider.example/v1",
                     headers: { "x-provider": "header" },
                     body: { custom: true },
-                    limits: { context: 100, output: 20 },
                     providerOptions,
                   })
                   return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
