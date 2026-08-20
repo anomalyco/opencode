@@ -146,6 +146,22 @@ function globalConfigFile() {
   return candidates[0]
 }
 
+// Config discovery only reads opencode.json/opencode.jsonc, so an update has to
+// land in one of those. Prefer a file the project already has, otherwise create
+// opencode.json next to it.
+function projectConfigFile(dir: string) {
+  const candidates = [
+    path.join(dir, "opencode.jsonc"),
+    path.join(dir, "opencode.json"),
+    path.join(dir, ".opencode", "opencode.jsonc"),
+    path.join(dir, ".opencode", "opencode.json"),
+  ]
+  for (const file of candidates) {
+    if (existsSync(file)) return file
+  }
+  return path.join(dir, "opencode.json")
+}
+
 function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
   if (!isRecord(patch)) {
     const edits = modify(input, path, patch, {
@@ -623,7 +639,12 @@ const layer = Layer.effect(
 
     const update = Effect.fn("Config.update")(function* (config: Info) {
       const dir = yield* InstanceState.directory
-      const file = path.join(dir, "config.json")
+      const file = projectConfigFile(dir)
+      if (file.endsWith(".jsonc")) {
+        const before = (yield* readConfigFile(file)) ?? "{}"
+        yield* fs.writeFileString(file, patchJsonc(before, writable(config))).pipe(Effect.orDie)
+        return
+      }
       const existing = yield* loadFile(file)
       yield* fs
         .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))

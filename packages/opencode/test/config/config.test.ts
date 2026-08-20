@@ -358,15 +358,11 @@ it.instance(
 it.instance("updates config and preserves empty shell sentinel", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
-    yield* writeConfigEffect(
-      test.directory,
-      { $schema: "https://opencode.ai/config.json", shell: "bash" },
-      "config.json",
-    )
+    yield* writeConfigEffect(test.directory, { $schema: "https://opencode.ai/config.json", shell: "bash" })
 
     yield* Config.Service.use((svc) => svc.update(ConfigParse.schema(ConfigV1.Info, { shell: "" }, "test:config")))
 
-    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "config.json"))
+    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "opencode.json"))
     expect(writtenConfig).toMatchObject({ shell: "" })
   }),
 )
@@ -890,15 +886,48 @@ Nested command template`,
   }),
 )
 
-it.instance("updates config and writes to file", () =>
+it.instance("updates config into opencode.json when the project has no config file", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* Config.Service.use((svc) =>
       svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
     )
 
-    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "config.json"))
+    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "opencode.json"))
     expect(writtenConfig).toMatchObject({ model: "updated/model" })
+    expect(yield* FSUtil.use.existsSafe(path.join(test.directory, "config.json"))).toBe(false)
+  }),
+)
+
+it.instance("updates the config file the project already has", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const file = path.join(test.directory, ".opencode", "opencode.json")
+    yield* writeConfigEffect(path.join(test.directory, ".opencode"), { model: "old/model" })
+
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
+    )
+
+    expect(yield* FSUtil.use.readJson(file)).toMatchObject({ model: "updated/model" })
+    expect(yield* FSUtil.use.existsSafe(path.join(test.directory, "opencode.json"))).toBe(false)
+  }),
+)
+
+it.instance("updates opencode.jsonc in place and keeps its comments", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const file = path.join(test.directory, "opencode.jsonc")
+    yield* FSUtil.use.writeWithDirs(file, '{\n  // keep me\n  "model": "old/model"\n}\n')
+
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
+    )
+
+    const written = (yield* FSUtil.use.readFileStringSafe(file)) ?? ""
+    expect(written).toContain("// keep me")
+    expect(written).toContain('"model": "updated/model"')
+    expect(yield* FSUtil.use.existsSafe(path.join(test.directory, "opencode.json"))).toBe(false)
   }),
 )
 
