@@ -69,4 +69,9 @@ describe("parseDuration", () => {
     const result = run("0h0m59s")
     expect(Exit.isFailure(result)).toBe(true)
   })
+
+  it("huge magnitude → reject (overflow to Infinity)", () => {
+    const result = run(`${"9".repeat(400)}h`)
+    expect(Exit.isFailure(result)).toBe(true)
+  })
 })

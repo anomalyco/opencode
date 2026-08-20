@@ -17,6 +17,9 @@ export const parseDuration = (input: string): Effect.Effect<number, CronError> =
     const minutes = match[2] ? parseInt(match[2], 10) : 0
     const seconds = match[3] ? parseInt(match[3], 10) : 0
     const ms = (hours * 3600 + minutes * 60 + seconds) * 1000
+    if (!Number.isFinite(ms)) {
+      return yield* new CronError({ message: `Interval too large: "${input}".` })
+    }
     if (ms < MIN_INTERVAL_MS) {
       return yield* new CronError({ message: `Interval must be at least 1 minute (60s). Got: ${ms / 1000}s` })
     }
