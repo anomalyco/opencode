@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { ToolFailure } from "@opencode-ai/ai"
-import { Context, Effect, Exit, Fiber, Schema, Stream } from "effect"
+import { Context, DateTime, Effect, Exit, Fiber, Schema, Stream } from "effect"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Agent } from "@opencode-ai/core/agent"
@@ -14,6 +14,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Tool } from "@opencode-ai/core/tool"
+import { Money } from "@opencode-ai/schema/money"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -24,6 +25,57 @@ class Secret extends Context.Service<Secret, string>()("@opencode/test/PluginSec
 const versioned = <R>(plugin: EffectPlugin.Plugin<R>, version = "1") => ({ ...plugin, version })
 
 describe("Plugin", () => {
+  it.effect("exposes paginated session history reads", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const runtime = yield* PluginRuntime.Service
+      const location = yield* Location.Service
+      const parentID = Session.ID.make("ses_parent")
+      const child = (id: string, updated: number) =>
+        Session.Info.make({
+          id: Session.ID.make(id),
+          parentID,
+          projectID: location.project.id,
+          cost: Money.USD.make(0),
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: DateTime.makeUnsafe(updated), updated: DateTime.makeUnsafe(updated) },
+          location: Location.Ref.make({ directory: location.directory }),
+        })
+      const firstChild = child("ses_first", 1)
+      const secondChild = child("ses_second", 2)
+      const seen: unknown[] = []
+      const host = yield* PluginHost.make(plugins).pipe(
+        Effect.provideService(
+          PluginRuntime.Service,
+          PluginRuntime.Service.of({
+            ...runtime,
+            session: {
+              ...runtime.session,
+              list: (input) => {
+                seen.push(input)
+                return Effect.succeed({ data: [input?.anchor === undefined ? firstChild : secondChild] })
+              },
+              messages: (input) => {
+                seen.push(input)
+                return Effect.succeed([])
+              },
+            },
+          }),
+        ),
+      )
+
+      const first = yield* host.session.children({ sessionID: parentID, limit: 1 })
+      const second = yield* host.session.children({ sessionID: parentID, limit: 1, cursor: first.cursor.next })
+      const messages = yield* host.session.messages({ sessionID: parentID })
+
+      expect(first.data).toHaveLength(1)
+      expect(second.data).toHaveLength(1)
+      expect(second.data[0]?.id).not.toBe(first.data[0]?.id)
+      expect(messages.data).toEqual([])
+      expect(seen).toHaveLength(3)
+    }),
+  )
+
   it.live("exposes public events through the plugin context", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service

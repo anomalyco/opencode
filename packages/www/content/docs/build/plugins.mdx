@@ -192,22 +192,22 @@ Its read and action methods use the same inputs and responses as the client. It
 adds plugin-only methods for transforms, runtime hooks, reloads, registrations,
 and plugin options.
 
-| Capability             | Available operations                                                                         |
-| ---------------------- | -------------------------------------------------------------------------------------------- |
-| `ctx.agent`            | `list`, `get`, `transform`, `reload`                                                         |
-| `ctx.catalog.provider` | `list`, `get`                                                                                |
-| `ctx.catalog.model`    | `list`, `get`, `default`                                                                     |
-| `ctx.catalog`          | `transform`, `reload`                                                                        |
-| `ctx.command`          | `list`, `transform`, `reload`                                                                |
-| `ctx.integration`      | `list`, `get`, `connect`, `attempt`, `transform`, `reload`, and connection lookup/resolution |
-| `ctx.plugin`           | `list` currently active plugin IDs                                                           |
-| `ctx.reference`        | `list`, `transform`, `reload`                                                                |
-| `ctx.session`          | `create`, `get`, `prompt`, `command`, `rename`, `synthetic`, `interrupt`, `wait`, and `hook` |
-| `ctx.skill`            | `list`, `transform`, `reload`                                                                |
-| `ctx.tool`             | `transform` and `hook`                                                                       |
-| `ctx.aisdk`            | `hook`                                                                                       |
-| `ctx.event`            | `subscribe` to the current public server event stream                                        |
-| `ctx.options`          | Readonly options from the matching config object                                             |
+| Capability             | Available operations                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.agent`            | `list`, `get`, `transform`, `reload`                                                                                                     |
+| `ctx.catalog.provider` | `list`, `get`                                                                                                                            |
+| `ctx.catalog.model`    | `list`, `get`, `default`                                                                                                                 |
+| `ctx.catalog`          | `transform`, `reload`                                                                                                                    |
+| `ctx.command`          | `list`, `transform`, `reload`                                                                                                            |
+| `ctx.integration`      | `list`, `get`, `connect`, `attempt`, `transform`, `reload`, and connection lookup/resolution                                             |
+| `ctx.plugin`           | `list` currently active plugin IDs                                                                                                       |
+| `ctx.reference`        | `list`, `transform`, `reload`                                                                                                            |
+| `ctx.session`          | `list`, `children`, `messages`, `create`, `get`, `prompt`, `generate`, `command`, `rename`, `synthetic`, `interrupt`, `wait`, and `hook` |
+| `ctx.skill`            | `list`, `transform`, `reload`                                                                                                            |
+| `ctx.tool`             | `transform` and `hook`                                                                                                                   |
+| `ctx.aisdk`            | `hook`                                                                                                                                   |
+| `ctx.event`            | `subscribe` to the current public server event stream                                                                                    |
+| `ctx.options`          | Readonly options from the matching config object                                                                                         |
 
 ### Transform hooks
 

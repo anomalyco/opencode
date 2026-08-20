@@ -13,6 +13,7 @@ import { Session } from "../session.js"
 export interface Interface {
   readonly session: Pick<
     Session.Interface,
+    | "list"
     | "get"
     | "create"
     | "messages"
@@ -69,6 +70,7 @@ export const layerWithCell = (cell: Cell) =>
     Service,
     Service.of({
       session: {
+        list: (input) => require(cell, (runtime) => runtime.session.list(input)),
         get: (sessionID) => require(cell, (runtime) => runtime.session.get(sessionID)),
         create: (input) => require(cell, (runtime) => runtime.session.create(input)),
         messages: (input) => require(cell, (runtime) => runtime.session.messages(input)),

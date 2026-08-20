@@ -76,6 +76,7 @@ export function fromPromise(plugin: Plugin) {
         const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
         const CommandEndpoints = ClientApi.groups["server.command"].endpoints
         const IntegrationEndpoints = ClientApi.groups["server.integration"].endpoints
+        const MessageEndpoints = ClientApi.groups["server.message"].endpoints
         const McpEndpoints = ClientApi.groups["server.mcp"].endpoints
         const ModelEndpoints = ClientApi.groups["server.model"].endpoints
         const PluginEndpoints = ClientApi.groups["server.plugin"].endpoints
@@ -119,6 +120,10 @@ export function fromPromise(plugin: Plugin) {
                 callback(draft)
               }),
             )
+        const sessionList = adaptApiMethod<Context["session"]["list"]>(
+          SessionEndpoints["session.list"],
+          host.session.list,
+        )
 
         const context2: Context = {
           app: host.app,
@@ -307,6 +312,14 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
               ),
+            list: sessionList,
+            children: (input) =>
+              sessionList({
+                parentID: input.sessionID,
+                cursor: input.cursor,
+                limit: input.limit,
+              }),
+            messages: adaptApiMethod(MessageEndpoints["session.messages"], host.session.messages),
             create: adaptApiMethod(SessionEndpoints["session.create"], host.session.create),
             get: adaptApiMethod(SessionEndpoints["session.get"], host.session.get),
             prompt: adaptApiMethod(SessionEndpoints["session.prompt"], host.session.prompt),

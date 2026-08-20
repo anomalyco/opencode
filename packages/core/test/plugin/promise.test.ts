@@ -100,6 +100,41 @@ describe("fromPromise", () => {
     }),
   )
 
+  it.effect("adapts session history reads through the protocol schema", () =>
+    Effect.gen(function* () {
+      const seen: unknown[] = []
+      const host = testHost({
+        session: {
+          list: (input) => {
+            seen.push(input)
+            return Effect.succeed({ data: [], cursor: {} })
+          },
+          messages: (input) => {
+            seen.push(input)
+            return Effect.succeed({ data: [], cursor: {} })
+          },
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-session-history",
+          setup: async (ctx) => {
+            await ctx.session.list({ parentID: null, limit: 2 })
+            await ctx.session.children({ sessionID: Session.ID.make("ses_parent"), limit: 3 })
+            await ctx.session.messages({ sessionID: Session.ID.make("ses_parent"), limit: 4, order: "asc" })
+          },
+        }),
+      ).effect(host)
+
+      expect(seen).toEqual([
+        { parentID: null, limit: 2 },
+        { parentID: "ses_parent", limit: 3 },
+        { sessionID: "ses_parent", limit: 4, order: "asc" },
+      ])
+    }),
+  )
+
   it.effect("forwards transient session generation", () =>
     Effect.gen(function* () {
       const host = testHost({
