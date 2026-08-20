@@ -882,15 +882,14 @@ function createLayer(input: StreamInput) {
         }
 
         const refreshCost = Effect.fn("RunStreamTransport.refreshCost")(function* () {
-          const children = yield* Effect.promise(() =>
-            input.sdk.session.children({ sessionID: input.sessionID }),
+          const result = yield* Effect.promise(() =>
+            input.sdk.session.cost({ sessionID: input.sessionID }),
           ).pipe(
-            Effect.map((item) => item.data ?? []),
-            Effect.orElseSucceed(() => [] as readonly { cost?: number }[]),
+            Effect.map((response) => response.data?.cost ?? 0),
+            Effect.orElseSucceed(() => 0),
           )
-          const childCost = children.reduce((sum, child) => sum + (child.cost ?? 0), 0)
-          if (childCost !== state.data.subagentCost) {
-            state.data.subagentCost = childCost
+          if (result !== state.data.totalCost) {
+            state.data.totalCost = result
             syncFooter([])
           }
         })

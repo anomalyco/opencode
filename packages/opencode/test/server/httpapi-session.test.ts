@@ -1087,4 +1087,111 @@ describe("session HttpApi", () => {
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
+
+  it.instance(
+    "serves session cost aggregated across children",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const parent = yield* createSession({ title: "parent" })
+        const child = yield* createSession({ title: "child", parentID: parent.id })
+        const grandchild = yield* createSession({ title: "grandchild", parentID: child.id })
+
+        yield* Session.use.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: parent.id,
+          agent: "build",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
+          time: { created: Date.now() },
+        })
+        yield* Session.use.updatePart({
+          id: PartID.ascending(),
+          messageID: (yield* Session.use.messages({ sessionID: parent.id }))[0]!.info.id,
+          sessionID: parent.id,
+          type: "step-finish",
+          reason: "stop",
+          cost: 0.01,
+          tokens: { total: 100, input: 40, output: 60, reasoning: 0, cache: { read: 0, write: 0 } },
+        })
+
+        yield* Session.use.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: child.id,
+          agent: "build",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
+          time: { created: Date.now() },
+        })
+        yield* Session.use.updatePart({
+          id: PartID.ascending(),
+          messageID: (yield* Session.use.messages({ sessionID: child.id }))[0]!.info.id,
+          sessionID: child.id,
+          type: "step-finish",
+          reason: "stop",
+          cost: 0.02,
+          tokens: { total: 200, input: 80, output: 120, reasoning: 0, cache: { read: 0, write: 0 } },
+        })
+
+        yield* Session.use.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: grandchild.id,
+          agent: "build",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
+          time: { created: Date.now() },
+        })
+        yield* Session.use.updatePart({
+          id: PartID.ascending(),
+          messageID: (yield* Session.use.messages({ sessionID: grandchild.id }))[0]!.info.id,
+          sessionID: grandchild.id,
+          type: "step-finish",
+          reason: "stop",
+          cost: 0.03,
+          tokens: { total: 300, input: 120, output: 180, reasoning: 0, cache: { read: 0, write: 0 } },
+        })
+
+        const parentCost = yield* requestJson<{ cost: number; tokens: { input: number; output: number } }>(
+          pathFor(SessionPaths.cost, { sessionID: parent.id }),
+          { headers },
+        )
+        expect(parentCost.cost).toBeCloseTo(0.06, 10)
+        expect(parentCost.tokens.input).toBe(240)
+        expect(parentCost.tokens.output).toBe(360)
+
+        const childCost = yield* requestJson<{ cost: number; tokens: { input: number; output: number } }>(
+          pathFor(SessionPaths.cost, { sessionID: child.id }),
+          { headers },
+        )
+        expect(childCost.cost).toBeCloseTo(0.05, 10)
+        expect(childCost.tokens.input).toBe(200)
+        expect(childCost.tokens.output).toBe(300)
+
+        const grandchildCost = yield* requestJson<{ cost: number }>(
+          pathFor(SessionPaths.cost, { sessionID: grandchild.id }),
+          { headers },
+        )
+        expect(grandchildCost.cost).toBeCloseTo(0.03, 10)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "returns 404 for cost of missing session",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const missingSession = SessionID.descending()
+
+        const response = yield* request(pathFor(SessionPaths.cost, { sessionID: missingSession }), { headers })
+        expect(response.status).toBe(404)
+        expect(yield* responseJson(response)).toEqual({
+          name: "NotFoundError",
+          data: { message: `Session not found: ${missingSession}` },
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
 })
