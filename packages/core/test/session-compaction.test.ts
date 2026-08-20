@@ -143,12 +143,14 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
     })
     const input = (tokens: number, limits: { context: number; input?: number; output: number }) => ({
       session,
-      model: LanguageModel.make({
-        id: "test-model",
-        provider: "test-provider",
-        route: OpenAIChat.route.with({ limits }),
-      }),
-      cost: [],
+      model: SessionRunnerModel.resolved(
+        LanguageModel.make({
+          id: "test-model",
+          provider: "test-provider",
+          route: OpenAIChat.route.with({ limits }),
+        }),
+        { capabilities: { tools: true, input: ["text"], output: ["text"] }, cost: [] },
+      ),
       messages: [
         Schema.decodeUnknownSync(SessionMessage.Assistant)({
           id: SessionMessage.ID.make("msg_assistant"),
@@ -265,5 +267,61 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       { type: Bus.versionedType(SessionEvent.UsageRecorded.type, 1) },
       { type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1) },
     ])
+  }),
+)
+
+it.effect("forked session compaction reuses the fork root prompt cache key", () =>
+  Effect.gen(function* () {
+    requests = []
+    const db = (yield* Database.Service).db
+    const compaction = yield* SessionCompaction.Service
+    const store = yield* SessionStore.Service
+    const sessionID = Session.ID.make("ses_fork_compaction")
+    const rootID = Session.ID.make("ses_fork_compaction_root")
+    yield* db
+      .insert(ProjectTable)
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .onConflictDoNothing()
+      .run()
+      .pipe(Effect.orDie)
+    yield* db
+      .insert(SessionTable)
+      .values({
+        id: sessionID,
+        project_id: Project.ID.global,
+        fork_session_id: rootID,
+        fork_boundary: { type: "before", messageID: SessionMessage.ID.create() },
+        slug: "fork-compaction",
+        directory: "/project",
+        title: "Fork compaction",
+        version: "test",
+      })
+      .run()
+      .pipe(Effect.orDie)
+
+    const session = yield* store
+      .get(sessionID)
+      .pipe(
+        Effect.flatMap((session) =>
+          session ? Effect.succeed(session) : Effect.die("fork compaction test session missing"),
+        ),
+      )
+    expect(
+      yield* compaction.compactManual({
+        session,
+        messages: [
+          {
+            id: SessionMessage.ID.create(),
+            type: "user",
+            text: "Summarize the forked conversation.",
+            time: { created: DateTime.makeUnsafe(0) },
+          },
+        ],
+        inputID: SessionMessage.ID.make("msg_fork_compaction"),
+      }),
+    ).toEqual({ status: "completed" })
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.promptCacheKey).toBe(rootID)
   }),
 )

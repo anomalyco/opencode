@@ -1,26 +1,21 @@
 export * as SessionCompaction from "./compaction.js"
 
-import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest, type LanguageModel } from "@opencode-ai/ai"
+import { LLMClient, AIError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../effect/app-node-platform.js"
+import { Tool } from "../tool.js"
 import { SessionEvent } from "./event.js"
 import type { SessionMessage } from "./message.js"
-import { SessionModelHeaders } from "./model-headers.js"
-import { SessionModelHook } from "./model-hook.js"
-import { SessionModelHttp } from "./model-http.js"
-import { SessionPromptCacheKey } from "./prompt-cache-key.js"
-import { App } from "../app.js"
+import { SessionModelRequest } from "./model-request.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { toSessionError } from "./to-session-error.js"
 import { Token } from "../util/token.js"
-import type { Info, Ref } from "../model.js"
 import { SessionUsage } from "./usage.js"
-import { PluginHooks } from "../plugin/hooks.js"
 import { Agent } from "../agent.js"
 import { State } from "../state.js"
 
@@ -70,22 +65,25 @@ export type Draft = {
   configure: (settings: Partial<Settings>) => void
 }
 
+// Compaction summaries carry no tools; prepare still requires a snapshot for hook reconciliation.
+const noTools: Tool.Snapshot = {
+  definitions: [],
+  execute: () => new Tool.Error({ message: "Tools are not available for compaction" }),
+}
+
 type Dependencies = {
-  readonly app: App.Info
   readonly bus: Bus.Interface
   readonly llm: {
     readonly stream: (request: LLMRequest, options?: StreamOptions) => Stream.Stream<LLMEvent, AIError>
   }
   readonly models: SessionRunnerModel.Interface
-  readonly hooks: PluginHooks.Interface
+  readonly modelRequests: SessionModelRequest.Interface
 }
 
 export type AutoInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
-  readonly model: LanguageModel
-  readonly ref: Ref
-  readonly cost: Info["cost"]
+  readonly model: SessionRunnerModel.Resolved
 }
 
 export type ManualInput = {
@@ -95,13 +93,9 @@ export type ManualInput = {
   readonly started?: boolean
 }
 
-type RequiredInput = Omit<AutoInput, "ref">
-
 type Plan = {
   readonly session: SessionSchema.Info
-  readonly model: LanguageModel
-  readonly ref: Ref
-  readonly cost: Info["cost"]
+  readonly model: SessionRunnerModel.Resolved
   readonly reason: SessionMessage.Compaction["reason"]
   readonly prompt: string
   readonly recent: string
@@ -114,7 +108,7 @@ export type Outcome =
   | Pick<SessionMessage.CompactionFailed, "status" | "error">
 
 export interface Interface extends State.Transformable<Draft> {
-  readonly required: (input: RequiredInput) => boolean
+  readonly required: (input: AutoInput) => boolean
   readonly compact: (input: AutoInput) => Effect.Effect<Outcome>
   readonly compactManual: (input: ManualInput) => Effect.Effect<Outcome>
 }
@@ -271,65 +265,50 @@ const make = (dependencies: Dependencies) => {
           })
         : Effect.void,
     )
-    const request = yield* SessionModelHook.apply(
-      dependencies.hooks,
-      { sessionID: plan.session.id, agent: Agent.ID.make("compaction"), model: plan.ref },
-      LLM.request({
-        model: plan.model,
-        promptCacheKey: SessionPromptCacheKey.make(plan.session.id),
-        http: { headers: SessionModelHeaders.make(plan.session, dependencies.app) },
-        messages: [Message.user(plan.prompt)],
-        tools: [],
+    const prepared = yield* dependencies.modelRequests.prepare({
+      scope: { session: plan.session, agentID: Agent.ID.make("compaction"), model: plan.model, tools: noTools },
+      transcript: { system: [], messages: [Message.user(plan.prompt)] },
+    })
+    yield* dependencies.llm.stream(prepared.request, prepared.options).pipe(
+      Stream.runForEach((event) => {
+        if (LLMEvent.is.providerError(event))
+          failure = {
+            type: event.classification === "context-overflow" ? "provider.invalid-request" : "provider.error",
+            message: event.message,
+          }
+        if (LLMEvent.is.textDelta(event)) {
+          chunks.push(event.text)
+          return dependencies.bus.publish(SessionEvent.Compaction.Delta, {
+            sessionID: plan.session.id,
+            text: event.text,
+          })
+        }
+        if (LLMEvent.is.stepFinish(event)) {
+          const step = SessionUsage.record(event.usage, plan.model.cost)
+          usage = usage ? SessionUsage.add(usage, step) : step
+        }
+        return Effect.void
       }),
-    )
-    yield* dependencies.llm
-      .stream(request, {
-        http: SessionModelHttp.middleware(dependencies.hooks, {
-          sessionID: plan.session.id,
-          agent: Agent.ID.make("compaction"),
-          model: plan.ref,
+      Effect.catchTag("AI.Error", (error) =>
+        Effect.sync(() => {
+          failure = toSessionError(error)
         }),
-      })
-      .pipe(
-        Stream.runForEach((event) => {
-          if (LLMEvent.is.providerError(event))
-            failure = {
-              type: event.classification === "context-overflow" ? "provider.invalid-request" : "provider.error",
-              message: event.message,
-            }
-          if (LLMEvent.is.textDelta(event)) {
-            chunks.push(event.text)
-            return dependencies.bus.publish(SessionEvent.Compaction.Delta, {
-              sessionID: plan.session.id,
-              text: event.text,
-            })
-          }
-          if (LLMEvent.is.stepFinish(event)) {
-            const step = SessionUsage.record(event.usage, plan.cost)
-            usage = usage ? SessionUsage.add(usage, step) : step
-          }
-          return Effect.void
-        }),
-        Effect.catchTag("AI.Error", (error) =>
-          Effect.sync(() => {
-            failure = toSessionError(error)
-          }),
-        ),
-        Effect.onInterrupt(() =>
-          recordUsage.pipe(
-            Effect.andThen(
-              plan.reason === "auto"
-                ? failed({
-                    sessionID: plan.session.id,
-                    reason: plan.reason,
-                    error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
-                    inputID: plan.inputID,
-                  }).pipe(Effect.asVoid)
-                : Effect.void,
-            ),
+      ),
+      Effect.onInterrupt(() =>
+        recordUsage.pipe(
+          Effect.andThen(
+            plan.reason === "auto"
+              ? failed({
+                  sessionID: plan.session.id,
+                  reason: plan.reason,
+                  error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+                  inputID: plan.inputID,
+                }).pipe(Effect.asVoid)
+              : Effect.void,
           ),
         ),
-      )
+      ),
+    )
     yield* recordUsage
     const summary = chunks.join("")
     if (failure || !summary.trim()) {
@@ -355,8 +334,6 @@ const make = (dependencies: Dependencies) => {
       return yield* execute({
         session: input.session,
         model: input.model,
-        ref: input.ref,
-        cost: input.cost,
         reason: "auto",
         ...content,
       })
@@ -367,17 +344,17 @@ const make = (dependencies: Dependencies) => {
       error,
     })
   })
-  const required = (input: RequiredInput) => {
+  const required = (input: AutoInput) => {
     const config = state.get()
     if (!config.auto) return false
-    const context = input.model.route.defaults.limits?.context
+    const context = input.model.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const last = input.messages.findLast(
       (message): message is SessionMessage.Assistant & { tokens: NonNullable<SessionMessage.Assistant["tokens"]> } =>
         message.type === "assistant" && message.tokens !== undefined,
     )
     if (!last) return false
-    const limits = input.model.route.defaults.limits
+    const limits = input.model.model.route.defaults.limits
     const output = Math.min(limits?.output ?? 0, OUTPUT_TOKEN_MAX)
     const promptCeiling = Math.min(
       limits?.input === undefined ? Number.POSITIVE_INFINITY : limits.input - config.buffer,
@@ -410,9 +387,7 @@ const make = (dependencies: Dependencies) => {
     if ("status" in resolved) return resolved
     return yield* execute({
       session: input.session,
-      model: resolved.model,
-      ref: resolved.ref,
-      cost: resolved.cost,
+      model: resolved,
       reason: "manual",
       inputID: input.inputID,
       started: input.started,
@@ -434,14 +409,13 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
     const models = yield* SessionRunnerModel.Service
-    const app = yield* App.Metadata
-    const hooks = yield* PluginHooks.Service
-    return make({ bus, llm, models, app, hooks })
+    const modelRequests = yield* SessionModelRequest.Service
+    return make({ bus, llm, models, modelRequests })
   }),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, llmClient, SessionRunnerModel.node, App.node, PluginHooks.node],
+  deps: [Bus.node, llmClient, SessionRunnerModel.node, SessionModelRequest.node],
 })

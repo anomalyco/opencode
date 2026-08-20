@@ -150,8 +150,10 @@ const session = Session.Info.make({
 })
 const input = (tokens: number) => ({
   session,
-  model,
-  cost: [],
+  model: SessionRunnerModel.resolved(model, {
+    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    cost: [],
+  }),
   messages: [
     Schema.decodeUnknownSync(SessionMessage.Assistant)({
       id: SessionMessage.ID.make("msg_compaction_config"),
