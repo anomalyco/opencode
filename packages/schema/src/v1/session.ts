@@ -487,8 +487,17 @@ export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assista
   error?: AssistantError
 }
 
-export const Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
-export type Info = User | Assistant
+export const System = Schema.Struct({
+  ...messageBase,
+  role: Schema.Literal("system"),
+  time: Schema.Struct({
+    created: Timestamp,
+  }),
+}).annotate({ identifier: "SystemMessage" })
+export type System = Types.DeepMutable<Schema.Schema.Type<typeof System>>
+
+export const Info = Schema.Union([User, Assistant, System]).annotate({ discriminator: "role", identifier: "Message" })
+export type Info = User | Assistant | System
 
 export const WithParts = Schema.Struct({
   info: Info,
