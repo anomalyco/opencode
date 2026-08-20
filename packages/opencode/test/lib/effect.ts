@@ -46,6 +46,47 @@ const isolatedRun: Runner = (value, layer) =>
     return yield* exit
   }).pipe(Effect.runPromise)
 
+// Bun's per-test timeout fails the *test* without interrupting the fiber behind
+// it. An Effect that never settles — a driver stub that never returns, a permit
+// never released, a lock handed out and never given back — keeps its fiber and
+// its scope alive, so the runner process wedges rather than the test failing.
+// Only Effect's own interruption reaches the fiber, so bodies that exercise real
+// concurrency race against this bound; the interrupt also closes the body's scope.
+//
+// 3s is set against two hard edges. It must clear the slowest honest body in the
+// suites that opt in by a wide margin, and it must stay under bun's own 5000ms
+// default per-test timeout, or bun fails the test first and the fiber wedges
+// anyway on any run that omits `--timeout 30000`.
+export const FIBER_BOUND_MILLIS = 3_000
+
+const boundedRun =
+  (millis: number): Runner =>
+  (value, layer) =>
+    Effect.gen(function* () {
+      const exit = yield* body(value).pipe(
+        Effect.scoped,
+        Effect.provide(layer),
+        // Applied outside `provide` so the bound resolves the outer live Clock
+        // rather than the TestClock an `it.effect` layer installs inside.
+        Effect.timeoutOrElse({
+          duration: Duration.millis(millis),
+          orElse: () =>
+            Effect.die(
+              new Error(
+                `test body did not settle within ${millis}ms and was interrupted (FIBER_BOUND_MILLIS): a fiber is blocked forever, not merely slow`,
+              ),
+            ),
+        }),
+        Effect.exit,
+      )
+      if (Exit.isFailure(exit)) {
+        for (const err of Cause.prettyErrors(exit.cause)) {
+          yield* Effect.logError(err)
+        }
+      }
+      return yield* exit
+    }).pipe(Effect.runPromise)
+
 // Builds the test layer through the shared process-wide memoMap so cached
 // services (Bus, Session, …) match Server.Default's instances. Use for tests
 // that publish to an in-process HTTP server and need pub/sub identity with
@@ -136,6 +177,15 @@ const liveEnv = TestConsole.layer
 
 export const it = make<never, never>(testEnv, liveEnv)
 
+// `it`, with every body raced against FIBER_BOUND_MILLIS and interrupted at it.
+// Use for suites that exercise real concurrency — locks, queues, forked fibers,
+// driver handshakes — where a regression yields a fiber that never settles rather
+// than a wrong value. Same API as `it`. Deliberately opt-in rather than folded
+// into `isolatedRun`: every test file shares that runner and several have bodies
+// that legitimately run 10-30s (compaction, prompt, session, truncation), so a
+// bound tight enough to be useful here would fail honest tests there.
+export const itBounded = make<never, never>(testEnv, liveEnv, boundedRun(FIBER_BOUND_MILLIS))
+
 export const testEffect = <R, E>(layer: Layer.Layer<R, E>) =>
   make<R, E>(Layer.provideMerge(layer, testEnv), Layer.provideMerge(layer, liveEnv))
 
@@ -145,6 +195,13 @@ export const testEffect = <R, E>(layer: Layer.Layer<R, E>) =>
 // an in-process HTTP server — most tests should stick with `testEffect`.
 export const testEffectShared = <R, E>(layer: Layer.Layer<R, E>) =>
   make<R, E>(Layer.provideMerge(layer, testEnv), Layer.provideMerge(layer, liveEnv), sharedRun)
+
+// `testEffect`, with `itBounded`'s bound. Exists because a suite whose failure mode is a deadlock
+// needs both halves at once: its own service layer, and a bound that turns a wedged fiber into a
+// named error instead of a stalled runner. `itBounded` alone cannot supply services, and
+// `testEffect` alone cannot report a hang.
+export const testEffectBounded = <R, E>(layer: Layer.Layer<R, E>) =>
+  make<R, E>(Layer.provideMerge(layer, testEnv), Layer.provideMerge(layer, liveEnv), boundedRun(FIBER_BOUND_MILLIS))
 
 export const awaitWithTimeout = <A, E, R>(
   self: Effect.Effect<A, E, R>,
