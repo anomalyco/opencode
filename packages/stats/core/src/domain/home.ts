@@ -6,8 +6,8 @@ import type { GeoStatMetric } from "./geo"
 import { ModelStatRepo, type ModelStatMetric } from "./model"
 import type { ProviderStatMetric } from "./provider"
 
-export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
-export type TokenProduct = "Zen" | "Go" | "Enterprise"
+export type UsageProduct = "All Users" | "Zen" | "Go" | "Free + Go" | "Enterprise"
+export type TokenProduct = "Zen" | "Go" | "Free + Go" | "Enterprise"
 export type UsageRange = "1D" | "1W" | "2W" | "1M" | "2M" | "3M" | "YTD" | "ALL"
 export type UsagePoint = { date: string; segments: { model: string; value: number }[] }
 export type MarketDay = { date: string; total: number; authors: { author: string; share: number; tokens: number }[] }
@@ -129,7 +129,7 @@ const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const METRIC_MODEL_LIMIT = 10
 const TOP_MODEL_SEGMENT_LIMIT = 9
-const SITE_PRODUCT = "Go"
+const SITE_PRODUCT = "Free + Go"
 const LEADERBOARD_CHANGE_MIN_MULTIPLE = 10
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
@@ -215,7 +215,7 @@ async function listModelDaily(): Promise<ModelStatMetric[]> {
     await queryRows(`select period_key, updated_at, tier, provider, model, sessions, unique_users, input_tokens,
     output_tokens, reasoning_tokens, cache_read_tokens, total_tokens, input_cost_microcents, output_cost_microcents,
     total_cost_microcents from model_stat where grain = 'day' and client = 'all' and source = 'all'
-    and tier in ('Go', 'go') order by period_key`)
+    and tier in ('Free', 'free', 'Go', 'go') order by period_key`)
   ).map((row) => ({
     periodKey: stringValue(row.period_key),
     updatedAt: dateValue(row.updated_at),
@@ -238,7 +238,8 @@ async function listModelDaily(): Promise<ModelStatMetric[]> {
 async function listProviderDaily(): Promise<ProviderStatMetric[]> {
   return (
     await queryRows(`select period_key, updated_at, tier, provider, total_tokens from provider_stat
-    where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') order by period_key`)
+    where grain = 'day' and client = 'all' and source = 'all'
+    and tier in ('Free', 'free', 'Go', 'go') order by period_key`)
   ).map((row) => ({
     periodKey: stringValue(row.period_key),
     updatedAt: dateValue(row.updated_at),
@@ -259,7 +260,8 @@ async function listGeoDaily(opts?: { provider?: string; model?: string }): Promi
   return (
     await queryRows(
       `select period_key, updated_at, tier, provider, model, country, continent, total_tokens from geo_stat
-    where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') ${scope} order by period_key`,
+    where grain = 'day' and client = 'all' and source = 'all'
+    and tier in ('Free', 'free', 'Go', 'go') ${scope} order by period_key`,
       params,
     )
   ).map((row) => ({
@@ -366,7 +368,9 @@ function buildStatsHomeData(
     leaderboard: createUsageProductRecord((product) =>
       createRangeRecord((range) => buildLeaderboard(normalized, product, getWindow("1W", earliest, latest))),
     ),
-    market: createRangeRecord((range) => buildMarketShare(providers, "Go", range, getWindow(range, earliest, latest))),
+    market: createRangeRecord((range) =>
+      buildMarketShare(providers, SITE_PRODUCT, range, getWindow(range, earliest, latest)),
+    ),
     tokenCost: createTokenProductRecord((product) =>
       buildTokenCost(normalized, product, getWindow("1W", earliest, latest)),
     ),
@@ -735,6 +739,7 @@ function rowsForProduct<T extends { periodStart: number; tier: string }>(
   end: number,
 ) {
   const windowRows = rows.filter((row) => row.periodStart >= start && row.periodStart < end)
+  if (product === SITE_PRODUCT) return windowRows.filter((row) => row.tier === "Free" || row.tier === "Go")
   if (product !== "All Users") return windowRows.filter((row) => row.tier === product)
 
   const allRows = windowRows.filter((row) => row.tier === "all")
@@ -870,6 +875,7 @@ function createUsageProductRecord<T>(value: (product: UsageProduct) => T): Recor
     "All Users": value("All Users"),
     Zen: value("Zen"),
     Go: value("Go"),
+    "Free + Go": value("Free + Go"),
     Enterprise: value("Enterprise"),
   }
 }
@@ -878,6 +884,7 @@ function createTokenProductRecord<T>(value: (product: TokenProduct) => T): Recor
   return {
     Zen: value("Zen"),
     Go: value("Go"),
+    "Free + Go": value("Free + Go"),
     Enterprise: value("Enterprise"),
   }
 }
@@ -947,6 +954,7 @@ function normalizeGeoRow(row: GeoStatMetric): GeoMetricRow[] {
 function normalizeTier(value: string) {
   const normalized = value.toLowerCase()
   if (normalized === "paid" || normalized === "zen") return "Zen"
+  if (normalized === "free") return "Free"
   if (normalized === "go") return "Go"
   if (normalized === "enterprise") return "Enterprise"
   if (normalized === "all") return "all"

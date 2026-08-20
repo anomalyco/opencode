@@ -69,7 +69,7 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
                   eq(providerStat.grain, "day"),
                   eq(providerStat.client, "all"),
                   eq(providerStat.source, "all"),
-                  inArray(providerStat.tier, ["Go", "go"]),
+                  inArray(providerStat.tier, ["Free", "free", "Go", "go"]),
                 ),
               )
               .orderBy(asc(providerStat.period_key)),
