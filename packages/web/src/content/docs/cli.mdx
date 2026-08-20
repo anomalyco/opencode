@@ -368,6 +368,8 @@ opencode run --ephemeral "Suggest a commit message for the staged changes"
 
 This is useful in scripts, CI pipelines, and shell integrations where each invocation would otherwise leave a session behind. If the process is killed before it can clean up, the leftover session is still hidden from lists and is deleted automatically on a later startup. Since ephemeral sessions are fire-and-forget, `--ephemeral` cannot be combined with `--continue`, `--session`, `--attach`, or `--share`.
 
+The minimal interactive interface supports it too — `opencode --mini --ephemeral` starts a scratch conversation whose sessions are deleted when you exit.
+
 #### Flags
 
 | Flag                                      | Short | Description                                                                |

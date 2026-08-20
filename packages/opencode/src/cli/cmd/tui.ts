@@ -125,6 +125,10 @@ export const TuiThreadCommand = cmd({
         describe: "start the minimal interactive interface",
         default: false,
       })
+      .option("ephemeral", {
+        type: "boolean",
+        describe: "do not persist the session after exiting (requires --mini)",
+      })
       .option("replay", {
         type: "boolean",
         hidden: true,
@@ -158,6 +162,11 @@ export const TuiThreadCommand = cmd({
         process.exitCode = 1
         return
       }
+      if (args.ephemeral && (args.continue || args.session)) {
+        UI.error("--ephemeral cannot be used with --continue or --session")
+        process.exitCode = 1
+        return
+      }
 
       const { runMini } = await import("./run")
       await runMini({
@@ -171,6 +180,7 @@ export const TuiThreadCommand = cmd({
         replay: noReplay ? false : undefined,
         replayLimit: args.replayLimit,
         demo: args.demo,
+        ephemeral: args.ephemeral,
       })
       return
     }
@@ -179,6 +189,7 @@ export const TuiThreadCommand = cmd({
       ["--no-replay", noReplay],
       ["--replay-limit", args.replayLimit !== undefined],
       ["--demo", args.demo !== undefined],
+      ["--ephemeral", args.ephemeral !== undefined],
     ].find((entry) => entry[1])?.[0]
     if (unsupported) {
       UI.error(`${unsupported} requires --mini`)

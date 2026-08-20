@@ -462,6 +462,28 @@ export const RunCommand = effectCmd({
         return message.slice(0, 50) + (message.length > 50 ? "..." : "")
       }
 
+      // Every ephemeral session created in this invocation, including extra
+      // ones from interactive mode. Deletion is best-effort promptness: the
+      // server hides ephemeral sessions from lists and sweeps abandoned ones
+      // on startup, so uncovered exits (kill -9, crashes) only delay cleanup.
+      const ephemeralSessions = new Map<string, OpencodeClient>()
+      let ephemeralCleanup: Promise<void> | undefined
+      const removeEphemeral = () => {
+        if (!args.ephemeral) return Promise.resolve()
+        if (ephemeralCleanup) return ephemeralCleanup
+        ephemeralCleanup = Promise.all(
+          [...ephemeralSessions].map(([sessionID, sdk]) =>
+            sdk.session.delete({ sessionID }).then(
+              () => undefined,
+              () => {
+                process.stderr.write(`failed to delete ephemeral session ${sessionID}\n`)
+              },
+            ),
+          ),
+        ).then(() => undefined)
+        return ephemeralCleanup
+      }
+
       async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
         if (args.session) {
           const current = await sdk.session
@@ -534,6 +556,7 @@ export const RunCommand = effectCmd({
         if (!id) {
           return
         }
+        if (args.ephemeral) ephemeralSessions.set(id, sdk)
 
         return {
           id,
@@ -579,6 +602,7 @@ export const RunCommand = effectCmd({
         if (!id) {
           throw new Error("Failed to create session")
         }
+        if (args.ephemeral) ephemeralSessions.set(id, sdk)
 
         void share(sdk, id).catch(() => {})
         return {
@@ -687,35 +711,23 @@ export const RunCommand = effectCmd({
         }
         const sessionID = sess.id
 
-        // Ephemeral cleanup is best-effort promptness: the server hides
-        // ephemeral sessions from lists and sweeps abandoned ones on startup,
-        // so uncovered exits (kill -9, crashes) only delay deletion.
-        let cleanup: Promise<void> | undefined
-        const remove = () => {
-          if (!args.ephemeral) return Promise.resolve()
-          if (cleanup) return cleanup
-          cleanup = sdk.session.delete({ sessionID }).then(
-            () => undefined,
-            () => {
-              process.stderr.write(`failed to delete ephemeral session ${sessionID}\n`)
-            },
-          )
-          return cleanup
-        }
         const interrupted = (signal: "SIGINT" | "SIGTERM") => async () => {
-          await remove()
+          await removeEphemeral()
           process.exit(signal === "SIGINT" ? 130 : 143)
         }
         const sigint = interrupted("SIGINT")
         const sigterm = interrupted("SIGTERM")
-        if (args.ephemeral) {
+        // Interactive mode owns SIGINT as a UI gesture and exits through its
+        // own lifecycle, which lands in done() below; raw handlers would race
+        // the renderer teardown.
+        if (args.ephemeral && !interactive) {
           process.on("SIGINT", sigint)
           process.on("SIGTERM", sigterm)
         }
         const done = async () => {
           process.off("SIGINT", sigint)
           process.off("SIGTERM", sigterm)
-          await remove()
+          await removeEphemeral()
         }
 
         function emit(type: string, data: Record<string, unknown>) {
@@ -955,7 +967,7 @@ export const RunCommand = effectCmd({
         }) as typeof globalThis.fetch
 
         try {
-          return await runInteractiveLocalMode({
+          await runInteractiveLocalMode({
             directory: directory ?? root,
             fetch: fetchFn,
             resolveAgent: localAgent,
@@ -976,6 +988,7 @@ export const RunCommand = effectCmd({
         } catch (error) {
           dieInteractive(error)
         }
+        return removeEphemeral()
       }
 
       if (args.attach) {
@@ -1015,6 +1028,7 @@ type MiniCommandInput = {
   replay?: boolean
   replayLimit?: number
   demo?: boolean
+  ephemeral?: boolean
 }
 
 export async function runMini(input: MiniCommandInput) {
@@ -1028,7 +1042,7 @@ export async function runMini(input: MiniCommandInput) {
     session: input.session,
     fork: input.fork,
     share: undefined,
-    ephemeral: false,
+    ephemeral: input.ephemeral ?? false,
     model: input.model,
     agent: input.agent,
     format: "default",
