@@ -6,8 +6,8 @@ import type { GeoStatMetric } from "./geo"
 import { ModelStatRepo, type ModelStatMetric } from "./model"
 import type { ProviderStatMetric } from "./provider"
 
-export type UsageProduct = "All Users" | "Zen" | "Go" | "Free + Go" | "Enterprise"
-export type TokenProduct = "Zen" | "Go" | "Free + Go" | "Enterprise"
+export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
+export type TokenProduct = "Zen" | "Go" | "Enterprise"
 export type UsageRange = "1D" | "1W" | "2W" | "1M" | "2M" | "3M" | "YTD" | "ALL"
 export type UsagePoint = { date: string; segments: { model: string; value: number }[] }
 export type MarketDay = { date: string; total: number; authors: { author: string; share: number; tokens: number }[] }
@@ -129,7 +129,7 @@ const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const METRIC_MODEL_LIMIT = 10
 const TOP_MODEL_SEGMENT_LIMIT = 9
-const SITE_PRODUCT = "Free + Go"
+const SITE_PRODUCT = "Go"
 const LEADERBOARD_CHANGE_MIN_MULTIPLE = 10
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
@@ -368,9 +368,7 @@ function buildStatsHomeData(
     leaderboard: createUsageProductRecord((product) =>
       createRangeRecord((range) => buildLeaderboard(normalized, product, getWindow("1W", earliest, latest))),
     ),
-    market: createRangeRecord((range) =>
-      buildMarketShare(providers, SITE_PRODUCT, range, getWindow(range, earliest, latest)),
-    ),
+    market: createRangeRecord((range) => buildMarketShare(providers, "Go", range, getWindow(range, earliest, latest))),
     tokenCost: createTokenProductRecord((product) =>
       buildTokenCost(normalized, product, getWindow("1W", earliest, latest)),
     ),
@@ -739,7 +737,7 @@ function rowsForProduct<T extends { periodStart: number; tier: string }>(
   end: number,
 ) {
   const windowRows = rows.filter((row) => row.periodStart >= start && row.periodStart < end)
-  if (product === SITE_PRODUCT) return windowRows.filter((row) => row.tier === "Free" || row.tier === "Go")
+  if (product === "Go") return windowRows.filter((row) => row.tier === "Free" || row.tier === "Go")
   if (product !== "All Users") return windowRows.filter((row) => row.tier === product)
 
   const allRows = windowRows.filter((row) => row.tier === "all")
@@ -875,7 +873,6 @@ function createUsageProductRecord<T>(value: (product: UsageProduct) => T): Recor
     "All Users": value("All Users"),
     Zen: value("Zen"),
     Go: value("Go"),
-    "Free + Go": value("Free + Go"),
     Enterprise: value("Enterprise"),
   }
 }
@@ -884,7 +881,6 @@ function createTokenProductRecord<T>(value: (product: TokenProduct) => T): Recor
   return {
     Zen: value("Zen"),
     Go: value("Go"),
-    "Free + Go": value("Free + Go"),
     Enterprise: value("Enterprise"),
   }
 }

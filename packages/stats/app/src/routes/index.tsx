@@ -82,13 +82,13 @@ const getData = query(async () => {
   const [stats, catalog] = await Promise.all([runStatsEffect(getStatsHomeData()), loadModelCatalog()])
   return {
     updatedAt: stats.updatedAt,
-    usage: stats.usage["Free + Go"]["2M"],
-    users: stats.users["Free + Go"]["2M"],
-    leaderboard: stats.leaderboard["Free + Go"]["2M"],
+    usage: stats.usage.Go["2M"],
+    users: stats.users.Go["2M"],
+    leaderboard: stats.leaderboard.Go["2M"],
     market: stats.market["2M"],
-    tokenCost: priceTokenCostFromCatalog(stats.tokenCost["Free + Go"], catalog),
-    cacheRatio: stats.cacheRatio["Free + Go"],
-    sessionCost: stats.sessionCost["Free + Go"],
+    tokenCost: priceTokenCostFromCatalog(stats.tokenCost.Go, catalog),
+    cacheRatio: stats.cacheRatio.Go,
+    sessionCost: stats.sessionCost.Go,
     country: stats.country["2M"],
   } satisfies StatsHomePageData
 }, "getStatsHomeData")
