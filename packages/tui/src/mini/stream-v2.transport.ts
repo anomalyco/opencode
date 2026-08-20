@@ -1780,6 +1780,11 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (state.wait) state.wait.interrupted = true
+      // Optimistic: paint idle now instead of waiting out server-side cleanup. Late deltas
+      // from the dying turn only append text; the terminal execution event re-confirms idle,
+      // and a successor turn's execution.started legitimately returns to running.
+      state.rootActive = false
+      write([], { phase: "idle", status: "" })
       await sdk.session.interrupt({ sessionID: input.sessionID, continue: true }).catch(() => {})
     },
     selectSubagent(sessionID) {

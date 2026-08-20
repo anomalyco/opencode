@@ -11,7 +11,11 @@ export interface Coordinator<Key, E, Reason = never> {
   readonly run: (key: Key) => Effect.Effect<void, E>
   /** Rings the doorbell: an idle key starts an execution; an active one drains again before settling. */
   readonly wake: (key: Key, scope?: Promotable) => Effect.Effect<void>
-  /** Stops the active execution, clears its doorbell, and waits for cleanup. No-op when idle. */
+  /**
+   * Stops the active execution and clears its doorbell. No-op when idle. Resolves once the
+   * interruption is accepted, not when cleanup settles: the execution fiber finishes its
+   * finalizers and settled hook on its own time. Compose with `awaitIdle` for settlement.
+   */
   readonly interrupt: (key: Key, reason?: Reason) => Effect.Effect<void>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
@@ -27,6 +31,12 @@ export interface Coordinator<Key, E, Reason = never> {
  */
 type Execution<E, Reason> = {
   readonly done: Deferred.Deferred<void, E>
+  /**
+   * Settlement signal that always resolves successfully. Idleness waiters must not share
+   * `done`: an interrupted execution's exit interrupts suspended waiters as it resumes them,
+   * and a waiter's synchronous unregistration can starve later waiters of their resume.
+   */
+  readonly idle: Deferred.Deferred<void>
   owner?: Fiber.Fiber<void>
   scope: Promotable
   pendingWake?: Promotable
@@ -75,6 +85,7 @@ export const make = <Key, E, Reason = never>(options: {
     const start = (key: Key, force: boolean, scope: Promotable) => {
       const execution: Execution<E, Reason> = {
         done: Deferred.makeUnsafe<void, E>(),
+        idle: Deferred.makeUnsafe<void>(),
         scope,
         stopping: false,
       }
@@ -105,6 +116,7 @@ export const make = <Key, E, Reason = never>(options: {
       if (execution.pendingWake) start(key, false, execution.pendingWake)
       else executions.delete(key)
       Deferred.doneUnsafe(execution.done, exit)
+      Deferred.doneUnsafe(execution.idle, Exit.void)
     }
 
     const run = (key: Key): Effect.Effect<void, E> =>
@@ -112,7 +124,7 @@ export const make = <Key, E, Reason = never>(options: {
         const execution = executions.get(key)
         if (execution !== undefined) {
           // A stopping execution refuses joiners: wait out its cleanup, then run fresh.
-          if (execution.stopping) return Deferred.await(execution.done).pipe(Effect.andThen(run(key)))
+          if (execution.stopping) return Deferred.await(execution.idle).pipe(Effect.andThen(run(key)))
           return Deferred.await(execution.done)
         }
         return Deferred.await(start(key, true, "input").done)
@@ -138,7 +150,10 @@ export const make = <Key, E, Reason = never>(options: {
         // Wakes arriving during cleanup are new admissions and restart normally at settle.
         execution.pendingWake = undefined
         execution.interruptionReason = reason
-        return Fiber.interrupt(execution.owner)
+        // Fire and forget: nobody benefits from waiting out cleanup here, and callers like
+        // the interrupt endpoint must acknowledge immediately even when finalizers are slow.
+        fork(Fiber.interrupt(execution.owner))
+        return Effect.void
       })
 
     // One execution's `done` already spans coalesced continuations; re-check after it
@@ -147,7 +162,7 @@ export const make = <Key, E, Reason = never>(options: {
       Effect.suspend(() => {
         const execution = executions.get(key)
         if (execution === undefined) return Effect.void
-        return Deferred.await(execution.done).pipe(Effect.exit, Effect.andThen(awaitIdle(key)))
+        return Deferred.await(execution.idle).pipe(Effect.andThen(awaitIdle(key)))
       })
 
     return { active: Effect.sync(() => new Set(executions.keys())), run, wake, interrupt, awaitIdle }

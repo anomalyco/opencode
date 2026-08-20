@@ -622,11 +622,49 @@ describe("SessionRunCoordinator", () => {
         yield* coordinator.wake("session")
         yield* Deferred.await(started)
         yield* coordinator.interrupt("session")
+        yield* coordinator.awaitIdle("session")
 
         expect(settled).toHaveLength(1)
         expect(settled[0] !== undefined && Exit.isFailure(settled[0]) && Cause.hasInterrupts(settled[0].cause)).toBe(
           true,
         )
+        expect(yield* coordinator.active).toEqual(new Set())
+      }),
+    ),
+  )
+
+  it.effect("acknowledges interruption before cleanup settles", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const cleanupStarted = yield* Deferred.make<void>()
+        const cleanupGate = yield* Deferred.make<void>()
+        const settled: Array<string | undefined> = []
+        const coordinator = yield* SessionRunCoordinator.make<string, never, string>({
+          drain: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.onInterrupt(() =>
+                Deferred.succeed(cleanupStarted, undefined).pipe(Effect.andThen(Deferred.await(cleanupGate))),
+              ),
+            ),
+          settled: (_key, _exit, reason) => Effect.sync(() => void settled.push(reason)),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(started)
+        // Interrupt resolves while the cleanup gate is still closed: acceptance, not settlement.
+        yield* coordinator.interrupt("session", "user")
+        expect(settled).toHaveLength(0)
+        expect(Array.from(yield* coordinator.active)).toEqual(["session"])
+        // Repeating the interrupt during cleanup stays an immediate no-op.
+        yield* coordinator.interrupt("session", "user")
+
+        yield* Deferred.await(cleanupStarted)
+        yield* Deferred.succeed(cleanupGate, undefined)
+        yield* coordinator.awaitIdle("session")
+
+        expect(settled).toEqual(["user"])
         expect(yield* coordinator.active).toEqual(new Set())
       }),
     ),
