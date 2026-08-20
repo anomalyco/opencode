@@ -236,6 +236,38 @@ it.instance("tools() reuses cached definitions until a protocol notification", (
   }),
 )
 
+// Issue #3523: when `<server>_<tool>` exceeds 64 chars OpenAI rejects the
+// request and the error never reaches the TUI. These two tool names share
+// their first 55 chars after the server prefix, so blind truncation would
+// collapse them into one key — the hash suffix must keep them distinct.
+it.instance("tools() caps provider-facing names at 64 chars without collapsing collisions", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    server.state.tools = [
+      {
+        name: "perform_extremely_specific_workflow_step_alpha",
+        description: "first long-named tool",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
+        name: "perform_extremely_specific_workflow_step_beta",
+        description: "second long-named tool",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]
+    yield* mcp.add("chrome-devtools-aaaaaaaaaaaaaaaaaaa", remote(server.url))
+
+    const keys = Object.keys(yield* mcp.tools())
+    expect(keys.length).toBe(2)
+    expect(new Set(keys).size).toBe(2)
+    for (const key of keys) {
+      expect(key.length).toBeLessThanOrEqual(64)
+      expect(key).toMatch(/_[0-9a-f]{8}$/)
+    }
+  }),
+)
+
 it.instance("instructions() returns non-empty connected server instructions with tool names", () =>
   Effect.gen(function* () {
     const guide = yield* lifecycleServer({ instructions: "Use lookup before mutate." })

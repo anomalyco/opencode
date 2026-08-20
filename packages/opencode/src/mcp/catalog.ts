@@ -117,6 +117,10 @@ export function fetch<T extends { name: string }>(
 
 export const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_")
 
+// WARNING: no length cap. Provider-facing tool names must go through
+// buildToolName below — OpenAI's tool-use API rejects function.name strings
+// over 64 chars (issue #3523). toolName is only safe for internal registry
+// keys (prompts/resources), which have no provider limit.
 export const toolName = (clientName: string, name: string) => sanitize(clientName) + "_" + sanitize(name)
 
 // OpenAI's tool-use API rejects `tools[].function.name` strings longer than
