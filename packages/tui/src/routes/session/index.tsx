@@ -1663,7 +1663,7 @@ function ReasoningHeader(props: {
       ? RGBA.fromValues(theme.warning.r, theme.warning.g, theme.warning.b, theme.thinkingOpacity)
       : theme.warning
   const completed = () => {
-    if (props.encrypted) return `Thought${props.duration ? ` · ${props.duration}` : ""} · encrypted`
+    if (props.encrypted) return `Thought (encrypted)${props.duration ? ` · ${props.duration}` : ""}`
     const detail = [props.title, props.duration].filter(Boolean).join(" · ")
     return `${props.toggleable ? (props.open ? "- " : "+ ") : ""}Thought${detail ? `: ${detail}` : ""}`
   }
