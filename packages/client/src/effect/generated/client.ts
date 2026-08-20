@@ -186,6 +186,8 @@ import type {
   Endpoint20_3Output,
   Endpoint20_4Input,
   Endpoint20_4Output,
+  Endpoint20_5Input,
+  Endpoint20_5Output,
   Endpoint21_0Input,
   Endpoint21_0Output,
   Endpoint21_1Input,
@@ -1093,12 +1095,22 @@ const Endpoint20_4 = (raw: RawClient["server.pty"]) => (input: Endpoint20_4Input
     ),
   )
 
+const Endpoint20_5 = (raw: RawClient["server.pty"]) => (input: Endpoint20_5Input) =>
+  preserveEffect<Endpoint20_5Output>()(
+    raw["pty.connectToken"]({
+      params: { ptyID: input["ptyID"] },
+      query: { location: input["location"] },
+      headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroup20 = (raw: RawClient["server.pty"]) => ({
   list: Endpoint20_0(raw),
   create: Endpoint20_1(raw),
   get: Endpoint20_2(raw),
   update: Endpoint20_3(raw),
   remove: Endpoint20_4(raw),
+  connect: { token: Endpoint20_5(raw) },
 })
 
 const Endpoint21_0 = (raw: RawClient["server.shell"]) => (input?: Endpoint21_0Input) =>

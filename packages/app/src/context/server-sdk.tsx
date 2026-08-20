@@ -1,5 +1,5 @@
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import { createClientConnection, type ClientConnectionStatus } from "@opencode-ai/client/solid"
+import { createClientConnection, createPtyClient, type ClientConnectionStatus } from "@opencode-ai/client/solid"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { type Accessor, onCleanup } from "solid-js"
 import { createApiForServer, type ServerApi } from "@/utils/server"
@@ -61,6 +61,7 @@ type ServerSDKBase = {
   scope: ServerScope
   url: string
   api: ServerApi
+  pty: ReturnType<typeof createPtyClient>
   connection: {
     status: Accessor<ServerConnectionStatus>
     attempt: Accessor<number>
@@ -72,6 +73,7 @@ type ServerSDKBase = {
 function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
   const platform = usePlatform()
   const api = createApiForServer({ server: server.http, fetch: platform.fetch })
+  const pty = createPtyClient(api, { url: server.http.url })
   const events = createOpenCodeEventSource()
 
   const connection = createClientConnection(api, {
@@ -93,6 +95,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     scope,
     url: server.http.url,
     api,
+    pty,
     connection,
     event: events.event,
   }

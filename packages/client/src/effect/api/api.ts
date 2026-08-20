@@ -31,6 +31,7 @@ import type { FileSystem } from "@opencode-ai/schema/filesystem"
 import type { Command } from "@opencode-ai/schema/command"
 import type { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import type { Pty } from "@opencode-ai/schema/pty"
+import type { PtyTicket } from "@opencode-ai/schema/pty-ticket"
 import type { Reference } from "@opencode-ai/schema/reference"
 import type { Worktree } from "@opencode-ai/schema/worktree"
 import type { Vcs } from "@opencode-ai/schema/vcs"
@@ -1431,12 +1432,21 @@ export type Endpoint20_4Input = {
 export type Endpoint20_4Output = void
 export type PtyRemoveOperation<E = never> = (input: Endpoint20_4Input) => Effect.Effect<Endpoint20_4Output, E>
 
+export type Endpoint20_5Input = {
+  readonly ptyID: Pty.ID
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly "x-opencode-ticket"?: string | undefined
+}
+export type Endpoint20_5Output = { readonly location: Location.Info; readonly data: PtyTicket.ConnectToken }
+export type PtyConnectTokenOperation<E = never> = (input: Endpoint20_5Input) => Effect.Effect<Endpoint20_5Output, E>
+
 export interface PtyApi<E = never> {
   readonly list: PtyListOperation<E>
   readonly create: PtyCreateOperation<E>
   readonly get: PtyGetOperation<E>
   readonly update: PtyUpdateOperation<E>
   readonly remove: PtyRemoveOperation<E>
+  readonly connect: { readonly token: PtyConnectTokenOperation<E> }
 }
 
 export type Endpoint21_0Input = {

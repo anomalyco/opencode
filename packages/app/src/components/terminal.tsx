@@ -15,9 +15,7 @@ import { useServerSDK } from "@/context/server-sdk"
 import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
-import { terminalConnectToken } from "@/utils/terminal-connect-token"
 import { terminalWriter } from "@/utils/terminal-writer"
-import { terminalWebSocketURL } from "@/utils/terminal-websocket-url"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -179,7 +177,6 @@ export const Terminal = (props: TerminalProps) => {
   const language = useLanguage()
   // Intentional mount-time capture: the imperative xterm/WebSocket lifecycle needs stable values, and Terminal remounts when the SDK scope changes.
   const directory = sdk().directory
-  const url = serverSDK.url
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, [
     "pty",
@@ -531,14 +528,6 @@ export const Terminal = (props: TerminalProps) => {
           })
       }
 
-      const connectToken = async () => {
-        const result = await terminalConnectToken({ url, id, directory })
-        if (result.ticket) return result.ticket
-        if (result.status === 404 || result.status === 405) return
-        if (result.status === 403) throw new Error(language.t("terminal.connectTicket.csrfError"))
-        throw new Error(language.t("terminal.connectTicket.statusError", { status: result.status }))
-      }
-
       const retry = (err: unknown) => {
         if (disposed) return
         if (reconn !== undefined) return
@@ -562,23 +551,21 @@ export const Terminal = (props: TerminalProps) => {
         if (disposed) return
         drop?.()
 
-        const ticket = await connectToken().catch((err) => {
-          fail(err)
-          return undefined
-        })
-        if (once.value) return
-        if (disposed) return
-
-        const socket = new WebSocket(
-          terminalWebSocketURL({
-            url,
-            id,
-            directory,
+        const socket = await serverSDK.pty
+          .connect({
+            ptyID: id,
+            location: { directory },
             cursor: seek,
-            ticket,
-          }),
-        )
-        socket.binaryType = "arraybuffer"
+          })
+          .catch((err) => {
+            fail(err)
+            return undefined
+          })
+        if (!socket || once.value) return
+        if (disposed) {
+          socket.close(1000)
+          return
+        }
         ws = socket
 
         const handleOpen = () => {
