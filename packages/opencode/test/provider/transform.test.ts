@@ -4454,6 +4454,46 @@ describe("ProviderTransform.variants", () => {
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
+
+    test("omits the generic output cap when an exact max_completion_tokens value is configured", () => {
+      const model = createMockModel({
+        id: "cerebras/gpt-oss-120b",
+        providerID: "cerebras",
+        api: {
+          id: "gpt-oss-120b",
+          url: "https://api.cerebras.ai/v1",
+          npm: "@ai-sdk/cerebras",
+        },
+      })
+
+      const result = ProviderTransform.maxOutputTokensForRequest({
+        model,
+        options: { max_completion_tokens: 64 },
+        maxOutputTokens: 32_000,
+      })
+
+      expect(result).toBeUndefined()
+    })
+
+    test("keeps the generic output cap when no exact value is configured", () => {
+      const model = createMockModel({
+        id: "cerebras/gpt-oss-120b",
+        providerID: "cerebras",
+        api: {
+          id: "gpt-oss-120b",
+          url: "https://api.cerebras.ai/v1",
+          npm: "@ai-sdk/cerebras",
+        },
+      })
+
+      const result = ProviderTransform.maxOutputTokensForRequest({
+        model,
+        options: {},
+        maxOutputTokens: 32_000,
+      })
+
+      expect(result).toBe(32_000)
+    })
   })
 
   describe("@ai-sdk/togetherai", () => {

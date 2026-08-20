@@ -1419,6 +1419,17 @@ export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_T
   return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
 }
 
+export function maxOutputTokensForRequest(input: {
+  model: Provider.Model
+  options: Record<string, any>
+  maxOutputTokens: number | undefined
+}): number | undefined {
+  if (input.model.api.npm === "@ai-sdk/cerebras" && input.options.max_completion_tokens !== undefined) {
+    return undefined
+  }
+  return input.maxOutputTokens
+}
+
 type JsonRecord = Record<string, unknown>
 
 function isPlainObject(value: unknown): value is JsonRecord {
