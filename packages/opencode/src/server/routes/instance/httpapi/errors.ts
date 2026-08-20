@@ -122,6 +122,31 @@ export class SessionBusyError extends Schema.TaggedErrorClass<SessionBusyError>(
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * The client-facing form of a branch-cancellation failure.
+ *
+ * This shares the wire tag `SessionClosureError` with the domain failure in
+ * `session/closure/coordinator` while carrying different fields, the same split
+ * `Session.BusyError` and `SessionBusyError` already use above. `handlers/session-errors.ts`
+ * `mapClosure` is the only conversion, and it derives `message` from a closed table rather than
+ * from the failure's own text, so a field added to the domain error cannot reach a client by
+ * default.
+ */
+export class SessionClosureError extends Schema.TaggedErrorClass<SessionClosureError>()(
+  "SessionClosureError",
+  {
+    kind: Schema.Literals([
+      "scope_incomplete",
+      "quiescence_failed",
+      "planning_failed",
+      "record_failed",
+      "closure_unavailable",
+    ]),
+    message: Schema.String,
+  },
+  { httpApiStatus: 500 },
+) {}
+
 export class QuestionNotFoundError extends Schema.TaggedErrorClass<QuestionNotFoundError>()(
   "QuestionNotFoundError",
   {
