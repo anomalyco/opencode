@@ -162,6 +162,10 @@ export const RunCommand = effectCmd({
         type: "boolean",
         describe: "share the session",
       })
+      .option("ephemeral", {
+        type: "boolean",
+        describe: "do not persist the session after the run completes",
+      })
       .option("model", {
         type: "string",
         alias: ["m"],
@@ -427,6 +431,11 @@ export const RunCommand = effectCmd({
         process.exit(1)
       }
 
+      if (args.ephemeral && (args.continue || args.session || args.attach || args.share)) {
+        UI.error("--ephemeral cannot be used with --continue, --session, --attach, or --share")
+        process.exit(1)
+      }
+
       const rules: PermissionV1.Ruleset = interactive
         ? []
         : [
@@ -533,6 +542,7 @@ export const RunCommand = effectCmd({
       }
 
       async function share(sdk: OpencodeClient, sessionID: string) {
+        if (args.ephemeral) return
         const cfg = await sdk.config.get()
         if (!cfg.data) return
         if (cfg.data.share !== "auto" && !flags.autoShare && !args.share) return
@@ -985,6 +995,7 @@ export async function runMini(input: MiniCommandInput) {
     session: input.session,
     fork: input.fork,
     share: undefined,
+    ephemeral: false,
     model: input.model,
     agent: input.agent,
     format: "default",
