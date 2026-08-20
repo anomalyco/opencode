@@ -14,7 +14,7 @@ import type { SessionMutation } from "../session/closure/mutation"
 import { SessionAdmission } from "../session/closure/admission"
 import { AttachmentCoordinator } from "@/session/attachment/coordinator"
 import { Config } from "@/config/config"
-import { Cause, Effect, Exit, Schema, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
@@ -322,6 +322,26 @@ export const TaskTool = Tool.define(
         )
       })
 
+      // Public job ids are reusable, so this call keeps the physical lifetime for its own exact
+      // wait and cancellation, and the opaque invocation handle for the one async observer. The
+      // deferred closes the promotion race: `onPromote` can run before `startExact` returns, so its
+      // observer has to await publication rather than read a cell that may still be empty.
+      const armed = yield* Deferred.make<
+        { readonly lifetime: BackgroundJob.Lifetime; readonly handle: BackgroundJob.InvocationHandle } | undefined
+      >()
+
+      // The observer waits on the exact accepted invocation. A wait by public id could attach to a
+      // replacement lifetime and report another invocation's outcome as this one's result.
+      const exactObservation = Deferred.await(armed).pipe(
+        Effect.flatMap((current) =>
+          current
+            ? background.waitHandle({ handle: current.handle })
+            : // Nothing was armed for this attempt, so there is no invocation of ours to observe.
+              // Never fall back to the reusable public id.
+              Effect.succeed<BackgroundJob.WaitResult>({ timedOut: false }),
+        ),
+      )
+
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
         state: "completed" | "error",
         text: string,
@@ -374,7 +394,7 @@ export const TaskTool = Tool.define(
 
       /** One continuation lease, one wait, and at most one parent prompt. */
       const notify = Effect.fn("TaskTool.notifyBackgroundResult")(function* (
-        jobID: SessionID,
+        observation: Effect.Effect<BackgroundJob.WaitResult>,
         target?: AttachedObserver,
       ) {
         // Acquired before the waiter is scheduled, so the lease exists for the whole time the
@@ -409,7 +429,7 @@ export const TaskTool = Tool.define(
         const held = acquired.value
 
         const observe = Effect.gen(function* () {
-          const result = yield* background.wait({ id: jobID })
+          const result = yield* observation
           const info = result.info
           if (!info) {
             if (target?.owner) yield* target.attachment.absent(target.reservation)
@@ -468,14 +488,16 @@ export const TaskTool = Tool.define(
       })
 
       /** Elects at most one observer per reservation, and never silently shares delivery ownership. */
-      const attachObservation = Effect.fn("TaskTool.attachObservation")(function* (jobID: SessionID) {
+      const attachObservation = Effect.fn("TaskTool.attachObservation")(function* (
+        observation: Effect.Effect<BackgroundJob.WaitResult>,
+      ) {
         if (!parentScope || !reservation) {
-          yield* notify(jobID)
+          yield* notify(observation)
           return
         }
         const claim = yield* parentScope.claimObserver(reservation)
         if (claim.type === "owner") {
-          yield* notify(jobID, { attachment: parentScope, reservation, owner: true })
+          yield* notify(observation, { attachment: parentScope, reservation, owner: true })
           return
         }
         if (claim.type === "fallback") {
@@ -483,7 +505,7 @@ export const TaskTool = Tool.define(
             "session.id": ctx.sessionID,
             "task.id": nextSession.id,
           })
-          yield* notify(jobID, { attachment: parentScope, reservation, owner: false })
+          yield* notify(observation, { attachment: parentScope, reservation, owner: false })
           return
         }
         if (claim.type !== "unavailable") return
@@ -495,7 +517,22 @@ export const TaskTool = Tool.define(
           "task.id": nextSession.id,
           reason: claim.reason,
         })
-        yield* notify(jobID, { attachment: parentScope, reservation, owner: false })
+        yield* notify(observation, { attachment: parentScope, reservation, owner: false })
+      })
+
+      const attach = Effect.fn("TaskTool.attach")(function* () {
+        yield* attachObservation(exactObservation)
+      })
+
+      const attachExtension = Effect.fn("TaskTool.attachExtension")(function* (
+        handle: BackgroundJob.InvocationHandle,
+      ) {
+        // A root extension already belongs either to the original synchronous waiter or to the one
+        // observer installed when that lifetime became async. Installing another notifier here would
+        // duplicate the result and every later extension. Only a distinct parent reservation can own
+        // a new observer cohort.
+        if (!parentScope || !reservation) return
+        yield* attachObservation(background.waitHandle({ handle }))
       })
 
       const runningResult = (summary: "Async task started" | "Async task updated", text: string) => ({
@@ -533,30 +570,30 @@ export const TaskTool = Tool.define(
           return yield* collision()
         }
         if (parentScope) yield* background.promote(nextSession.id)
-        const extended = yield* background.extend({
+        const handle = yield* background.extendWithHandle({
           id: nextSession.id,
           run: runTask(),
           admission: jobAdmission,
         })
-        if (!extended) {
+        if (!handle) {
           if (parentScope && reservation) yield* parentScope.reject(reservation)
           return yield* collision()
         }
-        if (parentScope) yield* attachObservation(nextSession.id)
+        yield* attachExtension(handle)
         return runningResult("Async task updated", flags.experimentalBackgroundSubagents ? ASYNC_UPDATED : TASK_UPDATED)
       }
 
       const admission = yield* Effect.gen(function* () {
         if (parentScope) yield* background.promote(nextSession.id)
         const extended = yield* background
-          .extend({ id: nextSession.id, run: runTask(), admission: jobAdmission })
+          .extendWithHandle({ id: nextSession.id, run: runTask(), admission: jobAdmission })
           .pipe(Effect.exit)
         if (Exit.isFailure(extended)) {
           if (parentScope && reservation) yield* parentScope.reject(reservation)
           return yield* Effect.failCause(extended.cause)
         }
         if (extended.value) {
-          if (parentScope) yield* attachObservation(nextSession.id)
+          yield* attachExtension(extended.value)
           if (claim) yield* attachments.settleClaim(claim, true)
           return { type: "extended" as const }
         }
@@ -570,7 +607,7 @@ export const TaskTool = Tool.define(
         }
 
         const started = yield* background
-          .start({
+          .startExact({
             id: nextSession.id,
             type: id,
             title: params.description,
@@ -580,25 +617,40 @@ export const TaskTool = Tool.define(
                 title: params.description,
                 metadata: { ...metadata, background: true, jobId: nextSession.id },
               }),
-              attachObservation(nextSession.id),
+              attach(),
             ]),
             run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
             admission: jobAdmission,
           })
           .pipe(Effect.exit)
         if (Exit.isFailure(started)) {
+          // An observer can already be waiting on the handle: `onPromote` is live from registration
+          // onward, which is inside `startExact`. Publishing the absence releases it, and `undefined`
+          // is the honest value — a start that failed armed no lifetime for anyone to observe.
+          yield* Deferred.succeed(armed, undefined)
           if (parentScope && reservation) yield* parentScope.reject(reservation)
           return yield* Effect.failCause(started.cause)
         }
-        if (runAsync) yield* attachObservation(nextSession.id)
+        // Published before `attach()`, so the common async path never parks. The lifetime is absent
+        // only when this attempt joined an arm already in progress that then terminalized; passing
+        // that absence through unchanged is deliberate, because it is the one fact observers need.
+        yield* Deferred.succeed(
+          armed,
+          started.value.lifetime && started.value.handle
+            ? { lifetime: started.value.lifetime, handle: started.value.handle }
+            : undefined,
+        )
+        if (runAsync) yield* attach()
         if (claim) yield* attachments.settleClaim(claim, true)
-        return { type: "started" as const, info: started.value }
+        return { type: "started" as const, result: started.value }
       }).pipe(Effect.ensuring(claim ? attachments.settleClaim(claim, false) : Effect.void))
 
       if (admission.type === "extended") {
         return runningResult("Async task updated", flags.experimentalBackgroundSubagents ? ASYNC_UPDATED : TASK_UPDATED)
       }
-      const info = admission.info
+      const info = admission.result.info
+      // The exact lifetime the synchronous consumers below are entitled to act on.
+      const lifetime = admission.result.lifetime
 
       function backgroundResult() {
         return {
@@ -635,10 +687,30 @@ export const TaskTool = Tool.define(
         () =>
           Effect.gen(function* () {
             const result = yield* Effect.raceFirst(
-              background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
-              background.waitForPromotion(nextSession.id),
+              // The exact handle, never the public id. A wait by id here could return a replacement
+              // lifetime's terminal info and report it as this task's own result.
+              lifetime
+                ? background.waitExact({ lifetime }).pipe(Effect.map((waited) => waited.info))
+                : // Nothing was armed for this invocation: it joined an arm already in progress that
+                  // then terminalized, and the `info` already in hand is that attempt's own terminal
+                  // snapshot. Re-reading by id could only find a successor. Resolving rather than
+                  // parking also keeps this racer live, which the promotion racer below relies on.
+                  Effect.succeed(info),
+              // `waitForPromotionExact` reports `undefined` for a stale or already-terminal lifetime
+              // where the id-based method blocks forever. That is honest for a direct caller but
+              // wrong inside this race: a non-promotion resolving first would win, and the terminal
+              // outcome the other racer holds would read as "no result" — a completed task with
+              // empty output. So only an actual promotion may win, and a non-answer parks. It cannot
+              // hang the race, because the racer above always resolves.
+              lifetime
+                ? background
+                    .waitForPromotionExact(lifetime)
+                    .pipe(Effect.flatMap((promoted) => (promoted ? Effect.succeed(promoted) : Effect.never)))
+                : Effect.never,
             )
             if (result?.metadata?.background === true) return backgroundResult()
+            // Settled synchronously, so no async observer will ever consume this reservation.
+            if (parentScope && reservation) yield* parentScope.reject(reservation)
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
             return {
@@ -649,8 +721,15 @@ export const TaskTool = Tool.define(
           }),
         (_, exit) =>
           Effect.gen(function* () {
-            if (Exit.hasInterrupts(exit))
-              yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
+            if (Exit.hasInterrupts(exit)) {
+              if (parentScope) yield* parentScope.claimCancellation("cancelled")
+              // The exact lifetime this invocation started, never the public id. After a
+              // replacement, a cancel by id lands on a lifetime this task never started — and unlike
+              // the sweeps, that one is currently being run by another live invocation. With no
+              // lifetime there is nothing of ours to cancel: the attempt we joined had already
+              // terminalized.
+              yield* Effect.all([cancel, lifetime ? background.cancelExact(lifetime) : Effect.void], { discard: true })
+            }
           }).pipe(
             Effect.ensuring(
               Effect.sync(() => {
