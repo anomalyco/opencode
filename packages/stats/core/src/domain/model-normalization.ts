@@ -9,6 +9,7 @@ export const MODEL_AUTHOR_RULES = [
   { match: "kimi", author: "moonshot" },
   { match: "mimo", author: "xiaomi" },
   { match: "minimax", author: "minimax" },
+  { match: "muse-spark", author: "meta" },
   { match: "nemotron", author: "nvidia" },
   { match: "qwen", author: "qwen" },
 ] as const
