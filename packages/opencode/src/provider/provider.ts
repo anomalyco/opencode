@@ -40,15 +40,28 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
 
   const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+  let deadline: number | undefined
+
+  function observedDataEvent(value: Uint8Array) {
+    buffer += decoder.decode(value, { stream: true })
+    const events = buffer.split(/\r?\n\r?\n/)
+    buffer = events.pop() ?? ""
+    return events.some((event) => /^data\s*:/m.test(event))
+  }
+
   const body = new ReadableStream<Uint8Array>({
     async pull(ctrl) {
+      if (deadline === undefined) deadline = Date.now() + ms
       const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
+        const remaining = Math.max(0, deadline - Date.now())
         const id = setTimeout(() => {
           const err = new ProviderError.ResponseStreamError("SSE read timed out")
           ctl.abort(err)
           void reader.cancel(err)
           reject(err)
-        }, ms)
+        }, remaining)
 
         reader.read().then(
           (part) => {
@@ -67,6 +80,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
         return
       }
 
+      if (observedDataEvent(part.value)) deadline = Date.now() + ms
       ctrl.enqueue(part.value)
     },
     async cancel(reason) {
