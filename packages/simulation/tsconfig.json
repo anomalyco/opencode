@@ -5,7 +5,5 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "noUncheckedIndexedAccess": false
   },
-  // Drive scripts type-check inside the external opencode-drive CLI, which owns their types.
-  "exclude": ["drive"],
   "references": [{ "path": "../core" }]
 }
