@@ -642,7 +642,30 @@ export const TaskTool = Tool.define(
             id: nextSession.id,
             type: id,
             title: params.description,
-            metadata,
+            /**
+             * The Task-edge coordinates, added to the job's metadata only.
+             *
+             * The bare `metadata` object is shared with the ToolPart: `ctx.metadata({ metadata })`
+             * writes it as product-visible part bytes, and `onPromote` below rewrites it. Spreading
+             * the coordinates here rather than into `metadata` itself is what keeps them off that
+             * surface — `startExact` takes its own metadata argument, so the job carries two extra
+             * keys while the ToolPart's bytes stay unchanged.
+             *
+             * A message and a call, because that is all `Tool.Context` carries. There is no `partID`
+             * on it; the durable triple lives only in the processor's process-local `ctx.toolcalls`,
+             * which is gone by the time closure proves quiescence. `Ports.ToolPartCapability`
+             * resolves the part from these coordinates downstream, after the proof.
+             *
+             * `taskCallId` is omitted rather than written `undefined` when absent, so the shape
+             * check in `closure/discovery.ts` reports "no coordinate" instead of coercing one.
+             * Missing evidence must not widen cancellation authority, and an invented coordinate is
+             * how a branch walk would widen it.
+             */
+            metadata: {
+              ...metadata,
+              taskMessageId: ctx.messageID,
+              ...(ctx.callID ? { taskCallId: ctx.callID } : {}),
+            },
             onPromote: Effect.all([
               ctx.metadata({
                 title: params.description,
