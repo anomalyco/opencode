@@ -1,6 +1,7 @@
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "./locale"
 import * as Model from "./model"
+import { isCompleteClosurePair } from "@opencode-ai/core/session/closure-record"
 
 export type TranscriptOptions = {
   thinking: boolean
@@ -38,7 +39,9 @@ export function formatTranscript(
   for (const msg of messages.toSorted(
     (a, b) => a.info.time.created - b.info.time.created || a.info.id.localeCompare(b.info.id),
   )) {
-    transcript += formatMessage(msg.info, msg.parts, options, providers)
+    const block = formatMessage(msg.info, msg.parts, options, providers)
+    if (!block) continue
+    transcript += block
     transcript += `---\n\n`
   }
 
@@ -51,14 +54,19 @@ export function formatMessage(
   options: TranscriptOptions,
   providers?: Provider[] | ReadonlyMap<string, Provider>,
 ): string {
-  let result = ""
-
-  if (msg.role === "user") {
-    result += `## User\n\n`
-  } else {
-    result += formatAssistantHeader(msg, options.assistantMetadata, providers ?? options.providers)
+  if (isCompleteClosurePair({ info: msg, parts })) {
+    const part = parts[0]
+    if (part?.type !== "text") return ""
+    return `## Branch closure\n\n${part.text}\n\n`
   }
 
+  if (msg.role === "user") {
+    const body = parts.map((part) => formatPart(part, options)).join("")
+    if (!body) return ""
+    return `## User\n\n${body}`
+  }
+
+  let result = formatAssistantHeader(msg, options.assistantMetadata, providers ?? options.providers)
   for (const part of parts) {
     result += formatPart(part, options)
   }

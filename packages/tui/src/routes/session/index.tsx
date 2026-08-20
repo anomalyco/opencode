@@ -82,6 +82,13 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { runAfterSessionBranchAbort } from "../../util/session-abort"
+import {
+  closureEvidencePart,
+  isHumanUserMessage,
+  isMessageNavigationStop,
+  taskSpinnerRunning,
+} from "../../util/closure-record"
 
 addDefaultParsers(parsers.parsers)
 
@@ -392,7 +399,7 @@ export function Session() {
         const parts = sync.data.part[message.id]
         if (!parts || !Array.isArray(parts)) return false
 
-        return parts.some((part) => part && part.type === "text" && !part.synthetic && !part.ignored)
+        return isMessageNavigationStop(message, parts)
       })
       .sort((a, b) => a.y - b.y)
 
@@ -616,32 +623,44 @@ export function Session() {
         name: "undo",
       },
       run: async () => {
-        const status = sync.data.session_status?.[route.sessionID]
-        if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
-        const message = messagesBeforeRevert().findLast((item) => item.role === "user")
-        if (!message) return
-        void sdk.client.session
-          .revert({
-            sessionID: route.sessionID,
-            messageID: message.id,
-          })
-          .then(() => {
-            toBottom()
-          })
-        const parts = sync.data.part[message.id]
-        prompt?.set(
-          parts.reduce(
-            (agg, part) => {
-              if (part.type === "text") {
-                if (!part.synthetic) agg.input += part.text
-              }
-              if (part.type === "file") agg.parts.push(part)
-              return agg
-            },
-            { input: "", parts: [] as PromptInfo["parts"] },
-          ),
-        )
-        dialog.clear()
+        await runAfterSessionBranchAbort({
+          client: sdk.client,
+          sessionID: route.sessionID,
+          onFailure: (error) =>
+            toast.show({
+              title: "Undo failed",
+              message: errorMessage(error),
+              variant: "error",
+            }),
+          action: async () => {
+            const message = messagesBeforeRevert().findLast((item) =>
+              isHumanUserMessage(item, sync.data.part[item.id] ?? []),
+            )
+            if (!message) return
+            void sdk.client.session
+              .revert({
+                sessionID: route.sessionID,
+                messageID: message.id,
+              })
+              .then(() => {
+                toBottom()
+              })
+            const parts = sync.data.part[message.id]
+            prompt?.set(
+              parts.reduce(
+                (agg, part) => {
+                  if (part.type === "text") {
+                    if (!part.synthetic) agg.input += part.text
+                  }
+                  if (part.type === "file") agg.parts.push(part)
+                  return agg
+                },
+                { input: "", parts: [] as PromptInfo["parts"] },
+              ),
+            )
+            dialog.clear()
+          },
+        })
       },
     },
     {
@@ -652,21 +671,35 @@ export function Session() {
       slash: {
         name: "redo",
       },
-      run: () => {
+      run: async () => {
         dialog.clear()
         const messageID = session()?.revert?.messageID
         if (!messageID) return
-        const message = messages().find((x) => x.role === "user" && x.id > messageID)
-        if (!message) {
-          void sdk.client.session.unrevert({
-            sessionID: route.sessionID,
-          })
-          prompt?.set({ input: "", parts: [] })
-          return
-        }
-        void sdk.client.session.revert({
+        await runAfterSessionBranchAbort({
+          client: sdk.client,
           sessionID: route.sessionID,
-          messageID: message.id,
+          onFailure: (error) =>
+            toast.show({
+              title: "Redo failed",
+              message: errorMessage(error),
+              variant: "error",
+            }),
+          action: async () => {
+            const message = messages().find(
+              (x) => x.id > messageID && isHumanUserMessage(x, sync.data.part[x.id] ?? []),
+            )
+            if (!message) {
+              void sdk.client.session.unrevert({
+                sessionID: route.sessionID,
+              })
+              prompt?.set({ input: "", parts: [] })
+              return
+            }
+            void sdk.client.session.revert({
+              sessionID: route.sessionID,
+              messageID: message.id,
+            })
+          },
         })
       },
     },
@@ -841,14 +874,12 @@ export function Session() {
         // Find the most recent user message with non-ignored, non-synthetic text parts
         for (let i = messages.length - 1; i >= 0; i--) {
           const message = messages[i]
-          if (!message || message.role !== "user") continue
+          if (!message || !isHumanUserMessage(message, sync.data.part[message.id] ?? [])) continue
 
           const parts = sync.data.part[message.id]
           if (!parts || !Array.isArray(parts)) continue
 
-          const hasValidTextPart = parts.some(
-            (part) => part && part.type === "text" && !part.synthetic && !part.ignored,
-          )
+          const hasValidTextPart = isMessageNavigationStop(message, parts)
 
           if (hasValidTextPart) {
             const child = scroll.getChildren().find((child) => {
@@ -1137,7 +1168,7 @@ export function Session() {
     if (index === -1) return []
     return messages()
       .slice(index)
-      .filter((message) => message.role === "user")
+      .filter((message) => isHumanUserMessage(message, sync.data.part[message.id] ?? []))
   })
 
   const revert = createMemo(() => {
@@ -1200,6 +1231,9 @@ export function Session() {
                 <For each={messages()}>
                   {(message, index) => (
                     <Switch>
+                      <Match when={closureEvidencePart(message, sync.data.part[message.id] ?? [])}>
+                        {(part) => <BranchClosureMessage message={message} part={part()} index={index()} />}
+                      </Match>
                       <Match when={message.id === revert()?.messageID}>
                         {(function () {
                           const redoShortcut = useCommandShortcut("session.redo")
@@ -1359,6 +1393,19 @@ export function Session() {
         </box>
       </context.Provider>
     </LocationProvider>
+  )
+}
+
+function BranchClosureMessage(props: { message: { id: string }; part: TextPart; index: number }) {
+  const { theme } = useTheme()
+  return (
+    <box id={props.message.id} marginTop={props.index === 0 ? 0 : 1} paddingLeft={1} flexShrink={0}>
+      <text fg={theme.textMuted}>
+        <span style={{ bold: true }}>Branch closure</span>
+        {"\n"}
+        {props.part.text}
+      </text>
+    </box>
   )
 }
 
@@ -2246,11 +2293,7 @@ function Task(props: ToolProps) {
 
   const status = createMemo(() => sync.data.session_status[sessionID() ?? ""])
   const isRunning = createMemo(() => {
-    const value = status()
-    return (
-      props.part.state.status === "running" ||
-      (props.metadata.background === true && value !== undefined && value.type !== "idle")
-    )
+    return taskSpinnerRunning(props.part.state.status, props.metadata.background === true, status())
   })
   const retry = createMemo(() => {
     const value = status()
