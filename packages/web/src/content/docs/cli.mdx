@@ -34,6 +34,7 @@ opencode [project]
 | <nobr><code>{"--continue"}</code></nobr>    | `-c`  | Continue the last session                                               |
 | <nobr><code>{"--session"}</code></nobr>     | `-s`  | Session ID to continue                                                  |
 | <nobr><code>{"--fork"}</code></nobr>        |       | Fork the session when continuing (use with `--continue` or `--session`) |
+| <nobr><code>{"--ephemeral"}</code></nobr>   |       | Do not persist sessions created in this instance after exiting          |
 | <nobr><code>{"--prompt"}</code></nobr>      |       | Prompt to use                                                           |
 | <nobr><code>{"--model"}</code></nobr>       | `-m`  | Model to use in the form of provider/model                              |
 | <nobr><code>{"--agent"}</code></nobr>       |       | Agent to use                                                            |
@@ -368,7 +369,7 @@ opencode run --ephemeral "Suggest a commit message for the staged changes"
 
 This is useful in scripts, CI pipelines, and shell integrations where each invocation would otherwise leave a session behind. If the process is killed before it can clean up, the leftover session is still hidden from lists and is deleted automatically on a later startup. Since ephemeral sessions are fire-and-forget, `--ephemeral` cannot be combined with `--continue`, `--session`, `--attach`, or `--share`.
 
-The minimal interactive interface supports it too — `opencode --mini --ephemeral` starts a scratch conversation whose sessions are deleted when you exit.
+The interactive interfaces support it too — `opencode --ephemeral` (or `opencode --mini --ephemeral`) starts a scratch instance whose sessions are deleted when you exit.
 
 #### Flags
 
