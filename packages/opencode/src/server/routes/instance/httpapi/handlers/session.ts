@@ -387,13 +387,17 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof PermissionResponsePayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response }).pipe(
-        Effect.catchTag("Permission.NotFoundError", (error) =>
-          Effect.fail(
-            new PermissionNotFoundError({
-              requestID: String(error.requestID),
-              message: `Permission request not found: ${error.requestID}`,
-            }),
+      // The session-scoped compatibility route converges on the same `Permission.reply` as the
+      // root one, so the guard inside the service covers both and no second authority exists here.
+      yield* SessionError.mapAdmission(
+        permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response }).pipe(
+          Effect.catchTag("Permission.NotFoundError", (error) =>
+            Effect.fail(
+              new PermissionNotFoundError({
+                requestID: String(error.requestID),
+                message: `Permission request not found: ${error.requestID}`,
+              }),
+            ),
           ),
         ),
       )

@@ -5,6 +5,8 @@ import { SessionID } from "@/session/schema"
 import { QuestionID } from "./schema"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { QuestionV1 } from "@opencode-ai/schema/question-v1"
+import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionAdmission } from "@/session/closure/admission"
 
 export const Option = QuestionV1.Option
 export type Option = typeof Option.Type
@@ -54,8 +56,8 @@ export interface Interface {
   readonly reply: (input: {
     requestID: QuestionID
     answers: ReadonlyArray<Answer>
-  }) => Effect.Effect<void, NotFoundError>
-  readonly reject: (requestID: QuestionID) => Effect.Effect<void, NotFoundError>
+  }) => Effect.Effect<void, NotFoundError | SessionClosure.AdmissionRefused>
+  readonly reject: (requestID: QuestionID) => Effect.Effect<void, NotFoundError | SessionClosure.AdmissionRefused>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
@@ -65,6 +67,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    const closure = yield* SessionClosure.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Question.state")(function* () {
         const state = {
@@ -121,14 +124,29 @@ const layer = Layer.effect(
         yield* Effect.logWarning("reply for unknown request", { requestID: input.requestID })
         return yield* new NotFoundError({ requestID: input.requestID })
       }
-      pending.delete(input.requestID)
-      yield* Effect.logInfo("replied", { requestID: input.requestID, answers: input.answers })
-      yield* events.publish(Event.Replied, {
-        sessionID: existing.info.sessionID,
-        requestID: existing.info.id,
-        answers: input.answers.map((a) => [...a]),
-      })
-      yield* Deferred.succeed(existing.deferred, input.answers)
+      // An answer resumes the suspended tool that asked, so the guard has to run before the
+      // deferred resolves: after a branch closes, resuming its tool restarts the work that was
+      // just stopped. There is no cascade here — exactly one deferred is resolved — so one
+      // admission covers the whole resolved set by construction.
+      //
+      // `retryable: false` is what keeps that decided. Waiting for release and then running this
+      // body is precisely resuming the suspended tool after the branch closed. The joined
+      // admission is still settled.
+      return yield* SessionAdmission.admitted(
+        closure,
+        { session: existing.info.sessionID, origin: "external", source: "Question.reply", retryable: false },
+        () =>
+          Effect.gen(function* () {
+            pending.delete(input.requestID)
+            yield* Effect.logInfo("replied", { requestID: input.requestID, answers: input.answers })
+            yield* events.publish(Event.Replied, {
+              sessionID: existing.info.sessionID,
+              requestID: existing.info.id,
+              answers: input.answers.map((a) => [...a]),
+            })
+            yield* Deferred.succeed(existing.deferred, input.answers)
+          }),
+      )
     })
 
     const reject = Effect.fn("Question.reject")(function* (requestID: QuestionID) {
@@ -138,13 +156,25 @@ const layer = Layer.effect(
         yield* Effect.logWarning("reject for unknown request", { requestID })
         return yield* new NotFoundError({ requestID })
       }
-      pending.delete(requestID)
-      yield* Effect.logInfo("rejected", { requestID })
-      yield* events.publish(Event.Rejected, {
-        sessionID: existing.info.sessionID,
-        requestID: existing.info.id,
-      })
-      yield* Deferred.fail(existing.deferred, new RejectedError())
+      // Admitted for the same reason the answer is, and the reason is evidence rather than
+      // symmetry: a rejection reaches the processor's tool-call failure path, which writes the
+      // part to error — a durable transcript mutation — and only then breaks conditionally. So
+      // this is a continuation, not a proven termination, and retrying it after release would
+      // drive that mutation into a branch that has just closed.
+      return yield* SessionAdmission.admitted(
+        closure,
+        { session: existing.info.sessionID, origin: "external", source: "Question.reject", retryable: false },
+        () =>
+          Effect.gen(function* () {
+            pending.delete(requestID)
+            yield* Effect.logInfo("rejected", { requestID })
+            yield* events.publish(Event.Rejected, {
+              sessionID: existing.info.sessionID,
+              requestID: existing.info.id,
+            })
+            yield* Deferred.fail(existing.deferred, new RejectedError())
+          }),
+      )
     })
 
     const list = Effect.fn("Question.list")(function* () {
@@ -156,6 +186,10 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [EventV2Bridge.node, SessionClosure.node],
+})
 
 export * as Question from "."
