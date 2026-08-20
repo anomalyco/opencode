@@ -1,4 +1,4 @@
-import type { NotFoundError as StorageNotFoundError } from "@/storage/storage"
+import { NotFoundError as StorageNotFoundError } from "@/storage/storage"
 import { Session } from "@/session/session"
 import { SessionClosure } from "@/session/closure/coordinator"
 import { SessionMutation } from "@/session/closure/mutation"
@@ -90,8 +90,18 @@ export function mapAdmission<A, E, R>(
   )
 }
 
-export function mapStorageNotFound<A, R>(self: Effect.Effect<A, StorageNotFoundError, R>) {
-  return self.pipe(Effect.mapError((error) => ApiError.notFound(error.message)))
+// Generic in the trailing error for the same reason `mapBusy` is: a seam that can raise a storage
+// miss can also raise a refusal, and each mapper must leave the other's errors alone. Every
+// existing caller passes exactly `NotFoundError` and still compiles.
+export function mapStorageNotFound<A, E, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, Exclude<E, StorageNotFoundError> | ApiError.ApiNotFoundError, R> {
+  return self.pipe(
+    Effect.mapError((error) => {
+      if (error instanceof StorageNotFoundError) return ApiError.notFound(error.message)
+      return error as Exclude<E, StorageNotFoundError>
+    }),
+  )
 }
 
 /**

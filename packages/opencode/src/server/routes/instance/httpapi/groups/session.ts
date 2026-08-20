@@ -216,7 +216,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Successfully deleted session"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.delete",
@@ -423,7 +423,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
           query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Successfully deleted part"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "part.delete",
@@ -435,7 +435,7 @@ export const SessionApi = HttpApi.make("session")
           query: WorkspaceRoutingQuery,
           payload: SessionV1.Part,
           success: described(SessionV1.Part, "Successfully updated part"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "part.update",

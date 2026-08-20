@@ -794,7 +794,13 @@ const layer = Layer.effect(
       yield* Effect.forEach(
         sessions.filter((sessionInfo) => !sessionInfo.parentID || !sessionIDs.has(sessionInfo.parentID)),
         (sessionInfo) =>
-          session.remove(sessionInfo.id).pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.void)),
+          session.remove(sessionInfo.id).pipe(
+            Effect.catchIf(NotFoundError.isInstance, () => Effect.void),
+            // Deliberately not joined to the NotFound swallow above. An already-gone session is
+            // benign; a session refusing removal because its branch is being cancelled is not, and
+            // treating that as success would orphan it behind a deleted workspace.
+            Effect.catchTag("SessionClosureMutationRefused", Effect.die),
+          ),
         { discard: true },
       )
 

@@ -10,6 +10,8 @@ import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionClosure } from "./closure/coordinator"
+import { SessionMutation } from "./closure/mutation"
 import { SessionV2 } from "@opencode-ai/core/session"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
@@ -462,16 +464,26 @@ export interface Interface {
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
-  readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
+  readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound | SessionMutation.MutationRefused>
   readonly updateMessage: <T extends SessionV1.Info>(msg: T) => Effect.Effect<T>
-  readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
-  readonly removePart: (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) => Effect.Effect<PartID>
+  readonly removeMessage: (input: {
+    sessionID: SessionID
+    messageID: MessageID
+  }) => Effect.Effect<MessageID, SessionMutation.MutationRefused>
+  readonly removePart: (input: {
+    sessionID: SessionID
+    messageID: MessageID
+    partID: PartID
+  }) => Effect.Effect<PartID, SessionMutation.MutationRefused>
   readonly getPart: (input: {
     sessionID: SessionID
     messageID: MessageID
     partID: PartID
   }) => Effect.Effect<SessionV1.Part | undefined>
   readonly updatePart: <T extends SessionV1.Part>(part: T) => Effect.Effect<T>
+  readonly replacePart: <T extends SessionV1.Part>(
+    part: T,
+  ) => Effect.Effect<T, SessionMutation.MutationRefused>
   readonly updatePartDelta: (input: {
     sessionID: SessionID
     messageID: MessageID
@@ -501,7 +513,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | SessionClosure.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -510,6 +522,7 @@ const layer: Layer.Layer<
     const background = yield* BackgroundJob.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const closure = yield* SessionClosure.Service
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
@@ -618,7 +631,24 @@ const layer: Layer.Layer<
       return rows.map(fromRow)
     })
 
-    const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
+    // The whole subtree, collected before anything is reserved. The coordinator refuses a
+    // reservation when any session in its scope is being cancelled, so one subtree-scoped
+    // reservation makes the decision atomic for the entire removal: all of it is admitted, or none
+    // of it starts. Reserving per level would let a cancellation landing mid-recursion reject level
+    // k+1 after levels 1..k had already deleted, leaving a partial subtree.
+    const subtree: (sessionID: SessionID) => Effect.Effect<SessionID[]> = Effect.fnUntraced(function* (
+      sessionID: SessionID,
+    ) {
+      const kids = yield* children(sessionID)
+      const nested = yield* Effect.forEach(kids, (child) => subtree(child.id))
+      return [sessionID, ...nested.flat()]
+    })
+
+    // Deliberately unreserved: `remove` takes the subtree reservation once and this recursion runs
+    // entirely inside it. Re-acquiring per level would take one reservation per node.
+    const removeNode: (sessionID: SessionID) => Effect.Effect<void, NotFound> = Effect.fnUntraced(function* (
+      sessionID: SessionID,
+    ) {
       const session = yield* get(sessionID)
       try {
         // `remove` needs to work in all cases, such as broken sessions that
@@ -631,7 +661,7 @@ const layer: Layer.Layer<
         if (hasInstance) yield* cancelBackgroundJobs(background, sessionID)
         const kids = yield* children(sessionID)
         for (const child of kids) {
-          yield* remove(child.id)
+          yield* removeNode(child.id)
         }
 
         yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
@@ -639,6 +669,30 @@ const layer: Layer.Layer<
       } catch (error) {
         yield* Effect.logError("failed to remove session", { sessionID, error })
       }
+    })
+
+    const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
+      // `get` stays ahead of the reservation so a missing session still answers NotFound rather
+      // than a refusal.
+      yield* get(sessionID)
+      const scope = yield* subtree(sessionID)
+
+      // `remove` is required to work for broken sessions that run cleanup without instance state,
+      // and the coordinator is reached through it — so with no instance context there is no
+      // coordinator to reserve with. This is not a permissive default: the same probe `removeNode`
+      // already uses to decide whether to cancel background jobs decides this, and a coordinator
+      // that exists but rejects the location still fails closed inside `leased`.
+      //
+      // The residual, stated no more narrowly than it is: a caller outside instance context cannot
+      // take a reservation. That does not establish that no cancellation is running over these rows
+      // elsewhere in the process — the coordinator is per-directory but the database is shared.
+      const hasInstance = yield* InstanceState.directory.pipe(
+        Effect.as(true),
+        Effect.catchCause(() => Effect.succeed(false)),
+      )
+      if (!hasInstance) return yield* removeNode(sessionID)
+
+      return yield* SessionMutation.leased(closure, { sessions: scope, kind: "remove_session" }, removeNode(sessionID))
     })
 
     const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
@@ -656,6 +710,26 @@ const layer: Layer.Layer<
         })
         return part
       }).pipe(Effect.withSpan("Session.updatePart"))
+
+    /**
+     * Replace an already-persisted part at a coordinate this caller did not create.
+     *
+     * Separate from `updatePart` because the two are different operations that shared one entry
+     * point. `updatePart` is the writer a live execution uses for parts it is producing — the shell
+     * stream calls it per chunk and the processor calls it at every part boundary — so reserving it
+     * wholesale would take a reservation per chunk. Replacement is the destructive one, and it is
+     * what has to be ordered against cancellation.
+     *
+     * Naming them apart is what keeps the guard off the route. While the only reservation lived in
+     * the HTTP handler, a second external caller reaching `Session` directly would have had to
+     * remember to take one. Now the method that names the operation carries it.
+     *
+     * This does not make `updatePart` safe to call blind, and it stays unreserved by design.
+     */
+    const replacePart = <T extends SessionV1.Part>(part: T): Effect.Effect<T, SessionMutation.MutationRefused> =>
+      SessionMutation.leased(closure, { sessions: [part.sessionID], kind: "replace_part" }, updatePart(part)).pipe(
+        Effect.withSpan("Session.replacePart"),
+      )
 
     const getPart: Interface["getPart"] = Effect.fn("Session.getPart")(function* (input) {
       const row = yield* db
@@ -865,14 +939,24 @@ const layer: Layer.Layer<
       return result.reverse()
     })
 
+    // The publication is the deletion: these methods only publish, and the projector executes the
+    // row delete, so reserving the publication reserves the SQL. The reservation sits in the
+    // service rather than only at the HTTP handler, which is what makes a direct domain or SDK call
+    // unable to bypass it. An enclosing reservation that already covers this session — the one
+    // `revert.cleanup` takes, for instance — passes through, so its N deletions do not take N
+    // separate reservations.
     const removeMessage = Effect.fn("Session.removeMessage")(function* (input: {
       sessionID: SessionID
       messageID: MessageID
     }) {
-      yield* events.publish(SessionV1.Event.MessageRemoved, {
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-      })
+      yield* SessionMutation.leased(
+        closure,
+        { sessions: [input.sessionID], kind: "remove_message" },
+        events.publish(SessionV1.Event.MessageRemoved, {
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+        }),
+      )
       return input.messageID
     })
 
@@ -881,11 +965,15 @@ const layer: Layer.Layer<
       messageID: MessageID
       partID: PartID
     }) {
-      yield* events.publish(SessionV1.Event.PartRemoved, {
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-        partID: input.partID,
-      })
+      yield* SessionMutation.leased(
+        closure,
+        { sessions: [input.sessionID], kind: "remove_part" },
+        events.publish(SessionV1.Event.PartRemoved, {
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          partID: input.partID,
+        }),
+      )
       return input.partID
     })
 
@@ -943,6 +1031,7 @@ const layer: Layer.Layer<
       removeMessage,
       removePart,
       updatePart,
+      replacePart,
       getPart,
       updatePartDelta,
       findMessage,
@@ -1028,7 +1117,7 @@ function listByProject(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, SessionClosure.node],
 })
 
 export * as Session from "./session"

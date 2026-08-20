@@ -178,7 +178,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const remove = Effect.fn("SessionHttpApi.remove")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* SessionError.mapStorageNotFound(session.remove(ctx.params.sessionID))
+      yield* SessionError.mapAdmission(SessionError.mapStorageNotFound(session.remove(ctx.params.sessionID)))
       return true
     })
 
@@ -405,7 +405,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     }) {
       yield* requireSession(ctx.params.sessionID)
       yield* SessionError.mapBusy(runState.assertNotBusy(ctx.params.sessionID))
-      yield* session.removeMessage(ctx.params)
+      yield* SessionError.mapAdmission(session.removeMessage(ctx.params))
       return true
     })
 
@@ -413,7 +413,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID; messageID: MessageID; partID: PartID }
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* session.removePart(ctx.params)
+      yield* SessionError.mapAdmission(session.removePart(ctx.params))
       return true
     })
 
@@ -430,7 +430,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       ) {
         return yield* new HttpApiError.BadRequest({})
       }
-      return yield* session.updatePart(payload)
+      // The coordinate validation stays ahead of the call: it is a read-only precondition, so
+      // deciding it first keeps the existing 400 for a malformed request rather than turning it
+      // into a refusal.
+      return yield* SessionError.mapAdmission(session.replacePart(payload))
     })
 
     return handlers
