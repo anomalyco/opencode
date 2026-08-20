@@ -133,6 +133,8 @@ describe("fromPromise", () => {
             expect(input.continue).toBe(true)
             return Effect.void
           },
+          switchAgent: (input) => Effect.sync(() => seen.push(input)),
+          switchModel: (input) => Effect.sync(() => seen.push(input)),
           rename: (input) => Effect.sync(() => seen.push(input)),
           wait: (input) => Effect.sync(() => seen.push(input)),
         },
@@ -144,6 +146,13 @@ describe("fromPromise", () => {
           setup: async (ctx) => {
             expect(await ctx.session.interrupt({ sessionID: "ses_success", continue: true })).toBeUndefined()
             await expect(ctx.session.interrupt({ sessionID: "ses_failure" })).rejects.toThrow("interrupt failed")
+            expect(await ctx.session.switchAgent({ sessionID: "ses_success", agent: "build" })).toBeUndefined()
+            expect(
+              await ctx.session.switchModel({
+                sessionID: "ses_success",
+                model: { providerID: "openai", id: "gpt-5" },
+              }),
+            ).toBeUndefined()
             expect(await ctx.session.rename({ sessionID: "ses_success", title: "Renamed" })).toBeUndefined()
             expect(await ctx.session.wait({ sessionID: "ses_success" })).toBeUndefined()
           },
@@ -151,6 +160,11 @@ describe("fromPromise", () => {
       ).effect(host)
 
       expect(seen).toEqual([
+        { sessionID: Session.ID.make("ses_success"), agent: Agent.ID.make("build") },
+        {
+          sessionID: Session.ID.make("ses_success"),
+          model: { providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5") },
+        },
         { sessionID: Session.ID.make("ses_success"), title: "Renamed" },
         { sessionID: Session.ID.make("ses_success") },
       ])
