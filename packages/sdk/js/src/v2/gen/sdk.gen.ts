@@ -850,9 +850,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Background subagents
+   * Make Task subagents async
    *
-   * Detach any synchronous subagents currently blocking the session and continue them in the background.
+   * Stop waiting for any Task subagents whose synchronous calls are currently blocking the session; the same running tasks continue asynchronously.
    */
   public background<ThrowOnError extends boolean = false>(
     parameters: {
