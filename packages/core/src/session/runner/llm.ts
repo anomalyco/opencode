@@ -217,7 +217,13 @@ const layer = Layer.effect(
       let step = continuation?.step ?? 1
       let next = continuation
       while (true) {
-        if (yield* runPendingCompaction(sessionID, "steer")) continue
+        if (yield* runPendingCompaction(sessionID, "steer")) {
+          // A compaction consumed here may have been the only steer input keeping the
+          // loop alive. Without model work owed and no steers waiting, calling the model
+          // again would send an input-free request; the drain loop finds any queued work.
+          if (!next && !(yield* SessionInbox.has(db, sessionID, "steer"))) return { type: "complete" as const }
+          continue
+        }
         if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
         const result = yield* runStep(sessionID, promotable, step)
         next = result.needsContinuation ? { step: result.step + 1 } : undefined

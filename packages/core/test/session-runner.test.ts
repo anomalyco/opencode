@@ -2115,7 +2115,7 @@ describe("SessionRunnerLLM", () => {
       const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* stream.started
 
-      const first = yield* session.compact({ sessionID })
+      const first = yield* session.compact({ sessionID, delivery: "queue" })
       expect(yield* SessionInbox.find((yield* Database.Service).db, first.id)).toMatchObject({
         id: first.id,
       })
@@ -2228,6 +2228,68 @@ describe("SessionRunnerLLM", () => {
         type: "compaction",
         status: "completed",
         summary: "Manual summary",
+      })
+    }),
+  )
+
+  it.effect("runs manual compaction at the next step boundary before queued prompts", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      currentModel = recoveryModel
+      const stream = yield* TestLLM.gate
+      yield* TestLLM.push(
+        TestLLM.text("Active complete", "text-active-steer-compact"),
+        [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
+        TestLLM.text("Queue complete", "text-queue-after-compact"),
+      )
+      yield* admit(session, "Active work")
+      const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* stream.started
+
+      const compaction = yield* session.compact({ sessionID })
+      yield* session.prompt({ sessionID, text: "Queued prompt", delivery: "queue", resume: false })
+      yield* stream.release
+      yield* Fiber.join(active)
+
+      // Steer-delivered compaction runs at the boundary after the active step, ahead of
+      // the queued prompt, and consuming it does not trigger an input-free model call.
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
+      expect(userTexts(requests[2])).toContain("Queued prompt")
+      expect(yield* SessionInbox.find((yield* Database.Service).db, compaction.id)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "completed",
+        summary: "durable summary",
+      })
+    }),
+  )
+
+  it.effect("runs manual compaction before the continuation of an active tool turn", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      currentModel = recoveryModel
+      const stream = yield* TestLLM.gate
+      yield* TestLLM.push(
+        TestLLM.tool("call-active", "echo", { text: "active" }),
+        [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
+        TestLLM.text("Continued", "text-continued-after-compact"),
+      )
+      yield* admit(session, "Active work")
+      const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* stream.started
+
+      const compaction = yield* session.compact({ sessionID })
+      yield* stream.release
+      yield* Fiber.join(active)
+
+      // The compaction summary is requested before the tool turn's continuation step.
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "completed",
+        summary: "durable summary",
       })
     }),
   )

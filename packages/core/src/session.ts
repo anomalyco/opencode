@@ -819,7 +819,7 @@ const layer = Layer.effect(
         const admitted = yield* SessionInbox.admitCompaction(db, bus, {
           id: inputID,
           sessionID: input.sessionID,
-          delivery: input.delivery ?? "queue",
+          delivery: input.delivery ?? "steer",
         }).pipe(
           Effect.catchDefect((defect) =>
             defect instanceof SessionInbox.LifecycleConflict

@@ -440,7 +440,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           OpenApi.annotations({
             identifier: "v2.session.compact",
             summary: "Compact session",
-            description: "Queue a durable session compaction request.",
+            description:
+              "Durably admit a session compaction request. Steers by default: it runs at the next step boundary instead of waiting behind queued prompts.",
           }),
         ),
     )
