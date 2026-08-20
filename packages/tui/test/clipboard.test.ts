@@ -1,19 +1,51 @@
 import { expect, test } from "bun:test"
-import { copyCommand } from "../src/clipboard"
+import { plan } from "../src/clipboard"
 
-test("prefers Wayland clipboard when available", () => {
-  expect(copyCommand("linux", true, (name) => name === "wl-copy")).toEqual(["wl-copy"])
+test("SSH sessions only use terminal-mediated copy", () => {
+  expect(plan({ os: "linux", ssh: true, tmux: false, wsl: false, display: true, has: () => true })).toEqual(["osc52"])
+  expect(plan({ os: "linux", ssh: true, tmux: true, wsl: false, display: true, has: () => true })).toEqual([
+    "tmux",
+    "osc52",
+  ])
 })
 
-test("uses osascript on macOS", () => {
-  expect(copyCommand("darwin", false, (name) => name === "osascript")).toEqual(["osascript"])
+test("local macOS uses osascript", () => {
+  expect(plan({ os: "darwin", ssh: false, tmux: false, wsl: false, display: false, has: () => true })).toEqual([
+    "osascript",
+  ])
 })
 
-test("falls back through X11 clipboard commands", () => {
-  expect(copyCommand("linux", true, (name) => name === "xclip")).toEqual(["xclip", "-selection", "clipboard"])
-  expect(copyCommand("linux", false, (name) => name === "xsel")).toEqual(["xsel", "--clipboard", "--input"])
+test("local Windows/WSL uses powershell before terminal copy", () => {
+  expect(plan({ os: "win32", ssh: false, tmux: false, wsl: false, display: false, has: () => true })).toEqual([
+    "powershell",
+    "osc52",
+  ])
+  expect(plan({ os: "linux", ssh: false, tmux: false, wsl: true, display: true, has: () => true })).toEqual([
+    "powershell",
+    "osc52",
+  ])
 })
 
-test("returns undefined when native clipboard is unavailable", () => {
-  expect(copyCommand("linux", false, () => false)).toBeUndefined()
+test("local Linux prefers the pure-JS X11 owner when DISPLAY is set", () => {
+  expect(plan({ os: "linux", ssh: false, tmux: false, wsl: false, display: true, has: () => true })).toEqual([
+    "x11",
+    "wl-copy",
+    "xclip",
+    "xsel",
+    "osc52",
+  ])
+})
+
+test("local Linux without DISPLAY and without tools falls back to OSC 52", () => {
+  expect(plan({ os: "linux", ssh: false, tmux: false, wsl: false, display: false, has: () => false })).toEqual([
+    "osc52",
+  ])
+})
+
+test("local Linux inside tmux inserts the tmux backend before OSC 52", () => {
+  expect(plan({ os: "linux", ssh: false, tmux: true, wsl: false, display: true, has: () => false })).toEqual([
+    "x11",
+    "tmux",
+    "osc52",
+  ])
 })
