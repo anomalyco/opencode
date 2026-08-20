@@ -40,6 +40,7 @@ interface LifecycleServerState {
   roots?: Array<{ uri: string; name?: string }>
   requests: string[]
   aborted: number
+  connectionFailures: number
 }
 
 function lifecycleServer(input?: { capabilities?: ServerCapabilities; instructions?: string; requestRoots?: boolean }) {
@@ -53,6 +54,7 @@ function lifecycleServer(input?: { capabilities?: ServerCapabilities; instructio
         resourceTemplates: [],
         requests: [],
         aborted: 0,
+        connectionFailures: 0,
       }
 
       const makeProtocol = async () => {
@@ -120,6 +122,10 @@ function lifecycleServer(input?: { capabilities?: ServerCapabilities; instructio
         fetch(request) {
           state.requests.push(request.method)
           request.signal.addEventListener("abort", () => state.aborted++)
+          if (state.connectionFailures > 0) {
+            state.connectionFailures--
+            return new Response("unavailable", { status: 503 })
+          }
           return current.transport.handleRequest(request)
         },
       })
@@ -324,6 +330,243 @@ it.instance("disconnect removes protocol data and reconnect establishes a new se
     yield* mcp.connect("reconnect-server")
     expect((yield* mcp.status())["reconnect-server"]?.status).toBe("connected")
     expect(Object.keys(yield* mcp.tools())).toEqual(["reconnect-server_test_tool"])
+  }),
+)
+
+it.instance("unexpected remote disconnect reconnects and restores cached tools", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("unexpected-close", remote(server.url))
+    const previous = (yield* mcp.clients())["unexpected-close"]
+
+    yield* Effect.promise(server.restart)
+    yield* Effect.sync(() => {
+      previous?.onclose?.()
+      previous?.onclose?.()
+    })
+
+    expect((yield* mcp.status())["unexpected-close"]?.status).toBe("failed")
+    yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const client = (yield* mcp.clients())["unexpected-close"]
+        return client && client !== previous && (yield* mcp.status())["unexpected-close"]?.status === "connected"
+          ? client
+          : undefined
+      }),
+      "remote MCP did not reconnect",
+      "3 seconds",
+    )
+    expect(Object.keys(yield* mcp.tools())).toEqual(["unexpected-close_test_tool"])
+  }),
+)
+
+it.instance("transport errors invalidate the current remote client without requiring onclose", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("transport-error", remote(server.url))
+    const previous = (yield* mcp.clients())["transport-error"]
+
+    yield* Effect.promise(server.restart)
+    yield* Effect.sync(() => previous?.onerror?.(new Error("fetch failed: getaddrinfo ENOTFOUND mcp.test")))
+
+    expect((yield* mcp.clients())["transport-error"]).toBeUndefined()
+    expect((yield* mcp.status())["transport-error"]).toEqual({
+      status: "failed",
+      error: "fetch failed: getaddrinfo ENOTFOUND mcp.test",
+    })
+    yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const client = (yield* mcp.clients())["transport-error"]
+        return client && client !== previous && (yield* mcp.status())["transport-error"]?.status === "connected"
+          ? client
+          : undefined
+      }),
+      "remote MCP did not reconnect after a transport error",
+      "3 seconds",
+    )
+  }),
+)
+
+it.instance("newly reconnected remote clients can reconnect immediately", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("reconnect-generation", remote(server.url))
+    const first = (yield* mcp.clients())["reconnect-generation"]
+
+    if (!first) throw new Error("initial remote MCP client was not created")
+    yield* Effect.promise(server.restart)
+    yield* Effect.sync(() => first.onerror?.(new Error("fetch failed")))
+
+    const second = yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const client = (yield* mcp.clients())["reconnect-generation"]
+        return client && client !== first && (yield* mcp.status())["reconnect-generation"]?.status === "connected"
+          ? client
+          : undefined
+      }),
+      "first remote MCP reconnect did not complete",
+      "3 seconds",
+    )
+    if (!second) throw new Error("first remote MCP reconnect did not create a client")
+
+    yield* Effect.sync(() => second.onerror?.(new Error("fetch failed again")))
+    yield* Effect.promise(server.restart)
+
+    const third = yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const client = (yield* mcp.clients())["reconnect-generation"]
+        return client &&
+          client !== first &&
+          client !== second &&
+          (yield* mcp.status())["reconnect-generation"]?.status === "connected"
+          ? client
+          : undefined
+      }),
+      "second remote MCP reconnect did not complete",
+      "3 seconds",
+    )
+    expect(third).toBeDefined()
+    expect((yield* mcp.status())["reconnect-generation"]?.status).toBe("connected")
+    expect((yield* mcp.clients())["reconnect-generation"]).not.toBe(first)
+    expect((yield* mcp.clients())["reconnect-generation"]).not.toBe(second)
+    expect(Object.keys(yield* mcp.tools())).toEqual(["reconnect-generation_test_tool"])
+  }),
+)
+
+it.instance("manual disconnect cancels a newly restored remote client", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("disconnect-restored", remote(server.url))
+    const previous = (yield* mcp.clients())["disconnect-restored"]
+
+    yield* Effect.promise(server.restart)
+    yield* Effect.sync(() => previous?.onerror?.(new Error("fetch failed")))
+    yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const client = (yield* mcp.clients())["disconnect-restored"]
+        return client && client !== previous && (yield* mcp.status())["disconnect-restored"]?.status === "connected"
+          ? client
+          : undefined
+      }),
+      "restored remote MCP did not connect",
+      "3 seconds",
+    )
+
+    const requests = server.state.requests.length
+    yield* mcp.disconnect("disconnect-restored")
+    yield* Effect.sleep("1100 millis")
+
+    expect((yield* mcp.status())["disconnect-restored"]?.status).toBe("disabled")
+    expect((yield* mcp.clients())["disconnect-restored"]).toBeUndefined()
+    expect(server.state.requests.length).toBe(requests)
+  }),
+)
+
+it.instance("JSON-RPC application errors do not invalidate a connected remote client", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("application-error", remote(server.url))
+    const client = (yield* mcp.clients())["application-error"]
+    server.state.listToolsError = "application failure"
+
+    const exit = yield* Effect.tryPromise({
+      try: () => client.listTools(),
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    }).pipe(Effect.exit)
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect((yield* mcp.status())["application-error"]?.status).toBe("connected")
+    expect((yield* mcp.clients())["application-error"]).toBe(client)
+  }),
+)
+
+it.instance("remote reconnect retries transient failures until the network recovers", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("transient-close", remote(server.url))
+    const previous = (yield* mcp.clients())["transient-close"]
+
+    server.state.connectionFailures = 4
+    yield* Effect.promise(server.restart)
+    yield* Effect.sync(() => {
+      previous?.onerror?.(new Error("fetch failed"))
+      previous?.onclose?.()
+    })
+
+    yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const client = (yield* mcp.clients())["transient-close"]
+        return client && client !== previous && (yield* mcp.status())["transient-close"]?.status === "connected"
+          ? client
+          : undefined
+      }),
+      "remote MCP did not recover after transient failures",
+      "10 seconds",
+    )
+    expect(server.state.connectionFailures).toBe(0)
+    expect(Object.keys(yield* mcp.tools())).toEqual(["transient-close_test_tool"])
+  }),
+)
+
+it.instance("manual disconnect cancels an unexpected remote reconnect", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("manual-disconnect", remote(server.url))
+    const previous = (yield* mcp.clients())["manual-disconnect"]
+    const requests = server.state.requests.length
+
+    yield* Effect.sync(() => previous?.onclose?.())
+    yield* mcp.disconnect("manual-disconnect")
+    yield* Effect.sleep("1100 millis")
+
+    expect((yield* mcp.status())["manual-disconnect"]?.status).toBe("disabled")
+    expect(server.state.requests.length).toBe(requests)
+  }),
+)
+
+it.instance("disabled remote configuration stops a pending reconnect", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("disabled-after-close", remote(server.url))
+    const previous = (yield* mcp.clients())["disabled-after-close"]
+    const requests = server.state.requests.length
+
+    yield* Effect.sync(() => previous?.onclose?.())
+    yield* mcp.add("disabled-after-close", { ...remote(server.url), enabled: false })
+    yield* Effect.sleep("1100 millis")
+
+    expect((yield* mcp.status())["disabled-after-close"]?.status).toBe("disabled")
+    expect(server.state.requests.length).toBe(requests)
+  }),
+)
+
+it.instance("replaced remote clients cannot start a reconnect for the old client", () =>
+  Effect.gen(function* () {
+    const first = yield* lifecycleServer()
+    const second = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("replaced-close", remote(first.url))
+    const previous = (yield* mcp.clients())["replaced-close"]
+    yield* mcp.add("replaced-close", remote(second.url))
+    const requests = second.state.requests.length
+
+    yield* Effect.sync(() => {
+      previous?.onerror?.(new Error("fetch failed"))
+      previous?.onclose?.()
+    })
+    yield* Effect.sleep("1100 millis")
+
+    expect((yield* mcp.status())["replaced-close"]?.status).toBe("connected")
+    expect((yield* mcp.clients())["replaced-close"]).not.toBe(previous)
+    expect(second.state.requests.length).toBe(requests)
   }),
 )
 
