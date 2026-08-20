@@ -301,9 +301,9 @@ function statPeriods(grain: "day" | "week", periodStart: Date, periodEnd: Date) 
 
 function statModelSql(model: string, providerModel: string) {
   return `COALESCE(NULLIF(regexp_replace(CASE
-      WHEN lower(${model}) = 'big-pickle' THEN NULLIF(${providerModel}, '')
+      WHEN lower(${model}) = 'big-pickle' THEN regexp_replace(NULLIF(${providerModel}, ''), '^.*/', '')
       ELSE ${model}
-    END, '(-free|:global)+$', ''), ''), 'unknown')`
+    END, '(-free|:free|:global)+$', ''), ''), 'unknown')`
 }
 
 function freeTierSql(tier: string, model: string) {

@@ -681,6 +681,7 @@ export const dict = {
     'Wähle "OpenCode Go" als Anbieter in deiner opencode-Konfiguration, um Go-Modelle zu verwenden.',
   "workspace.lite.providers.title": "Anbieter",
   "workspace.lite.providers.description": "Steuere, welche Anbieter für das Routing verwendet werden.",
+  "workspace.lite.providers.allowTraining": "Modelle zulassen, die mit Anfragedaten trainieren",
   "workspace.lite.providers.useChina": "In China gehostete Modelle aktivieren",
   "workspace.lite.black.message":
     "Du hast derzeit OpenCode Black abonniert oder stehst auf der Warteliste. Bitte kündige zuerst, wenn du zu Go wechseln möchtest.",

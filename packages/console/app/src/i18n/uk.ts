@@ -678,6 +678,7 @@ export const dict = {
   "workspace.lite.subscription.selectProvider": 'Виберіть "OpenCode Go" як провайдера в конфігурації opencode.',
   "workspace.lite.providers.title": "Провайдери",
   "workspace.lite.providers.description": "Керуйте провайдерами, які використовуються для маршрутизації.",
+  "workspace.lite.providers.allowTraining": "Дозволити моделі, що навчаються на даних запитів",
   "workspace.lite.providers.useChina": "Увімкнути моделі, розміщені в Китаї",
   "workspace.lite.black.message":
     "Ви вже підписані на OpenCode Black або в списку очікування. Спочатку скасуйте підписку, якщо хочете перейти на Go.",

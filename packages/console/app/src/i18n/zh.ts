@@ -650,6 +650,7 @@ export const dict = {
     "在你的 opencode 配置中选择「OpenCode Go」作为提供商，即可使用 Go 模型。",
   "workspace.lite.providers.title": "提供商",
   "workspace.lite.providers.description": "控制用于路由的提供商。",
+  "workspace.lite.providers.allowTraining": "允许使用请求数据进行训练的模型",
   "workspace.lite.providers.useChina": "启用部署在中国的模型",
   "workspace.lite.black.message": "您当前已订阅 OpenCode Black 或在候补名单中。如需切换到 Go，请先取消订阅。",
   "workspace.lite.other.message": "此工作区中的另一位成员已经订阅了 OpenCode Go。每个工作区只有一名成员可以订阅。",

@@ -675,6 +675,7 @@ export const dict = {
     'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า opencode ของคุณเพื่อใช้โมเดล Go',
   "workspace.lite.providers.title": "ผู้ให้บริการ",
   "workspace.lite.providers.description": "ควบคุมผู้ให้บริการที่ใช้สำหรับการกำหนดเส้นทาง",
+  "workspace.lite.providers.allowTraining": "อนุญาตโมเดลที่ฝึกด้วยข้อมูลคำขอ",
   "workspace.lite.providers.useChina": "เปิดใช้โมเดลที่โฮสต์ในจีน",
   "workspace.lite.black.message":
     "ขณะนี้คุณสมัครสมาชิก OpenCode Black หรืออยู่ในรายการรอ โปรดยกเลิกการสมัครก่อนหากต้องการเปลี่ยนไปใช้ Go",

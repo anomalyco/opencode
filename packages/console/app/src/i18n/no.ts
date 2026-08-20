@@ -680,6 +680,7 @@ export const dict = {
     'Velg "OpenCode Go" som leverandør i opencode-konfigurasjonen din for å bruke Go-modeller.',
   "workspace.lite.providers.title": "Leverandører",
   "workspace.lite.providers.description": "Kontroller hvilke leverandører som brukes til ruting.",
+  "workspace.lite.providers.allowTraining": "Tillat modeller som trener på forespørselsdata",
   "workspace.lite.providers.useChina": "Aktiver modeller hostet i Kina",
   "workspace.lite.black.message":
     "Du abonnerer for øyeblikket på OpenCode Black eller står på venteliste. Vennligst avslutt abonnementet først hvis du vil bytte til Go.",

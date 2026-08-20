@@ -671,6 +671,7 @@ export const dict = {
     'اختر "OpenCode Go" كمزود في إعدادات opencode الخاصة بك لاستخدام نماذج Go.',
   "workspace.lite.providers.title": "المزودون",
   "workspace.lite.providers.description": "تحكم في المزودين المستخدمين للتوجيه.",
+  "workspace.lite.providers.allowTraining": "السماح بالنماذج التي تتدرب على بيانات الطلبات",
   "workspace.lite.providers.useChina": "تفعيل النماذج المستضافة في الصين",
   "workspace.lite.black.message":
     "أنت مشترك حاليًا في OpenCode Black أو في قائمة الانتظار. يرجى إلغاء الاشتراك أولاً إذا كنت ترغب في التبديل إلى Go.",

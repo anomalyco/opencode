@@ -683,6 +683,7 @@ export const dict = {
     'Go modellerini kullanmak için opencode yapılandırmanızda "OpenCode Go"\'yu sağlayıcı olarak seçin.',
   "workspace.lite.providers.title": "Sağlayıcılar",
   "workspace.lite.providers.description": "Yönlendirme için hangi sağlayıcıların kullanılacağını kontrol edin.",
+  "workspace.lite.providers.allowTraining": "İstek verileriyle eğitilen modellere izin ver",
   "workspace.lite.providers.useChina": "Çin'de barındırılan modelleri etkinleştir",
   "workspace.lite.black.message":
     "Şu anda OpenCode Black abonesisiniz veya bekleme listesindesiniz. Go'ya geçmek istiyorsanız lütfen önce aboneliğinizi iptal edin.",
