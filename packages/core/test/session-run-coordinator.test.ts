@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { testEffect } from "./lib/effect"
 
@@ -269,31 +270,24 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
-  it.effect("replaces a settlement-window wake with a steer continuation", () =>
+  it.effect("a settlement-window wake starts a fresh execution with its own scope", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const settling = yield* Deferred.make<void>()
         const release = yield* Deferred.make<void>()
-        const requests: SessionRunCoordinator.Request[] = []
+        const scopes: SessionInbox.Promotable[] = []
         const coordinator = yield* SessionRunCoordinator.make({
-          drain: (_key, _force, request) => Effect.sync(() => requests.push(request)),
+          drain: (_key, _force, scope) => Effect.sync(() => scopes.push(scope)),
           settled: () => Deferred.succeed(settling, undefined).pipe(Effect.andThen(Deferred.await(release))),
         })
 
-        yield* coordinator.wake("session", "input")
+        yield* coordinator.wake("session", "steer")
         yield* Deferred.await(settling)
         yield* coordinator.wake("session", "input")
-        const interrupted = yield* coordinator
-          .interrupt("session", undefined, {
-            continue: { request: "steer", when: Effect.succeed(true) },
-          })
-          .pipe(Effect.forkChild)
-        yield* Effect.yieldNow
         yield* Deferred.succeed(release, undefined)
-        yield* Fiber.join(interrupted)
         yield* coordinator.awaitIdle("session")
 
-        expect(requests).toEqual(["input", "steer"])
+        expect(scopes).toEqual(["steer", "input"])
       }),
     ),
   )
@@ -371,17 +365,17 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
-  it.effect("coalesces drain requests with input taking precedence", () =>
+  it.effect("coalesces drain scopes with input taking precedence", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
         const release = yield* Deferred.make<void>()
-        const requests: SessionRunCoordinator.Request[] = []
+        const scopes: SessionInbox.Promotable[] = []
         const coordinator = yield* SessionRunCoordinator.make({
-          drain: (_key, _force, request) =>
+          drain: (_key, _force, scope) =>
             Effect.gen(function* () {
-              requests.push(request)
-              if (requests.length !== 1) return
+              scopes.push(scope)
+              if (scopes.length !== 1) return
               yield* Deferred.succeed(firstStarted, undefined)
               yield* Deferred.await(release)
             }),
@@ -394,22 +388,22 @@ describe("SessionRunCoordinator", () => {
         yield* Deferred.succeed(release, undefined)
         yield* coordinator.awaitIdle("session")
 
-        expect(requests).toEqual(["steer", "input"])
+        expect(scopes).toEqual(["steer", "input"])
       }),
     ),
   )
 
-  it.effect("does not carry a completed input request into a steer drain", () =>
+  it.effect("does not carry a completed input scope into a steer drain", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
         const release = yield* Deferred.make<void>()
-        const requests: SessionRunCoordinator.Request[] = []
+        const scopes: SessionInbox.Promotable[] = []
         const coordinator = yield* SessionRunCoordinator.make({
-          drain: (_key, _force, request) =>
+          drain: (_key, _force, scope) =>
             Effect.gen(function* () {
-              requests.push(request)
-              if (requests.length !== 1) return
+              scopes.push(scope)
+              if (scopes.length !== 1) return
               yield* Deferred.succeed(firstStarted, undefined)
               yield* Deferred.await(release)
             }),
@@ -421,89 +415,23 @@ describe("SessionRunCoordinator", () => {
         yield* Deferred.succeed(release, undefined)
         yield* coordinator.awaitIdle("session")
 
-        expect(requests).toEqual(["input", "steer"])
+        expect(scopes).toEqual(["input", "steer"])
       }),
     ),
   )
 
-  it.effect("an active wake inherits scope without starting idle work", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const firstStarted = yield* Deferred.make<void>()
-        const release = yield* Deferred.make<void>()
-        const requests: SessionRunCoordinator.Request[] = []
-        const coordinator = yield* SessionRunCoordinator.make({
-          drain: (_key, _force, request) =>
-            Effect.gen(function* () {
-              requests.push(request)
-              if (requests.length !== 1) return
-              yield* Deferred.succeed(firstStarted, undefined)
-              yield* Deferred.await(release)
-            }),
-        })
-
-        yield* coordinator.wakeActive("session")
-        yield* coordinator.wake("session", "steer")
-        yield* Deferred.await(firstStarted)
-        yield* coordinator.wakeActive("session")
-        yield* Deferred.succeed(release, undefined)
-        yield* coordinator.awaitIdle("session")
-
-        expect(requests).toEqual(["steer", "steer"])
-      }),
-    ),
-  )
-
-  it.effect("coalesces overlapping interrupt continuations into one steer successor", () =>
+  it.effect("a cleanup-era wake starts a successor with its own scope", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
         const cleanupStarted = yield* Deferred.make<void>()
         const cleanupGate = yield* Deferred.make<void>()
-        const requests: SessionRunCoordinator.Request[] = []
+        const scopes: SessionInbox.Promotable[] = []
         const coordinator = yield* SessionRunCoordinator.make({
-          drain: (_key, _force, request) =>
+          drain: (_key, _force, scope) =>
             Effect.gen(function* () {
-              requests.push(request)
-              if (requests.length !== 1) return
-              yield* Deferred.succeed(firstStarted, undefined)
-              yield* Effect.never.pipe(
-                Effect.onInterrupt(() =>
-                  Deferred.succeed(cleanupStarted, undefined).pipe(Effect.andThen(Deferred.await(cleanupGate))),
-                ),
-              )
-            }),
-        })
-        const continuation = { continue: { request: "steer" as const, when: Effect.succeed(false) } }
-
-        yield* coordinator.wake("session")
-        yield* Deferred.await(firstStarted)
-        const first = yield* coordinator.interrupt("session", undefined, continuation).pipe(Effect.forkChild)
-        yield* Deferred.await(cleanupStarted)
-        const second = yield* coordinator.interrupt("session", undefined, continuation).pipe(Effect.forkChild)
-        yield* Effect.yieldNow
-        yield* coordinator.wake("session", "input")
-        yield* Deferred.succeed(cleanupGate, undefined)
-        yield* Effect.all([Fiber.join(first), Fiber.join(second)])
-        yield* coordinator.awaitIdle("session")
-
-        expect(requests).toEqual(["input", "steer"])
-      }),
-    ),
-  )
-
-  it.effect("a continuing interrupt replaces a cleanup-era input wake", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const firstStarted = yield* Deferred.make<void>()
-        const cleanupStarted = yield* Deferred.make<void>()
-        const cleanupGate = yield* Deferred.make<void>()
-        const requests: SessionRunCoordinator.Request[] = []
-        const coordinator = yield* SessionRunCoordinator.make({
-          drain: (_key, _force, request) =>
-            Effect.gen(function* () {
-              requests.push(request)
-              if (requests.length !== 1) return
+              scopes.push(scope)
+              if (scopes.length !== 1) return
               yield* Deferred.succeed(firstStarted, undefined)
               yield* Effect.never.pipe(
                 Effect.onInterrupt(() =>
@@ -515,45 +443,16 @@ describe("SessionRunCoordinator", () => {
 
         yield* coordinator.wake("session", "input")
         yield* Deferred.await(firstStarted)
-        const plain = yield* coordinator.interrupt("session").pipe(Effect.forkChild)
+        const interrupt = yield* coordinator.interrupt("session").pipe(Effect.forkChild)
         yield* Deferred.await(cleanupStarted)
+        // A new admission during cancellation restarts normally: interruption only
+        // claims the wakes recorded before it.
         yield* coordinator.wake("session", "input")
-        const continuing = yield* coordinator
-          .interrupt("session", undefined, {
-            continue: { request: "steer", when: Effect.succeed(false) },
-          })
-          .pipe(Effect.forkChild)
-        yield* Effect.yieldNow
         yield* Deferred.succeed(cleanupGate, undefined)
-        yield* Effect.all([Fiber.join(plain), Fiber.join(continuing)])
+        yield* Fiber.join(interrupt)
         yield* coordinator.awaitIdle("session")
 
-        expect(requests).toEqual(["input", "steer"])
-      }),
-    ),
-  )
-
-  it.effect("does not start a conditional continuation without eligible work", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const started = yield* Deferred.make<void>()
-        const requests: SessionRunCoordinator.Request[] = []
-        const coordinator = yield* SessionRunCoordinator.make({
-          drain: (_key, _force, request) =>
-            Effect.sync(() => requests.push(request)).pipe(
-              Effect.andThen(Deferred.succeed(started, undefined)),
-              Effect.andThen(Effect.never),
-            ),
-        })
-
-        yield* coordinator.wake("session")
-        yield* Deferred.await(started)
-        yield* coordinator.interrupt("session", undefined, {
-          continue: { request: "steer", when: Effect.succeed(false) },
-        })
-        yield* coordinator.awaitIdle("session")
-
-        expect(requests).toEqual(["input"])
+        expect(scopes).toEqual(["input", "input"])
       }),
     ),
   )
@@ -723,11 +622,75 @@ describe("SessionRunCoordinator", () => {
         yield* coordinator.wake("session")
         yield* Deferred.await(started)
         yield* coordinator.interrupt("session")
+        yield* coordinator.awaitIdle("session")
 
         expect(settled).toHaveLength(1)
         expect(settled[0] !== undefined && Exit.isFailure(settled[0]) && Cause.hasInterrupts(settled[0].cause)).toBe(
           true,
         )
+        expect(yield* coordinator.active).toEqual(new Set())
+      }),
+    ),
+  )
+
+  it.effect("acknowledges interruption before cleanup settles", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const cleanupStarted = yield* Deferred.make<void>()
+        const cleanupGate = yield* Deferred.make<void>()
+        const settled: Array<string | undefined> = []
+        const coordinator = yield* SessionRunCoordinator.make<string, never, string>({
+          drain: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.onInterrupt(() =>
+                Deferred.succeed(cleanupStarted, undefined).pipe(Effect.andThen(Deferred.await(cleanupGate))),
+              ),
+            ),
+          settled: (_key, _exit, reason) => Effect.sync(() => void settled.push(reason)),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(started)
+        // Interrupt resolves while the cleanup gate is still closed: acceptance, not settlement.
+        yield* coordinator.interrupt("session", "user")
+        expect(settled).toHaveLength(0)
+        expect(Array.from(yield* coordinator.active)).toEqual(["session"])
+        // Repeating the interrupt during cleanup stays an immediate no-op.
+        yield* coordinator.interrupt("session", "user")
+
+        yield* Deferred.await(cleanupStarted)
+        yield* Deferred.succeed(cleanupGate, undefined)
+        yield* coordinator.awaitIdle("session")
+
+        expect(settled).toEqual(["user"])
+        expect(yield* coordinator.active).toEqual(new Set())
+      }),
+    ),
+  )
+
+  it.effect("an interrupt during terminal settlement claims the recorded wake", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const settling = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        let drains = 0
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () => Effect.sync(() => void drains++),
+          settled: () => Deferred.succeed(settling, undefined).pipe(Effect.andThen(Deferred.await(release))),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(settling)
+        // The owner has exited; this wake lands on the settling execution's doorbell.
+        yield* coordinator.wake("session")
+        // The interrupt claims it: settle must not start a successor for the dead intent.
+        yield* coordinator.interrupt("session")
+        yield* Deferred.succeed(release, undefined)
+        yield* coordinator.awaitIdle("session")
+
+        expect(drains).toBe(1)
         expect(yield* coordinator.active).toEqual(new Set())
       }),
     ),

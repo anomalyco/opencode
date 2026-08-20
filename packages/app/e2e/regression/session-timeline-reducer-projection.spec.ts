@@ -15,7 +15,7 @@ import {
 
 test("groups singleton and separated context operations at correct boundaries", async ({ page }) => {
   const parts = [
-    toolPart("prt_boundary_01_read", "read", "completed", { filePath: "src/a.ts" }),
+    toolPart("prt_boundary_01_read", "read", "completed", { path: "src/a.ts" }),
     textPart("prt_boundary_02_text", "Boundary text"),
     toolPart("prt_boundary_03_glob", "glob", "completed", { path: ".", pattern: "**/*.ts" }),
     toolPart("prt_boundary_04_grep", "grep", "completed", { path: ".", pattern: "stable" }),

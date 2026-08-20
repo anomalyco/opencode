@@ -1,5 +1,5 @@
-import type { FilePart } from "@/types"
 import type { FileDiffInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionUserActions } from "@opencode-ai/session-ui/message"
 import { getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
@@ -81,6 +81,7 @@ import {
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
+import { SessionPanelFrame, SessionRouteFrame } from "@/pages/session/session-frame"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewV2SidebarToggle } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
@@ -90,7 +91,7 @@ import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
-import { Identifier } from "@/utils/id"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Persist, persisted } from "@/utils/persist"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { requireServerKey, sessionHref } from "@/utils/session-route"
@@ -262,27 +263,6 @@ function MarkSessionNotificationsViewed(props: { sessionID?: () => string | unde
     notification.session.markViewed(sessionID)
   })
   return null
-}
-
-function SessionRouteFrame(props: ParentProps<{ padded?: boolean }>) {
-  return (
-    <div class="relative size-full overflow-hidden flex flex-col" classList={{ "p-2": props.padded }}>
-      {props.children}
-    </div>
-  )
-}
-
-function SessionPanelFrame(props: ParentProps<{ raised?: boolean }>) {
-  return (
-    <div
-      class="flex-1 min-h-0 flex flex-col bg-v2-background-bg-base rounded-[10px] overflow-hidden"
-      classList={{
-        "shadow-[var(--v2-elevation-raised)]": props.raised,
-      }}
-    >
-      {props.children}
-    </div>
-  )
 }
 
 export default function Page() {
@@ -1564,7 +1544,7 @@ export default function Page() {
   const queueFollowup = (draft: FollowupDraft) => {
     setFollowup("items", draft.sessionID, (items) => [
       ...(items ?? []),
-      { id: Identifier.ascending("message"), ...draft },
+      { id: SessionMessage.ID.create(), ...draft },
     ])
     setFollowup("failed", draft.sessionID, undefined)
     setFollowup("paused", draft.sessionID, undefined)
@@ -1613,14 +1593,15 @@ export default function Page() {
 
   // attachment bytes are embedded as a data URL, so downloading always works;
   // revealing requires the on-disk path captured by the client that attached the file
-  const openAttachment = (file: FilePart) => {
+  const openAttachment: NonNullable<SessionUserActions["openAttachment"]> = (file) => {
+    const url = file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
     const download = () => {
       const anchor = document.createElement("a")
-      anchor.href = file.url
-      anchor.download = getFilename(file.filename) || "attachment"
+      anchor.href = url
+      anchor.download = getFilename(file.name) || "attachment"
       anchor.click()
     }
-    const path = file.filename ?? ""
+    const path = file.name ?? ""
     const absolute = path.startsWith("/") || path.startsWith("\\\\") || /^[a-zA-Z]:[\\/]/.test(path)
     if (platform.revealPath && absolute) {
       void platform.revealPath(path).then(
@@ -1634,7 +1615,7 @@ export default function Page() {
     download()
   }
 
-  const actions = { revert, openAttachment }
+  const actions = { revert, openAttachment } satisfies SessionUserActions
 
   createEffect(() => {
     const sessionID = controller.identity.params.id

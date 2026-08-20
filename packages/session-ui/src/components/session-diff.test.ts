@@ -102,7 +102,7 @@ describe("session diff", () => {
     expect(fileDiff.hunks).toEqual([])
   })
 
-  test("keeps full legacy content as a complete diff", () => {
+  test("keeps full preloaded content as a complete diff", () => {
     const diff = {
       file: "a.ts",
       before: "one\n",

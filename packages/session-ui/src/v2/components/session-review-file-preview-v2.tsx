@@ -7,7 +7,7 @@ import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { mediaKindFromPath } from "../../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../../pierre/selection-bridge"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
-import type { PresentationFileContent, PresentationFileDiff } from "../../presentation"
+import type { PresentationFileContent, PresentationFileDiff } from "../../file-presentation"
 import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
@@ -171,7 +171,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     if (focus.file !== props.file) {
       // The focused file has no mounted preview (e.g. not in the current diff
       // set); clear the focus anyway so it cannot hijack a later diff refresh.
-      // V1 clears unconditionally the same way.
+      // Clear unconditionally so an unavailable file cannot retain stale focus.
       untrack(() => {
         const token = focusToken
         requestAnimationFrame(() => {
@@ -190,7 +190,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
 
       // The diff renders asynchronously, so poll for the comment anchor before
       // scrolling; clear the focus once handled so revisiting the file does not
-      // re-open a stale comment (mirrors the v1 review behavior).
+      // re-open a stale comment.
       focusToken++
       const token = focusToken
       const scrollTo = (attempt: number) => {

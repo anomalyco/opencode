@@ -261,7 +261,7 @@ export const route = Route.make({
   endpoint,
   auth,
   transport,
-  defaults: { providerOptions: { openai: { store: false } } },
+  defaults: { providerOptions: { store: false } },
 })
 
 export * as OpenAIResponses from "./openai-responses.js"

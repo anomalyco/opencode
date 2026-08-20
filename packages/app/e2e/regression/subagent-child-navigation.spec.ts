@@ -167,14 +167,14 @@ function parentMessages(): SessionMessageInfo[] {
       content: [
         {
           type: "tool",
-          id: "call_task_0001",
-          name: "task",
+          id: "call_subagent_0001",
+          name: "subagent",
           time: { created: 1700000001000, ran: 1700000001000, completed: 1700000002000 },
           state: {
             status: "completed",
-            input: { description: taskDescription, subagent_type: "explore" },
+            input: { description: taskDescription, agent: "explore", prompt: "Inspect the delegated work." },
             content: [{ type: "text", text: "Subagent finished" }],
-            metadata: { sessionId: childID },
+            metadata: { sessionID: childID },
           },
         },
       ],

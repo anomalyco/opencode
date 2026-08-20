@@ -185,6 +185,33 @@ pmap -x <pid> | sort -k3 -nr | head -25
 
 Heap serialization itself can temporarily increase RSS and allocator high-water marks, so record `ps`/`smaps_rollup` both before and after capture. Large anonymous mappings with a comparatively small live heap require native-allocation or allocator investigation; they cannot be explained from JavaScript retainer paths alone.
 
+## CPU profiles
+
+The CLI installs a `SIGPROF` listener on non-Windows processes in `packages/cli/src/cpu-profile.ts`. One signal starts a ten-second CPU profile and stops it automatically; additional signals are ignored while a profile is active. There is no CPU profile CLI flag or environment variable.
+
+1. Get the PID from the health endpoint. For shared-service performance, target the server PID returned here rather than the short wrapper or TUI process:
+
+```bash
+opencode2 api get /api/health
+```
+
+Use `bun dev api get /api/health` instead when targeting the local/dev channel.
+
+2. Start the capture:
+
+```bash
+kill -PROF <server-pid>
+```
+
+3. Wait for `CPU profile written` in the channel's log before opening the file. Profiles are written to the same log directory as `cpu-<pid>-<timestamp>.cpuprofile`; the log's `path=` field is authoritative:
+
+```bash
+grep 'CPU profile' ~/.local/share/opencode/log/opencode.log | tail
+find ~/.local/share/opencode/log -maxdepth 1 -name 'cpu-<server-pid>-*.cpuprofile' -printf '%T@ %s %p\n' | sort -nr | head
+```
+
+Use `opencode-local.log` for a local/dev process. Load the completed `.cpuprofile` in Chrome DevTools or another V8 CPU profile viewer and inspect the hottest functions, call stacks, and self time during the controlled workload.
+
 ## Debugger
 
 - To debug the V2 CLI or TUI with Bun's inspector, launch the CLI entrypoint through Terminal Control with an inspector URL, then attach a debugger to that URL:

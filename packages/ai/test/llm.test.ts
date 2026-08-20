@@ -59,18 +59,18 @@ describe("llm constructors", () => {
         provider: "fake",
         route: chatRoute.with({
           generation: { maxTokens: 100, temperature: 1 },
-          providerOptions: { openai: { store: false, metadata: { model: true } } },
+          providerOptions: { store: false, metadata: { model: true } },
           http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
         }),
       }),
       prompt: "Say hello.",
       generation: { temperature: 0 },
-      providerOptions: { openai: { store: true, metadata: { request: true } } },
+      providerOptions: { store: true, metadata: { request: true } },
       http: { body: { metadata: { request: true } }, headers: { "x-shared": "request" }, query: { request: "1" } },
     })
 
     expect(request.generation).toEqual({ temperature: 0 })
-    expect(request.providerOptions).toEqual({ openai: { store: true, metadata: { request: true } } })
+    expect(request.providerOptions).toEqual({ store: true, metadata: { request: true } })
     expect(request.http).toEqual({
       body: { metadata: { request: true } },
       headers: { "x-shared": "request" },
@@ -123,7 +123,7 @@ describe("llm constructors", () => {
       defaults: {
         limits: { context: 128_000, output: 8_192 },
         generation: { maxTokens: 1_024, stop: ["END"] },
-        providerOptions: { openai: { parallelToolCalls: false } },
+        providerOptions: { parallelToolCalls: false },
         http: { body: { extra_body: true } },
       },
       compatibility: { toolSchema: "moonshot" },
@@ -132,7 +132,7 @@ describe("llm constructors", () => {
 
     expect(request.model.defaults?.limits).toEqual({ context: 128_000, output: 8_192 })
     expect(request.model.defaults?.generation).toEqual({ maxTokens: 1_024, stop: ["END"] })
-    expect(request.model.defaults?.providerOptions).toEqual({ openai: { parallelToolCalls: false } })
+    expect(request.model.defaults?.providerOptions).toEqual({ parallelToolCalls: false })
     expect(request.model.defaults?.http).toEqual({ body: { extra_body: true } })
     expect(request.model.compatibility).toEqual({ toolSchema: "moonshot" })
     expect(request.generation).toBeUndefined()

@@ -1,4 +1,4 @@
-import type { PresentationFileContent } from "../presentation"
+import type { PresentationFileContent } from "../file-presentation"
 
 export type MediaKind = "image" | "audio" | "svg"
 

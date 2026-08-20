@@ -124,6 +124,18 @@ export function createPromptState() {
   return value
 }
 
+type PromptTabs = {
+  state?: (
+    tab: unknown,
+    key: string,
+    init: () => ReturnType<typeof createPromptState>,
+  ) => ReturnType<typeof createPromptState>
+}
+
+export function createTabPromptState(tabs: PromptTabs, tab: unknown) {
+  return tabs.state?.(tab, "prompt", createPromptState) ?? createPromptState()
+}
+
 const prompt = createPromptState()
 
 export function usePrompt() {

@@ -1,22 +1,31 @@
-import type { UserMessage } from "../presentation"
+import type { FileDiffInfo, SessionMessageUser } from "@opencode-ai/client/promise"
 import { HoverCard } from "@kobalte/core/hover-card"
 import { ComponentProps, For, Match, Show, createMemo, createSignal, splitProps, Switch } from "solid-js"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 
 export function MessageNav(
   props: ComponentProps<"ul"> & {
-    messages: UserMessage[]
-    current?: UserMessage
+    messages: SessionMessageUser[]
+    current?: SessionMessageUser
     size: "normal" | "compact"
-    onMessageSelect: (message: UserMessage) => void
-    getLabel?: (message: UserMessage) => string | undefined
+    onMessageSelect: (message: SessionMessageUser) => void
+    getLabel?: (message: SessionMessageUser) => string | undefined
+    getChanges?: (message: SessionMessageUser) => FileDiffInfo[] | undefined
   },
 ) {
   const i18n = useI18n()
-  const [local, others] = splitProps(props, ["messages", "current", "size", "onMessageSelect", "getLabel", "class"])
+  const [local, others] = splitProps(props, [
+    "messages",
+    "current",
+    "size",
+    "onMessageSelect",
+    "getLabel",
+    "getChanges",
+    "class",
+  ])
   const [hovercardOpen, setHovercardOpen] = createSignal(false)
 
-  const selectMessage = (message: UserMessage) => {
+  const selectMessage = (message: SessionMessageUser) => {
     setHovercardOpen(false)
     local.onMessageSelect(message)
   }
@@ -50,16 +59,13 @@ export function MessageNav(
                 </Match>
                 <Match when={local.size === "normal"}>
                   <button data-slot="message-nav-message-button" onClick={handleClick} onKeyDown={handleKeyPress}>
-                    <MessageDiffBars changes={message.summary?.diffs ?? []} />
+                    <MessageDiffBars changes={local.getChanges?.(message) ?? []} />
                     <div
                       data-slot="message-nav-title-preview"
                       data-active={message.id === local.current?.id || undefined}
                     >
-                      <Show
-                        when={local.getLabel?.(message) ?? message.summary?.title}
-                        fallback={i18n.t("ui.messageNav.newMessage")}
-                      >
-                        {local.getLabel?.(message) ?? message.summary?.title}
+                      <Show when={local.getLabel?.(message)} fallback={i18n.t("ui.messageNav.newMessage")}>
+                        {local.getLabel?.(message)}
                       </Show>
                     </div>
                   </button>

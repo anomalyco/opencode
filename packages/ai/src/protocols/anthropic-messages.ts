@@ -16,7 +16,6 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderOptions,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
@@ -52,9 +51,7 @@ export interface OptionsInput {
   readonly effort?: string
 }
 
-export type ProviderOptionsInput = ProviderOptions & {
-  readonly anthropic?: OptionsInput
-}
+export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
 // Request Body Schema
@@ -593,7 +590,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 })
 
 const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (request: LLMRequest) {
-  const input = request.providerOptions?.anthropic
+  const input = request.providerOptions
   return {
     thinking: yield* resolveThinking(input?.thinking),
     effort: typeof input?.effort === "string" ? input.effort : undefined,
@@ -1015,8 +1012,8 @@ const step = (state: ParserState, event: AnthropicEvent) => {
 // =============================================================================
 /**
  * The Anthropic Messages protocol — request body construction, body schema,
- * and the streaming-event state machine. Used by native Anthropic Cloud and
- * (once registered) Vertex Anthropic / Bedrock-hosted Anthropic passthrough.
+ * and the streaming-event state machine shared by Anthropic-compatible and
+ * Vertex-hosted Messages routes.
  */
 export const protocol = Protocol.make({
   id: ADAPTER,

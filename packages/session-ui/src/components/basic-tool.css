@@ -238,7 +238,7 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     text-transform: capitalize;
-    color: var(--task-agent-legacy-color, var(--text-strong));
+    color: var(--task-agent-color-fallback, var(--text-strong));
   }
 
   [data-slot="basic-tool-tool-subtitle"] {

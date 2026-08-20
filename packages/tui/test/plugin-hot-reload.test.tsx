@@ -8,9 +8,8 @@ import { pathToFileURL } from "node:url"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
-function lifecycleSource(marker: string, id: string, version: string) {
+function lifecyclePluginSource(marker: string, id: string, version: string) {
   return `
-import { appendFile } from "node:fs/promises"
 export default {
   id: ${JSON.stringify(id)},
   setup: async () => {
@@ -18,6 +17,29 @@ export default {
     return () => appendFile(${JSON.stringify(marker)}, "${version}:cleanup\\n")
   },
 }
+`
+}
+
+function lifecycleSource(marker: string, id: string, version: string) {
+  return `
+import { appendFile } from "node:fs/promises"
+${lifecyclePluginSource(marker, id, version)}
+`
+}
+
+function gatedLifecycleSource(marker: string, ready: string, gate: string, id: string, version: string) {
+  return `
+import { access, appendFile } from "node:fs/promises"
+await appendFile(${JSON.stringify(ready)}, "ready\\n")
+while (true) {
+  try {
+    await access(${JSON.stringify(gate)})
+    break
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+${lifecyclePluginSource(marker, id, version)}
 `
 }
 
@@ -174,6 +196,40 @@ test("editing a discovered TUI plugin hot-reloads its fresh module", async () =>
   await app.task
 })
 
+test("does not activate a local plugin whose source changes during import", async () => {
+  await using tmp = await tmpdir()
+  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
+  await mkdir(directory, { recursive: true })
+  const marker = path.join(tmp.path, "marker.txt")
+  const ready = path.join(tmp.path, "ready.txt")
+  const gate = path.join(tmp.path, "gate.txt")
+  const source = path.join(directory, "hot.ts")
+  await writeFile(source, lifecycleSource(marker, "test.hot", "v1"))
+
+  await using app = await bootApp(tmp.path)
+  const read = () => readFile(marker, "utf8")
+  expect(await until(read, (value) => value === "v1:setup\n")).toBe("v1:setup\n")
+
+  await writeFile(source, gatedLifecycleSource(marker, ready, gate, "test.hot", "v2"))
+  try {
+    expect(
+      await until(
+        () => readFile(ready, "utf8"),
+        (value) => value === "ready\n",
+      ),
+    ).toBe("ready\n")
+    await writeFile(source, lifecycleSource(marker, "test.hot", "v3"))
+    await writeFile(gate, "open")
+
+    expect(await until(read, (value) => value?.includes("v3:setup") ?? false)).toBe("v1:setup\nv1:cleanup\nv3:setup\n")
+  } finally {
+    await writeFile(gate, "open")
+  }
+
+  process.emit("SIGHUP")
+  await app.task
+})
+
 test("a plugin whose slot render throws does not take down the TUI", async () => {
   await using tmp = await tmpdir()
   const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
@@ -271,29 +327,39 @@ test("a save whose setup throws restores the previous version", async () => {
   const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
   await mkdir(directory, { recursive: true })
   const marker = path.join(tmp.path, "a.txt")
+  const markerB = path.join(tmp.path, "b.txt")
   const source = path.join(directory, "a.ts")
+  const sourceB = path.join(directory, "b.ts")
   await writeFile(source, lifecycleSource(marker, "test.a", "a1"))
+  await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b1"))
 
   await using app = await bootApp(tmp.path)
   const read = () => readFile(marker, "utf8")
+  const readB = () => readFile(markerB, "utf8")
   expect(await until(read, (value) => value === "a1:setup\n")).toBe("a1:setup\n")
+  expect(await until(readB, (value) => value === "b1:setup\n")).toBe("b1:setup\n")
 
   // The module imports fine but its setup throws — unlike an import failure,
   // the swap has already torn down a1, so keep-last-good means restoring it.
-  await writeFile(
-    source,
-    `
+  const broken = `
 export default {
   id: "test.a",
   setup: async () => {
     throw new Error("setup boom")
   },
 }
-`,
-  )
+`
+  await writeFile(source, broken)
   expect(await until(read, (value) => value === "a1:setup\na1:cleanup\na1:setup\n")).toBe(
     "a1:setup\na1:cleanup\na1:setup\n",
   )
+
+  // Duplicate notifications for unchanged contents must not retry the broken
+  // generation and cycle the restored plugin again.
+  await writeFile(source, broken)
+  await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b2"))
+  expect(await until(readB, (value) => value?.includes("b2:setup") ?? false)).toBe("b1:setup\nb1:cleanup\nb2:setup\n")
+  expect(await read()).toBe("a1:setup\na1:cleanup\na1:setup\n")
 
   // Fixing the file swaps out the restored version normally.
   await writeFile(source, lifecycleSource(marker, "test.a", "a2"))

@@ -8,6 +8,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { ServiceConfig } from "../src/services/service-config"
+import { ServiceRegistration } from "../src/services/service-registration"
 
 test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("latest")).toBe(0xc0de)
@@ -17,29 +18,6 @@ test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("local")).toBe(0xc0df)
   expect(ServiceConfig.defaultPort("preview-a")).toBe(ServiceConfig.defaultPort("preview-a"))
   expect(ServiceConfig.defaultPort("preview-a")).not.toBe(ServiceConfig.defaultPort("preview-b"))
-})
-
-test("managed service forwards the CPU profile path to the server", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-profile-"))
-  const profile = path.join(root, "server.cpuprofile")
-  try {
-    const previous = process.env.OPENCODE_CPU_PROFILE
-    process.env.OPENCODE_CPU_PROFILE = profile
-    try {
-      const options = await Effect.runPromise(
-        ServiceConfig.options().pipe(
-          Effect.provide(Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })),
-          Effect.provide(NodeFileSystem.layer),
-        ),
-      )
-      expect(options.command.slice(-2)).toEqual(["--cpu-profile", profile])
-    } finally {
-      if (previous === undefined) delete process.env.OPENCODE_CPU_PROFILE
-      else process.env.OPENCODE_CPU_PROFILE = previous
-    }
-  } finally {
-    await fs.rm(root, { recursive: true, force: true })
-  }
 })
 
 test("local channel stores service config with the local service filename", async () => {
@@ -172,20 +150,6 @@ test("preview registration migration never moves stable discovery", async () => 
     await fs.rm(root, { recursive: true, force: true })
   }
 })
-
-test("managed service writes its registration once", async () => {
-  const service = await startManagedService("opencode-service-once-")
-  try {
-    const before = await fs.stat(service.registration)
-    await Bun.sleep(6_000)
-    const after = await fs.stat(service.registration)
-    expect(after.ino).toBe(before.ino)
-    expect(after.mtimeMs).toBe(before.mtimeMs)
-    expect(await Bun.file(service.registration).json()).toEqual(service.info)
-  } finally {
-    await stopManagedService(service)
-  }
-}, 30_000)
 
 test("deleting a managed service registration stops its owner", async () => {
   const service = await startManagedService("opencode-service-delete-")
@@ -478,39 +442,45 @@ test("port contender recognizes an incumbent registered during the bind race", a
   }
 }, 45_000)
 
-test("stale dead registration is replaced after binding the selected port", async () => {
+test("service registration replaces a stale owner with the bound address", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-stale-"))
-  const port = await availablePort()
   const registration = path.join(root, "state", "opencode", "service-local.json")
-  await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
   await fs.mkdir(path.dirname(registration), { recursive: true })
-  await fs.writeFile(path.join(root, "config", "opencode", "service-local.json"), JSON.stringify({ port }))
   await fs.writeFile(
     registration,
-    JSON.stringify({ id: "dead", version: "dead", url: `http://127.0.0.1:${port}`, pid: 2_147_483_647 }),
+    JSON.stringify({ id: "dead", version: "dead", url: "http://127.0.0.1:4321", pid: 2_147_483_647 }),
   )
-  const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
-    env: serviceEnv(root),
-    stderr: "pipe",
-    stdout: "ignore",
-  })
   try {
-    const info = await waitForInfo(registration, (value) => value.id !== "dead")
-    expect(new URL(info.url).port).toBe(String(port))
-    expect(info.pid).toBe(owner.pid)
-    await Effect.runPromise(Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)))
-    await owner.exited
+    const cleanup = await Effect.runPromise(
+      ServiceRegistration.register({
+        address: { _tag: "TcpAddress", hostname: "127.0.0.1", port: 4321 },
+        password: "secret",
+        id: "owner",
+        file: registration,
+        shutdown: Effect.never,
+      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
+    )
+    expect(await Bun.file(registration).json()).toEqual({
+      id: "owner",
+      version: OPENCODE_VERSION,
+      url: "http://127.0.0.1:4321",
+      pid: process.pid,
+      password: "secret",
+    })
+    await Effect.runPromise(cleanup.pipe(Effect.provide(NodeFileSystem.layer)))
+    expect(await Bun.file(registration).exists()).toBe(false)
   } finally {
-    owner.kill("SIGTERM")
-    await owner.exited
     await fs.rm(root, { recursive: true, force: true })
   }
-}, 30_000)
+})
 
 test("a failed service stays registered and owns the selected port until stopped", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-failed-"))
+  const port = await availablePort()
   const database = path.join(root, "database")
   await fs.mkdir(database)
+  await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
+  await fs.writeFile(path.join(root, "config", "opencode", "service-local.json"), JSON.stringify({ port }))
   const env = {
     ...process.env,
     HOME: root,

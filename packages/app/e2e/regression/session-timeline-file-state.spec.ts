@@ -1,18 +1,19 @@
 import { expect, test } from "@playwright/test"
 import { assistantMessage, setupTimeline, toolPart, userMessage } from "../performance/timeline-stability/fixture"
+import { createTwoFilesPatch } from "diff"
 
 test("preserves nested patch file state through outer collapse and reopen", async ({ page }) => {
   const patchID = "prt_nested_patch"
-  const files = [patchFile("src/a.ts", "update"), patchFile("src/b.ts", "add"), patchFile("src/old.ts", "delete")]
+  const files = [patchFile("src/a.ts", "modified"), patchFile("src/b.ts", "added"), patchFile("src/old.ts", "deleted")]
   await setupTimeline(page, {
     messages: [
       userMessage(),
       assistantMessage([
         toolPart(
           patchID,
-          "apply_patch",
+          "patch",
           "completed",
-          { files: files.map((file) => file.filePath) },
+          { patchText: "Update three files" },
           { metadata: { files } },
         ),
       ]),
@@ -31,15 +32,15 @@ test("preserves nested patch file state through outer collapse and reopen", asyn
   await expect(deleted.getByRole("button")).toHaveAttribute("aria-expanded", "true")
 })
 
-function patchFile(filePath: string, type: "add" | "update" | "delete") {
+function patchFile(file: string, status: "added" | "modified" | "deleted") {
+  const before = status === "added" ? "" : source(false)
+  const after = status === "deleted" ? "" : source(true)
   return {
-    filePath,
-    relativePath: filePath,
-    type,
-    additions: type === "delete" ? 0 : 4,
-    deletions: type === "add" ? 0 : 3,
-    before: type === "add" ? undefined : source(false),
-    after: type === "delete" ? undefined : source(true),
+    file,
+    status,
+    patch: createTwoFilesPatch(`a/${file}`, `b/${file}`, before, after),
+    additions: status === "deleted" ? 0 : 4,
+    deletions: status === "added" ? 0 : 3,
   }
 }
 

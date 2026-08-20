@@ -1,53 +1,34 @@
-// @ts-nocheck
-import * as mod from "./markdown"
-import { create } from "@opencode-ai/ui/storybook/scaffold"
 import { markdown } from "@opencode-ai/ui/storybook/fixtures"
-
-const docs = `### Overview
-Render sanitized Markdown with code blocks, inline code, and safe links.
-
-Pair with \`Code\` for standalone code views.
-
-### API
-- Required: \`text\` Markdown string.
-- Uses the Marked context provider for parsing and sanitization.
-
-### Variants and states
-- Code blocks include copy buttons when rendered.
-
-### Behavior
-- Sanitizes HTML and auto-converts inline URL code to links.
-- Adds copy buttons to code blocks.
-
-### Accessibility
-- Copy buttons include aria-labels from i18n.
-- TODO: confirm link target behavior in sanitized output.
-
-### Theming/tokens
-- Uses \`data-component="markdown"\` and related slots for styling.
-
-`
-
-const story = create({
-  title: "UI/Markdown",
-  mod,
-  args: {
-    text: markdown,
-  },
-})
+import { Markdown } from "./markdown"
 
 export default {
-  title: "UI/Markdown",
+  title: "OpenCode/Conversation/Markdown response",
   id: "components-markdown",
-  component: story.meta.component,
-  tags: ["autodocs"],
+  component: Markdown,
   parameters: {
     docs: {
       description: {
-        component: docs,
+        component:
+          "Production assistant Markdown with headings, lists, links, inline code, and fenced code. The preview uses the same sanitizer, worker, and copy actions as a Session response.",
       },
     },
   },
 }
 
-export const Basic = story.Basic
+export const CompleteResponse = {
+  render: () => (
+    <div class="mx-auto max-w-[760px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
+      <Markdown text={markdown} />
+    </div>
+  ),
+}
+
+export const CompactResult = {
+  render: () => (
+    <div class="mx-auto max-w-[560px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
+      <Markdown
+        text={"Updated the Session status and verified it.\n\n- **12 tests passed**\n- `bun typecheck` passed"}
+      />
+    </div>
+  ),
+}

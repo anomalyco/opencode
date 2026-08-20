@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Model } from "../src/model.js"
+import { Provider } from "../src/provider.js"
 
 describe("Model.Ref", () => {
   test("parses model references with optional variants", () => {
@@ -47,5 +48,13 @@ describe("Model.Compatibility", () => {
       maxTokensField: "max_completion_tokens",
       requireFinishReason: false,
     })
+  })
+})
+
+describe("Model.Info", () => {
+  test("uses practical token limits for unknown models", () => {
+    const model = Model.Info.default(Provider.ID.make("custom"), Model.ID.make("gpt-5.6"))
+
+    expect(model.limit).toEqual({ context: 200_000, output: 32_000 })
   })
 })

@@ -1376,7 +1376,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         <StartupLoading ready={plugins.ready} />
       </Show>
       <Show when={showReconnecting()}>
-        <Reconnecting />
+        <Reconnecting managed={client.restart !== undefined} />
       </Show>
       <MigrationOverlay />
       <Toast />

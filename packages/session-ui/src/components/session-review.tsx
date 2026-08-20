@@ -16,7 +16,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { createEffect, createMemo, For, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
-import type { PresentationFileContent, PresentationFileDiff } from "../presentation"
+import type { PresentationFileContent, PresentationFileDiff } from "../file-presentation"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
@@ -64,12 +64,12 @@ export type SessionReviewCommentActions = {
 export type SessionReviewFocus = { file: string; id: string }
 
 type RawReviewDiff = (PresentationFileDiff | FileDiffInfo) & {
-  preloaded?: PreloadMultiFileDiffResult<any>
+  preloaded?: PreloadMultiFileDiffResult<unknown>
 }
 type ReviewDiff = ((PresentationFileDiff & { file: string }) | FileDiffInfo) & {
-  preloaded?: PreloadMultiFileDiffResult<any>
+  preloaded?: PreloadMultiFileDiffResult<unknown>
 }
-type Item = ViewDiff & { preloaded?: PreloadMultiFileDiffResult<any> }
+type Item = ViewDiff & { preloaded?: PreloadMultiFileDiffResult<unknown> }
 
 function diff(value: unknown): value is ReviewDiff {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false

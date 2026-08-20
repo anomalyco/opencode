@@ -14,6 +14,7 @@ import { Command } from "../command.js"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Integration } from "../integration.js"
+import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { Model } from "../model.js"
 import { MCP } from "../mcp/index.js"
@@ -28,7 +29,10 @@ import { WebSearch } from "../websearch.js"
 import { PluginHooks } from "./hooks.js"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
-export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../plugin.js").Interface) {
+export const make = Effect.fn("PluginHost.make")(function* (
+  plugin: import("../plugin.js").Interface,
+  pluginID: string = "test",
+) {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
   const aisdk = yield* AISDK.Service
@@ -36,6 +40,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
   const commands = yield* Command.Service
   const bus = yield* Bus.Service
   const integration = yield* Integration.Service
+  const kv = yield* KV.Service
   const mcp = yield* MCP.Service
   const location = yield* Location.Service
   const reference = yield* Reference.Service
@@ -340,6 +345,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
           })
         }),
     },
+    storage: storage(kv, pluginID),
     shell: {
       hook: (name, callback) => hooks.register("shell", name, callback),
     },
@@ -405,6 +411,35 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
     },
   } satisfies Plugin.Context
 })
+
+export function storage(kv: KV.Interface, pluginID: string): Plugin.Context["storage"] {
+  const namespace = `plugin:${pluginID
+    .split("")
+    .map((value) => value.charCodeAt(0).toString(16).padStart(4, "0"))
+    .join("")}:`
+  return {
+    get: (key) => kv.get(namespace + key),
+    set: (key, value) => kv.set(namespace + key, value),
+    remove: (key) => kv.remove(namespace + key),
+    scan: (options) =>
+      kv
+        .scan({
+          prefix: namespace + options.prefix,
+          after: options.after === undefined ? undefined : namespace + options.after,
+          limit: options.limit,
+        })
+        .pipe(
+          Effect.map((result) => {
+            const entries = result.entries.map((entry) => ({
+              key: entry.key.slice(namespace.length),
+              value: entry.value,
+            }))
+            if (result.next === undefined) return { entries }
+            return { entries, next: result.next.slice(namespace.length) }
+          }),
+        ),
+  }
+}
 
 function methodImplementation(input: IntegrationMethodRegistration): Integration.Implementation {
   if ("authorize" in input) {

@@ -292,8 +292,12 @@ export function createFileFind(opts: CreateFileFindOptions) {
   }
 
   const setHighlights = (ranges: Range[], currentIndex: number) => {
-    const api = (globalThis as unknown as { CSS?: { highlights?: any }; Highlight?: any }).CSS?.highlights
-    const Highlight = (globalThis as unknown as { Highlight?: any }).Highlight
+    const root = globalThis as unknown as {
+      CSS?: { highlights?: { delete: (name: string) => void; set: (name: string, value: unknown) => void } }
+      Highlight?: new (...ranges: Range[]) => unknown
+    }
+    const api = root.CSS?.highlights
+    const Highlight = root.Highlight
     if (!api || typeof Highlight !== "function") return false
 
     api.delete("opencode-find")

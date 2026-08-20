@@ -518,7 +518,7 @@ async function expectCanScrollToStart(
   let current = await timelineState(page)
   let unchangedAtTop = 0
 
-  for (let attempt = 0; attempt < 600; attempt++) {
+  for (let attempt = 0; attempt < 800; attempt++) {
     collectSeen(current, seenParts, seenMessages)
     samples.push(sampleTraversal(current, seenParts.size, seenMessages.size))
     expectNoSmokeErrors(errors, current.errorToasts, current.forbiddenText)

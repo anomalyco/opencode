@@ -48,28 +48,26 @@ describe("Gemini route", () => {
       const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: {
-            gemini: {
-              cachedContent: "cachedContents/example",
-              safetySettings: [{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" }],
-              serviceTier: "priority",
-              thinkingConfig: { thinkingBudget: 0, includeThoughts: false, thinkingLevel: "high" },
-            },
+            cachedContent: "cachedContents/example",
+            safetySettings: [{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" }],
+            serviceTier: "priority",
+            thinkingConfig: { thinkingBudget: 0, includeThoughts: false, thinkingLevel: "high" },
           },
         }),
       )
       const filtered = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { gemini: { thinkingConfig: { thinkingBudget: "invalid", includeThoughts: false } } },
+          providerOptions: { thinkingConfig: { thinkingBudget: "invalid", includeThoughts: false } },
         }),
       )
       const defaulted = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
+          providerOptions: { thinkingConfig: { thinkingLevel: "high" } },
         }),
       )
       const emptySafetySettings = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { gemini: { safetySettings: [] } },
+          providerOptions: { safetySettings: [] },
         }),
       )
 

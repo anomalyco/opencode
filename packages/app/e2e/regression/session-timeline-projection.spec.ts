@@ -12,7 +12,7 @@ import {
 test.describe("session timeline projection", () => {
   test("renders every admitted tool family and hides timeline-only exclusions", async ({ page }) => {
     const parts = [
-      toolPart("prt_01_read", "read", "completed", { filePath: "src/a.ts" }),
+      toolPart("prt_01_read", "read", "completed", { path: "src/a.ts" }),
       toolPart("prt_02_glob", "glob", "completed", { path: ".", pattern: "**/*.ts" }),
       toolPart("prt_03_grep", "grep", "completed", { path: ".", pattern: "value" }),
       toolPart("prt_04_list", "list", "completed", { path: "src" }),
@@ -24,16 +24,20 @@ test.describe("session timeline projection", () => {
         { query: "timeline stability" },
         { output: "https://example.com/result" },
       ),
-      toolPart("prt_task", "task", "completed", { description: "Inspect timeline", subagent_type: "explore" }),
+      toolPart("prt_task", "subagent", "completed", {
+        description: "Inspect timeline",
+        agent: "explore",
+        prompt: "Inspect the timeline implementation.",
+      }),
       toolPart(
         "prt_bash",
-        "bash",
+        "shell",
         "completed",
         { command: "printf stable" },
         { output: "stable", title: "printf stable" },
       ),
       editPart("prt_edit"),
-      toolPart("prt_write", "write", "completed", { filePath: "src/new.ts", content: "export const stable = true\n" }),
+      toolPart("prt_write", "write", "completed", { path: "src/new.ts", content: "export const stable = true\n" }),
       patchPart("prt_patch"),
       toolPart("prt_todo", "todowrite", "completed", { todos: [{ content: "Hidden", status: "pending" }] }),
       toolPart(
@@ -175,16 +179,10 @@ function editPart(id: string) {
     id,
     "edit",
     "completed",
-    { filePath: "src/a.ts" },
+    { path: "src/a.ts", oldString: "export const value = 1", newString: "export const value = 2" },
     {
       metadata: {
-        filediff: {
-          file: "src/a.ts",
-          additions: 1,
-          deletions: 1,
-          before: "export const value = 1\n",
-          after: "export const value = 2\n",
-        },
+        files: [patchFile("src/a.ts", "modified")],
       },
     },
   )
@@ -193,31 +191,33 @@ function editPart(id: string) {
 function patchPart(id: string) {
   return toolPart(
     id,
-    "apply_patch",
+    "patch",
     "completed",
-    { files: ["src/a.ts", "src/b.ts"] },
+    { patchText: "Update the projected files" },
     {
       metadata: {
         files: [
-          patchFile("src/a.ts", "update"),
-          patchFile("src/b.ts", "add"),
-          patchFile("src/old.ts", "delete"),
-          { ...patchFile("src/moved.ts", "move"), move: "src/new-place.ts" },
+          patchFile("src/a.ts", "modified"),
+          patchFile("src/b.ts", "added"),
+          patchFile("src/old.ts", "deleted"),
         ],
       },
     },
   )
 }
 
-function patchFile(filePath: string, type: "add" | "update" | "delete" | "move") {
+function patchFile(file: string, status: "added" | "modified" | "deleted") {
   return {
-    filePath,
-    relativePath: filePath,
-    type,
-    additions: type === "delete" ? 0 : 1,
-    deletions: type === "add" ? 0 : 1,
-    before: type === "add" ? undefined : "export const before = true\n",
-    after: type === "delete" ? undefined : "export const after = true\n",
+    file,
+    status,
+    patch:
+      status === "added"
+        ? "@@ -0,0 +1 @@\n+export const after = true"
+        : status === "deleted"
+          ? "@@ -1 +0,0 @@\n-export const before = true"
+          : "@@ -1 +1 @@\n-export const before = true\n+export const after = true",
+    additions: status === "deleted" ? 0 : 1,
+    deletions: status === "added" ? 0 : 1,
   }
 }
 

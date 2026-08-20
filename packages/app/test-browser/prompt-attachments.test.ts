@@ -3,8 +3,8 @@ import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createPromptAttachmentsCore } from "@/components/prompt-input/attachments"
 import { createPromptState } from "@/context/prompt"
-import { createPromptInputV2Attachments } from "../../session-ui/src/v2/components/prompt-input/attachments"
-import type { PromptInputV2Prompt } from "../../session-ui/src/v2/components/prompt-input/types"
+import { createPromptInputV2Attachments } from "@opencode-ai/session-ui/v2/prompt-input/attachments"
+import type { PromptInputV2Prompt } from "@opencode-ai/session-ui/v2/prompt-input/types"
 
 describe("prompt attachment session ownership", () => {
   test("adds an asynchronously read image to the session where the read started", async () => {

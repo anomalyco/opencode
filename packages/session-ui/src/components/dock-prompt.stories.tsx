@@ -1,62 +1,58 @@
-// @ts-nocheck
-import * as mod from "./dock-prompt"
-import { create } from "@opencode-ai/ui/storybook/scaffold"
-
-const docs = `### Overview
-Docked prompt layout for questions and permission requests.
-
-Use with form controls or confirmation buttons in the footer.
-
-### API
-- Required: \`kind\` (question | permission), \`header\`, \`children\`, \`footer\`.
-- Optional: \`ref\` for measuring or focus management.
-
-### Variants and states
-- Question and permission layouts (data attributes).
-
-### Behavior
-- Pure layout component; behavior handled by parent.
-
-### Accessibility
-- Ensure header and footer content provide clear context and actions.
-
-### Theming/tokens
-- Uses \`data-component="dock-prompt"\` with kind data attribute.
-
-`
-
-const story = create({
-  title: "UI/DockPrompt",
-  mod,
-  args: {
-    kind: "question",
-    header: "Header",
-    children: "Prompt content",
-    footer: "Footer",
-  },
-})
+import { Button } from "@opencode-ai/ui/button"
+import { DockPrompt } from "./dock-prompt"
 
 export default {
-  title: "UI/DockPrompt",
+  title: "OpenCode/Requests/Prompt frame",
   id: "components-dock-prompt",
-  component: story.meta.component,
-  tags: ["autodocs"],
+  component: DockPrompt,
   parameters: {
     docs: {
       description: {
-        component: docs,
+        component:
+          "The shared production frame for active questions and permission requests. Complete interactive examples live under Session/Complete workspace.",
       },
     },
   },
 }
 
-export const Basic = story.Basic
+export const Question = {
+  render: () => (
+    <DockPrompt
+      kind="question"
+      header={<div class="text-13-medium text-text-strong">Session layout</div>}
+      footer={
+        <>
+          <Button size="normal" variant="ghost">
+            Dismiss
+          </Button>
+          <Button size="normal" variant="contrast">
+            Submit
+          </Button>
+        </>
+      }
+    >
+      <div class="text-13-regular text-text-base">Which Session layout should I implement?</div>
+    </DockPrompt>
+  ),
+}
 
 export const Permission = {
-  args: {
-    kind: "permission",
-    header: "Allow access?",
-    children: "This action needs permission to proceed.",
-    footer: "Approve or deny",
-  },
+  render: () => (
+    <DockPrompt
+      kind="permission"
+      header={<div class="text-13-medium text-text-strong">Permission required</div>}
+      footer={
+        <>
+          <Button size="normal" variant="ghost">
+            Deny
+          </Button>
+          <Button size="normal" variant="contrast">
+            Allow once
+          </Button>
+        </>
+      }
+    >
+      <code class="text-12-regular text-text-base">npm publish --tag canary</code>
+    </DockPrompt>
+  ),
 }

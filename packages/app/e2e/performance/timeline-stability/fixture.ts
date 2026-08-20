@@ -60,17 +60,17 @@ type ReasoningSeed = {
 type ToolSeed = {
   id: string
   type: "tool"
-  callID: string
-  tool: string
+  name: string
   messageID?: string
   executed?: boolean
   providerState?: Record<string, unknown>
   providerResultState?: Record<string, unknown>
   state:
-    | { status: "pending"; input: Record<string, unknown>; raw: string }
+    | { status: "streaming"; input: Record<string, unknown>; raw: string }
     | {
         status: "running"
         input: Record<string, unknown>
+        output?: string
         title?: string
         metadata: Record<string, unknown>
         time: { start: number }
@@ -100,10 +100,10 @@ export type PartSeed<Owner extends "user" | "assistant"> = Owner extends "user"
   ? TextSeed | FileSeed | AgentSeed
   : TextSeed | ReasoningSeed | ToolSeed
 
-type ToolOptions<State extends ToolStatus> = State extends "pending"
+type ToolOptions<State extends ToolStatus> = State extends "streaming"
   ? { output?: never; title?: never; metadata?: never; error?: never }
   : State extends "running"
-    ? { title?: string; metadata?: Record<string, unknown>; output?: never; error?: never }
+    ? { title?: string; metadata?: Record<string, unknown>; output?: string; error?: never }
     : State extends "error"
       ? { error?: string; metadata?: Record<string, unknown>; output?: never; title?: never }
       : { output?: string; title?: string; metadata?: Record<string, unknown>; error?: never }
@@ -371,6 +371,15 @@ export function partUpdated(part: PartSeed<"assistant">): readonly OpenCodeEvent
   }
   if (part.type === "reasoning") {
     startedParts.add(part.id)
+    if (!started && !part.text)
+      return [
+        makeEvent("session.reasoning.started", {
+          sessionID,
+          assistantMessageID: messageID,
+          ordinal: ref.ordinal!,
+          state: jsonRecord(part.metadata),
+        }),
+      ]
     return [
       ...(started
         ? []
@@ -542,9 +551,9 @@ export function reasoningPart(id: string, text: string): ReasoningSeed {
 export function toolPart(
   id: string,
   tool: string,
-  state: "pending",
+  state: "streaming",
   input: Record<string, unknown>,
-  options?: ToolOptions<"pending">,
+  options?: ToolOptions<"streaming">,
 ): ToolSeed
 export function toolPart(
   id: string,
@@ -574,14 +583,15 @@ export function toolPart(
   input: Record<string, unknown>,
   options: ToolOptions<ToolStatus> = {},
 ): ToolSeed {
-  const base = { id, type: "tool" as const, callID: id, tool }
-  if (state === "pending") return { ...base, state: { status: state, input, raw: "" } }
+  const base = { id, type: "tool" as const, name: tool }
+  if (state === "streaming") return { ...base, state: { status: state, input, raw: "" } }
   if (state === "running")
     return {
       ...base,
       state: {
         status: state,
         input,
+        ...(options.output === undefined ? {} : { output: options.output }),
         title: options.title,
         metadata: options.metadata ?? {},
         time: { start: 1700000001000 },
@@ -612,12 +622,10 @@ export function toolPart(
 }
 
 export function shell(id: string, state: ToolStatus, output = "", command = `echo ${id}`): ToolSeed {
-  if (state === "pending") return toolPart(id, "bash", state, { command })
-  if (state === "running")
-    return toolPart(id, "bash", state, { command }, { title: command, metadata: { command, output } })
-  if (state === "error")
-    return toolPart(id, "bash", state, { command }, { error: output || undefined, metadata: { command, output } })
-  return toolPart(id, "bash", state, { command }, { title: command, output, metadata: { command, output } })
+  if (state === "streaming") return toolPart(id, "shell", state, { command })
+  if (state === "running") return toolPart(id, "shell", state, { command }, { title: command, output })
+  if (state === "error") return toolPart(id, "shell", state, { command }, { error: output || undefined })
+  return toolPart(id, "shell", state, { command }, { title: command, output })
 }
 
 export function completedAssistantInfo(info: SessionMessageAssistant): SessionMessageAssistant {
@@ -655,7 +663,7 @@ function messageContent(
 ): SessionMessageAssistant["content"][number] {
   if (part.type === "tool") {
     partRefs.set(part.id, { messageID, type: part.type })
-    toolStates.set(part.callID, part.state.status)
+    toolStates.set(part.id, part.state.status)
   } else {
     partRefs.set(part.id, { messageID, type: part.type, ordinal: ordinals[part.type]++ })
     startedParts.add(part.id)
@@ -675,8 +683,8 @@ function messageContent(
   const completed = state.status === "completed" || state.status === "error" ? state.time.end : undefined
   const base = {
     type: "tool" as const,
-    id: part.callID,
-    name: part.tool,
+    id: part.id,
+    name: part.name,
     time: {
       created: time?.start ?? 1700000001000,
       ...(time?.start === undefined ? {} : { ran: time.start }),
@@ -686,11 +694,18 @@ function messageContent(
     ...(part.providerState ? { providerState: jsonRecord(part.providerState) } : {}),
     ...(part.providerResultState ? { providerResultState: jsonRecord(part.providerResultState) } : {}),
   }
-  if (state.status === "pending") return { ...base, state: { status: "streaming", input: state.raw } }
+  if (state.status === "streaming") return { ...base, state: { status: "streaming", input: state.raw } }
   if (state.status === "running")
     return {
       ...base,
-      state: { status: "running", input: jsonRecord(state.input), metadata: jsonRecord(state.metadata) },
+      state: {
+        status: "running",
+        input: jsonRecord(state.input),
+        metadata: jsonRecord({
+          ...state.metadata,
+          ...(state.output === undefined ? {} : { output: state.output }),
+        }),
+      },
     }
   if (state.status === "error")
     return {
@@ -714,7 +729,7 @@ function messageContent(
 }
 
 function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[] {
-  const previous = toolStates.get(part.callID)
+  const previous = toolStates.get(part.id)
   if (previous === "completed" || previous === "error") return []
 
   const events: OpenCodeEvent[] = []
@@ -723,27 +738,27 @@ function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[]
       makeEvent("session.tool.input.started", {
         sessionID,
         assistantMessageID: messageID,
-        id: part.callID,
-        name: part.tool,
+        id: part.id,
+        name: part.name,
       }),
     )
   }
-  if (part.state.status === "pending") {
-    toolStates.set(part.callID, part.state.status)
+  if (part.state.status === "streaming") {
+    toolStates.set(part.id, part.state.status)
     return events
   }
-  if (!previous || previous === "pending") {
+  if (!previous || previous === "streaming") {
     events.push(
       makeEvent("session.tool.input.ended", {
         sessionID,
         assistantMessageID: messageID,
-        id: part.callID,
+        id: part.id,
         text: JSON.stringify(part.state.input),
       }),
       makeEvent("session.tool.called", {
         sessionID,
         assistantMessageID: messageID,
-        id: part.callID,
+        id: part.id,
         input: part.state.input,
         executed: part.executed ?? true,
         state: jsonRecord(part.providerState),
@@ -751,16 +766,20 @@ function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[]
     )
   }
   if (part.state.status === "running") {
-    if (previous === "running" || Object.keys(part.state.metadata).length)
+    const metadata = {
+      ...part.state.metadata,
+      ...(part.state.output === undefined ? {} : { output: part.state.output }),
+    }
+    if (previous === "running" || Object.keys(metadata).length)
       events.push(
         makeEvent("session.tool.progress", {
           sessionID,
           assistantMessageID: messageID,
-          id: part.callID,
-          metadata: jsonRecord(part.state.metadata),
+          id: part.id,
+          metadata: jsonRecord(metadata),
         }),
       )
-    toolStates.set(part.callID, part.state.status)
+    toolStates.set(part.id, part.state.status)
     return events
   }
   if (part.state.status === "error") {
@@ -768,28 +787,28 @@ function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[]
       makeEvent("session.tool.failed", {
         sessionID,
         assistantMessageID: messageID,
-        id: part.callID,
+        id: part.id,
         error: { type: "ToolError", message: part.state.error },
         metadata: jsonRecord(part.state.metadata),
         executed: part.executed ?? true,
         resultState: jsonRecord(part.providerResultState),
       }),
     )
-    toolStates.set(part.callID, part.state.status)
+    toolStates.set(part.id, part.state.status)
     return events
   }
   events.push(
     makeEvent("session.tool.success", {
       sessionID,
       assistantMessageID: messageID,
-      id: part.callID,
+      id: part.id,
       content: [{ type: "text", text: part.state.output }],
       metadata: jsonRecord(part.state.metadata),
       executed: part.executed ?? true,
       resultState: jsonRecord(part.providerResultState),
     }),
   )
-  toolStates.set(part.callID, part.state.status)
+  toolStates.set(part.id, part.state.status)
   return events
 }
 

@@ -1,7 +1,5 @@
 import "@/index.css"
 import * as Sentry from "@sentry/solid"
-import { I18nProvider } from "@opencode-ai/ui/context"
-import type { UiI18n } from "@opencode-ai/ui/context/i18n"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { File } from "@opencode-ai/session-ui/file"
@@ -26,7 +24,7 @@ import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
-import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
+import { LanguageProvider, UiI18nBridge, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { usePlatform } from "@/context/platform"
@@ -98,23 +96,6 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
         )}
       </Show>
     </Show>
-  )
-}
-
-function UiI18nBridge(props: ParentProps) {
-  const language = useLanguage()
-  return (
-    <I18nProvider
-      value={{
-        locale: language.intl,
-        layoutLocale: language.layoutLocale,
-        t: language.t as UiI18n["t"],
-        plural: language.plural,
-        pluralForm: language.pluralForm,
-      }}
-    >
-      {props.children}
-    </I18nProvider>
   )
 }
 

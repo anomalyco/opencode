@@ -11,6 +11,7 @@ import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Form } from "@opencode-ai/core/form"
 import { Integration } from "@opencode-ai/core/integration"
+import { KV } from "@opencode-ai/core/kv"
 import { Location } from "@opencode-ai/core/location"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { Npm } from "@opencode-ai/util/npm"
@@ -52,6 +53,7 @@ export const PluginTestLayer = LayerNode.compile(
     Catalog.node,
     Command.node,
     Integration.node,
+    KV.node,
     MCP.node,
     PluginRuntime.node,
     PluginHooks.node,

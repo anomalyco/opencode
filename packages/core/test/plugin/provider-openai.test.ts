@@ -137,7 +137,7 @@ describe("OpenAIPlugin", () => {
       const proxy = yield* request(Provider.ID.openai, "https://proxy.example/v1?region=us")
 
       const provider = required(yield* catalog.provider.get(Provider.ID.openai))
-      expect(provider.package).toBe("@opencode-ai/ai/providers/openai")
+      expect(provider.package).toBe(Provider.aisdk("@ai-sdk/openai"))
       expect(provider.settings).toMatchObject({ baseURL: "https://chatgpt.com/backend-api/codex" })
       expect(provider.headers).toMatchObject({ originator: "opencode", "chatgpt-account-id": "acct_123" })
       expect(direct.baseURL).toBe("https://chatgpt.com/backend-api/codex")
@@ -147,7 +147,7 @@ describe("OpenAIPlugin", () => {
       expect(proxy.baseURL).toBe("https://proxy.example/v1?region=us")
       expect(proxy.headers).toMatchObject({ originator: "opencode", "session-id": "ses_test" })
       const eligible = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
-      expect(eligible.package).toBe("@opencode-ai/ai/providers/openai")
+      expect(eligible.package).toBe(Provider.aisdk("@ai-sdk/openai"))
       expect(eligible.headers).toMatchObject({ originator: "opencode", "chatgpt-account-id": "acct_123" })
       expect(eligible.cost).toEqual([])
       expect(eligible.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
@@ -194,7 +194,7 @@ describe("OpenAIPlugin", () => {
 
       const provider = required(yield* catalog.provider.get(Provider.ID.openai))
       const model = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
-      expect(model.package).toBe("@opencode-ai/ai/providers/openai")
+      expect(model.package).toBe(Provider.aisdk("@ai-sdk/openai"))
       expect(model.enabled).toBe(true)
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(direct.headers).not.toHaveProperty("originator")
@@ -221,15 +221,15 @@ describe("OpenAIPlugin", () => {
       })
       const sessionID = Session.ID.make("ses_websocket_hooks")
       const agentID = Agent.ID.make("build")
-      const agent = Agent.Info.make(Agent.Info.default(agentID))
       const model = SessionRunnerModel.resolved(OpenAIResponses.route.model({ id: "gpt-5.5" }), {
         capabilities: { tools: true, input: ["text"], output: ["text"] },
         cost: [],
+        limit: { context: 200_000, output: 32_000 },
       })
       const program = Effect.gen(function* () {
         const requests = yield* SessionModelRequest.Service
         return yield* requests.prepare({
-          context: {
+          scope: {
             session: Session.Info.make({
               id: sessionID,
               projectID: Project.ID.global,
@@ -238,13 +238,12 @@ describe("OpenAIPlugin", () => {
               time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
               location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
             }),
-            agent: { id: agentID, info: agent },
+            agentID,
             model,
-            initial: "",
-            messages: [],
             tools: { definitions: [], execute: () => Effect.die("unused tool execution") },
           },
-          step: 1,
+          transcript: { system: [], messages: [] },
+          webSocket: "session",
         })
       }).pipe(
         Effect.provide(SessionModelRequest.layer),
@@ -258,7 +257,6 @@ describe("OpenAIPlugin", () => {
 
       const prepared = yield* program
 
-      expect(prepared.webSocketEligible).toBe(true)
       expect(prepared.options.webSocket).toBe(executor)
       expect(prepared.options.http).toBeUndefined()
     }),

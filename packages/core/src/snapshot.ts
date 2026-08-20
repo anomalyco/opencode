@@ -3,7 +3,6 @@ export * as Snapshot from "./snapshot.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
-import { Config } from "./config.js"
 import { File } from "./file.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "./git.js"
@@ -12,6 +11,7 @@ import { Location } from "./location.js"
 import { AbsolutePath, RelativePath } from "./schema.js"
 import { ID } from "@opencode-ai/schema/snapshot"
 import { Hash } from "@opencode-ai/util/hash"
+import { State } from "./state.js"
 
 export { ID }
 
@@ -36,7 +36,11 @@ export interface RestoreInput {
   readonly files: ReadonlyMap<RelativePath, ID>
 }
 
-export interface Interface {
+export type Draft = {
+  configure: (enabled: boolean) => void
+}
+
+export interface Interface extends State.Transformable<Draft> {
   /**
    * Capture the current Location-scoped filesystem state as a content-addressed
    * tree. Returns `undefined` when snapshots are disabled, unsupported, or the
@@ -68,12 +72,20 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sn
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const config = yield* Config.Service
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
     const lifetime = yield* Scope.Scope
+    const state = State.create<{ enabled: boolean }, Draft>({
+      name: "snapshot",
+      initial: () => ({ enabled: true }),
+      draft: (draft) => ({
+        configure: (enabled) => {
+          draft.enabled = enabled
+        },
+      }),
+    })
     // Cache a scope-owned fiber so caller cancellation stops waiting without poisoning shared initialization.
     const repositoryFiber = yield* Effect.cached(
       Effect.gen(function* () {
@@ -100,13 +112,10 @@ const layer = Layer.effect(
       return RelativePath.make(relative.replaceAll("\\", "/") || ".")
     })
 
-    const enabled = Effect.fnUntraced(function* () {
-      if (location.vcs?.type !== "git") return false
-      return Config.latest(yield* config.entries(), "snapshots") !== false
-    })
+    const enabled = () => location.vcs?.type === "git" && state.get().enabled
 
     const capture = Effect.fn("Snapshot.capture")(function* () {
-      if (!(yield* enabled())) return undefined
+      if (!enabled()) return undefined
       return yield* Effect.gen(function* () {
         const repo = yield* repository
         return ID.make(
@@ -170,26 +179,28 @@ const layer = Layer.effect(
     })
 
     const restore = Effect.fn("Snapshot.restore")(function* (input: RestoreInput) {
-      if (!(yield* enabled())) return yield* new Error({ operation: "restore", message: "Snapshots are disabled" })
+      if (!enabled()) return yield* new Error({ operation: "restore", message: "Snapshots are disabled" })
       const repo = yield* repository.pipe(Effect.mapError((cause) => failure("restore", cause)))
       yield* git.tree
         .restore({ repository: repo.snapshotRepository, files: yield* plan(repo.worktree, input) })
         .pipe(Effect.mapError((cause) => failure("restore", cause)))
     })
 
-    return Service.of({ capture, files, diff, restore })
+    return Service.of({ transform: state.transform, reload: state.reload, capture, files, diff, restore })
   }).pipe(Effect.withSpan("Snapshot.boot")),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Config.node, FSUtil.node, Git.node, Global.node, Location.node],
+  deps: [FSUtil.node, Git.node, Global.node, Location.node],
 })
 
 export const noopLayer = Layer.succeed(
   Service,
   Service.of({
+    transform: () => Effect.succeed({ dispose: Effect.void }),
+    reload: () => Effect.void,
     capture: () => Effect.succeed(undefined),
     files: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),

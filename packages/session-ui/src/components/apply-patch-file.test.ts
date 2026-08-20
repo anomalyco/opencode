@@ -1,79 +1,31 @@
 import { describe, expect, test } from "bun:test"
-import { patchFiles } from "./apply-patch-file"
-import { text } from "./session-diff"
+import { patchFile, patchFiles } from "./apply-patch-file"
 
-describe("apply patch file", () => {
-  test("parses v2 patch metadata", () => {
-    const file = patchFiles([
-      {
-        file: "a.ts",
-        status: "modified",
-        patch:
-          "Index: a.ts\n===================================================================\n--- a.ts\n+++ a.ts\n@@ -1,2 +1,2 @@\n one\n-two\n+three\n",
-        additions: 1,
-        deletions: 1,
-      },
-    ])[0]
+describe("apply patch files", () => {
+  test("parses current file diffs", () => {
+    const file = patchFile({
+      file: "src/session.ts",
+      patch: "@@ -1 +1 @@\n-old\n+new",
+      additions: 1,
+      deletions: 1,
+      status: "modified",
+    })
 
-    expect(file).toBeDefined()
-    expect(file?.filePath).toBe("a.ts")
-    expect(file?.relativePath).toBe("a.ts")
+    expect(file?.path).toBe("src/session.ts")
     expect(file?.type).toBe("update")
-    expect(file?.view.fileDiff.name).toBe("a.ts")
-    expect(file?.view.fileDiff.isPartial).toBe(true)
-    expect(text(file.view, "deletions")).toBe("one\ntwo\n")
-    expect(text(file.view, "additions")).toBe("one\nthree\n")
+    expect(file?.view.additions).toBe(1)
   })
 
-  test("maps all v2 patch statuses", () => {
+  test("keeps only current file diff values", () => {
     expect(
       patchFiles([
-        { file: "added.ts", status: "added", patch: "+one", additions: 1, deletions: 0 },
-        { file: "deleted.ts", status: "deleted", patch: "-one", additions: 0, deletions: 1 },
-        { file: "modified.ts", status: "modified", patch: "-one\n+two", additions: 1, deletions: 1 },
-      ]).map((file) => ({ file: file.filePath, type: file.type })),
+        { file: "src/new.ts", patch: "@@ -0,0 +1 @@\n+new", additions: 1, deletions: 0, status: "added" },
+        { file: "src/old.ts", patch: "@@ -1 +0,0 @@\n-old", additions: 0, deletions: 1, status: "deleted" },
+        { file: "src/incomplete.ts", additions: 1, deletions: 1, status: "modified" },
+      ]).map((file) => ({ path: file.path, type: file.type })),
     ).toEqual([
-      { file: "added.ts", type: "add" },
-      { file: "deleted.ts", type: "delete" },
-      { file: "modified.ts", type: "update" },
+      { path: "src/new.ts", type: "add" },
+      { path: "src/old.ts", type: "delete" },
     ])
-  })
-
-  test("parses legacy patch metadata", () => {
-    const file = patchFiles([
-      {
-        filePath: "/tmp/a.ts",
-        relativePath: "a.ts",
-        type: "update",
-        patch:
-          "Index: a.ts\n===================================================================\n--- a.ts\t\n+++ a.ts\t\n@@ -1,2 +1,2 @@\n one\n-two\n+three\n",
-        additions: 1,
-        deletions: 1,
-      },
-    ])[0]
-
-    expect(file).toBeDefined()
-    expect(file?.view.fileDiff.name).toBe("a.ts")
-    expect(file?.view.fileDiff.isPartial).toBe(false)
-    expect(text(file.view, "deletions")).toBe("one\ntwo\n")
-    expect(text(file.view, "additions")).toBe("one\nthree\n")
-  })
-
-  test("keeps legacy before and after payloads working", () => {
-    const file = patchFiles([
-      {
-        filePath: "/tmp/a.ts",
-        relativePath: "a.ts",
-        type: "update",
-        before: "one\n",
-        after: "two\n",
-        additions: 1,
-        deletions: 1,
-      },
-    ])[0]
-
-    expect(file).toBeDefined()
-    expect(text(file.view, "deletions")).toBe("one\n")
-    expect(text(file.view, "additions")).toBe("two\n")
   })
 })

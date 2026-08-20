@@ -1,132 +1,74 @@
-// @ts-nocheck
-import { createSignal } from "solid-js"
-import * as mod from "./basic-tool"
-import { create } from "@opencode-ai/ui/storybook/scaffold"
-
-const docs = `### Overview
-Expandable tool panel with a structured trigger and optional details.
-
-Use structured triggers for consistent layout; custom triggers allowed.
-
-### API
-- Required: \`icon\` and \`trigger\` (structured or custom JSX).
-- Optional: \`status\`, \`defaultOpen\`, \`forceOpen\`, \`defer\`, \`locked\`.
-
-### Variants and states
-- Pending/running status animates the title via TextShimmer.
-
-### Behavior
-- Uses Collapsible; can defer content rendering until open.
-- Locked state prevents closing.
-
-### Accessibility
-- TODO: confirm trigger semantics and aria labeling.
-
-### Theming/tokens
-- Uses \`data-component="tool-trigger"\` and related slots.
-
-`
-
-const story = create({
-  title: "UI/Basic Tool",
-  mod,
-  args: {
-    icon: "mcp",
-    defaultOpen: true,
-    trigger: {
-      title: "Basic Tool",
-      subtitle: "Example subtitle",
-      args: ["--flag", "value"],
-    },
-    children: "Details content",
-  },
-})
+import { createStore } from "solid-js/store"
+import { Button } from "@opencode-ai/ui/button"
+import { BasicTool } from "./basic-tool"
 
 export default {
-  title: "UI/Basic Tool",
+  title: "OpenCode/Tools/Disclosure",
   id: "components-basic-tool",
-  component: story.meta.component,
-  tags: ["autodocs"],
+  component: BasicTool,
   parameters: {
     docs: {
       description: {
-        component: docs,
+        component:
+          "The disclosure frame shared by production tool messages. Use these stories to inspect common resting, running, expanded, and summary-only states.",
       },
     },
   },
 }
 
-export const Basic = story.Basic
-
-export const Pending = {
-  args: {
-    status: "pending",
-    trigger: {
-      title: "Running tool",
-      subtitle: "Working...",
-    },
-    children: "Progress details",
-  },
+export const Completed = {
+  render: () => (
+    <BasicTool
+      icon="glasses"
+      defaultOpen
+      trigger={{ title: "Read", subtitle: "src/session.ts", args: ["offset=1", "limit=80"] }}
+    >
+      <div class="px-3 py-2 text-12-regular text-text-base">Loaded the requested file.</div>
+    </BasicTool>
+  ),
 }
 
-export const Locked = {
-  args: {
-    locked: true,
-    trigger: {
-      title: "Locked tool",
-      subtitle: "Cannot close",
-    },
-    children: "Locked details",
-  },
+export const Running = {
+  render: () => (
+    <BasicTool icon="console" status="running" trigger={{ title: "Running tests", subtitle: "bun test src/timeline" }}>
+      <div class="px-3 py-2 font-mono text-12-regular text-text-base">Running timeline tests...</div>
+    </BasicTool>
+  ),
 }
 
-export const Deferred = {
-  args: {
-    defer: true,
-    defaultOpen: false,
-    trigger: {
-      title: "Deferred tool",
-      subtitle: "Content mounts on open",
-    },
-    children: "Deferred content",
-  },
+export const Collapsed = {
+  render: () => (
+    <BasicTool
+      icon="magnifying-glass-menu"
+      trigger={{ title: "Searched", subtitle: "packages/session-ui", args: ["pattern=TimelineRow.key"] }}
+    >
+      <div class="px-3 py-2 text-12-regular text-text-base">2 matching files</div>
+    </BasicTool>
+  ),
 }
 
-export const ForceOpen = {
-  args: {
-    forceOpen: true,
-    trigger: {
-      title: "Forced open",
-      subtitle: "Cannot close",
-    },
-    children: "Forced content",
-  },
+export const SummaryOnly = {
+  render: () => (
+    <BasicTool icon="post-skill" hideDetails trigger={{ title: "Skill", subtitle: "rtl-aware-development" }} />
+  ),
 }
 
-export const HideDetails = {
-  args: {
-    hideDetails: true,
-    trigger: {
-      title: "Summary only",
-      subtitle: "Details hidden",
-    },
-    children: "Hidden content",
-  },
-}
-
-export const SubtitleAction = {
+export const Controlled = {
   render: () => {
-    const [message, setMessage] = createSignal("Subtitle not clicked")
+    const [state, setState] = createStore({ open: false })
     return (
-      <div style={{ display: "grid", gap: "8px" }}>
-        <div style={{ "font-size": "12px", color: "var(--text-weak)" }}>{message()}</div>
-        <mod.BasicTool
-          icon="mcp"
-          trigger={{ title: "Clickable subtitle", subtitle: "Click me" }}
-          onSubtitleClick={() => setMessage("Subtitle clicked")}
+      <div class="flex max-w-[620px] flex-col gap-3">
+        <Button class="w-fit" size="small" variant="neutral" onClick={() => setState("open", (value) => !value)}>
+          {state.open ? "Close tool details" : "Open tool details"}
+        </Button>
+        <BasicTool
+          icon="code-lines"
+          open={state.open}
+          onOpenChange={(open) => setState("open", open)}
+          trigger={{ title: "Edited", subtitle: "src/session.ts", args: ["+3", "-1"] }}
         >
-          Subtitle action details
-        </mod.BasicTool>
+          <div class="px-3 py-2 text-12-regular text-text-base">Changed the active Session label.</div>
+        </BasicTool>
       </div>
     )
   },

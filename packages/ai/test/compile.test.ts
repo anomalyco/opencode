@@ -17,31 +17,25 @@ describe("request option precedence", () => {
   test("deep-merges provider option records and replaces arrays, primitives, and null", () => {
     const merged = mergeProviderOptions(
       {
-        openai: {
-          include: ["route"],
-          metadata: { route: true, shared: "route" },
-          nullable: "route",
-          primitive: "route",
-        },
+        include: ["route"],
+        metadata: { route: true, shared: "route" },
+        nullable: "route",
+        primitive: "route",
       },
       {
-        openai: {
-          include: ["model"],
-          metadata: { model: true, shared: "model" },
-          nullable: null,
-          primitive: "model",
-        },
+        include: ["model"],
+        metadata: { model: true, shared: "model" },
+        nullable: null,
+        primitive: "model",
       },
-      { openai: { metadata: { request: true }, primitive: false } },
+      { metadata: { request: true }, primitive: false },
     )
 
     expect(merged).toEqual({
-      openai: {
-        include: ["model"],
-        metadata: { route: true, model: true, request: true, shared: "model" },
-        nullable: null,
-        primitive: false,
-      },
+      include: ["model"],
+      metadata: { route: true, model: true, request: true, shared: "model" },
+      nullable: null,
+      primitive: false,
     })
   })
 
@@ -51,13 +45,13 @@ describe("request option precedence", () => {
         endpoint: { baseURL: "https://api.openai.test/v1/" },
         auth: Auth.bearer("test"),
         generation: { maxTokens: 10, temperature: 1, stop: ["route"] },
-        providerOptions: { openai: { store: false, reasoningEffort: "low" } },
+        providerOptions: { store: false, reasoningEffort: "low" },
       })
       const model = route.model({
         id: "gpt-4o-mini",
         defaults: {
           generation: { maxTokens: 20, temperature: 0.5, frequencyPenalty: 0.25, stop: ["model"] },
-          providerOptions: { openai: { reasoningEffort: "medium" } },
+          providerOptions: { reasoningEffort: "medium" },
         },
       })
       const prepared = yield* compileRequest(
@@ -65,7 +59,7 @@ describe("request option precedence", () => {
           model,
           prompt: "Say hello.",
           generation: { maxTokens: 30, topP: 0.9, stop: ["request"] },
-          providerOptions: { openai: { store: true } },
+          providerOptions: { store: true },
         }),
       )
 

@@ -1,8 +1,10 @@
 import * as i18n from "@solid-primitives/i18n"
-import { createEffect, createMemo, createResource } from "solid-js"
+import { createEffect, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import {
+  I18nProvider,
+  type UiI18n,
   pluralCategory,
   type UiI18nPluralLookupKey,
   type UiI18nPluralKey,
@@ -260,3 +262,20 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     }
   },
 })
+
+export function UiI18nBridge(props: { children?: JSX.Element }) {
+  const language = useLanguage()
+  return (
+    <I18nProvider
+      value={{
+        locale: language.intl,
+        layoutLocale: language.layoutLocale,
+        t: language.t as UiI18n["t"],
+        plural: language.plural,
+        pluralForm: language.pluralForm,
+      }}
+    >
+      {props.children}
+    </I18nProvider>
+  )
+}

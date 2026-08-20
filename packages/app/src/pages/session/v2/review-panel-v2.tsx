@@ -52,12 +52,29 @@ export type ReviewPanelV2Props = {
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
+  fileList?: "tree" | "flat"
 }
 
 export function ReviewPanelV2(props: ReviewPanelV2Props) {
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
+  const readFile = async (path: string) =>
+    serverSDK.api.file
+      .read({ path, location: { directory: sdk().directory } })
+      .then((data) => ({ type: "text" as const, content: new TextDecoder().decode(data) }))
+      .catch((error) => {
+        console.debug("[session-review-v2] failed to read file", { path, error })
+        return undefined
+      })
 
+  return <ReviewPanelV2View {...props} readFile={readFile} />
+}
+
+export function ReviewPanelV2View(
+  props: ReviewPanelV2Props & {
+    readFile?: (path: string) => Promise<{ type: "text"; content: string } | undefined>
+  },
+) {
   const diffs = createMemo(() => props.diffs.filter(filterRenderableDiff))
   const filteredFiles = createMemo(() =>
     filterReviewFiles(
@@ -84,12 +101,12 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
   const detailSource = createMemo(() => {
     const diff = sourceActiveItem()
     const load = props.loadDiff
-    if (!diff || !load || !reviewDiffNeedsLoad(diff)) return
+    if (!diff || !load || !reviewDiffNeedsLoad(diff)) return undefined
     return { diff, load, version: props.diffVersion }
   })
   const [loadedDiff] = createResource(detailSource, async ({ diff, load, version }) => {
     const value = await load(diff.file, version)
-    if (value?.file !== diff.file) return
+    if (value?.file !== diff.file) return undefined
     return { source: diff, version, value }
   })
 
@@ -100,15 +117,6 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
     if (loaded && loaded.source === source && loaded.version === props.diffVersion) return loaded.value
     return source
   })
-
-  const readFile = async (path: string) =>
-    serverSDK.api.file
-      .read({ path, location: { directory: sdk().directory } })
-      .then((data) => ({ type: "text" as const, content: new TextDecoder().decode(data) }))
-      .catch((error) => {
-        console.debug("[session-review-v2] failed to read file", { path, error })
-        return undefined
-      })
 
   return (
     <SessionReviewV2
@@ -129,6 +137,7 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
           searching={searching()}
           kinds={treeKinds()}
           activeDiff={activeDiff()}
+          flat={props.fileList === "flat"}
         />
       }
       activeFile={activeDiff()}
@@ -151,7 +160,7 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
                   diff={diff()}
                   diffStyle={props.diffStyle}
                   expandMode={props.state.expandMode()}
-                  readFile={readFile}
+                  readFile={props.readFile}
                   onLineComment={props.onLineComment}
                   onLineCommentUpdate={props.onLineCommentUpdate}
                   onLineCommentDelete={props.onLineCommentDelete}
@@ -179,6 +188,7 @@ function ReviewPanelV2Sidebar(props: {
   searching: boolean
   kinds: ReturnType<typeof reviewDiffKinds>
   activeDiff: string | undefined
+  flat: boolean
 }) {
   const language = useLanguage()
   const [explicitHighlight, setExplicitHighlight] = createSignal<string | undefined>()
@@ -225,13 +235,25 @@ function ReviewPanelV2Sidebar(props: {
         <Show
           when={props.searching}
           fallback={
-            <FileTreeV2
-              allowed={props.filteredFiles}
-              kinds={props.kinds}
-              draggable={false}
-              active={props.activeDiff}
-              onFileClick={(node) => props.onSelectFile(node.path)}
-            />
+            <Show
+              when={props.flat}
+              fallback={
+                <FileTreeV2
+                  allowed={props.filteredFiles}
+                  kinds={props.kinds}
+                  draggable={false}
+                  active={props.activeDiff}
+                  onFileClick={(node) => props.onSelectFile(node.path)}
+                />
+              }
+            >
+              <SessionFileListV2
+                files={props.filteredFiles}
+                kinds={props.kinds}
+                active={props.activeDiff}
+                onFileClick={props.onSelectFile}
+              />
+            </Show>
           }
         >
           <Show

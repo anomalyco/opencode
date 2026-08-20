@@ -8,7 +8,7 @@ import {
 } from "../performance/timeline-stability/fixture"
 
 test("renders every tool error outcome without leaking hidden tools", async ({ page }) => {
-  const ordinary = ["bash", "edit", "write", "apply_patch", "webfetch", "websearch", "task", "skill", "mcp_probe"]
+  const ordinary = ["shell", "edit", "write", "patch", "webfetch", "websearch", "subagent", "skill", "mcp_probe"]
   const parts = ordinary.map((tool, index) =>
     toolPart(`prt_error_${index}`, tool, "error", errorInput(tool), { error: `${tool} failed visibly` }),
   )
@@ -37,8 +37,8 @@ test("transitions shell and question through running error outcomes", async ({ p
       userMessage(),
       assistantMessage(
         [
-          toolPart(shellID, "bash", "pending", { command: "exit 1" }),
-          toolPart(questionID, "question", "pending", questionInput()),
+          toolPart(shellID, "shell", "streaming", { command: "exit 1" }),
+          toolPart(questionID, "question", "streaming", questionInput()),
         ],
         { completed: false },
       ),
@@ -46,11 +46,11 @@ test("transitions shell and question through running error outcomes", async ({ p
   })
   await timeline.waitForPart(shellID)
   await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
-  await timeline.send(partUpdated(toolPart(shellID, "bash", "running", { command: "exit 1" })), 120)
+  await timeline.send(partUpdated(toolPart(shellID, "shell", "running", { command: "exit 1" })), 120)
   await timeline.send(partUpdated(toolPart(questionID, "question", "running", questionInput())), 180)
   await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
   await timeline.send(
-    partUpdated(toolPart(shellID, "bash", "error", { command: "exit 1" }, { error: "Command exited 1" })),
+    partUpdated(toolPart(shellID, "shell", "error", { command: "exit 1" }, { error: "Command exited 1" })),
     180,
   )
   await timeline.send(
@@ -147,12 +147,13 @@ function questionInput() {
 }
 
 function errorInput(tool: string) {
-  if (tool === "bash") return { command: "exit 1" }
-  if (["edit", "write"].includes(tool)) return { filePath: "src/error.ts", content: "" }
-  if (tool === "apply_patch") return { files: ["src/error.ts"] }
+  if (tool === "shell") return { command: "exit 1" }
+  if (["edit", "write"].includes(tool)) return { path: "src/error.ts", content: "" }
+  if (tool === "patch") return { patchText: "Update src/error.ts" }
   if (tool === "webfetch") return { url: "https://example.com" }
   if (tool === "websearch") return { query: "failure" }
-  if (tool === "task") return { description: "Fail task", subagent_type: "explore" }
+  if (tool === "subagent")
+    return { description: "Fail subagent", agent: "explore", prompt: "Inspect the failure." }
   if (tool === "skill") return { name: "failure" }
   return { target: "failure" }
 }

@@ -27,6 +27,32 @@ import { host as testHost } from "./host"
 const it = testEffect(PluginTestLayer)
 
 describe("fromPromise", () => {
+  it.effect("adapts plugin storage methods", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const adapted = PluginPromise.fromPromise(
+        define({
+          id: "promise-storage",
+          setup: async (ctx) => {
+            expect(await ctx.storage.get("missing")).toBeUndefined()
+            await ctx.storage.set("items/b", { order: 2 })
+            await ctx.storage.set("items/a", { order: 1 })
+            expect(await ctx.storage.get("items/a")).toEqual({ order: 1 })
+            expect(await ctx.storage.scan({ prefix: "items/", limit: 1 })).toEqual({
+              entries: [{ key: "items/a", value: { order: 1 } }],
+              next: "items/a",
+            })
+            await ctx.storage.remove("items/a")
+            await ctx.storage.remove("items/a")
+            expect(await ctx.storage.get("items/a")).toBeUndefined()
+          },
+        }),
+      )
+
+      yield* plugins.activate([{ ...adapted, version: "1" }])
+    }),
+  )
+
   it.effect("adapts session creation through the protocol schema", () =>
     Effect.gen(function* () {
       let seen: unknown

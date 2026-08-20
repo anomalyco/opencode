@@ -1,7 +1,5 @@
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Layer, Queue } from "effect"
-import { Config } from "@opencode-ai/core/config"
-import { Document, Info } from "@opencode-ai/schema/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
@@ -9,6 +7,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Pty } from "@opencode-ai/core/pty"
 import type { PtyID } from "@opencode-ai/core/pty/schema"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 
@@ -18,13 +17,7 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/tmp") })),
 )
-const configLayer = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
-const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [
-    [Config.node, configLayer],
-    [Location.node, locationLayer],
-  ]),
-)
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [[Location.node, locationLayer]]))
 const ptyTest = process.platform === "win32" ? it.live.skip : it.live
 
 const subscribePtyEvents = Effect.fn("PtySessionTest.subscribePtyEvents")(function* () {
@@ -207,26 +200,17 @@ describe("pty", () => {
 
 const configuredShell = process.platform === "win32" ? undefined : Bun.which("bash")
 const configuredIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [
-    [
-      Config.node,
-      Layer.mock(Config.Service)({
-        entries: () =>
-          Effect.succeed(
-            configuredShell ? [new Document({ type: "document", info: new Info({ shell: configuredShell }) })] : [],
-          ),
-      }),
-    ],
-    [Location.node, locationLayer],
-  ]),
+  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node, ShellSelect.node]), [[Location.node, locationLayer]]),
 )
 const configuredTest = process.platform === "win32" ? configuredIt.live.skip : configuredIt.live
 
 describe("pty create defaults", () => {
-  configuredTest("defaults command, login args, and cwd from config and location", () =>
+  configuredTest("defaults command, login args, and cwd from shell selection and location", () =>
     Effect.gen(function* () {
       if (!configuredShell) return
       const pty = yield* Pty.Service
+      const shell = yield* ShellSelect.Service
+      yield* shell.transform((draft) => draft.configure(configuredShell))
       const info = yield* Effect.acquireRelease(pty.create({ title: "configured" }), (created) =>
         pty.remove(created.id).pipe(Effect.ignore),
       )

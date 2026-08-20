@@ -7,8 +7,32 @@ import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import { SessionBackgroundDock } from "@/pages/session/composer/session-background-dock"
 import type { SessionComposerRegionController } from "./session-composer-region-controller"
 
+type SessionComposerRegionState = Pick<
+  SessionComposerRegionController["state"],
+  "questionRequest" | "permissionRequest" | "permissionResponding" | "decide" | "blocked"
+> & {
+  background: Pick<SessionComposerRegionController["state"]["background"], "blocking" | "tasks" | "move">
+}
+
+export type SessionComposerRegionViewController = Pick<
+  SessionComposerRegionController,
+  | "centered"
+  | "followup"
+  | "revert"
+  | "onResponseSubmit"
+  | "openParent"
+  | "setPromptRef"
+  | "setDockRef"
+  | "parentID"
+  | "child"
+  | "showComposer"
+  | "handoffPrompt"
+  | "promptReady"
+  | "lift"
+> & { state: SessionComposerRegionState }
+
 export function SessionComposerRegion(props: {
-  controller: SessionComposerRegionController
+  controller: SessionComposerRegionViewController
   promptInput: JSX.Element
 }) {
   const language = useLanguage()

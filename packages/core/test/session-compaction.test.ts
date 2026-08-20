@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
-import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -67,15 +66,13 @@ const client = Layer.mock(LLMClient.Service)({
   },
   generate: () => Effect.die("unused"),
 })
-const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
+const resolved = SessionRunnerModel.resolved(model, {
+  capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+  cost,
+  limit: { context: 200_000, output: 32_000 },
+})
 const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: () =>
-    Effect.succeed(
-      SessionRunnerModel.resolved(model, {
-        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-        cost,
-      }),
-    ),
+  resolve: () => Effect.succeed(resolved),
 })
 const it = testEffect(
   AppNodeBuilder.build(
@@ -83,7 +80,6 @@ const it = testEffect(
     [
       [Bus.node, Bus.configured({ persist: true })],
       [llmClient, client],
-      [Config.node, config],
       [SessionRunnerModel.node, models],
     ],
   ),
@@ -144,14 +140,13 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
       time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
       location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
     })
-    const input = (tokens: number, limits: { context: number; input?: number; output: number }) => ({
+    const input = (tokens: number, limit: { context: number; input?: number; output: number }) => ({
       session,
-      model: LanguageModel.make({
-        id: "test-model",
-        provider: "test-provider",
-        route: OpenAIChat.route.with({ limits }),
+      resolved: SessionRunnerModel.resolved(model, {
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        cost: [],
+        limit,
       }),
-      cost: [],
       messages: [
         Schema.decodeUnknownSync(SessionMessage.Assistant)({
           id: SessionMessage.ID.make("msg_assistant"),

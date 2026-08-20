@@ -1,5 +1,6 @@
 import { Message, Model, Part, Session, SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import { iife } from "@opencode-ai/core/util/iife"
+import type { SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
 import z from "zod"
 import { Storage } from "./storage"
 
@@ -7,8 +8,29 @@ function fn<T extends z.ZodType, Result>(schema: T, cb: (input: z.infer<T>) => R
   return (input: z.infer<T>) => cb(schema.parse(input))
 }
 
+function currentMessage(input: unknown): input is SessionMessageInfo {
+  if (!input || typeof input !== "object") return false
+  if (!("id" in input) || typeof input.id !== "string") return false
+  if (!("type" in input) || typeof input.type !== "string") return false
+  return (
+    "time" in input &&
+    !!input.time &&
+    typeof input.time === "object" &&
+    "created" in input.time &&
+    typeof input.time.created === "number"
+  )
+}
+
+type LegacySession = Session
+
 export namespace Share {
   export type SessionDiff = SnapshotFileDiff & { file: string; patch: string }
+  export type Session = LegacySession | SessionInfo
+  export const Messages = z.object({
+    sessionID: z.string(),
+    messages: z.array(z.custom<SessionMessageInfo>(currentMessage)),
+  })
+  export type Messages = z.infer<typeof Messages>
 
   export const Info = z.object({
     id: z.string(),
@@ -25,6 +47,10 @@ export namespace Share {
     z.object({
       type: z.literal("message"),
       data: z.custom<Message>(),
+    }),
+    z.object({
+      type: z.literal("messages"),
+      data: Messages,
     }),
     z.object({
       type: z.literal("part"),
@@ -56,6 +82,8 @@ export namespace Share {
         return "session"
       case "message":
         return `message/${item.data.id}`
+      case "messages":
+        return `messages/${item.data.sessionID}`
       case "part":
         return `part/${item.data.messageID}/${item.data.id}`
       case "session_diff":
@@ -195,6 +223,9 @@ export namespace Share {
                 await Storage.write(["share_data", input.share.id, "message", data.id], item.data)
                 break
               }
+              case "messages":
+                await Storage.write(["share_data", input.share.id, "messages", item.data.sessionID], item.data)
+                break
               case "part": {
                 const data = item.data as Part
                 await Storage.write(["share_data", input.share.id, "part", data.messageID, data.id], item.data)

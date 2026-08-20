@@ -67,19 +67,18 @@ for (const deviceScaleFactor of [1.25, 1.5]) {
 test("keeps the patch card inside a fractionally short virtual row", async ({ page }) => {
   const patchID = "prt_patch_outline"
   const file = {
-    filePath: "src/outline.ts",
-    relativePath: "src/outline.ts",
-    type: "update",
+    file: "src/outline.ts",
+    status: "modified",
+    patch:
+      "diff --git a/src/outline.ts b/src/outline.ts\n--- a/src/outline.ts\n+++ b/src/outline.ts\n@@ -1 +1 @@\n-const outline = false\n+const outline = true\n",
     additions: 1,
     deletions: 1,
-    before: "const outline = false\n",
-    after: "const outline = true\n",
   }
   const timeline = await setupTimeline(page, {
     messages: [
       userMessage(),
       assistantMessage([
-        toolPart(patchID, "apply_patch", "completed", { files: [file.filePath] }, { metadata: { files: [file] } }),
+        toolPart(patchID, "patch", "completed", { patchText: "Update src/outline.ts" }, { metadata: { files: [file] } }),
       ]),
     ],
     settings: { editToolPartsExpanded: true },

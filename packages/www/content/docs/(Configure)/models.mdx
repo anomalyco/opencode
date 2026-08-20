@@ -85,9 +85,14 @@ You can also map a friendly catalog ID to a different API model ID with `modelID
 ```
 
 Here `openai/coding-default` is the selectable catalog reference, while `gpt-5.2` is sent to the provider. A model that is
-not already in the catalog defaults to tool support, text and image input, and text output. Set accurate `capabilities`
-and `limit` values when those defaults do not match the model or OpenCode needs to enforce its context limits. Set
-`disabled: true` on a model entry to hide it from the available catalog.
+not already in the catalog receives fallback metadata:
+
+- Tool support, text and image input, and text output.
+- A 200,000-token context limit and 32,000-token output limit. The input limit remains unspecified.
+
+These values are assumptions, not model discovery. Configure accurate `capabilities` and `limit` values whenever they are
+known; explicit values override the fallbacks. Set `disabled: true` on a model entry to hide it from the available
+catalog.
 
 OpenAI-compatible models that stream reasoning through a custom assistant-message field can set
 `compatibility.reasoningField`:

@@ -49,14 +49,12 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       list: "ui.tool.list",
       glob: "ui.tool.glob",
       grep: "ui.tool.grep",
-      task: "ui.tool.task",
+      subagent: "ui.tool.agent.default",
       webfetch: "ui.tool.webfetch",
       websearch: "ui.tool.websearch",
-      bash: "ui.tool.shell",
       shell: "ui.tool.shell",
       execute: "ui.tool.execute",
       patch: "ui.tool.patch",
-      apply_patch: "ui.tool.patch",
       question: "ui.tool.questions",
     }
     const key = map[split.tool]

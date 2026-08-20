@@ -1,4 +1,5 @@
 import { test } from "@playwright/test"
+import { createTwoFilesPatch } from "diff"
 import {
   defineVisualRegions,
   reportVisualStability,
@@ -18,16 +19,20 @@ import {
 } from "./fixture"
 
 const profiles = [
-  { name: "edit", tool: "edit", input: { filePath: "src/edit.ts" } },
+  {
+    name: "edit",
+    tool: "edit",
+    input: { path: "src/edit.ts", oldString: "export const value = 1", newString: "export const value = 2" },
+  },
   {
     name: "multi patch",
-    tool: "apply_patch",
-    input: { files: ["src/a.ts", "src/b.ts", "src/old.ts", "src/moved.ts"] },
+    tool: "patch",
+    input: { patchText: "Update generated files" },
   },
 ] as const
 
 for (const profile of profiles) {
-  test(`stabilizes ${profile.name} pending to completed`, async ({ page }, testInfo) => {
+  test(`stabilizes ${profile.name} streaming to completed`, async ({ page }, testInfo) => {
     const partID = `prt_file_matrix_${profiles.indexOf(profile)}`
     const followingID = `prt_file_matrix_following_${profiles.indexOf(profile)}`
     const timeline = await setupTimeline(page, {
@@ -35,7 +40,7 @@ for (const profile of profiles) {
         userMessage(),
         assistantMessage(
           [
-            toolPart(partID, profile.tool, "pending", profile.input),
+            toolPart(partID, profile.tool, "streaming", profile.input),
             textPart(followingID, `Following ${profile.name}`),
           ],
           { completed: false },
@@ -89,34 +94,27 @@ function completedPart(partID: string, profile: (typeof profiles)[number]) {
   if (profile.tool === "edit") {
     return toolPart(partID, profile.tool, "completed", profile.input, {
       metadata: {
-        filediff: {
-          file: "src/edit.ts",
-          additions: 50,
-          deletions: 50,
-          before: source(50, false),
-          after: source(50, true),
-        },
+        files: [patchFile("src/edit.ts", "modified", 50)],
       },
     })
   }
   const files = [
-    patchFile("src/a.ts", "update"),
-    patchFile("src/b.ts", "add"),
-    patchFile("src/old.ts", "delete"),
-    { ...patchFile("src/moved.ts", "move"), move: "src/new-place.ts" },
+    patchFile("src/a.ts", "modified", 20),
+    patchFile("src/b.ts", "added", 20),
+    patchFile("src/old.ts", "deleted", 20),
   ]
   return toolPart(partID, profile.tool, "completed", profile.input, { metadata: { files } })
 }
 
-function patchFile(filePath: string, type: "add" | "update" | "delete" | "move") {
+function patchFile(file: string, status: "added" | "modified" | "deleted", lines: number) {
+  const before = status === "added" ? "" : source(lines, false)
+  const after = status === "deleted" ? "" : source(lines, true)
   return {
-    filePath,
-    relativePath: filePath,
-    type,
-    additions: type === "delete" ? 0 : 20,
-    deletions: type === "add" ? 0 : 20,
-    before: type === "add" ? undefined : source(20, false),
-    after: type === "delete" ? undefined : source(20, true),
+    file,
+    status,
+    patch: createTwoFilesPatch(`a/${file}`, `b/${file}`, before, after),
+    additions: status === "deleted" ? 0 : lines,
+    deletions: status === "added" ? 0 : lines,
   }
 }
 

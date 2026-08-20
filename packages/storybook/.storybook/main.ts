@@ -2,7 +2,7 @@ import { defineMain } from "storybook-solidjs-vite"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import tailwindcss from "@tailwindcss/vite"
-import { playgroundCss } from "./playground-css-plugin"
+import { playgroundCss } from "./playground-css-plugin.ts"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const ui = path.resolve(here, "../../ui")
@@ -13,7 +13,7 @@ const mocks = path.resolve(here, "./mocks")
 export default defineMain({
   framework: {
     name: "storybook-solidjs-vite",
-    options: {},
+    options: { docgen: false },
   },
   addons: [
     "@storybook/addon-onboarding",
@@ -29,7 +29,7 @@ export default defineMain({
   ],
   async viteFinal(config) {
     const { mergeConfig, searchForWorkspaceRoot } = await import("vite")
-    return mergeConfig(config, {
+    const merged = mergeConfig(config, {
       plugins: [tailwindcss(), playgroundCss()],
       resolve: {
         dedupe: ["solid-js", "solid-js/web", "@solidjs/meta"],
@@ -44,16 +44,11 @@ export default defineMain({
           { find: /^@\/context\/comments$/, replacement: path.resolve(mocks, "app/context/comments.ts") },
           { find: /^@\/context\/command$/, replacement: path.resolve(mocks, "app/context/command.ts") },
           { find: /^@\/context\/permission$/, replacement: path.resolve(mocks, "app/context/permission.ts") },
-          { find: /^@\/context\/language$/, replacement: path.resolve(mocks, "app/context/language.ts") },
           { find: /^@\/context\/platform$/, replacement: path.resolve(mocks, "app/context/platform.ts") },
           { find: /^@\/context\/global-sync$/, replacement: path.resolve(mocks, "app/context/global-sync.ts") },
           { find: /^@\/context\/server-sync$/, replacement: path.resolve(mocks, "app/context/server-sync.ts") },
           { find: /^@\/context\/server-sdk$/, replacement: path.resolve(mocks, "app/context/server-sdk.ts") },
           { find: /^@\/hooks\/use-providers$/, replacement: path.resolve(mocks, "app/hooks/use-providers.ts") },
-          {
-            find: /^@\/components\/dialog-select-model$/,
-            replacement: path.resolve(mocks, "app/components/dialog-select-model.tsx"),
-          },
           {
             find: /^@\/components\/dialog-select-model-unpaid$/,
             replacement: path.resolve(mocks, "app/components/dialog-select-model-unpaid.tsx"),
@@ -70,5 +65,10 @@ export default defineMain({
         },
       },
     })
+    merged.plugins = merged.plugins?.flat(8).filter((plugin) => {
+      if (!plugin || typeof plugin !== "object" || !("name" in plugin)) return true
+      return plugin.name !== "storybook:optimize-deps-plugin"
+    })
+    return merged
   },
 })

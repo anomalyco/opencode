@@ -41,12 +41,10 @@ export interface ToolAccumulator {
  * when at least one is defined. Returns `undefined` when neither input nor
  * output is known so routes don't publish a misleading `0`.
  *
- * Under the additive `AI.Usage` contract, `inputTokens` and `outputTokens`
- * are the non-cached input and visible output only. The provider-supplied
- * `total` is the source of truth when present; the computed fallback
- * under-counts cache and reasoning by design and exists mainly so
- * Anthropic-style providers (which don't surface a total) still get a
- * sensible aggregate on the input + output axes.
+ * Under the inclusive `AI.Usage` contract, `inputTokens` includes cached input
+ * and `outputTokens` includes reasoning. Protocol mappers normalize those
+ * inclusive values before calling this helper. The provider-supplied total is
+ * the source of truth when present; otherwise their sum is the canonical total.
  */
 export const totalTokens = (
   inputTokens: number | undefined,
@@ -67,7 +65,7 @@ export const totalTokens = (
  *
  * If `total` is `undefined`, returns `undefined` (we don't fabricate
  * counts). If `subtrahend` is `undefined`, returns `total` unchanged. The
- * provider-native breakdown stays available on `Usage.native` for debugging.
+ * provider-native breakdown stays available on `Usage.providerMetadata` for debugging.
  */
 export const subtractTokens = (total: number | undefined, subtrahend: number | undefined): number | undefined => {
   if (total === undefined) return undefined
@@ -199,8 +197,8 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, and drops empty / `[DONE]` keep-alive events so the downstream
- * `decodeChunk` sees one JSON string per element. The SSE channel emits a
+ * decoder, and drops empty / `[DONE]` keep-alive events so the protocol event
+ * schema sees one JSON string per element. The SSE channel emits a
  * `Retry` control event on its error channel; we drop it here (we don't
  * implement client-driven retries). Decoder failures become provider output
  * errors so the public error channel stays `AIError`.
@@ -216,11 +214,7 @@ export const sseFraming = (bytes: Stream.Stream<Uint8Array, AIError>): Stream.St
   )
 
 /**
- * Canonical invalid-request constructor. Lift one-line `const invalid =
- * (message) => invalidRequest(message)` aliases out of every
- * route so the error constructor lives in one place. If we ever extend
- * `InvalidRequestReason` with route context or trace metadata, the change
- * lands here.
+ * Canonical invalid-request constructor shared by protocol lowering.
  */
 export const invalidRequest = (message: string) =>
   new AIError({

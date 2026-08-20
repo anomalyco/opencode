@@ -89,7 +89,7 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     data: {
       id: "permission-background-a",
       sessionID: sessionA.id,
-      action: "bash",
+      action: "shell",
       resources: ["git status"],
       metadata: {},
       save: [],
@@ -116,7 +116,7 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     data: {
       id: "permission-background-a-child",
       sessionID: childSessionA.id,
-      action: "bash",
+      action: "shell",
       resources: ["git diff"],
       metadata: {},
       save: [],

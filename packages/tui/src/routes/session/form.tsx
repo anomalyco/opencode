@@ -340,15 +340,35 @@ export function FormPrompt(props: {
     pick(row.value)
   }
 
+  function pasteCustom(value: string) {
+    const current = answerField()
+    if (!current || textual() || !custom() || confirm()) return false
+    setStore("selected", rows().length)
+    updateCustom(current, input() + value)
+    setStore("editing", true)
+    return true
+  }
+
   usePaste((event) => {
     if (keymap.mode.current() !== FORM_MODE) return
-    const current = answerField()
-    if (!current || textual() || !custom() || confirm()) return
+    if (!pasteCustom(stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n"))) return
     event.preventDefault()
-    setStore("selected", rows().length)
-    updateCustom(current, input() + stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n"))
-    setStore("editing", true)
   })
+
+  function pasteClipboard() {
+    return clipboard
+      .read()
+      .then((content) => {
+        if (content?.mime !== "text/plain") return
+        const value = stripAnsiSequences(content.data).replace(/\r\n?/g, "\n")
+        if (store.editing || textual()) {
+          textarea?.insertText(value)
+          return
+        }
+        pasteCustom(value)
+      })
+      .catch(toast.error)
+  }
 
   function commitInput(text: string) {
     const current = answerField()
@@ -504,6 +524,23 @@ export function FormPrompt(props: {
   }
 
   onMount(() => onCleanup(keymap.mode.push(FORM_MODE)))
+
+  Keymap.createLayer(() => ({
+    mode: FORM_MODE,
+    enabled: !confirm() && answerField() !== undefined,
+    commands: [
+      {
+        id: "prompt.paste",
+        title: "Paste from clipboard",
+        group: "Form",
+        run: (_input, event) => {
+          event?.preventDefault()
+          event?.stopPropagation()
+          return pasteClipboard()
+        },
+      },
+    ],
+  }))
 
   Keymap.createLayer(() => ({
     mode: FORM_MODE,

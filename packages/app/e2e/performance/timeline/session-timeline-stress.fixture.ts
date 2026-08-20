@@ -1,3 +1,5 @@
+import { createTwoFilesPatch } from "diff"
+
 const words = [
   "alpha",
   "bravo",
@@ -28,22 +30,21 @@ const directory = "C:/OpenCode/SmokeProject"
 const projectID = "proj_smoke_timeline"
 const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
-type MessagePart = {
-  id: string
-  type: "text" | "reasoning" | "tool"
-  text?: string
-  time?: { start: number; end?: number }
-  callID?: string
-  tool?: string
-  state?: {
-    status: "completed"
-    input: Record<string, unknown>
-    output: string
-    title: unknown
-    metadata: Record<string, unknown>
-    time: { start: number; end: number }
-  }
-}
+type MessagePart =
+  | { id: string; type: "text"; text: string }
+  | { id: string; type: "reasoning"; text: string; time?: { start: number; end?: number } }
+  | {
+      id: string
+      type: "tool"
+      name: string
+      state: {
+        status: "completed"
+        input: Record<string, unknown>
+        content: [{ type: "text"; text: string }]
+        metadata: Record<string, unknown>
+      }
+      time: { created: number; ran: number; completed: number }
+    }
 
 function lorem(seed: number, length: number) {
   let out = ""
@@ -102,17 +103,16 @@ function messageContent(part: MessagePart): SessionMessageAssistant["content"][n
         ? { created: part.time.start, ...(part.time.end === undefined ? {} : { completed: part.time.end }) }
         : undefined,
     }
-  const state = part.state!
   return {
     type: "tool",
-    id: part.callID ?? part.id,
-    name: part.tool!,
-    time: { created: state.time.start, ran: state.time.start, completed: state.time.end },
+    id: part.id,
+    name: part.name,
+    time: part.time,
     state: {
       status: "completed",
-      input: state.input as Record<string, JsonValue>,
-      content: [{ type: "text", text: state.output }],
-      metadata: state.metadata as Record<string, JsonValue>,
+      input: part.state.input as Record<string, JsonValue>,
+      content: part.state.content,
+      metadata: part.state.metadata as Record<string, JsonValue>,
     },
   }
 }
@@ -149,43 +149,46 @@ function toolPart(
 ): MessagePart {
   const metadata =
     metadataOverride ??
-    (tool === "apply_patch"
-      ? { files: [patchFile(index, "update"), patchFile(index + 1, index % 2 === 0 ? "add" : "delete")] }
+    (tool === "patch"
+      ? {
+          files: [
+            patchFile(index, "modified"),
+            patchFile(index + 1, index % 2 === 0 ? "added" : "deleted"),
+          ],
+        }
       : tool === "edit" || tool === "write"
-        ? {
-            filediff: fileDiff(String(input.filePath ?? `src/generated/file-${index}.ts`), index),
-            diff: patch(index, outputLength),
-            preview: patch(index + 1, 420),
-          }
+        ? { files: [fileDiff(String(input.path ?? `src/generated/file-${index}.ts`), index)] }
         : tool === "question"
           ? { answers: [["Proceed"], ["Keep sample output"]] }
           : {})
   return {
-    id: id(`prt_tool_${tool}_${partIndex}`, index),
+    id: id(`call_${tool}_${partIndex}`, index),
     type: "tool",
-    callID: id("call", index * 10 + partIndex),
-    tool,
+    name: tool,
     state: {
       status: "completed",
       input,
-      output: lorem(index * 23 + partIndex, outputLength),
-      title: tool === "bash" ? "Verify generated output" : input.filePath || input.path || input.pattern || "completed",
+      content: [{ type: "text", text: lorem(index * 23 + partIndex, outputLength) }],
       metadata,
-      time: { start: 1700000000000 + index * 10_000, end: 1700000000000 + index * 10_000 + 400 },
+    },
+    time: {
+      created: 1700000000000 + index * 10_000,
+      ran: 1700000000000 + index * 10_000,
+      completed: 1700000000000 + index * 10_000 + 400,
     },
   }
 }
 
-function patchFile(seed: number, type: "add" | "update" | "delete") {
+function patchFile(seed: number, status: "added" | "modified" | "deleted") {
+  const file = `src/generated/patch-${seed}.ts`
+  const before = status === "added" ? "" : code(seed, 18)
+  const after = status === "deleted" ? "" : code(seed + 1, 24)
   return {
-    filePath: `src/generated/patch-${seed}.ts`,
-    relativePath: `src/generated/patch-${seed}.ts`,
-    type,
-    additions: (seed % 7) + 1,
-    deletions: type === "add" ? 0 : seed % 4,
-    patch: patch(seed, 520),
-    before: type === "add" ? undefined : code(seed, 18),
-    after: type === "delete" ? undefined : code(seed + 1, 24),
+    file,
+    status,
+    additions: status === "deleted" ? 0 : (seed % 7) + 1,
+    deletions: status === "added" ? 0 : seed % 4,
+    patch: createTwoFilesPatch(`a/${file}`, `b/${file}`, before, after),
   }
 }
 
@@ -200,15 +203,11 @@ function fileDiff(file: string, seed: number) {
         : before.replace("value4", "updatedValue4").replace("value20", "updatedValue20")
   return {
     file,
+    status: "modified" as const,
     additions: lines === 300 ? 300 : lines === 2 ? 1 : 2,
     deletions: lines === 300 ? 300 : lines === 2 ? 1 : 2,
-    before,
-    after,
+    patch: createTwoFilesPatch(`a/${file}`, `b/${file}`, before, after),
   }
-}
-
-function patch(seed: number, length: number) {
-  return `diff --git a/src/generated/file-${seed}.ts b/src/generated/file-${seed}.ts\n+${lorem(seed, length).replace(/\n/g, "\n+")}`
 }
 
 function code(seed: number, lines: number, width = 32) {
@@ -225,22 +224,24 @@ function turn(index: number): SessionMessageInfo[] {
     ...(index % 5 === 0 ? [reasoningPart(index, 0, 420)] : []),
     ...(index % 3 === 0
       ? [
-          toolPart(index, 0, "read", { filePath: `src/generated/file-${index}.ts`, offset: 0, limit: 80 }, 220),
+          toolPart(index, 0, "read", { path: `src/generated/file-${index}.ts`, offset: 0, limit: 80 }, 220),
           toolPart(index, 5, "glob", { path: directory, pattern: `**/*sample-${index}*.ts` }, 140),
           toolPart(index, 1, "grep", { path: directory, pattern: `sample-${index}`, include: "*.ts" }, 180),
           toolPart(index, 6, "list", { path: `src/generated/${index}` }, 120),
         ]
       : []),
     textPart(index, 2, 160 + (index % 6) * 90),
-    ...(index % 4 === 0 ? [toolPart(index, 3, "edit", { filePath: `src/generated/file-${index}.ts` }, 700)] : []),
+    ...(index % 4 === 0
+      ? [toolPart(index, 3, "edit", { path: `src/generated/file-${index}.ts`, oldString: "before", newString: "after" }, 700)]
+      : []),
     ...(index % 6 === 0
-      ? [toolPart(index, 7, "write", { filePath: `src/generated/write-${index}.ts`, content: code(index, 28) }, 560)]
+      ? [toolPart(index, 7, "write", { path: `src/generated/write-${index}.ts`, content: code(index, 28) }, 560)]
       : []),
     ...(index % 8 === 0
-      ? [toolPart(index, 8, "apply_patch", { files: [`src/generated/patch-${index}.ts`] }, 620)]
+      ? [toolPart(index, 8, "patch", { patchText: `Update generated patch ${index}` }, 620)]
       : []),
     ...(index % 7 === 0
-      ? [toolPart(index, 4, "bash", { command: "bun typecheck", description: "Verify generated output" }, 620)]
+      ? [toolPart(index, 4, "shell", { command: "bun typecheck", description: "Verify generated output" }, 620)]
       : []),
     ...(index % 10 === 0 ? [toolPart(index, 9, "webfetch", { url: "https://example.com/docs/sample" }, 120)] : []),
     ...(index % 11 === 0 ? [toolPart(index, 10, "websearch", { query: "sample movement notes" }, 240)] : []),
@@ -256,7 +257,15 @@ function turn(index: number): SessionMessageInfo[] {
         ]
       : []),
     ...(index % 17 === 0
-      ? [toolPart(index, 12, "task", { description: "Inspect generated fixture", subagent_type: "explore" }, 160)]
+      ? [
+          toolPart(
+            index,
+            12,
+            "subagent",
+            { description: "Inspect generated fixture", agent: "explore", prompt: "Inspect the fixture." },
+            160,
+          ),
+        ]
       : []),
   ]
   return [user, assistantMessage(targetID, index, user.id, parts)]
@@ -272,10 +281,10 @@ const sourceMessages = Array.from({ length: 12 }, (_, index) => [
           toolPart(
             index + 1000,
             1,
-            "task",
-            { description: "Inspect child navigation", subagent_type: "explore" },
+            "subagent",
+            { description: "Inspect child navigation", agent: "explore", prompt: "Inspect child navigation." },
             160,
-            { sessionId: childID },
+            { sessionID: childID },
           ),
         ]
       : []),

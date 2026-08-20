@@ -608,10 +608,9 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (
-              admitted.type !== "user" ||
-              !SessionInbox.equivalent(admitted, { sessionID: input.sessionID, item: admittedInput })
-            )
+            // First admission wins: same-session reuse is idempotent and ignores the
+            // retried payload, metadata, and delivery mode.
+            if (admitted.type !== "user" || admitted.sessionID !== input.sessionID)
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             if (input.resume !== false) {
               if (activeShells.has(admitted.sessionID)) return admitted
@@ -628,7 +627,11 @@ const layer = Layer.effect(
       }),
       command: Effect.fn("Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const commands = yield* Command.Service.pipe(Effect.provide(locations.get(session.location)))
+        const commands = yield* Effect.gen(function* () {
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush
+          return yield* Command.Service
+        }).pipe(Effect.provide(locations.get(session.location)))
         const command = yield* commands.get(input.command)
         if (!command)
           return yield* new Command.NotFoundError({
@@ -667,6 +670,8 @@ const layer = Layer.effect(
             activeShells.add(input.sessionID)
             yield* execution.awaitIdle(input.sessionID)
             const started = yield* Effect.gen(function* () {
+              const plugins = yield* PluginSupervisor.Service
+              yield* plugins.flush
               const shell = yield* Shell.Service
               return yield* shell
                 .create({
@@ -785,7 +790,7 @@ const layer = Layer.effect(
           payload,
           delivery: input.delivery ?? "steer",
         })
-        const recovered = yield* SessionInbox.serialized(
+        yield* SessionInbox.serialized(
           input.sessionID,
           Effect.gen(function* () {
             const latest = yield* result.get(input.sessionID)
@@ -796,25 +801,16 @@ const layer = Layer.effect(
               )
               const moved = [SessionEvent.Moved, { sessionID: input.sessionID, ...payload }] as const
               const first = cancellations[0]
-              if (!first) {
-                yield* bus.publish(...moved)
-                return true
-              }
-              yield* bus.publishAll([first, ...cancellations.slice(1), moved])
-              return true
+              if (!first) return yield* bus.publish(...moved).pipe(Effect.asVoid)
+              return yield* bus.publishAll([first, ...cancellations.slice(1), moved])
             }
             yield* SessionInbox.admit(db, bus, {
               id: SessionMessage.ID.create(),
               sessionID: input.sessionID,
               item,
             })
-            return false
           }),
         )
-        if (recovered) {
-          yield* execution.wakeActive(input.sessionID)
-          return
-        }
         yield* execution.wake(input.sessionID)
       }),
       compact: Effect.fn("Session.compact")(function* (input) {
@@ -886,10 +882,9 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (
-              admitted.type !== "synthetic" ||
-              !SessionInbox.equivalent(admitted, { sessionID: input.sessionID, item: admittedInput })
-            )
+            // First admission wins: same-session reuse is idempotent and ignores the
+            // retried payload, metadata, and delivery mode.
+            if (admitted.type !== "synthetic" || admitted.sessionID !== input.sessionID)
               return yield* new SyntheticConflictError({ sessionID: input.sessionID, inputID })
             if (input.resume !== false && !(yield* result.get(input.sessionID)).revert)
               yield* execution.wake(input.sessionID)
@@ -905,19 +900,23 @@ const layer = Layer.effect(
           const session = yield* result.get(input.sessionID)
           if ((yield* execution.active).has(input.sessionID))
             return yield* new BusyError({ sessionID: input.sessionID })
-          return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
-            Effect.provideService(Database.Service, database),
-            Effect.provideService(Bus.Service, bus),
-            Effect.provide(locations.get(session.location)),
-          )
+          return yield* Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush
+            return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
+              Effect.provideService(Database.Service, database),
+              Effect.provideService(Bus.Service, bus),
+            )
+          }).pipe(Effect.provide(locations.get(session.location)))
         }),
         clear: Effect.fn("Session.revert.clear")(function* (sessionID) {
           const session = yield* result.get(sessionID)
           if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          const revert = yield* SessionRevert.clear(session).pipe(
-            Effect.provideService(Bus.Service, bus),
-            Effect.provide(locations.get(session.location)),
-          )
+          const revert = yield* Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush
+            return yield* SessionRevert.clear(session).pipe(Effect.provideService(Bus.Service, bus))
+          }).pipe(Effect.provide(locations.get(session.location)))
           yield* execution.wake(sessionID)
           return revert
         }),
@@ -972,7 +971,6 @@ const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
       return Effect.succeed({
         id: skill.id,
         name: skill.name,
-        text: Skill.toModelOutput(skill, []),
         mention: attachment.mention,
       })
     })

@@ -34,10 +34,11 @@ import type {
   WebSearchProvider,
 } from "../promise"
 import { Worktree } from "@opencode-ai/schema/worktree"
-import { isPermissionNotFoundError } from "../promise"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { isPermissionNotFoundError, type SessionPromptInput } from "../promise"
 import { createStore, produce, reconcile } from "solid-js/store"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import { createEffect, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
 
@@ -178,11 +179,6 @@ export function createData(config: CreateDataInput) {
     setStore("session", "active", sessionID, status)
   }
 
-  function addPending(item: SessionInboxInfo) {
-    if (store.session.pending[item.sessionID]?.some((pending) => pending.id === item.id)) return
-    setStore("session", "pending", item.sessionID, [...(store.session.pending[item.sessionID] ?? []), item])
-  }
-
   function removePending(sessionID: string, inboxID?: string) {
     if (!inboxID) return
     if (store.session.pending[sessionID]?.some((item) => item.id === inboxID))
@@ -217,6 +213,60 @@ export function createData(config: CreateDataInput) {
     const item = store.session.pending[sessionID]?.[index]
     if (index < 0 || !item || item.delivery === delivery) return
     setStore("session", "pending", sessionID, index, { ...item, delivery })
+  }
+
+  // Inbox IDs of optimistic prompt admissions still awaiting their durable
+  // echo. This is the one deliberate piece of in-flight bookkeeping in this
+  // layer: it exists so a rejection only rolls back rows the server never
+  // acknowledged, and so a concurrent pending re-fetch cannot wipe a row the
+  // server does not know about yet. Entries clear on the enqueued echo or on
+  // rollback — not on POST success, which typically precedes the echo.
+  const outbox = new Set<string>()
+
+  // Upsert an admitted inbox item into pending, input, and (for user and
+  // synthetic items) the visible transcript. Used by the inbox.enqueued
+  // handler and by optimistic prompt admission; the upsert is what reconciles
+  // the durable echo with an optimistic placeholder — the durable payload and
+  // times replace the client's guess.
+  function admitLocal(item: SessionInboxInfo) {
+    batch(() => {
+      const pending = store.session.pending[item.sessionID] ?? []
+      const at = pending.findIndex((entry) => entry.id === item.id)
+      setStore(
+        "session",
+        "pending",
+        item.sessionID,
+        at < 0 ? [...pending, item] : pending.map((entry, index) => (index === at ? item : entry)),
+      )
+      const input = store.session.input[item.sessionID] ?? []
+      if (!input.includes(item.id)) setStore("session", "input", item.sessionID, [...input, item.id])
+      if (item.type !== "user" && item.type !== "synthetic") return
+      message.update(item.sessionID, (draft, index) => {
+        const row =
+          item.type === "user"
+            ? { id: item.id, type: "user" as const, ...item.payload, time: { created: item.timeCreated } }
+            : { id: item.id, type: "synthetic" as const, ...item.payload, time: { created: item.timeCreated } }
+        const position = index.get(item.id)
+        if (position === undefined) return message.append(draft, index, row)
+        draft[position] = row
+      })
+    })
+  }
+
+  // Remove an inbox item from pending, input, and the visible transcript.
+  // Used by the inbox.cancelled handler and by optimistic rollback.
+  function retractLocal(sessionID: string, inboxID: string) {
+    batch(() => {
+      removePending(sessionID, inboxID)
+      if (!messageIndex.get(sessionID)?.has(inboxID)) return
+      message.update(sessionID, (draft, index) => {
+        const position = index.get(inboxID)
+        if (position === undefined) return
+        draft.splice(position, 1)
+        index.delete(inboxID)
+        message.reindex(draft, index, position)
+      })
+    })
   }
 
   const message = {
@@ -325,6 +375,7 @@ export function createData(config: CreateDataInput) {
   }
 
   function removeSession(sessionID: string) {
+    store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -493,49 +544,16 @@ export function createData(config: CreateDataInput) {
         updatePending(event.data.sessionID, event.data.inboxID, event.data.delivery)
         return
       case "session.inbox.cancelled": {
-        removePending(event.data.sessionID, event.data.inboxID)
-        if (messageIndex.get(event.data.sessionID)?.has(event.data.inboxID))
-          message.update(event.data.sessionID, (draft, index) => {
-            const position = index.get(event.data.inboxID)
-            if (position === undefined) return
-            draft.splice(position, 1)
-            index.delete(event.data.inboxID)
-            message.reindex(draft, index, position)
-          })
+        retractLocal(event.data.sessionID, event.data.inboxID)
         return
       }
       case "session.inbox.enqueued": {
-        const item = event.data.item
-        addPending({
+        outbox.delete(event.data.inboxID)
+        admitLocal({
           id: event.data.inboxID,
           sessionID: event.data.sessionID,
           timeCreated: event.created,
-          ...item,
-        })
-        if (!store.session.input[event.data.sessionID]?.includes(event.data.inboxID))
-          setStore("session", "input", event.data.sessionID, [
-            ...(store.session.input[event.data.sessionID] ?? []),
-            event.data.inboxID,
-          ])
-        if (item.type !== "user" && item.type !== "synthetic") return
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(
-            draft,
-            index,
-            item.type === "user"
-              ? {
-                  id: event.data.inboxID,
-                  type: "user",
-                  ...item.payload,
-                  time: { created: event.created },
-                }
-              : {
-                  id: event.data.inboxID,
-                  type: "synthetic",
-                  ...item.payload,
-                  time: { created: event.created },
-                },
-          )
+          ...event.data.item,
         })
         return
       }
@@ -1062,18 +1080,66 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
             const pending = await api().session.inbox.list({ sessionID })
-            setStore("session", "pending", sessionID, reconcile(pending))
+            // Keep optimistic rows still awaiting their echo: this fetch may
+            // have raced ahead of an in-flight admission the server does not
+            // know about yet.
+            const inflight = (store.session.pending[sessionID] ?? []).filter(
+              (item) => outbox.has(item.id) && !pending.some((row) => row.id === item.id),
+            )
+            const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
+            setStore("session", "pending", sessionID, reconcile(merged))
             setStore(
               "session",
               "input",
               sessionID,
-              reconcile(pending.filter((item) => item.type !== "compaction").map((item) => item.id)),
+              reconcile(merged.filter((item) => item.type !== "compaction").map((item) => item.id)),
             )
           })
         },
         invalidate(sessionID: string) {
           sync.invalidate(`session.pending:${sessionID}`)
         },
+      },
+      // Optimistic prompt admission: render the prompt immediately under a
+      // client-minted ID, send it, and let the durable inbox.enqueued echo
+      // upsert that same ID with the server's payload. Server admission is
+      // idempotent per ID, so retrying with the identical payload cannot
+      // double-admit.
+      prompt(input: SessionPromptInput) {
+        const id = input.id ?? SessionMessage.ID.create()
+        // A retry may reuse an ID that is already rendered — and possibly
+        // already durable. Admit optimistically only for new IDs so a failed
+        // retry cannot roll back acknowledged state.
+        const fresh =
+          !messageIndex.get(input.sessionID)?.has(id) &&
+          !store.session.pending[input.sessionID]?.some((item) => item.id === id)
+        if (fresh) {
+          outbox.add(id)
+          admitLocal({
+            id,
+            sessionID: input.sessionID,
+            timeCreated: Date.now(),
+            type: "user",
+            delivery: input.delivery ?? "steer",
+            // Files and skills stay off the optimistic row: their durable
+            // forms are server-loaded (content, mime, resolution), so they
+            // fill in when the echo upserts the row.
+            payload: {
+              text: input.text,
+              agents: input.agents?.map((agent) => ({ ...agent })),
+              metadata: input.metadata,
+            },
+          })
+        }
+        // Wrapped so even a synchronous client failure reaches the rollback.
+        return Promise.resolve()
+          .then(() => api().session.prompt({ ...input, id }))
+          .catch((error) => {
+            // Roll back only rows this call admitted and the echo has not
+            // acknowledged: anything else is server state.
+            if (fresh && outbox.delete(id)) retractLocal(input.sessionID, id)
+            throw error
+          })
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
@@ -1114,7 +1180,14 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
             const response = await api().message.list({ sessionID, limit: 200, order: "desc" })
-            const messages = response.data.toReversed()
+            const fetched = response.data.toReversed()
+            // Same protection as the pending sync: a re-fetch racing an
+            // optimistic admission must not wipe the in-flight transcript row.
+            const ids = new Set(fetched.map((item) => item.id))
+            const inflight = (store.session.message[sessionID] ?? []).filter(
+              (item) => outbox.has(item.id) && !ids.has(item.id),
+            )
+            const messages = inflight.length === 0 ? fetched : [...fetched, ...inflight]
             messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
             setStore("session", "message", sessionID, reconcile(messages))
             setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)

@@ -12,7 +12,6 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderOptions,
   type ProviderMetadata,
   type TextPart,
   type ToolCallPart,
@@ -67,9 +66,7 @@ export interface OptionsInput {
   }
 }
 
-export type ProviderOptionsInput = ProviderOptions & {
-  readonly gemini?: OptionsInput
-}
+export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
 // Request Body Schema
@@ -387,7 +384,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 })
 
 const resolveOptions = (request: LLMRequest) => {
-  const input = request.providerOptions?.gemini
+  const input = request.providerOptions
   const value = input?.thinkingConfig
   const thinkingConfig = {
     thinkingBudget:
@@ -630,8 +627,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
 // =============================================================================
 /**
  * The Gemini protocol — request body construction, body schema, and the
- * streaming-event state machine. Used by Google AI Studio Gemini and (once
- * registered) Vertex Gemini.
+ * streaming-event state machine shared by Google AI Studio and Vertex Gemini.
  */
 export const protocol = Protocol.make({
   id: ADAPTER,

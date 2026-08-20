@@ -146,29 +146,20 @@ const modelTransport = Layer.succeed(
     closeAll: Effect.void,
   }),
 )
-const model = LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
+type ModelLimit = { readonly context: number; readonly input?: number; readonly output: number }
+const defaultModelLimit = { context: 200_000, output: 32_000 }
+const modelLimits = new Map<string, ModelLimit>()
+const testModel = (id: string, limit: ModelLimit = defaultModelLimit) => {
+  modelLimits.set(id, limit)
+  return LanguageModel.make({ id, provider: "fake", route: OpenAIChat.route })
+}
+const model = testModel("fake-model")
 const defaultSystem = SessionSystemPrompt.make([])
-const replacementModel = LanguageModel.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
-const compactModel = LanguageModel.make({
-  id: "compact",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 4_000, output: 50 } }),
-})
-const fullOutputModel = LanguageModel.make({
-  id: "full-output",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 262_144, output: 262_144 } }),
-})
-const undersizedContextModel = LanguageModel.make({
-  id: "undersized-context",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 1, output: 1_000 } }),
-})
-const recoveryModel = LanguageModel.make({
-  id: "recovery",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 20_000, output: 1_000 } }),
-})
+const replacementModel = testModel("replacement")
+const compactModel = testModel("compact", { context: 4_000, output: 50 })
+const fullOutputModel = testModel("full-output", { context: 262_144, output: 262_144 })
+const undersizedContextModel = testModel("undersized-context", { context: 1, output: 1_000 })
+const recoveryModel = testModel("recovery", { context: 20_000, output: 1_000 })
 
 test("calculates step cost using the matching context tier", () => {
   expect(
@@ -304,13 +295,15 @@ let currentModel = model
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: (session) =>
     modelResolveHook.pipe(
-      Effect.as(
-        SessionRunnerModel.resolved(session.model?.id === "replacement" ? replacementModel : currentModel, {
+      Effect.map(() => {
+        const selected = session.model?.id === "replacement" ? replacementModel : currentModel
+        return SessionRunnerModel.resolved(selected, {
           capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
           cost: [],
+          limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
           variant: session.model?.variant,
-        }),
-      ),
+        })
+      }),
     ),
 })
 const systemContextKey = Instructions.Key.make("test/context")
@@ -436,7 +429,6 @@ const execution = Layer.effect(
       active: coordinator.active,
       resume: coordinator.run,
       wake: coordinator.wake,
-      wakeActive: coordinator.wakeActive,
       interrupt: (sessionID) => coordinator.interrupt(sessionID),
       awaitIdle: coordinator.awaitIdle,
     })
@@ -1038,14 +1030,21 @@ describe("SessionRunnerLLM", () => {
       const database = yield* Database.Service
       const bus = yield* Bus.Service
       yield* InstructionState.prepare(database.db, bus, selected.instructions, sessionID)
+      const loaded = yield* context.load(selected)
 
       const prepared = yield* modelRequests.prepare({
-        context: yield* context.load(selected),
-        step: 1,
+        scope: {
+          session: loaded.session,
+          agentID: loaded.agent.id,
+          model: loaded.model,
+          tools: loaded.tools,
+        },
+        transcript: { system: [], messages: [] },
+        webSocket: "session",
       })
 
       expect(prepared.request.http?.headers?.["x-model-request-hook"]).toBe("active")
-      expect(prepared.webSocketEligible).toBe(true)
+      // No forced HTTP middleware: the other-provider hook must not revoke eligibility.
       expect(prepared.options.http).toBeUndefined()
     }),
   )
@@ -1074,9 +1073,16 @@ describe("SessionRunnerLLM", () => {
       const database = yield* Database.Service
       const bus = yield* Bus.Service
       yield* InstructionState.prepare(database.db, bus, selected.instructions, sessionID)
+      const loaded = yield* context.load(selected)
       const prepared = yield* modelRequests.prepare({
-        context: yield* context.load(selected),
-        step: 1,
+        scope: {
+          session: loaded.session,
+          agentID: loaded.agent.id,
+          model: loaded.model,
+          tools: loaded.tools,
+        },
+        transcript: { system: [], messages: [] },
+        webSocket: "session",
       })
       const http = prepared.options.http ?? (yield* Effect.die("Expected Session HTTP middleware"))
 
@@ -1085,7 +1091,7 @@ describe("SessionRunnerLLM", () => {
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("network")))
       })
 
-      expect(prepared.webSocketEligible).toBe(false)
+      expect(prepared.options.webSocket).toBeUndefined()
       expect(response.headers["x-response-hook"]).toBe("active")
       expect(requestTriggers).toBe(1)
       expect(responseTriggers).toBe(1)
@@ -3211,6 +3217,54 @@ describe("SessionRunnerLLM", () => {
       expect(userTexts(requests[0])).toEqual(["Steer now"])
       expect(yield* SessionInbox.has(db, sessionID, "steer")).toBe(false)
       expect(yield* SessionInbox.has(db, sessionID, "queue")).toBe(true)
+    }),
+  )
+
+  it.effect("a steer-scoped drain runs a queued manual compaction next in line", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      const bus = yield* Bus.Service
+      // Admit without waking so the steer-scoped drain below is the first consumer.
+      const compaction = yield* SessionInbox.admitCompaction(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        delivery: "queue",
+      })
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+      // Control work is scope-independent between turns: the barrier is consumed
+      // even though the drain never promotes queued input.
+      expect(yield* SessionInbox.find(db, compaction.id)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+        error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+      })
+    }),
+  )
+
+  it.effect("a steer-scoped drain leaves a compaction parked behind a queued prompt", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      const bus = yield* Bus.Service
+      yield* session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
+      const compaction = yield* SessionInbox.admitCompaction(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        delivery: "queue",
+      })
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+      // Enqueue order holds: the queued prompt is next in line, so nothing runs.
+      expect(requests).toHaveLength(0)
+      expect(yield* SessionInbox.has(db, sessionID, "queue")).toBe(true)
+      expect(yield* SessionInbox.find(db, compaction.id)).toMatchObject({ id: compaction.id })
     }),
   )
 

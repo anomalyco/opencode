@@ -62,7 +62,7 @@ type LineCommentControllerProps<T extends LineCommentShape> = {
   onDelete?: (comment: T) => void
   renderCommentActions?: (comment: T, controls: { edit: VoidFunction; remove: VoidFunction }) => JSX.Element
   editSubmitLabel?: string
-  onDraftPopoverFocusOut?: JSX.EventHandlerUnion<HTMLDivElement, FocusEvent>
+  onDraftPopoverFocusOut?: (event: FocusEvent) => void
   getHoverSelectedRange?: Accessor<SelectedLineRange | null>
   cancelDraftOnCommentToggle?: boolean
   clearSelectionOnSelectionEndNull?: boolean
@@ -79,8 +79,8 @@ type CommentProps = {
   selection: JSX.Element
   actions?: JSX.Element
   editor?: DraftProps
-  onClick?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>
-  onMouseEnter?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>
+  onClick?: (event: MouseEvent) => void
+  onMouseEnter?: (event: MouseEvent) => void
 }
 
 type DraftProps = {
@@ -90,12 +90,12 @@ type DraftProps = {
   onInput: (value: string) => void
   onCancel: VoidFunction
   onSubmit: (value: string) => void
-  onPopoverFocusOut?: JSX.EventHandlerUnion<HTMLDivElement, FocusEvent>
+  onPopoverFocusOut?: (event: FocusEvent) => void
   cancelLabel?: string
   submitLabel?: string
 }
 
-// Generic host machinery shared by the v1 and v2 annotation renderers: each
+// Generic host machinery shared by the inline and panel annotation renderers: each
 // annotation key gets a detached DOM host with its own Solid root, updated in
 // place through a signal so Pierre can reparent the host without re-rendering.
 export function createLineCommentAnnotationRenderer<T, C, D>(props: {

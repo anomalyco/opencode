@@ -30,7 +30,6 @@ import { stringWidth } from "../../util/string-width"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
 import { saveDraft, takeDraft } from "./draft-stash"
-import { Skill } from "@opencode-ai/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
@@ -45,7 +44,6 @@ import { DialogIntegration } from "../dialog-integration"
 import { useConnected } from "../use-connected"
 import { useToast } from "../../ui/toast"
 import { createFadeIn } from "../../util/signal"
-import { DialogSkill } from "../dialog-skill"
 import { useArgs } from "../../context/args"
 import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
@@ -583,44 +581,6 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Skills",
-        name: "prompt.skills",
-        category: "Prompt",
-        slash: { name: "skills" },
-        run: () => {
-          dialog.replace(() => (
-            <DialogSkill
-              location={currentLocation.current}
-              onSelect={(skill) => {
-                if (store.prompt.skills?.some((item) => item.id === skill)) return
-                const text = `/${skill}`
-                const start = input.cursorOffset
-                input.insertText(text + " ")
-                const extmarkId = input.extmarks.create({
-                  start,
-                  end: start + promptOffsetWidth(text),
-                  virtual: true,
-                  styleId: skillStyleId,
-                  typeId: promptPartTypeId,
-                })
-                setStore(
-                  produce((draft) => {
-                    draft.prompt.text = input.plainText
-                    const skills = (draft.prompt.skills ??= [])
-                    const index = skills.length
-                    skills.push({
-                      id: Skill.ID.make(skill),
-                      mention: { start, end: start + promptOffsetWidth(text), text },
-                    })
-                    draft.extmarkToPart.set(extmarkId, { type: "skill", index })
-                  }),
-                )
-              }}
-            />
-          ))
-        },
-      },
-      {
         title: "Move session",
         desc: "Move to another project dir",
         name: "session.move",
@@ -661,7 +621,6 @@ export function Prompt(props: PromptProps) {
       "prompt.stash",
       "prompt.stash.pop",
       "prompt.stash.list",
-      "prompt.skills",
       "session.interrupt",
       "session.background",
       "session.move",
@@ -1304,7 +1263,12 @@ export function Prompt(props: PromptProps) {
           return false
         }
       }
-      const error = await client.api.session
+      // The data layer admits optimistically: the prompt renders immediately
+      // and rolls back if the server rejects it, so submission does not wait
+      // on the network. On rejection the row is already rolled back; restore
+      // the composer unless the user has started typing something new.
+      const entry = { ...store.prompt, mode: currentMode }
+      data.session
         .prompt({
           sessionID,
           text: inputText,
@@ -1313,14 +1277,15 @@ export function Prompt(props: PromptProps) {
           skills: store.prompt.skills?.length ? store.prompt.skills : undefined,
           delivery,
         })
-        .then(
-          () => undefined,
-          (error) => error,
-        )
-      if (error) {
-        toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
-        return false
-      }
+        .catch((error) => {
+          toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
+          if (disposed || input.isDestroyed || input.plainText !== "") return
+          input.setText(entry.text)
+          setStore("prompt", entry)
+          setStore("mode", entry.mode ?? "normal")
+          restoreExtmarksFromPrompt(entry)
+          input.cursorOffset = entry.text.length
+        })
       if (pendingEditorSelection) editor.markSelectionSent()
     }
     history.append({
@@ -1332,15 +1297,14 @@ export function Prompt(props: PromptProps) {
     setStore("extmarkToPart", new Map())
     props.onSubmit?.()
 
-    // temporary hack to make sure the message is sent
+    // Optimistic admission puts the message in the store synchronously, so
+    // the session view renders it on arrival.
     if (!props.sessionID) {
       if (pendingEditorSelection) editor.preserveSelectionFromNewSession()
-      setTimeout(() => {
-        route.navigate({
-          type: "session",
-          sessionID,
-        })
-      }, 50)
+      route.navigate({
+        type: "session",
+        sessionID,
+      })
     }
     input.clear()
     if (finishMoveProgress) move.finishSubmit()
