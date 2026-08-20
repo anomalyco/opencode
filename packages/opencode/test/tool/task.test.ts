@@ -168,7 +168,15 @@ const admittingClosure = (log: LeaseLog, label: string): SessionClosure.Interfac
       log.events.push(`${label}:settle:${disposition ?? "retired"}`)
       log.settled.push({ lease, disposition: disposition ?? "retired" })
     }),
-  reserveMutation: () => Effect.die("unused"),
+  // Reserves as well as admits. `Session.remove` reserves the subtree before deleting it, and
+  // these fixtures delete sessions, so a stub that dies here would fail the removal tests on the
+  // fixture rather than on the behaviour they assert. Production has the same arrangement: `Session`
+  // resolves the coordinator its own layer provides.
+  reserveMutation: () =>
+    Effect.sync(() => {
+      log.events.push(`${label}:reserve`)
+      return { type: "reserved" as const, mutation: Model.id("mutation", `mutation_${label}_${log.events.length}`) }
+    }),
   activateMutation: () => Effect.void,
   retireMutation: () => Effect.void,
 })
