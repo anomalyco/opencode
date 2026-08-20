@@ -276,6 +276,7 @@ export const dict = {
   "go.graph.freePill": "Big Pickle et modèles gratuits",
   "go.graph.go": "Go",
   "go.graph.label": "Requêtes par tranche de 5 heures",
+  "go.graph.limitedRegions": "régions limitées",
   "go.graph.usageLimits": "Limites d'utilisation",
   "go.graph.aria": "Requêtes par 5h : {{free}} vs {{go}}",
 
@@ -689,6 +690,7 @@ export const dict = {
     'Sélectionnez "OpenCode Go" comme fournisseur dans votre configuration opencode pour utiliser les modèles Go.',
   "workspace.lite.providers.title": "Fournisseurs",
   "workspace.lite.providers.description": "Contrôlez les fournisseurs utilisés pour le routage.",
+  "workspace.lite.providers.allowTraining": "Autoriser les modèles qui s’entraînent sur les données des requêtes",
   "workspace.lite.providers.useChina": "Activer les modèles hébergés en Chine",
   "workspace.lite.black.message":
     "Vous êtes actuellement abonné à OpenCode Black ou sur liste d'attente. Veuillez d'abord vous désabonner si vous souhaitez passer à Go.",

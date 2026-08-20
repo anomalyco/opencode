@@ -260,6 +260,7 @@ export const dict = {
   "go.graph.freePill": "Big Pickle 與免費模型",
   "go.graph.go": "Go",
   "go.graph.label": "每 5 小時請求數",
+  "go.graph.limitedRegions": "僅限部分地區",
   "go.graph.usageLimits": "使用限制",
   "go.graph.aria": "每 5 小時請求數：{{free}} vs {{go}}",
 
@@ -650,6 +651,7 @@ export const dict = {
     "在您的 opencode 設定中選擇「OpenCode Go」作為提供商，即可使用 Go 模型。",
   "workspace.lite.providers.title": "提供商",
   "workspace.lite.providers.description": "控制用於路由的提供商。",
+  "workspace.lite.providers.allowTraining": "允許使用請求資料進行訓練的模型",
   "workspace.lite.providers.useChina": "啟用部署在中國的模型",
   "workspace.lite.black.message": "您目前已訂閱 OpenCode Black 或在候補名單中。若要切換至 Go，請先取消訂閱。",
   "workspace.lite.other.message": "此工作區中的另一位成員已訂閱 OpenCode Go。每個工作區只能有一位成員訂閱。",
