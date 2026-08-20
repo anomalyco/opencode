@@ -134,7 +134,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           result.location.provider.refresh(event.location),
           result.location.integration.refresh(event.location),
           result.location.reference.refresh(event.location),
-        ])
+        ]).then((settled) => {
+          // These race the instance rebuild. Swallowing a rejection here leaves the
+          // TUI showing the stale skills and commands hot reload exists to replace.
+          for (const failure of settled.filter((item) => item.status === "rejected"))
+            console.error("Failed to refresh location data after instance reload", failure.reason)
+        })
         return
       }
       switch (event.type) {

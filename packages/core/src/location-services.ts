@@ -83,18 +83,27 @@ export type LocationError = LayerNode.Error<typeof locationServices>
 
 // Every built map registers here with the refs it has served, so instance
 // reloads (hot reload, git init) can drop cached location layers across all
-// maps and workspace-scoped refs, not just one they happen to hold.
-const registry = new Set<{ map: LayerMap.LayerMap<Location.Ref, LocationServices, LocationError>; refs: Set<Location.Ref> }>()
+// maps and workspace-scoped refs, not just one they happen to hold. Entries are
+// released with the layer scope that created them, so a torn-down map - a
+// finished test, a closed workspace - does not stay reachable from module state.
+type RegistryEntry = {
+  map: LayerMap.LayerMap<Location.Ref, LocationServices, LocationError>
+  refs: Map<string, Set<Location.Ref>>
+}
+
+const registry = new Set<RegistryEntry>()
 
 export function invalidateLocationDirectory(directory: string) {
   return Effect.forEach(
     [...registry],
-    (entry) =>
-      Effect.forEach(
-        [...entry.refs].filter((ref) => ref.directory === directory),
-        (ref) => entry.map.invalidate(ref).pipe(Effect.ignore),
-        { discard: true },
-      ),
+    (entry) => {
+      const refs = entry.refs.get(directory)
+      if (!refs) return Effect.void
+      // The cached layers are gone once invalidated; the map re-registers each ref
+      // when it next serves it, so dropping them here keeps the index bounded.
+      entry.refs.delete(directory)
+      return Effect.forEach([...refs], (ref) => entry.map.invalidate(ref).pipe(Effect.ignore), { discard: true })
+    },
     { discard: true },
   )
 }
@@ -102,12 +111,14 @@ export function invalidateLocationDirectory(directory: string) {
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {
-  const refs = new Set<Location.Ref>()
+  const refs = new Map<string, Set<Location.Ref>>()
   return Layer.effect(
     LocationServiceMap.Service,
     LayerMap.make(
       (ref: Location.Ref) => {
-        refs.add(ref)
+        const served = refs.get(ref.directory) ?? new Set<Location.Ref>()
+        served.add(ref)
+        refs.set(ref.directory, served)
         const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
         // Apply replacements during hoist, not afterward: replacements can
         // introduce new tagged dependencies (Location.boundNode depends on
@@ -127,7 +138,18 @@ export function buildLocationServiceMap(
         )
       },
       { idleTimeToLive: "60 minutes" },
-    ).pipe(Effect.tap((map) => Effect.sync(() => registry.add({ map, refs })))),
+    ).pipe(
+      Effect.tap((map) =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            const entry: RegistryEntry = { map, refs }
+            registry.add(entry)
+            return entry
+          }),
+          (entry) => Effect.sync(() => registry.delete(entry)),
+        ),
+      ),
+    ),
   )
 }
 

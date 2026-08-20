@@ -35,8 +35,9 @@ interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
 }
 
-const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service | HotReload.Service> =
-  Layer.effect(
+type LayerDeps = Project.Service | InstanceBootstrap.Service | HotReload.Service
+
+const layer: Layer.Layer<Service, never, LayerDeps> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const project = yield* Project.Service
@@ -62,10 +63,14 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
                 })),
               )
         yield* bootstrap.run.pipe(Effect.provideService(InstanceRef, ctx))
-        // Pass only the directory so reload re-derives worktree and project,
-        // and skip when the instance was disposed while the reload waited.
+        // Withhold worktree so reload re-derives it, but carry the project through:
+        // reload stamps the server.instance.disposed event with input.project?.id, and
+        // dropping it makes hot-reload disposals look different from every other one.
+        // Skip when the instance was disposed while the reload waited.
         const hotReloadRun = Effect.suspend(() =>
-          cache.has(ctx.directory) ? reload({ directory: ctx.directory }).pipe(Effect.asVoid) : Effect.void,
+          cache.has(ctx.directory)
+            ? reload({ directory: ctx.directory, project: ctx.project }).pipe(Effect.asVoid)
+            : Effect.void,
         )
         yield* hotReload.init(hotReloadRun).pipe(
           Effect.provideService(InstanceRef, ctx),
