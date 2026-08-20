@@ -11,6 +11,7 @@ export const profiles = {
   fireworks: { provider: "fireworks", baseURL: "https://api.fireworks.ai/inference/v1" },
   groq: { provider: "groq", baseURL: "https://api.groq.com/openai/v1" },
   openrouter: { provider: "openrouter", baseURL: "https://openrouter.ai/api/v1" },
+  qwencloud: { provider: "qwencloud", baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1" },
   togetherai: { provider: "togetherai", baseURL: "https://api.together.xyz/v1" },
   xai: { provider: "xai", baseURL: "https://api.x.ai/v1" },
 } as const satisfies Record<string, OpenAICompatibleProfile>

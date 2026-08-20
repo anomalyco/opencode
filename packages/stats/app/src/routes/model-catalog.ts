@@ -352,6 +352,7 @@ function catalogLabSlug(value: string) {
   const aliases: Record<string, string> = {
     moonshot: "moonshotai",
     qwen: "alibaba",
+    qwencloud: "alibaba",
     zhipu: "zhipuai",
     zai: "zhipuai",
   }
