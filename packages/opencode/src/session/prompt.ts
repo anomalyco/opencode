@@ -1083,6 +1083,7 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let latestRequest: { request: LLM.StreamInput; messageIDs: ReadonlySet<MessageID> } | undefined
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1141,6 +1142,81 @@ const layer = Layer.effect(
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()
 
+          const assembleRequest = Effect.fn("SessionPrompt.assembleRequest")(function* (input: {
+            messages: SessionV1.WithParts[]
+            user: SessionV1.User
+            model: Provider.Model
+            processor: SessionProcessor.Handle
+          }) {
+            const agent = yield* agents.get(input.user.agent)
+            if (!agent) throw new Error(`Agent not found: ${input.user.agent}`)
+            const requestMessages = yield* SessionReminders.apply({ messages: input.messages, agent, session }).pipe(
+              Effect.provideService(RuntimeFlags.Service, flags),
+              Effect.provideService(FSUtil.Service, fsys),
+              Effect.provideService(Session.Service, sessions),
+            )
+            const lastUserMsg = requestMessages.findLast((message) => message.info.role === "user")
+            const bypassAgentCheck = lastUserMsg?.parts.some((part) => part.type === "agent") ?? false
+            const promptOps = yield* ops()
+            const tools = yield* SessionTools.resolve({
+              agent,
+              session,
+              model: input.model,
+              processor: input.processor,
+              bypassAgentCheck,
+              messages: requestMessages,
+              promptOps,
+            }).pipe(
+              Effect.provideService(Plugin.Service, plugin),
+              Effect.provideService(Permission.Service, permission),
+              Effect.provideService(ToolRegistry.Service, registry),
+              Effect.provideService(MCP.Service, mcp),
+              Effect.provideService(Truncate.Service, truncate),
+              Effect.provideService(RuntimeFlags.Service, flags),
+            )
+            const format = input.user.format ?? { type: "text" as const }
+            if (format.type === "json_schema") {
+              tools.StructuredOutput = createStructuredOutputTool({
+                schema: format.schema,
+                onSuccess(output) {
+                  structured = output
+                },
+              })
+            }
+            yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: requestMessages })
+            const [skills, env, instructions, mcpInstructions, modelMessages] = yield* Effect.all([
+              sys.skills(agent),
+              sys.environment(input.model),
+              instruction.system().pipe(Effect.orDie),
+              sys.mcp(agent, session.permission),
+              MessageV2.toModelMessagesEffect(requestMessages, input.model),
+            ])
+            const system = [
+              ...env,
+              ...instructions,
+              ...(mcpInstructions ? [mcpInstructions] : []),
+              ...(skills ? [skills] : []),
+            ]
+            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            return {
+              user: input.user,
+              agent,
+              permission: session.permission,
+              sessionID,
+              parentSessionID: session.parentID,
+              system,
+              messages: [
+                ...modelMessages,
+                ...(step >= (agent.steps ?? Infinity)
+                  ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }]
+                  : []),
+              ],
+              tools,
+              model: input.model,
+              toolChoice: format.type === "json_schema" ? "required" : undefined,
+            } satisfies LLM.StreamInput
+          })
+
           if (task?.type === "subtask") {
             yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
             continue
@@ -1153,6 +1229,20 @@ const layer = Layer.effect(
               sessionID,
               auto: task.auto,
               overflow: task.overflow,
+              capture: latestRequest,
+              rebuild: (input) =>
+                Effect.gen(function* () {
+                  const user = input.messages.findLast((message) => message.info.role === "user")?.info
+                  if (!user || user.role !== "user") {
+                    throw new Error("No live user message available for suffix compaction")
+                  }
+                  return yield* assembleRequest({
+                    messages: input.messages,
+                    user,
+                    model: input.model,
+                    processor: input.processor,
+                  })
+                }),
             })
             if (result === "stop") break
             continue
@@ -1175,14 +1265,6 @@ const layer = Layer.effect(
             yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
             throw error
           }
-          const maxSteps = agent.steps ?? Infinity
-          const isLastStep = step >= maxSteps
-          msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
-            Effect.provideService(RuntimeFlags.Service, flags),
-            Effect.provideService(FSUtil.Service, fsys),
-            Effect.provideService(Session.Service, sessions),
-          )
-
           const msg: SessionV1.Assistant = {
             id: MessageID.ascending(),
             parentID: lastUser.id,
@@ -1219,71 +1301,12 @@ const layer = Layer.effect(
             .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
 
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
-            const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
-            const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
-            const promptOps = yield* ops()
-
-            const tools = yield* SessionTools.resolve({
-              agent,
-              session,
-              model,
-              processor: handle,
-              bypassAgentCheck,
-              messages: msgs,
-              promptOps,
-            }).pipe(
-              Effect.provideService(Plugin.Service, plugin),
-              Effect.provideService(Permission.Service, permission),
-              Effect.provideService(ToolRegistry.Service, registry),
-              Effect.provideService(MCP.Service, mcp),
-              Effect.provideService(Truncate.Service, truncate),
-              Effect.provideService(RuntimeFlags.Service, flags),
-            )
-
-            if (lastUser.format?.type === "json_schema") {
-              tools["StructuredOutput"] = createStructuredOutputTool({
-                schema: lastUser.format.schema,
-                onSuccess(output) {
-                  structured = output
-                },
-              })
-            }
-
+            const format = lastUser.format ?? { type: "text" as const }
             if (step === 1)
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
-
-            yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-
-            const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
-              sys.skills(agent),
-              sys.environment(model),
-              instruction.system().pipe(Effect.orDie),
-              sys.mcp(agent, session.permission),
-              MessageV2.toModelMessagesEffect(msgs, model),
-            ])
-            const system = [
-              ...env,
-              ...instructions,
-              ...(mcpInstructions ? [mcpInstructions] : []),
-              ...(skills ? [skills] : []),
-            ]
-            const format = lastUser.format ?? { type: "text" as const }
-            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-            const result = yield* handle.process({
-              user: lastUser,
-              agent,
-              permission: session.permission,
-              sessionID,
-              parentSessionID: session.parentID,
-              system,
-              messages: [
-                ...modelMsgs,
-                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
-              ],
-              tools,
-              model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
-            })
+            const request = yield* assembleRequest({ messages: msgs, user: lastUser, model, processor: handle })
+            latestRequest = { request, messageIDs: new Set(msgs.map((item) => item.info.id)) }
+            const result = yield* handle.process(request)
 
             if (structured !== undefined) {
               handle.message.structured = structured

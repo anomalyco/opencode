@@ -33,6 +33,7 @@ type PrepareInput = {
   readonly plugin: Plugin.Interface
   readonly flags: RuntimeFlags.Info
   readonly isWorkflow: boolean
+  readonly maxOutputTokens?: number
 }
 
 export type Prepared = {
@@ -111,6 +112,10 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
           ...input.messages,
         ]
 
+  const maxOutputTokens = Math.min(
+    ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax),
+    input.maxOutputTokens ?? Infinity,
+  )
   const params = yield* input.plugin.trigger(
     "chat.params",
     {
@@ -126,7 +131,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         : undefined,
       topP: input.agent.topP ?? ProviderTransform.topP(input.model),
       topK: ProviderTransform.topK(input.model),
-      maxOutputTokens: ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax),
+      maxOutputTokens,
       options,
     },
   )
@@ -182,7 +187,10 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     system,
     messages,
     tools: Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b))),
-    params,
+    params:
+      input.maxOutputTokens === undefined
+        ? params
+        : { ...params, maxOutputTokens: Math.min(params.maxOutputTokens ?? maxOutputTokens, maxOutputTokens) },
     messageTransformOptions: options,
     headers: {
       ...(input.model.providerID.startsWith("opencode")
