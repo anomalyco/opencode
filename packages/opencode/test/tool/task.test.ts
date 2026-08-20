@@ -300,9 +300,10 @@ describe("tool.task", () => {
       if (Exit.isSuccess(exit)) throw new Error("expected task failure")
       const child = (yield* sessions.children(chat.id))[0]
       expect(child).toBeDefined()
-      expect(Cause.squash(exit.cause).message).toBe(
-        `Subagent failed (task_id: ${child?.id}): Network connection lost`,
-      )
+      const failure = Cause.squash(exit.cause)
+      expect(failure).toBeInstanceOf(Error)
+      if (!(failure instanceof Error)) throw new Error("expected Error defect")
+      expect(failure.message).toBe(`Subagent failed (task_id: ${child?.id}): Network connection lost`)
     }),
   )
 
