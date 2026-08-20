@@ -5,6 +5,7 @@
 // the current model so the footer can pre-select it.
 import { promptCopy, promptSame } from "./prompt.shared"
 import type { RunInput, RunPrompt } from "./types"
+import { isCompleteClosurePair } from "@opencode-ai/core/session/closure-record"
 
 const LIMIT = 200
 
@@ -133,6 +134,9 @@ function turn(msg: SessionMessages[number]): Turn | undefined {
   if (msg.info.role !== "user") {
     return undefined
   }
+  // Not a prompt the user sent, so it must not enter the prompt-history ring or be offered back
+  // to them by up-arrow.
+  if (isCompleteClosurePair(msg)) return undefined
 
   return {
     prompt: messagePrompt(msg),

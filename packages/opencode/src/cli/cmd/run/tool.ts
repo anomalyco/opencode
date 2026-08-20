@@ -756,14 +756,27 @@ function scrollTaskStart(_: ToolProps<typeof TaskTool>): string {
   return ""
 }
 
-function taskResult(output: string): string | undefined {
+/**
+ * Extracts the body direct-run displays from the structured Task outcome.
+ *
+ * Synchronous Task output and the async callback carry the same envelope, so this reads that one
+ * result rather than keeping a format of its own. A completed Task is `task_result`; the other two
+ * arms carry the same position when the child stopped without a normal answer or failed.
+ *
+ * Anchored to the end of the envelope, and scoped past any `task_prior_output`, because that
+ * section quotes an earlier lifetime's terminal output verbatim and can contain these very tags.
+ * An unanchored search would return the quoted history instead of the current outcome.
+ */
+function taskBody(output: string): string | undefined {
   if (!output.trim()) {
     return undefined
   }
 
-  const match = output.match(/<task_result>\s*([\s\S]*?)\s*<\/task_result>/)
+  const prior = output.lastIndexOf("</task_prior_output>")
+  const scoped = prior === -1 ? output : output.slice(prior + "</task_prior_output>".length)
+  const match = scoped.match(/<(task_result|task_status|task_error)>\r?\n([\s\S]*)\r?\n<\/\1>\r?\n<\/task>\s*$/)
   if (match) {
-    return match[1].trim() || undefined
+    return match[2].trim() || undefined
   }
 
   const next = output
@@ -1439,7 +1452,7 @@ export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody |
     }
 
     if (commit.phase === "final" && ctx.status === "completed") {
-      const result = taskResult(text(ctx.state.output))
+      const result = taskBody(text(ctx.state.output))
       if (result) {
         return markdownBody(result)
       }
