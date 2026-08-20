@@ -1,4 +1,4 @@
-import type { BackgroundJob } from "@opencode-ai/core/background-job"
+import { BackgroundJob as CoreBackgroundJob, type BackgroundJob } from "@opencode-ai/core/background-job"
 import { Effect, Ref } from "effect"
 import type { SessionClosure } from "../session/closure/coordinator"
 import * as Model from "../session/closure/model"
@@ -30,8 +30,10 @@ export namespace BackgroundJobBinder {
     return {
       bind: (input: BackgroundJob.BindRequest) =>
         Effect.gen(function* () {
-          // Missing admission cannot make this guard permissive.
-          if (!input.admission) return { kind: "rejected" as const, reason: "no_admission" satisfies Refusal }
+          // A caller that supplies no admission gets the behaviour it would get with no authority
+          // wired at all. Fencing is what admission opts into; refusing its absence would reject
+          // every background job started by a caller that predates it.
+          if (!input.admission) return yield* CoreBackgroundJob.permissiveBinder.bind(input)
 
           const lifetime = yield* identify(input.lifetime.token)
           const job = Model.id("job", `job_${input.lifetime.id}`)
