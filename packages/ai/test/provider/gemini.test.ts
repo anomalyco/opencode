@@ -55,6 +55,12 @@ describe("Gemini route", () => {
           },
         }),
       )
+      const explicitCachedContent = yield* compileRequest(
+        LLMRequest.update(request, {
+          promptCacheKey: "cachedContents/from-key",
+          providerOptions: { cachedContent: "cachedContents/explicit" },
+        }),
+      )
       const filtered = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: { thinkingConfig: { thinkingBudget: "invalid", includeThoughts: false } },
@@ -117,6 +123,7 @@ describe("Gemini route", () => {
         thinkingLevel: "high",
       })
       expect(prepared.body.cachedContent).toBe("cachedContents/example")
+      expect(explicitCachedContent.body.cachedContent).toBe("cachedContents/explicit")
       expect(cachedKey.body.cachedContent).toBe("cachedContents/from-key")
       expect(vertexCachedKey.body.cachedContent).toBe(
         "projects/my-project/locations/us-central1/cachedContents/from-vertex-key",
