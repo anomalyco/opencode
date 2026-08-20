@@ -55,7 +55,8 @@ export function make(origin = "http://127.0.0.1:8000", interval: Duration.Input 
             model.name = item.id
             // Tool calling depends on vLLM server flags and parsers that model discovery does not report.
             model.capabilities = { tools: false, input: ["text"], output: ["text"] }
-            model.limit = { context: item.max_model_len ?? 0, output: 0 }
+            if (typeof item.max_model_len === "number" && item.max_model_len > 0)
+              model.limit.context = item.max_model_len
           })
         }
       })
