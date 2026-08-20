@@ -62,6 +62,7 @@ function createModel(opts: {
   input?: number
   cost?: Provider.Model["cost"]
   npm?: string
+  compaction?: Provider.Model["compaction"]
 }): Provider.Model {
   return {
     id: "test-model",
@@ -72,6 +73,7 @@ function createModel(opts: {
       input: opts.input,
       output: opts.output,
     },
+    compaction: opts.compaction,
     cost: opts.cost ?? { input: 0, output: 0, cache: { read: 0, write: 0 } },
     capabilities: {
       toolcall: true,
@@ -561,6 +563,73 @@ describe("session.compaction.isOverflow", () => {
       },
     ),
   )
+
+  it.live(
+    "per-model compaction.auto=false overrides global auto=true",
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const compact = yield* SessionCompaction.Service
+          const model = createModel({
+            context: 100_000,
+            output: 32_000,
+            compaction: { auto: false },
+          })
+          const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+          expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+        }),
+      {
+        config: {
+          compaction: { auto: true },
+        },
+      },
+    ),
+  )
+
+  it.live(
+    "per-model compaction.reserved overrides global reserved",
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const compact = yield* SessionCompaction.Service
+          // Global reserved = 10k → usable = input - 10k = 90k
+          // Model reserved = 60k → usable = input - 60k = 40k
+          const model = createModel({
+            context: 100_000,
+            input: 100_000,
+            output: 32_000,
+            compaction: { reserved: 60_000 },
+          })
+          const tokens = { input: 50_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+          // 55k > 40k → overflow with model reserved
+          expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+        }),
+      {
+        config: {
+          compaction: { reserved: 10_000 },
+        },
+      },
+    ),
+  )
+
+  it.live(
+    "per-model compaction.reserved does not affect models without override",
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const compact = yield* SessionCompaction.Service
+          const model = createModel({ context: 100_000, input: 100_000, output: 32_000 })
+          const tokens = { input: 50_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+          // Global reserved = 10k → usable = 90k; 55k < 90k → no overflow
+          expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+        }),
+      {
+        config: {
+          compaction: { reserved: 10_000 },
+        },
+      },
+    ),
+  )
 })
 
 describe("session.compaction.create", () => {
@@ -959,6 +1028,44 @@ describe("session.compaction.process", () => {
       expect(part?.type).toBe("compaction")
       expect(part?.tail_start_id).toBe(keep.id)
     }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) })),
+  )
+
+  itCompaction.instance(
+    "per-model tail_turns overrides global tail_turns",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      yield* createUserMessage(session.id, "first")
+      yield* createUserMessage(session.id, "second")
+      const keep = yield* createUserMessage(session.id, "third")
+      yield* createSummaryCompaction(session.id)
+
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const parent = msgs.at(-1)?.info.id
+      expect(parent).toBeTruthy()
+      yield* SessionCompaction.use.process({
+        parentID: parent!,
+        messages: msgs,
+        sessionID: session.id,
+        auto: false,
+      })
+
+      const part = yield* readCompactionPart(session.id)
+      expect(part?.type).toBe("compaction")
+      // Global tail_turns = 2 would keep "second"+"third"; model tail_turns = 1 keeps only "third"
+      expect(part?.tail_start_id).toBe(keep.id)
+    }).pipe(
+      withCompaction({
+        config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }),
+        provider: ProviderTest.fake({
+          model: createModel({
+            context: 100_000,
+            output: 32_000,
+            compaction: { tail_turns: 1 },
+          }),
+        }),
+      }),
+    ),
   )
 
   itCompaction.instance(
