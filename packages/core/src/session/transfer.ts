@@ -115,6 +115,11 @@ const layer = Layer.effect(
                       tokens_cache_write: input.data.info.tokens.cache.write,
                       time_created: DateTime.toEpochMillis(input.data.info.time.created),
                       time_updated: DateTime.toEpochMillis(input.data.info.time.updated),
+                      time_idle: input.data.info.time.idle ? DateTime.toEpochMillis(input.data.info.time.idle) : null,
+                      time_viewed: input.data.info.time.viewed
+                        ? DateTime.toEpochMillis(input.data.info.time.viewed)
+                        : null,
+                      idle_outcome: input.data.info.outcome ?? null,
                       time_archived: input.data.info.time.archived
                         ? DateTime.toEpochMillis(input.data.info.time.archived)
                         : null,

@@ -70,6 +70,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
     Match.type<SessionEvent.DurableEvent>(),
     Match.discriminatorsExhaustive("type")({
       "session.created": () => Effect.void,
+      "session.viewed": () => Effect.void,
       "session.usage.recorded": () => Effect.void,
       "session.agent.selected": (event) =>
         Effect.gen(function* () {

@@ -172,6 +172,7 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly variables?: SessionEnvironment.Variables
   }) => Effect.Effect<SessionEnvironment.Variables | undefined, NotFoundError>
+  readonly view: (input: { sessionID: SessionSchema.ID }) => Effect.Effect<void, NotFoundError>
   readonly remove: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -448,6 +449,17 @@ const layer = Layer.effect(
         yield* result.get(input.sessionID)
         if (input.variables !== undefined) yield* environments.set(input.sessionID, input.variables)
         return yield* environments.get(input.sessionID)
+      }),
+      view: Effect.fn("Session.view")(function* (input) {
+        const row = yield* db
+          .select({ idle: SessionTable.time_idle, viewed: SessionTable.time_viewed })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, input.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!row) return yield* new NotFoundError({ sessionID: input.sessionID })
+        if (row.idle === null || (row.viewed !== null && row.viewed >= row.idle)) return
+        yield* bus.publish(SessionEvent.Viewed, { sessionID: input.sessionID, idle: row.idle })
       }),
       remove: Effect.fn("Session.remove")(function* (sessionID) {
         const session = yield* result.get(sessionID)

@@ -388,6 +388,37 @@ function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, me
     .pipe(Effect.orDie)
 }
 
+function projectIdle(
+  db: DatabaseService,
+  event:
+    | typeof SessionEvent.Execution.Succeeded.Type
+    | typeof SessionEvent.Execution.Failed.Type
+    | typeof SessionEvent.Execution.Interrupted.Type,
+) {
+  return Effect.gen(function* () {
+    yield* run(db, event)
+    if (event.type === SessionEvent.Execution.Interrupted.type && event.data.reason === "shutdown") return
+    const time = event.created
+    const outcome =
+      event.type === SessionEvent.Execution.Succeeded.type
+        ? "succeeded"
+        : event.type === SessionEvent.Execution.Failed.type
+          ? "failed"
+          : "interrupted"
+    yield* db
+      .update(SessionTable)
+      .set({
+        // Unread uses a strict timestamp comparison, so every terminal must advance even within one millisecond.
+        time_idle: sql`max(${time}, coalesce(${SessionTable.time_idle} + 1, ${time}))`,
+        idle_outcome: outcome,
+        time_updated: sql`${SessionTable.time_updated}`,
+      })
+      .where(eq(SessionTable.id, event.data.sessionID))
+      .run()
+      .pipe(Effect.orDie)
+  })
+}
+
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
@@ -509,6 +540,20 @@ const layer = Layer.effectDiscard(
         .run()
         .pipe(Effect.orDie),
     )
+    yield* bus.project(SessionEvent.Viewed, (event) => {
+      const idle = event.data.idle
+      return db
+        .update(SessionTable)
+        .set({
+          // Monotone watermark: a duplicate or stale view never regresses, and a terminal event
+          // committing after the viewer's observation keeps the newer idle transition unread.
+          time_viewed: sql`max(${idle}, coalesce(${SessionTable.time_viewed}, ${idle}))`,
+          time_updated: sql`${SessionTable.time_updated}`,
+        })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie)
+    })
     yield* bus.project(SessionEvent.UsageRecorded, (event) => applyUsage(db, event.data.sessionID, event.data))
     yield* bus.project(SessionEvent.Forked, (event) => projectFork(db, event))
     yield* bus.project(SessionEvent.InboxDelivered, (event) =>
@@ -573,9 +618,9 @@ const layer = Layer.effectDiscard(
         delivery: event.data.delivery,
       }),
     )
-    yield* bus.project(SessionEvent.Execution.Succeeded, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Execution.Failed, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Execution.Interrupted, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Execution.Succeeded, (event) => projectIdle(db, event))
+    yield* bus.project(SessionEvent.Execution.Failed, (event) => projectIdle(db, event))
+    yield* bus.project(SessionEvent.Execution.Interrupted, (event) => projectIdle(db, event))
     yield* bus.project(SessionEvent.InstructionsUpdated, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)

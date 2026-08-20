@@ -708,6 +708,19 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         }),
       ),
     )
+    .add(
+      HttpApiEndpoint.post("session.view", "/api/session/:sessionID/view", {
+        params: { sessionID: Session.ID },
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.view",
+          summary: "View session",
+          description: "Mark the latest recorded idle transition as viewed.",
+        }),
+      ),
+    )
     .annotateMerge(
       OpenApi.annotations({
         title: "session",

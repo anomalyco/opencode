@@ -324,6 +324,16 @@ export type SessionRenamed = {
   data: { sessionID: string; title: string }
 }
 
+export type SessionViewed = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.viewed"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; idle: number }
+}
+
 export type SessionDeleted = {
   id: string
   created: number
@@ -1664,7 +1674,8 @@ export type SessionInfo = {
   model?: ModelRef
   cost: MoneyUSD
   tokens: TokenUsageInfo
-  time: { created: number; updated: number; archived?: number }
+  outcome?: "succeeded" | "failed" | "interrupted"
+  time: { created: number; updated: number; idle?: number; viewed?: number; archived?: number }
   title?: string
   location: LocationRef
   subpath?: string
@@ -1949,6 +1960,7 @@ export type SessionEventDurable =
   | SessionModelSelected
   | SessionMoved
   | SessionRenamed
+  | SessionViewed
   | SessionDeleted
   | SessionForked
   | SessionInboxDelivered
@@ -2034,6 +2046,7 @@ export type V2Event =
   | SessionModelSelected
   | SessionMoved
   | SessionRenamed
+  | SessionViewed
   | SessionUsageUpdated
   | SessionDeleted
   | SessionForked
@@ -2510,7 +2523,14 @@ export type SessionImportInput = {
         readonly reasoning: number
         readonly cache: { readonly read: number; readonly write: number }
       }
-      readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+      readonly outcome?: "succeeded" | "failed" | "interrupted"
+      readonly time: {
+        readonly created: number
+        readonly updated: number
+        readonly idle?: number
+        readonly viewed?: number
+        readonly archived?: number
+      }
       readonly title?: string
       readonly location: { readonly directory: string; readonly workspaceID?: string }
       readonly subpath?: string
@@ -2778,7 +2798,14 @@ export type SessionImportInput = {
         readonly reasoning: number
         readonly cache: { readonly read: number; readonly write: number }
       }
-      readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+      readonly outcome?: "succeeded" | "failed" | "interrupted"
+      readonly time: {
+        readonly created: number
+        readonly updated: number
+        readonly idle?: number
+        readonly viewed?: number
+        readonly archived?: number
+      }
       readonly title?: string
       readonly location: { readonly directory: string; readonly workspaceID?: string }
       readonly subpath?: string
@@ -3046,7 +3073,14 @@ export type SessionImportInput = {
         readonly reasoning: number
         readonly cache: { readonly read: number; readonly write: number }
       }
-      readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
+      readonly outcome?: "succeeded" | "failed" | "interrupted"
+      readonly time: {
+        readonly created: number
+        readonly updated: number
+        readonly idle?: number
+        readonly viewed?: number
+        readonly archived?: number
+      }
       readonly title?: string
       readonly location: { readonly directory: string; readonly workspaceID?: string }
       readonly subpath?: string
@@ -3979,6 +4013,10 @@ export type SessionEnvironmentInput = {
 }
 
 export type SessionEnvironmentOutput = void
+
+export type SessionViewInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionViewOutput = void
 
 export type MessageListInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]

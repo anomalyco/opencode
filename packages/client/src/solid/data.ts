@@ -882,6 +882,16 @@ export function createData(config: CreateDataInput) {
           const currentAssistant = message.activeAssistant(draft)
           if (currentAssistant) currentAssistant.retry = undefined
         })
+        if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
+        // Refresh only sessions this client already loaded; unloaded sessions hydrate on demand.
+        if (!store.session.info[event.data.sessionID]) return
+        result.session.invalidate(event.data.sessionID)
+        void result.session.sync(event.data.sessionID)
+        return
+      case "session.viewed":
+        if (!store.session.info[event.data.sessionID]) return
+        result.session.invalidate(event.data.sessionID)
+        void result.session.sync(event.data.sessionID)
         return
       case "session.revert.staged":
         if (store.session.info[event.data.sessionID])

@@ -105,6 +105,17 @@ export const Renamed = Event.durable({
 })
 export type Renamed = typeof Renamed.Type
 
+export const Viewed = Event.durable({
+  type: "session.viewed",
+  ...options,
+  schema: {
+    ...Base,
+    /** Epoch-millisecond idle watermark the viewer observed; projection never marks a newer idle transition viewed. */
+    idle: Schema.Finite,
+  },
+})
+export type Viewed = typeof Viewed.Type
+
 export const UsageRecorded = Event.durable({
   type: "session.usage.recorded",
   ...options,
@@ -585,6 +596,7 @@ export const Definitions = Event.inventory(
   ModelSelected,
   Moved,
   Renamed,
+  Viewed,
   UsageUpdated,
   Deleted,
   Forked,
