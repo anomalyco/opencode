@@ -12,6 +12,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionClosure } from "./closure/coordinator"
 import { SessionMutation } from "./closure/mutation"
+import { CLOSURE_RECORD_METADATA_KEY } from "@opencode-ai/core/session/closure-record"
 import { SessionV2 } from "@opencode-ai/core/session"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
@@ -425,6 +426,38 @@ export class BoundaryError extends Schema.TaggedErrorClass<BoundaryError>()("Ses
   partID: Schema.optional(PartID),
 }) {}
 
+export class ReservedMetadataError extends Schema.TaggedErrorClass<ReservedMetadataError>()(
+  "SessionReservedMetadataError",
+  {
+    key: Schema.Literal(CLOSURE_RECORD_METADATA_KEY),
+    sessionID: SessionID,
+    messageID: MessageID,
+    partID: PartID,
+  },
+) {}
+
+/**
+ * Reject caller-owned part bytes that claim the branch-closure provenance key.
+ *
+ * Closure records are the durable account of what a cancellation stopped, and their meaning depends
+ * on nobody else being able to write one. The key is reserved rather than the value validated: a
+ * malformed claim and a well-formed forgery get the same refusal, which keeps this a provenance
+ * gate and not a second, divergent copy of the classifier.
+ */
+export function rejectReservedPartMetadata(part: SessionV1.Part): Effect.Effect<void, ReservedMetadataError> {
+  const metadata = "metadata" in part ? part.metadata : undefined
+  if (typeof metadata !== "object" || metadata === null || !Object.hasOwn(metadata, CLOSURE_RECORD_METADATA_KEY))
+    return Effect.void
+  return Effect.fail(
+    new ReservedMetadataError({
+      key: CLOSURE_RECORD_METADATA_KEY,
+      sessionID: part.sessionID,
+      messageID: part.messageID,
+      partID: part.id,
+    }),
+  )
+}
+
 export type NotFound = NotFoundError
 
 export interface Interface {
@@ -483,7 +516,7 @@ export interface Interface {
   readonly updatePart: <T extends SessionV1.Part>(part: T) => Effect.Effect<T>
   readonly replacePart: <T extends SessionV1.Part>(
     part: T,
-  ) => Effect.Effect<T, SessionMutation.MutationRefused>
+  ) => Effect.Effect<T, SessionMutation.MutationRefused | ReservedMetadataError>
   readonly updatePartDelta: (input: {
     sessionID: SessionID
     messageID: MessageID
@@ -725,9 +758,21 @@ const layer: Layer.Layer<
      * remember to take one. Now the method that names the operation carries it.
      *
      * This does not make `updatePart` safe to call blind, and it stays unreserved by design.
+     *
+     * It is also where the reserved closure key is refused, for the same reason the reservation is
+     * here. This is the seam caller-supplied part bytes arrive through; `updatePart` is the writer a
+     * live execution uses for parts it is producing, called once per streamed token, and a guard
+     * there would run thousands of times a turn against a condition only a caller payload can
+     * create. The check runs ahead of the reservation because a payload claiming reserved
+     * provenance is malformed whatever the branch is doing.
      */
-    const replacePart = <T extends SessionV1.Part>(part: T): Effect.Effect<T, SessionMutation.MutationRefused> =>
-      SessionMutation.leased(closure, { sessions: [part.sessionID], kind: "replace_part" }, updatePart(part)).pipe(
+    const replacePart = <T extends SessionV1.Part>(
+      part: T,
+    ): Effect.Effect<T, SessionMutation.MutationRefused | ReservedMetadataError> =>
+      rejectReservedPartMetadata(part).pipe(
+        Effect.andThen(
+          SessionMutation.leased(closure, { sessions: [part.sessionID], kind: "replace_part" }, updatePart(part)),
+        ),
         Effect.withSpan("Session.replacePart"),
       )
 

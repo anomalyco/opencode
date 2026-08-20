@@ -116,10 +116,18 @@ type AdmissionError = SessionClosure.AdmissionRefused | SessionMutation.Mutation
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error | AdmissionError>
+  // `ReservedMetadataError` rides on the two entry points that persist parts someone outside this
+  // service supplied: `prompt` takes them from its caller, and `command` resolves them from a
+  // template and then hands them to the `command.execute.before` plugin hook, which can mutate
+  // them before they are written. `loop` and `shell` build their own and cannot raise it.
+  readonly prompt: (
+    input: PromptInput,
+  ) => Effect.Effect<SessionV1.WithParts, Image.Error | AdmissionError | Session.ReservedMetadataError>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts, AdmissionError>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError | AdmissionError>
-  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error | AdmissionError>
+  readonly command: (
+    input: CommandInput,
+  ) => Effect.Effect<SessionV1.WithParts, Image.Error | AdmissionError | Session.ReservedMetadataError>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -1111,13 +1119,21 @@ const layer = Layer.effect(
         })
       }
 
+      // The plugin hook above has already had its opportunity to mutate these parts, so one
+      // preflight here covers both direct prompt input and plugin-supplied metadata. It runs before
+      // the message or any part is persisted, so a payload claiming reserved closure provenance
+      // cannot leave a half-written message behind.
+      yield* Effect.forEach(parts, Session.rejectReservedPartMetadata, { discard: true })
+
       yield* sessions.updateMessage(info)
       for (const part of parts) yield* sessions.updatePart(part)
 
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: TaskPromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error | AdmissionError> =
+    const prompt: (
+      input: TaskPromptInput,
+    ) => Effect.Effect<SessionV1.WithParts, Image.Error | AdmissionError | Session.ReservedMetadataError> =
       Effect.fn("SessionPrompt.prompt")(function* (input: TaskPromptInput) {
         // An attachment scope is a private capability handed to one delegated call, never resolved
         // from a registry here. Generic ingress is unaffected: only a caller that was given a scope

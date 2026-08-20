@@ -437,7 +437,12 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       // The coordinate validation stays ahead of the call: it is a read-only precondition, so
       // deciding it first keeps the existing 400 for a malformed request rather than turning it
       // into a refusal.
-      return yield* SessionError.mapAdmission(session.replacePart(payload))
+      //
+      // A payload claiming the reserved branch-closure key is malformed in the same way, so it
+      // answers 400 like the coordinate check above rather than adding an error to this endpoint.
+      return yield* SessionError.mapAdmission(session.replacePart(payload)).pipe(
+        Effect.catchTag("SessionReservedMetadataError", () => new HttpApiError.BadRequest({})),
+      )
     })
 
     return handlers

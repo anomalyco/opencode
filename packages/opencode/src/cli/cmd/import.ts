@@ -103,7 +103,17 @@ export const ImportCommand = effectCmd({
   handler: Effect.fn("Cli.import")(function* (args) {
     const ctx = yield* InstanceRef
     if (!ctx) return yield* Effect.die("InstanceRef not provided")
-    return yield* runImport(args.file, ctx)
+    // A visible CLI failure naming the offending part, rather than a defect: the file is the
+    // user's, and this tells them which part to fix.
+    return yield* runImport(args.file, ctx).pipe(
+      Effect.catchTag(
+        "SessionReservedMetadataError",
+        (error) =>
+          new CliError({
+            message: `Cannot import reserved metadata key "${error.key}" on part ${error.partID}`,
+          }),
+      ),
+    )
   }),
 })
 
@@ -176,6 +186,19 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     return
   }
 
+  // An imported file is caller input, not authenticated replication, so it is decoded and checked
+  // in full before the first write. Checking as we go would let an offending part late in the file
+  // leave a partial import behind.
+  const messages = exportData.messages.map((msg) => ({
+    info: decodeMessageInfo(msg.info) as SessionV1.Info,
+    parts: msg.parts.map((part) => decodePart(part) as SessionV1.Part),
+  }))
+  yield* Effect.forEach(
+    messages.flatMap((msg) => msg.parts),
+    Session.rejectReservedPartMetadata,
+    { discard: true },
+  )
+
   const info = Schema.decodeUnknownSync(Session.Info)({
     ...exportData.info,
     projectID: ctx.project.id,
@@ -193,8 +216,8 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     .run()
     .pipe(Effect.orDie)
 
-  for (const msg of exportData.messages) {
-    const msgInfo = decodeMessageInfo(msg.info) as SessionV1.Info
+  for (const msg of messages) {
+    const msgInfo = msg.info
     const { id, sessionID: _, ...msgData } = msgInfo
     yield* db
       .insert(MessageTable)
@@ -208,8 +231,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
       .run()
       .pipe(Effect.orDie)
 
-    for (const part of msg.parts) {
-      const partInfo = decodePart(part) as SessionV1.Part
+    for (const partInfo of msg.parts) {
       const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
       yield* db
         .insert(PartTable)
