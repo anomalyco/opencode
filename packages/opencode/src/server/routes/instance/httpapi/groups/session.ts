@@ -80,6 +80,7 @@ export const SessionPaths = {
   status: `${root}/status`,
   get: `${root}/:sessionID`,
   children: `${root}/:sessionID/children`,
+  cost: `${root}/:sessionID/cost`,
   todo: `${root}/:sessionID/todo`,
   diff: `${root}/:sessionID/diff`,
   messages: `${root}/:sessionID/message`,
@@ -151,6 +152,30 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.children",
             summary: "Get session children",
             description: "Retrieve all child sessions that were forked from the specified parent session.",
+          }),
+        ),
+        HttpApiEndpoint.get("cost", SessionPaths.cost, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(
+            Schema.Struct({
+              cost: Schema.Finite,
+              tokens: Schema.Struct({
+                input: Schema.Finite,
+                output: Schema.Finite,
+                reasoning: Schema.Finite,
+                cache: Schema.Struct({ read: Schema.Finite, write: Schema.Finite }),
+              }),
+            }),
+            "Aggregated cost including all descendant sessions",
+          ),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.cost",
+            summary: "Get total session cost",
+            description:
+              "Retrieve the total cost and token usage for a session, aggregated across all descendant (subagent) sessions.",
           }),
         ),
         HttpApiEndpoint.get("todo", SessionPaths.todo, {
