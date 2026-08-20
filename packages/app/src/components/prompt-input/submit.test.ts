@@ -417,7 +417,9 @@ describe("prompt submit worktree selection", () => {
         model: { providerID: "provider", modelID: "model", variant: "high" },
       },
     })
-    expect((promptInputs[0] as { id?: string }).id).toStartWith("msg_")
+    // ID minting is delegated to the data layer, which mints a client ID when
+    // none is supplied (covered by the data-layer tests in packages/tui).
+    expect((promptInputs[0] as { id?: string }).id).toBeUndefined()
   })
 
   test("restores the prompt when sending fails", async () => {

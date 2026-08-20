@@ -11,7 +11,7 @@ import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, type usePrompt } from "@/context/prompt"
 import { useWorkspaceLocation } from "@/context/location"
 import { useServerSDK, type ServerSDK } from "@/context/server-sdk"
-import { Identifier } from "@/utils/id"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { getDirectory } from "@opencode-ai/util/path"
 import { buildPromptRequest } from "./build-prompt-request"
 import { setCursorPosition } from "./editor-dom"
@@ -40,7 +40,6 @@ type FollowupSendInput = {
   data: Data
   session: Accessor<{ agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined>
   draft: FollowupDraft
-  messageID?: string
   optimisticBusy?: boolean
 }
 
@@ -69,10 +68,9 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   ) {
     setBusy()
     try {
-      const messageID = Identifier.ascending("message")
       await input.api.command({
         sessionID: input.draft.sessionID,
-        id: messageID,
+        id: SessionMessage.ID.create(),
         command: cmd,
         arguments: tail.join(" "),
         agent: input.draft.agent,
@@ -95,7 +93,6 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     }
   }
 
-  const messageID = input.messageID ?? Identifier.ascending("message")
   const encodedImages = await Promise.all(
     images.map(async (attachment) => ({
       ...attachment,
@@ -132,11 +129,10 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       })
     }
 
-    // The data layer admits optimistically: the prompt renders immediately
-    // and rolls back if the server rejects it.
+    // The data layer admits optimistically under a client-minted ID: the
+    // prompt renders immediately and rolls back if the server rejects it.
     await input.data.session.prompt({
       sessionID: input.draft.sessionID,
-      id: messageID,
       text: request.text,
       files: request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
       agents: request.agents,
@@ -448,12 +444,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           ?.find((command) => command.name === commandName)
         if (customCommand) {
           clearInput()
-          const messageID = Identifier.ascending("message")
           submissionData.session.setStatus(session.id, "running")
           void submissionServerSDK.api.session
             .command({
               sessionID: session.id,
-              id: messageID,
+              id: SessionMessage.ID.create(),
               command: commandName,
               arguments: args.join(" "),
               agent,
@@ -478,7 +473,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
 
       const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
-      const messageID = Identifier.ascending("message")
 
       for (const item of commentItems) submission.target().context.remove(item.key)
       clearInput()
@@ -488,7 +482,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         data: submissionData,
         session: () => session,
         draft,
-        messageID,
         optimisticBusy: sessionDirectory === projectDirectory,
       }).catch((err) => {
         if (sessionDirectory === projectDirectory) {
