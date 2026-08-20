@@ -8,10 +8,13 @@ const directory = "C:/OpenCode/SubagentNavigation"
 const projectID = "proj_subagent_navigation"
 const parentID = "ses_subagent_parent"
 const childID = "ses_subagent_child"
+const grandchildID = "ses_subagent_grandchild"
 const parentTitle = "Parent session"
 const childTitle = "Subagent child session"
+const grandchildTitle = "Nested subagent session"
 // Child session pages derive their heading from the task part that spawned them.
 const taskDescription = "Inspect child navigation"
+const nestedTaskDescription = "Inspect nested navigation"
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
@@ -24,6 +27,23 @@ test("navigates to a subagent child session missing from the session list", asyn
 
   const titlebarRight = page.locator("#opencode-titlebar-right")
   await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
+})
+
+test("keeps the root tab active for a nested subagent", async ({ page }) => {
+  await setup(page)
+  await openChildFromParent(page)
+  await expectSessionTitle(page, taskDescription)
+
+  const card = page.locator(`a[href="${sessionHref(grandchildID)}"]`)
+  await expect(card).toBeVisible()
+  await card.click()
+
+  await expect(page).toHaveURL(new RegExp(`/server/.+/session/${grandchildID}$`), { timeout: 15_000 })
+  await expectSessionTitle(page, nestedTaskDescription)
+
+  const rootTab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(parentID)}"])`)
+  await expect(rootTab).toHaveAttribute("data-active", "true")
+  await expect(page.locator("[data-titlebar-tab-slot]:visible")).toHaveCount(1)
 })
 
 test("keeps the parent visible while the child session resolves", async ({ page }) => {
@@ -94,8 +114,10 @@ async function setup(page: Page, events?: () => OpenCodeEvent[]) {
       connected: ["opencode"],
       default: { providerID: "opencode", modelID: "claude-opus-4-6" },
     },
-    sessions: [session(parentID, parentTitle, 1700000000000), childSession()],
-    pageMessages: (sessionID) => ({ items: sessionID === parentID ? parentMessages() : [] }),
+    sessions: [session(parentID, parentTitle, 1700000000000), childSession(), grandchildSession()],
+    pageMessages: (sessionID) => ({
+      items: sessionID === parentID ? parentMessages() : sessionID === childID ? childMessages() : [],
+    }),
     events,
     eventRetry: events ? 16 : undefined,
   })
@@ -145,6 +167,10 @@ function childSession() {
   return session(childID, childTitle, 1700000001000, { parentID })
 }
 
+function grandchildSession() {
+  return session(grandchildID, grandchildTitle, 1700000002000, { parentID: childID })
+}
+
 function parentMessages(): SessionMessageInfo[] {
   const userID = "msg_user_0001"
   const assistantID = "msg_assistant_0001"
@@ -175,6 +201,43 @@ function parentMessages(): SessionMessageInfo[] {
             input: { description: taskDescription, agent: "explore", prompt: "Inspect the delegated work." },
             content: [{ type: "text", text: "Subagent finished" }],
             metadata: { sessionID: childID },
+          },
+        },
+      ],
+    },
+  ]
+}
+
+function childMessages(): SessionMessageInfo[] {
+  const userID = "msg_user_0002"
+  const assistantID = "msg_assistant_0002"
+  return [
+    {
+      id: userID,
+      type: "user",
+      time: { created: 1700000002000 },
+      text: "Delegate nested work to a subagent",
+    },
+    {
+      id: assistantID,
+      type: "assistant",
+      time: { created: 1700000003000, completed: 1700000004000 },
+      model: { id: "claude-opus-4-6", providerID: "opencode" },
+      agent: "build",
+      cost: 0.01,
+      tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
+      finish: "stop",
+      content: [
+        {
+          type: "tool",
+          id: "call_subagent_0002",
+          name: "subagent",
+          time: { created: 1700000003000, ran: 1700000003000, completed: 1700000004000 },
+          state: {
+            status: "completed",
+            input: { description: nestedTaskDescription, agent: "explore", prompt: "Inspect the nested work." },
+            content: [{ type: "text", text: "Nested subagent finished" }],
+            metadata: { sessionID: grandchildID },
           },
         },
       ],

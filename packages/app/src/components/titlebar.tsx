@@ -34,6 +34,7 @@ import { tabKey, useTabs } from "@/context/tabs"
 import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
+import { rootSession } from "@/utils/session-route"
 
 const v2TitlebarHeight = 36
 const minTitlebarZoom = 0.25
@@ -170,15 +171,43 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             const tabs = useTabs()
             const tabsStore = tabs.store
             const tabsStoreActions = tabs
-            const [session] = createResource(
-              () => {
-                const route = layout.route()
-                if (route.type !== "session") return undefined
-                const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
-                return conn ? { route, sdk: global.ensureServerCtx(conn).sdk } : undefined
-              },
-              ({ route, sdk }) => sdk.api.session.get({ sessionID: route.sessionId }).catch(() => {}),
+            const routeContext = createMemo(() => {
+              const route = layout.route()
+              if (route.type !== "session") return
+              const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
+              return conn ? { route, ctx: global.ensureServerCtx(conn) } : undefined
+            })
+            const [resolvedSession] = createResource(routeContext, ({ route, ctx }) =>
+              (async () => {
+                const session =
+                  ctx.data.session.get(route.sessionId) ??
+                  (await ctx.sdk.api.session.get({ sessionID: route.sessionId }))
+                const root = await rootSession(
+                  session,
+                  async (sessionID) =>
+                    ctx.data.session.get(sessionID) ?? (await ctx.sdk.api.session.get({ sessionID })),
+                )
+                return { session, rootID: root.id }
+              })().catch(() => undefined),
             )
+            const session = () => {
+              const input = routeContext()
+              if (!input) return
+              const loaded = input.ctx.data.session.get(input.route.sessionId)
+              if (loaded) return loaded
+              const resolved = resolvedSession()
+              return resolved?.session.id === input.route.sessionId ? resolved.session : undefined
+            }
+            const rootID = () => {
+              const input = routeContext()
+              if (!input) return
+              const current = input.ctx.data.session.get(input.route.sessionId)
+              const resolved = resolvedSession()
+              if (!current) return resolved?.session.id === input.route.sessionId ? resolved.rootID : undefined
+              const root = input.ctx.data.session.root(current.id)
+              if (!current.parentID || input.ctx.data.session.get(root)) return root
+              return resolved?.session.id === input.route.sessionId ? resolved.rootID : undefined
+            }
 
             const matchRoute = (route: LayoutRoute) => {
               if (route.type === "home") return
@@ -186,19 +215,10 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 return tabsStore.find((item) => item.type === "draft" && item.draftID === route.draftID)
               }
               if (route.type === "session") {
-                const main = tabsStore.find(
-                  (item) =>
-                    item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
+                const sessionId = rootID() ?? route.sessionId
+                return tabsStore.find(
+                  (item) => item.type === "session" && item.server === route.server && item.sessionId === sessionId,
                 )
-                if (main) return main
-                const s = session()
-                if (s?.parentID) {
-                  const parentID = s.parentID
-                  const parent = tabsStore.find(
-                    (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
-                  )
-                  if (parent) return parent
-                }
               }
             }
 
@@ -214,9 +234,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               }
 
               if (route.type === "session") {
-                const s = session()
-                if (!s) return
-                const sessionId = s.parentID ?? s.id
+                const sessionId = rootID()
+                if (!sessionId) return
                 const next = { server: route.server, sessionId }
                 tabsStoreActions.addSessionTab(next)
               }
