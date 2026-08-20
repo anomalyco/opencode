@@ -2170,6 +2170,7 @@ body {
   font: inherit;
   font-size: 11px;
   line-height: 1;
+  text-align: left;
   cursor: pointer;
   outline: none;
   text-decoration: none;

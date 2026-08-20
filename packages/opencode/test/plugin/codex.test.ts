@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test"
+import { createServer, type IncomingMessage } from "node:http"
+import { type AddressInfo } from "node:net"
+import { WebSocketServer } from "ws"
 import {
   CodexAuthPlugin,
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  extractResidency,
   renderOAuthError,
   type IdTokenClaims,
 } from "../../src/plugin/openai/codex"
@@ -131,6 +135,69 @@ describe("plugin.codex", () => {
     })
   })
 
+  describe("extractResidency", () => {
+    test("extracts compute residency from the namespaced auth claims", () => {
+      expect(
+        extractResidency(
+          createTestJwt({
+            "https://api.openai.com/auth": { chatgpt_compute_residency: "eu" },
+          }),
+        ),
+      ).toBe("eu")
+    })
+
+    test("falls back to a root compute residency claim", () => {
+      expect(extractResidency(createTestJwt({ chatgpt_compute_residency: "us" }))).toBe("us")
+    })
+
+    test("supports compute residency values without maintaining a region list", () => {
+      expect(
+        extractResidency(
+          createTestJwt({
+            "https://api.openai.com/auth": { chatgpt_compute_residency: "ae" },
+          }),
+        ),
+      ).toBe("ae")
+      expect(
+        extractResidency(
+          createTestJwt({
+            "https://api.openai.com/auth": { chatgpt_compute_residency: "future-region_1" },
+          }),
+        ),
+      ).toBe("future-region_1")
+    })
+
+    test("ignores unconstrained and data residency values", () => {
+      expect(
+        extractResidency(
+          createTestJwt({
+            "https://api.openai.com/auth": { chatgpt_compute_residency: "no_constraint" },
+          }),
+        ),
+      ).toBeUndefined()
+      expect(
+        extractResidency(
+          createTestJwt({
+            "https://api.openai.com/auth": { chatgpt_data_residency: "gb" },
+          }),
+        ),
+      ).toBeUndefined()
+      expect(extractResidency(createTestJwt({ chatgpt_compute_residency: "" }))).toBeUndefined()
+      expect(extractResidency("not-a-jwt")).toBeUndefined()
+    })
+
+    test("prefers a namespaced unconstrained value over a root residency", () => {
+      expect(
+        extractResidency(
+          createTestJwt({
+            chatgpt_compute_residency: "eu",
+            "https://api.openai.com/auth": { chatgpt_compute_residency: "no_constraint" },
+          }),
+        ),
+      ).toBeUndefined()
+    })
+  })
+
   test("installs websocket transport only when experimental websockets are enabled", async () => {
     const disabled = await CodexAuthPlugin({} as never)
     const enabled = await CodexAuthPlugin({} as never, { experimentalWebSockets: true })
@@ -147,6 +214,73 @@ describe("plugin.codex", () => {
     expect(disabledOptions.fetch).toBeUndefined()
     expect(enabledOptions.fetch).toBeFunction()
     await enabled.dispose?.()
+  })
+
+  test("sends token residency only to the ChatGPT Codex backend", async () => {
+    const requests: Array<{ path: string; residency: string | null }> = []
+    using server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        requests.push({
+          path: new URL(request.url).pathname,
+          residency: request.headers.get("x-openai-internal-codex-residency"),
+        })
+        return new Response("{}")
+      },
+    })
+    const hooks = await CodexAuthPlugin({} as never, {
+      codexApiEndpoint: new URL("/backend-api/codex/responses", server.url).toString(),
+    })
+    const loaded = await hooks.auth!.loader!(
+      async () =>
+        ({
+          type: "oauth",
+          refresh: "refresh",
+          access: createTestJwt({
+            "https://api.openai.com/auth": { chatgpt_compute_residency: "eu" },
+          }),
+          expires: Date.now() + 60_000,
+        }) as never,
+      {} as never,
+    )
+
+    await loaded.fetch!("https://api.openai.com/v1/responses")
+    await loaded.fetch!(new URL("/other", server.url))
+
+    expect(requests).toEqual([
+      { path: "/backend-api/codex/responses", residency: "eu" },
+      { path: "/other", residency: null },
+    ])
+  })
+
+  test("sends token residency through the WebSocket transport", async () => {
+    await using server = await createCodexWebSocketServer()
+    const hooks = await CodexAuthPlugin({} as never, {
+      codexApiEndpoint: server.url,
+      experimentalWebSockets: true,
+    })
+    const loaded = await hooks.auth!.loader!(
+      async () =>
+        ({
+          type: "oauth",
+          refresh: "refresh",
+          access: createTestJwt({
+            "https://api.openai.com/auth": { chatgpt_compute_residency: "eu" },
+          }),
+          expires: Date.now() + 60_000,
+        }) as never,
+      {} as never,
+    )
+
+    const response = await loaded.fetch!("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { "session-id": "session-1" },
+      body: JSON.stringify({ stream: true, input: "hi" }),
+    })
+
+    expect(await response.text()).toContain("data: [DONE]")
+    expect(server.headers()?.["x-openai-internal-codex-residency"]).toBe("eu")
+    await hooks.dispose?.()
   })
 
   test("filters unsupported modes and uses Codex context limits for OAuth GPT models", async () => {
@@ -181,9 +315,9 @@ describe("plugin.codex", () => {
 
     expect(models["gpt-5.4"]?.limit).toEqual(limit)
     expect(models["gpt-5.5"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
-    expect(models["gpt-5.6-sol"]?.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
-    expect(models["gpt-5.6-terra"]?.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
-    expect(models["gpt-5.6-luna"]?.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
+    expect(models["gpt-5.6-sol"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+    expect(models["gpt-5.6-terra"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+    expect(models["gpt-5.6-luna"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
     expect(models["gpt-5.4-pro"]).toBeUndefined()
     expect(models["gpt-5.7-pro"]).toBeDefined()
     expect(models["gpt-5.6-sol-high"]).toBeDefined()
@@ -193,6 +327,9 @@ describe("plugin.codex", () => {
   })
 
   test("deduplicates concurrent Codex token refreshes", async () => {
+    const refreshedAccess = createTestJwt({
+      "https://api.openai.com/auth": { chatgpt_compute_residency: "eu" },
+    })
     let auth = {
       type: "oauth" as const,
       refresh: "refresh-old",
@@ -207,7 +344,7 @@ describe("plugin.codex", () => {
       resolveRefresh = resolve
     })
     let refreshRequests = 0
-    const apiRequests: { authorization: string | null; accountId: string | null }[] = []
+    const apiRequests: { authorization: string | null; accountId: string | null; residency: string | null }[] = []
 
     using server = Bun.serve({
       port: 0,
@@ -219,7 +356,7 @@ describe("plugin.codex", () => {
           await refreshReady
           return Response.json({
             id_token: createTestJwt({ chatgpt_account_id: "acc-123" }),
-            access_token: "access-new",
+            access_token: refreshedAccess,
             refresh_token: "refresh-new",
             expires_in: 3600,
           })
@@ -229,6 +366,7 @@ describe("plugin.codex", () => {
           apiRequests.push({
             authorization: request.headers.get("authorization"),
             accountId: request.headers.get("ChatGPT-Account-Id"),
+            residency: request.headers.get("x-openai-internal-codex-residency"),
           })
           return new Response("{}", { status: 200 })
         }
@@ -281,11 +419,11 @@ describe("plugin.codex", () => {
     expect(refreshRequests).toBe(1)
     expect(authUpdates).toHaveLength(1)
     expect(authUpdates[0]?.body.refresh).toBe("refresh-new")
-    expect(authUpdates[0]?.body.access).toBe("access-new")
+    expect(authUpdates[0]?.body.access).toBe(refreshedAccess)
     expect(authUpdates[0]?.body.accountId).toBe("acc-123")
     expect(apiRequests).toEqual([
-      { authorization: "Bearer access-new", accountId: "acc-123" },
-      { authorization: "Bearer access-new", accountId: "acc-123" },
+      { authorization: `Bearer ${refreshedAccess}`, accountId: "acc-123", residency: "eu" },
+      { authorization: `Bearer ${refreshedAccess}`, accountId: "acc-123", residency: "eu" },
     ])
   })
 })
@@ -295,5 +433,31 @@ async function waitFor(predicate: () => boolean) {
   while (!predicate()) {
     if (Date.now() - started > 1_000) throw new Error("timed out waiting for condition")
     await new Promise((resolve) => setTimeout(resolve, 1))
+  }
+}
+
+async function createCodexWebSocketServer() {
+  let headers: IncomingMessage["headers"] | undefined
+  const server = createServer()
+  const sockets = new WebSocketServer({ server })
+  sockets.on("connection", (socket, request) => {
+    headers = request.headers
+    socket.once("message", () => {
+      socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_123" } }))
+    })
+  })
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject)
+    server.listen(0, "127.0.0.1", resolve)
+  })
+  const address = server.address() as AddressInfo
+  return {
+    url: `http://127.0.0.1:${address.port}/backend-api/codex/responses`,
+    headers: () => headers,
+    async [Symbol.asyncDispose]() {
+      for (const socket of sockets.clients) socket.terminate()
+      sockets.close()
+      server.close()
+    },
   }
 }
