@@ -592,6 +592,16 @@ body {
           white-space: nowrap;
         }
 
+        [data-regions] {
+          color: var(--color-text-weak);
+          white-space: nowrap;
+
+          a {
+            color: inherit;
+            pointer-events: auto;
+          }
+        }
+
         [data-value] {
           color: var(--color-text-strong);
           font-weight: 600;

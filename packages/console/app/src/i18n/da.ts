@@ -272,6 +272,7 @@ export const dict = {
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",
   "go.graph.label": "Forespørgsler pr. 5 timer",
+  "go.graph.limitedRegions": "begrænsede regioner",
   "go.graph.usageLimits": "Brugsgrænser",
   "go.graph.aria": "Forespørgsler pr. 5t: {{free}} vs {{go}}",
 
@@ -679,6 +680,7 @@ export const dict = {
     'Vælg "OpenCode Go" som udbyder i din opencode-konfiguration for at bruge Go-modeller.',
   "workspace.lite.providers.title": "Udbydere",
   "workspace.lite.providers.description": "Styr, hvilke udbydere der bruges til routing.",
+  "workspace.lite.providers.allowTraining": "Tillad modeller, der træner på anmodningsdata",
   "workspace.lite.providers.useChina": "Aktivér modeller hostet i Kina",
   "workspace.lite.black.message":
     "Du abonnerer i øjeblikket på OpenCode Black eller er på venteliste. Afmeld venligst først, hvis du vil skifte til Go.",

@@ -350,7 +350,7 @@ function ModelHero(props: {
               <ModelHeroSparkline data={data()} />
             </span>
             <span>across last week's</span>
-            <span data-slot="model-hero-pill">OpenCode Go</span>
+            <span data-slot="model-hero-pill">OpenCode</span>
             <span>usage with</span>
             <span data-slot="model-hero-pill">{formatPercent(data().tokenShare)}</span>
             <span>of observed</span>
