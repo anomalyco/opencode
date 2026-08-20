@@ -66,6 +66,7 @@ import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { formatTaskSubtitle } from "./message-part-task"
+import { closureEvidencePart } from "./closure-record"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
 async function writeClipboard(text: string): Promise<boolean> {
@@ -935,8 +936,10 @@ export function registerPartComponent(type: string, component: PartComponent) {
 }
 
 export function Message(props: MessageProps) {
+  const closure = createMemo(() => closureEvidencePart(props.message, props.parts))
   return (
     <Switch>
+      <Match when={closure()}>{(part) => <BranchClosureDisplay text={part().text} />}</Match>
       <Match when={props.message.role === "user" && props.message}>
         {(userMessage) => (
           <UserMessageDisplay
@@ -960,6 +963,15 @@ export function Message(props: MessageProps) {
         )}
       </Match>
     </Switch>
+  )
+}
+
+export function BranchClosureDisplay(props: { text: string }) {
+  return (
+    <div data-component="branch-closure" role="note">
+      <span data-slot="branch-closure-label">Branch closure</span>
+      <span data-slot="branch-closure-text">{props.text}</span>
+    </div>
   )
 }
 
