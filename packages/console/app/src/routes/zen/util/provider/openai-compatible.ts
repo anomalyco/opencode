@@ -80,6 +80,37 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
   },
 })
 
+export function normalizeOaCompatibleChunk(chunk: string): string {
+  if (!chunk.startsWith("data: ")) return chunk
+
+  let json: any
+  try {
+    json = JSON.parse(chunk.slice(6))
+  } catch {
+    return chunk
+  }
+
+  let changed = false
+  for (const choice of Array.isArray(json.choices) ? json.choices : []) {
+    for (const toolCall of Array.isArray(choice?.delta?.tool_calls) ? choice.delta.tool_calls : []) {
+      if (toolCall.id === null) {
+        delete toolCall.id
+        changed = true
+      }
+      if (toolCall.type === null) {
+        delete toolCall.type
+        changed = true
+      }
+      if (toolCall.function?.name === null) {
+        delete toolCall.function.name
+        changed = true
+      }
+    }
+  }
+
+  return changed ? `data: ${JSON.stringify(json)}` : chunk
+}
+
 export function fromOaCompatibleRequest(body: any): CommonRequest {
   if (!body || typeof body !== "object") return body
 
