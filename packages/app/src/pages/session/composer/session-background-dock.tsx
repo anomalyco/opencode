@@ -1,6 +1,6 @@
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { Keybind } from "@opencode-ai/ui/keybind"
 import { For, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { SessionComposerPullout } from "./session-composer-pullout"
@@ -52,7 +52,7 @@ export function SessionBackgroundDock(props: {
             <span>
               <span class="text-v2-text-text-muted">{moving()}</span>
               <span class="pl-2">
-                <KeybindV2 keys={command.keybindParts("session.background")} variant="neutral" />
+                <Keybind keys={command.keybindParts("session.background")} variant="neutral" />
               </span>
             </span>
           )}

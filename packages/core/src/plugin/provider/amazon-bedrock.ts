@@ -60,7 +60,7 @@ function selectMantleModel(sdk: MantleSDK, modelID: string) {
 }
 
 export const AmazonBedrockPlugin = define({
-  id: "opencode.provider.amazon-bedrock",
+  id: "opencode.provider.amazon.bedrock",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {

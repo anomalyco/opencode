@@ -7,7 +7,7 @@ import { Effect } from "effect"
 const urls = [/^https:\/\/mcp\.cloudflare\.com\/mcp$/, /^https:\/\/executor\.sh\/[^/]+\/mcp$/]
 
 export const Plugin = define({
-  id: "opencode.mcp.codemode-exclusion",
+  id: "opencode.mcp.codemode.exclusion",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.mcp.transform((draft) => {
       for (const [, server] of draft.list()) {

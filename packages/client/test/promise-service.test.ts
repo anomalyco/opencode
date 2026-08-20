@@ -59,6 +59,26 @@ test("ensures a missing service with native promises", async () => {
   }
 })
 
+test("adds configured environment variables with native promises", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const endpoint = await ensure({
+    file: registration,
+    version: "test",
+    command: [process.execPath, fixture, registration, "environment"],
+    env: { OPENCODE_SERVICE_ENV_TEST: "configured" },
+  })
+  const info = await Bun.file(registration).json()
+
+  try {
+    expect(endpoint.url).toBe(info.url)
+    expect(await Bun.file(registration + ".environment").text()).toBe("configured")
+  } finally {
+    process.kill(info.pid, "SIGTERM")
+    await waitForExit(info.pid)
+  }
+})
+
 test("waits for a live contender when another native contender fails", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
@@ -126,13 +146,13 @@ test("evicts an unresponsive registered service before starting its replacement"
   await waitForExit(replacement.pid)
 })
 
-test("requests graceful stop of the exact service instance", async () => {
+test("signals the registered service process", async () => {
   const registration = await setup("graceful")
-  const info = await Bun.file(registration).json()
 
   await Service.stop({ file: registration })
 
-  expect(await Bun.file(registration + ".stop").json()).toEqual({ instanceID: info.id })
+  expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+  expect(await Bun.file(registration).exists()).toBe(false)
 })
 
 async function setup(mode: string) {

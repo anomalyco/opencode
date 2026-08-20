@@ -5,17 +5,9 @@ import { Iterable, pipe } from "effect"
 import { createEffect, createMemo, type Accessor } from "solid-js"
 import { emptyProviderCatalog } from "./provider-catalog"
 import { useIntegrations } from "./use-integrations"
+import { popularProviders } from "./provider-order"
 
-export const popularProviders = [
-  "opencode",
-  "opencode-go",
-  "anthropic",
-  "github-copilot",
-  "openai",
-  "google",
-  "openrouter",
-  "vercel",
-]
+export { popularProviders } from "./provider-order"
 const popularProviderSet = new Set(popularProviders)
 
 export function useProviders(directory: Accessor<string | undefined>) {

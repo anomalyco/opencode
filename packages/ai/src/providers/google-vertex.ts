@@ -6,16 +6,14 @@ import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
-import { ProviderID, type LLMRequest, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export interface GeminiOptionsInput extends Gemini.OptionsInput {
   readonly labels?: Readonly<Record<string, string>>
 }
 
-export type GeminiProviderOptionsInput = ProviderOptions & {
-  readonly gemini?: GeminiOptionsInput
-}
+export type GeminiProviderOptionsInput = GeminiOptionsInput
 
 export const id = ProviderID.make("google-vertex")
 
@@ -40,7 +38,7 @@ export type Settings = ProviderPackage.Settings &
 
 const fromRequest = Effect.fn("GoogleVertex.fromRequest")(function* (request: LLMRequest) {
   const body = yield* Gemini.protocol.body.from(request)
-  const value = request.providerOptions?.gemini?.labels
+  const value = request.providerOptions?.labels
   const labels = ProviderShared.isRecord(value)
     ? Object.fromEntries(
         Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
@@ -121,7 +119,6 @@ export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsIn
     baseURL: settings.baseURL,
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
     location: settings.location,
     project: settings.project,
     providerOptions: settings.providerOptions,

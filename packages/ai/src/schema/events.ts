@@ -1,7 +1,20 @@
 import { Schema } from "effect"
-import { ContentBlockID, FinishReason, ProviderMetadata, ToolCallID } from "./ids.js"
-import { Message, ToolCallPart, ToolOutput, ToolResultPart, ToolResultValue, type ContentPart } from "./messages.js"
+import { LLM } from "@opencode-ai/schema/llm"
+import { ContentBlockID, ToolCallID } from "./ids.js"
+import {
+  Message,
+  ProviderMetadata,
+  ToolCallPart,
+  ToolOutput,
+  ToolResultPart,
+  ToolResultValue,
+  type ContentPart,
+} from "./messages.js"
 import { ProviderFailureClassification } from "./errors.js"
+
+export const FinishReason = LLM.FinishReason
+export type FinishReason = Schema.Schema.Type<typeof FinishReason>
+export { ProviderMetadata } from "./messages.js"
 
 /**
  * Token usage reported by an LLM provider.

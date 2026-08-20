@@ -2,10 +2,32 @@
 
 The app's high-volume performance diagnostics live under `packages/app/e2e/performance` and are excluded from normal local and CI Playwright discovery. The benchmark config builds the app and serves the production bundle before running scenarios serially.
 
+The `devex` category is the explicit exception to the production-build rule. It measures development commands from submission through a user-visible ready state and has its own Playwright configuration.
+
 Run the suite explicitly from `packages/app`:
 
 ```sh
 bun run test:bench
+```
+
+Run the desktop development startup benchmark from the repository root:
+
+```sh
+bun run bench:devex
+```
+
+It runs five serial samples of the exact `bun dev:desktop` command. Each sample uses a fresh desktop profile, database, service configuration, service registration, and service process; the desktop selects an isolated ephemeral loopback endpoint. It removes desktop build output and the desktop Vite cache before every run; dependencies, Bun's package cache, and Electron remain installed. The harness stops only that sample's service; it does not stop or change the elected global OpenCode service. The measured endpoint is a visible Home page whose empty-state controls pass Playwright actionability checks. The command's Electron installation check remains inside the measured interval.
+
+Set `DESKTOP_STARTUP_RUNS` only for focused diagnostics:
+
+```sh
+DESKTOP_STARTUP_RUNS=1 bun run bench:devex
+```
+
+Set `OPENCODE_PERFORMANCE_TRACE_DIR` to capture the renderer's CDP trace from attachment through actionable Home:
+
+```sh
+DESKTOP_STARTUP_RUNS=1 OPENCODE_PERFORMANCE_TRACE_DIR=/tmp/opencode-desktop-traces bun run bench:devex
 ```
 
 PowerShell:

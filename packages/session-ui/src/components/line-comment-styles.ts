@@ -36,7 +36,7 @@ export const lineCommentStyles = `
   border: none;
 }
 
-[data-component="line-comment"] [data-component="icon"] {
+[data-component="line-comment"] [data-slot="icon-svg"] {
   color: var(--white);
 }
 

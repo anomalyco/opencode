@@ -1,15 +1,15 @@
 export * as LocationWatcher from "./location-watcher.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, Layer, Stream } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Scope, Semaphore, Stream } from "effect"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
-import { Document } from "@opencode-ai/schema/config"
 import path from "path"
-import { Config } from "../config.js"
 import { Bus } from "../bus.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "../git.js"
 import { Location } from "../location.js"
+import { PluginSupervisor } from "../plugin/supervisor.js"
+import { LocationWatcherPolicy } from "./location-watcher-policy.js"
 import { Watcher } from "./watcher.js"
 
 export interface Interface {}
@@ -24,42 +24,86 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
-    const configService = yield* Config.Service
+    const plugins = yield* PluginSupervisor.Service
+    const policy = yield* LocationWatcherPolicy.Service
     const publish = (update: { type: "create" | "update" | "delete"; path: string }) =>
       bus.publish(FileSystem.Event.Changed, {
         file: update.path,
         event: update.type === "create" ? "add" : update.type === "update" ? "change" : "unlink",
       })
-
-    yield* Effect.gen(function* () {
-      const config = (yield* configService.entries())
-        .filter((entry): entry is Document => entry.type === "document")
-        .flatMap((item) => item.info.watcher?.ignore ?? [])
-
-      if (location.vcs?.type === "git") {
-        const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
-        const vcs = resolved
-          ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved)))
-          : undefined
-        if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
-          const updates = yield* watcher.subscribe({ path: path.join(vcs, "HEAD"), type: "file" })
-          yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped)
+    const target = yield* Effect.cached(
+      Effect.gen(function* () {
+        if (location.vcs?.type === "git") {
+          const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
+          const vcs = resolved
+            ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved)))
+            : undefined
+          if (vcs) return { path: path.join(vcs, "HEAD"), aliases: [".git", vcs, ...(resolved ? [resolved] : [])] }
         }
-      }
-      if (location.vcs?.type === "hg") {
-        const store = location.vcs.store
-        const vcs = yield* fs.realPath(store).pipe(Effect.catch(() => Effect.succeed(store)))
-        if (!config.includes(".hg") && !config.includes(vcs)) {
-          const updates = yield* watcher.subscribe({ path: path.join(vcs, "branch"), type: "file" })
-          yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped)
+        if (location.vcs?.type === "hg") {
+          const store = location.vcs.store
+          const vcs = yield* fs.realPath(store).pipe(Effect.catch(() => Effect.succeed(store)))
+          return { path: path.join(vcs, "branch"), aliases: [".hg", vcs] }
         }
-      }
-    }).pipe(
-      Effect.withSpan("LocationWatcher.start", { attributes: { directory: location.directory } }),
-      Effect.catchCause((cause) => Effect.logError("failed to init location watcher service", { cause })),
-      Effect.forkScoped,
+      }).pipe(
+        Effect.withSpan("LocationWatcher.target", { attributes: { directory: location.directory } }),
+        Effect.catchCause((cause) =>
+          Effect.logError("failed to resolve location watcher target", { cause }).pipe(Effect.as(undefined)),
+        ),
+      ),
     )
-
+    const lock = Semaphore.makeUnsafe(1)
+    let requested = 0
+    let stopped = false
+    let active: { path: string; scope: Scope.Closeable } | undefined
+    const reconcile = (ignore: readonly string[]) => {
+      const request = ++requested
+      return lock.withPermit(
+        Effect.gen(function* () {
+          if (stopped || request !== requested) return
+          const resolved = yield* target
+          if (stopped || request !== requested) return
+          const next = resolved && !resolved.aliases.some((alias) => ignore.includes(alias)) ? resolved.path : undefined
+          if (active?.path === next) return
+          if (active) yield* Scope.close(active.scope, Exit.void)
+          active = undefined
+          if (!next) return
+          const scope = yield* Scope.make()
+          active = { path: next, scope }
+          yield* Effect.gen(function* () {
+            const updates = yield* watcher.subscribe({ path: next, type: "file" })
+            yield* Stream.runForEach(updates, publish)
+          }).pipe(
+            Effect.catchCauseIf(
+              (cause) => !Cause.hasInterrupts(cause),
+              (cause) => Effect.logError("location watcher subscription failed", { path: next, cause }),
+            ),
+            Effect.forkIn(scope, { startImmediately: true }),
+          )
+        }).pipe(Effect.withSpan("LocationWatcher.reconcile", { attributes: { directory: location.directory } })),
+      )
+    }
+    yield* Effect.addFinalizer(() =>
+      lock.withPermit(
+        Effect.gen(function* () {
+          stopped = true
+          requested++
+          if (active) yield* Scope.close(active.scope, Exit.void)
+          active = undefined
+        }),
+      ),
+    )
+    yield* policy.observe(reconcile)
+    yield* Effect.gen(function* () {
+      yield* plugins.flush
+      yield* reconcile(policy.current())
+    }).pipe(
+      Effect.catchCauseIf(
+        (cause) => !Cause.hasInterrupts(cause),
+        (cause) => Effect.logError("failed to start location watcher", { cause }),
+      ),
+      Effect.forkScoped({ startImmediately: true }),
+    )
     return Service.of({})
   }),
 )
@@ -67,5 +111,13 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Watcher.node, FSUtil.node, Location.node, Config.node, Git.node, Bus.node],
+  deps: [
+    Watcher.node,
+    FSUtil.node,
+    Location.node,
+    Git.node,
+    Bus.node,
+    PluginSupervisor.node,
+    LocationWatcherPolicy.node,
+  ],
 })

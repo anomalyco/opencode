@@ -3,7 +3,6 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { OPENCODE_VERSION } from "../src/version"
-import { writeExport } from "../src/commands/handlers/export"
 
 const info = {
   id: "ses_export_test",
@@ -72,7 +71,7 @@ test("export is raw by default and supports explicit sanitization", async () => 
   })
 
   try {
-    const [stdout, , exitCode] = await run(["export", "-s", info.id, "--server", server.url.toString()])
+    const [stdout, , exitCode] = await run(["export", info.id, "--server", server.url.toString()])
     const exported = JSON.parse(stdout)
 
     expect(exitCode).toBe(0)
@@ -80,7 +79,6 @@ test("export is raw by default and supports explicit sanitization", async () => 
 
     const [sanitized, , sanitizedExitCode] = await run([
       "export",
-      "-s",
       info.id,
       "--sanitize",
       "--server",
@@ -94,7 +92,7 @@ test("export is raw by default and supports explicit sanitization", async () => 
   }
 }, 15_000)
 
-test("export reports an empty session list without a stack trace", async () => {
+test("export requires a session outside an interactive terminal", async () => {
   const server = Bun.serve({
     port: 0,
     fetch(request) {
@@ -114,23 +112,39 @@ test("export reports an empty session list without a stack trace", async () => {
   try {
     const [stdout, stderr, exitCode] = await run(["export", "--server", server.url.toString()])
 
-    expect(exitCode).toBe(0)
+    expect(exitCode).toBe(1)
     expect(stdout).toBe("")
-    expect(stderr).toBe(`No sessions found${os.EOL}`)
+    expect(stderr).toBe(`Pass a session ID when running without an interactive terminal${os.EOL}`)
   } finally {
     await server.stop(true)
   }
 })
 
-test("interactive export writes a temporary JSON file", async () => {
-  const output = await writeExport(transfer, info.id, false)
-  const file = output.trim()
+test("export reports a missing session without a stack trace", async () => {
+  const sessionID = "ses_missing"
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url)
+      if (url.pathname === "/api/health") return health()
+      if (url.pathname === `/api/session/${sessionID}/export`) {
+        return Response.json(
+          { _tag: "SessionNotFoundError", sessionID, message: `Session not found: ${sessionID}` },
+          { status: 404 },
+        )
+      }
+      return new Response("Not found", { status: 404 })
+    },
+  })
 
   try {
-    expect(path.dirname(file)).toBe(os.tmpdir())
-    expect(await Bun.file(file).json()).toEqual(transfer)
+    const [stdout, stderr, exitCode] = await run(["export", sessionID, "--server", server.url.toString()])
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe("")
+    expect(stderr).toBe(`Session not found: ${sessionID}${os.EOL}`)
   } finally {
-    await fs.rm(file, { force: true })
+    await server.stop(true)
   }
 })
 

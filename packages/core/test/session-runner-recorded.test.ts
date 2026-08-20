@@ -70,6 +70,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
       SessionRunnerModel.resolved(model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         cost: [],
+        limit: { context: 200_000, output: 20 },
       }),
     ),
 })
@@ -126,7 +127,6 @@ const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
         active: coordinator.active,
         resume: coordinator.run,
         wake: coordinator.wake,
-        wakeActive: coordinator.wakeActive,
         interrupt: (sessionID) => coordinator.interrupt(sessionID),
         awaitIdle: coordinator.awaitIdle,
       })

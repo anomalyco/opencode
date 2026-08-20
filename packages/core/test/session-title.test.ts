@@ -27,7 +27,7 @@ let requests: LLMRequest[] = []
 const model = LanguageModel.make({
   id: "title-model",
   provider: "test",
-  route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
+  route: OpenAIChat.route,
 })
 const cost = [
   {
@@ -72,6 +72,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
       SessionRunnerModel.resolved(model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         cost,
+        limit: { context: 200_000, output: 32_000 },
       }),
     ),
 })

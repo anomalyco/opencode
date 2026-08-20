@@ -11,7 +11,6 @@ import { ApplicationLifecycle } from "../lifecycle"
 import { nativeT } from "../native/translations"
 import { getStore } from "../storage/store"
 import { createUpdaterController, type UpdaterReadyRecord } from "./controller"
-import { createUpdaterPlatform } from "./platform"
 
 const key = "ready"
 
@@ -32,7 +31,12 @@ export const layer = Layer.effect(
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
     const store = getStore("opencode.updater")
-    const platform = UPDATER_ENABLED ? createUpdaterPlatform(runFork) : undefined
+    const platform = UPDATER_ENABLED
+      ? yield* Effect.promise(async () => {
+          const { createUpdaterPlatform } = await import("./platform")
+          return createUpdaterPlatform(runFork)
+        })
+      : undefined
     const controller = createUpdaterController({
       currentVersion: app.getVersion(),
       platform,

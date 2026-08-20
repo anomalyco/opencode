@@ -1,6 +1,7 @@
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
+import type { SessionInfo } from "@opencode-ai/client"
 import { useRoute, useRouteData } from "../../../context/route"
 import { useData } from "../../../context/data"
 import { useClient } from "../../../context/client"
@@ -9,6 +10,7 @@ import { Locale } from "../../../util/locale"
 import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./index"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+import { sessionFamily } from "../../../util/session"
 
 interface SubagentEntry {
   sessionID: string
@@ -16,6 +18,7 @@ interface SubagentEntry {
   title: string
   status: string
   current: boolean
+  prefix: string
 }
 
 export function SubagentsTab(props: { sessionID: string }) {
@@ -34,47 +37,24 @@ export function SubagentsTab(props: { sessionID: string }) {
     const current = session()
     if (!current) return []
 
-    const result: SubagentEntry[] = []
-
-    if (current.parentID) {
-      const siblings = data.session.list().filter((s) => s.parentID === current.parentID)
-      for (const sibling of siblings) {
-        const title = withTimestampedFallback(sibling)
+    const result = sessionFamily<SessionInfo>(data.session.list(), current.id).map(
+      ({ session, prefix }): SubagentEntry => {
+        const title = withTimestampedFallback(session)
         const agentMatch = title.match(/@(\w+) subagent/)
-        const agent = sibling.agent
-          ? Locale.titlecase(sibling.agent)
-          : agentMatch
-            ? Locale.titlecase(agentMatch[1])
-            : "Subagent"
-        const name = agentMatch ? title.replace(agentMatch[0], "").trim() || title : title
-        result.push({
-          sessionID: sibling.id,
-          agent,
-          title: name,
-          status: data.session.status(sibling.id),
-          current: sibling.id === route.sessionID,
-        })
-      }
-    } else {
-      const children = data.session.list().filter((s) => s.parentID === props.sessionID)
-      for (const child of children) {
-        const title = withTimestampedFallback(child)
-        const agentMatch = title.match(/@(\w+) subagent/)
-        const agent = child.agent
-          ? Locale.titlecase(child.agent)
-          : agentMatch
-            ? Locale.titlecase(agentMatch[1])
-            : "Subagent"
-        const name = agentMatch ? title.replace(agentMatch[0], "").trim() || title : title
-        result.push({
-          sessionID: child.id,
-          agent,
-          title: name,
-          status: data.session.status(child.id),
-          current: child.id === route.sessionID,
-        })
-      }
-    }
+        return {
+          sessionID: session.id,
+          agent: session.agent
+            ? Locale.titlecase(session.agent)
+            : agentMatch
+              ? Locale.titlecase(agentMatch[1])
+              : "Subagent",
+          title: agentMatch ? title.replace(agentMatch[0], "").trim() || title : title,
+          status: data.session.status(session.id),
+          current: session.id === route.sessionID,
+          prefix,
+        }
+      },
+    )
 
     return result.filter((entry) => (store.active ? entry.status === "running" : entry.status !== "running"))
   })
@@ -264,6 +244,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                     >
+                      {entry.prefix}
                       {entry.agent}: {entry.title}
                     </text>
                   </box>

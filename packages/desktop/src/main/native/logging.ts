@@ -3,7 +3,6 @@ export * as DesktopLogging from "./logging"
 import log from "electron-log/main.js"
 import { app, crashReporter, netLog, shell } from "electron"
 import { Context, Effect, FileSystem, Layer, Logger, Option, Path, References } from "effect"
-import { ZipWriter, BlobWriter, BlobReader } from "@zip.js/zip.js"
 import { homedir } from "node:os"
 import { VERSION } from "../constants"
 
@@ -253,6 +252,7 @@ function collect(fs: FileSystem.FileSystem, path: Path.Path, dir: string, prefix
 
 function writeZip(fs: FileSystem.FileSystem, output: string, entries: Entry[]) {
   return Effect.gen(function* () {
+    const { BlobReader, BlobWriter, ZipWriter } = yield* Effect.promise(() => import("@zip.js/zip.js"))
     const writer = new ZipWriter(new BlobWriter("application/zip"))
     yield* Effect.forEach(
       entries,

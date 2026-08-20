@@ -208,7 +208,7 @@ export const Plugin = {
               )
               yield* context.progress({ shellID: info.id })
 
-              const captureShell = Effect.fn("ShellTool.captureShell")(function* () {
+              const captureShell = Effect.fnUntraced(function* () {
                 const configured = Config.latest(yield* config.entries(), "tool_output")
                 const maxLines = configured?.max_lines ?? ToolOutput.MAX_LINES
                 const maxBytes = configured?.max_bytes ?? ToolOutput.MAX_BYTES
@@ -228,7 +228,7 @@ export const Plugin = {
                 }
               })
 
-              const settleShell = Effect.fn("ShellTool.settleShell")(function* () {
+              const settleShell = Effect.fnUntraced(function* () {
                 const final = yield* shell.wait(info.id)
                 const capture = yield* captureShell()
 

@@ -13,13 +13,16 @@ import { AppProcess } from "@opencode-ai/util/process"
 import { Config } from "./config"
 import { Npm } from "@opencode-ai/util/npm"
 import { Heap } from "./heap"
+import { CpuProfile } from "./cpu-profile"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
   acp: () => import("./commands/handlers/acp"),
   api: () => import("./commands/handlers/api"),
   auth: {
+    list: () => import("./commands/handlers/auth/list"),
     login: () => import("./commands/handlers/auth/login"),
+    logout: () => import("./commands/handlers/auth/logout"),
   },
   debug: {
     agents: () => import("./commands/handlers/debug/agents"),
@@ -36,6 +39,8 @@ const Handlers = Runtime.handlers(Commands, {
   },
   plugin: {
     list: () => import("./commands/handlers/plugin/list"),
+    add: () => import("./commands/handlers/plugin/add"),
+    remove: () => import("./commands/handlers/plugin/remove"),
   },
   models: () => import("./commands/handlers/models"),
   export: () => import("./commands/handlers/export"),
@@ -57,6 +62,22 @@ const Handlers = Runtime.handlers(Commands, {
 
 Effect.gen(function* () {
   yield* Heap.listen
+  yield* CpuProfile.listen
+  const runFork = Effect.runForkWith(yield* Effect.context<never>())
+  const uncaughtException = (cause: Error, origin: "uncaughtException" | "unhandledRejection") => {
+    runFork(Effect.logError("uncaught exception", { cause, origin }))
+  }
+  const unhandledRejection = (cause: unknown) => {
+    runFork(Effect.logError("unhandled rejection", { cause }))
+  }
+  process.on("uncaughtException", uncaughtException)
+  process.on("unhandledRejection", unhandledRejection)
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      process.off("uncaughtException", uncaughtException)
+      process.off("unhandledRejection", unhandledRejection)
+    }),
+  )
   yield* Effect.logInfo("cli starting", {
     version: OPENCODE_VERSION,
     channel: OPENCODE_CHANNEL,
@@ -65,6 +86,12 @@ Effect.gen(function* () {
   })
   return yield* Runtime.run(Commands, Handlers, { version: OPENCODE_VERSION })
 }).pipe(
+  Effect.catchCause((cause) =>
+    Effect.logError("cli process failed", {
+      cause,
+      args: process.argv.slice(2),
+    }).pipe(Effect.andThen(Effect.failCause(cause))),
+  ),
   Effect.annotateLogs({ role: "cli" }),
   Effect.provide(Config.layer),
   Effect.provide(Updater.layer),

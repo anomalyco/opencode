@@ -35,6 +35,17 @@ describe("Npm.sanitize", () => {
   })
 })
 
+describe("Npm.isRegistryPackage", () => {
+  test("accepts registry packages and rejects unsupported install targets", async () => {
+    expect(await Npm.isRegistryPackage("plugin")).toBe(true)
+    expect(await Npm.isRegistryPackage("@acme/plugin@beta")).toBe(true)
+    expect(await Npm.isRegistryPackage("plugin@^1.2.0")).toBe(true)
+    expect(await Npm.isRegistryPackage("./plugin")).toBe(false)
+    expect(await Npm.isRegistryPackage("github:acme/plugin")).toBe(false)
+    expect(await Npm.isRegistryPackage("alias@npm:plugin@1.0.0")).toBe(false)
+  })
+})
+
 describe("Npm.add", () => {
   test("resolves cached scoped package specs without reifying", async () => {
     await using tmp = await tmpdir()
@@ -104,5 +115,33 @@ describe("Npm.add", () => {
 
     expect(entries.tui.entrypoint).toEndWith("/tui.js")
     expect(entries.fallback.entrypoint).toEndWith("/index.js")
+  })
+})
+
+describe("Npm.resolve", () => {
+  test("resolves a TUI entrypoint only when the package is already cached", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const spec = "fixture-plugin@1.0.0"
+    const directory = path.join(cache, "packages", Npm.sanitize(spec), "node_modules", "fixture-plugin")
+    const missing = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.resolve(spec, { subpaths: ["tui"] })
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+    expect(missing.entrypoint).toBeUndefined()
+
+    await fs.mkdir(directory, { recursive: true })
+    await writePackage(directory, {
+      name: "fixture-plugin",
+      exports: { ".": "./index.js", "./tui": "./tui.js" },
+    })
+    await Bun.write(path.join(directory, "index.js"), "export default {}\n")
+    await Bun.write(path.join(directory, "tui.js"), "export default {}\n")
+
+    const resolved = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.resolve(spec, { subpaths: ["tui"] })
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+    expect(resolved.entrypoint).toEndWith("/tui.js")
   })
 })

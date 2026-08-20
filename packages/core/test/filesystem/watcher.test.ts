@@ -4,18 +4,24 @@ import fs from "fs/promises"
 import path from "path"
 import { Deferred, Duration, Effect, Fiber, Layer, Option, Schedule, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
+import { ConfigLocationWatcherPlugin } from "@opencode-ai/core/config/plugin/location-watcher"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { makeLocationNode, type LocationNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { LocationWatcher } from "@opencode-ai/core/filesystem/location-watcher"
+import { LocationWatcherPolicy } from "@opencode-ai/core/filesystem/location-watcher-policy"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
+import { Document, Event, Info, type Entry } from "@opencode-ai/schema/config"
 import { Location } from "@opencode-ai/core/location"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
+import { host } from "../plugin/host"
 
 type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 const describeNative = process.env.CI ? describe.skip : describe
@@ -23,27 +29,10 @@ const describeNative = process.env.CI ? describe.skip : describe
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Bus.node])))
 
 const configLayer = Config.testLayer()
-
-describe("Watcher.testLayer", () => {
-  it.effect("records subscriptions and broadcasts emitted updates through the service", () =>
-    Effect.gen(function* () {
-      const watcher = yield* Watcher.Service
-      const test = yield* Watcher.Test
-      const updates = yield* watcher.subscribe({ path: "/root", type: "directory" })
-      const received = yield* updates.pipe(
-        Stream.take(1),
-        Stream.runCollect,
-        Effect.forkScoped({ startImmediately: true }),
-      )
-      yield* Effect.yieldNow
-
-      yield* test.emit({ type: "update", path: "/root/file.md" })
-
-      expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "update", path: "/root/file.md" }])
-      // subscriptions() reports acquired watches, so paths come back resolved.
-      expect(yield* test.subscriptions()).toEqual([{ path: path.resolve("/root"), type: "directory" }])
-    }).pipe(Effect.provide(Watcher.testLayer)),
-  )
+const pluginNode = makeLocationNode({
+  service: PluginSupervisor.Service,
+  layer: Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void })),
+  deps: [],
 })
 
 function withNative(native: Watcher.NativeInterface) {
@@ -135,16 +124,26 @@ describe("Watcher lifecycle", () => {
   })
 })
 
-function provide(directory: string, vcs?: Location.Interface["vcs"], watcher?: Layer.Layer<Watcher.Service>) {
+function provide(
+  directory: string,
+  vcs?: Location.Interface["vcs"],
+  watcher?: Layer.Layer<Watcher.Service>,
+  config: Layer.Layer<Config.Service> = configLayer,
+  plugins: LocationNode<PluginSupervisor.Service> = pluginNode,
+) {
   const locationLayer = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) }, { vcs })),
   )
-  const built = AppNodeBuilder.build(LocationWatcher.node, [
-    [Config.node, configLayer],
-    [Location.node, locationLayer],
-    ...(watcher ? ([[Watcher.node, watcher]] as const) : []),
-  ])
+  const built = AppNodeBuilder.build(
+    LayerNode.group([LocationWatcher.node, LocationWatcherPolicy.node, Bus.node, Config.node]),
+    [
+      [Config.node, config],
+      [Location.node, locationLayer],
+      [PluginSupervisor.node, plugins],
+      ...(watcher ? ([[Watcher.node, watcher]] as const) : []),
+    ],
+  )
   return Effect.provide(built)
 }
 
@@ -154,6 +153,8 @@ function withTmp<A, E, R>(
     vcs?: "git" | "hg"
     init?: (directory: string) => Promise<void>
     watcher?: Layer.Layer<Watcher.Service>
+    config?: Layer.Layer<Config.Service>
+    plugins?: LocationNode<PluginSupervisor.Service>
   },
 ) {
   return Effect.acquireRelease(
@@ -174,7 +175,11 @@ function withTmp<A, E, R>(
       return { tmp, vcs: { type: "git" as const, store: AbsolutePath.make(path.join(tmp.path, ".git")) } }
     }),
     ({ tmp }) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap(({ tmp, vcs }) => f(tmp.path, vcs).pipe(provide(tmp.path, vcs, options?.watcher))))
+  ).pipe(
+    Effect.flatMap(({ tmp, vcs }) =>
+      f(tmp.path, vcs).pipe(provide(tmp.path, vcs, options?.watcher, options?.config ?? configLayer, options?.plugins)),
+    ),
+  )
 }
 
 describe("LocationWatcher subscriptions", () => {
@@ -221,6 +226,107 @@ describe("LocationWatcher subscriptions", () => {
           expect(subscriptions).toEqual([{ path: path.join(directory, ".hg", "branch"), type: "file" }])
         }),
       { vcs: "hg", watcher },
+    )
+  })
+
+  it.live("reconciles config without duplicate subscriptions", () => {
+    const entries = { current: [] as Entry[] }
+    const subscriptions: Watcher.WatchInput[] = []
+    const counts = { active: 0, released: 0 }
+    const watcher = Layer.succeed(
+      Watcher.Service,
+      Watcher.Service.of({
+        subscribe: (input) =>
+          Effect.sync(() => {
+            subscriptions.push(input)
+            counts.active++
+            return Stream.never.pipe(
+              Stream.ensuring(
+                Effect.sync(() => {
+                  counts.active--
+                  counts.released++
+                }),
+              ),
+            )
+          }),
+      }),
+    )
+    const config = Layer.succeed(
+      Config.Service,
+      Config.Service.of({
+        entries: () => Effect.sync(() => entries.current),
+        update: () => Effect.die("unused config.update"),
+        changes: () => Stream.never,
+      }),
+    )
+    return Effect.gen(function* () {
+      yield* withTmp(
+        () =>
+          Effect.gen(function* () {
+            const policy = yield* LocationWatcherPolicy.Service
+            const bus = yield* Bus.Service
+            yield* Effect.sync(() => subscriptions.length).pipe(
+              Effect.filterOrFail((count) => count === 1),
+              Effect.retry(Schedule.spaced("10 millis")),
+            )
+            expect(counts.active).toBe(1)
+
+            entries.current = [new Document({ type: "document", info: new Info({ watcher: { ignore: [".git"] } }) })]
+            yield* ConfigLocationWatcherPlugin.Plugin.effect(
+              host({ event: { subscribe: () => bus.subscribe(Event.Updated) } }),
+            )
+            yield* Effect.sync(() => counts.active).pipe(
+              Effect.filterOrFail((count) => count === 0),
+              Effect.retry(Schedule.spaced("10 millis")),
+            )
+            expect(counts.released).toBe(1)
+
+            entries.current = []
+            yield* bus.publish(Event.Updated, {})
+            yield* Effect.sync(() => subscriptions.length).pipe(
+              Effect.filterOrFail((count) => count === 2),
+              Effect.retry(Schedule.spaced("10 millis")),
+            )
+            expect(counts.active).toBe(1)
+
+            yield* policy.reload()
+            expect(subscriptions).toHaveLength(2)
+          }),
+        { vcs: "git", watcher, config },
+      )
+      expect(counts.active).toBe(0)
+      expect(counts.released).toBe(2)
+    })
+  })
+
+  it.live("does not start before configured policy is ready", () => {
+    const subscriptions: Watcher.WatchInput[] = []
+    const watcher = Layer.succeed(
+      Watcher.Service,
+      Watcher.Service.of({
+        subscribe: (input) => Effect.sync(() => subscriptions.push(input)).pipe(Effect.as(Stream.never)),
+      }),
+    )
+    const plugins = makeLocationNode({
+      service: PluginSupervisor.Service,
+      layer: Layer.effect(
+        PluginSupervisor.Service,
+        Effect.gen(function* () {
+          const policy = yield* LocationWatcherPolicy.Service
+          yield* policy.transform((draft) => draft.add([".git"]))
+          return PluginSupervisor.Service.of({ flush: Effect.void })
+        }),
+      ),
+      deps: [LocationWatcherPolicy.node],
+    })
+    return withTmp(
+      () =>
+        Effect.gen(function* () {
+          yield* LocationWatcher.Service
+          yield* Effect.sleep("50 millis")
+          expect(subscriptions).toEqual([])
+        }),
+      { vcs: "git", watcher, plugins },
     )
   })
 })

@@ -12,8 +12,8 @@ export type EnsureTiming = {
 const timings = new WeakMap<object, EnsureTiming>()
 
 export const defaultEnsureTiming: EnsureTiming = {
-  pollInterval: 1_000,
-  attempts: 120,
+  pollInterval: 100,
+  attempts: 1_200,
   requestTimeout: 2_000,
   spawnDelay: 5_000,
   maxSpawnDelay: 30_000,

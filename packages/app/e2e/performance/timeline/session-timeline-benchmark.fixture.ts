@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../../utils/waits"
 import { expect } from "../benchmark"
+import { createTwoFilesPatch } from "diff"
 
 const directory = "C:/OpenCode/TimelineStateRegression"
 const projectID = "proj_timeline_state_regression"
@@ -26,28 +27,29 @@ const userMessage = {
 
 const editPart: ToolSeed = {
   id: editPartID,
-  sessionID,
-  messageID: assistantMessageID,
   type: "tool",
-  callID: "call_edit_regression",
-  tool: "edit",
+  name: "edit",
   state: {
     status: "completed",
-    input: { filePath: "src/regression.ts" },
-    output: "Edited src/regression.ts",
-    title: "src/regression.ts",
-    metadata: {
-      filediff: {
-        file: "src/regression.ts",
-        additions: 1,
-        deletions: 1,
-        before: "export const value = 'before'\n",
-        after: "export const value = 'after'\n",
-      },
-      diff: "diff --git a/src/regression.ts b/src/regression.ts\n-export const value = 'before'\n+export const value = 'after'\n",
+    input: {
+      path: "src/regression.ts",
+      oldString: "export const value = 'before'",
+      newString: "export const value = 'after'",
     },
-    time: { start: 1700000001000, end: 1700000002000 },
+    content: [{ type: "text", text: "Edited src/regression.ts" }],
+    metadata: {
+      files: [
+        currentFile(
+          "src/regression.ts",
+          "export const value = 'before'\n",
+          "export const value = 'after'\n",
+          1,
+          1,
+        ),
+      ],
+    },
   },
+  time: { created: 1700000001000, ran: 1700000001000, completed: 1700000002000 },
 }
 
 const assistantMessage = {
@@ -204,20 +206,20 @@ function performanceTurn(index: number) {
       ? [
           {
             id: `prt_0000_${suffix}_edit`,
-            sessionID,
-            messageID: assistantID,
             type: "tool",
-            callID: `call_0000_${suffix}_edit`,
-            tool: "edit",
+            name: "edit",
             state: {
               status: "completed",
-              input: { filePath: `src/history-${index}.ts` },
-              output: `Edited src/history-${index}.ts`,
-              title: `src/history-${index}.ts`,
+              input: { path: `src/history-${index}.ts`, oldString: before, newString: after },
+              content: [{ type: "text", text: `Edited src/history-${index}.ts` }],
               metadata: {
-                filediff: { file: `src/history-${index}.ts`, additions: 48, deletions: 48, before, after },
+                files: [currentFile(`src/history-${index}.ts`, before, after, 48, 48)],
               },
-              time: { start: 1690000001200 + index * 2_000, end: 1690000001400 + index * 2_000 },
+            },
+            time: {
+              created: 1690000001200 + index * 2_000,
+              ran: 1690000001200 + index * 2_000,
+              completed: 1690000001400 + index * 2_000,
             },
           },
         ]
@@ -226,20 +228,18 @@ function performanceTurn(index: number) {
       ? [
           {
             id: `prt_0000_${suffix}_write`,
-            sessionID,
-            messageID: assistantID,
             type: "tool",
-            callID: `call_0000_${suffix}_write`,
-            tool: "write",
+            name: "write",
             state: {
               status: "completed",
-              input: { filePath: `src/generated-${index}.tsx`, content: after },
-              output: `Wrote src/generated-${index}.tsx`,
-              title: `src/generated-${index}.tsx`,
-              metadata: {
-                filediff: { file: `src/generated-${index}.tsx`, additions: 32, deletions: 0, before: "", after },
-              },
-              time: { start: 1690000001400 + index * 2_000, end: 1690000001500 + index * 2_000 },
+              input: { path: `src/generated-${index}.tsx`, content: after },
+              content: [{ type: "text", text: `Wrote src/generated-${index}.tsx` }],
+              metadata: { files: [currentFile(`src/generated-${index}.tsx`, "", after, 32, 0)] },
+            },
+            time: {
+              created: 1690000001400 + index * 2_000,
+              ran: 1690000001400 + index * 2_000,
+              completed: 1690000001500 + index * 2_000,
             },
           },
         ]
@@ -248,31 +248,24 @@ function performanceTurn(index: number) {
       ? [
           {
             id: `prt_0000_${suffix}_patch`,
-            sessionID,
-            messageID: assistantID,
             type: "tool",
-            callID: `call_0000_${suffix}_patch`,
-            tool: "apply_patch",
+            name: "patch",
             state: {
               status: "completed",
               input: { patchText: realisticPatch(index) },
-              output: "Success. Updated src/components/SessionCard.tsx",
-              title: "src/components/SessionCard.tsx",
+              content: [{ type: "text", text: "Success. Updated src/components/SessionCard.tsx" }],
               metadata: {
                 files: [
                   {
-                    filePath: "src/components/SessionCard.tsx",
-                    relativePath: "src/components/SessionCard.tsx",
-                    type: "update",
-                    additions: 8,
-                    deletions: 3,
-                    patch: realisticPatch(index),
-                    before,
-                    after,
+                    ...currentFile("src/components/SessionCard.tsx", before, after, 8, 3),
                   },
                 ],
               },
-              time: { start: 1690000001500 + index * 2_000, end: 1690000001700 + index * 2_000 },
+            },
+            time: {
+              created: 1690000001500 + index * 2_000,
+              ran: 1690000001500 + index * 2_000,
+              completed: 1690000001700 + index * 2_000,
             },
           },
         ]
@@ -309,20 +302,16 @@ function performanceTurn(index: number) {
 }
 
 type ToolSeed = {
-  id?: string
-  sessionID?: string
-  messageID?: string
+  id: string
   type: "tool"
-  callID: string
-  tool: string
+  name: string
   state: {
-    status: string
+    status: "completed"
     input: Record<string, unknown>
-    output: string
-    title?: string
+    content: [{ type: "text"; text: string }]
     metadata: Record<string, unknown>
-    time: { start: number; end: number }
   }
+  time: { created: number; ran: number; completed: number }
 }
 
 type ContentSeedBase = { id?: string; sessionID?: string; messageID?: string }
@@ -335,13 +324,13 @@ type ContentSeed =
 function toolContent(part: ToolSeed): SessionMessageAssistant["content"][number] {
   return {
     type: "tool",
-    id: part.callID,
-    name: part.tool,
-    time: { created: part.state.time.start, ran: part.state.time.start, completed: part.state.time.end },
+    id: part.id,
+    name: part.name,
+    time: part.time,
     state: {
       status: "completed",
       input: part.state.input as Record<string, JsonValue>,
-      content: [{ type: "text", text: part.state.output }],
+      content: part.state.content,
       metadata: part.state.metadata as Record<string, JsonValue>,
     },
   }
@@ -420,6 +409,16 @@ export function MessageSummary(props: { messages: Message[]; locale: string }) {
   )
 }
 `
+}
+
+function currentFile(file: string, before: string, after: string, additions: number, deletions: number) {
+  return {
+    file,
+    patch: createTwoFilesPatch(`a/${file}`, `b/${file}`, before, after),
+    additions,
+    deletions,
+    status: before ? (after ? "modified" : "deleted") : "added",
+  }
 }
 
 function realisticPatch(index: number) {

@@ -55,7 +55,7 @@ function authFetch(fetchWithRuntimeOptions?: unknown) {
 }
 
 export const GoogleVertexPlugin = define({
-  id: "opencode.provider.google-vertex",
+  id: "opencode.provider.google.vertex",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
@@ -71,6 +71,9 @@ export const GoogleVertexPlugin = define({
         const project = resolveProject(item.provider.settings ?? {})
         const location = String(resolveLocation(item.provider.settings ?? {}))
         evt.provider.update(item.provider.id, (provider) => {
+          // Vertex authenticates through ADC rather than a key credential, so a
+          // resolvable project is what makes the provider usable.
+          if (project && provider.activation === "auto") provider.activation = "enabled"
           provider.settings = {
             ...provider.settings,
             ...(project ? { project } : {}),

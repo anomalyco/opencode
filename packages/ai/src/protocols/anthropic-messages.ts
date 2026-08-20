@@ -16,7 +16,6 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderOptions,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
@@ -32,6 +31,7 @@ import { ToolStream } from "./utils/tool-stream.js"
 const ADAPTER = "anthropic-messages"
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
+export const DEFAULT_MAX_TOKENS = 32_000
 
 export type ThinkingInput =
   | {
@@ -52,9 +52,7 @@ export interface OptionsInput {
   readonly effort?: string
 }
 
-export type ProviderOptionsInput = ProviderOptions & {
-  readonly anthropic?: OptionsInput
-}
+export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
 // Request Body Schema
@@ -593,7 +591,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 })
 
 const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (request: LLMRequest) {
-  const input = request.providerOptions?.anthropic
+  const input = request.providerOptions
   return {
     thinking: yield* resolveThinking(input?.thinking),
     effort: typeof input?.effort === "string" ? input.effort : undefined,
@@ -627,7 +625,6 @@ const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function*
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
-  const outputLimit = request.model.defaults?.limits?.output ?? request.model.route.defaults.limits?.output ?? 4096
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
@@ -666,7 +663,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tools,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: generation?.maxTokens ?? outputLimit,
+    max_tokens: generation?.maxTokens ?? DEFAULT_MAX_TOKENS,
     temperature: generation?.temperature,
     top_p: generation?.topP,
     top_k: generation?.topK,
@@ -905,6 +902,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
 
   if (delta?.type === "input_json_delta" && event.index !== undefined) {
     if (!delta.partial_json) return [state, NO_EVENTS] satisfies StepResult
+    if (!state.tools[event.index]) return [state, NO_EVENTS] satisfies StepResult
     const result = ToolStream.appendExisting(
       ADAPTER,
       state.tools,
@@ -1014,8 +1012,8 @@ const step = (state: ParserState, event: AnthropicEvent) => {
 // =============================================================================
 /**
  * The Anthropic Messages protocol — request body construction, body schema,
- * and the streaming-event state machine. Used by native Anthropic Cloud and
- * (once registered) Vertex Anthropic / Bedrock-hosted Anthropic passthrough.
+ * and the streaming-event state machine shared by Anthropic-compatible and
+ * Vertex-hosted Messages routes.
  */
 export const protocol = Protocol.make({
   id: ADAPTER,

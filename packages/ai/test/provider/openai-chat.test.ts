@@ -165,7 +165,7 @@ describe("OpenAI Chat route", () => {
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
           prompt: "think",
-          providerOptions: { openai: { reasoningEffort: "max" } },
+          providerOptions: { reasoningEffort: "max" },
         }),
       )
 
@@ -221,7 +221,7 @@ describe("OpenAI Chat route", () => {
         LLM.request({
           model,
           prompt: "think",
-          providerOptions: { openai: { reasoningEffort: "experimental" } },
+          providerOptions: { reasoningEffort: "experimental" },
         }),
       )
 
@@ -255,7 +255,7 @@ describe("OpenAI Chat route", () => {
     LLMClient.generate(
       LLMRequest.update(request, {
         model: Azure.configure({
-          baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
+          baseURL: "https://opencode-test.openai.azure.com/openai/",
           apiKey: "azure-key",
           headers: { authorization: "Bearer stale" },
         }).chat("gpt-4o-mini"),
@@ -661,6 +661,74 @@ describe("OpenAI Chat route", () => {
           usage,
         },
       ])
+    }),
+  )
+
+  it.effect("preserves streamed refusals as ordinary assistant text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ role: "assistant", refusal: "I can't" }),
+              deltaChunk({ refusal: " help with that." }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("I can't help with that.")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+      expect(response.message.content).toEqual([{ type: "text", text: "I can't help with that." }])
+
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "I can't help with that." }])
+    }),
+  )
+
+  it.effect("orders metadata-only reasoning before refusal output", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: [] } }] },
+              deltaChunk({ refusal: "I can't help with that." }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { openai: { reasoningDetails: [] } } },
+        {
+          type: "text",
+          text: "I can't help with that.",
+        },
+      ])
+    }),
+  )
+
+  it.effect("joins content and refusal deltas into ordinary assistant text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ refusal: "No." }),
+              deltaChunk({ content: " Alternative." }),
+              deltaChunk({ refusal: " Still no." }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("No. Alternative. Still no.")
+      expect(response.events.filter(LLMEvent.is.textStart).map((event) => event.id)).toEqual(["text-0"])
+      expect(response.events.filter(LLMEvent.is.textEnd).map((event) => event.id)).toEqual(["text-0"])
     }),
   )
 

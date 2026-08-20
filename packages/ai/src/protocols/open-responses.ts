@@ -90,8 +90,11 @@ const OpenResponsesFunctionCallOutput = Schema.Union([
 
 export const InputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
+  Schema.Struct({ role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenResponsesInputContent) }),
   Schema.Struct({
+    type: Schema.tag("message"),
+    id: Schema.optionalKey(Schema.String),
     role: Schema.tag("assistant"),
     content: Schema.Array(OpenResponsesOutputText),
     phase: Schema.optionalKey(MessagePhase),
@@ -100,6 +103,7 @@ export const InputItem = Schema.Union([
   OpenResponsesItemReference,
   Schema.Struct({
     type: Schema.tag("function_call"),
+    id: Schema.optionalKey(Schema.String),
     call_id: Schema.String,
     name: Schema.String,
     arguments: Schema.String,
@@ -114,6 +118,8 @@ type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
 type LoweredInputItem =
   | OpenResponsesInputItem
   | {
+      readonly type: "message"
+      readonly id?: string
       readonly role: "assistant"
       readonly content: ReadonlyArray<{ readonly type: "output_text"; readonly text: string }>
       readonly phase?: MessagePhase | null
@@ -127,8 +133,6 @@ type OpenResponsesReasoningInput = {
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
-type OpenResponsesReasoningReplay = Omit<OpenResponsesReasoningInput, "id">
-
 export const Tool = Schema.Struct({
   type: Schema.tag("function"),
   name: Schema.String,
@@ -140,6 +144,11 @@ export const Tool = Schema.Struct({
 export const ToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
   Schema.Struct({ type: Schema.tag("function"), name: Schema.String }),
+  Schema.Struct({
+    type: Schema.tag("allowed_tools"),
+    mode: Schema.Literals(["auto", "none", "required"]),
+    tools: Schema.Array(Schema.Struct({ type: Schema.tag("function"), name: Schema.String })),
+  }),
 ])
 
 // Fields shared between the HTTP body and the WebSocket `response.create`
@@ -153,6 +162,15 @@ export const coreFields = {
   tools: optionalArray(Tool),
   tool_choice: Schema.optional(ToolChoice),
   store: Schema.optional(Schema.Boolean),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  safety_identifier: Schema.optional(Schema.String),
+  stream_options: Schema.optional(
+    Schema.Struct({
+      include_obfuscation: Schema.optional(Schema.Boolean),
+    }),
+  ),
+  top_logprobs: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 20 }))),
+  truncation: Schema.optional(OpenResponsesOptions.TruncationSchema),
   service_tier: Schema.optional(OpenResponsesOptions.ServiceTierSchema),
   prompt_cache_key: Schema.optional(Schema.String),
   include: optionalArray(OpenResponsesOptions.ResponseIncludableSchema),
@@ -168,8 +186,12 @@ export const coreFields = {
     }),
   ),
   max_output_tokens: Schema.optional(Schema.Number),
+  max_tool_calls: Schema.optional(Schema.Int),
+  parallel_tool_calls: Schema.optional(Schema.Boolean),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
+  presence_penalty: Schema.optional(Schema.Number),
+  frequency_penalty: Schema.optional(Schema.Number),
 }
 
 const OpenResponsesBody = Schema.Struct({
@@ -279,6 +301,20 @@ export const Event = Schema.StructWithRest(
 )
 export type Event = Schema.Schema.Type<typeof Event>
 
+const RefusalEvent = Schema.Union([
+  Schema.Struct({
+    type: Schema.tag("response.refusal.delta"),
+    item_id: Schema.String,
+    delta: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.tag("response.refusal.done"),
+    item_id: Schema.String,
+    refusal: Schema.String,
+  }),
+])
+const isRefusalEvent = Schema.is(RefusalEvent)
+
 export interface Extension {
   readonly id: string
   readonly name: string
@@ -331,7 +367,7 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (
     name: tool.name,
     description: tool.description,
     parameters: ToolSchemaProjection.responses(inputSchema),
-    // TODO: Read this from Responses tool options so direct LLM callers can opt into strict schemas.
+    // The common tool definition does not currently express Responses strict-schema policy.
     strict: false,
   }
 })
@@ -344,34 +380,42 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
     tool: (toolName) => ({ type: "function" as const, name: toolName }),
   })
 
-const lowerToolCall = (part: ToolCallPart): OpenResponsesInputItem => ({
-  type: "function_call",
-  call_id: part.id,
-  name: part.name,
-  arguments: ProviderShared.encodeJson(part.input),
-})
+const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
+  const metadata = providerMetadata?.[providerMetadataKey]
+  return ProviderShared.isRecord(metadata) && typeof metadata.itemId === "string" && metadata.itemId.length > 0
+    ? metadata.itemId
+    : undefined
+}
+
+const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {
+  const id = itemID(part.providerMetadata, providerMetadataKey)
+  return {
+    type: "function_call",
+    ...(id ? { id } : {}),
+    call_id: part.id,
+    name: part.name,
+    arguments: ProviderShared.encodeJson(part.input),
+  }
+}
 
 const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
   const metadata = part.providerMetadata?.[providerMetadataKey]
-  if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string" || metadata.itemId.length === 0)
-    return undefined
+  const id = itemID(part.providerMetadata, providerMetadataKey)
+  if (!ProviderShared.isRecord(metadata) || !id) return undefined
   const encryptedContent =
     typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
       ? metadata.reasoningEncryptedContent
       : undefined
   return {
     type: "reasoning",
-    id: metadata.itemId,
+    id,
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
     encrypted_content: encryptedContent,
   }
 }
 
 const hostedToolItemID = (part: ToolResultPart, providerMetadataKey: string) => {
-  const metadata = part.providerMetadata?.[providerMetadataKey]
-  return ProviderShared.isRecord(metadata) && typeof metadata.itemId === "string" && metadata.itemId.length > 0
-    ? metadata.itemId
-    : undefined
+  return itemID(part.providerMetadata, providerMetadataKey)
 }
 
 const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
@@ -439,14 +483,10 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
   for (const message of request.messages) {
     if (message.role === "system") {
-      const part = yield* ProviderShared.wrappedSystemUpdate(extension.name, message)
-      const previous = input.at(-1)
-      if (previous && "role" in previous && previous.role === "user")
-        input[input.length - 1] = {
-          role: "user",
-          content: [...previous.content, { type: "input_text", text: part.text }],
-        }
-      else input.push({ role: "user", content: [{ type: "input_text", text: part.text }] })
+      input.push({
+        role: "developer",
+        content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(extension.name, message)),
+      })
       continue
     }
 
@@ -460,24 +500,26 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
     if (message.role === "assistant") {
       const content: TextPart[] = []
-      const reasoningItems: Record<string, OpenResponsesReasoningReplay> = {}
+      const reasoningItems: Record<string, OpenResponsesReasoningInput> = {}
       const reasoningReferences = new Set<string>()
       const hostedToolReferences = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
-        const groups = content.reduce<Array<{ phase: MessagePhase | null | undefined; parts: TextPart[] }>>(
-          (groups, part) => {
-            const metadata = part.providerMetadata?.[providerMetadataKey]
-            const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase, extension) : undefined
-            const group = groups.at(-1)
-            if (group && group.phase === phase) group.parts.push(part)
-            else groups.push({ phase, parts: [part] })
-            return groups
-          },
-          [],
-        )
+        const groups = content.reduce<
+          Array<{ id: string | undefined; phase: MessagePhase | null | undefined; parts: TextPart[] }>
+        >((groups, part) => {
+          const metadata = part.providerMetadata?.[providerMetadataKey]
+          const id = itemID(part.providerMetadata, providerMetadataKey)
+          const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase, extension) : undefined
+          const group = groups.at(-1)
+          if (group && group.id === id && group.phase === phase) group.parts.push(part)
+          else groups.push({ id, phase, parts: [part] })
+          return groups
+        }, [])
         input.push(
           ...groups.map((group) => ({
+            type: "message" as const,
+            ...(group.id === undefined ? {} : { id: group.id }),
             role: "assistant" as const,
             content: group.parts.map((part) => ({ type: "output_text" as const, text: part.text })),
             ...(group.phase === undefined ? {} : { phase: group.phase }),
@@ -506,19 +548,14 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
               existing.encrypted_content = reasoning.encrypted_content
             continue
           }
-          const replay = {
-            type: reasoning.type,
-            summary: reasoning.summary,
-            encrypted_content: reasoning.encrypted_content,
-          }
-          reasoningItems[reasoning.id] = replay
-          input.push(replay)
+          reasoningItems[reasoning.id] = reasoning
+          input.push(reasoning)
           continue
         }
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part))
+          input.push(lowerToolCall(part, providerMetadataKey))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
@@ -573,6 +610,12 @@ const lowerOptions = (request: LLMRequest) => {
   return {
     ...(options.instructions ? { instructions: options.instructions } : {}),
     ...(options.store !== undefined ? { store: options.store } : {}),
+    ...(options.metadata ? { metadata: options.metadata } : {}),
+    ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
+    ...(options.streamOptions?.includeObfuscation !== undefined
+      ? { stream_options: { include_obfuscation: options.streamOptions.includeObfuscation } }
+      : {}),
+    ...(options.topLogprobs !== undefined ? { top_logprobs: options.topLogprobs } : {}),
     ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
     ...(options.include ? { include: options.include } : {}),
     ...(options.reasoningEffort || options.reasoningSummary
@@ -580,6 +623,19 @@ const lowerOptions = (request: LLMRequest) => {
       : {}),
     ...(options.textVerbosity ? { text: { verbosity: options.textVerbosity } } : {}),
     ...(options.serviceTier ? { service_tier: options.serviceTier } : {}),
+    ...(options.maxToolCalls !== undefined ? { max_tool_calls: options.maxToolCalls } : {}),
+    ...(options.parallelToolCalls !== undefined ? { parallel_tool_calls: options.parallelToolCalls } : {}),
+    ...(options.truncation ? { truncation: options.truncation } : {}),
+  }
+}
+
+const allowedToolChoice = (request: LLMRequest) => {
+  const allowed = OpenResponsesOptions.resolve(request).allowedTools
+  if (!allowed) return undefined
+  return {
+    type: "allowed_tools" as const,
+    mode: allowed.mode,
+    tools: allowed.toolNames.map((name) => ({ type: "function" as const, name })),
   }
 }
 
@@ -602,11 +658,15 @@ export const fromRequestWithExtension = Effect.fn("OpenResponses.fromRequestWith
               ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
             ),
           ),
-    tool_choice: request.toolChoice ? yield* lowerToolChoice(extension.name, request.toolChoice) : undefined,
+    tool_choice:
+      allowedToolChoice(request) ??
+      (request.toolChoice ? yield* lowerToolChoice(extension.name, request.toolChoice) : undefined),
     stream: true as const,
     max_output_tokens: generation?.maxTokens,
     temperature: generation?.temperature,
     top_p: generation?.topP,
+    presence_penalty: generation?.presencePenalty,
+    frequency_penalty: generation?.frequencyPenalty,
     ...lowerOptions(request),
   }
 })
@@ -675,7 +735,7 @@ const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepRe
   if (!event.delta) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   const phase = state.messagePhases[id]
-  const metadata = phase === undefined ? undefined : providerMetadata(state, { phase })
+  const metadata = providerMetadata(state, { itemId: id, ...(phase === undefined ? {} : { phase }) })
   const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, metadata)
   return [{ ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) }, events]
 }
@@ -904,7 +964,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
           state.lifecycle,
           events,
           item.id,
-          phase === undefined ? undefined : providerMetadata(state, { phase }),
+          providerMetadata(state, { itemId: item.id, ...(phase === undefined ? {} : { phase }) }),
         ),
         messageItems,
         messagePhases,
@@ -917,7 +977,11 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     if (!item.id || !item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
     const tools = state.tools[item.id]
       ? state.tools
-      : ToolStream.start(state.tools, item.id, { id: item.call_id, name: item.name })
+      : ToolStream.start(state.tools, item.id, {
+          id: item.call_id,
+          name: item.name,
+          providerMetadata: providerMetadata(state, { itemId: item.id }),
+        })
     const result =
       item.arguments === undefined
         ? yield* ToolStream.finish(state.id, tools, item.id)
@@ -968,11 +1032,19 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onResponseFinish = (state: ParserState, event: Event): StepResult => {
-  const events: LLMEvent[] = []
+const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (state: ParserState, event: Event) {
+  // Some compatible providers omit output_item.done even after completing the response.
+  const pending =
+    event.type === "response.completed"
+      ? yield* ToolStream.finishAll(state.id, state.tools)
+      : { tools: state.tools, events: NO_EVENTS }
+  const events: LLMEvent[] = [...pending.events]
+  const hasFunctionCall =
+    pending.events.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
+    state.hasFunctionCall
   const lifecycle = Lifecycle.finish(state.lifecycle, events, {
     reason: {
-      normalized: mapFinishReason(event, state.hasFunctionCall),
+      normalized: mapFinishReason(event, hasFunctionCall),
       raw: event.response?.incomplete_details?.reason,
     },
     usage: mapUsage(event.response?.usage, state.providerMetadataKey),
@@ -984,8 +1056,8 @@ const onResponseFinish = (state: ParserState, event: Event): StepResult => {
           })
         : undefined,
   })
-  return [{ ...state, lifecycle }, events]
-}
+  return [{ ...state, lifecycle, hasFunctionCall, tools: pending.tools }, events] satisfies StepResult
+})
 
 // Build a single human-readable message from whatever the provider supplied.
 // When both code and message are present, prefix the code so consumers see
@@ -1027,6 +1099,14 @@ export const step = (state: ParserState, event: Event) => {
         : onOutputTextDone(state, event, event.item_id),
     )
   }
+  if (event.type === "response.refusal.delta" || event.type === "response.refusal.done") {
+    if (!isRefusalEvent(event)) return ProviderShared.eventError(state.id, `${event.type} is malformed`)
+    return Effect.succeed(
+      event.type === "response.refusal.delta"
+        ? onOutputTextDelta(state, event, event.item_id)
+        : onOutputTextDone(state, { ...event, text: event.refusal }, event.item_id),
+    )
+  }
   if (event.type === "response.reasoning.delta" || event.type === "response.reasoning_summary_text.delta") {
     if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(onReasoningDelta(state, event, event.item_id))
@@ -1054,8 +1134,7 @@ export const step = (state: ParserState, event: Event) => {
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
     return onOutputItemDone(state, event)
   }
-  if (event.type === "response.completed" || event.type === "response.incomplete")
-    return Effect.succeed(onResponseFinish(state, event))
+  if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
   if (event.type === "response.failed") return providerError(state, event, `${state.name} response failed`)
   if (event.type === "error")
     return decodeKnownErrorEvent(event).pipe(

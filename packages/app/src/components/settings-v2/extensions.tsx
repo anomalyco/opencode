@@ -1,11 +1,12 @@
 import { Component, For, createEffect, createMemo, createResource } from "solid-js"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Switch } from "@opencode-ai/ui/v2/switch-v2"
-import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
+import { Switch } from "@opencode-ai/ui/switch"
+import { Tabs } from "@opencode-ai/ui/tabs"
 import { useLanguage } from "@/context/language"
 import { useData } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useMcpToggle } from "@/context/mcp"
+import { pluginLabel } from "@/utils/plugin"
 import { ExternalLink } from "../external-link"
 import { InlineServerSelect } from "./parts/server-select"
 import "./settings-v2.css"
@@ -44,7 +45,9 @@ export const SettingsExtensionsV2: Component = () => {
     () => serverSdk.connection.status() === "connected",
     () => serverSdk.api.plugin.list().then((result) => result.data),
   )
-  const plugins = createMemo<PluginRowItem[]>(() => (pluginList.latest ?? []).map((item) => ({ name: item.id })))
+  const plugins = createMemo<PluginRowItem[]>(() =>
+    (pluginList.latest ?? []).map((item) => ({ name: pluginLabel(item) })),
+  )
 
   createEffect(() => {
     if (serverSdk.connection.status() !== "connected") return
@@ -65,14 +68,14 @@ export const SettingsExtensionsV2: Component = () => {
       </div>
 
       <div class="settings-v2-tab-body">
-        <TabsV2 variant="pill" defaultValue="mcps" class="settings-v2-extensions-tabs">
-          <TabsV2.List>
-            <TabsV2.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</TabsV2.Trigger>
-            <TabsV2.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</TabsV2.Trigger>
-            <TabsV2.Trigger value="skills">{language.t("settings.extensions.tab.skills")}</TabsV2.Trigger>
-          </TabsV2.List>
+        <Tabs variant="pill" defaultValue="mcps" class="settings-v2-extensions-tabs">
+          <Tabs.List>
+            <Tabs.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</Tabs.Trigger>
+            <Tabs.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</Tabs.Trigger>
+            <Tabs.Trigger value="skills">{language.t("settings.extensions.tab.skills")}</Tabs.Trigger>
+          </Tabs.List>
 
-          <TabsV2.Content value="mcps">
+          <Tabs.Content value="mcps">
             <div class="settings-v2-section">
               <div class="flex items-center justify-between">
                 <span class="text-13-medium text-v2-text-text-base">
@@ -96,9 +99,9 @@ export const SettingsExtensionsV2: Component = () => {
                 </For>
               </div>
             </div>
-          </TabsV2.Content>
+          </Tabs.Content>
 
-          <TabsV2.Content value="plugins">
+          <Tabs.Content value="plugins">
             <div class="settings-v2-section">
               <div class="flex items-center justify-between">
                 <span class="text-13-medium text-v2-text-text-base">
@@ -119,9 +122,9 @@ export const SettingsExtensionsV2: Component = () => {
                 </For>
               </div>
             </div>
-          </TabsV2.Content>
+          </Tabs.Content>
 
-          <TabsV2.Content value="skills">
+          <Tabs.Content value="skills">
             <div class="settings-v2-section">
               <div class="flex items-center justify-between">
                 <span class="text-13-medium text-v2-text-text-base">
@@ -147,8 +150,8 @@ export const SettingsExtensionsV2: Component = () => {
                 </For>
               </div>
             </div>
-          </TabsV2.Content>
-        </TabsV2>
+          </Tabs.Content>
+        </Tabs>
       </div>
     </>
   )

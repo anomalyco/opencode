@@ -1,4 +1,4 @@
-import type { FilePartSource } from "../../../presentation"
+import type { FilePartSource } from "../../../file-presentation"
 
 type PromptInputV2PartBase = {
   content: string

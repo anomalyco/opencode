@@ -6,6 +6,7 @@ import { useMcpToggle } from "@/context/mcp"
 import { useWorkspaceLocation } from "@/context/location"
 import { useData } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
+import { pluginLabel } from "@/utils/plugin"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -38,7 +39,7 @@ export function StatusPopoverBody(props: { shown: boolean }) {
     () => (props.shown ? sdk().directory : undefined),
     (directory) => serverSDK.api.plugin.list({ location: { directory } }).then((result) => result.data),
   )
-  const plugins = createMemo(() => (pluginList.latest ?? []).map((item) => item.id))
+  const plugins = createMemo(() => (pluginList.latest ?? []).map(pluginLabel))
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
 
@@ -47,10 +48,9 @@ export function StatusPopoverBody(props: { shown: boolean }) {
       <Tabs
         aria-label={language.t("status.popover.ariaLabel")}
         class="tabs bg-background-strong rounded-xl overflow-hidden"
-        data-component="tabs"
         data-active="mcp"
         defaultValue="mcp"
-        variant="alt"
+        variant="underline"
       >
         <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
           <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
@@ -110,6 +110,7 @@ export function StatusPopoverBody(props: { shown: boolean }) {
                         </span>
                         <div onClick={(event) => event.stopPropagation()}>
                           <Switch
+                            appearance="standard"
                             checked={enabled()}
                             disabled={toggleMcp.isPending && toggleMcp.variables === name}
                             onChange={() => {

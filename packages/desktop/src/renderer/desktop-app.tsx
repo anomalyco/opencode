@@ -13,9 +13,8 @@ import {
 } from "@opencode-ai/app"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
-import { createEffect, createMemo, createResource, Show } from "solid-js"
+import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
 import type { ElectronAPI } from "./api-types"
-import { MigrationStatus } from "./migration-status"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform, type DesktopWindowState } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
@@ -25,6 +24,8 @@ import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
+
+const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
 
 export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; version: string }) {
   const [windowState] = createResource(() => props.api.getWindowID().then((id) => ({ id, version: props.version })))
@@ -83,9 +84,11 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
                 serverKey={key}
               />
               <DesktopEffects api={props.api} />
-              <Show when={initializationData(sidecar)} keyed>
-                {(server) => <MigrationStatus server={server} />}
-              </Show>
+              <Suspense fallback={null}>
+                <Show when={initializationData(sidecar)} keyed>
+                  {(server) => <MigrationStatus server={server} />}
+                </Show>
+              </Suspense>
             </AppInterface>
           )}
         </Show>
@@ -98,6 +101,7 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
       <AppBaseProviders
         locale={locale.latest}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
+        onThemeApplied={() => void props.api.themeReady()}
       >
         <Show when={true}>{(_) => <ReadyApp />}</Show>
       </AppBaseProviders>

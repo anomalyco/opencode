@@ -47,14 +47,16 @@ const start = Effect.fn("BackgroundService.startInternal")(function* () {
     }),
   )
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
+  const url = new URL(service.url)
+  if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
   yield* Effect.logInfo("v2 CLI background service ready", {
     username: service.auth.username,
     version: cli.version,
-    ...endpoint(service.url),
+    ...endpoint(url.origin),
   })
   if (isolated && cli.binary) yield* cleanCliStages(cli.binary)
   return {
-    url: service.url,
+    url: url.origin,
     username: service.auth.username,
     password: service.auth.password,
     version: cli.version,

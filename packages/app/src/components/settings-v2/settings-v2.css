@@ -1,5 +1,5 @@
-@import "@opencode-ai/ui/v2/text-input-v2.css";
-@import "@opencode-ai/ui/v2/button-v2.css";
+@import "@opencode-ai/ui/text-input.css";
+@import "@opencode-ai/ui/button.css";
 
 [data-component="tabs-v2"][data-variant="settings"] {
   height: 100%;

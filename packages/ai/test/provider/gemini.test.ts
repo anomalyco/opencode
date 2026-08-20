@@ -48,28 +48,26 @@ describe("Gemini route", () => {
       const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: {
-            gemini: {
-              cachedContent: "cachedContents/example",
-              safetySettings: [{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" }],
-              serviceTier: "priority",
-              thinkingConfig: { thinkingBudget: 0, includeThoughts: false, thinkingLevel: "high" },
-            },
+            cachedContent: "cachedContents/example",
+            safetySettings: [{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" }],
+            serviceTier: "priority",
+            thinkingConfig: { thinkingBudget: 0, includeThoughts: false, thinkingLevel: "high" },
           },
         }),
       )
       const filtered = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { gemini: { thinkingConfig: { thinkingBudget: "invalid", includeThoughts: false } } },
+          providerOptions: { thinkingConfig: { thinkingBudget: "invalid", includeThoughts: false } },
         }),
       )
       const defaulted = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
+          providerOptions: { thinkingConfig: { thinkingLevel: "high" } },
         }),
       )
       const emptySafetySettings = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { gemini: { safetySettings: [] } },
+          providerOptions: { safetySettings: [] },
         }),
       )
 
@@ -137,6 +135,48 @@ describe("Gemini route", () => {
       expect(prepared.body.contents).toEqual([
         { role: "user", parts: [{ text: "Before." }, { text: "<system-update>\nUpdate.\n</system-update>" }] },
         { role: "model", parts: [{ text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("keeps system updates separate from function responses", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "done", resultType: "text" }),
+            Message.system("Update."),
+            Message.system("Later update."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [{ functionCall: { id: undefined, name: "lookup", args: { query: "weather" } } }],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                id: undefined,
+                name: "lookup",
+                response: { name: "lookup", content: "done" },
+              },
+            },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            { text: "<system-update>\nUpdate.\n</system-update>" },
+            { text: "<system-update>\nLater update.\n</system-update>" },
+          ],
+        },
       ])
     }),
   )

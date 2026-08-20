@@ -1,4 +1,4 @@
-import type { PresentationFileContent } from "../presentation"
+import type { PresentationFileContent } from "../file-presentation"
 import { createEffect, createMemo, Match, on, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
@@ -49,7 +49,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     const media = cfg()
     if (!media || media.mode === "off") return false
     if (kind()) return false
-    return isBinaryContent(media.current as any)
+    return isBinaryContent(media.current)
   })
 
   const onLoad = () => props.media?.onLoad?.()
@@ -61,7 +61,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     if (media.deleted) return true
     if (k === "svg") return false
     if (media.current !== undefined) return false
-    return !hasMediaValue(media.after as any) && hasMediaValue(media.before as any)
+    return !hasMediaValue(media.after) && hasMediaValue(media.before)
   })
 
   const direct = createMemo(() => {
@@ -104,7 +104,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     void input.readFile(input.path).then(
       (result) => {
         if (!active) return
-        const src = dataUrlFromMediaValue(result as any, input.kind)
+        const src = dataUrlFromMediaValue(result, input.kind)
         if (!src) {
           input.onError?.({ kind: input.kind })
           setRemote({ key: input.key, loading: false, error: true, src: undefined, mime: undefined })
@@ -154,18 +154,18 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
   const svgSource = createMemo(() => {
     const media = cfg()
     if (!media || kind() !== "svg") return
-    return svgTextFromValue(media.current as any)
+    return svgTextFromValue(media.current)
   })
   const svgSrc = createMemo(() => {
     const media = cfg()
     if (!media || kind() !== "svg") return
-    return dataUrlFromMediaValue(media.current as any, "svg")
+    return dataUrlFromMediaValue(media.current, "svg")
   })
   const svgInvalid = createMemo(() => {
     const media = cfg()
     if (!media || kind() !== "svg") return
     if (svgSource() !== undefined) return
-    if (!hasMediaValue(media.current as any)) return
+    if (!hasMediaValue(media.current)) return
     return [media.path, media.current] as const
   })
 

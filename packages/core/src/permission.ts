@@ -152,14 +152,14 @@ const layer = Layer.effect(
       )
     })
 
-    const configured = Effect.fn("Permission.configured")(function* (sessionID: SessionSchema.ID, agentID?: Agent.ID) {
+    const configured = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, agentID?: Agent.ID) {
       const session = yield* sessions.get(sessionID)
       if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
       const agent = yield* agents.resolve(agentID ?? session.agent)
       return agent?.permissions ?? missingAgentPermissions
     })
 
-    const allowsAll = Effect.fn("Permission.allowsAll")(function* (input: {
+    const allowsAll = Effect.fnUntraced(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly action: string
       readonly agent?: Agent.ID

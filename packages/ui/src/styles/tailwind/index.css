@@ -1,7 +1,21 @@
 @layer theme, base, components, utilities;
 
 @import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities) source("../../../../");
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "../../../../app/src";
+@source "../../../../app/index.html";
+@source not "../../../../app/src/i18n";
+@source not "../../../../app/src/**/*.test.{ts,tsx}";
+@source "../../../../desktop/src/renderer";
+@source not "../../../../desktop/src/renderer/**/*.test.{ts,tsx}";
+@source "../../../../enterprise/src";
+@source "../../../../session-ui/src";
+@source not "../../../../session-ui/src/**/*.test.{ts,tsx}";
+@source "../../../../storybook";
+@source "../../../src";
+@source not "../../../src/assets";
+@source not "../../../src/i18n";
+@source not "../../../src/**/*.test.{ts,tsx}";
 @import "./utilities.css";
 
 @import "../index.css";

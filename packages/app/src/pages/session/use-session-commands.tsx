@@ -219,8 +219,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const openFile = () => {
     void openDialog(
-      () => import("@/components/dialog-select-file"),
-      (x) => dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />),
+      () => import("@/components/dialog-command-palette-v2"),
+      (x) => dialog.show(() => <x.DialogCommandPaletteV2 onOpenFile={showAllFiles} />),
     )
   }
 

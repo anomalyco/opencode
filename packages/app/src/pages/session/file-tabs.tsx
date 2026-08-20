@@ -7,8 +7,8 @@ import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
 import { createLineCommentControllerV2 } from "@opencode-ai/session-ui/v2/line-comment-annotations-v2"
 import { sampledChecksum } from "@opencode-ai/util/encode"
-import { LineCommentV2OverflowIcon } from "@opencode-ai/ui/v2/line-comment-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { LineCommentOverflowIcon } from "@opencode-ai/ui/line-comment"
+import { Menu } from "@opencode-ai/ui/menu"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@/utils/toast"
@@ -26,7 +26,7 @@ type SessionFileViewProps = {
 
 const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
 
-function FileCommentMenuV2(props: {
+function FileCommentMenu(props: {
   moreLabel: string
   editLabel: string
   deleteLabel: string
@@ -35,17 +35,17 @@ function FileCommentMenuV2(props: {
 }) {
   return (
     <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-      <MenuV2 gutter={4}>
-        <MenuV2.Trigger as="button" type="button" data-slot="line-comment-v2-overflow" aria-label={props.moreLabel}>
-          <LineCommentV2OverflowIcon />
-        </MenuV2.Trigger>
-        <MenuV2.Portal>
-          <MenuV2.Content>
-            <MenuV2.Item onSelect={props.onEdit}>{props.editLabel}</MenuV2.Item>
-            <MenuV2.Item onSelect={props.onDelete}>{props.deleteLabel}</MenuV2.Item>
-          </MenuV2.Content>
-        </MenuV2.Portal>
-      </MenuV2>
+      <Menu gutter={4}>
+        <Menu.Trigger as="button" type="button" data-slot="line-comment-v2-overflow" aria-label={props.moreLabel}>
+          <LineCommentOverflowIcon />
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Item onSelect={props.onEdit}>{props.editLabel}</Menu.Item>
+            <Menu.Item onSelect={props.onDelete}>{props.deleteLabel}</Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
     </div>
   )
 }
@@ -331,7 +331,7 @@ export function SessionFileView(props: SessionFileViewProps) {
     },
     editSubmitLabel: language.t("common.save"),
     renderCommentActions: (_, controls) => (
-      <FileCommentMenuV2
+      <FileCommentMenu
         moreLabel={language.t("common.moreOptions")}
         editLabel={language.t("common.edit")}
         deleteLabel={language.t("common.delete")}

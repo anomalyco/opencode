@@ -1,9 +1,8 @@
 import type { ModelRef, SessionMessageInfo, SessionStatus } from "@opencode-ai/client/promise"
+import { reuseTimelineRows, Timeline, TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
 import { createMemo, type Accessor } from "solid-js"
-import { reuseTimelineRows } from "./row-reconciliation"
-import { Timeline, TimelineRow } from "./rows"
 
-export { reuseTimelineRows } from "./row-reconciliation"
+export { reuseTimelineRows } from "@opencode-ai/session-ui/timeline/projection"
 
 export function createTimelineProjection(input: {
   sessionMessages: Accessor<SessionMessageInfo[]>
@@ -75,7 +74,7 @@ export function createTimelineProjection(input: {
     return result
   })
   const projection = createMemo(() =>
-    Timeline.constructSessionMessageRows(input.sessionMessages(), input.showReasoningSummaries(), input.status().type),
+    Timeline.constructSessionMessageRows(input.sessionMessages(), input.showReasoningSummaries(), input.status()),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>

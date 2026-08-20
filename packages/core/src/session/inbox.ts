@@ -180,13 +180,27 @@ export const admitCompaction = Effect.fn("SessionInbox.admitCompaction")(functio
   bus: Bus.Interface,
   input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID; readonly delivery: Delivery },
 ) {
-  const admitted = yield* admit(db, bus, {
-    id: input.id,
-    sessionID: input.sessionID,
-    item: Item.make({ type: "compaction", payload: {}, delivery: input.delivery }),
-  })
-  if (admitted.type === "compaction") return admitted
-  return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  return yield* serialized(
+    input.sessionID,
+    Effect.gen(function* () {
+      const exact = yield* find(db, input.id)
+      if (exact) {
+        if (exact.type === "compaction" && exact.sessionID === input.sessionID) return exact
+        return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+      }
+      if (yield* promotedFromMessage(db, input.sessionID, input.id, input.delivery))
+        return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+      const pending = (yield* list(db, input.sessionID)).find((item) => item.type === "compaction")
+      if (pending) return pending
+      const admitted = yield* admit(db, bus, {
+        id: input.id,
+        sessionID: input.sessionID,
+        item: Item.make({ type: "compaction", payload: {}, delivery: input.delivery }),
+      })
+      if (admitted.type === "compaction") return admitted
+      return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+    }),
+  )
 })
 
 export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(function* (
@@ -319,49 +333,29 @@ export const moveIDs = Effect.fn("SessionInbox.moveIDs")(function* (db: Database
     .pipe(Effect.orDie)
 })
 
-export const nextQueued = Effect.fn("SessionInbox.nextQueued")(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-) {
-  const row = yield* db
-    .select()
-    .from(SessionInboxTable)
-    .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "queue")))
-    .orderBy(asc(SessionInboxTable.enqueued_seq))
-    .limit(1)
-    .get()
-    .pipe(Effect.orDie)
-  return row ? fromRow(row) : undefined
-})
-
-export const nextSteer = Effect.fn("SessionInbox.nextSteer")(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-) {
-  const row = yield* db
-    .select()
-    .from(SessionInboxTable)
-    .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "steer")))
-    .orderBy(asc(SessionInboxTable.enqueued_seq))
-    .limit(1)
-    .get()
-    .pipe(Effect.orDie)
-  return row ? fromRow(row) : undefined
-})
-
 export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   promotable: Promotable,
 ) {
-  return (yield* nextSteer(db, sessionID)) ?? (promotable === "input" ? yield* nextQueued(db, sessionID) : undefined)
+  const next = (delivery: Delivery) =>
+    db
+      .select()
+      .from(SessionInboxTable)
+      .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, delivery)))
+      .orderBy(asc(SessionInboxTable.enqueued_seq))
+      .limit(1)
+      .get()
+      .pipe(Effect.orDie)
+  const steer = yield* next("steer")
+  if (steer) return fromRow(steer)
+  if (promotable !== "input") return undefined
+  const queued = yield* next("queue")
+  return queued ? fromRow(queued) : undefined
 })
 
-/**
- * Which pending rows count: "any" counts every row, while "input" means any
- * item in either delivery mode.
- */
-export type Scope = "any" | "input" | Delivery
+/** Which pending rows count: "input" means any item in either delivery mode. */
+export type Scope = "input" | Delivery
 
 export const has = Effect.fn("SessionInbox.has")(function* (
   db: DatabaseService,
@@ -374,11 +368,9 @@ export const has = Effect.fn("SessionInbox.has")(function* (
     .where(
       and(
         eq(SessionInboxTable.session_id, sessionID),
-        scope === "any"
-          ? undefined
-          : scope === "input"
-            ? or(eq(SessionInboxTable.delivery, "steer"), eq(SessionInboxTable.delivery, "queue"))
-            : eq(SessionInboxTable.delivery, scope),
+        scope === "input"
+          ? or(eq(SessionInboxTable.delivery, "steer"), eq(SessionInboxTable.delivery, "queue"))
+          : eq(SessionInboxTable.delivery, scope),
       ),
     )
     .limit(1)
@@ -386,23 +378,6 @@ export const has = Effect.fn("SessionInbox.has")(function* (
     .pipe(Effect.orDie)
   return row !== undefined
 })
-
-export const equivalent = (input: Info, expected: { readonly sessionID: SessionSchema.ID; readonly item: Item }) => {
-  if (
-    input.type !== expected.item.type ||
-    input.delivery !== expected.item.delivery ||
-    input.sessionID !== expected.sessionID
-  )
-    return false
-  if (input.type === "user" && expected.item.type === "user")
-    return JSON.stringify(encodeUser(input.payload)) === JSON.stringify(encodeUser(expected.item.payload))
-  if (input.type === "synthetic" && expected.item.type === "synthetic")
-    return JSON.stringify(encodeSynthetic(input.payload)) === JSON.stringify(encodeSynthetic(expected.item.payload))
-  if (input.type === "compaction" && expected.item.type === "compaction") return true
-  if (input.type === "move" && expected.item.type === "move")
-    return JSON.stringify(encodeMove(input.payload)) === JSON.stringify(encodeMove(expected.item.payload))
-  return false
-}
 
 const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
   serialized(input.sessionID, effect).pipe(Effect.asVoid)

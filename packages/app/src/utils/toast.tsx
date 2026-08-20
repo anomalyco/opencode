@@ -1,15 +1,18 @@
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
-import type { ToastOptions, ToastVariant } from "@opencode-ai/ui/toast"
-import { ToastV2, showToastV2, toasterV2 } from "@opencode-ai/ui/v2/toast-v2"
+import { Toast, showToast, toaster, type ToastOptions } from "@opencode-ai/ui/toast"
 
-export function ToastRegion() {
-  return <ToastV2.Region />
+type AppToastOptions = Omit<ToastOptions, "icon"> & {
+  icon?: IconProps["name"]
 }
 
-export function showToast(options: ToastOptions | string) {
-  if (typeof options === "string") return showToastV2(options)
+export function ToastRegion() {
+  return <Toast.Region />
+}
 
-  return showToastV2({
+function showAppToast(options: AppToastOptions | string) {
+  if (typeof options === "string") return showToast(options)
+
+  return showToast({
     ...options,
     icon: resolveIcon(options.icon, options.variant),
     actions: options.actions?.map((action) => ({
@@ -19,11 +22,13 @@ export function showToast(options: ToastOptions | string) {
   })
 }
 
+export { showAppToast as showToast }
+
 export function dismissToast(toastId: number) {
-  return toasterV2.dismiss(toastId)
+  return toaster.dismiss(toastId)
 }
 
-function resolveIcon(icon: IconProps["name"] | undefined, variant: ToastVariant | undefined) {
+function resolveIcon(icon: IconProps["name"] | undefined, variant: ToastOptions["variant"]) {
   const name = icon ?? (variant === "success" ? "check" : undefined)
   if (!name) return
   return <Icon name={name} />

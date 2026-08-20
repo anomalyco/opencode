@@ -32,11 +32,11 @@ export function normalizeNewSessionWorktree(value: string, directory: string, pr
 
 export function resolveNewSessionBranch(input: {
   worktree: string
-  local?: string
+  directory: string
   worktreeBranch: (worktree: string) => string | undefined
 }) {
-  if (input.worktree === "main" || input.worktree === "create") return input.local
-  return input.worktreeBranch(input.worktree) ?? input.local
+  const directory = input.worktree === "main" || input.worktree === "create" ? input.directory : input.worktree
+  return input.worktreeBranch(directory)
 }
 
 export function resolveNewSessionGit(input: { projectVcs?: string; branch?: string }) {
@@ -95,11 +95,10 @@ export function createNewSessionWorkspaceController(input: {
     const directories = project ? [project.worktree, ...workspaceDirectories(project)] : [sdk().directory]
     directories.forEach((directory) => void data.location.vcs.sync({ directory }).catch(() => undefined))
   })
-  const localBranch = createMemo(() => data.location.vcs.info({ directory: projectRoot() })?.branch.current)
   const branch = createMemo(() =>
     resolveNewSessionBranch({
       worktree: value(),
-      local: localBranch(),
+      directory: sdk().directory,
       worktreeBranch: (worktree) => data.location.vcs.info({ directory: worktree })?.branch.current,
     }),
   )

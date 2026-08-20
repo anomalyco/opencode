@@ -32,9 +32,9 @@
   },
   "peerDependencies": {
     "@opencode-ai/theme": "workspace:*",
-    "@opentui/core": ">=0.5.3",
-    "@opentui/keymap": ">=0.5.3",
-    "@opentui/solid": ">=0.5.3",
+    "@opentui/core": ">=0.5.4",
+    "@opentui/keymap": ">=0.5.4",
+    "@opentui/solid": ">=0.5.4",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {

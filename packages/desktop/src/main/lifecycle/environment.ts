@@ -38,14 +38,12 @@ export const configureApplication = Effect.fn("Application.configure")(function*
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
-  if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
+  if (!app.isPackaged)
+    app.commandLine.appendSwitch("remote-debugging-port", process.env.OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT ?? "9222")
 
-  const onboardingRoot = yield* createOnboardingTestRoot()
-  app.setPath(
-    "userData",
-    onboardingRoot ? path.join(onboardingRoot, "desktop") : path.join(app.getPath("appData"), appID),
-  )
-  if (onboardingRoot) app.setPath("sessionData", path.join(onboardingRoot, "session"))
+  const testRoot = yield* createTestRoot()
+  app.setPath("userData", testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), appID))
+  if (testRoot) app.setPath("sessionData", path.join(testRoot, "session"))
 })
 
 export function acquireApplicationLock() {
@@ -85,7 +83,8 @@ export const prepareDesktop = Effect.gen(function* () {
     ),
     Effect.catch((error) => Effect.logWarning("failed to clean scoped store files", { error })),
   )
-  app.setAsDefaultProtocolClient("opencode")
+  if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
+    app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol(path, paths.rendererRoot, Effect.runForkWith(context))
   setDockIcon(path, paths)
 })
@@ -99,18 +98,22 @@ export const loadProxyEnvironment = Effect.gen(function* () {
   }).pipe(Effect.catch((error) => Effect.logWarning("failed to load proxy environment", { error })))
 })
 
-const createOnboardingTestRoot = Effect.fn("Application.createOnboardingTestRoot")(function* () {
-  if (!testOnboarding) return undefined
+const createTestRoot = Effect.fn("Application.createTestRoot")(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const root = path.join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
-  yield* fs.remove(root, { recursive: true, force: true })
+  const root = testOnboarding
+    ? path.join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+    : app.isPackaged
+      ? undefined
+      : process.env.OPENCODE_DESKTOP_TEST_ROOT
+  if (!root) return undefined
+  if (testOnboarding) yield* fs.remove(root, { recursive: true, force: true })
   yield* Effect.forEach(
     ["data", "config", "cache", "state", "desktop", "session"],
     (dir) => fs.makeDirectory(path.join(root, dir), { recursive: true }),
     { discard: true },
   )
-  process.env.OPENCODE_DB = ":memory:"
+  if (testOnboarding) process.env.OPENCODE_DB = ":memory:"
   process.env.XDG_DATA_HOME = path.join(root, "data")
   process.env.XDG_CONFIG_HOME = path.join(root, "config")
   process.env.XDG_CACHE_HOME = path.join(root, "cache")

@@ -1,12 +1,11 @@
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog, DialogFooter } from "@opencode-ai/ui/v2/dialog-v2"
-import { Field } from "@opencode-ai/ui/v2/field-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { Button } from "@opencode-ai/ui/button"
+import { Dialog, DialogFooter } from "@opencode-ai/ui/dialog"
+import { Field } from "@opencode-ai/ui/field"
 import { Icon } from "@opencode-ai/ui/icon"
-import { ProjectAvatar, PROJECT_AVATAR_VARIANTS } from "@opencode-ai/ui/v2/project-avatar-v2"
-import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
-import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { ProjectAvatar, PROJECT_AVATAR_VARIANTS } from "@opencode-ai/ui/project-avatar"
+import { Tabs } from "@opencode-ai/ui/tabs"
+import { Textarea } from "@opencode-ai/ui/textarea"
+import { TextInput } from "@opencode-ai/ui/text-input"
 import { For, Show, createSignal, startTransition } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { getProjectAvatarVariant, type LocalProject } from "@/context/layout"
@@ -37,46 +36,46 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
 
   const Footer = () => (
     <DialogFooter>
-      <ButtonV2 type="button" variant="neutral" disabled={model.save.isPending} onClick={model.close}>
+      <Button type="button" variant="neutral" disabled={model.save.isPending} onClick={model.close}>
         {language.t("common.cancel")}
-      </ButtonV2>
-      <ButtonV2 type="submit" variant="contrast" disabled={!model.supported || model.save.isPending}>
+      </Button>
+      <Button type="submit" variant="contrast" disabled={!model.supported || model.save.isPending}>
         {model.save.isPending ? language.t("common.saving") : language.t("common.save")}
-      </ButtonV2>
+      </Button>
     </DialogFooter>
   )
 
   return (
     <Dialog size="x-large" variant="settings" class="project-settings-v2-dialog">
-      <TabsV2
+      <Tabs
         orientation="vertical"
         variant="settings"
         value={tab()}
         onChange={(value) => void startTransition(() => setTab(value))}
         class="project-settings-v2"
       >
-        <TabsV2.List>
+        <Tabs.List>
           <div class="project-settings-v2-nav">
-            <TabsV2.Trigger value="general">
+            <Tabs.Trigger value="general">
               <ProjectAvatar
                 fallback={projectName()}
                 variant={getProjectAvatarVariant(props.project.icon?.color)}
                 class="!size-4 shrink-0"
               />
               <span class="truncate">{projectName()}</span>
-            </TabsV2.Trigger>
-            <TabsV2.Trigger value="scripts">
+            </Tabs.Trigger>
+            <Tabs.Trigger value="scripts">
               <Icon name="code" size="small" />
               {language.t("project.settings.scripts")}
-            </TabsV2.Trigger>
-            <TabsV2.Trigger value="extensions">
+            </Tabs.Trigger>
+            <Tabs.Trigger value="extensions">
               <Icon name="extensions" size="small" />
               {language.t("settings.tab.extensions")}
-            </TabsV2.Trigger>
+            </Tabs.Trigger>
           </div>
-        </TabsV2.List>
+        </Tabs.List>
 
-        <TabsV2.Content value="general" class="project-settings-v2-panel">
+        <Tabs.Content value="general" class="project-settings-v2-panel">
           <form onSubmit={model.submit} class="project-settings-v2-form">
             <div class="project-settings-v2-scroll">
               <div class="project-settings-page-header">
@@ -86,7 +85,7 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
 
               <Field>
                 <Field.Label>{language.t("dialog.project.edit.name")}</Field.Label>
-                <TextInputV2
+                <TextInput
                   autofocus
                   appearance="large"
                   class="!w-full"
@@ -132,7 +131,7 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
                         "opacity-0": !model.store.iconHover,
                       }}
                     >
-                      <IconV2 name={model.store.iconOverride ? "close" : "share"} />
+                      <Icon name={model.store.iconOverride ? "close" : "share"} />
                     </span>
                   </button>
                   <input
@@ -188,9 +187,9 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
             </div>
             <Footer />
           </form>
-        </TabsV2.Content>
+        </Tabs.Content>
 
-        <TabsV2.Content value="scripts" class="project-settings-v2-panel">
+        <Tabs.Content value="scripts" class="project-settings-v2-panel">
           <form onSubmit={model.submit} class="project-settings-v2-form">
             <div class="project-settings-v2-scroll">
               <div class="project-settings-page-header">
@@ -200,7 +199,7 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
               <Field>
                 <Field.Label>{language.t("dialog.project.edit.worktree.startup")}</Field.Label>
                 <Field.Prefix>{language.t("dialog.project.edit.worktree.startup.description")}</Field.Prefix>
-                <TextareaV2
+                <Textarea
                   class="!w-full [&_[data-slot=textarea-v2-textarea]]:font-mono"
                   rows={5}
                   value={model.store.startup}
@@ -212,12 +211,12 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
             </div>
             <Footer />
           </form>
-        </TabsV2.Content>
+        </Tabs.Content>
 
-        <TabsV2.Content value="extensions" class="project-settings-v2-panel">
+        <Tabs.Content value="extensions" class="project-settings-v2-panel">
           <ProjectSettingsExtensions />
-        </TabsV2.Content>
-      </TabsV2>
+        </Tabs.Content>
+      </Tabs>
     </Dialog>
   )
 }

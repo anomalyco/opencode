@@ -42,6 +42,19 @@ const client = {
   },
 }
 
-export function useServerSDK() {
-  return () => ({ client })
+const api = {
+  form: {
+    reply: async () => ({ data: true }),
+    cancel: async () => ({ data: true }),
+  },
 }
+
+export function useServerSDK() {
+  return {
+    scope: ServerScope.local,
+    url: "http://storybook.local",
+    api,
+    client,
+  }
+}
+import { ServerScope } from "@/utils/server-scope"

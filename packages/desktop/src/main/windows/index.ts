@@ -26,6 +26,7 @@ import { wireWindowRecovery } from "./recovery"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
 const windowIDs = new WeakMap<BrowserWindow, string>()
+const themeReady = new WeakMap<BrowserWindow, () => void>()
 const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
@@ -71,6 +72,10 @@ export function getLastFocusedWindow() {
   return win
 }
 
+export function setWindowThemeReady(win: BrowserWindow) {
+  themeReady.get(win)?.()
+}
+
 export interface Dependencies {
   readonly fs: FileSystem.FileSystem
   readonly path: Path.Path
@@ -105,7 +110,26 @@ export function createMainWindow(deps: Dependencies, id: string = randomUUID()) 
   wireFullscreen(win)
   loadWindow(win, "index.html")
   wireZoom(win)
-  win.once("ready-to-show", () => win.show())
+  let contentReady = false
+  let appliedTheme = false
+  let revealed = false
+  const reveal = () => {
+    if (!contentReady || !appliedTheme || revealed || win.isDestroyed()) return
+    revealed = true
+    win.show()
+    deps.runFork(Effect.logInfo("main window visible", { window: id }))
+  }
+  const ready = () => {
+    contentReady = true
+    reveal()
+  }
+  themeReady.set(win, () => {
+    appliedTheme = true
+    reveal()
+  })
+  win.once("ready-to-show", ready)
+  if (process.platform === "linux") win.webContents.once("did-finish-load", ready)
+  win.once("closed", () => themeReady.delete(win))
   return win
 }
 

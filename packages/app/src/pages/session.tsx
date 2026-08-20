@@ -1,5 +1,5 @@
-import type { FilePart } from "@/types"
 import type { FileDiffInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionUserActions } from "@opencode-ai/session-ui/message"
 import { getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
@@ -30,10 +30,9 @@ import { createStore } from "solid-js/store"
 import type { SessionReviewLineComment } from "@opencode-ai/session-ui/session-review"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode-ai/ui/scroll-view"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Button } from "@opencode-ai/ui/button"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
 import { showToast } from "@/utils/toast"
@@ -82,6 +81,7 @@ import {
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
+import { SessionPanelFrame, SessionRouteFrame } from "@/pages/session/session-frame"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewV2SidebarToggle } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
@@ -91,7 +91,7 @@ import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
-import { Identifier } from "@/utils/id"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Persist, persisted } from "@/utils/persist"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { requireServerKey, sessionHref } from "@/utils/session-route"
@@ -195,9 +195,9 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
               </div>
             )}
           </Show>
-          <ButtonV2 variant="neutral" size="normal" icon="xmark-small" onClick={closeTab}>
+          <Button variant="neutral" size="normal" icon="xmark-small" onClick={closeTab}>
             {language.t("session.error.notFound.closeTab")}
-          </ButtonV2>
+          </Button>
         </div>
       </div>
     )
@@ -263,27 +263,6 @@ function MarkSessionNotificationsViewed(props: { sessionID?: () => string | unde
     notification.session.markViewed(sessionID)
   })
   return null
-}
-
-function SessionRouteFrame(props: ParentProps<{ padded?: boolean }>) {
-  return (
-    <div class="relative size-full overflow-hidden flex flex-col" classList={{ "p-2": props.padded }}>
-      {props.children}
-    </div>
-  )
-}
-
-function SessionPanelFrame(props: ParentProps<{ raised?: boolean }>) {
-  return (
-    <div
-      class="flex-1 min-h-0 flex flex-col bg-v2-background-bg-base rounded-[10px] overflow-hidden"
-      classList={{
-        "shadow-[var(--v2-elevation-raised)]": props.raised,
-      }}
-    >
-      {props.children}
-    </div>
-  )
 }
 
 export default function Page() {
@@ -1042,25 +1021,6 @@ export default function Page() {
         options={changesOptions()}
         current={reviewMode()}
         label={changesLabel}
-        onSelect={(option) => option && controller.layout.view().review.setMode(option)}
-        variant="ghost"
-        size="small"
-        valueClass="text-14-medium"
-      />
-    )
-  }
-
-  const changesTitleV2 = () => {
-    if (!canReview()) {
-      return null
-    }
-
-    return (
-      <SelectV2
-        appearance="inline"
-        options={changesOptions()}
-        current={reviewMode()}
-        label={changesLabel}
         placement="bottom-start"
         gutter={6}
         onSelect={(option) => option && controller.layout.view().review.setMode(option)}
@@ -1161,7 +1121,7 @@ export default function Page() {
   // updates such as session switches.
   const reviewPanelV2Props = () => ({
     get title() {
-      return changesTitleV2()
+      return changesTitle()
     },
     get empty() {
       return reviewEmptyV2()
@@ -1584,7 +1544,7 @@ export default function Page() {
   const queueFollowup = (draft: FollowupDraft) => {
     setFollowup("items", draft.sessionID, (items) => [
       ...(items ?? []),
-      { id: Identifier.ascending("message"), ...draft },
+      { id: SessionMessage.ID.create(), ...draft },
     ])
     setFollowup("failed", draft.sessionID, undefined)
     setFollowup("paused", draft.sessionID, undefined)
@@ -1633,14 +1593,15 @@ export default function Page() {
 
   // attachment bytes are embedded as a data URL, so downloading always works;
   // revealing requires the on-disk path captured by the client that attached the file
-  const openAttachment = (file: FilePart) => {
+  const openAttachment: NonNullable<SessionUserActions["openAttachment"]> = (file) => {
+    const url = file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
     const download = () => {
       const anchor = document.createElement("a")
-      anchor.href = file.url
-      anchor.download = getFilename(file.filename) || "attachment"
+      anchor.href = url
+      anchor.download = getFilename(file.name) || "attachment"
       anchor.click()
     }
-    const path = file.filename ?? ""
+    const path = file.name ?? ""
     const absolute = path.startsWith("/") || path.startsWith("\\\\") || /^[a-zA-Z]:[\\/]/.test(path)
     if (platform.revealPath && absolute) {
       void platform.revealPath(path).then(
@@ -1654,7 +1615,7 @@ export default function Page() {
     download()
   }
 
-  const actions = { revert, openAttachment }
+  const actions = { revert, openAttachment } satisfies SessionUserActions
 
   createEffect(() => {
     const sessionID = controller.identity.params.id
@@ -1752,22 +1713,22 @@ export default function Page() {
       >
         <Tabs.Trigger
           value="session"
+          classes={{ button: compact ? "w-full !py-2" : "w-full" }}
           classList={{
             "!w-1/2 !max-w-none": true,
             "!border-b-0 !border-t !border-border-weak-base [&:has([data-selected])]:!border-t-transparent": bottom,
           }}
-          classes={{ button: compact ? "w-full !py-2" : "w-full" }}
           onClick={() => setStore("mobileTab", "session")}
         >
           {language.t("session.tab.session")}
         </Tabs.Trigger>
         <Tabs.Trigger
           value="changes"
+          classes={{ button: compact ? "w-full !py-2" : "w-full" }}
           classList={{
             "!w-1/2 !max-w-none !border-r-0": true,
             "!border-b-0 !border-t !border-border-weak-base [&:has([data-selected])]:!border-t-transparent": bottom,
           }}
-          classes={{ button: compact ? "w-full !py-2" : "w-full" }}
           onClick={() => setStore("mobileTab", "changes")}
         >
           {hasReview()

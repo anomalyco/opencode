@@ -36,6 +36,9 @@ test("preserves the draft when a populated command menu triggers a built-in", as
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   const composer = page.locator('[data-component="prompt-input-v2"]')
   const input = composer.locator('[data-component="prompt-input"]')
+  await expect.poll(() => input.evaluate((element) => getComputedStyle(element, "::before").content)).toBe(
+    `"${String.fromCodePoint(0x200b)}"`,
+  )
   await expectAppVisible(composer)
 
   await input.fill("keep me")

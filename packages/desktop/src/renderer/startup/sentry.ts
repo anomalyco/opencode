@@ -1,13 +1,13 @@
-import * as Sentry from "@sentry/solid"
 import pkg from "../../../package.json"
 
 export function desktopVersion() {
   return import.meta.env.OPENCODE_VERSION ?? pkg.version
 }
 
-export function initializeSentry(version: string) {
+export async function initializeSentry(version: string) {
   if (!import.meta.env.VITE_SENTRY_DSN) return
-  Sentry.init({
+  const { init } = await import("@sentry/solid")
+  init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
     release: import.meta.env.VITE_SENTRY_RELEASE ?? `desktop@${version}`,

@@ -1,9 +1,7 @@
-// @ts-nocheck
 import { createStore } from "solid-js/store"
 import { PromptInputV2, type PromptInputV2PersistedState, type PromptInputV2Suggestion } from "."
 import { createPromptInputV2Controller } from "./interaction"
 import { createPromptInputV2Store } from "./store"
-import { createEffect } from "solid-js"
 
 const agents = [
   { id: "build", label: "Build" },
@@ -105,14 +103,14 @@ const commandSuggestions: PromptInputV2Suggestion[] = [
 ]
 
 function ControlledPromptInput() {
-  // Agent choice is a persisted user/workspace preference in v1, not part of PromptStore.
+  // Agent choice is a persisted App preference, not part of PromptStore.
   const [preferences, setPreferences] = createStore({ agent: "build" })
 
   const [runtime, setRuntime] = createStore({
     stopping: false,
   })
 
-  // This matches the v1 PromptStore and can use the same persistence boundary.
+  // This matches the App PromptStore and can use the same persistence boundary.
   const state = createStore<PromptInputV2PersistedState>({
     prompt: [
       { type: "text", content: "", start: 0, end: 0 },
@@ -211,11 +209,11 @@ function ControlledPromptInput() {
 }
 
 export default {
-  title: "Session UI/PromptInputV2",
+  title: "OpenCode/Composer/Prompt input",
   id: "session-ui-prompt-input-v2",
   component: PromptInputV2,
 }
 
-export const ControlledComposition = {
+export const PromptWithContext = {
   render: () => <ControlledPromptInput />,
 }

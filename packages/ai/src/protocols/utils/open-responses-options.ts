@@ -1,5 +1,19 @@
-import { Schema } from "effect"
-import { TextVerbosity, type LLMRequest } from "../../schema/index.js"
+import { Option, Schema } from "effect"
+import type { LLMRequest } from "../../schema/index.js"
+
+export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
+export type ReasoningEffort = (typeof ReasoningEfforts)[number] | (string & {})
+export const ReasoningEffort = Schema.declare<ReasoningEffort>(
+  (value): value is ReasoningEffort => typeof value === "string",
+  { title: "ReasoningEffort" },
+)
+
+export const TextVerbosities = ["low", "medium", "high"] as const
+export type TextVerbosity = (typeof TextVerbosities)[number] | (string & {})
+export const TextVerbosity = Schema.declare<TextVerbosity>(
+  (value): value is TextVerbosity => typeof value === "string",
+  { title: "TextVerbosity" },
+)
 
 export const ResponseIncludables = [
   "file_search_call.results",
@@ -11,52 +25,67 @@ export const ResponseIncludables = [
   "reasoning.encrypted_content",
   "message.output_text.logprobs",
 ] as const
-export type ResponseIncludable = (typeof ResponseIncludables)[number]
+export type ResponseIncludable = (typeof ResponseIncludables)[number] | (string & {})
 
 export const ServiceTiers = ["auto", "default", "flex", "priority"] as const
 export type ServiceTier = (typeof ServiceTiers)[number]
 
-const TEXT_VERBOSITY = new Set<string>(["low", "medium", "high"])
-const INCLUDABLES = new Set<string>(ResponseIncludables)
-const SERVICE_TIERS = new Set<string>(ServiceTiers)
+export const Truncations = ["auto", "disabled"] as const
+export type Truncation = (typeof Truncations)[number]
 
-const isTextVerbosity = (value: unknown): value is Schema.Schema.Type<typeof TextVerbosity> =>
-  typeof value === "string" && TEXT_VERBOSITY.has(value)
-
-const isServiceTier = (value: unknown): value is ServiceTier => typeof value === "string" && SERVICE_TIERS.has(value)
-
-export const ReasoningEffort = Schema.String
 export const TextVerbositySchema = TextVerbosity
-export const ResponseIncludableSchema = Schema.Literals(ResponseIncludables)
+export const ResponseIncludableSchema = Schema.declare<ResponseIncludable>(
+  (value): value is ResponseIncludable => typeof value === "string",
+  { title: "ResponseIncludable" },
+)
 export const ServiceTierSchema = Schema.Literals(ServiceTiers)
+export const TruncationSchema = Schema.Literals(Truncations)
 
-export interface Resolved {
-  readonly instructions?: string
-  readonly store?: boolean
-  readonly reasoningEffort?: string
-  readonly reasoningSummary?: "auto" | "concise" | "detailed"
-  readonly include?: ReadonlyArray<ResponseIncludable>
-  readonly textVerbosity?: Schema.Schema.Type<typeof TextVerbosity>
-  readonly serviceTier?: ServiceTier
+export const AllowedTools = Schema.Struct({
+  toolNames: Schema.Array(Schema.String),
+  mode: Schema.optional(Schema.Literals(["auto", "none", "required"])),
+})
+export type AllowedTools = typeof AllowedTools.Type
+
+export const StreamOptions = Schema.Struct({
+  includeObfuscation: Schema.optional(Schema.Boolean),
+})
+
+export const Options = Schema.Struct({
+  instructions: Schema.optional(Schema.String),
+  store: Schema.optional(Schema.Boolean),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  safetyIdentifier: Schema.optional(Schema.String),
+  streamOptions: Schema.optional(StreamOptions),
+  topLogprobs: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 20 }))),
+  reasoningEffort: Schema.optional(ReasoningEffort),
+  reasoningSummary: Schema.optional(Schema.Literals(["auto", "concise", "detailed"])),
+  include: Schema.optional(Schema.Array(ResponseIncludableSchema)),
+  textVerbosity: Schema.optional(TextVerbositySchema),
+  serviceTier: Schema.optional(ServiceTierSchema),
+  truncation: Schema.optional(TruncationSchema),
+  allowedTools: Schema.optional(AllowedTools),
+  maxToolCalls: Schema.optional(Schema.Int),
+  parallelToolCalls: Schema.optional(Schema.Boolean),
+})
+export type Options = typeof Options.Type
+
+export type Resolved = Omit<Options, "allowedTools"> & {
+  readonly allowedTools?: AllowedTools & { readonly mode: NonNullable<AllowedTools["mode"]> }
 }
 
+const decodeOptions = Schema.decodeUnknownOption(Options)
+
 export const resolve = (request: LLMRequest): Resolved => {
-  const input = request.providerOptions?.[request.model.route.providerMetadataKey ?? "openresponses"]
-  const include = Array.isArray(input?.include)
-    ? input.include.filter((entry): entry is ResponseIncludable => INCLUDABLES.has(entry))
-    : []
-  const reasoningSummary = input?.reasoningSummary
+  const input = Option.getOrUndefined(decodeOptions(request.providerOptions))
+  if (!input) return {}
   return {
-    instructions: typeof input?.instructions === "string" ? input.instructions : undefined,
-    store: typeof input?.store === "boolean" ? input.store : undefined,
-    reasoningEffort: typeof input?.reasoningEffort === "string" ? input.reasoningEffort : undefined,
-    reasoningSummary:
-      reasoningSummary === "auto" || reasoningSummary === "concise" || reasoningSummary === "detailed"
-        ? reasoningSummary
+    ...input,
+    include: input.include?.length ? input.include : undefined,
+    allowedTools:
+      input.allowedTools && input.allowedTools.toolNames.length > 0
+        ? { ...input.allowedTools, mode: input.allowedTools.mode ?? "auto" }
         : undefined,
-    include: include.length > 0 ? include : undefined,
-    textVerbosity: isTextVerbosity(input?.textVerbosity) ? input.textVerbosity : undefined,
-    serviceTier: isServiceTier(input?.serviceTier) ? input.serviceTier : undefined,
   }
 }
 

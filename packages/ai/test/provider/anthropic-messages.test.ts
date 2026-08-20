@@ -63,7 +63,8 @@ describe("Anthropic Messages route", () => {
       const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: {
-            anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+            thinking: { type: "adaptive", display: "summarized" },
+            effort: "low",
           },
         }),
       )
@@ -79,17 +80,17 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 1_024 } } },
+          providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
         }),
       )
       const legacy = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "enabled", budget_tokens: 2_048 } } },
+          providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
         }),
       )
       const disabled = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "disabled" } } },
+          providerOptions: { thinking: { type: "disabled" } },
         }),
       )
 
@@ -103,7 +104,7 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const error = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { anthropic: { thinking: { type: "enabled" } } },
+          providerOptions: { thinking: { type: "enabled" } },
         }),
       ).pipe(Effect.flip)
 
@@ -321,7 +322,7 @@ describe("Anthropic Messages route", () => {
           { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: '{"forecast":"sunny"}' }] },
         ],
         stream: true,
-        max_tokens: 4096,
+        max_tokens: 32_000,
       })
     }),
   )
@@ -1010,6 +1011,34 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("ignores tool input deltas without a matching tool start", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+              { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hello" } },
+              {
+                type: "content_block_delta",
+                index: 1,
+                delta: { type: "input_json_delta", partial_json: '{"query":"orphaned"}' },
+              },
+              { type: "content_block_stop", index: 0 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.toolCalls).toEqual([])
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
   it.effect("settles pending tool calls at message_stop", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
@@ -1034,9 +1063,7 @@ describe("Anthropic Messages route", () => {
         ),
       )
 
-      expect(response.toolCalls).toMatchObject([
-        { id: "call_1", name: "lookup", input: { query: "weather" } },
-      ])
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { query: "weather" } }])
       expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_use" })
     }),
   )

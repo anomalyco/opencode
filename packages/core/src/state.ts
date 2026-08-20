@@ -97,10 +97,7 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
   const materialize = Effect.fnUntraced(function* () {
     const next = options.initial()
     const api = options.draft(next)
-    for (const transform of transforms)
-      yield* apply(transform.run, api).pipe(
-        Effect.withSpan("State.reload.update", { attributes: { state: options.name ?? "anonymous" } }),
-      )
+    for (const transform of transforms) yield* apply(transform.run, api)
     yield* commit(next)
   })
 

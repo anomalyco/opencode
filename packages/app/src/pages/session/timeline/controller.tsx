@@ -1,6 +1,6 @@
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
-import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode-ai/ui/dialog"
+import { Button } from "@opencode-ai/ui/button"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, on } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -186,7 +186,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       dialog.close()
     }
     return (
-      <DialogV2 fit>
+      <Dialog fit>
         <DialogHeader hideClose>
           <DialogTitleGroup
             title={language.t("session.delete.title")}
@@ -194,14 +194,14 @@ export function createTimelineController(input: { session: TimelineSessionSource
           />
         </DialogHeader>
         <DialogFooter>
-          <ButtonV2 variant="ghost" onClick={() => dialog.close()}>
+          <Button variant="ghost" onClick={() => dialog.close()}>
             {language.t("common.cancel")}
-          </ButtonV2>
-          <ButtonV2 variant="danger" onClick={confirm}>
+          </Button>
+          <Button variant="danger" onClick={confirm}>
             {language.t("session.delete.button")}
-          </ButtonV2>
+          </Button>
         </DialogFooter>
-      </DialogV2>
+      </Dialog>
     )
   }
 

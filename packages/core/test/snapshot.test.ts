@@ -127,6 +127,31 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("applies availability transforms", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project)
+          })
+
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const registration = yield* snapshot.transform((draft) => draft.configure(false))
+            expect(yield* snapshot.capture()).toBeUndefined()
+
+            yield* registration.dispose
+            expect(yield* snapshot.capture()).toBeDefined()
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   testEffect(Layer.empty).live("treats capture outside Git as unavailable", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

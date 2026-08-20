@@ -16,10 +16,10 @@ export type TriggerTitle = {
   action?: JSX.Element
 }
 
-const isTriggerTitle = (val: any): val is TriggerTitle => {
-  return (
-    typeof val === "object" && val !== null && "title" in val && (typeof Node === "undefined" || !(val instanceof Node))
-  )
+const isTriggerTitle = (val: unknown): val is TriggerTitle => {
+  if (typeof val !== "object" || val === null) return false
+  if (typeof Node !== "undefined" && val instanceof Node) return false
+  return "title" in val && typeof val.title === "string"
 }
 
 export interface BasicToolProps {
@@ -90,7 +90,7 @@ export function BasicTool(props: BasicToolProps) {
   })
   const open = () => props.open ?? state.open
   const ready = () => state.ready
-  const pending = () => props.status === "pending" || props.status === "running"
+  const pending = () => props.status === "streaming" || props.status === "running"
   const hasChildren = () => (props.defer ? "children" in props : props.children)
   const dynamicTrigger = typeof props.trigger === "function" ? props.trigger(open) : undefined
 
@@ -302,13 +302,13 @@ export function BasicTool(props: BasicToolProps) {
 }
 
 function label(input: Record<string, unknown> | undefined) {
-  const keys = ["description", "query", "url", "filePath", "path", "pattern", "name"]
+  const keys = ["description", "query", "url", "path", "pattern", "name"]
   return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
 }
 
 function args(input: Record<string, unknown> | undefined) {
   if (!input) return []
-  const skip = new Set(["description", "query", "url", "filePath", "path", "pattern", "name"])
+  const skip = new Set(["description", "query", "url", "path", "pattern", "name"])
   return Object.entries(input)
     .filter(([key]) => !skip.has(key))
     .flatMap(([key, value]) => {

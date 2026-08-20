@@ -87,6 +87,7 @@ export const api: ElectronAPI = {
   draftBlobGet: (id) => invoke("DraftsGetBlob", { id }).then((data) => (data ? toArrayBuffer(data) : null)),
 
   getWindowID: () => invoke("WindowGetId"),
+  themeReady: () => invoke("WindowThemeReady"),
   onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
   onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb(mutable(event.urls))),
 

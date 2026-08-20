@@ -1,7 +1,10 @@
 import { Schema } from "effect"
-import { JsonSchema, ModelID, ProviderID } from "./ids.js"
+import { ModelID, ProviderID } from "./ids.js"
 import type { AnyRoute } from "../route/client.js"
 import { isRecord } from "../utils/record.js"
+
+export const JsonSchema = Schema.Record(Schema.String, Schema.Unknown)
+export type JsonSchema = Schema.Schema.Type<typeof JsonSchema>
 
 export const mergeJsonRecords = (
   ...items: ReadonlyArray<Record<string, unknown> | undefined>
@@ -33,22 +36,12 @@ const mergeStringRecords = (
   return Object.keys(result).length === 0 ? undefined : result
 }
 
-export const ProviderOptions = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))
+export const ProviderOptions = Schema.Record(Schema.String, Schema.Unknown)
 export type ProviderOptions = Schema.Schema.Type<typeof ProviderOptions>
 
 export const mergeProviderOptions = (
   ...items: ReadonlyArray<ProviderOptions | undefined>
-): ProviderOptions | undefined => {
-  const result: Record<string, Record<string, unknown>> = {}
-  for (const item of items) {
-    if (!item) continue
-    for (const [provider, options] of Object.entries(item)) {
-      const merged = mergeJsonRecords(result[provider], options)
-      if (merged) result[provider] = merged
-    }
-  }
-  return Object.keys(result).length === 0 ? undefined : result
-}
+): ProviderOptions | undefined => mergeJsonRecords(...items)
 
 export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   body: Schema.optional(JsonSchema),
@@ -121,22 +114,7 @@ export const mergeGenerationOptions = (...items: ReadonlyArray<GenerationOptions
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
-export class LanguageModelLimits extends Schema.Class<LanguageModelLimits>("LLM.LanguageModelLimits")({
-  context: Schema.optional(Schema.Number),
-  input: Schema.optional(Schema.Number),
-  output: Schema.optional(Schema.Number),
-}) {}
-
-export namespace LanguageModelLimits {
-  export type Input = LanguageModelLimits | ConstructorParameters<typeof LanguageModelLimits>[0]
-
-  /** Normalize model limit input into the canonical `LanguageModelLimits` class. */
-  export const make = (input: Input | undefined) =>
-    input instanceof LanguageModelLimits ? input : new LanguageModelLimits(input ?? {})
-}
-
 export class LanguageModelDefaults extends Schema.Class<LanguageModelDefaults>("LLM.LanguageModelDefaults")({
-  limits: Schema.optional(LanguageModelLimits),
   generation: Schema.optional(GenerationOptions),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
@@ -146,7 +124,6 @@ export namespace LanguageModelDefaults {
   export type Input =
     | LanguageModelDefaults
     | {
-        readonly limits?: LanguageModelLimits.Input
         readonly generation?: GenerationOptions.Input
         readonly providerOptions?: ProviderOptions
         readonly http?: HttpOptions.Input
@@ -156,7 +133,6 @@ export namespace LanguageModelDefaults {
   export const make = (input: Input) => {
     if (input instanceof LanguageModelDefaults) return input
     return new LanguageModelDefaults({
-      limits: input.limits === undefined ? undefined : LanguageModelLimits.make(input.limits),
       generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
       providerOptions: input.providerOptions,
       http: input.http === undefined ? undefined : HttpOptions.make(input.http),
@@ -269,10 +245,9 @@ export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
 // Auto-placement policy for prompt caching. The protocol-neutral lowering step
 // reads this and injects `CacheHint`s at the configured boundaries; the
 // per-protocol body builders then translate those hints into wire markers as
-// usual. `"auto"` is the recommended default for agent loops — it places
+// usual. `"auto"` is the default for agent loops — it places
 // breakpoints at the last tool definition, the first and last distinct system
-// parts, and the conversation tail. The rolling message breakpoint keeps a
-// prior cache entry within Anthropic/Bedrock's 20-block lookback during long
+// parts, and the conversation tail so recent prefixes remain reusable during
 // tool loops.
 //
 // Pass `"none"` to opt out entirely (the legacy behavior). Pass the granular

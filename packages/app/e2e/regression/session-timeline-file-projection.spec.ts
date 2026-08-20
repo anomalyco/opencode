@@ -7,7 +7,7 @@ test("renders completed write content", async ({ page }) => {
     messages: [
       userMessage(),
       assistantMessage([
-        toolPart(id, "write", "completed", { filePath: "src/write.ts", content: "export const written = true\n" }),
+        toolPart(id, "write", "completed", { path: "src/write.ts", content: "export const written = true\n" }),
       ]),
     ],
     settings: { editToolPartsExpanded: true },
@@ -24,20 +24,19 @@ test("renders a completed single-file patch", async ({ page }) => {
       assistantMessage([
         toolPart(
           id,
-          "apply_patch",
+          "patch",
           "completed",
-          { files: ["src/a.ts"] },
+          { patchText: "Update src/a.ts" },
           {
             metadata: {
               files: [
                 {
-                  filePath: "src/a.ts",
-                  relativePath: "src/a.ts",
-                  type: "update",
+                  file: "src/a.ts",
+                  status: "modified",
+                  patch:
+                    "diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1 +1 @@\n-export const value = 1\n+export const value = 2\n",
                   additions: 1,
                   deletions: 1,
-                  before: "export const value = 1\n",
-                  after: "export const value = 2\n",
                 },
               ],
             },

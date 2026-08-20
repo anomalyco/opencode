@@ -56,7 +56,7 @@ const it = testEffect(
 )
 
 describe("Session.skill", () => {
-  it.effect("attaches a resolved skill snapshot to a normal prompt", () =>
+  it.effect("keeps skill mentions as references on a normal prompt", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const database = yield* Database.Service
@@ -67,8 +67,8 @@ describe("Session.skill", () => {
       yield* sessions.prompt({
         id,
         sessionID: session.id,
-        text: "Apply this guidance",
-        skills: [{ id: Skill.ID.make("effect"), mention: { start: 20, end: 27, text: "/effect" } }],
+        text: "Apply @effect",
+        skills: [{ id: Skill.ID.make("effect"), mention: { start: 6, end: 13, text: "@effect" } }],
         resume: false,
       })
       yield* SessionInbox.promote(database.db, bus, session.id, "steer")
@@ -77,13 +77,12 @@ describe("Session.skill", () => {
         expect.objectContaining({
           id,
           type: "user",
-          text: "Apply this guidance",
+          text: "Apply @effect",
           skills: [
             {
               id: "effect",
               name: "Effect",
-              text: expect.stringContaining("Use Effect"),
-              mention: { start: 20, end: 27, text: "/effect" },
+              mention: { start: 6, end: 13, text: "@effect" },
             },
           ],
         }),

@@ -14,6 +14,7 @@ import { PluginHooks } from "../plugin/hooks.js"
 import { SessionEvent } from "./event.js"
 import { SessionHistory } from "./history.js"
 import { SessionModelHeaders } from "./model-headers.js"
+import { SessionModelHook } from "./model-hook.js"
 import { SessionModelHttp } from "./model-http.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
@@ -80,23 +81,25 @@ const make = (dependencies: Dependencies) => {
           })
         : Effect.void,
     )
+    const request = yield* SessionModelHook.apply(
+      dependencies.hooks,
+      { sessionID: session.id, agent: agent.id, model: resolved.ref },
+      LLM.request({
+        model: resolved.model,
+        http: { headers: SessionModelHeaders.make(session, dependencies.app) },
+        system: agent.system,
+        messages: [Message.user(firstUser.text)],
+        tools: [],
+      }),
+    )
     const streamed = yield* dependencies.llm
-      .stream(
-        LLM.request({
-          model: resolved.model,
-          http: { headers: SessionModelHeaders.make(session, dependencies.app) },
-          system: agent.system,
-          messages: [Message.user(firstUser.text)],
-          tools: [],
+      .stream(request, {
+        http: SessionModelHttp.middleware(dependencies.hooks, {
+          sessionID: session.id,
+          agent: agent.id,
+          model: resolved.ref,
         }),
-        {
-          http: SessionModelHttp.middleware(dependencies.hooks, {
-            sessionID: session.id,
-            agent: agent.id,
-            model: resolved.ref,
-          }),
-        },
-      )
+      })
       .pipe(
         Stream.runForEach((event) => {
           if (LLMEvent.is.providerError(event)) failed = true

@@ -10,8 +10,16 @@ export type ServiceContender = {
 
 const stderrLimit = 8 * 1024
 
-export function spawnServiceContender(command: string, args: ReadonlyArray<string>): ServiceContender {
-  const child = spawn(command, args, { detached: true, stdio: ["ignore", "ignore", "pipe"] })
+export function spawnServiceContender(
+  command: string,
+  args: ReadonlyArray<string>,
+  env?: Readonly<Record<string, string>>,
+): ServiceContender {
+  const child = spawn(command, args, {
+    detached: true,
+    stdio: ["ignore", "ignore", "pipe"],
+    env: { ...process.env, ...env },
+  })
   let error: Error | undefined
   let closed = false
   let stderr = Buffer.alloc(0)

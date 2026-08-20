@@ -1,7 +1,5 @@
 import type {
   HealthGetOutput,
-  HealthStopInput,
-  HealthStopOutput,
   ServerGetOutput,
   LocationGetInput,
   LocationGetOutput,
@@ -365,18 +363,6 @@ export function make(options: ClientOptions) {
       get: (requestOptions?: RequestOptions) =>
         request<HealthGetOutput>(
           { method: "GET", path: `/api/health`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
-          requestOptions,
-        ),
-      stop: (input: HealthStopInput, requestOptions?: RequestOptions) =>
-        request<HealthStopOutput>(
-          {
-            method: "POST",
-            path: `/api/service/stop`,
-            body: { instanceID: input["instanceID"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
           requestOptions,
         ),
     },

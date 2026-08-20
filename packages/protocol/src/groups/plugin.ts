@@ -15,7 +15,7 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
         OpenApi.annotations({
           identifier: "v2.plugin.list",
           summary: "List plugins",
-          description: "Retrieve currently loaded plugins.",
+          description: "Retrieve enabled server plugins and their current status.",
         }),
       ),
   )

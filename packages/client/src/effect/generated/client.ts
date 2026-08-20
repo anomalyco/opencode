@@ -6,8 +6,6 @@ import { HttpApiClient } from "effect/unstable/httpapi"
 import { ClientApi } from "../../contract"
 import type {
   Endpoint0_0Output,
-  Endpoint0_1Input,
-  Endpoint0_1Output,
   Endpoint1_0Output,
   Endpoint2_0Input,
   Endpoint2_0Output,
@@ -248,12 +246,7 @@ const preserveStream =
 const Endpoint0_0 = (raw: RawClient["server.health"]) => () =>
   preserveEffect<Endpoint0_0Output>()(raw["health.get"]({}).pipe(Effect.mapError(mapClientError)))
 
-const Endpoint0_1 = (raw: RawClient["server.health"]) => (input: Endpoint0_1Input) =>
-  preserveEffect<Endpoint0_1Output>()(
-    raw["health.stop"]({ payload: { instanceID: input["instanceID"] } }).pipe(Effect.mapError(mapClientError)),
-  )
-
-const adaptGroup0 = (raw: RawClient["server.health"]) => ({ get: Endpoint0_0(raw), stop: Endpoint0_1(raw) })
+const adaptGroup0 = (raw: RawClient["server.health"]) => ({ get: Endpoint0_0(raw) })
 
 const Endpoint1_0 = (raw: RawClient["server.server"]) => () =>
   preserveEffect<Endpoint1_0Output>()(raw["server.get"]({}).pipe(Effect.mapError(mapClientError)))

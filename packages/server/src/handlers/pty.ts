@@ -1,6 +1,7 @@
 import { Pty } from "@opencode-ai/core/pty"
 import { PtyProtocol } from "@opencode-ai/core/pty/protocol"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
 import { Location } from "@opencode-ai/core/location"
 import { Effect, Queue } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -39,6 +40,8 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
       .handle(
         "pty.create",
         Effect.fn(function* (ctx) {
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush
           const pty = yield* Pty.Service
           const location = yield* Location.Service
           const cwd = ctx.payload.cwd || location.directory

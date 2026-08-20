@@ -49,7 +49,7 @@ Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g.
 
 ### Routes
 
-A route is the registered, runnable composition of four orthogonal pieces:
+A route is the runnable composition of four orthogonal pieces:
 
 - **`Protocol`** (`src/route/protocol.ts`) — semantic API contract. Owns request body construction (`body.from`), the body schema (`body.schema`), the streaming-event schema (`stream.event`), and the event-to-`LLMEvent` state machine (`stream.step`). `Route.make(...)` validates and JSON-encodes the body from `body.schema` and decodes frames with `stream.event`. Examples: `OpenAIChat.protocol`, `OpenResponses.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
 - **`Endpoint`** (`src/route/endpoint.ts`) — URL construction. The host, path, and route query live on the endpoint. `Endpoint.path("/chat/completions", { baseURL })` is the common case; pass a function for paths that embed the model id or a body field (e.g. `Endpoint.path(({ body }) => `/model/${body.modelId}/converse-stream`)`).
@@ -66,7 +66,7 @@ export const route = Route.make({
   endpoint: Endpoint.path("/chat/completions", {
     baseURL: "https://api.openai.com/v1",
   }),
-  auth: Auth.bearer(),
+  auth: Auth.bearer(Auth.config("OPENAI_API_KEY")),
   framing: Framing.sse,
 })
 ```
@@ -79,7 +79,7 @@ When a provider supports multiple physical transports, selection remains executi
 
 ### URL Construction
 
-`Endpoint` owns `{ baseURL, path, query }`. Each protocol route includes a canonical endpoint when the provider has one (e.g. `https://api.openai.com/v1`); provider helpers override endpoint fields by configuring the route before selecting a model. Routes that have no canonical URL (OpenAI-compatible Chat, GitHub Copilot) require configuration before execution.
+`Endpoint` owns `{ baseURL, path, query }`. Each protocol route includes a canonical endpoint when the provider has one (e.g. `https://api.openai.com/v1`); provider helpers override endpoint fields by configuring the route before selecting a model. Generic OpenAI-compatible routes have no canonical URL and require configuration before execution.
 
 For providers where the URL is derived from typed inputs (Azure resource name, Bedrock region), the provider helper configures the route endpoint before calling `.model(...)`. Use `AtLeastOne<T>` from `route/auth-options.ts` for inputs that accept either of two derivation paths (Azure: `resourceName` or `baseURL`).
 
@@ -126,54 +126,6 @@ Keep semantic APIs as separate entrypoints, such as OpenAI `chat` and `responses
 
 Do not expose `Route` in provider package settings. Route composition stays an implementation detail behind `model(...)`.
 
-### Folder layout
-
-```
-packages/ai/src/
-  schema/                   canonical Schema model, split by concern
-    ids.ts                  branded IDs, literal types, ProviderMetadata
-    options.ts              Generation/Provider/Http options, Limits, LanguageModel, cache policy
-    messages.ts             content parts, Message, ToolDefinition, LLMRequest
-    events.ts               Usage, individual events, LLMEvent, LLMResponse
-    errors.ts               error reasons, AIError, ToolFailure
-    index.ts                barrel
-  llm.ts                    request constructors and convenience helpers
-  route/
-    index.ts                @opencode-ai/ai/route advanced barrel
-    client.ts               Route.make + LLMClient.stream/generate
-    executor.ts             RequestExecutor service + transport error mapping
-    protocol.ts             Protocol type + Protocol.make
-    endpoint.ts             Endpoint type + Endpoint.path
-    auth.ts                 Auth type + Auth.bearer / Auth.apiKeyHeader / Auth.passthrough
-    auth-options.ts         ProviderAuthOption shape, AuthOptions.bearer, AtLeastOne helper
-    framing.ts              Framing type + Framing.sse
-    transport/              transport implementations
-      index.ts              Transport execution types + HttpTransport / WebSocketTransport namespaces
-      websocket-channel.ts  generic sequential channel executor/driver contract
-      http.ts               HttpTransport.httpJson — POST + framing
-      websocket.ts          direct one-request channel executor + raw socket adapter
-  protocols/
-    shared.ts               ProviderShared toolkit used inside protocol impls
-    openai-chat.ts          protocol + route (compose OpenAIChat.protocol)
-    open-responses.ts         provider-neutral Responses protocol baseline
-    open-responses-channel.ts provider-neutral Responses WebSocket transport factory
-    openai-responses.ts       OpenAI tools/events and channel policy composed over OpenResponses
-    anthropic-messages.ts
-    gemini.ts
-    bedrock-converse.ts
-    bedrock-event-stream.ts framing for AWS event-stream binary frames
-    openai-compatible-chat.ts route that reuses OpenAIChat.protocol, no canonical URL
-    openai-compatible-responses.ts deployment adapter that reuses OpenResponses.protocol, no canonical URL
-    utils/                  per-protocol helpers (auth, cache, media, tool-stream, ...)
-  providers/
-    openai-compatible.ts    generic Chat helper + family model helpers
-    openai-compatible-responses.ts generic Responses helper
-    openai-compatible-profile.ts family defaults (deepseek, togetherai, ...)
-    azure.ts / amazon-bedrock.ts / cloudflare.ts / github-copilot.ts / google.ts / xai.ts / openai.ts / anthropic.ts / openrouter.ts
-  tool.ts                   typed tool() helper
-  tool-runtime.ts           narrow one-call typed tool dispatcher
-```
-
 The dependency arrow points down: `providers/*.ts` files import protocol routes and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata. `OpenAIResponses` composes the provider-neutral `OpenResponses` protocol; the baseline never imports the OpenAI extension.
 
 ### Shared protocol helpers
@@ -193,7 +145,7 @@ If you find yourself copying a 3-to-5-line snippet between two protocols, lift i
 
 `LLMRequest.system` is the initial privileged prompt that applies ahead of the conversation. `Message.system(...)` is a separate, provider-neutral chronological operator update inside `LLMRequest.messages`; it applies only from its position in history onward and accepts text content only.
 
-Native chronological system messages are route/model-specific. Anthropic Messages lowers them natively for Claude Opus 4.8 (`claude-opus-4-8`). Other routes and models intentionally lower the update in place into ordinary user-compatible text using this stable escaped representation:
+Native chronological system messages are route/model-specific. Open Responses lowers them to standard `developer` messages, while Anthropic Messages lowers them to native system messages for Claude Opus 4.8 (`claude-opus-4-8`). Other routes and models intentionally lower the update in place into ordinary user-compatible text using this stable escaped representation:
 
 ```text
 <system-update>
@@ -221,19 +173,17 @@ Routes lower these into provider-native assistant tool-call messages and tool-re
 
 ### Tool dispatch
 
-`LLM.stream(request)` and `LLM.generate(request)` each run exactly one provider turn. Add tool schemas to `request.tools` with `Tool.toDefinitions(tools)`. When a caller wants the package's typed one-call execution behavior, pass each canonical local `tool-call` event to `ToolRuntime.dispatch(tools, call)`.
+`LLM.stream(request)` and `LLM.generate(request)` each run exactly one model call. Add tool schemas to `request.tools` with `Tool.toDefinitions(tools)`. When a caller wants the package's typed one-call execution behavior, pass each canonical local `tool-call` event to `ToolRuntime.dispatch(tools, call)`.
 
 ```ts
-const get_weather = tool({
+const get_weather = Tool.make({
   description: "Get current weather for a city",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
-  execute: ({ city }) =>
+  execute: (input) =>
     Effect.gen(function* () {
-      // city: string  — typed from parameters Schema
-      const data = yield* WeatherApi.fetch(city)
+      const data = yield* WeatherApi.fetch(input.city)
       return { temperature: data.temp, condition: data.cond }
-      // return type checked against success Schema
     }),
 })
 

@@ -1,68 +1,114 @@
+import type { PluginInfo } from "@opencode-ai/client"
 import { Plugin } from "@opencode-ai/plugin/tui"
-import { createEffect, createMemo, createSignal, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onMount, Show } from "solid-js"
+import { DialogErrorDetails } from "../../component/dialog-error-details"
 import { usePlugin } from "../../plugin/context"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
-import { DialogErrorDetails } from "../../component/dialog-error-details"
 
 const id = "opencode.plugins"
 
-function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePlugin> }) {
+type Entry =
+  | { readonly key: string; readonly runtime: "server"; readonly plugin: PluginInfo }
+  | {
+      readonly key: string
+      readonly runtime: "tui"
+      readonly id?: string
+      readonly target: string
+      readonly status: "active" | "inactive" | "failed"
+      readonly error?: string
+    }
+
+export function PluginsDialog(props: {
+  context: Plugin.Context
+  plugins: ReturnType<typeof usePlugin>
+  server?: () => readonly PluginInfo[]
+}) {
+  const dialog = useDialog()
   const [locked, setLocked] = createSignal(false)
   const [focused, setFocused] = createSignal<string>()
-  const [detail, setDetail] = createSignal<{ title: string; error: string }>()
-  const dialog = useDialog()
-  const options = createMemo(() => {
-    const builtins = props.plugins
+  const [detail, setDetail] = createSignal<Entry>()
+  const [initial, setInitial] = createSignal<string>()
+  const [server] = createResource(
+    () => (props.server ? undefined : (props.context.location ?? props.context.data.location.default())),
+    (location) => props.context.client.plugin.list({ location }).then((result) => result.data),
+  )
+  onMount(() => dialog.setSize("medium"))
+  const entries = createMemo<Entry[]>(() => {
+    const builtins: Entry[] = props.plugins
       .registered()
       .filter((plugin) => plugin.id !== id && plugin.source === "builtin")
-      .map(
-        (plugin): DialogSelectOption<string> => ({
-          title: plugin.id,
-          value: plugin.id,
-          category: "Built-in",
-          footer: plugin.active ? "active" : "inactive",
-          footerColor: plugin.active
-            ? props.context.theme.text.feedback.success.default
-            : props.context.theme.text.subdued,
-        }),
-      )
-    const external = props.plugins
+      .map((plugin) => ({
+        key: `tui:${plugin.id}`,
+        runtime: "tui" as const,
+        id: plugin.id,
+        target: plugin.id,
+        status: plugin.active ? ("active" as const) : ("inactive" as const),
+      }))
+    const external: Entry[] = props.plugins
       .list()
       .filter((plugin) => plugin.status !== "unsupported")
-      .map(
-        (plugin): DialogSelectOption<string> => ({
-          title: plugin.id ?? plugin.target,
-          value: plugin.id ?? plugin.target,
-          category: "External",
-          searchText: plugin.target,
-          footer: plugin.status,
-          footerColor:
-            plugin.status === "active"
-              ? props.context.theme.text.feedback.success.default
-              : plugin.status === "failed"
-                ? props.context.theme.text.feedback.error.default
-                : props.context.theme.text.subdued,
-        }),
-      )
-    return [...builtins, ...external].sort((a, b) => a.title.localeCompare(b.title))
+      .map((plugin) => ({
+        key: `tui:${plugin.id ?? plugin.target}`,
+        runtime: "tui" as const,
+        id: plugin.id,
+        target: plugin.target,
+        status: plugin.status,
+        error: plugin.status === "failed" ? plugin.error : undefined,
+      }))
+    const serverEntries: Entry[] = (props.server?.() ?? server() ?? []).map((plugin) => ({
+      key: `server:${plugin.id ?? source(plugin, props.context)}`,
+      runtime: "server" as const,
+      plugin,
+    }))
+    return [
+      ...[...builtins, ...external].sort((a, b) => label(a, props.context).localeCompare(label(b, props.context))),
+      ...serverEntries.sort((a, b) => label(a, props.context).localeCompare(label(b, props.context))),
+    ]
   })
-
-  const failure = (value: string | undefined) =>
-    props.plugins.list().find((plugin) => {
-      if (plugin.status !== "failed") return false
-      return (plugin.id ?? plugin.target) === value
-    })
-
   createEffect(() => {
-    if (focused()) return
-    const first = options()[0]
-    if (first) setFocused(first.value)
+    if (initial()) return
+    const first = entries().find((entry) => entry.runtime === "tui")
+    if (!first) return
+    setInitial(first.key)
+    setFocused(first.key)
   })
 
-  const toggle = (plugin: DialogSelectOption<string>) => {
-    if (locked()) return
-    const current = props.plugins.registered().find((item) => item.id === plugin.value)
+  const options = createMemo(() =>
+    entries().map(
+      (entry): DialogSelectOption<string> => ({
+        title: label(entry, props.context),
+        value: entry.key,
+        category: entry.runtime === "tui" ? "TUI" : "Server",
+        searchText: entry.runtime === "tui" ? entry.target : source(entry.plugin, props.context),
+        footer: status(entry) === "active" ? undefined : status(entry),
+        footerColor:
+          status(entry) === "failed"
+            ? props.context.theme.text.feedback.error.default
+            : props.context.theme.text.subdued,
+        gutter:
+          status(entry) === "active"
+            ? () => <text fg={props.context.theme.text.feedback.success.default}>✓</text>
+            : status(entry) === "failed"
+              ? () => <text fg={props.context.theme.text.feedback.error.default}>✗</text>
+              : undefined,
+      }),
+    ),
+  )
+  const focusedEntry = createMemo(() => entries().find((entry) => entry.key === focused()))
+  const focusedTui = createMemo(() => {
+    const entry = focusedEntry()
+    if (entry?.runtime !== "tui" || !entry.id) return
+    return entry
+  })
+  const toggleTitle = createMemo(() => {
+    const entry = focusedTui()
+    if (!entry) return "toggle"
+    return props.plugins.registered().find((plugin) => plugin.id === entry.id)?.active ? "disable" : "enable"
+  })
+  const toggle = (entry: Entry | undefined) => {
+    if (locked() || entry?.runtime !== "tui" || !entry.id) return
+    const current = props.plugins.registered().find((plugin) => plugin.id === entry.id)
     if (!current) return
     setLocked(true)
     void (current.active ? props.plugins.deactivate(current.id) : props.plugins.activate(current.id))
@@ -70,19 +116,13 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
         if (ok) return
         props.context.ui.toast.show({ variant: "error", message: `Failed to update plugin ${current.id}` })
       })
-      .catch((error) => {
+      .catch((cause) => {
         props.context.ui.toast.show({
           variant: "error",
-          message: error instanceof Error ? error.message : String(error),
+          message: cause instanceof Error ? cause.message : String(cause),
         })
       })
       .finally(() => setLocked(false))
-  }
-
-  const select = (plugin: DialogSelectOption<string>) => {
-    const failed = failure(plugin.value)
-    if (!failed || failed.status !== "failed") return toggle(plugin)
-    setDetail({ title: failed.target, error: failed.error })
   }
 
   return (
@@ -93,33 +133,42 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
           <DialogSelect
             title="Plugins"
             options={options()}
+            current={initial()}
             locked={locked()}
             preserveSelection={true}
             onMove={(option) => setFocused(option.value)}
-            actions={[
-              {
-                title: "toggle",
-                command: "plugins.toggle",
-                disabled: (option) => {
-                  const failed = failure(option?.value)
-                  return Boolean(failed && !("id" in failed && failed.id))
-                },
-                onTrigger: toggle,
-              },
-            ]}
-            onSelect={select}
+            onSelect={(option) => {
+              const entry = entries().find((entry) => entry.key === option.value)
+              if (pluginError(entry)) setDetail(entry)
+            }}
+            actions={
+              focusedTui()
+                ? [
+                    {
+                      title: toggleTitle(),
+                      command: "plugins.toggle",
+                      onTrigger: (option) => toggle(entries().find((entry) => entry.key === option.value)),
+                    },
+                  ]
+                : []
+            }
             footer={
-              <Show when={failure(focused())}>
-                <text fg={props.context.theme.text.subdued}>enter to view error</text>
+              <Show when={pluginError(focusedEntry())}>
+                <text>
+                  <span style={{ fg: props.context.theme.text.default }}>
+                    <b>enter</b>
+                  </span>
+                  <span style={{ fg: props.context.theme.text.subdued }}> view error</span>
+                </text>
               </Show>
             }
           />
         }
       >
-        {(item) => (
+        {(entry) => (
           <DialogErrorDetails
-            title={`Plugin: ${item().title}`}
-            error={item().error}
+            title={`${entry().runtime === "tui" ? "TUI" : "Server"} plugin: ${label(entry(), props.context)}`}
+            error={pluginError(entry()) ?? "Unknown plugin error"}
             onBack={() => {
               setDetail()
               dialog.setSize("medium")
@@ -129,6 +178,27 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
       </Show>
     </box>
   )
+}
+
+function label(entry: Entry, context: Plugin.Context) {
+  if (entry.runtime === "tui") return entry.id ?? entry.target
+  return entry.plugin.id ?? source(entry.plugin, context)
+}
+
+function source(plugin: PluginInfo, context: Plugin.Context) {
+  if (plugin.source.type === "package") return plugin.source.package
+  if (plugin.source.type === "local") return context.ui.format.path(plugin.source.path)
+  return plugin.source.type
+}
+
+function status(entry: Entry) {
+  if (entry.runtime === "server") return entry.plugin.status
+  return entry.status
+}
+
+function pluginError(entry: Entry | undefined) {
+  if (entry?.runtime === "server") return entry.plugin.status === "failed" ? entry.plugin.error : undefined
+  return entry?.error
 }
 
 function Commands(props: { context: Plugin.Context }) {
@@ -143,7 +213,7 @@ function Commands(props: { context: Plugin.Context }) {
         slash: { name: "plugins" },
         palette: true,
         run() {
-          props.context.ui.dialog.show(() => <View context={props.context} plugins={plugins} />)
+          props.context.ui.dialog.show(() => <PluginsDialog context={props.context} plugins={plugins} />)
         },
       },
     ],

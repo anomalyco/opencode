@@ -1,0 +1,3 @@
+[data-component="prompt-input"]:empty::before {
+  content: "\200B";
+}

@@ -10,9 +10,8 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Keybind } from "@opencode-ai/ui/keybind"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 
 import FileTree from "@/components/file-tree"
@@ -313,30 +312,27 @@ export function SessionSidePanel(props: {
                           <Show when={contextOpen()}>
                             <Tabs.Trigger
                               value="context"
+                              onMiddleClick={() => tabs().close("context")}
                               closeButton={
-                                <TooltipV2
+                                <Tooltip
                                   value={
                                     <>
                                       {language.t("common.closeTab")}
                                       <Show when={closeTabKeybind().length > 0}>
-                                        <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
+                                        <Keybind keys={closeTabKeybind()} variant="neutral" />
                                       </Show>
                                     </>
                                   }
                                   placement="bottom"
                                   gutter={10}
                                 >
-                                  <IconButton
-                                    icon="close-small"
-                                    variant="ghost"
-                                    class="h-5 w-5"
+                                  <Tabs.CloseButton
                                     onClick={() => tabs().close("context")}
                                     aria-label={language.t("common.closeTab")}
                                   />
-                                </TooltipV2>
+                                </Tooltip>
                               }
                               hideCloseButton
-                              onMiddleClick={() => tabs().close("context")}
                             >
                               <div class="flex items-center gap-2">
                                 <SessionContextUsage variant="indicator" />
@@ -360,30 +356,27 @@ export function SessionSidePanel(props: {
                               >
                                 <Tabs.Trigger
                                   value={SESSION_OPEN_FILE_TAB}
+                                  onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
                                   closeButton={
-                                    <TooltipV2
+                                    <Tooltip
                                       value={
                                         <>
                                           {language.t("common.closeTab")}
                                           <Show when={closeTabKeybind().length > 0}>
-                                            <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
+                                            <Keybind keys={closeTabKeybind()} variant="neutral" />
                                           </Show>
                                         </>
                                       }
                                       placement="bottom"
                                       gutter={10}
                                     >
-                                      <IconButton
-                                        icon="close-small"
-                                        variant="ghost"
-                                        class="h-5 w-5"
+                                      <Tabs.CloseButton
                                         onClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
                                         aria-label={language.t("common.closeTab")}
                                       />
-                                    </TooltipV2>
+                                    </Tooltip>
                                   }
                                   hideCloseButton
-                                  onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
                                 >
                                   <div class="flex items-center gap-1.5 italic">
                                     <Icon name="open-file" size="small" />
@@ -394,26 +387,26 @@ export function SessionSidePanel(props: {
                             )}
                           </For>
                           <div class="h-full shrink-0 sticky right-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
-                            <TooltipV2
+                            <Tooltip
                               value={
                                 <>
                                   {language.t("command.file.open")}
                                   <Show when={openFileKeybind().length > 0}>
-                                    <KeybindV2 keys={openFileKeybind()} variant="neutral" />
+                                    <Keybind keys={openFileKeybind()} variant="neutral" />
                                   </Show>
                                 </>
                               }
                               placement="bottom"
                               class="flex items-center"
                             >
-                              <IconButtonV2
+                              <IconButton
                                 icon={<Icon name="plus-small" />}
                                 variant="ghost-muted"
                                 size="large"
                                 onClick={() => openFileBrowser()}
                                 aria-label={language.t("command.file.open")}
                               />
-                            </TooltipV2>
+                            </Tooltip>
                           </div>
                         </Tabs.List>
                         <div
@@ -503,7 +496,7 @@ export function SessionSidePanel(props: {
                   classList={{ "border-l border-border-weaker-base": reviewOpen() }}
                 >
                   <Tabs
-                    variant="pill"
+                    variant="surface"
                     value={fileTreeTab()}
                     onChange={setFileTreeTabValue}
                     class="h-full"

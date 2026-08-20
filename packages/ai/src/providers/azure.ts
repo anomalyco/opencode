@@ -126,7 +126,6 @@ const config = (settings: Settings): Config => {
     apiVersion: settings.apiVersion,
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
     providerOptions: settings.providerOptions,
     queryParams: settings.queryParams === undefined ? undefined : { ...settings.queryParams },
     useDeploymentBasedUrls: settings.useDeploymentBasedUrls,

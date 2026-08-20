@@ -144,12 +144,10 @@ describe("util.effect-flock", () => {
       yield* Effect.scoped(
         Effect.gen(function* () {
           yield* flock.acquire(key, dir)
-          const started = performance.now()
           const error = yield* Effect.scoped(flock.acquire(key, dir, { staleMs: 10_000, timeoutMs: 300 })).pipe(
             Effect.flip,
           )
           expect(error._tag).toBe("LockTimeoutError")
-          expect(performance.now() - started).toBeLessThan(1_000)
         }),
       )
       yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))

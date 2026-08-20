@@ -1,7 +1,7 @@
 import { Component, For, Show, createMemo, createSignal } from "solid-js"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useGlobal } from "@/context/global"
@@ -51,11 +51,11 @@ export const SettingsProjectsV2: Component = () => {
           <span class="text-13-medium text-v2-text-text-base truncate">{name()}</span>
         </div>
         <div class="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <IconButtonV2
+          <IconButton
             type="button"
             variant="ghost-muted"
             size="small"
-            icon={<IconV2 name="settings-gear" size="small" class="text-v2-icon-icon-muted" />}
+            icon={<Icon name="settings-gear" size="small" class="text-v2-icon-icon-muted" />}
             onClick={(event: MouseEvent) => {
               event.stopPropagation()
               openProjectSettings(props.project, props.server)

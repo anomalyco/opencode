@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
 
 export const WindowGetId = Rpc.make("WindowGetId", { success: Schema.String })
+export const WindowThemeReady = Rpc.make("WindowThemeReady")
 export const WindowGetFocused = Rpc.make("WindowGetFocused", { success: Schema.Boolean })
 export const WindowGetFullscreen = Rpc.make("WindowGetFullscreen", { success: Schema.Boolean })
 export const WindowSetFocus = Rpc.make("WindowSetFocus")
@@ -26,6 +27,7 @@ export const WindowSetTitlebar = Rpc.make("WindowSetTitlebar", {
 })
 export const WindowRpcs = RpcGroup.make(
   WindowGetId,
+  WindowThemeReady,
   WindowGetFocused,
   WindowGetFullscreen,
   WindowSetFocus,

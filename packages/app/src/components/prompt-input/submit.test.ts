@@ -235,6 +235,9 @@ beforeAll(async () => {
       session: {
         remember: () => undefined,
         setStatus: () => undefined,
+        // Delegates straight to the API client; optimistic admission and
+        // rollback are covered by the data-layer tests in packages/tui.
+        prompt: (input: unknown) => rootClient.api.session.prompt(input as never),
       },
       location: {
         info: () => ({ project: { id: "project", directory: "/repo/main" } }),
@@ -414,7 +417,9 @@ describe("prompt submit worktree selection", () => {
         model: { providerID: "provider", modelID: "model", variant: "high" },
       },
     })
-    expect((promptInputs[0] as { id?: string }).id).toStartWith("msg_")
+    // ID minting is delegated to the data layer, which mints a client ID when
+    // none is supplied (covered by the data-layer tests in packages/tui).
+    expect((promptInputs[0] as { id?: string }).id).toBeUndefined()
   })
 
   test("restores the prompt when sending fails", async () => {

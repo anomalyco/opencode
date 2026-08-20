@@ -1,0 +1,86 @@
+import { Keybind } from "./keybind"
+
+const docs = `### Overview
+Inline keybind indicator that renders one or more keyboard keys in a compact row.
+
+### API
+- \`keys\`: Array of key labels to display (e.g. \`["⌘", "K"]\`).
+- \`variant\`: "neutral" (gray background) | "ghost" (no background).
+- Inherits native div attributes.
+
+### Variants
+- **Neutral** — each key sits on a \`#D4D4D4\` pill with darker text.
+- **Ghost** — keys render without a background, lighter text color.
+`
+
+export default {
+  title: "UI/Keybind",
+  id: "ui-keybind",
+  component: Keybind,
+  tags: ["autodocs"],
+  parameters: {
+    frameHeight: "200px",
+    frameBackground: "#fff",
+    docs: {
+      description: {
+        component: docs,
+      },
+    },
+  },
+  args: {
+    keys: ["⌘"],
+    variant: "neutral",
+  },
+  argTypes: {
+    keys: {
+      control: "object",
+    },
+    variant: {
+      control: "select",
+      options: ["neutral", "ghost"],
+    },
+  },
+}
+
+export const Playground = {}
+
+export const Variants = {
+  render: () => (
+    <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
+      <Keybind keys={["⌘"]} variant="neutral" />
+      <Keybind keys={["⌘"]} variant="ghost" />
+    </div>
+  ),
+}
+
+export const MultipleKeys = {
+  render: () => (
+    <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
+      <Keybind keys={["⌘", "K"]} variant="neutral" />
+      <Keybind keys={["⌘", "K"]} variant="ghost" />
+      <Keybind keys={["Ctrl", "B"]} variant="neutral" />
+      <Keybind keys={["Ctrl", "B"]} variant="ghost" />
+    </div>
+  ),
+}
+
+export const AllExamples = {
+  render: () => (
+    <div style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
+      <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
+        <span style={{ "font-size": "11px", color: "#808080", width: "50px" }}>Neutral</span>
+        <Keybind keys={["⌘"]} variant="neutral" />
+        <Keybind keys={["⌘", "K"]} variant="neutral" />
+        <Keybind keys={["⌘", "⇧", "P"]} variant="neutral" />
+        <Keybind keys={["Ctrl", "Shift", "B"]} variant="neutral" />
+      </div>
+      <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
+        <span style={{ "font-size": "11px", color: "#808080", width: "50px" }}>Ghost</span>
+        <Keybind keys={["⌘"]} variant="ghost" />
+        <Keybind keys={["⌘", "K"]} variant="ghost" />
+        <Keybind keys={["⌘", "⇧", "P"]} variant="ghost" />
+        <Keybind keys={["Ctrl", "Shift", "B"]} variant="ghost" />
+      </div>
+    </div>
+  ),
+}

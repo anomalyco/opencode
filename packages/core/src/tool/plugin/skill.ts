@@ -12,7 +12,7 @@ export const name = "skill"
 const FILE_LIMIT = 10
 
 export const Input = Schema.Struct({
-  id: Skill.ID.annotate({ description: "The ID of the skill from the available skills list" }),
+  id: Skill.ID.annotate({ description: "The ID of an available skill or a skill explicitly referenced by the user" }),
 })
 
 export const Output = Schema.Struct({
@@ -23,7 +23,7 @@ export const Output = Schema.Struct({
 export const description = [
   "Load a specialized skill's instructions and resources into the current conversation when the task at hand matches its description.",
   "",
-  "The skill ID must match one of the available skills in the instructions.",
+  "The skill ID must match an available skill or a skill explicitly referenced by the user.",
 ].join("\n")
 
 export const toModelOutput = Skill.toModelOutput

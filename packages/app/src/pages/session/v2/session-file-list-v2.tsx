@@ -1,5 +1,5 @@
 import { FileIcon } from "@opencode-ai/ui/file-icon"
-import "@opencode-ai/ui/v2/file-tree-v2.css"
+import "@opencode-ai/ui/file-tree.css"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { kindChange, kindLabel, type Kind } from "@/components/file-tree-v2"

@@ -89,13 +89,7 @@ describe("Plugin", () => {
       yield* host.mcp.connect({ location, server: "routed" }).pipe(Effect.orDie)
       yield* host.mcp.disconnect({ location, server: "routed" }).pipe(Effect.orDie)
       expect((yield* host.mcp.list({ location }).pipe(Effect.orDie)).location.directory).toBe(target)
-      expect(routed).toEqual([
-        "add:/target",
-        "remove:/target",
-        "connect:/target",
-        "disconnect:/target",
-        "list:/target",
-      ])
+      expect(routed).toEqual(["add:/target", "remove:/target", "connect:/target", "disconnect:/target", "list:/target"])
     }),
   )
 
@@ -138,9 +132,22 @@ describe("Plugin", () => {
       expect(updates).toBe(2)
       expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("second")
 
+      yield* plugins.activate(
+        [versioned(managed(), "2")],
+        [
+          {
+            source: { type: "package", package: "broken" },
+            status: "failed",
+            error: "failed to resolve",
+            tui: false,
+          },
+        ],
+      )
+      expect(updates).toBe(3)
+
       yield* plugins.activate([])
       expect(yield* agents.get(Agent.ID.make("configured"))).toBeUndefined()
-      expect(updates).toBe(3)
+      expect(updates).toBe(4)
       yield* unsubscribe
     }),
   )
@@ -160,7 +167,7 @@ describe("Plugin", () => {
         .pipe(Effect.exit)
 
       expect(Exit.isFailure(result)).toBe(true)
-      expect(yield* plugins.list()).toEqual([{ id: active }])
+      expect(yield* plugins.list()).toEqual([{ id: active, source: { type: "builtin" }, status: "active", tui: false }])
     }),
   )
 
@@ -189,12 +196,24 @@ describe("Plugin", () => {
       })
 
       yield* plugins.activate([versioned(good), versioned(bad)])
-      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("good") }])
+      expect(yield* plugins.list()).toEqual([
+        { id: Plugin.ID.make("good"), source: { type: "builtin" }, status: "active", tui: false },
+        {
+          id: Plugin.ID.make("bad"),
+          source: { type: "builtin" },
+          status: "failed",
+          error: expect.stringContaining("materialization failed"),
+          tui: false,
+        },
+      ])
       expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("loaded")
 
       fail = false
       yield* plugins.activate([versioned(good), versioned(bad, "2")])
-      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("good") }, { id: Plugin.ID.make("bad") }])
+      expect(yield* plugins.list()).toEqual([
+        { id: Plugin.ID.make("good"), source: { type: "builtin" }, status: "active", tui: false },
+        { id: Plugin.ID.make("bad"), source: { type: "builtin" }, status: "active", tui: false },
+      ])
     }),
   )
 
@@ -229,7 +248,15 @@ describe("Plugin", () => {
       yield* plugins.activate([versioned(previous)])
       yield* plugins.activate([versioned(replacement, "2")])
 
-      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("managed") }])
+      expect(yield* plugins.list()).toEqual([
+        {
+          id: Plugin.ID.make("managed"),
+          source: { type: "builtin" },
+          status: "failed",
+          error: expect.stringContaining("replacement failed"),
+          tui: false,
+        },
+      ])
       expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("previous")
     }),
   )
@@ -261,7 +288,15 @@ describe("Plugin", () => {
       yield* plugins.activate([versioned(previous)])
       yield* plugins.activate([versioned(replacement, "2")])
 
-      expect(yield* plugins.list()).toEqual([])
+      expect(yield* plugins.list()).toEqual([
+        {
+          id: Plugin.ID.make("managed"),
+          source: { type: "builtin" },
+          status: "failed",
+          error: expect.stringContaining("replacement failed"),
+          tui: false,
+        },
+      ])
       expect(yield* agents.get(Agent.ID.make("configured"))).toBeUndefined()
     }),
   )
@@ -300,6 +335,54 @@ describe("Plugin", () => {
       yield* plugins.activate([versioned(plugin)]).pipe(Effect.provideService(Secret, "secret"))
 
       expect(visible).toBe(false)
+    }),
+  )
+
+  it.effect("provides isolated durable storage for each plugin ID", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const storage = new Map<string, EffectPlugin.Context["storage"]>()
+      yield* plugins.activate(
+        ["a", "a:b", "雪"].map((id) => ({
+          id,
+          version: "1",
+          effect: (context: EffectPlugin.Context) => Effect.sync(() => storage.set(id, context.storage)),
+        })),
+      )
+      const first = storage.get("a")
+      const second = storage.get("a:b")
+      const unicode = storage.get("雪")
+      if (!first || !second || !unicode) return yield* Effect.die("plugin storage was not activated")
+
+      yield* first.set("b:c", { plugin: "a" })
+      yield* second.set("c", { plugin: "a:b" })
+      yield* unicode.set("c", { plugin: "雪" })
+      expect(yield* first.get("b:c")).toEqual({ plugin: "a" })
+      expect(yield* second.get("c")).toEqual({ plugin: "a:b" })
+      expect(yield* unicode.get("c")).toEqual({ plugin: "雪" })
+      expect(yield* first.get("c")).toBeUndefined()
+
+      const prefix = "%_:/雪/"
+      yield* first.set(`${prefix}beta`, [2])
+      yield* first.set(`${prefix}alpha`, [1])
+      const firstPage = yield* first.scan({ prefix, limit: 1 })
+      expect(firstPage).toEqual({ entries: [{ key: `${prefix}alpha`, value: [1] }], next: `${prefix}alpha` })
+      expect(yield* first.scan({ prefix, after: firstPage.next, limit: 1 })).toEqual({
+        entries: [{ key: `${prefix}beta`, value: [2] }],
+      })
+      expect(yield* first.scan({ prefix: `${prefix}%_` })).toEqual({ entries: [] })
+      expect(yield* first.scan({ prefix: "" })).toEqual({
+        entries: [
+          { key: `${prefix}alpha`, value: [1] },
+          { key: `${prefix}beta`, value: [2] },
+          { key: "b:c", value: { plugin: "a" } },
+        ],
+      })
+
+      yield* first.remove("b:c")
+      yield* first.remove("b:c")
+      expect(yield* first.get("b:c")).toBeUndefined()
+      return undefined
     }),
   )
 

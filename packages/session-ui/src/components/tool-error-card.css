@@ -23,7 +23,7 @@
     gap: 4px;
   }
 
-  [data-component="tool-error-card-icon"] [data-component="icon"] {
+  [data-component="tool-error-card-icon"] [data-slot="icon-svg"] {
     color: var(--card-accent);
   }
 

@@ -62,7 +62,6 @@ export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, se
     generation: settings.topP === undefined ? undefined : { topP: settings.topP },
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
     region: settings.region,
   }).model(modelID)
 }

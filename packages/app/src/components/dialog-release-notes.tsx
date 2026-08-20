@@ -86,12 +86,12 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
               <Show
                 when={isLast()}
                 fallback={
-                  <Button variant="secondary" size="large" onClick={handleNext}>
+                  <Button variant="neutral" size="large" onClick={handleNext}>
                     {language.t("dialog.releaseNotes.action.next")}
                   </Button>
                 }
               >
-                <Button variant="primary" size="large" onClick={handleClose}>
+                <Button variant="contrast" size="large" onClick={handleClose}>
                   {language.t("dialog.releaseNotes.action.getStarted")}
                 </Button>
               </Show>

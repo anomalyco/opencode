@@ -1,19 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Command } from "@opencode-ai/core/command"
-import { Config } from "@opencode-ai/core/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
-import { emptyConfigLayer, emptyMcpLayer, testLocationLayer } from "./fixture/mcp"
+import { emptyMcpLayer, testLocationLayer } from "./fixture/mcp"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(Command.node, [
     [MCP.node, emptyMcpLayer],
-    [Config.node, emptyConfigLayer],
     [Location.node, testLocationLayer],
   ]),
 )
