@@ -461,6 +461,29 @@ noLLMServer.instance(
 )
 
 noLLMServer.instance(
+  "loop does not exit when finish is unknown",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* seed(chat.id, { finish: "unknown" })
+
+      // The loop should NOT exit on "unknown" — it should treat it the
+      // same as "tool-calls" and keep running (or at least not break out
+      // of the loop as if the turn were completed).
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.role).toBe("assistant")
+      // "unknown" must not be treated as a terminal finish; the result
+      // should either continue or be re-evaluated, not silently exit.
+      if (result.info.role === "assistant") {
+        expect(result.info.finish).not.toBe("unknown")
+      }
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
   "loop exits for a completed parent turn with nonmonotonic message IDs",
   () =>
     Effect.gen(function* () {
