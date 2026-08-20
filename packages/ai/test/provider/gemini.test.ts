@@ -70,6 +70,46 @@ describe("Gemini route", () => {
           providerOptions: { safetySettings: [] },
         }),
       )
+      const cachedKey = yield* compileRequest(
+        LLMRequest.update(request, {
+          promptCacheKey: "cachedContents/from-key",
+        }),
+      )
+      const vertexCachedKey = yield* compileRequest(
+        LLMRequest.update(request, {
+          promptCacheKey: "projects/my-project/locations/us-central1/cachedContents/from-vertex-key",
+        }),
+      )
+      const genericCacheKey = yield* compileRequest(
+        LLMRequest.update(request, {
+          promptCacheKey: "session_12345",
+        }),
+      )
+      const emptyStudioKey = yield* compileRequest(
+        LLMRequest.update(request, {
+          promptCacheKey: "cachedContents/",
+        }),
+      )
+      const trailingStudioKey = yield* compileRequest(
+        LLMRequest.update(request, {
+          promptCacheKey: "cachedContents/id/extra",
+        }),
+      )
+      const emptyVertexKey = yield* compileRequest(
+        LLMRequest.update(request, {
+          promptCacheKey: "projects/p/locations/l/cachedContents/",
+        }),
+      )
+      const trailingVertexKey = yield* compileRequest(
+        LLMRequest.update(request, {
+          promptCacheKey: "projects/p/locations/l/cachedContents/id/extra",
+        }),
+      )
+      const invalidProjectsKey = yield* compileRequest(
+        LLMRequest.update(request, {
+          promptCacheKey: "projects/my-project/other-resource",
+        }),
+      )
 
       expect(prepared.body.generationConfig?.thinkingConfig).toEqual({
         thinkingBudget: 0,
@@ -77,6 +117,16 @@ describe("Gemini route", () => {
         thinkingLevel: "high",
       })
       expect(prepared.body.cachedContent).toBe("cachedContents/example")
+      expect(cachedKey.body.cachedContent).toBe("cachedContents/from-key")
+      expect(vertexCachedKey.body.cachedContent).toBe(
+        "projects/my-project/locations/us-central1/cachedContents/from-vertex-key",
+      )
+      expect(genericCacheKey.body.cachedContent).toBeUndefined()
+      expect(emptyStudioKey.body.cachedContent).toBeUndefined()
+      expect(trailingStudioKey.body.cachedContent).toBeUndefined()
+      expect(emptyVertexKey.body.cachedContent).toBeUndefined()
+      expect(trailingVertexKey.body.cachedContent).toBeUndefined()
+      expect(invalidProjectsKey.body.cachedContent).toBeUndefined()
       expect(prepared.body.safetySettings).toEqual([
         { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
       ])

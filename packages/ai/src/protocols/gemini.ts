@@ -385,6 +385,15 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
   return contents
 })
 
+// Gemini and Vertex AI support explicit `cachedContent` resource names (e.g.,
+// "cachedContents/{id}" or "projects/{project}/locations/{location}/cachedContents/{id}").
+// See:
+//   - https://ai.google.dev/gemini-api/docs/caching
+//   - https://cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview
+const isCachedContentResourceName = (value: string) =>
+  /^cachedContents\/[^/]+$/.test(value) ||
+  /^projects\/[^/]+\/locations\/[^/]+\/cachedContents\/[^/]+$/.test(value)
+
 const resolveOptions = (request: LLMRequest) => {
   const input = request.providerOptions
   const value = input?.thinkingConfig
@@ -400,8 +409,14 @@ const resolveOptions = (request: LLMRequest) => {
     thinkingLevel:
       ProviderShared.isRecord(value) && typeof value.thinkingLevel === "string" ? value.thinkingLevel : undefined,
   }
+  const cachedContent =
+    typeof input?.cachedContent === "string"
+      ? input.cachedContent
+      : typeof request.promptCacheKey === "string" && isCachedContentResourceName(request.promptCacheKey)
+        ? request.promptCacheKey
+        : undefined
   return {
-    cachedContent: typeof input?.cachedContent === "string" ? input.cachedContent : undefined,
+    cachedContent,
     safetySettings: mapSafetySettings(input?.safetySettings),
     serviceTier: typeof input?.serviceTier === "string" ? input.serviceTier : undefined,
     thinkingConfig: Object.values(thinkingConfig).some((item) => item !== undefined) ? thinkingConfig : undefined,
