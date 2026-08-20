@@ -4,6 +4,7 @@ import type {
   PluginInput,
   Plugin as PluginInstance,
   PluginModule,
+  PluginRoute,
   WorkspaceAdapter as PluginWorkspaceAdapter,
 } from "@opencode-ai/plugin"
 import { Config } from "@/config/config"
@@ -33,8 +34,11 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 
+type RouteTable = Array<{ id: string; routes: PluginRoute[] }>
+
 type State = {
   hooks: Hooks[]
+  routes: RouteTable
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -53,6 +57,8 @@ export interface Interface {
     output: Output,
   ) => Effect.Effect<Output>
   readonly list: () => Effect.Effect<Hooks[]>
+  /** Plugin-registered HTTP routes keyed by plugin id, used by the /plugin/* dispatcher */
+  readonly routes: () => Effect.Effect<RouteTable>
   readonly init: () => Effect.Effect<void>
 }
 
@@ -109,17 +115,33 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
   return result
 }
 
-async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
+async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[], routes: RouteTable) {
   const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
   if (plugin) {
-    await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
-    hooks.push(await (plugin as PluginModule).server(input, load.options))
+    const id = await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
+    const hook = await (plugin as PluginModule).server(input, load.options)
+    hooks.push(hook)
+    registerRoutes(routes, id, hook)
     return
   }
 
   for (const server of getLegacyPlugins(load.mod)) {
-    hooks.push(await server(input, load.options))
+    const hook = await server(input, load.options)
+    hooks.push(hook)
+    registerRoutes(routes, legacyPluginID(load.spec, server), hook)
   }
+}
+
+function legacyPluginID(spec: string, server: PluginInstance): string {
+  if (server.name && server.name !== "anonymous") return server.name
+  return parsePluginSpecifier(spec).pkg
+}
+
+function registerRoutes(routes: RouteTable, id: string, hook: Hooks) {
+  if (!hook.routes?.length) return
+  const entry = routes.find((item) => item.id === id)
+  if (entry) entry.routes.push(...hook.routes)
+  else routes.push({ id, routes: [...hook.routes] })
 }
 
 const layer = Layer.effect(
@@ -132,6 +154,7 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
         const hooks: Hooks[] = []
+        const routes: RouteTable = []
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
@@ -220,7 +243,7 @@ const layer = Layer.effect(
           // Keep plugin execution sequential so hook registration and execution
           // order remains deterministic across plugin runs.
           yield* Effect.tryPromise({
-            try: () => applyPlugin(load, input, hooks),
+            try: () => applyPlugin(load, input, hooks, routes),
             catch: (err) => {
               const message = errorMessage(err)
               return message
@@ -275,7 +298,7 @@ const layer = Layer.effect(
           ),
         )
 
-        return { hooks }
+        return { hooks, routes }
       }),
     )
 
@@ -299,11 +322,16 @@ const layer = Layer.effect(
       return s.hooks
     })
 
+    const routes = Effect.fn("Plugin.routes")(function* () {
+      const s = yield* InstanceState.get(state)
+      return s.routes
+    })
+
     const init = Effect.fn("Plugin.init")(function* () {
       yield* InstanceState.get(state)
     })
 
-    return Service.of({ trigger, list, init })
+    return Service.of({ trigger, list, routes, init })
   }),
 )
 
