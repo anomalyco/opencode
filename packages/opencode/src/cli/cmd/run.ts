@@ -528,6 +528,7 @@ export const RunCommand = effectCmd({
         const result = await sdk.session.create({
           title: name,
           permission: [...rules],
+          ephemeral: args.ephemeral,
         })
         const id = result.data?.id
         if (!id) {
@@ -572,6 +573,7 @@ export const RunCommand = effectCmd({
               }
             : undefined,
           permission: [...rules],
+          ephemeral: args.ephemeral,
         })
         const id = result.data?.id
         if (!id) {
@@ -684,6 +686,37 @@ export const RunCommand = effectCmd({
           process.exit(1)
         }
         const sessionID = sess.id
+
+        // Ephemeral cleanup is best-effort promptness: the server hides
+        // ephemeral sessions from lists and sweeps abandoned ones on startup,
+        // so uncovered exits (kill -9, crashes) only delay deletion.
+        let cleanup: Promise<void> | undefined
+        const remove = () => {
+          if (!args.ephemeral) return Promise.resolve()
+          if (cleanup) return cleanup
+          cleanup = sdk.session.delete({ sessionID }).then(
+            () => undefined,
+            () => {
+              process.stderr.write(`failed to delete ephemeral session ${sessionID}\n`)
+            },
+          )
+          return cleanup
+        }
+        const interrupted = (signal: "SIGINT" | "SIGTERM") => async () => {
+          await remove()
+          process.exit(signal === "SIGINT" ? 130 : 143)
+        }
+        const sigint = interrupted("SIGINT")
+        const sigterm = interrupted("SIGTERM")
+        if (args.ephemeral) {
+          process.on("SIGINT", sigint)
+          process.on("SIGTERM", sigterm)
+        }
+        const done = async () => {
+          process.off("SIGINT", sigint)
+          process.off("SIGTERM", sigterm)
+          await remove()
+        }
 
         function emit(type: string, data: Record<string, unknown>) {
           if (args.format === "json") {
@@ -859,10 +892,10 @@ export const RunCommand = effectCmd({
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
               process.exitCode = 1
-              return
+              return done()
             }
             await finish()
-            return
+            return done()
           }
 
           const model = pick(args.model)
@@ -876,10 +909,10 @@ export const RunCommand = effectCmd({
           if (result.error) {
             if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
             process.exitCode = 1
-            return
+            return done()
           }
           await finish()
-          return
+          return done()
         }
 
         const model = pick(args.model)
@@ -906,7 +939,7 @@ export const RunCommand = effectCmd({
         } catch (error) {
           dieInteractive(error)
         }
-        return
+        return done()
       }
 
       if (interactive && !args.attach && !args.session && !args.continue) {
