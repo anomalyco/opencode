@@ -301,8 +301,12 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "async": {
+      "description": "Start the subagent asynchronously; Task returns a running receipt instead of waiting for the subagent's result",
+      "type": "boolean",
+    },
     "background": {
-      "description": "Run the agent in the background. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress",
+      "description": "Deprecated alias for \`async\`, still accepted so existing callers keep working. Use \`async\` instead.",
       "type": "boolean",
     },
     "command": {

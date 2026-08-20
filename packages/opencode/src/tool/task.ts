@@ -14,6 +14,7 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { ASYNC_TASK_PROTOCOL } from "./task-protocol"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -22,23 +23,14 @@ export interface TaskPromptOps {
 }
 
 const id = "task"
-const BACKGROUND_DESCRIPTION = [
-  "Background mode: background=true launches the subagent asynchronously and returns immediately.",
-  "Foreground is the default; use it when you need the result before continuing.",
-  "Use background only for independent work that can run while you continue elsewhere.",
-  "You will be notified automatically when it finishes.",
-].join(" ")
-const BACKGROUND_STARTED = [
-  "The task is working in the background. You will be notified automatically when it finishes.",
-  "DO NOT sleep, poll for progress, ask the task for status, or duplicate this task's work — avoid working with the same files or topics it is using.",
-  "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
-].join("\n")
-const BACKGROUND_UPDATED = [
-  "Additional context sent to the running background task.",
-  "The task is still working in the background. You will be notified automatically when it finishes.",
-  "DO NOT sleep, poll for progress, ask the task for status, or duplicate this task's work — avoid working with the same files or topics it is using.",
-  "Work on non-overlapping tasks, or briefly tell the user what you sent and end your response.",
-].join("\n")
+const ASYNC_STARTED = "The task is running asynchronously. Follow the Async Task Protocol."
+const ASYNC_UPDATED = "Additional context queued for the running async task. Follow the Async Task Protocol."
+const TASK_UPDATED =
+  "Additional context queued for the running task. You will be notified automatically when it finishes."
+const ASYNC_PARAMETER_DESCRIPTION =
+  "Start the subagent asynchronously; Task returns a running receipt instead of waiting for the subagent's result"
+const BACKGROUND_PARAMETER_DESCRIPTION =
+  "Deprecated alias for `async`, still accepted so existing callers keep working. Use `async` instead."
 
 const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
@@ -53,12 +45,21 @@ const BaseParameterFields = {
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
 
-export const Parameters = Schema.Struct({
+const AsyncParameterFields = {
   ...BaseParameterFields,
-  background: Schema.optional(Schema.Boolean).annotate({
-    description:
-      "Run the agent in the background. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress",
-  }),
+  async: Schema.optional(Schema.Boolean).annotate({ description: ASYNC_PARAMETER_DESCRIPTION }),
+}
+
+/** What the model is offered once async execution is enabled: one input with one meaning. */
+const AsyncParameters = Schema.Struct(AsyncParameterFields)
+
+/**
+ * What the tool accepts. `background` is no longer advertised, but it is still decoded and still
+ * selects async execution, so callers written against the previous input keep working.
+ */
+export const Parameters = Schema.Struct({
+  ...AsyncParameterFields,
+  background: Schema.optional(Schema.Boolean).annotate({ description: BACKGROUND_PARAMETER_DESCRIPTION }),
 })
 
 function renderOutput(input: {
@@ -94,11 +95,14 @@ export const TaskTool = Tool.define(
       ctx: Tool.Context,
     ) {
       const cfg = yield* config.get()
-      const runInBackground = params.background === true
-      if (runInBackground && !flags.experimentalBackgroundSubagents) {
-        return yield* Effect.fail(
-          new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
-        )
+      if (params.background !== undefined) {
+        yield* Effect.logWarning("task called with the deprecated `background` input; use `async`", {
+          "session.id": ctx.sessionID,
+        })
+      }
+      const runAsync = params.async === true || params.background === true
+      if (runAsync && !flags.experimentalBackgroundSubagents) {
+        return yield* Effect.fail(new Error("Async subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"))
       }
 
       const parent = yield* sessions.get(ctx.sessionID)
@@ -186,7 +190,7 @@ export const TaskTool = Tool.define(
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
         model,
-        ...(runInBackground ? { background: true } : {}),
+        ...(runAsync ? { background: true } : {}),
       }
 
       yield* ctx.metadata({
@@ -243,8 +247,8 @@ export const TaskTool = Tool.define(
                   state,
                   summary:
                     state === "completed"
-                      ? `Background task completed: ${params.description}`
-                      : `Background task failed: ${params.description}`,
+                      ? `Async task completed: ${params.description}`
+                      : `Async task failed: ${params.description}`,
                   text,
                 }),
               },
@@ -275,8 +279,8 @@ export const TaskTool = Tool.define(
           output: renderOutput({
             sessionID: nextSession.id,
             state: "running",
-            summary: "Background task updated",
-            text: BACKGROUND_UPDATED,
+            summary: "Async task updated",
+            text: flags.experimentalBackgroundSubagents ? ASYNC_UPDATED : TASK_UPDATED,
           }),
         }
       }
@@ -307,13 +311,13 @@ export const TaskTool = Tool.define(
           output: renderOutput({
             sessionID: nextSession.id,
             state: "running",
-            summary: "Background task started",
-            text: BACKGROUND_STARTED,
+            summary: "Async task started",
+            text: ASYNC_STARTED,
           }),
         }
       }
 
-      if (runInBackground) {
+      if (runAsync) {
         yield* notify(info.id)
         return backgroundResult()
       }
@@ -360,10 +364,12 @@ export const TaskTool = Tool.define(
 
     return {
       description: flags.experimentalBackgroundSubagents
-        ? [DESCRIPTION, BACKGROUND_DESCRIPTION].join("\n\n")
+        ? [DESCRIPTION, ASYNC_TASK_PROTOCOL].join("\n\n")
         : DESCRIPTION,
       parameters: Parameters,
-      jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
+      // The advertised schema never carries `background`: a deprecated alias should stay decodable
+      // without being offered as a second way to say the same thing.
+      jsonSchema: ToolJsonSchema.fromSchema(flags.experimentalBackgroundSubagents ? AsyncParameters : BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         run(params, ctx).pipe(Effect.orDie),
     }
