@@ -3,11 +3,11 @@ export * as PlanPlugin from "./plan.js"
 import { Message, ToolFailure } from "@opencode-ai/ai"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Global } from "@opencode-ai/util/global"
-import { Patch } from "@opencode-ai/util/patch"
-import { Effect, Result, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import path from "path"
 import { Agent } from "../agent.js"
 import { Environment } from "../environment/index.js"
+import { Permission } from "../permission.js"
 import { SessionEvent } from "../session/event.js"
 
 const plan = Agent.ID.make("plan")
@@ -38,17 +38,21 @@ export const Plugin = define({
         item.description = "Read-only agent for exploring the codebase and planning work before implementation."
         item.mode = "primary"
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
+        item.permissions.push({ action: "edit", resource: "*", effect: "deny" })
+        item.permissions.push({ action: "edit", resource: path.join(directory, "*"), effect: "allow" })
+        item.permissions.push({ action: "external_directory", resource: path.join(directory, "*"), effect: "allow" })
       })
     })
 
-    yield* ctx.tool.hook("execute.before", (event) => {
+    yield* ctx.tool.hook("execute.after", (event) => {
       if (event.agent !== plan) return Effect.void
+      if (event.status !== "error") return Effect.void
       if (event.tool !== "edit" && event.tool !== "write" && event.tool !== "patch") return Effect.void
-      const outside = mutationPaths(event.tool, event.input).find((target) => !contained(directory, target))
-      if (!outside) return Effect.void
-      return new ToolFailure({
-        message: `Cannot use ${event.tool} to modify ${outside} in Plan mode. You can only edit files in the Plan directory: ${directory}`,
+      if (!(event.error.error instanceof Permission.BlockedError)) return Effect.void
+      event.error = new ToolFailure({
+        message: `Cannot use ${event.tool} to modify files outside the Plan directory: ${directory}`,
       })
+      return Effect.void
     })
 
     // Compaction and committed reverts can strip reminders while the session's agent stays
@@ -116,27 +120,4 @@ function lastReminder(messages: ReadonlyArray<Message>, enterReminder: string) {
     if (part?.type !== "text") return found
     return part.text === enterReminder || part.text === leave ? part.text : found
   }, undefined)
-}
-
-function mutationPaths(tool: "edit" | "write" | "patch", input: unknown) {
-  if (typeof input !== "object" || input === null) return []
-  if (tool !== "patch") {
-    const target = Reflect.get(input, "path")
-    return typeof target === "string" ? [path.resolve(target)] : []
-  }
-  const patchText = Reflect.get(input, "patchText")
-  if (typeof patchText !== "string") return []
-  const parsed = Patch.parse(patchText)
-  if (Result.isFailure(parsed)) return []
-  return parsed.success.flatMap((hunk) => [
-    path.resolve(hunk.path),
-    ...(hunk.type === "update" && hunk.movePath ? [path.resolve(hunk.movePath)] : []),
-  ])
-}
-
-function contained(directory: string, target: string) {
-  const relative = path.relative(directory, target)
-  return (
-    relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
-  )
 }

@@ -236,7 +236,6 @@ const pre = [
   MCPCodeModeExclusionPlugin.Plugin,
   WellKnownPlugin.Plugin,
   AgentPlugin.Plugin,
-  PlanPlugin.Plugin,
   CommandPlugin.Plugin,
   SkillPlugin.Plugin,
   ...SystemPromptPlugin.Plugins,
@@ -275,6 +274,7 @@ const post = [
   ConfigWebSearchPlugin.Plugin,
   VariantPlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
+  PlanPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 
 export const list = Effect.fn("PluginInternal.list")(function* () {

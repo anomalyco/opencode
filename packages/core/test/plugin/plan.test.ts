@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Message } from "@opencode-ai/ai"
-import { DateTime, Effect, Stream } from "effect"
+import { Message, ToolFailure } from "@opencode-ai/ai"
+import { DateTime, Effect, Stream, Types } from "effect"
 import type { SessionContext } from "@opencode-ai/plugin/effect/session"
 import type { ToolHooks } from "@opencode-ai/plugin/effect/tool"
 import { Agent } from "@opencode-ai/core/agent"
@@ -8,6 +8,7 @@ import { Environment } from "@opencode-ai/core/environment/index"
 import { Event } from "@opencode-ai/schema/event"
 import { Model } from "@opencode-ai/core/model"
 import { PlanPlugin } from "@opencode-ai/core/plugin/plan"
+import { Permission } from "@opencode-ai/core/permission"
 import { Provider } from "@opencode-ai/core/provider"
 import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -37,7 +38,15 @@ const agentSelected = (agent: Agent.ID, previous: Agent.ID): SessionEvent.AgentS
 const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.AgentSelected> = []) {
   const persisted = new Array<string>()
   let contextHook: ((input: SessionContext) => Effect.Effect<void>) | undefined
-  let toolHook: ((input: ToolHooks["execute.before"]) => Effect.Effect<void, Tool.Error>) | undefined
+  let toolHook: ((input: ToolHooks["execute.after"]) => Effect.Effect<void>) | undefined
+  const planAgent = {
+    id: plan,
+    name: Agent.Name.make("Plan"),
+    request: { settings: {}, headers: {}, body: {} },
+    mode: "primary",
+    hidden: false,
+    permissions: [{ action: "*", resource: "*", effect: "allow" }],
+  } satisfies Types.DeepMutable<Agent.Info>
   const driver = Environment.makeMemoryDriver()
   yield* PlanPlugin.Plugin.effect(
     host({
@@ -45,15 +54,26 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
         get: () => Effect.die("unused agent.get"),
         list: () => Effect.die("unused agent.list"),
         reload: () => Effect.die("unused agent.reload"),
-        transform: () => Effect.succeed({ dispose: Effect.void }),
+        transform: (callback) => {
+          callback({
+            list: () => [planAgent],
+            get: (id) => (id === plan ? planAgent : undefined),
+            default: () => {},
+            update: (id, update) => {
+              if (id === plan) update(planAgent)
+            },
+            remove: () => {},
+          })
+          return Effect.succeed({ dispose: Effect.void })
+        },
       },
       tool: {
         transform: () => Effect.die("unused tool.transform"),
         hook: (name, callback) => {
-          if (name === "execute.before") {
+          if (name === "execute.after") {
             // Hook names and callbacks are correlated, but TypeScript does not narrow this generic registration API.
             // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-            toolHook = callback as unknown as (input: ToolHooks["execute.before"]) => Effect.Effect<void, Tool.Error>
+            toolHook = callback as unknown as (input: ToolHooks["execute.after"]) => Effect.Effect<void>
           }
           return Effect.succeed({ dispose: Effect.void })
         },
@@ -90,7 +110,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
   )
   if (!contextHook) return yield* Effect.die("plan plugin did not register a context hook")
   if (!toolHook) return yield* Effect.die("plan plugin did not register a tool hook")
-  return { persisted, contextHook, toolHook, files: Environment.makeFiles(driver) }
+  return { persisted, contextHook, toolHook, files: Environment.makeFiles(driver), planAgent }
 })
 
 const request = (agent: Agent.ID, messages: Array<Message>): SessionContext => ({
@@ -102,13 +122,17 @@ const request = (agent: Agent.ID, messages: Array<Message>): SessionContext => (
   tools: {},
 })
 
-const toolRequest = (tool: "edit" | "write" | "patch", input: unknown): ToolHooks["execute.before"] => ({
+type ToolErrorEvent = Extract<ToolHooks["execute.after"], { readonly status: "error" }>
+
+const toolError = (tool: "edit" | "write" | "patch", error: Tool.Error): ToolErrorEvent => ({
   tool,
-  input,
+  input: {},
   sessionID,
   agent: plan,
   messageID: SessionMessage.ID.make("msg_plan_tool"),
   id: Tool.CallID.make("call_plan_tool"),
+  status: "error",
+  error,
 })
 
 const settle = (persisted: ReadonlyArray<string>, expected: number, remaining = 1000): Effect.Effect<void, Error> =>
@@ -220,40 +244,56 @@ describe("plan plugin mutations", () => {
     }),
   )
 
-  it.effect("allows edit and write inside the Plan directory", () =>
+  it.effect("allows edits only inside the Plan directory", () =>
     Effect.gen(function* () {
-      const { toolHook } = yield* run()
-      yield* toolHook(toolRequest("write", { path: path.join(planDirectory, "work.md") }))
-      yield* toolHook(toolRequest("edit", { path: path.join(planDirectory, "work.md") }))
+      const { planAgent } = yield* run()
+      expect(Permission.evaluate("edit", path.join(planDirectory, "work.md"), planAgent.permissions).effect).toBe(
+        "allow",
+      )
+      expect(Permission.evaluate("edit", "/workspace/source.ts", planAgent.permissions).effect).toBe("deny")
+      expect(Permission.evaluate("edit", "source.ts", planAgent.permissions).effect).toBe("deny")
     }),
   )
 
-  it.effect("rejects edit and write outside the Plan directory with the allowed path", () =>
+  it.effect("allows the Plan directory external boundary", () =>
+    Effect.gen(function* () {
+      const { planAgent } = yield* run()
+      expect(
+        Permission.evaluate("external_directory", path.join(planDirectory, "nested", "*"), planAgent.permissions)
+          .effect,
+      ).toBe("allow")
+    }),
+  )
+
+  it.effect("rewrites blocked mutation failures with the Plan directory", () =>
     Effect.gen(function* () {
       const { toolHook } = yield* run()
-      for (const tool of ["edit", "write"] as const) {
-        const failure = yield* toolHook(toolRequest(tool, { path: "/workspace/source.ts" })).pipe(Effect.flip)
-        expect(failure.message).toContain("You can only edit files in the Plan directory")
-        expect(failure.message).toContain(planDirectory)
+      for (const tool of ["edit", "write", "patch"] as const) {
+        const event = toolError(
+          tool,
+          new ToolFailure({
+            message: "Unable to modify file",
+            error: new Permission.BlockedError({
+              rules: [],
+              permission: "edit",
+              resources: ["source.ts"],
+            }),
+          }),
+        )
+        yield* toolHook(event)
+        expect(event.error.message).toContain("outside the Plan directory")
+        expect(event.error.message).toContain(planDirectory)
       }
     }),
   )
 
-  it.effect("rejects a patch when any target is outside the Plan directory", () =>
+  it.effect("preserves mutation failures unrelated to permissions", () =>
     Effect.gen(function* () {
       const { toolHook } = yield* run()
-      const failure = yield* toolHook(
-        toolRequest("patch", {
-          patchText: `*** Begin Patch
-*** Add File: ${path.join(planDirectory, "work.md")}
-+plan
-*** Add File: /workspace/source.ts
-+code
-*** End Patch`,
-        }),
-      ).pipe(Effect.flip)
-      expect(failure.message).toContain("/workspace/source.ts")
-      expect(failure.message).toContain(planDirectory)
+      const error = new ToolFailure({ message: "oldString was not found" })
+      const event = toolError("edit", error)
+      yield* toolHook(event)
+      expect(event.error).toBe(error)
     }),
   )
 })
