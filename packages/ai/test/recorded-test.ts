@@ -1,5 +1,7 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { NodeSocket } from "@effect/platform-node"
 import { Layer } from "effect"
+import { Socket } from "effect/unstable/socket"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 import { LLMClient, RequestExecutor } from "../src/route.js"
@@ -16,7 +18,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings")
 
-type RecordedEnv = RequestExecutorService | LLMClientService | ImageClientService
+type RecordedEnv = RequestExecutorService | LLMClientService | ImageClientService | Socket.WebSocketConstructor
 
 type RecordedTestsOptions = RecordedGroupOptions & {
   readonly options?: HttpRecorder.RecorderOptions
@@ -69,7 +71,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         ...metadata,
       }
       if (recording) {
-        if (process.env.CI !== undefined) throw new Error("Unset CI before recording HTTP cassettes")
+        if (process.env.CI !== undefined) throw new Error("Unset CI before recording cassettes")
         HttpRecorder.removeCassetteSync(cassette, { directory: FIXTURES_DIR })
       }
       const requestExecutor = RequestExecutor.layer.pipe(
@@ -81,10 +83,16 @@ export const recordedTests = (options: RecordedTestsOptions) =>
           }),
         ),
       )
+      const webSocket = HttpRecorder.layerWebSocketConstructor(cassette, {
+        ...recorderOptions,
+        directory: FIXTURES_DIR,
+        metadata: recorderMetadata,
+      }).pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS))
       return Layer.mergeAll(
         requestExecutor,
         LLMClient.layer.pipe(Layer.provide(requestExecutor)),
         ImageClient.layer.pipe(Layer.provide(requestExecutor)),
+        webSocket,
       )
     },
   })

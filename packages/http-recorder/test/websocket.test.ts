@@ -80,6 +80,38 @@ describe("WebSocket", () => {
     ])
   })
 
+  test("constructor recording forwards handshake options", async () => {
+    using directory = tempDirectory("http-recorder-websocket-constructor-")
+    let received: unknown
+    const recorder = HttpRecorder.layerWebSocketConstructor("websocket/constructor-options", {
+      directory: directory.path,
+    }).pipe(
+      Layer.provide(
+        Layer.succeed(Socket.WebSocketConstructor, (url, options) => {
+          received = options
+          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- the fixture implements the WebSocket surface used by the recorder.
+          return new EchoWebSocket(url) as unknown as globalThis.WebSocket
+        }),
+      ),
+    )
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const constructor = yield* Socket.WebSocketConstructor
+        const options = { headers: { authorization: "Bearer fixture" } }
+        const socket = Reflect.apply(constructor, undefined, ["wss://echo.example.test/options", options])
+        yield* Effect.callback<void>((resume) => {
+          socket.addEventListener("open", () => {
+            socket.close()
+            resume(Effect.void)
+          })
+        })
+      }).pipe(Effect.scoped, Effect.provide(recorder)),
+    )
+
+    expect(received).toEqual({ headers: { authorization: "Bearer fixture" } })
+  })
+
   test("constructor replay validates dynamic URLs and protocols without opening a live socket", async () => {
     using directory = tempDirectory("http-recorder-websocket-constructor-")
     await seedCassetteDirectory(directory.path, "websocket/constructor", [
