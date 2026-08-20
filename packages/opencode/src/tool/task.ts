@@ -59,6 +59,10 @@ export const Parameters = Schema.Struct({
     description:
       "Run the agent in the background. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress",
   }),
+  timeout: Schema.optional(Schema.Number).annotate({
+    description:
+      "Optional timeout in milliseconds for the foreground subagent. If the subagent does not complete within this duration it is cancelled and the tool returns a <task_error> block so the calling agent can retry with a larger timeout, narrow the scope, or fall back. Defaults to the value of OPENCODE_EXPERIMENTAL_TASK_DEFAULT_TIMEOUT_MS, or 10 minutes when unset.",
+  }),
 })
 
 function renderOutput(input: {
@@ -77,6 +81,8 @@ function renderOutput(input: {
     "</task>",
   ].join("\n")
 }
+
+const TASK_DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
 
 export const TaskTool = Tool.define(
   id,
@@ -314,24 +320,54 @@ export const TaskTool = Tool.define(
         runCancel.fork(cancel)
       }
 
+      const taskTimeoutMs = params.timeout ?? flags.taskDefaultTimeoutMs ?? TASK_DEFAULT_TIMEOUT_MS
+      if (params.timeout !== undefined && params.timeout < 0) {
+        return yield* Effect.fail(
+          new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number of milliseconds.`),
+        )
+      }
+
       return yield* Effect.acquireUseRelease(
         Effect.sync(() => {
           ctx.abort.addEventListener("abort", onAbort)
         }),
         () =>
           Effect.gen(function* () {
-            const result = yield* Effect.raceFirst(
-              background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
-              background.waitForPromotion(nextSession.id),
+            const inner = Effect.gen(function* () {
+              const result = yield* Effect.raceFirst(
+                background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
+                background.waitForPromotion(nextSession.id),
+              )
+              if (result?.metadata?.background === true) return backgroundResult()
+              if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
+              if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
+              return {
+                title: params.description,
+                metadata,
+                output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+              }
+            })
+            const outcome = yield* Effect.raceFirst(
+              inner.pipe(Effect.map((output) => ({ kind: "result" as const, output }))),
+              Effect.sleep(`${taskTimeoutMs} millis`).pipe(Effect.as({ kind: "timeout" as const })),
             )
-            if (result?.metadata?.background === true) return backgroundResult()
-            if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
-            if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
-            return {
-              title: params.description,
-              metadata,
-              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+            if (outcome.kind === "timeout") {
+              yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
+              return {
+                title: params.description,
+                metadata,
+                output: [
+                  `task_id: ${nextSession.id} (for resuming if the timeout was premature)`,
+                  "",
+                  "<task_error>",
+                  `Subagent "${params.subagent_type}" did not complete within ${taskTimeoutMs}ms and was cancelled.`,
+                  `If this task legitimately needs more time, retry with a larger 'timeout' value (in milliseconds) or narrow the task scope.`,
+                  `If the subagent appears stalled (provider or network hang), do not retry indefinitely; report what you have to the user.`,
+                  "</task_error>",
+                ].join("\n"),
+              }
             }
+            return outcome.output
           }),
         (_, exit) =>
           Effect.gen(function* () {
