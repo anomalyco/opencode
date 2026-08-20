@@ -76,7 +76,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
       }),
     })
   })
-  await page.route("**/pty*", (route) =>
+  await page.route(/\/api\/pty(?:\?.*)?$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
