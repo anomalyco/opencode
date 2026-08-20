@@ -5,6 +5,7 @@ import { DatabaseError } from "../database"
 import type { GeoStatMetric } from "./geo"
 import { ModelStatRepo, type ModelStatMetric } from "./model"
 import type { ProviderStatMetric } from "./provider"
+import { DATA_SITE_TIERS, normalizeTier } from "./stat"
 
 export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
 export type TokenProduct = "Zen" | "Go" | "Enterprise"
@@ -129,7 +130,9 @@ const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const METRIC_MODEL_LIMIT = 10
 const TOP_MODEL_SEGMENT_LIMIT = 9
+// Preserve the response shape while the public site presents Go and Free as one cohort.
 const SITE_PRODUCT = "Go"
+const SITE_TIER_PLACEHOLDERS = DATA_SITE_TIERS.map(() => "?").join(", ")
 const LEADERBOARD_CHANGE_MIN_MULTIPLE = 10
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
@@ -212,10 +215,13 @@ export function getStatsLabData(provider: string): Effect.Effect<StatsLabData | 
 
 async function listModelDaily(): Promise<ModelStatMetric[]> {
   return (
-    await queryRows(`select period_key, updated_at, tier, provider, model, sessions, unique_users, input_tokens,
+    await queryRows(
+      `select period_key, updated_at, tier, provider, model, sessions, unique_users, input_tokens,
     output_tokens, reasoning_tokens, cache_read_tokens, total_tokens, input_cost_microcents, output_cost_microcents,
     total_cost_microcents from model_stat where grain = 'day' and client = 'all' and source = 'all'
-    and tier in ('Go', 'go') order by period_key`)
+    and tier in (${SITE_TIER_PLACEHOLDERS}) order by period_key`,
+      DATA_SITE_TIERS,
+    )
   ).map((row) => ({
     periodKey: stringValue(row.period_key),
     updatedAt: dateValue(row.updated_at),
@@ -237,8 +243,12 @@ async function listModelDaily(): Promise<ModelStatMetric[]> {
 
 async function listProviderDaily(): Promise<ProviderStatMetric[]> {
   return (
-    await queryRows(`select period_key, updated_at, tier, provider, total_tokens from provider_stat
-    where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') order by period_key`)
+    await queryRows(
+      `select period_key, updated_at, tier, provider, total_tokens from provider_stat
+    where grain = 'day' and client = 'all' and source = 'all'
+    and tier in (${SITE_TIER_PLACEHOLDERS}) order by period_key`,
+      DATA_SITE_TIERS,
+    )
   ).map((row) => ({
     periodKey: stringValue(row.period_key),
     updatedAt: dateValue(row.updated_at),
@@ -259,8 +269,9 @@ async function listGeoDaily(opts?: { provider?: string; model?: string }): Promi
   return (
     await queryRows(
       `select period_key, updated_at, tier, provider, model, country, continent, total_tokens from geo_stat
-    where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') ${scope} order by period_key`,
-      params,
+    where grain = 'day' and client = 'all' and source = 'all'
+    and tier in (${SITE_TIER_PLACEHOLDERS}) ${scope} order by period_key`,
+      [...DATA_SITE_TIERS, ...params],
     )
   ).map((row) => ({
     periodKey: stringValue(row.period_key),
@@ -735,6 +746,7 @@ function rowsForProduct<T extends { periodStart: number; tier: string }>(
   end: number,
 ) {
   const windowRows = rows.filter((row) => row.periodStart >= start && row.periodStart < end)
+  if (product === SITE_PRODUCT) return windowRows.filter((row) => row.tier === "Go" || row.tier === "Free")
   if (product !== "All Users") return windowRows.filter((row) => row.tier === product)
 
   const allRows = windowRows.filter((row) => row.tier === "all")
@@ -942,15 +954,6 @@ function normalizeGeoRow(row: GeoStatMetric): GeoMetricRow[] {
       continent: row.continent || "",
     },
   ]
-}
-
-function normalizeTier(value: string) {
-  const normalized = value.toLowerCase()
-  if (normalized === "paid" || normalized === "zen") return "Zen"
-  if (normalized === "go") return "Go"
-  if (normalized === "enterprise") return "Enterprise"
-  if (normalized === "all") return "all"
-  return value
 }
 
 function dateTime(value: Date | string) {
