@@ -39,7 +39,7 @@ const models = [
   { name: "Qwen3.6 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M2.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "Muse Spark 1.2", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
+  { name: "Muse Spark 1.2 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "DeepSeek V4 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "DeepSeek V4 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -73,13 +73,13 @@ function LimitsGraph(props: { href: string }) {
     { id: "qwen3.8-max", name: "Qwen3.8 Max", req: 160, d: "90ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 1050, d: "150ms" },
-    { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
     { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 2050, d: "290ms" },
+    { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
-    { id: "hy3", name: "Hy3", req: 4300, d: "320ms" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 7600, d: "330ms" },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
-    { id: "muse-spark-1.2", name: "Muse Spark 1.2", req: 45300, edge: true, d: "360ms" },
+    { id: "hy3", name: "Hy3", req: 34400, baseReq: 4300, d: "320ms" },
+    { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", req: 45300, edge: true, d: "360ms" },
   ]
 
   const w = 1040
@@ -153,12 +153,23 @@ function LimitsGraph(props: { href: string }) {
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
-                    width={Math.max(0, x(ratio(m.req)) - left)}
+                    width={Math.max(0, x(ratio(m.baseReq ?? m.req)) - left)}
                     height={bh}
                     data-bar
                     data-kind="go"
                     data-model={m.id}
                   />
+                  {m.baseReq && (
+                    <rect
+                      x={x(ratio(m.baseReq)) + 2}
+                      y={gy(i()) - bh / 2}
+                      width={Math.max(0, x(ratio(m.req)) - x(ratio(m.baseReq)) - 2)}
+                      height={bh}
+                      data-bar
+                      data-kind="promo"
+                      data-model={m.id}
+                    />
+                  )}
                 </g>
               )}
             </For>
@@ -193,6 +204,7 @@ function LimitsGraph(props: { href: string }) {
               >
                 <span data-value>{m.req.toLocaleString()}</span>
                 <span data-name>{m.name}</span>
+                {m.baseReq && <span data-bonus>8x usage</span>}
               </span>
             )}
           </For>
@@ -242,6 +254,12 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
+            <div data-component="desktop-app-banner">
+              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
+              <div data-slot="content">
+                <span data-slot="text">{i18n.t("go.banner.text")}</span>
+              </div>
+            </div>
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />
@@ -496,7 +514,7 @@ export default function Home() {
                       .
                     </p>
                     <p>
-                      <strong>Muse Spark 1.2:</strong> {i18n.t("go.faq.a5.museRetention")}{" "}
+                      <strong>Muse Spark 1.2 Contributor:</strong> {i18n.t("go.faq.a5.museRetention")}{" "}
                       <a href="https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>

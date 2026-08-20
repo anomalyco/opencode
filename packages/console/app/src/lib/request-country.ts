@@ -70,5 +70,9 @@ export function countryFromRequest(request: Request | undefined) {
 }
 
 export function isModelCountryRestricted(model: string, country: string | undefined) {
-  return model === "muse-spark-1.2" && country !== undefined && MUSE_SPARK_BLOCKED_COUNTRIES.has(country.toUpperCase())
+  return (
+    model === "muse-spark-1.2-contributor" &&
+    country !== undefined &&
+    MUSE_SPARK_BLOCKED_COUNTRIES.has(country.toUpperCase())
+  )
 }

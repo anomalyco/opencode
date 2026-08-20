@@ -131,7 +131,12 @@ export async function handler(
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
     const authInfo = await authenticate(modelInfo, zenApiKey)
-    if (authInfo && opts.modelList === "lite" && modelInfo.id === "muse-spark-1.2" && !authInfo.allowTraining)
+    if (
+      authInfo &&
+      opts.modelList === "lite" &&
+      modelInfo.id === "muse-spark-1.2-contributor" &&
+      !authInfo.allowTraining
+    )
       throw new DataPolicyError(
         t("zen.api.error.trainingNotAllowed", {
           consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
