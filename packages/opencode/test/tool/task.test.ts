@@ -984,7 +984,11 @@ describe("tool.task", () => {
       expect(runs).toBe(1)
 
       yield* Deferred.succeed(done, undefined)
-      expect((yield* jobs.wait({ id: result.metadata.sessionId })).info?.output).toBe("background done")
+      // The stored output is the classified result, produced once so the synchronous return and the
+      // async callback carry the same structured shape.
+      const promoted = (yield* jobs.wait({ id: result.metadata.sessionId })).info?.output
+      expect(promoted).toContain("background done")
+      expect(promoted).toContain(`state="completed"`)
       expect((yield* Deferred.await(injected)).parts[0]?.type).toBe("text")
       expect(runs).toBe(1)
     }),
@@ -1094,7 +1098,8 @@ describe("tool.task", () => {
       second.resolve()
       const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 1_000 })
       expect(waited.info?.status).toBe("completed")
-      expect(waited.info?.output).toBe("second done")
+      expect(waited.info?.output).toContain("second done")
+      expect(waited.info?.output).toContain(`state="completed"`)
       const notification = yield* Effect.promise(() => injected.promise)
       expect(notification.variant).toBe("xhigh")
       expect(notification.parts[0]?.type).toBe("text")
@@ -1131,7 +1136,8 @@ describe("tool.task", () => {
       const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
       expect(waited.timedOut).toBe(false)
       expect(waited.info?.status).toBe("completed")
-      expect(waited.info?.output).toBe("background done")
+      expect(waited.info?.output).toContain("background done")
+      expect(waited.info?.output).toContain(`state="completed"`)
     }),
   )
 

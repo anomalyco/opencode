@@ -14,6 +14,7 @@ import type { SessionMutation } from "../session/closure/mutation"
 import type { SessionPhysical } from "../session/physical-interrupt"
 import { SessionAdmission } from "../session/closure/admission"
 import { AttachmentCoordinator } from "@/session/attachment/coordinator"
+import { renderCancelledTask, renderOutput, renderSelectedTask } from "@/session/task-return"
 import { Config } from "@/config/config"
 import { Cause, Deferred, Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -108,23 +109,6 @@ export const Parameters = Schema.Struct({
   ...AsyncParameterFields,
   background: Schema.optional(Schema.Boolean).annotate({ description: BACKGROUND_PARAMETER_DESCRIPTION }),
 })
-
-function renderOutput(input: {
-  sessionID: SessionID
-  state: "running" | "completed" | "error"
-  summary?: string
-  text: string
-}) {
-  const tag = input.state === "error" ? "task_error" : "task_result"
-  return [
-    `<task id="${input.sessionID}" state="${input.state}">`,
-    ...(input.summary ? [`<summary>${input.summary}</summary>`] : []),
-    `<${tag}>`,
-    input.text,
-    `</${tag}>`,
-    "</task>",
-  ].join("\n")
-}
 
 export const TaskTool = Tool.define(
   id,
@@ -288,6 +272,12 @@ export const TaskTool = Tool.define(
       }
       const reservation = parentScope ? yield* parentScope.reserve(nextSession.id) : undefined
 
+      // A successful replacement overwrites the terminal entry during registration, before the
+      // replacement run starts. Capture the earlier successful output while it is still addressable;
+      // an empty string is meaningful prior output and must not collapse into absence.
+      const previous = yield* background.get(nextSession.id)
+      const priorOutput = previous && Object.hasOwn(previous, "output") ? (previous.output ?? "") : undefined
+
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
         const invoke = (invocation?: AttachmentCoordinator.Scope) =>
           Effect.gen(function* () {
@@ -315,15 +305,14 @@ export const TaskTool = Tool.define(
             if (failed?.type === "tool" && failed.state.status === "error") {
               return yield* Effect.fail(new Error(`Subagent failed (task_id: ${nextSession.id}): ${failed.state.error}`))
             }
-            if (!invocation) return result.parts.findLast((item) => item.type === "text")?.text ?? ""
             // The return gate. `result()` releases only once the async children this call started
             // have settled, so a subagent cannot answer its caller before their results arrive.
-            const selected = yield* invocation.result(result)
-            const chosen =
-              selected.type === "evidence"
-                ? (selected.candidate?.assistant ?? selected.observed?.assistant ?? selected.fallback)
-                : undefined
-            return chosen?.parts.findLast((item) => item.type === "text")?.text ?? ""
+            const selected = invocation
+              ? yield* invocation.result(result)
+              : ({ type: "evidence", fallback: result, degraded: false } as const)
+            // Classified here, once, so the synchronous return and the async callback carry the
+            // same structured result rather than each deriving their own.
+            return renderSelectedTask({ sessionID: nextSession.id, selected, priorOutput })
           })
 
         if (!flags.experimentalBackgroundSubagents) return yield* invoke()
@@ -367,8 +356,10 @@ export const TaskTool = Tool.define(
         ),
       )
 
+      // Takes already-rendered text: a completed run carries the structured result the classifier
+      // produced inside `runTask`, and re-wrapping it here would give the async path a different
+      // shape from the synchronous one.
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
-        state: "completed" | "error",
         text: string,
         attachment?: AttachmentCoordinator.Scope,
       ) {
@@ -377,21 +368,7 @@ export const TaskTool = Tool.define(
           sessionID: ctx.sessionID,
           agent: currentParent.agent ?? ctx.agent,
           variant,
-          parts: [
-            {
-              type: "text",
-              synthetic: true,
-              text: renderOutput({
-                sessionID: nextSession.id,
-                state,
-                summary:
-                  state === "completed"
-                    ? `Async task completed: ${params.description}`
-                    : `Async task failed: ${params.description}`,
-                text,
-              }),
-            },
-          ],
+          parts: [{ type: "text", synthetic: true, text }],
           ...(attachment ? { attachmentScope: attachment } : {}),
         })
       })
@@ -402,16 +379,43 @@ export const TaskTool = Tool.define(
         readonly owner: boolean
       }
 
+      /**
+       * Output retained from a terminal run that a later invocation replaced. A completed run has
+       * no prior output to report — its own output is the result — and an empty string is real
+       * output, so absence and emptiness stay distinct.
+       */
+      const prior = (info: BackgroundJob.Info): string | undefined => {
+        if (info.status === "completed") return undefined
+        if (!Object.hasOwn(info, "output")) return undefined
+        return info.output ?? ""
+      }
+
       const injectResult = Effect.fn("TaskTool.injectObservedResult")(function* (
         info: BackgroundJob.Info,
         attachment: AttachmentCoordinator.Scope | undefined,
+        allowCancelled: boolean,
       ) {
         if (info.status === "completed") {
-          yield* inject("completed", info.output ?? "", attachment)
+          yield* inject(info.output ?? "", attachment)
           return true
         }
         if (info.status === "error") {
-          yield* inject("error", info.error ?? "Task failed", attachment)
+          yield* inject(
+            renderOutput({
+              sessionID: nextSession.id,
+              state: "error",
+              priorOutput: prior(info),
+              text: info.error ?? "Task failed",
+            }),
+            attachment,
+          )
+          return true
+        }
+        if (info.status === "cancelled" && allowCancelled) {
+          yield* inject(
+            renderCancelledTask({ sessionID: nextSession.id, status: "cancelled", priorOutput: prior(info) }),
+            attachment,
+          )
           return true
         }
         return false
@@ -464,14 +468,16 @@ export const TaskTool = Tool.define(
 
           // No attachment, or a scope that has already degraded: use the ordinary parent ingress
           // exactly once, without claiming the stronger delivery guarantee an owned scope carries.
+          // A cancelled child still keeps its envelope when this invocation was attached; ordinary
+          // root notification continues to suppress cancellation.
           if (!target || !target.owner) {
-            yield* injectResult(info, undefined)
+            yield* injectResult(info, undefined, target !== undefined)
             return
           }
 
           const attachment = target.attachment
           if (attachment.current().failed) {
-            yield* injectResult(info, undefined)
+            yield* injectResult(info, undefined, true)
             return
           }
           if (info.status === "running") {
@@ -485,7 +491,7 @@ export const TaskTool = Tool.define(
           if (!terminal) return
           const current = attachment.current()
           if (current.cancelled) return
-          const delivered = yield* injectResult(info, current.failed ? undefined : attachment)
+          const delivered = yield* injectResult(info, current.failed ? undefined : attachment, true)
           if (!delivered) {
             yield* attachment.degrade()
             return
@@ -739,12 +745,35 @@ export const TaskTool = Tool.define(
             if (result?.metadata?.background === true) return backgroundResult()
             // Settled synchronously, so no async observer will ever consume this reservation.
             if (parentScope && reservation) yield* parentScope.reject(reservation)
-            if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
-            if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
+            if (result?.status === "error") {
+              const reason = result.error ?? "Task failed"
+              const output = prior(result)
+              const body =
+                output === undefined
+                  ? reason
+                  : ["<task_prior_output>", output, "</task_prior_output>", reason].join("\n")
+              return yield* Effect.fail(new Error(body))
+            }
+            // A cancelled child is reported as a result rather than a tool failure: the task session
+            // is still addressable, and the caller needs to be able to tell "the child was stopped"
+            // from "the task tool could not run".
+            if (result?.status === "cancelled") {
+              return {
+                title: params.description,
+                metadata,
+                output: renderCancelledTask({
+                  sessionID: nextSession.id,
+                  status: "cancelled",
+                  priorOutput: prior(result),
+                }),
+              }
+            }
+            // Already the structured result the classifier produced inside `runTask`; re-wrapping it
+            // here is what made a failed child look like an empty successful task.
             return {
               title: params.description,
               metadata,
-              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+              output: result?.output ?? "",
             }
           }),
         (_, exit) =>
