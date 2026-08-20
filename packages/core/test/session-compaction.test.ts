@@ -311,8 +311,8 @@ it.effect("keeps session context hooks away from compaction requests", () =>
   Effect.gen(function* () {
     requests = []
     const compaction = yield* SessionCompaction.Service
-    // Conversation-shaping hooks must not observe housekeeping requests: compaction
-    // opts out of context hooks, so the transcript passes through unchanged.
+    // Context hooks shape the agent conversation; compaction is not part of it,
+    // so it opts out and the transcript passes through unchanged.
     const hooks = yield* PluginHooks.Service
     yield* hooks.register("session", "context", (event) =>
       Effect.sync(() => {

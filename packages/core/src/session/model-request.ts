@@ -61,7 +61,7 @@ interface PrepareInput {
     readonly session: SessionSchema.Info
     readonly agentID: Agent.ID
     readonly model: SessionRunnerModel.Resolved
-    /** Omitted for housekeeping requests that carry no tools. */
+    /** Omitted for requests that carry no tools (title, compaction). */
     readonly tools?: Tool.Snapshot
   }
   readonly transcript: {
@@ -70,8 +70,9 @@ interface PrepareInput {
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /**
-   * Session context hooks shape agent conversations. Housekeeping callers
-   * (title, compaction) opt out: their transcripts pass through unchanged.
+   * Session context hooks shape the agent conversation. Requests that are not
+   * part of the conversation (title, compaction) opt out: their transcripts
+   * pass through unchanged.
    */
   readonly contextHooks?: false
   /** Stateful Session WebSocket channels require an explicit durable-runner opt-in. */
