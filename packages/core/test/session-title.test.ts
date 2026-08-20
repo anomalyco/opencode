@@ -1,7 +1,8 @@
-import { expect } from "bun:test"
+import { beforeEach, expect } from "bun:test"
 import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Agent } from "@opencode-ai/core/agent"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -19,14 +20,22 @@ import { Session } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { App } from "@opencode-ai/core/app"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
+let selectedSmall: Model.Info | undefined
 const model = LanguageModel.make({
   id: "title-model",
+  provider: "test",
+  route: OpenAIChat.route,
+})
+const smallModel = LanguageModel.make({
+  id: "title-small",
   provider: "test",
   route: OpenAIChat.route,
 })
@@ -68,14 +77,28 @@ const client = Layer.mock(LLMClient.Service)({
   generate: () => Effect.die("unused"),
 })
 const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: () =>
+  resolve: (session) =>
     Effect.succeed(
-      SessionRunnerModel.resolved(model, {
+      SessionRunnerModel.resolved(session.model?.id === "title-small" ? smallModel : model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         cost,
         limit: { context: 200_000, output: 32_000 },
       }),
     ),
+})
+const catalog = Layer.mock(Catalog.Service, {
+  provider: {
+    get: () => Effect.die("unused"),
+    all: () => Effect.die("unused"),
+    available: () => Effect.die("unused"),
+  },
+  model: {
+    get: () => Effect.die("unused"),
+    all: () => Effect.die("unused"),
+    available: () => Effect.die("unused"),
+    default: () => Effect.die("unused"),
+    small: () => Effect.succeed(selectedSmall),
+  },
 })
 const it = testEffect(
   AppNodeBuilder.build(
@@ -90,6 +113,7 @@ const it = testEffect(
     ]),
     [
       [llmClient, client],
+      [Catalog.node, catalog],
       [SessionRunnerModel.node, models],
     ],
   ),
@@ -135,6 +159,18 @@ const prompt = (sessionID: Session.ID, text: string) =>
     })
   })
 
+const small = Model.Info.make({
+  ...Model.Info.default(Provider.ID.make("test"), Model.ID.make("title-small")),
+  family: Model.Family.make("gpt-nano"),
+  capabilities: { tools: false, input: ["text"], output: ["text"] },
+})
+
+beforeEach(() => {
+  requests = []
+  selectedSmall = undefined
+  titleStream = successfulTitle
+})
+
 it.effect("generates a title from the sole user message and renames the session", () =>
   Effect.gen(function* () {
     requests = []
@@ -172,6 +208,61 @@ it.effect("generates a title from the sole user message and renames the session"
     expect(renamed?.title).toBe("Generated Title")
     expect(renamed?.tokens).toEqual({ input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } })
     expect(renamed?.cost).toBeCloseTo(0.0000233)
+  }),
+)
+
+it.effect("uses a small model from the primary provider", () =>
+  Effect.gen(function* () {
+    requests = []
+    titleStream = successfulTitle
+    selectedSmall = small
+    const agentService = yield* Agent.Service
+    yield* agentService.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.mode = "primary"
+        agent.hidden = true
+        agent.system = "You are a title generator."
+      })
+    })
+    const sessionID = Session.ID.make("ses_title_small_model")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Use a small model for this title")
+
+    const title = yield* SessionTitle.Service
+    yield* title.generateForFirstPrompt(sessionID)
+
+    expect(requests.map((request) => String(request.model.id))).toEqual(["title-small"])
+    const store = yield* SessionStore.Service
+    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("falls back to the primary model when the small model fails", () =>
+  Effect.gen(function* () {
+    requests = []
+    titleStream = () =>
+      requests.length === 1
+        ? Stream.make(LLMEvent.providerError({ message: "Small model unavailable" }))
+        : successfulTitle()
+    selectedSmall = small
+    const agentService = yield* Agent.Service
+    yield* agentService.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.mode = "primary"
+        agent.hidden = true
+        agent.system = "You are a title generator."
+      })
+    })
+    const sessionID = Session.ID.make("ses_title_small_fallback")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Fall back when title generation fails")
+
+    const title = yield* SessionTitle.Service
+    yield* title.generateForFirstPrompt(sessionID)
+
+    expect(requests.map((request) => String(request.model.id))).toEqual(["title-small", "title-model"])
+    const store = yield* SessionStore.Service
+    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
   }),
 )
 
