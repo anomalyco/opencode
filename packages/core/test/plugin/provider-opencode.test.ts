@@ -516,6 +516,7 @@ describe("OpencodePlugin", () => {
           model.time.released = Date.now()
         })
         catalog.model.update(providerID, Model.ID.make("gpt-5-nano"), (model) => {
+          model.family = Model.Family.make("gpt-nano")
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
           model.cost = [...cost(10, 10)]

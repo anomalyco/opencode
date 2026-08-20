@@ -209,16 +209,6 @@ const layer = Layer.effect(
         small: Effect.fn("Catalog.model.small")(function* (providerID) {
           const record = state.get().providers.get(providerID)
           if (!record) return
-
-          // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
-          if (providerID === Provider.ID.azure) return
-
-          const priority =
-            providerID === Provider.ID.opencode
-              ? ["gpt-nano"]
-              : providerID === Provider.ID.githubCopilot
-                ? ["gpt-mini", ...SMALL_MODEL_FAMILY_PRIORITY]
-                : SMALL_MODEL_FAMILY_PRIORITY
           const models = pipe(
             Array.fromIterable(record.models.values()),
             Array.filter(
@@ -231,12 +221,8 @@ const layer = Layer.effect(
             ),
             Array.sortWith((model) => model.time.released, Order.flip(Order.Number)),
           )
-          for (const family of priority) {
-            const selected = models.find(
-              (model) =>
-                model.family === family ||
-                (providerID === Provider.ID.opencode && family === "gpt-nano" && model.id === "gpt-5-nano"),
-            )
+          for (const family of SMALL_MODEL_FAMILY_PRIORITY) {
+            const selected = models.find((model) => model.family === family)
             if (selected) return projectModel(selected, record.provider)
           }
         }),
