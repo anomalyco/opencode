@@ -1,7 +1,6 @@
 import { APICallError } from "@ai-sdk/provider"
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { createMistral } from "@ai-sdk/mistral"
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
@@ -410,63 +409,6 @@ it.effect("moves a tool image through the real Mistral provider as a user messag
         ],
       },
     ])
-  }),
-)
-
-it.effect("does not treat SSE comment heartbeats as model progress", () =>
-  Effect.gen(function* () {
-    const aisdk = yield* AISDK.Service
-    const encoder = new TextEncoder()
-    let heartbeat: ReturnType<typeof setInterval> | undefined
-    const customFetch = Object.assign(
-      async () =>
-        new Response(
-          new ReadableStream({
-            start(controller) {
-              controller.enqueue(
-                encoder.encode(
-                  'data: {"id":"response-1","object":"chat.completion.chunk","created":0,"model":"api-model","choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]}\n\n',
-                ),
-              )
-              heartbeat = setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 5)
-            },
-            cancel() {
-              if (heartbeat) clearInterval(heartbeat)
-            },
-          }),
-          { headers: { "content-type": "text/event-stream" } },
-        ),
-      { preconnect: fetch.preconnect },
-    )
-    yield* aisdk.hook.sdk((event) => {
-      event.sdk = createOpenAICompatible({
-        ...event.options,
-        name: String(event.options.name),
-        baseURL: String(event.options.baseURL),
-      })
-    })
-    const resolved = yield* aisdk.model(
-      model("@ai-sdk/openai-compatible", {
-        apiKey: "test",
-        baseURL: "https://example.test/v1",
-        chunkTimeout: 25,
-        fetch: customFetch,
-      }),
-    )
-    const result = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
-      Effect.provide(client),
-      Effect.result,
-      Effect.ensuring(
-        Effect.sync(() => {
-          if (heartbeat) clearInterval(heartbeat)
-        }),
-      ),
-    )
-
-    expect(result).toMatchObject({
-      _tag: "Failure",
-      failure: { reason: { message: expect.stringContaining("SSE read timed out") } },
-    })
   }),
 )
 

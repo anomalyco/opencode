@@ -34,7 +34,6 @@ import {
 import { Auth, Endpoint, RequestExecutor, type AnyRoute } from "@opencode-ai/ai/route"
 import { ProviderShared } from "@opencode-ai/ai/protocols/shared"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
-import { makeParser } from "effect/unstable/encoding/Sse"
 import type { ID, Info } from "./model.js"
 import { Provider } from "./provider.js"
 import { State } from "./state.js"
@@ -66,23 +65,15 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
 
   const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let deadline: number | undefined
-  const parser = makeParser((event) => {
-    if (event._tag === "Event") deadline = Date.now() + ms
-  })
   const body = new ReadableStream<Uint8Array>({
     async pull(ctrl) {
-      const expires = deadline ?? Date.now() + ms
-      deadline = expires
       const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
-        const remaining = Math.max(0, expires - Date.now())
         const id = setTimeout(() => {
           const err = new Error("SSE read timed out")
           ctl.abort(err)
           void reader.cancel(err)
           reject(err)
-        }, remaining)
+        }, ms)
 
         reader.read().then(
           (part) => {
@@ -101,7 +92,6 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
         return
       }
 
-      parser.feed(decoder.decode(part.value, { stream: true }))
       ctrl.enqueue(part.value)
     },
     async cancel(reason) {
