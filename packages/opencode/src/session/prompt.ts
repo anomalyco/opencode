@@ -7,7 +7,10 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { SessionRevert } from "./revert"
 import { Session } from "./session"
-import type { SessionClosure } from "./closure/coordinator"
+import { SessionClosure } from "./closure/coordinator"
+import { SessionAdmission } from "./closure/admission"
+import { AttachmentCoordinator } from "./attachment/coordinator"
+import { hasUnconsumedLocalTool } from "./task-return"
 import type { SessionMutation } from "./closure/mutation"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
@@ -144,6 +147,12 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const instruction = yield* Instruction.Service
     const state = yield* SessionRunState.Service
+    const closure = yield* SessionClosure.Service
+    // Required rather than optional. This service provably holds a coordinator, and the task tool
+    // cannot resolve one: it is constructed inside `ToolRegistry`'s layer, which consumes these
+    // services without publishing them. Reading it here makes a graph that omits the coordinator a
+    // build failure instead of a second, silently private registry.
+    const attachments = yield* AttachmentCoordinator.Service
     const revert = yield* SessionRevert.Service
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
@@ -156,7 +165,46 @@ const layer = Layer.effect(
       return {
         cancel: (sessionID: SessionID) => cancel(sessionID),
         resolvePromptParts: (template: string) => resolvePromptParts(template),
-        prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
+        // Two changes to the previous blanket `Effect.catch(Effect.die)`.
+        //
+        // Origin: `prompt` hard-codes `origin: "external"` because its ordinary caller is the HTTP
+        // seam, so a task-internal prompt reaching it was recorded as external. External admission
+        // may wait for a closing branch and retry; internal admission must reject instead. Fixed
+        // here rather than left to be discovered once external retry exists.
+        //
+        // Refusals: an admission or mutation refusal is a reachable, expected condition that the
+        // task tool has to be able to act on, so it survives this boundary as a typed failure.
+        // Image failures keep their existing die-on-error behaviour.
+        prompt: (input: TaskPromptInput) =>
+          SessionAdmission.admitted(
+            closure,
+            {
+              session: input.sessionID,
+              origin: "internal",
+              source: "TaskPromptOps.prompt",
+              reuseAmbient: "revalidate",
+            },
+            () => prompt(input),
+          ).pipe(
+            Effect.catch((error) =>
+              "_tag" in error &&
+              (error._tag === "SessionClosureAdmissionRefused" || error._tag === "SessionClosureMutationRefused")
+                ? Effect.fail(error)
+                : Effect.die(error),
+            ),
+          ),
+        // A wake is continuation work for one exact attachment generation, so the capability is
+        // carried directly. Locating the scope again by session id would let a later generation be
+        // substituted for the one that scheduled the wake.
+        wake: (sessionID: SessionID, attachment: AttachmentCoordinator.Scope) =>
+          loopWithAttachment({ sessionID }, attachment),
+        attachments,
+        // The task tool needs its own admission leases but cannot resolve the coordinator from its
+        // own context, for the reason given where `attachments` is bound above. Both capabilities
+        // are handed down the seam that already carries `prompt`.
+        acquireContinuation: (input: SessionAdmission.ContinuationInput) =>
+          SessionAdmission.acquireContinuation(closure, input),
+        admitScoped: (input: SessionAdmission.ScopedInput) => SessionAdmission.admitScoped(closure, input),
       } satisfies TaskPromptOps
     })
 
@@ -1060,26 +1108,34 @@ const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error | AdmissionError> = Effect.fn(
-      "SessionPrompt.prompt",
-    )(function* (input: PromptInput) {
-      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
-      yield* revert.cleanup(session)
-      const message = yield* createUserMessage(input)
-      yield* sessions.touch(input.sessionID)
+    const prompt: (input: TaskPromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error | AdmissionError> =
+      Effect.fn("SessionPrompt.prompt")(function* (input: TaskPromptInput) {
+        // An attachment scope is a private capability handed to one delegated call, never resolved
+        // from a registry here. Generic ingress is unaffected: only a caller that was given a scope
+        // can pass one, and it must be the scope for this very session.
+        const claimed = input.attachmentScope
+        if (claimed && claimed.sessionID !== input.sessionID) {
+          yield* claimed.degrade()
+          return yield* Effect.die(new Error(`Attachment scope does not belong to session ${input.sessionID}`))
+        }
+        const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+        yield* revert.cleanup(session)
+        const message = yield* createUserMessage(input)
+        if (claimed) yield* claimed.own(message.info.id)
+        yield* sessions.touch(input.sessionID)
 
-      const permissions: PermissionV1.Rule[] = []
-      for (const [t, enabled] of Object.entries(input.tools ?? {})) {
-        permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
-      }
-      if (permissions.length > 0) {
-        session.permission = permissions
-        yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
-      }
+        const permissions: PermissionV1.Rule[] = []
+        for (const [t, enabled] of Object.entries(input.tools ?? {})) {
+          permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
+        }
+        if (permissions.length > 0) {
+          session.permission = permissions
+          yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
+        }
 
-      if (input.noReply === true) return message
-      return yield* loop({ sessionID: input.sessionID })
-    })
+        if (input.noReply === true) return message
+        return yield* loopWithAttachment({ sessionID: input.sessionID }, claimed)
+      })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user").pipe(Effect.orDie)
@@ -1089,10 +1145,27 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
+    /**
+     * A wake enters an existing turn rather than creating one, so there is no new user message to
+     * own. Claim the latest one instead, which is what the scope's turn evidence is keyed against.
+     */
+    const ownLatestUser = Effect.fn("SessionPrompt.ownLatestUser")(function* (
+      attachment: AttachmentCoordinator.Scope | undefined,
+      sessionID: SessionID,
+    ) {
+      if (!attachment) return
+      const match = yield* sessions.findMessage(sessionID, (message) => message.info.role === "user").pipe(Effect.orDie)
+      if (Option.isNone(match)) return
+      if (!attachment.owns(match.value.info.id)) yield* attachment.own(match.value.info.id)
+    })
+
     // The loop can start subtasks, and a subtask taking admission inside the loop is refused here
     // rather than at the entry point, so this raises what `ensureRunning` declares its work may.
-    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts, SessionClosure.AdmissionRefused> =
-      Effect.fn("SessionPrompt.run")(function* (sessionID: SessionID) {
+    const runLoop: (
+      sessionID: SessionID,
+      attachment?: AttachmentCoordinator.Scope,
+    ) => Effect.Effect<SessionV1.WithParts, SessionClosure.AdmissionRefused> = Effect.fn("SessionPrompt.run")(
+      function* (sessionID: SessionID, attachment?: AttachmentCoordinator.Scope) {
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
@@ -1109,6 +1182,11 @@ const layer = Layer.effect(
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+          // A scope that has already failed or been cancelled stops receiving turn evidence, so the
+          // rest of this turn behaves exactly as an unattached one.
+          const attachmentState = attachment?.current()
+          const turnAttachment =
+            attachmentState && !attachmentState.failed && !attachmentState.cancelled ? attachment : undefined
 
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
@@ -1120,12 +1198,18 @@ const layer = Layer.effect(
             lastAssistantMsg?.parts.some(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
+          // A wake can arrive with the previous clean assistant still latest, so it has to earn one
+          // real provider opportunity rather than exiting immediately. Only at step 0: once this
+          // runner has made an attempt, the turn returns even if more attachment work is due, and
+          // the observer schedules the next wake. Provider turns never spin inside one wake.
+          const attachmentNeedsTurn = step === 0 && (turnAttachment?.needsWake() ?? false)
 
           if (
             lastAssistant?.finish &&
             !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastAssistant.parentID === lastUser.id
+            lastAssistant.parentID === lastUser.id &&
+            !attachmentNeedsTurn
           ) {
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
@@ -1244,6 +1328,7 @@ const layer = Layer.effect(
               bypassAgentCheck,
               messages: msgs,
               promptOps,
+              attachment: turnAttachment,
             }).pipe(
               Effect.provideService(Plugin.Service, plugin),
               Effect.provideService(Permission.Service, permission),
@@ -1298,15 +1383,19 @@ const layer = Layer.effect(
               toolChoice: format.type === "json_schema" ? "required" : undefined,
             })
 
-            if (structured !== undefined) {
-              handle.message.structured = structured
-              handle.message.finish = handle.message.finish ?? "stop"
-              yield* sessions.updateMessage(handle.message)
-              return "break" as const
-            }
+            // Classified before the turn is observed rather than returned from inside the branches:
+            // an attached turn must record its evidence on every exit path, including the ones that
+            // end the loop.
+            const classification = yield* Effect.gen(function* () {
+              if (structured !== undefined) {
+                handle.message.structured = structured
+                handle.message.finish = handle.message.finish ?? "stop"
+                yield* sessions.updateMessage(handle.message)
+                return "break" as const
+              }
 
-            const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
-            if (finished && !handle.message.error) {
+              const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
+              if (!finished || handle.message.error) return undefined
               // Surface any content-filter finish (e.g. Anthropic stop_reason:
               // refusal) as an error. These turns may have produced no visible
               // output at all — previously the session went idle silently — or
@@ -1319,15 +1408,36 @@ const layer = Layer.effect(
                 yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
                 return "break" as const
               }
-              if (format.type === "json_schema") {
-                handle.message.error = new SessionV1.StructuredOutputError({
-                  message: "Model did not produce structured output",
-                  retries: 0,
-                }).toObject()
-                yield* sessions.updateMessage(handle.message)
+              if (format.type !== "json_schema") return undefined
+              handle.message.error = new SessionV1.StructuredOutputError({
+                message: "Model did not produce structured output",
+                retries: 0,
+              }).toObject()
+              yield* sessions.updateMessage(handle.message)
+              return "break" as const
+            })
+
+            if (AttachmentCoordinator.isScope(turnAttachment)) {
+              const assistant = yield* MessageV2.get({ sessionID, messageID: handle.message.id }).pipe(
+                Effect.provideService(Database.Service, database),
+                Effect.orDie,
+              )
+              if (assistant.info.role !== "assistant") {
+                yield* turnAttachment.degrade()
                 return "break" as const
               }
+              // "Clean" means this turn is a finished answer rather than a pause: it stopped for a
+              // real reason, carries no error, and left no local tool call unconsumed. Only a clean
+              // turn can satisfy the caller's wait; anything else is retained as lesser evidence.
+              const clean =
+                !!assistant.info.finish &&
+                !["tool-calls", "unknown"].includes(assistant.info.finish) &&
+                !assistant.info.error &&
+                !hasUnconsumedLocalTool(assistant.parts)
+              yield* turnAttachment.observeTurn({ assistant, clean })
             }
+
+            if (classification) return classification
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
@@ -1350,12 +1460,30 @@ const layer = Layer.effect(
 
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
-      })
+      },
+    )
 
+    const loopWithAttachment: (
+      input: LoopInput,
+      attachment?: AttachmentCoordinator.Scope,
+    ) => Effect.Effect<SessionV1.WithParts, AdmissionError> = Effect.fn("SessionPrompt.loopWithAttachment")(function* (
+      input: LoopInput,
+      attachment?: AttachmentCoordinator.Scope,
+    ) {
+      yield* ownLatestUser(attachment, input.sessionID)
+      return yield* state.ensureRunning(
+        input.sessionID,
+        lastAssistant(input.sessionID),
+        runLoop(input.sessionID, attachment),
+      )
+    })
+
+    // The public loop stays capability-free: an attachment scope is only ever carried in, never
+    // discovered, so a generic caller cannot join a delegated call's turn observation.
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts, AdmissionError> = Effect.fn(
       "SessionPrompt.loop",
     )(function* (input: LoopInput) {
-      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+      return yield* loopWithAttachment(input)
     })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError | AdmissionError> =
@@ -1535,6 +1663,15 @@ export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput"
   sessionID: SessionID,
 }) {}
 
+/**
+ * A prompt carrying the attachment scope of the delegated call it belongs to. The scope is a
+ * capability, not a schema field: it is handed to one caller and never appears on the wire, so the
+ * public `PromptInput` is unchanged and generic ingress cannot supply one.
+ */
+export type TaskPromptInput = PromptInput & {
+  readonly attachmentScope?: AttachmentCoordinator.Scope
+}
+
 export const ShellInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
@@ -1629,6 +1766,8 @@ export const node = LayerNode.make({
     CrossSpawnSpawner.node,
     Instruction.node,
     SessionRunState.node,
+    SessionClosure.node,
+    AttachmentCoordinator.node,
     SessionRevert.node,
     SessionSummary.node,
     SystemPrompt.node,

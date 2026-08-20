@@ -15,6 +15,10 @@ import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
+import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionClosureModel as Model } from "@/session/closure/model"
+import { SessionAdmission } from "@/session/closure/admission"
+import { AttachmentCoordinator } from "@/session/attachment/coordinator"
 
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
@@ -52,7 +56,14 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       RuntimeFlags.node,
       Ripgrep.node,
     ]),
-    [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
+    [
+      [RuntimeFlags.node, RuntimeFlags.layer(flags)],
+      // The background binder resolves whichever coordinator the layer provides, and these fixtures
+      // hand the task tool a caller lease minted by `taskClosure`. Both must be the same object, or
+      // the binder rejects a lease it never issued. Read through a thunk because the layer is built
+      // at module load, before `taskClosure` below is initialised.
+      [SessionClosure.node, Layer.effect(SessionClosure.Service, Effect.sync(() => taskClosure))],
+    ],
   )
 
 const it = testEffect(layer())
@@ -96,11 +107,98 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   return { chat, assistant }
 })
 
+// Arms every job it is asked about. The background binder consults whichever coordinator the layer
+// provides, so these fixtures need one that admits: closure bookkeeping has its own suite, and what
+// is under test here is the task tool's own logic.
+const armingJobs = {
+  jobStart: () =>
+    Effect.succeed({
+      type: "arm_allowed" as const,
+      permit: Model.id("arm", "arm_task_test"),
+      sequence: 0n,
+      claim: Effect.succeed(true),
+    }),
+  jobExtend: () =>
+    Effect.succeed({
+      type: "arm_allowed" as const,
+      permit: Model.id("arm", "arm_task_test"),
+      sequence: 0n,
+      claim: Effect.succeed(true),
+    }),
+  jobPermit: () => Effect.succeed(true),
+  jobRegistered: () => Effect.void,
+  jobBinderFailed: () => Effect.void,
+  jobCancel: () => Effect.void,
+  jobTerminal: () => Effect.void,
+}
+
+const unusedJobs = armingJobs as unknown as SessionClosure.Interface
+
+type LeaseLog = {
+  readonly acquired: Array<{ session: SessionID; source: string; origin: string }>
+  readonly settled: Array<{ lease: string; disposition: string }>
+  readonly events: string[]
+}
+
+const leaseLog = (): LeaseLog => ({ acquired: [], settled: [], events: [] })
+
+/**
+ * A coordinator that admits. The admission helpers themselves are the shipped ones, so these
+ * fixtures exercise the real acquire/settle path and only the coordinator underneath is a stub.
+ */
+const admittingClosure = (log: LeaseLog, label: string): SessionClosure.Interface => ({
+  ...unusedJobs,
+  request: () => Effect.die("unused"),
+  view: Effect.die("unused"),
+  identity: Effect.die("unused"),
+  acquire: (input) =>
+    Effect.sync(() => {
+      log.events.push(`${label}:acquire`)
+      log.acquired.push({ session: input.session, source: input.source, origin: input.origin })
+      return {
+        type: "admitted" as const,
+        lease: Model.id("lease", `lease_${label}_${log.acquired.length}`),
+        epoch: 0n,
+        instance: Model.id("instance", "instance_task_test"),
+      }
+    }),
+  bind: () => Effect.void,
+  retire: (lease, disposition) =>
+    Effect.sync(() => {
+      log.events.push(`${label}:settle:${disposition ?? "retired"}`)
+      log.settled.push({ lease, disposition: disposition ?? "retired" })
+    }),
+  reserveMutation: () => Effect.die("unused"),
+  activateMutation: () => Effect.void,
+  retireMutation: () => Effect.void,
+})
+
+/**
+ * Answers "no scope" for `locate`, which is the only method reached with the feature flag off, and
+ * dies on the rest. A flag-on fixture that actually exercises attachment passes a real coordinator
+ * instead, so it cannot assert against one nothing else can observe.
+ */
+/**
+ * One coordinator, shared by the layer's background binder and by the caller lease these fixtures
+ * hand to the task tool. Production has the same arrangement — `SessionPrompt` gives `admitScoped`
+ * the very service the binder resolves — and a test with two would reject its own leases.
+ */
+const taskClosure = admittingClosure(leaseLog(), "task")
+
+const inertCoordinator = (): AttachmentCoordinator.TaskInterface => ({
+  open: () => Effect.die("unused"),
+  locate: () => Effect.succeed(undefined),
+  claim: () => Effect.die("unused"),
+  settleClaim: () => Effect.die("unused"),
+  awaitClaim: () => Effect.die("unused"),
+})
+
 function stubOps(opts?: {
   onPrompt?: (input: SessionPrompt.PromptInput) => void
   text?: string
   error?: NonNullable<SessionV1.Assistant["error"]>
   toolError?: string
+  attachments?: AttachmentCoordinator.TaskInterface
 }): TaskPromptOps {
   return {
     cancel: () => Effect.void,
@@ -110,8 +208,19 @@ function stubOps(opts?: {
         opts?.onPrompt?.(input)
         return reply(input, opts?.text ?? "done", opts?.error, opts?.toolError)
       }),
+    attachments: opts?.attachments ?? inertCoordinator(),
+    acquireContinuation: (input) => SessionAdmission.acquireContinuation(taskClosure, input),
+    admitScoped: (input) => SessionAdmission.admitScoped(taskClosure, input),
   }
 }
+
+/**
+ * Ops carrying a real attachment coordinator. Required whenever the experiment is on, because the
+ * task tool then opens an invocation scope for every run; the inert default only answers `locate`.
+ */
+const attachedOps = Effect.fn("TaskToolTest.attachedOps")(function* (opts?: Parameters<typeof stubOps>[0]) {
+  return stubOps({ ...opts, attachments: yield* AttachmentCoordinator.make })
+})
 
 function reply(
   input: SessionPrompt.PromptInput,
@@ -426,11 +535,11 @@ describe("tool.task", () => {
       const cancelled = defer<SessionID>()
       const abort = new AbortController()
       const promptOps: TaskPromptOps = {
+        ...(yield* attachedOps()),
         cancel: (sessionID) =>
           Effect.sync(() => {
             cancelled.resolve(sessionID)
           }),
-        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
         prompt: (input) =>
           Effect.promise(() => {
             ready.resolve(input)
@@ -735,7 +844,7 @@ describe("tool.task", () => {
           messageID: assistant.id,
           agent: "build",
           abort: new AbortController().signal,
-          extra: { promptOps: { ...stubOps(), prompt: () => Effect.never } satisfies TaskPromptOps },
+          extra: { promptOps: { ...(yield* attachedOps()), prompt: () => Effect.never } satisfies TaskPromptOps },
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -765,7 +874,7 @@ describe("tool.task", () => {
           messageID: assistant.id,
           agent: "build",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps({ text: "subagent answer" }) },
+          extra: { promptOps: yield* attachedOps({ text: "subagent answer" }) },
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -796,7 +905,7 @@ describe("tool.task", () => {
           messageID: assistant.id,
           agent: "build",
           abort: new AbortController().signal,
-          extra: { promptOps: { ...stubOps(), prompt: () => Effect.never } satisfies TaskPromptOps },
+          extra: { promptOps: { ...(yield* attachedOps()), prompt: () => Effect.never } satisfies TaskPromptOps },
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -820,8 +929,7 @@ describe("tool.task", () => {
       const injected = yield* Deferred.make<SessionPrompt.PromptInput>()
       let runs = 0
       const promptOps: TaskPromptOps = {
-        cancel: () => Effect.void,
-        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        ...(yield* attachedOps()),
         prompt: (input) => {
           if (input.sessionID === chat.id) {
             return Deferred.succeed(injected, input).pipe(Effect.as(reply(input, "injected")))
@@ -896,7 +1004,7 @@ describe("tool.task", () => {
           abort: new AbortController().signal,
           extra: {
             promptOps: {
-              ...stubOps(),
+              ...(yield* attachedOps()),
               prompt: () => Effect.never,
             } satisfies TaskPromptOps,
           },
@@ -925,7 +1033,7 @@ describe("tool.task", () => {
       const injected = defer<SessionPrompt.PromptInput>()
       let prompts = 0
       const promptOps: TaskPromptOps = {
-        ...stubOps(),
+        ...(yield* attachedOps()),
         prompt: (input) => {
           if (input.sessionID === chat.id) {
             injected.resolve(input)
@@ -1006,7 +1114,7 @@ describe("tool.task", () => {
           messageID: assistant.id,
           agent: "build",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps({ text: "background done" }) },
+          extra: { promptOps: yield* attachedOps({ text: "background done" }) },
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -1041,7 +1149,7 @@ describe("tool.task", () => {
           abort: new AbortController().signal,
           extra: {
             promptOps: {
-              ...stubOps({ text: "background done" }),
+              ...(yield* attachedOps({ text: "background done" })),
               prompt: (input) =>
                 input.sessionID === chat.id ? Effect.never : Effect.succeed(reply(input, "background done")),
             } satisfies TaskPromptOps,
@@ -1080,7 +1188,7 @@ describe("tool.task", () => {
           abort: new AbortController().signal,
           extra: {
             promptOps: {
-              ...stubOps(),
+              ...(yield* attachedOps()),
               prompt: () => Effect.never,
             } satisfies TaskPromptOps,
           },
@@ -1119,7 +1227,7 @@ describe("tool.task", () => {
           abort: new AbortController().signal,
           extra: {
             promptOps: {
-              ...stubOps(),
+              ...(yield* attachedOps()),
               prompt: () => Effect.never,
             } satisfies TaskPromptOps,
           },
@@ -1158,7 +1266,7 @@ describe("tool.task", () => {
           abort: new AbortController().signal,
           extra: {
             promptOps: {
-              ...stubOps(),
+              ...(yield* attachedOps()),
               prompt: () => Effect.never,
             } satisfies TaskPromptOps,
           },
