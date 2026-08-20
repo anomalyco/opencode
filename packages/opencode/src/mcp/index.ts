@@ -614,14 +614,26 @@ const layer = Layer.effect(
 
     const instructions = Effect.fn("MCP.instructions")(function* () {
       const s = yield* InstanceState.get(state)
-      return Object.entries(s.instructions)
+      const entries = Object.entries(s.instructions)
         .filter(([name]) => s.status[name]?.status === "connected")
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, item]) => ({
-          name,
-          instructions: item,
-          tools: (s.defs[name] ?? []).map((tool) => McpCatalog.toolName(name, tool.name)),
-        }))
+      const result: ServerInstructions[] = []
+      for (const [name, item] of entries) {
+        const tools: string[] = []
+        for (const tool of s.defs[name] ?? []) {
+          const built = McpCatalog.buildToolName(name, tool.name)
+          if (built.truncated) {
+            yield* Effect.logWarning("MCP tool name exceeds 64 chars, truncating with hash suffix", {
+              server: name,
+              tool: tool.name,
+              truncated: built.name,
+            })
+          }
+          tools.push(built.name)
+        }
+        result.push({ name, instructions: item, tools })
+      }
+      return result
     })
 
     const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCPV1.Info) {
@@ -681,7 +693,15 @@ const layer = Layer.effect(
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const def of listed) {
-          result[McpCatalog.toolName(clientName, def.name)] = { def, client, timeout }
+          const built = McpCatalog.buildToolName(clientName, def.name)
+          if (built.truncated) {
+            yield* Effect.logWarning("MCP tool name exceeds 64 chars, truncating with hash suffix", {
+              server: clientName,
+              tool: def.name,
+              truncated: built.name,
+            })
+          }
+          result[built.name] = { def, client, timeout }
         }
       }
       return result
