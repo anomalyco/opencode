@@ -8,6 +8,7 @@
   [data-slot="animated-number-value"] {
     display: inline-flex;
     flex-direction: row-reverse;
+    direction: ltr;
     align-items: baseline;
     justify-content: flex-end;
     line-height: inherit;
