@@ -24,6 +24,7 @@ describe("inference stat normalization", () => {
     expect(modelAuthor("kimi-k2.6")).toBe("moonshot")
     expect(modelAuthor("mimo-v2-omni")).toBe("xiaomi")
     expect(modelAuthor("minimax-m2.7")).toBe("minimax")
+    expect(modelAuthor("muse-spark-1.2-contributor")).toBe("meta")
     expect(modelAuthor("nemotron-3-super-free")).toBe("nvidia")
     expect(modelAuthor("qwen3.7-max")).toBe("qwen")
     expect(modelAuthor("alpha-gpt-next")).toBeUndefined()
@@ -67,6 +68,9 @@ describe("inference stat normalization", () => {
       { provider: "openai" },
     ])
     expect(toProviderAggregate(aggregate("big-pickle", "opencode"))).toMatchObject([{ provider: "unknown" }])
+    expect(toProviderAggregate(aggregate("muse-spark-1.2-contributor", "unknown"))).toMatchObject([
+      { provider: "meta" },
+    ])
   })
 
   test("geo aggregates never keep opencode or big-pickle dimensions", () => {
