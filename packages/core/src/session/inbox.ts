@@ -379,23 +379,6 @@ export const has = Effect.fn("SessionInbox.has")(function* (
   return row !== undefined
 })
 
-export const equivalent = (input: Info, expected: { readonly sessionID: SessionSchema.ID; readonly item: Item }) => {
-  if (
-    input.type !== expected.item.type ||
-    input.delivery !== expected.item.delivery ||
-    input.sessionID !== expected.sessionID
-  )
-    return false
-  if (input.type === "user" && expected.item.type === "user")
-    return JSON.stringify(encodeUser(input.payload)) === JSON.stringify(encodeUser(expected.item.payload))
-  if (input.type === "synthetic" && expected.item.type === "synthetic")
-    return JSON.stringify(encodeSynthetic(input.payload)) === JSON.stringify(encodeSynthetic(expected.item.payload))
-  if (input.type === "compaction" && expected.item.type === "compaction") return true
-  if (input.type === "move" && expected.item.type === "move")
-    return JSON.stringify(encodeMove(input.payload)) === JSON.stringify(encodeMove(expected.item.payload))
-  return false
-}
-
 const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
   serialized(input.sessionID, effect).pipe(Effect.asVoid)
 

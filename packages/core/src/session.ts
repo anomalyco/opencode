@@ -608,10 +608,9 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (
-              admitted.type !== "user" ||
-              !SessionInbox.equivalent(admitted, { sessionID: input.sessionID, item: admittedInput })
-            )
+            // First admission wins: same-session reuse is idempotent and ignores the
+            // retried payload, metadata, and delivery mode.
+            if (admitted.type !== "user" || admitted.sessionID !== input.sessionID)
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             if (input.resume !== false) {
               if (activeShells.has(admitted.sessionID)) return admitted
@@ -883,10 +882,9 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (
-              admitted.type !== "synthetic" ||
-              !SessionInbox.equivalent(admitted, { sessionID: input.sessionID, item: admittedInput })
-            )
+            // First admission wins: same-session reuse is idempotent and ignores the
+            // retried payload, metadata, and delivery mode.
+            if (admitted.type !== "synthetic" || admitted.sessionID !== input.sessionID)
               return yield* new SyntheticConflictError({ sessionID: input.sessionID, inputID })
             if (input.resume !== false && !(yield* result.get(input.sessionID)).revert)
               yield* execution.wake(input.sessionID)

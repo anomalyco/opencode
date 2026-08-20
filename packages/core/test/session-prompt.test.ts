@@ -652,53 +652,52 @@ describe("Session.prompt", () => {
     }),
   )
 
-  it.effect("rejects reuse of one ID with a different prompt", () =>
+  it.effect("keeps the first admission when one ID is reused with a different prompt", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
 
-      yield* session.prompt({
+      const first = yield* session.prompt({
         sessionID,
         id: messageID,
         text: "Fix the failing tests",
       })
-      const failure = yield* session
-        .prompt({
-          sessionID,
-          id: messageID,
-          text: "Delete the failing tests",
-          resume: false,
-        })
-        .pipe(Effect.flip)
+      const retried = yield* session.prompt({
+        sessionID,
+        id: messageID,
+        text: "Delete the failing tests",
+        resume: false,
+      })
 
-      expect(failure._tag).toBe("Session.PromptConflictError")
+      expect(retried).toEqual(first)
+      expect(retried.payload.text).toBe("Fix the failing tests")
       expect(yield* session.messages({ sessionID })).toHaveLength(0)
       expect(yield* admittedCount).toBe(1)
     }),
   )
 
-  it.effect("rejects reuse of one ID with a different delivery mode", () =>
+  it.effect("keeps the first admission's delivery mode when one ID is reused with another", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
 
-      yield* session.prompt({
+      const first = yield* session.prompt({
         id: messageID,
         sessionID,
         text: "Fix the failing tests",
         resume: false,
       })
-      const failure = yield* session
-        .prompt({
-          id: messageID,
-          sessionID,
-          text: "Fix the failing tests",
-          delivery: "queue",
-          resume: false,
-        })
-        .pipe(Effect.flip)
+      const retried = yield* session.prompt({
+        id: messageID,
+        sessionID,
+        text: "Fix the failing tests",
+        delivery: "queue",
+        resume: false,
+      })
 
-      expect(failure._tag).toBe("Session.PromptConflictError")
+      expect(retried).toEqual(first)
+      expect(retried.delivery).toBe("steer")
+      expect(yield* admittedCount).toBe(1)
     }),
   )
 
@@ -914,7 +913,7 @@ describe("Session.prompt", () => {
     }),
   )
 
-  it.effect("treats prompt metadata as durable retry identity", () =>
+  it.effect("keeps the first admission's metadata when one ID is reused with other metadata", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
@@ -928,11 +927,12 @@ describe("Session.prompt", () => {
 
       const first = yield* session.prompt(input)
       const retried = yield* session.prompt(input)
-      const failure = yield* session.prompt({ ...input, metadata: { source: "plugin" } }).pipe(Effect.flip)
+      const differing = yield* session.prompt({ ...input, metadata: { source: "plugin" } })
 
       expect(retried).toEqual(first)
+      expect(differing).toEqual(first)
       expect(first.payload.metadata).toEqual({ source: "api" })
-      expect(failure._tag).toBe("Session.PromptConflictError")
+      expect(yield* admittedCount).toBe(1)
     }),
   )
 
@@ -978,7 +978,7 @@ describe("Session.prompt", () => {
     }),
   )
 
-  it.effect("reconciles exact synthetic retries and rejects conflicting reuse", () =>
+  it.effect("reconciles synthetic retries from the promoted message regardless of payload", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
@@ -991,11 +991,11 @@ describe("Session.prompt", () => {
       })
       yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
       const promotedRetry = yield* session.synthetic(input)
-      const failure = yield* session.synthetic({ ...input, text: "Different completion" }).pipe(Effect.flip)
+      const differing = yield* session.synthetic({ ...input, text: "Different completion" })
 
       expect(entries[1]).toEqual(entries[0])
       expect(promotedRetry).toMatchObject({ id: messageID, type: "synthetic", payload: { text: "Completed" } })
-      expect(failure).toMatchObject({ _tag: "Session.SyntheticConflictError", sessionID, inputID: messageID })
+      expect(differing).toMatchObject({ id: messageID, type: "synthetic", payload: { text: "Completed" } })
       expect(yield* admittedCount).toBe(0)
       expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxEnqueued.type, 1))).toBe(1)
     }),
