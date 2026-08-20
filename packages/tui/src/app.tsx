@@ -96,7 +96,6 @@ import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
 import { DialogVariant } from "./component/dialog-variant"
-import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
@@ -266,7 +265,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             Effect.catch((error) => Effect.sync(() => log("error", "Failed to dispose TUI clipboard", { error }))),
           ),
       )
-      win32DisableProcessedInput()
       const finalizers = new Set<() => Promise<void>>()
       yield* Effect.addFinalizer(() =>
         Effect.promise(async () => {
@@ -450,7 +448,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     }),
   )
   yield* Effect.sync(() => {
-    win32FlushInputBuffer()
     if (result.reason !== undefined)
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
     if (result.epilogue) process.stdout.write(result.epilogue + "\n")
