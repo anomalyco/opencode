@@ -131,6 +131,37 @@ describe("Catalog", () => {
     }).pipe(Effect.provide(localCatalogLayer))
   })
 
+  it.effect("derives availability from a configured credential profile", () => {
+    const integrationID = Integration.ID.make("aws")
+    const providerID = Provider.ID.make("bedrock-like")
+    const localCatalogLayer = Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
+        [Location.node, locationLayer],
+      ]),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.integrationID = integrationID
+        }),
+      )
+      expect(yield* catalog.provider.available()).toEqual([])
+
+      // A profile is resolved by the provider's own credential chain, so the
+      // integration never reports a stored or environment connection for it.
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.settings = { profile: "opencode" }
+        }),
+      )
+
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
+    }).pipe(Effect.provide(localCatalogLayer))
+  })
+
   it.effect("projects environment connections without a catalog plugin", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

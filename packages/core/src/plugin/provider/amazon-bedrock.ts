@@ -62,10 +62,34 @@ function selectMantleModel(sdk: MantleSDK, modelID: string) {
 export const AmazonBedrockPlugin = define({
   id: "opencode.provider.amazon.bedrock",
   effect: Effect.fn(function* (ctx) {
+    yield* ctx.integration.transform((draft) => {
+      // The catalog lists every AWS variable as a key, so a region or an access key ID
+      // would be sent as a bearer token. Only the Bedrock API key is one; the rest merely
+      // say credentials exist, and SigV4 resolves them through the AWS credential chain.
+      draft.method.update({
+        integrationID: Provider.ID.amazonBedrock,
+        method: {
+          type: "env",
+          names: ["AWS_BEARER_TOKEN_BEDROCK"],
+          detect: [
+            "AWS_PROFILE",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_REGION",
+            "AWS_WEB_IDENTITY_TOKEN_FILE",
+            "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+            "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+          ],
+        },
+      })
+    })
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
-        if (Provider.packageName(item.provider.package) !== "@ai-sdk/amazon-bedrock") continue
+        if (
+          item.provider.id !== Provider.ID.amazonBedrock &&
+          Provider.packageName(item.provider.package) !== "@ai-sdk/amazon-bedrock"
+        )
+          continue
         evt.provider.update(item.provider.id, (provider) => {
           if (typeof provider.settings?.endpoint !== "string") return
           // The AI SDK expects a base URL, but users configure Bedrock private/VPC

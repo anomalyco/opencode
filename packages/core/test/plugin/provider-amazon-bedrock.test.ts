@@ -3,7 +3,10 @@ import { describe, expect } from "bun:test"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { AmazonBedrockPlugin } from "@opencode-ai/core/plugin/provider/amazon-bedrock"
@@ -12,6 +15,16 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
+
+const bedrockIntegrationID = Integration.ID.make(Provider.ID.amazonBedrock)
+
+const registerBedrock = (catalog: Catalog.Interface) =>
+  catalog.transform((draft) =>
+    draft.provider.update(Provider.ID.amazonBedrock, (provider) => {
+      provider.package = Provider.aisdk("@ai-sdk/amazon-bedrock")
+      provider.integrationID = bedrockIntegrationID
+    }),
+  )
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
@@ -98,6 +111,42 @@ describe("AmazonBedrockPlugin", () => {
       expect(result.package).toBe(Provider.aisdk("@ai-sdk/amazon-bedrock"))
       expect(result.settings).toEqual({ baseURL: "https://bedrock.example" })
     }),
+  )
+
+  it.effect("preserves region templates until configured provider settings are merged", () =>
+    withEnv({ AWS_REGION: undefined }, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        yield* catalog.transform((catalog) => {
+          catalog.provider.update(Provider.ID.amazonBedrock, (item) => {
+            item.package = Provider.aisdk("@ai-sdk/amazon-bedrock")
+            item.settings = { baseURL: "https://bedrock.${AWS_REGION}.amazonaws.com" }
+          })
+          catalog.model.update(Provider.ID.amazonBedrock, Model.ID.make("openai.gpt-5.6-sol"), (item) => {
+            item.package = Provider.aisdk("@ai-sdk/amazon-bedrock/mantle")
+            item.settings = { baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1" }
+          })
+        })
+        yield* addPlugin()
+        const modelID = Model.ID.make("openai.gpt-5.6-sol")
+        expect((yield* catalog.model.get(Provider.ID.amazonBedrock, modelID))?.settings?.baseURL).toBe(
+          "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+        )
+
+        // ConfigProviderPlugin runs after provider plugins and applies the configured region.
+        yield* catalog.transform((catalog) => {
+          catalog.provider.update(Provider.ID.amazonBedrock, (item) => {
+            item.settings = Provider.mergeOverlay(item.settings, { region: "eu-west-1" })
+          })
+        })
+        const configured = required(yield* catalog.model.get(Provider.ID.amazonBedrock, modelID))
+        const resolved = yield* ModelResolver.fromCatalogModel(configured, undefined, {
+          loadAWSCredentials: () => Effect.succeed(undefined),
+        })
+
+        expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-mantle.eu-west-1.api.aws/openai/v1")
+      }),
+    ),
   )
 
   it.effect("prefers endpoint over baseURL for SDK base URL", () =>
@@ -604,5 +653,85 @@ describe("AmazonBedrockPlugin", () => {
       expect(calls).toEqual([])
       expect(result.language).toBeUndefined()
     }),
+  )
+
+  it.effect("makes the provider available from AWS_PROFILE without treating it as a key", () =>
+    withEnv(
+      {
+        AWS_ACCESS_KEY_ID: undefined,
+        AWS_BEARER_TOKEN_BEDROCK: undefined,
+        AWS_REGION: undefined,
+        AWS_SECRET_ACCESS_KEY: undefined,
+        AWS_PROFILE: "opencode",
+      },
+      () =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          const integrations = yield* Integration.Service
+          yield* registerBedrock(catalog)
+          yield* addPlugin()
+
+          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(
+            Provider.ID.amazonBedrock,
+          )
+          const connection = required(yield* integrations.connection.active(bedrockIntegrationID))
+          expect(connection).toEqual({ type: "env", name: "AWS_PROFILE" })
+          expect(yield* integrations.connection.resolve(connection)).toBeUndefined()
+        }),
+    ),
+  )
+
+  it.effect("never resolves a region or an access key ID as a credential", () =>
+    withEnv(
+      {
+        AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
+        AWS_BEARER_TOKEN_BEDROCK: undefined,
+        AWS_PROFILE: undefined,
+        AWS_REGION: "us-east-1",
+        AWS_SECRET_ACCESS_KEY: "secret",
+      },
+      () =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          const integrations = yield* Integration.Service
+          yield* registerBedrock(catalog)
+          yield* addPlugin()
+
+          const connections = required(yield* integrations.get(bedrockIntegrationID)).connections
+          expect(connections.map((connection) => connection.type === "env" && connection.name)).toEqual([
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_REGION",
+          ])
+          for (const connection of connections) {
+            expect(yield* integrations.connection.resolve(connection)).toBeUndefined()
+          }
+        }),
+    ),
+  )
+
+  it.effect("prefers the Bedrock API key over detection variables", () =>
+    withEnv(
+      {
+        AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
+        AWS_BEARER_TOKEN_BEDROCK: "token",
+        AWS_PROFILE: "opencode",
+        AWS_REGION: "us-east-1",
+        AWS_SECRET_ACCESS_KEY: undefined,
+      },
+      () =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          const integrations = yield* Integration.Service
+          yield* registerBedrock(catalog)
+          yield* addPlugin()
+
+          const connection = required(yield* integrations.connection.active(bedrockIntegrationID))
+          expect(connection).toEqual({ type: "env", name: "AWS_BEARER_TOKEN_BEDROCK" })
+          expect(yield* integrations.connection.resolve(connection)).toEqual(
+            Credential.Key.make({ type: "key", key: "token" }),
+          )
+        }),
+    ),
   )
 })

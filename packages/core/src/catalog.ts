@@ -67,6 +67,10 @@ const layer = Layer.effect(
     const available = (provider: Provider.Info, integration: Integration.Info | undefined) => {
       if (provider.activation === "disabled") return false
       if (provider.activation === "enabled") return true
+      // A configured profile authenticates through the provider's own credential chain
+      // (Amazon Bedrock SigV4 resolves ~/.aws/config, SSO, and process credentials), so
+      // there is no stored or environment credential for the integration to report.
+      if (typeof provider.settings?.profile === "string") return true
       if (integration?.connections.length) return true
       return provider.integrationID === undefined && !integration
     }

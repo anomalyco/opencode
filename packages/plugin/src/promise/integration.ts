@@ -28,7 +28,10 @@ export interface IntegrationKeyMethod {
 
 export interface IntegrationEnvMethod {
   readonly type: "env"
+  /** Variables whose value is the credential itself. */
   readonly names: ReadonlyArray<string>
+  /** Variables that only indicate the integration is configured. */
+  readonly detect?: ReadonlyArray<string>
 }
 
 export type IntegrationMethod =

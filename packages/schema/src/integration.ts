@@ -41,7 +41,14 @@ export const KeyMethod = Schema.Struct({
 export interface EnvMethod extends Schema.Schema.Type<typeof EnvMethod> {}
 export const EnvMethod = Schema.Struct({
   type: Schema.Literal("env"),
+  /** Variables whose value is the credential itself, such as `OPENAI_API_KEY`. */
   names: Schema.Array(Schema.String),
+  /**
+   * Variables that only indicate the integration is configured. Amazon Bedrock sets
+   * `AWS_PROFILE` and `AWS_REGION`, neither of which is usable as a key, and signs
+   * requests through its own credential chain instead.
+   */
+  detect: optional(Schema.Array(Schema.String)),
 }).annotate({ identifier: "Integration.EnvMethod" })
 
 export const Method = Schema.Union([OAuthMethod, CommandMethod, KeyMethod, EnvMethod])
