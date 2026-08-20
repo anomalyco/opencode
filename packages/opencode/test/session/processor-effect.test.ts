@@ -3,7 +3,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { tool } from "ai"
+import { APICallError, tool } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import z from "zod"
@@ -226,6 +226,44 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+let encryptedRecoveryCalls = 0
+let encryptedRecoveryMode: "success" | "fail" | "stream-failure" = "success"
+let encryptedRecoveryInputs: LLM.StreamInput[] = []
+const encryptedRecoveryLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: (input) => {
+      encryptedRecoveryInputs.push(input)
+      encryptedRecoveryCalls += 1
+      if (encryptedRecoveryMode === "stream-failure" && encryptedRecoveryCalls === 1) {
+        return Stream.fail(
+          new APICallError({
+            message: "Upstream request failed: [invalid_encrypted_content] stale reasoning",
+            url: "https://example.com",
+            requestBodyValues: {},
+            statusCode: 400,
+            responseHeaders: { "content-type": "application/json" },
+            responseBody: JSON.stringify({ error: { code: "invalid_encrypted_content" } }),
+            isRetryable: false,
+          }),
+        )
+      }
+      if (encryptedRecoveryMode === "fail" || encryptedRecoveryCalls === 1) {
+        return Stream.make(LLMEvent.providerError({ message: "invalid_encrypted_content: stale reasoning" }))
+      }
+      return Stream.make(
+        LLMEvent.textStart({ id: "text-1" }),
+        LLMEvent.textDelta({ id: "text-1", text: "recovered" }),
+        LLMEvent.textEnd({ id: "text-1" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      )
+    },
+  }),
+)
+const encryptedRecoveryEnv = LayerNode.compile(root, [...replacements, [LLM.node, encryptedRecoveryLLM]])
+const itEncryptedRecovery = testEffect(encryptedRecoveryEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -236,6 +274,151 @@ const boot = Effect.fn("test.boot")(function* () {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+itEncryptedRecovery.live("session.processor recovers from invalid encrypted reasoning stream failure", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        encryptedRecoveryCalls = 0
+        encryptedRecoveryMode = "stream-failure"
+        encryptedRecoveryInputs = []
+
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "stale reasoning")
+        const historical = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          messageID: historical.id,
+          sessionID: chat.id,
+          type: "reasoning",
+          text: "visible reasoning",
+          time: { start: Date.now() },
+          metadata: {
+            openai: {
+              itemId: "item-1",
+              reasoningEncryptedContent: "encrypted-1",
+              keep: "yes",
+            },
+          },
+        })
+        const currentParent = yield* user(chat.id, "continue")
+        const msg = yield* assistant(chat.id, currentParent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const value = yield* handle.process({
+          user: {
+            id: currentParent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: currentParent.time,
+            agent: currentParent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "reasoning",
+                  text: "visible reasoning",
+                  providerOptions: {
+                    openai: {
+                      itemId: "item-1",
+                      reasoningEncryptedContent: "encrypted-1",
+                      keep: "yes",
+                    },
+                  },
+                },
+                { type: "text", text: "previous answer" },
+              ],
+            },
+            { role: "user", content: "continue" },
+          ],
+          tools: {},
+        })
+
+        const stored = yield* session.messages({ sessionID: chat.id })
+        const storedReasoning = stored
+          .flatMap((item) => item.parts)
+          .find((part): part is SessionV1.ReasoningPart => part.type === "reasoning" && part.messageID === historical.id)
+
+        expect(value).toBe("continue")
+        expect(encryptedRecoveryCalls).toBe(2)
+        expect(encryptedRecoveryInputs[0]?.messages[0]).toMatchObject({
+          role: "assistant",
+          content: [
+            {
+              type: "reasoning",
+              providerOptions: {
+                openai: { itemId: "item-1", reasoningEncryptedContent: "encrypted-1", keep: "yes" },
+              },
+            },
+            { type: "text", text: "previous answer" },
+          ],
+        })
+        expect(encryptedRecoveryInputs[1]?.messages[0]).toMatchObject({
+          role: "assistant",
+          content: [
+            {
+              type: "reasoning",
+              text: "visible reasoning",
+              providerOptions: { openai: { keep: "yes" } },
+            },
+            { type: "text", text: "previous answer" },
+          ],
+        })
+        expect(storedReasoning?.text).toBe("visible reasoning")
+        expect(storedReasoning?.metadata).toEqual({ openai: { keep: "yes" } })
+      }),
+    { config: cfg },
+  ),
+)
+
+itEncryptedRecovery.live("session.processor only recovers invalid encrypted reasoning content once", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        encryptedRecoveryCalls = 0
+        encryptedRecoveryMode = "fail"
+        encryptedRecoveryInputs = []
+
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "stale reasoning")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "stale reasoning" }],
+          tools: {},
+        })
+
+        expect(value).toBe("stop")
+        expect(encryptedRecoveryCalls).toBe(2)
+        expect(JSON.stringify(handle.message.error?.data)).toContain("invalid_encrypted_content")
+      }),
+    { config: cfg },
+  ),
+)
 
 it.live("session.processor effect tests capture llm input cleanly", () =>
   provideTmpdirServer(
