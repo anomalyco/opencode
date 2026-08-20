@@ -193,8 +193,8 @@ describe("SessionClosure job bind", () => {
           const held = yield* holdLease(closure, root, "k8a")
           const ids = coordinates("k8a")
 
-          // A REAL fence through the real claim path, not a scripted refusal. 7.2's Gate-3 note is
-          // explicit that the two diverge and only one reflects production.
+          // A real fence through the real claim path, not a scripted refusal. The two diverge, and
+          // only the real path reflects production.
           const fence = yield* raiseFence(closure, runs, root, node)
 
           const outcome = yield* closure.jobStart({ ...ids, lease: held.lease, epoch: held.epoch })
@@ -807,8 +807,8 @@ describe("SessionClosure job bind", () => {
 
           const fence = yield* raiseFence(closure, runs, root, node)
 
-          // 7.4: "a fence never rewrites `consumed` to `revoked`". The invocation is a pre-fence
-          // admission the operation adopts and cancels through the whole token instead.
+          // A fence never rewrites `consumed` to `revoked`. The invocation is a pre-fence admission
+          // the operation adopts and cancels through the whole token instead.
           const fenced = yield* closure.view
           expect(fenced.armPermits.find((item) => item.id === outcome.permit)?.state).toBe("consumed")
 
