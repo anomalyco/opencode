@@ -27,7 +27,7 @@ let requests: LLMRequest[] = []
 const model = LanguageModel.make({
   id: "title-model",
   provider: "test",
-  route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
+  route: OpenAIChat.route,
 })
 const cost = [
   {

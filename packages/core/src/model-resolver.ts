@@ -164,7 +164,6 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     ...nativeCredentialSettings(specifier, credential),
     headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
     body: Provider.mergeOverlay(mapping?.body, resolved.body),
-    limits: { context: resolved.limit.context, input: resolved.limit.input, output: resolved.limit.output },
   }
   return yield* Effect.try({
     try: () => {

@@ -31,6 +31,7 @@ import { ToolStream } from "./utils/tool-stream.js"
 const ADAPTER = "anthropic-messages"
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
+export const DEFAULT_MAX_TOKENS = 32_000
 
 export type ThinkingInput =
   | {
@@ -624,7 +625,6 @@ const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function*
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
-  const outputLimit = request.model.defaults?.limits?.output ?? request.model.route.defaults.limits?.output ?? 4096
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
@@ -663,7 +663,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tools,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: generation?.maxTokens ?? outputLimit,
+    max_tokens: generation?.maxTokens ?? DEFAULT_MAX_TOKENS,
     temperature: generation?.temperature,
     top_p: generation?.topP,
     top_k: generation?.topK,

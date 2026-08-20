@@ -322,7 +322,7 @@ describe("Anthropic Messages route", () => {
           { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: '{"forecast":"sunny"}' }] },
         ],
         stream: true,
-        max_tokens: 4096,
+        max_tokens: 32_000,
       })
     }),
   )

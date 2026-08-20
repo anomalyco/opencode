@@ -328,7 +328,6 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
               body: projected.body === undefined ? undefined : { ...projected.body },
               headers: info.headers,
             },
-      limits: { context: info.limit.context, input: info.limit.input, output: info.limit.output },
       providerOptions: projected.settings,
     },
     body: {

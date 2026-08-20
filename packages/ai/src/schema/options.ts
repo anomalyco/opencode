@@ -114,22 +114,7 @@ export const mergeGenerationOptions = (...items: ReadonlyArray<GenerationOptions
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
-export class LanguageModelLimits extends Schema.Class<LanguageModelLimits>("LLM.LanguageModelLimits")({
-  context: Schema.optional(Schema.Number),
-  input: Schema.optional(Schema.Number),
-  output: Schema.optional(Schema.Number),
-}) {}
-
-export namespace LanguageModelLimits {
-  export type Input = LanguageModelLimits | ConstructorParameters<typeof LanguageModelLimits>[0]
-
-  /** Normalize model limit input into the canonical `LanguageModelLimits` class. */
-  export const make = (input: Input | undefined) =>
-    input instanceof LanguageModelLimits ? input : new LanguageModelLimits(input ?? {})
-}
-
 export class LanguageModelDefaults extends Schema.Class<LanguageModelDefaults>("LLM.LanguageModelDefaults")({
-  limits: Schema.optional(LanguageModelLimits),
   generation: Schema.optional(GenerationOptions),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
@@ -139,7 +124,6 @@ export namespace LanguageModelDefaults {
   export type Input =
     | LanguageModelDefaults
     | {
-        readonly limits?: LanguageModelLimits.Input
         readonly generation?: GenerationOptions.Input
         readonly providerOptions?: ProviderOptions
         readonly http?: HttpOptions.Input
@@ -149,7 +133,6 @@ export namespace LanguageModelDefaults {
   export const make = (input: Input) => {
     if (input instanceof LanguageModelDefaults) return input
     return new LanguageModelDefaults({
-      limits: input.limits === undefined ? undefined : LanguageModelLimits.make(input.limits),
       generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
       providerOptions: input.providerOptions,
       http: input.http === undefined ? undefined : HttpOptions.make(input.http),
