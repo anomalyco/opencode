@@ -78,6 +78,13 @@ function renderOutput(input: {
   ].join("\n")
 }
 
+function samePermissionRule(
+  left: { permission: string; pattern: string; action: string },
+  right: { permission: string; pattern: string; action: string },
+) {
+  return left.permission === right.permission && left.pattern === right.pattern && left.action === right.action
+}
+
 export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
@@ -136,39 +143,27 @@ export const TaskTool = Tool.define(
       const session = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
-      const childPermission = deriveSubagentSessionPermission({
-        parentSessionPermission: parent.permission ?? [],
-        subagent: next,
-      })
-      const childToolDenies = [
-        ...(next.permission.some((rule) => rule.permission === "todowrite")
-          ? []
-          : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
-        ...(next.permission.some((rule) => rule.permission === id)
-          ? []
-          : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),
-        ...(cfg.experimental?.primary_tools?.map((permission) => ({
-          permission,
-          pattern: "*" as const,
-          action: "deny" as const,
-        })) ?? []),
-      ]
+      const childSessionPermission = (subagent: Agent.Info, parentPermission = parent.permission ?? []) => {
+        const inherited = deriveSubagentSessionPermission({
+          parentSessionPermission: parentPermission,
+          subagent,
+        })
+        const toolDenies =
+          cfg.experimental?.primary_tools?.map((permission) => ({
+            permission,
+            pattern: "*" as const,
+            action: "deny" as const,
+          })) ?? []
+        return [...inherited, ...toolDenies.filter((deny) => !inherited.some((rule) => samePermissionRule(rule, deny)))]
+      }
+      const childPermission = childSessionPermission(next)
       const nextSession =
         session ??
         (yield* sessions.create({
           parentID: ctx.sessionID,
           title: params.description + ` (@${next.name} subagent)`,
           agent: next.name,
-          permission: [
-            ...childPermission,
-            ...childToolDenies.filter(
-              (deny) =>
-                !childPermission.some(
-                  (rule) =>
-                    rule.permission === deny.permission && rule.pattern === deny.pattern && rule.action === deny.action,
-                ),
-            ),
-          ],
+          permission: childPermission,
         }))
 
       const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
@@ -199,6 +194,27 @@ export const TaskTool = Tool.define(
 
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
         const parts = yield* ops.resolvePromptParts(params.prompt)
+        const current = yield* sessions.get(nextSession.id)
+        if (current.parentID === ctx.sessionID && current.agent !== next.name) {
+          const currentParent = yield* sessions.get(ctx.sessionID)
+          const currentParentPermission = currentParent.permission ?? []
+          const previous = current.agent ? yield* agent.get(current.agent) : undefined
+          const preserved = [...(current.permission ?? [])]
+          for (const rule of previous ? childSessionPermission(previous, currentParentPermission) : []) {
+            // Remove one derived copy so an identical session-specific rule remains.
+            const index = preserved.findIndex((item) => samePermissionRule(item, rule))
+            if (index !== -1) preserved.splice(index, 1)
+          }
+          const nextPermission = childSessionPermission(next, currentParentPermission)
+          yield* sessions.setAgentPermission({
+            sessionID: nextSession.id,
+            agent: next.name,
+            permission: [
+              ...preserved.filter((rule) => !nextPermission.some((item) => samePermissionRule(item, rule))),
+              ...nextPermission,
+            ],
+          })
+        }
         const result = yield* ops.prompt({
           messageID: MessageID.ascending(),
           sessionID: nextSession.id,

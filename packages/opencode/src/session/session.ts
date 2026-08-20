@@ -434,6 +434,11 @@ export interface Interface {
     model: NonNullable<Info["model"]>
     time: number
   }) => Effect.Effect<void>
+  readonly setAgentPermission: (input: {
+    sessionID: SessionID
+    agent: string
+    permission: PermissionV1.Ruleset
+  }) => Effect.Effect<void>
   readonly setPermission: (input: { sessionID: SessionID; permission: PermissionV1.Ruleset }) => Effect.Effect<void>
   readonly setRevert: (input: {
     sessionID: SessionID
@@ -775,6 +780,18 @@ const layer: Layer.Layer<
       }).pipe(Effect.orDie)
     })
 
+    const setAgentPermission = Effect.fn("Session.setAgentPermission")(function* (input: {
+      sessionID: SessionID
+      agent: string
+      permission: PermissionV1.Ruleset
+    }) {
+      yield* patch(input.sessionID, {
+        agent: input.agent,
+        permission: [...input.permission],
+        time: { updated: Date.now() },
+      }).pipe(Effect.orDie)
+    })
+
     const setPermission = Effect.fn("Session.setPermission")(function* (input: {
       sessionID: SessionID
       permission: PermissionV1.Ruleset
@@ -914,6 +931,7 @@ const layer: Layer.Layer<
       setArchived,
       setMetadata,
       setAgentModel,
+      setAgentPermission,
       setPermission,
       setRevert,
       clearRevert,
