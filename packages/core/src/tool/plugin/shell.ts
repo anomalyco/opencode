@@ -72,14 +72,11 @@ const Output = Schema.Struct({
 type Output = typeof Output.Type
 
 const resultMessages = (output: Output) => {
-  const notice =
-    output.status === "running"
-      ? BACKGROUND_INSTRUCTION
-      : output.timeout
-        ? "Command timed out before completion."
-        : output.exit !== undefined
-          ? `Command exited with code ${output.exit}.`
-          : undefined
+  const notice = (() => {
+    if (output.status === "running") return BACKGROUND_INSTRUCTION
+    if (output.timeout) return "Command timed out before completion."
+    if (output.exit !== undefined) return `Command exited with code ${output.exit}.`
+  })()
   return [output.output, ...(notice ? [notice] : [])]
 }
 
