@@ -1,7 +1,7 @@
 export * as Shell from "./shell.js"
 
 import path from "path"
-import { Context, Deferred, Duration, Effect, Fiber, Layer, Schema, Schedule, Stream } from "effect"
+import { Context, Deferred, Duration, Effect, Fiber, Latch, Layer, Schema, Schedule, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
@@ -286,7 +286,7 @@ const layer = () =>
               sessions.set(id, session)
 
               const stream = createWriteStream(file)
-              const outputDone = Deferred.makeUnsafe<void>()
+              const outputDone = Latch.makeUnsafe()
               const pump = handle.all.pipe(
                 Stream.runForEach((chunk: Uint8Array) =>
                   Effect.sync(() => {
@@ -304,8 +304,8 @@ const layer = () =>
                         stream.end(() => resolve())
                       }),
                   )
-                  yield* Deferred.succeed(outputDone, undefined)
-                }).pipe(Effect.catch(() => Deferred.succeed(outputDone, undefined))),
+                  yield* outputDone.open
+                }).pipe(Effect.catch(() => outputDone.open)),
               )
               yield* Effect.promise(
                 () =>
@@ -324,7 +324,7 @@ const layer = () =>
                     draft.time.completed = Date.now()
                   })
                   yield* beforeWait
-                  yield* Deferred.await(outputDone)
+                  yield* outputDone.await
                   // Resolve waiters with the terminal Info before any retention eviction, so an evicted
                   // session still reports success rather than the removal NotFoundError. This runs before
                   // the timeout-fiber interrupt below, which on the timeout path would otherwise cancel
