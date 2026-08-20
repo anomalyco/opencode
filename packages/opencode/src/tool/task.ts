@@ -325,8 +325,16 @@ export const TaskTool = Tool.define(
               background.waitForPromotion(nextSession.id),
             )
             if (result?.metadata?.background === true) return backgroundResult()
-            if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
-            if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
+            if (result?.status === "error" || result?.status === "cancelled")
+              return yield* Effect.fail(
+                new Error(
+                  renderOutput({
+                    sessionID: nextSession.id,
+                    state: "error",
+                    text: result.status === "error" ? (result.error ?? "Task failed") : "Task cancelled",
+                  }),
+                ),
+              )
             return {
               title: params.description,
               metadata,
