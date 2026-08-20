@@ -211,6 +211,13 @@ function stubOps(opts?: {
     attachments: opts?.attachments ?? inertCoordinator(),
     acquireContinuation: (input) => SessionAdmission.acquireContinuation(taskClosure, input),
     admitScoped: (input) => SessionAdmission.admitScoped(taskClosure, input),
+    // Records rather than dies: the task tool reaches this on every interrupt path, and these
+    // fixtures drive child cancellation through `cancel` instead. Reporting "absent" is honest —
+    // there is no runner registry behind this stub to interrupt.
+    physical: {
+      interruptExact: () => Effect.succeed({ type: "absent" as const }),
+      reportExact: () => Effect.succeed({ type: "absent" as const }),
+    },
   }
 }
 

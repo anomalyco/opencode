@@ -10,6 +10,7 @@ import { Session } from "./session"
 import { SessionClosure } from "./closure/coordinator"
 import { SessionAdmission } from "./closure/admission"
 import { AttachmentCoordinator } from "./attachment/coordinator"
+import { SessionPhysical } from "./physical-interrupt"
 import { hasUnconsumedLocalTool } from "./task-return"
 import type { SessionMutation } from "./closure/mutation"
 import { Agent } from "../agent/agent"
@@ -148,6 +149,10 @@ const layer = Layer.effect(
     const instruction = yield* Instruction.Service
     const state = yield* SessionRunState.Service
     const closure = yield* SessionClosure.Service
+    // Taken from context rather than built here, and that is load-bearing: it must be backed by the
+    // same `SessionRunState` this service holds, or a physical interrupt would cancel a runner in a
+    // different registry than the one running the work.
+    const physical = yield* SessionPhysical.Service
     // Required rather than optional. This service provably holds a coordinator, and the task tool
     // cannot resolve one: it is constructed inside `ToolRegistry`'s layer, which consumes these
     // services without publishing them. Reading it here makes a graph that omits the coordinator a
@@ -205,6 +210,10 @@ const layer = Layer.effect(
         acquireContinuation: (input: SessionAdmission.ContinuationInput) =>
           SessionAdmission.acquireContinuation(closure, input),
         admitScoped: (input: SessionAdmission.ScopedInput) => SessionAdmission.admitScoped(closure, input),
+        // Relayed whole rather than as two unwrapped functions. The report/adopt distinction is the
+        // safety property here, and keeping both methods on one interface makes a caller state which
+        // one it means at the call site.
+        physical,
       } satisfies TaskPromptOps
     })
 
@@ -1767,6 +1776,7 @@ export const node = LayerNode.make({
     Instruction.node,
     SessionRunState.node,
     SessionClosure.node,
+    SessionPhysical.node,
     AttachmentCoordinator.node,
     SessionRevert.node,
     SessionSummary.node,

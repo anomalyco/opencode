@@ -11,6 +11,7 @@ import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import type { SessionClosure } from "../session/closure/coordinator"
 import type { SessionMutation } from "../session/closure/mutation"
+import type { SessionPhysical } from "../session/physical-interrupt"
 import { SessionAdmission } from "../session/closure/admission"
 import { AttachmentCoordinator } from "@/session/attachment/coordinator"
 import { Config } from "@/config/config"
@@ -54,6 +55,18 @@ export interface TaskPromptOps {
   admitScoped(
     input: SessionAdmission.ScopedInput,
   ): Effect.Effect<SessionAdmission.Interface, SessionClosure.AdmissionRefused, Scope.Scope>
+  /**
+   * The finalizer-safe counterpart to `cancel`, and the two are not interchangeable.
+   *
+   * `cancel` means full branch closure: it sweeps background jobs recursively and then interrupts
+   * the runner. A task finalizer is awaited by the very fiber or job scope that closure has to
+   * quiesce, so calling `cancel` from one closes a loop in which every await is locally reasonable.
+   * A physical interrupt performs one exact interrupt with no discovery, no view, no record, and no
+   * wait on an owning closure operation.
+   *
+   * `cancel` stays, and is still correct for a direct user abort of the child session.
+   */
+  physical: SessionPhysical.Interface
 }
 
 const id = "task"
@@ -322,6 +335,18 @@ export const TaskTool = Tool.define(
         )
       })
 
+      // This finalizer runs inside the delegated execution being torn down, and it targets the very
+      // session whose runner that execution is using. A full `cancel` here would close a loop:
+      // cancelling the job awaits this fiber, while the recursive sweep `cancel` performs can reach
+      // back to the lifetime whose teardown is doing the awaiting.
+      //
+      // `reportExact` rather than `interruptExact`, because this caller is the target. If an
+      // interrupt for this identity is already in flight, awaiting it would block on a signal that
+      // cannot complete until this finalizer returns. Reporting returns immediately and lets the
+      // in-flight interrupt finish.
+      const executeTask = () =>
+        runTask().pipe(Effect.onInterrupt(() => ops.physical.reportExact({ type: "session", session: nextSession.id })))
+
       // Public job ids are reusable, so this call keeps the physical lifetime for its own exact
       // wait and cancellation, and the opaque invocation handle for the one async observer. The
       // deferred closes the promotion race: `onPromote` can run before `startExact` returns, so its
@@ -572,7 +597,7 @@ export const TaskTool = Tool.define(
         if (parentScope) yield* background.promote(nextSession.id)
         const handle = yield* background.extendWithHandle({
           id: nextSession.id,
-          run: runTask(),
+          run: executeTask(),
           admission: jobAdmission,
         })
         if (!handle) {
@@ -586,7 +611,7 @@ export const TaskTool = Tool.define(
       const admission = yield* Effect.gen(function* () {
         if (parentScope) yield* background.promote(nextSession.id)
         const extended = yield* background
-          .extendWithHandle({ id: nextSession.id, run: runTask(), admission: jobAdmission })
+          .extendWithHandle({ id: nextSession.id, run: executeTask(), admission: jobAdmission })
           .pipe(Effect.exit)
         if (Exit.isFailure(extended)) {
           if (parentScope && reservation) yield* parentScope.reject(reservation)
@@ -619,7 +644,7 @@ export const TaskTool = Tool.define(
               }),
               attach(),
             ]),
-            run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
+            run: executeTask(),
             admission: jobAdmission,
           })
           .pipe(Effect.exit)
@@ -683,6 +708,9 @@ export const TaskTool = Tool.define(
       return yield* Effect.acquireUseRelease(
         Effect.sync(() => {
           ctx.abort.addEventListener("abort", onAbort)
+          // A signal that already fired before the listener was attached would otherwise be missed
+          // entirely, leaving the child running after the caller was aborted.
+          if (ctx.abort.aborted) onAbort()
         }),
         () =>
           Effect.gen(function* () {
@@ -728,7 +756,22 @@ export const TaskTool = Tool.define(
               // the sweeps, that one is currently being run by another live invocation. With no
               // lifetime there is nothing of ours to cancel: the attempt we joined had already
               // terminalized.
-              yield* Effect.all([cancel, lifetime ? background.cancelExact(lifetime) : Effect.void], { discard: true })
+              yield* Effect.all(
+                [
+                  // Synchronous teardown is finalizer-safe territory too, so it takes the exact
+                  // physical interrupt rather than `cancel`'s full sweep. `interruptExact` rather
+                  // than `reportExact` because this runs in the caller's tool fiber, not inside the
+                  // child execution — an independent caller, free to adopt an in-flight interrupt
+                  // and take its result.
+                  ops.physical.interruptExact({ type: "session", session: nextSession.id }),
+                  // The exact lifetime this invocation started, never the public id. Routed through
+                  // the registry so it dedupes against an interrupt already tearing this same
+                  // lifetime down. With no lifetime there is nothing of ours to cancel: the attempt
+                  // we joined had already terminalized.
+                  lifetime ? ops.physical.interruptExact({ type: "lifetime", lifetime }) : Effect.void,
+                ],
+                { discard: true },
+              )
             }
           }).pipe(
             Effect.ensuring(
