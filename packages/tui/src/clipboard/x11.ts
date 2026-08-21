@@ -10,53 +10,17 @@
 // single instance across copies.
 
 import x11 from "x11"
+import type { X11Client, X11Display, X11Event } from "x11"
 
 const CHUNK = 100_000 // bytes per ChangeProperty request (replace, then append)
-
-interface X11Event {
-  name: string
-  time: number
-  owner: number
-  requestor: number
-  selection: number
-  target: number
-  property: number
-}
-
-interface X11Client {
-  AllocID(): number
-  CreateWindow(wid: number, parent: number, x: number, y: number, w: number, h: number): void
-  InternAtom(onlyIfExists: boolean, name: string, cb: (err: Error | null, atom: number) => void): void
-  SetSelectionOwner(owner: number, selection: number, time: number): void
-  ConvertSelection(requestor: number, selection: number, target: number, property: number, time: number): void
-  ChangeProperty(mode: 0 | 1 | 2, wid: number, name: number, type: number, format: 8 | 16 | 32, data: Buffer): void
-  DeleteProperty(wid: number, property: number): void
-  GetProperty(
-    del: boolean,
-    wid: number,
-    name: number,
-    type: number,
-    longOffset: number,
-    longLength: number,
-    cb: (err: Error | null, prop: { type: number; data: Buffer }) => void,
-  ): void
-  SendEvent(destination: number, propagate: boolean, eventMask: number, event: Record<string, unknown>): void
-  on(event: "event", cb: (ev: X11Event) => void): void
-  removeListener(event: "event", cb: (ev: X11Event) => void): void
-  terminate(): void
-}
-
-interface X11Display {
-  screen: { root: number }[]
-}
 
 function createClient(): Promise<{ client: X11Client; display: X11Display }> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("timed out connecting to the X server")), 3000)
-    x11.createClient((err: Error | null, display: unknown) => {
+    x11.createClient((err, display) => {
       clearTimeout(timeout)
       if (err) return reject(err)
-      resolve({ client: (display as { client: X11Client }).client, display: display as X11Display })
+      resolve({ client: display.client, display })
     })
   })
 }
