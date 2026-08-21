@@ -135,7 +135,16 @@ jobs:
 
             const linkedIssues = result.repository.pullRequest.closingIssuesReferences.totalCount;
 
-            if (linkedIssues === 0) {
+            // GitHub only populates closingIssuesReferences when a PR targets the repository's
+            // default branch (dev). PRs targeting other branches like v2 always return totalCount 0.
+            // Fall back to checking the PR description for closing keywords (e.g. Closes #123).
+            const body = pr.body || '';
+            const issueMatch = body.match(/### Issue for this PR\s*\n([\s\S]*?)(?=###|$)/);
+            const issueContent = issueMatch ? issueMatch[1].trim() : body;
+            const hasBodyIssueRef = /(closes|fixes|resolves)\s+#\d+/i.test(issueContent) || /#\d+/.test(issueContent);
+            const hasLinkedIssue = linkedIssues > 0 || hasBodyIssueRef;
+
+            if (!hasLinkedIssue) {
               await addLabel('needs:issue');
               await comment('issue', `Thanks for your contribution!
 
