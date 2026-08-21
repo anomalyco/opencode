@@ -222,6 +222,10 @@ describe("session.retry.retryable", () => {
     "The model is currently at capacity due to high demand",
     "The service is temporarily at capacity",
     "upstream returned status 524",
+    "Error: unknown certificate verification error",
+    "unable to verify the first certificate",
+    "TLS handshake failed",
+    "connection closed during handshake",
   ])("retries matching API error text: %s", (message) => {
     expect(SessionRetry.retryable(wrap(message), retryProvider)).toEqual({ message })
   })
