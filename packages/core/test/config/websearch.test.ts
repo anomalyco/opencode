@@ -32,7 +32,7 @@ describe("ConfigWebSearchPlugin.Plugin", () => {
       yield* waitUntil(
         websearch.default().pipe(
           Effect.map((provider) => provider?.id === WebSearch.ID.make("test")),
-          Effect.catch(() => Effect.succeed(false)),
+          Effect.orElseSucceed(() => false),
         ),
       )
     }).pipe(Effect.provide(Config.testLayer([configured(false)]))),

@@ -1,5 +1,5 @@
-id: no-effect-flat-map-suspend
-language: TypeScript
+id: no-effect-flat-map-suspend-tsx
+language: Tsx
 message: Use effect-form Effect.andThen when the previous value is ignored.
 severity: error
 rule:

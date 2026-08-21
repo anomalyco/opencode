@@ -1,5 +1,5 @@
-id: no-effect-catch-succeed
-language: TypeScript
+id: no-effect-catch-succeed-tsx
+language: Tsx
 message: Use Effect.orElseSucceed for constant failure recovery.
 severity: error
 rule:

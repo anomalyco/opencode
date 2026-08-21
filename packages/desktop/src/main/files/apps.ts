@@ -108,11 +108,7 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
 
   if (key) {
     for (const file of paths) {
-      const dirs = [
-        path.dirname(file),
-        path.dirname(path.dirname(file)),
-        path.dirname(path.dirname(path.dirname(file))),
-      ]
+      const dirs = [path.dirname(file), path.dirname(path.dirname(file)), path.dirname(path.dirname(path.dirname(file)))]
       for (const dir of dirs) {
         const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => []))
         for (const entry of entries) {

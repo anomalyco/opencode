@@ -38,6 +38,24 @@ snapshots:
         style: primary
         start: 12
         end: 61
+  effect.pipe(Effect.flatMap((_value) => Effect.suspend(() => next))):
+    labels:
+      - source: Effect.flatMap((_value) => Effect.suspend(() => next))
+        style: primary
+        start: 12
+        end: 66
+  "effect.pipe(Effect.flatMap((_value: Value) => Effect.suspend(() => next)))":
+    labels:
+      - source: "Effect.flatMap((_value: Value) => Effect.suspend(() => next))"
+        style: primary
+        start: 12
+        end: 73
+  "effect.pipe(Effect.flatMap((_value: Value) => { return Effect.suspend(() => next) }))":
+    labels:
+      - source: "Effect.flatMap((_value: Value) => { return Effect.suspend(() => next) })"
+        style: primary
+        start: 12
+        end: 84
   effect.pipe(Effect.flatMap(_ => Effect.suspend(() => next))):
     labels:
       - source: Effect.flatMap(_ => Effect.suspend(() => next))
@@ -50,6 +68,12 @@ snapshots:
         style: primary
         start: 12
         end: 70
+  effect.pipe(Effect.flatMap(_value => { return Effect.suspend(() => next) })):
+    labels:
+      - source: Effect.flatMap(_value => { return Effect.suspend(() => next) })
+        style: primary
+        start: 12
+        end: 75
   effect.pipe(Effect.flatMap(function () { return Effect.suspend(() => next) })):
     labels:
       - source: Effect.flatMap(function () { return Effect.suspend(() => next) })
@@ -62,3 +86,15 @@ snapshots:
         style: primary
         start: 12
         end: 78
+  effect.pipe(Effect.flatMap(function (_value) { return Effect.suspend(() => next) })):
+    labels:
+      - source: Effect.flatMap(function (_value) { return Effect.suspend(() => next) })
+        style: primary
+        start: 12
+        end: 83
+  "effect.pipe(Effect.flatMap(function (_value: Value) { return Effect.suspend(() => next) }))":
+    labels:
+      - source: "Effect.flatMap(function (_value: Value) { return Effect.suspend(() => next) })"
+        style: primary
+        start: 12
+        end: 90

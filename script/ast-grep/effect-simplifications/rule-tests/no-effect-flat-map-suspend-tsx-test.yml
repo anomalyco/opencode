@@ -1,0 +1,21 @@
+id: no-effect-flat-map-suspend-tsx
+valid:
+  - const view = <Widget value={effect.pipe(Effect.andThen(Effect.suspend(() => next)))} />
+  - const view = <Widget value={effect.pipe(Effect.flatMap((value) => Effect.suspend(() => use(value))))} />
+  - const view = <Widget value={effect.pipe(Effect.flatMap((value) => Effect.suspend(() => next)))} />
+  - const view = <Widget value={effect.pipe(Effect.flatMap((_value) => Effect.suspend(() => use(_value))))} />
+  - const view = <Widget value={effect.pipe(Effect.flatMap((_value) => Effect.suspend(() => ({ _value }))))} />
+  - "const view = <Widget value={effect.pipe(Effect.flatMap((_value: Value) => Effect.suspend(() => use(_value))))} />"
+  - const view = <Widget value={effect.pipe(Effect.flatMap((_value) => Effect.suspend(() => values.map((_value) => use(_value)))))} />
+  - const view = <Widget value={effect.pipe(Effect.flatMap(({ value }) => Effect.suspend(() => next)))} />
+  - const view = <Widget value={Effect.flatMap(effect, options, () => Effect.suspend(() => next))} />
+  - const view = <Widget value={effect.pipe(Effect.flatMap(() => Effect.suspend(thunk)))} />
+  - const view = <Widget value={effect.pipe(Effect.flatMap(function () { return Effect.suspend(() => new.target) }))} />
+  - const view = <Widget value={effect.pipe(Effect.flatMap(function () { return Effect.suspend(() => import.meta) }))} />
+invalid:
+  - const view = <Widget value={effect.pipe(Effect.flatMap(() => Effect.suspend(() => next)))} />
+  - const view = <Widget value={Effect.flatMap(effect, () => Effect.suspend(() => next))} />
+  - const view = <Widget value={effect.pipe(Effect.flatMap((_value) => Effect.suspend(() => next)))} />
+  - const view = <Widget value={effect.pipe(Effect.flatMap(_value => { return Effect.suspend(() => next) }))} />
+  - "const view = <Widget value={effect.pipe(Effect.flatMap((_value: Value) => Effect.suspend(() => next)))} />"
+  - const view = <Widget value={effect.pipe(Effect.flatMap(function (_value) { return Effect.suspend(() => next) }))} />

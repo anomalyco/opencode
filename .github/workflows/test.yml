@@ -22,22 +22,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  effect-simplifications:
-    name: effect simplifications
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-
-      - name: Setup Bun
-        uses: ./.github/actions/setup-bun
-
-      - name: Test Effect simplification rules
-        run: bun run test:effect-simplification-rules
-
-      - name: Check Effect simplifications
-        run: bun run lint:effect-simplifications
-
   unit:
     name: unit (${{ matrix.settings.name }})
     strategy:
@@ -65,6 +49,14 @@ jobs:
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
+
+      - name: Test Effect simplification rules
+        if: runner.os == 'Linux'
+        run: bun run test:effect-simplification-rules
+
+      - name: Check Effect simplifications
+        if: runner.os == 'Linux'
+        run: bun run lint:effect-simplifications
 
       - name: Configure git identity
         run: |
