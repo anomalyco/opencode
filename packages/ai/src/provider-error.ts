@@ -74,9 +74,11 @@ const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error"
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
 const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded/i
 const CONTENT_POLICY_TEXT = /content[-_\s]?policy|content_filter|safety/i
+const TRANSIENT_TEXT = /\btry again (?:later|in\b)|\b(?:currently|temporarily) at capacity\b|\bretry your request\b/i
 
 export interface ProviderFailure {
   readonly message: string
+  readonly stream?: boolean | undefined
   readonly status?: number | undefined
   readonly code?: string | undefined
   readonly retryAfterMs?: number | undefined
@@ -133,6 +135,12 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
       status: input.status,
       retryAfterMs: input.retryAfterMs,
     })
+  if (TRANSIENT_TEXT.test(text))
+    return new ProviderInternalReason({
+      ...common,
+      status: input.status,
+      retryAfterMs: input.retryAfterMs,
+    })
   if (input.status === 429) {
     return new RateLimitReason({
       ...common,
@@ -149,6 +157,12 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   if (codes.some((code) => INVALID_REQUEST_CODES.has(code))) return new InvalidRequestReason(common)
   if (input.status === 400 || input.status === 404 || input.status === 413 || input.status === 422)
     return new InvalidRequestReason(common)
+  if (input.stream)
+    return new ProviderInternalReason({
+      ...common,
+      status: input.status,
+      retryAfterMs: input.retryAfterMs,
+    })
   return new UnknownProviderReason({ ...common, status: input.status })
 }
 

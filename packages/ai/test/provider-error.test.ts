@@ -75,6 +75,26 @@ describe("provider error classification", () => {
     ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
   })
 
+  test("classifies transient gateway message fallbacks as provider internal", () => {
+    expect(
+      [
+        "The model is currently at capacity due to high demand.",
+        "The service is temporarily at capacity.",
+        "Please try again in a few minutes.",
+        "Please retry your request shortly.",
+      ].map((message) => classifyProviderFailure({ message })._tag),
+    ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal", "ProviderInternal"])
+  })
+
+  test("classifies provider stream errors as provider internal", () => {
+    expect(
+      [
+        "The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing: https://docs.x.ai/developers/advanced-api-usage/priority-processing",
+        "The model is temporarily unavailable.",
+      ].map((message) => classifyProviderFailure({ message, stream: true })._tag),
+    ).toEqual(["ProviderInternal", "ProviderInternal"])
+  })
+
   test("classifies transient client statuses as provider internal", () => {
     expect([408, 409].map((status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag)).toEqual([
       "ProviderInternal",

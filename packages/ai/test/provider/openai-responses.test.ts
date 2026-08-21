@@ -809,7 +809,7 @@ describe("OpenAI Responses route", () => {
         "ProviderInternal",
         "RateLimit",
         "ProviderInternal",
-        "UnknownProvider",
+        "ProviderInternal",
       ])
     }),
   )
@@ -2661,6 +2661,19 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("classifies code-less capacity errors as transient", () =>
+    Effect.gen(function* () {
+      const message =
+        "The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing: https://docs.x.ai/developers/advanced-api-usage/priority-processing"
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", message }))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message })
+    }),
+  )
+
   it.effect("falls back to error code when no message is present", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
@@ -2801,7 +2814,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Something went wrong" })
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Something went wrong" })
     }),
   )
 
@@ -2812,7 +2825,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "OpenAI Responses stream error" })
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "OpenAI Responses stream error" })
     }),
   )
 
@@ -2823,7 +2836,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "OpenAI Responses stream error" })
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "OpenAI Responses stream error" })
     }),
   )
 
@@ -2834,7 +2847,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "OpenAI Responses response failed" })
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "OpenAI Responses response failed" })
     }),
   )
 

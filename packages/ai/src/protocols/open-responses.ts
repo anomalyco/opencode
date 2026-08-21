@@ -1073,7 +1073,13 @@ const providerErrorMessage = (event: Event, fallback: string): string => {
 }
 
 export const providerFailure = (id: string, event: Event, fallback: string) => {
-  const code = event.code || event.error?.code || event.response?.error?.code || undefined
+  const code =
+    event.code ||
+    event.error?.code ||
+    event.error?.type ||
+    event.response?.error?.code ||
+    event.response?.error?.type ||
+    undefined
   const message = providerErrorMessage(event, fallback)
   const status =
     typeof event.status === "number"
@@ -1084,7 +1090,7 @@ export const providerFailure = (id: string, event: Event, fallback: string) => {
   return new AIError({
     module: id,
     method: "stream",
-    reason: classifyProviderFailure({ message, code, status }),
+    reason: classifyProviderFailure({ message, code, status, stream: true }),
   })
 }
 
