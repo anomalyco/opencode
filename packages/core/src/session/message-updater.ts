@@ -21,8 +21,18 @@ export interface Adapter {
   readonly appendMessage: (message: SessionMessage.Info) => Effect.Effect<void, never, never>
 }
 
+type DraftAssistant = WritableDraft<SessionMessage.Assistant>
+
+const projectTerminalSnapshot = (draft: DraftAssistant, event: SessionEvent.Step.Ended | SessionEvent.Step.Failed) => {
+  if (event.data.snapshot || event.data.files)
+    draft.snapshot = {
+      ...draft.snapshot,
+      end: event.data.snapshot,
+      files: event.data.files ? Array.from(event.data.files) : undefined,
+    }
+}
+
 export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
-  type DraftAssistant = WritableDraft<SessionMessage.Assistant>
   type DraftTool = WritableDraft<SessionMessage.AssistantTool>
   type DraftText = WritableDraft<SessionMessage.AssistantText>
   type DraftReasoning = WritableDraft<SessionMessage.AssistantReasoning>
@@ -45,18 +55,6 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       if (!assistant) return
       yield* adapter.updateAssistant(produce(assistant, recipe))
     })
-
-  const projectTerminalSnapshot = (
-    draft: DraftAssistant,
-    event: SessionEvent.Step.Ended | SessionEvent.Step.Failed,
-  ) => {
-    if (event.data.snapshot || event.data.files)
-      draft.snapshot = {
-        ...draft.snapshot,
-        end: event.data.snapshot,
-        files: event.data.files ? Array.from(event.data.files) : undefined,
-      }
-  }
 
   const clearCurrentRetry = Effect.gen(function* () {
     const assistant = yield* adapter.getCurrentAssistant()
