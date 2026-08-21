@@ -1,1 +1,3 @@
+@layer theme, base, components, utilities;
+
 @import "./menu.css" layer(components);
