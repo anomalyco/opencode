@@ -39,7 +39,7 @@ export function make(
     if (item.code === "?") {
       const content = yield* fs
         .readFileString(path.join(input.worktree, item.file))
-        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        .pipe(Effect.orElseSucceed(() => undefined))
       if (content === undefined || Buffer.byteLength(content) > MAX_PATCH_BYTES) return emptyPatch(item.file)
       return addPatch(item.file, content)
     }
@@ -77,14 +77,25 @@ export function make(
       return { branch: { current: yield* hg.branch(), default: "default" } } satisfies Info
     }),
     status: Effect.fn("VcsHg.status")(function* () {
-      return (yield* diffAgainst(undefined, { context: 0 })).map(
+      const [items, batch] = yield* Effect.all(
+        // Zero-context patches are enough to count changed lines.
+        [hg.status(undefined, scope), hg.diff(undefined, scope, { context: 0 })],
+        { concurrency: 2 },
+      )
+      const chunks = chunksByFile(batch, () => undefined)
+      return yield* Effect.forEach(
+        items.toSorted((a, b) => a.file.localeCompare(b.file)),
         (item) =>
-          ({
-            file: item.file,
-            additions: item.additions,
-            deletions: item.deletions,
-            status: item.status,
-          }) satisfies FileStatus,
+          Effect.gen(function* () {
+            const patch = yield* patchFor(item, undefined, chunks.get(item.file))
+            const counts = countPatch(patch)
+            return {
+              file: item.file,
+              additions: counts.additions,
+              deletions: counts.deletions,
+              status: item.status,
+            } satisfies FileStatus
+          }),
       )
     }),
     diff: Effect.fn("VcsHg.diff")(function* (mode: Mode, options?: DiffOptions) {
@@ -131,7 +142,7 @@ function makeHg(proc: AppProcess.Interface, worktree: string) {
         truncated: result.stdoutTruncated || result.stderrTruncated,
       }
     },
-    Effect.catch(() => Effect.succeed({ exitCode: 1, text: () => "", truncated: false })),
+    Effect.orElseSucceed(() => ({ exitCode: 1, text: () => "", truncated: false })),
   )
 
   const status = Effect.fn("VcsHg.statusNames")(function* (rev: string | undefined, scope: string) {

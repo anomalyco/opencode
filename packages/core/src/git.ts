@@ -376,7 +376,7 @@ const layer = Layer.effect(
         .pipe(Effect.mapError(operationError("Failed to configure shared Git objects")))
       yield* fs
         .copyFile(path.join(input.seed.gitDirectory, "index"), path.join(input.gitDirectory, "index"))
-        .pipe(Effect.catch(() => Effect.void))
+        .pipe(Effect.ignore)
       return repository
     })
 
