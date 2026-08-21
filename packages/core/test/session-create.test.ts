@@ -13,6 +13,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Hash } from "@opencode-ai/util/hash"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
+import { Instructions } from "@opencode-ai/core/instructions/index"
 import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
@@ -24,6 +25,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
+import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -42,6 +44,7 @@ const it = testEffect(
       SessionStore.node,
       Session.node,
       SessionTransfer.node,
+      InstructionEntry.node,
     ]),
     [
       [Bus.node, Bus.configured({ persist: true })],
@@ -434,6 +437,30 @@ describe("Session.create", () => {
       })
 
       expect((yield* session.context(forked.id)).map((message) => message.id)).toEqual(original)
+    }),
+  )
+
+  it.effect("inherits instruction entries when forking", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const entries = yield* InstructionEntry.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location })
+      yield* session.prompt({ sessionID: parent.id, text: "Fork context", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      yield* entries.put({ sessionID: parent.id, key: "deploy-target", value: "production" })
+      yield* entries.put({ sessionID: parent.id, key: "retired", value: true })
+      yield* entries.remove({ sessionID: parent.id, key: "retired" })
+
+      const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+      const inherited = yield* entries.load(forked.id)
+
+      expect(yield* entries.list(forked.id)).toEqual([{ key: "deploy-target", value: "production" }])
+      expect(yield* Instructions.read(inherited)).toEqual([
+        { key: Instructions.Key.make("api/deploy-target"), value: "production" },
+        { key: Instructions.Key.make("api/retired"), value: Instructions.removed },
+      ])
     }),
   )
 
