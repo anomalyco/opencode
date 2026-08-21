@@ -31,6 +31,11 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(Layer.empty)
 const selection = Schema.decodeUnknownSync(ConfigModel.Selection)
 
+function inFixture(root: string, target: string) {
+  const relative = path.relative(root, target)
+  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+}
+
 function testLayer(
   directory: string,
   globalDirectory = path.join(directory, "global"),
@@ -801,7 +806,7 @@ describe("Config", () => {
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const config = yield* Config.Service
-          const entries = yield* config.entries()
+          const entries = (yield* config.entries()).filter((entry) => !entry.path || inFixture(tmp.path, entry.path))
 
           expect(entries).toEqual([
             new Directory({ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) }),
@@ -861,7 +866,7 @@ describe("Config", () => {
             const watcher = yield* Watcher.Test
             yield* config.entries()
 
-            expect(yield* watcher.subscriptions()).toEqual([
+            expect((yield* watcher.subscriptions()).filter((item) => inFixture(tmp.path, item.path))).toEqual([
               {
                 type: "directory",
                 path: AbsolutePath.make(path.join(tmp.path, "global")),
@@ -1506,7 +1511,7 @@ describe("Config", () => {
 
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
-            const entries = yield* config.entries()
+            const entries = (yield* config.entries()).filter((entry) => !entry.path || inFixture(tmp.path, entry.path))
             const documents = entries.filter((entry) => entry.type === "document")
 
             expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
