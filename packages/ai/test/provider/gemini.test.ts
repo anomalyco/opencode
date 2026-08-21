@@ -181,6 +181,53 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("merges parallel tool results into one function-response turn", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } }),
+              ToolCallPart.make({ id: "call_2", name: "lookup", input: { query: "time" } }),
+            ]),
+            Message.tool({ id: "call_1", name: "lookup", result: "sunny", resultType: "text" }),
+            Message.tool({ id: "call_2", name: "lookup", result: "noon", resultType: "text" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            { functionCall: { id: undefined, name: "lookup", args: { query: "weather" } } },
+            { functionCall: { id: undefined, name: "lookup", args: { query: "time" } } },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                id: undefined,
+                name: "lookup",
+                response: { name: "lookup", content: "sunny" },
+              },
+            },
+            {
+              functionResponse: {
+                id: undefined,
+                name: "lookup",
+                response: { name: "lookup", content: "noon" },
+              },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("prepares multimodal user input and tool history", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
