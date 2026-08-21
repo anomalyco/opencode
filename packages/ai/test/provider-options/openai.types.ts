@@ -10,6 +10,11 @@ LLM.request({ model: selected, prompt: "Hello", providerOptions: { textVerbosity
 LLM.request({ model: selected, prompt: "Hello", providerOptions: { textVerbosity: "verbose" } })
 LLM.request({ model: chat, prompt: "Hello", providerOptions: { reasoningEffort: "max" } })
 LLM.request({ model: chat, prompt: "Hello", providerOptions: { reasoningEffort: "experimental" } })
+LLM.request({
+  model: selected,
+  prompt: "Hello",
+  providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100_000 }] },
+})
 
 LLM.request({
   model: selected,

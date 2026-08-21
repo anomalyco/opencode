@@ -13,6 +13,7 @@ import { OpenAIImage } from "./utils/openai-image.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
 import { OpenAIResponsesChannel } from "./openai-responses-channel.js"
+import { OpenAIOptions } from "./utils/openai-options.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
@@ -56,6 +57,14 @@ const OpenAIResponsesCoreFields = {
   input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
+  context_management: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        type: Schema.tag("compaction"),
+        compact_threshold: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+      }),
+    ),
+  ),
 }
 
 const OpenAIResponsesBody = Schema.Struct({
@@ -115,6 +124,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     extension,
   )
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
+  const contextManagement = OpenAIOptions.resolve(request).contextManagement
   return {
     ...body,
     tools:
@@ -125,6 +135,10 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
           ),
     tool_choice:
       body.tool_choice ?? (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
+    context_management: contextManagement?.map((item) => ({
+      type: item.type,
+      compact_threshold: item.compactThreshold,
+    })),
   } satisfies OpenAIResponsesBody
 })
 

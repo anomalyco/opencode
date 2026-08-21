@@ -1,9 +1,12 @@
 import { mergeProviderOptions, type ProviderOptions } from "../schema/index.js"
 import type { OpenResponsesOptionsInput } from "./open-responses-options.js"
+import type { ContextManagement } from "../protocols/utils/openai-options.js"
 
 export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options.js"
 
-export type OpenAIOptionsInput = OpenResponsesOptionsInput
+export type OpenAIOptionsInput = OpenResponsesOptionsInput & {
+  readonly contextManagement?: ContextManagement
+}
 
 export type OpenAIProviderOptionsInput = OpenAIOptionsInput
 

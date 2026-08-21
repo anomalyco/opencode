@@ -1,3 +1,5 @@
+import { Option, Schema } from "effect"
+import type { LLMRequest } from "../../schema/index.js"
 import { OpenResponsesOptions } from "./open-responses-options.js"
 
 export const OpenAIReasoningEfforts = OpenResponsesOptions.ReasoningEfforts
@@ -19,6 +21,22 @@ export const OpenAIServiceTier = OpenResponsesOptions.ServiceTierSchema
 
 export const isReasoningEffort = (effort: unknown): effort is OpenAIReasoningEffort => typeof effort === "string"
 
-export const resolve = OpenResponsesOptions.resolve
+export const ContextManagement = Schema.Array(
+  Schema.Struct({
+    type: Schema.tag("compaction"),
+    compactThreshold: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+  }),
+)
+export type ContextManagement = typeof ContextManagement.Type
+
+const Options = Schema.Struct({
+  contextManagement: Schema.optional(ContextManagement),
+})
+const decodeOptions = Schema.decodeUnknownOption(Options)
+
+export const resolve = (request: LLMRequest) => ({
+  ...OpenResponsesOptions.resolve(request),
+  ...Option.getOrElse(decodeOptions(request.providerOptions), () => ({})),
+})
 
 export * as OpenAIOptions from "./openai-options.js"

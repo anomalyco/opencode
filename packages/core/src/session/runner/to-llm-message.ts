@@ -146,6 +146,10 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   const sameProvider = String(message.model.providerID) === String(model.providerID)
   const sameModel = sameProvider && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
+  const native =
+    reuseProviderMetadata && Array.isArray(message.providerState?.compactionItems)
+      ? { [providerMetadataKey]: message.providerState }
+      : undefined
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text")
       return [
@@ -204,9 +208,15 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     )
     .filter((message) => message !== undefined)
     .map(Message.tool)
-  if (meaningful.length === 0) return results
+  if (meaningful.length === 0 && native === undefined) return results
   return [
-    Message.make({ id: message.id, role: "assistant", content: meaningful, metadata: message.metadata }),
+    Message.make({
+      id: message.id,
+      role: "assistant",
+      content: meaningful,
+      metadata: message.metadata,
+      native,
+    }),
     ...results,
   ]
 }

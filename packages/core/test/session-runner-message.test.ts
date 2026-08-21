@@ -1020,6 +1020,40 @@ Recent work
     ])
   })
 
+  test("carries same-model server compaction state as native message data", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-compaction"),
+          type: "assistant",
+          agent: build,
+          model,
+          content: [],
+          providerState: {
+            responseId: "resp_1",
+            compactionItems: [{ type: "compaction", id: "cmp_1", encrypted_content: "opaque-state" }],
+          },
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages).toEqual([
+      Message.make({
+        id: id("assistant-compaction"),
+        role: "assistant",
+        content: [],
+        native: {
+          provider: {
+            responseId: "resp_1",
+            compactionItems: [{ type: "compaction", id: "cmp_1", encrypted_content: "opaque-state" }],
+          },
+        },
+      }),
+    ])
+  })
+
   test("preserves assistant text provider state across same-provider model changes and failures", () => {
     const messages = toLLMMessages(
       [

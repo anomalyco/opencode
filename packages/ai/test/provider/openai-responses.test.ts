@@ -168,6 +168,50 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("enables server-side compaction", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: {
+            contextManagement: [{ type: "compaction", compactThreshold: 100_000 }],
+          },
+        }),
+      )
+
+      expect(prepared.body.context_management).toEqual([{ type: "compaction", compact_threshold: 100_000 }])
+    }),
+  )
+
+  it.effect("replays durable server-side compaction items", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.make({
+              role: "assistant",
+              content: "After compaction",
+              native: {
+                openai: {
+                  compactionItems: [{ type: "compaction", id: "cmp_1", encrypted_content: "opaque-state" }],
+                },
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "compaction", id: "cmp_1", encrypted_content: "opaque-state" },
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "After compaction" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("passes through custom OpenAI reasoning effort strings", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1501,6 +1545,45 @@ describe("OpenAI Responses route", () => {
           reason: { normalized: "stop", raw: undefined },
           providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
           usage,
+        },
+      ])
+    }),
+  )
+
+  it.effect("retains server-side compaction output for continuation", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.done",
+                item: {
+                  type: "compaction",
+                  id: "cmp_1",
+                  encrypted_content: "opaque-state",
+                  status: "completed",
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.stepFinish)).toEqual([
+        {
+          type: "step-finish",
+          index: 0,
+          reason: { normalized: "stop", raw: undefined },
+          providerMetadata: {
+            openai: {
+              responseId: "resp_1",
+              serviceTier: undefined,
+              compactionItems: [{ type: "compaction", id: "cmp_1", encrypted_content: "opaque-state" }],
+            },
+          },
+          usage: undefined,
         },
       ])
     }),

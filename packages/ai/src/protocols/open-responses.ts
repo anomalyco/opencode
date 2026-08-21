@@ -69,6 +69,13 @@ const OpenResponsesReasoningItem = Schema.Struct({
   encrypted_content: optionalNull(Schema.String),
 })
 
+const OpenResponsesCompactionItem = Schema.Struct({
+  type: Schema.tag("compaction"),
+  id: Schema.optionalKey(Schema.String),
+  encrypted_content: Schema.String,
+})
+type OpenResponsesCompactionItem = Schema.Schema.Type<typeof OpenResponsesCompactionItem>
+
 const OpenResponsesItemReference = Schema.Struct({
   type: Schema.tag("item_reference"),
   id: Schema.String,
@@ -100,6 +107,7 @@ export const InputItem = Schema.Union([
     phase: Schema.optionalKey(MessagePhase),
   }),
   OpenResponsesReasoningItem,
+  OpenResponsesCompactionItem,
   OpenResponsesItemReference,
   Schema.Struct({
     type: Schema.tag("function_call"),
@@ -339,6 +347,7 @@ export interface ParserState {
   readonly messagePhase: (value: unknown) => MessagePhase | null | undefined
   readonly messagePhases: Readonly<Record<string, MessagePhase | null>>
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
+  readonly compactionItems: ReadonlyArray<OpenResponsesCompactionItem>
   readonly store: boolean | undefined
 }
 
@@ -416,6 +425,12 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
 
 const hostedToolItemID = (part: ToolResultPart, providerMetadataKey: string) => {
   return itemID(part.providerMetadata, providerMetadataKey)
+}
+
+const compactionItems = (message: LLMRequest["messages"][number], providerMetadataKey: string) => {
+  const native = message.native?.[providerMetadataKey]
+  if (!ProviderShared.isRecord(native) || !Array.isArray(native.compactionItems)) return []
+  return native.compactionItems.filter(Schema.is(OpenResponsesCompactionItem))
 }
 
 const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
@@ -499,6 +514,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
     }
 
     if (message.role === "assistant") {
+      input.push(...compactionItems(message, providerMetadataKey))
       const content: TextPart[] = []
       const reasoningItems: Record<string, OpenResponsesReasoningInput> = {}
       const reasoningReferences = new Set<string>()
@@ -1029,6 +1045,21 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     ] satisfies StepResult
   }
 
+  if (item.type === "compaction") {
+    if (!item.id || typeof item.encrypted_content !== "string")
+      return yield* ProviderShared.eventError(state.id, "Open Responses compaction item is malformed")
+    return [
+      {
+        ...state,
+        compactionItems: [
+          ...state.compactionItems,
+          { type: "compaction", id: item.id, encrypted_content: item.encrypted_content },
+        ],
+      },
+      NO_EVENTS,
+    ] satisfies StepResult
+  }
+
   return [state, NO_EVENTS] satisfies StepResult
 })
 
@@ -1049,10 +1080,11 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
     },
     usage: mapUsage(event.response?.usage, state.providerMetadataKey),
     providerMetadata:
-      event.response?.id || event.response?.service_tier
+      event.response?.id || event.response?.service_tier || state.compactionItems.length > 0
         ? providerMetadata(state, {
-            responseId: event.response.id,
-            serviceTier: event.response.service_tier,
+            responseId: event.response?.id,
+            serviceTier: event.response?.service_tier,
+            ...(state.compactionItems.length > 0 ? { compactionItems: state.compactionItems } : {}),
           })
         : undefined,
   })
@@ -1162,6 +1194,7 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   messagePhase: (value) => messagePhase(value, extension),
   messagePhases: {},
   reasoningItems: {},
+  compactionItems: [],
   store: OpenResponsesOptions.resolve(request).store,
 })
 
