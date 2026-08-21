@@ -96,31 +96,61 @@ function getServerPlugin(value: unknown) {
   return value.server
 }
 
-function getLegacyPlugins(mod: Record<string, unknown>) {
-  const seen = new Set<unknown>()
-  const result: PluginInstance[] = []
+// A plugin factory must resolve to a Hooks record. Every consumer of the shared hooks array
+// indexes entries directly, so a helper that resolves to undefined, a string, or a boolean would
+// be read as a hook and break unrelated plugins.
+function isHooks(value: unknown): value is Hooks {
+  return typeof value === "object" && value !== null
+}
 
-  for (const entry of Object.values(mod)) {
+// The legacy path treats every export as a plugin factory, so modules that ship helpers next to
+// their plugin are common. Report the exports we drop instead of failing the whole module.
+type SkipReport = (name: string, reason: string) => void
+
+function getLegacyPlugins(mod: Record<string, unknown>, skip: SkipReport) {
+  const seen = new Set<unknown>()
+  const result: { name: string; plugin: PluginInstance }[] = []
+
+  for (const [name, entry] of Object.entries(mod)) {
     if (seen.has(entry)) continue
     seen.add(entry)
     const plugin = getServerPlugin(entry)
-    if (!plugin) throw new TypeError("Plugin export is not a function")
-    result.push(plugin)
+    if (!plugin) {
+      skip(name, `export is ${entry === null ? "null" : typeof entry}, not a plugin function`)
+      continue
+    }
+    result.push({ name, plugin })
   }
 
   return result
 }
 
-async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
+async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[], skip: SkipReport) {
   const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
   if (plugin) {
     await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
-    hooks.push(await (plugin as PluginModule).server(input, load.options))
+    const result = await (plugin as PluginModule).server(input, load.options)
+    if (!isHooks(result)) throw new TypeError(`Plugin ${load.spec} server() did not return hooks`)
+    hooks.push(result)
     return
   }
 
-  for (const server of getLegacyPlugins(load.mod)) {
-    hooks.push(await server(input, load.options))
+  const legacy = getLegacyPlugins(load.mod, skip)
+  if (!legacy.length) throw new TypeError(`Plugin ${load.spec} does not export a plugin function`)
+
+  for (const { name, plugin: server } of legacy) {
+    let result
+    try {
+      result = await server(input, load.options)
+    } catch (error) {
+      skip(name, errorMessage(error))
+      continue
+    }
+    if (!isHooks(result)) {
+      skip(name, `export returned ${result === null ? "null" : typeof result}, not hooks`)
+      continue
+    }
+    hooks.push(result)
   }
 }
 
@@ -219,10 +249,12 @@ const layer = Layer.effect(
         for (const load of loaded) {
           if (!load) continue
 
+          const skipped: { name: string; reason: string }[] = []
+
           // Keep plugin execution sequential so hook registration and execution
           // order remains deterministic across plugin runs.
           yield* Effect.tryPromise({
-            try: () => applyPlugin(load, input, hooks),
+            try: () => applyPlugin(load, input, hooks, (name, reason) => skipped.push({ name, reason })),
             catch: (err) => {
               const message = errorMessage(err)
               return message
@@ -239,6 +271,14 @@ const layer = Layer.effect(
               return Effect.void
             }),
           )
+
+          for (const entry of skipped) {
+            yield* Effect.logWarning("plugin export skipped", {
+              path: load.spec,
+              export: entry.name,
+              reason: entry.reason,
+            })
+          }
         }
 
         // Notify plugins of current config
