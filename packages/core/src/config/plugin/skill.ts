@@ -46,7 +46,7 @@ export const Plugin = define({
 
     function firstMissing(target: string): Effect.Effect<string | undefined> {
       const parent = path.dirname(target)
-      if (parent === target) return Effect.succeed(undefined)
+      if (parent === target) return Effect.undefined
       return fs.isDir(parent).pipe(Effect.flatMap((exists) => (exists ? Effect.succeed(target) : firstMissing(parent))))
     }
 

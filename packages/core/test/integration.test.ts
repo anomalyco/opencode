@@ -17,7 +17,7 @@ const failingCredentialNode = makeGlobalNode({
     Credential.Service.of({
       all: () => Effect.succeed([]),
       list: () => Effect.succeed([]),
-      get: () => Effect.succeed(undefined),
+      get: () => Effect.undefined,
       create: () => Effect.die(new Error("credential persistence failed")),
       update: () => Effect.void,
       remove: () => Effect.void,

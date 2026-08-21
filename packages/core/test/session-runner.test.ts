@@ -378,16 +378,16 @@ const pluginSupervisor = Layer.succeed(
 )
 const promptCatalog = Layer.mock(Catalog.Service, {
   provider: {
-    get: () => Effect.succeed(undefined),
+    get: () => Effect.undefined,
     all: () => Effect.succeed([]),
     available: () => Effect.succeed([]),
   },
   model: {
-    get: () => Effect.succeed(undefined),
+    get: () => Effect.undefined,
     all: () => Effect.succeed([]),
     available: () => Effect.succeed([]),
-    default: () => Effect.succeed(undefined),
-    small: () => Effect.succeed(undefined),
+    default: () => Effect.undefined,
+    small: () => Effect.undefined,
   },
 })
 const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [

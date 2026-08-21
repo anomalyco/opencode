@@ -201,7 +201,7 @@ export const noopLayer = Layer.succeed(
   Service.of({
     transform: () => Effect.succeed({ dispose: Effect.void }),
     reload: () => Effect.void,
-    capture: () => Effect.succeed(undefined),
+    capture: () => Effect.undefined,
     files: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),
     restore: () => Effect.void,

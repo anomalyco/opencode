@@ -841,17 +841,17 @@ export class Interpreter<R> {
 
   private customIterator(value: unknown, node: AstNode, allowAsync = true) {
     if (value instanceof CodeModeGenerator) {
-      if (value.asynchronous && !allowAsync) return Effect.succeed(undefined)
+      if (value.asynchronous && !allowAsync) return Effect.undefined
       return Effect.succeed({
         iterator: value,
         next: new GeneratorMethodReference(value, "next"),
         asynchronous: value.asynchronous,
       })
     }
-    if (!isRecord(value) || isRuntimeReference(value)) return Effect.succeed(undefined)
+    if (!isRecord(value) || isRuntimeReference(value)) return Effect.undefined
     const asyncMethod = allowAsync ? Reflect.get(value, AsyncIteratorSymbol) : undefined
     const method = asyncMethod ?? Reflect.get(value, IteratorSymbol)
-    if (method === undefined || method === null) return Effect.succeed(undefined)
+    if (method === undefined || method === null) return Effect.undefined
     const self = this
     return Effect.map(
       this.invokeCallable(this.requireIteratorMethod(method, "Iterator method", node), [], node),

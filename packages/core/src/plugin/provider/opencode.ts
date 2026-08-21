@@ -213,7 +213,7 @@ function fetchProviders(http: HttpClient.HttpClient, value: Credential.Value) {
     )
     .pipe(
       Effect.flatMap((response) => {
-        if (response.status === 404) return Effect.succeed(undefined)
+        if (response.status === 404) return Effect.undefined
         return HttpClientResponse.filterStatusOk(response).pipe(
           Effect.flatMap(HttpClientResponse.schemaBodyJson(RemoteResponse)),
           Effect.map((remote) => remote.config.provider),

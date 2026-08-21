@@ -624,11 +624,11 @@ export const layer = (options?: Options) =>
             Effect.map((input) => input as Record<string, SourceProvider>),
             Effect.orElseSucceed(() => undefined),
           )
-        : Effect.succeed(undefined)
+        : Effect.undefined
 
       // The bundled snapshot is the boot-time floor for the catalog; the
       // periodic fetch below still refreshes on top.
-      const loadSnapshot = options?.snapshot === false ? Effect.succeed(undefined) : bundledSnapshot
+      const loadSnapshot = options?.snapshot === false ? Effect.undefined : bundledSnapshot
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const text = yield* fetchApi()

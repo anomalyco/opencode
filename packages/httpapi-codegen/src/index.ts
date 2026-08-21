@@ -1426,7 +1426,7 @@ export function write(
       output.files,
       (file) =>
         fs.exists(join(directory, file.path)).pipe(
-          Effect.flatMap((exists) => (exists ? fs.stat(join(directory, file.path)) : Effect.succeed(undefined))),
+          Effect.flatMap((exists) => (exists ? fs.stat(join(directory, file.path)) : Effect.undefined)),
           Effect.flatMap((info) =>
             info?.type === "SymbolicLink"
               ? new GenerationError({ reason: `Unsafe output path: ${file.path}` })

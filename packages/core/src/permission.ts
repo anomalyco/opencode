@@ -302,7 +302,7 @@ const layer = Layer.effect(
           const rememberedRules = yield* savedRules()
           for (const [id, item] of pending) {
             const rules = yield* configured(item.request.sessionID, item.agent).pipe(
-              Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)),
+              Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
             )
             if (!rules) continue
             if (denied(item.request, rules)) continue

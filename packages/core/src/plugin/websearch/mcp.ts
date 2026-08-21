@@ -10,7 +10,7 @@ export const parseResponse = <F extends Schema.Struct.Fields>(body: string, resu
   const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ result })))
   const parse = (payload: string) => {
     const trimmed = payload.trim()
-    if (!trimmed.startsWith("{")) return Effect.succeed(undefined)
+    if (!trimmed.startsWith("{")) return Effect.undefined
     return decode(trimmed).pipe(Effect.map((response) => response.result))
   }
   return Effect.gen(function* () {
