@@ -24,6 +24,8 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
         setStore(x)
       })
       .catch((error) => {
+        // Missing kv.json is expected on first run; it is created lazily on first write.
+        if (error?.code === "ENOENT") return
         console.error("Failed to read KV state", { error })
       })
       .finally(() => {
