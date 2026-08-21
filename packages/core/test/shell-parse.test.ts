@@ -150,6 +150,13 @@ describe("ShellParse", () => {
     expect(portable.commands).toEqual([{ resource: "rm\\\necho harmless", save: "rm\\\necho *" }])
   })
 
+  test("does not widen saved permissions across escaped leading whitespace", async () => {
+    const portable = await Effect.runPromise(
+      ShellParse.scan("\\ rm harmless", "/bin/bash", "/workspace", { portable: true }),
+    )
+    expect(portable.commands).toEqual([{ resource: "\\ rm harmless", save: "\\ rm *" }])
+  })
+
   test("keeps a genuinely different quoted command under shell authorization", async () => {
     const command = 'c"\\d" relative'
     const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
@@ -206,15 +213,29 @@ describe("ShellParse", () => {
 
   test.each([
     ["export H''OME=/etc; cd; cat passwd", "/bin/bash", { HOME: "/workspace" }],
+    ["builtin export H''OME=/etc; cd; cat passwd", "/bin/bash", { HOME: "/workspace" }],
+    ["command export H''OME=/etc; cd; cat passwd", "/bin/bash", { HOME: "/workspace" }],
+    ["command builtin export H''OME=/etc; cd; cat passwd", "/bin/bash", { HOME: "/workspace" }],
     ["Set-Item Env:T /etc; Set-Location $env:T; Get-Content passwd", "pwsh", { HOME: "/workspace", T: "/workspace" }],
   ] as const)("keeps same-invocation directory environment mutation uncertain: %s", async (command, shell, env) => {
     const portable = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true, env }))
     expect(portable.directoryUnknown).toBe(true)
   })
 
+  test.each(["command -v export HOME=/etc; cd", "command -V export HOME=/etc; cd"])(
+    "keeps query-only Bash wrappers statically resolved: %s",
+    async (command) => {
+      const portable = await Effect.runPromise(
+        ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true, env: { HOME: "/workspace" } }),
+      )
+      expect(portable.directories).toEqual(["/workspace"])
+      expect(portable.directoryUnknown).toBe(false)
+    },
+  )
+
   test.each([
     ["/bin/bash", { HOME: "/workspace", BASH_ENV: "/tmp/hook" }],
-    ["/bin/zsh", { HOME: "/workspace", ZDOTDIR: "/tmp/hooks" }],
+    ["/bin/zsh", { HOME: "/tmp/hooks" }],
     ["/bin/ksh", { HOME: "/workspace", ENV: "/tmp/hook" }],
   ] as const)("fails closed for shell startup hooks: %s", async (shell, env) => {
     const command = "echo safe"

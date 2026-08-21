@@ -141,11 +141,11 @@ permission scanner. The default remains the tree-sitter scanner.
 ```
 
 When enabled, the portable scanner is authoritative and tree-sitter is not
-consulted. It analyzes Bash-compatible shells (`bash`, `dash`, `ksh`, `sh`, and
-`zsh`) and PowerShell. Other shells and unsupported syntax, including heredocs,
-are treated as opaque. Shell startup-hook environments such as `BASH_ENV`,
-`ZDOTDIR`, and `ENV` are also opaque because they can execute code outside the
-submitted command.
+consulted. It analyzes Bash-compatible shells (`bash`, `dash`, `ksh`, and `sh`)
+and PowerShell. Other shells and unsupported syntax, including heredocs, are
+treated as opaque. `zsh` is opaque because it always loads `.zshenv`; shell
+startup-hook environments such as `BASH_ENV` and `ENV` are also opaque because
+they can execute code outside the submitted command.
 
 Opaque input requests permission for the complete original command. A scoped
 wildcard allow such as `echo *` cannot authorize opaque input; only an exact

@@ -691,7 +691,7 @@ function powerShellOpaqueReason(command: Command): OpaqueReason | undefined {
     return "dynamic-execution"
 
   const name = shellCommandName(head)
-  if (["new-alias", "nal", "sal", "set-alias"].includes(name)) return "dynamic-execution"
+  if (["import-alias", "ipal", "new-alias", "nal", "sal", "set-alias"].includes(name)) return "dynamic-execution"
   if (command.words.some((word) => /^alias:/i.test(word))) return "dynamic-execution"
   if (["return", "throw", "exit", "break", "continue"].includes(name) && command.words.length > 1)
     return "dynamic-execution"

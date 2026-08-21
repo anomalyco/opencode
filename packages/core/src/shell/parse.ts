@@ -11,7 +11,7 @@ type Part = { type: string; text: string }
 type SourceToken = { raw: string; value: string }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "sl", "pop-location", "push-location", "set-location"])
 const POWERSHELL_PATH_FLAGS = new Set(["-literalpath", "-path"])
-const PORTABLE_BASH_SHELLS = new Set(["bash", "dash", "ksh", "sh", "zsh"])
+const PORTABLE_BASH_SHELLS = new Set(["bash", "dash", "ksh", "sh"])
 
 export type Result = {
   commands: Array<{ resource: string; save: string }>
@@ -464,13 +464,20 @@ function directoryCommand(words: string[], powershell: boolean) {
   return { name: wrapped, words: words.slice(index), wrapped: true }
 }
 
-function mutatesDirectoryEnvironment(words: string[], powershell: boolean) {
+function mutatesDirectoryEnvironment(words: string[], powershell: boolean): boolean {
   const name = powershell ? powerShellCommandName(words[0]) : words[0]
   if (powershell)
     return (
       ["clear-item", "move-item", "new-item", "remove-item", "rename-item", "set-item"].includes(name ?? "") &&
       words.slice(1).some((word) => /^env:/i.test(word))
     )
+
+  if (["builtin", "command"].includes(name ?? "")) {
+    const start = words.findIndex((word, index) => index > 0 && !word.startsWith("-"))
+    if (name === "command" && words.slice(1, start < 0 ? undefined : start).some((option) => /[vV]/.test(option)))
+      return false
+    return start >= 0 && mutatesDirectoryEnvironment(words.slice(start), false)
+  }
 
   const variable = (word: string | undefined) => /^(?:CDPATH|HOME)(?:\+?=|$)/.test(word ?? "")
   if (["declare", "export", "local", "read", "readonly", "typeset", "unset"].includes(name ?? ""))
@@ -482,7 +489,6 @@ function mutatesDirectoryEnvironment(words: string[], powershell: boolean) {
 function shellStartupUnknown(shell: string, env: Record<string, string | undefined>) {
   if (shell === "bash")
     return Boolean(environment(env, "BASH_ENV")) || Object.keys(env).some((key) => key.startsWith("BASH_FUNC_"))
-  if (shell === "zsh") return Boolean(environment(env, "ZDOTDIR"))
   if (shell === "ksh") return Boolean(environment(env, "ENV"))
   return false
 }
@@ -548,10 +554,6 @@ function sourceTokens(resource: string) {
     if (char === "\\" && index + 1 < resource.length) {
       if (resource[index + 1] === "\n") {
         raw += char + resource[++index]
-        continue
-      }
-      if (!raw && /\s/.test(resource[index + 1])) {
-        index++
         continue
       }
       raw += char + resource[++index]

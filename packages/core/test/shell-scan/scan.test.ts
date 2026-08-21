@@ -334,6 +334,8 @@ describe("ShellScan PowerShell", () => {
     "Set-Location $(Resolve-Path ..); git status",
     "Set-Alias jump Set-Location; jump /etc; Get-Content passwd",
     "Set-Item alias:jump Set-Location; jump /etc; Get-Content passwd",
+    "Import-Alias ./aliases.csv; jump /etc; Get-Content passwd",
+    "ipal ./aliases.csv; jump /etc; Get-Content passwd",
   ])("returns opaque for dynamic PowerShell execution: %s", (command) => {
     expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
   })
