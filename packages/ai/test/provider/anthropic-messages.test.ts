@@ -327,6 +327,29 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("scrubs outbound tool call IDs without truncating them", () =>
+    Effect.gen(function* () {
+      const id = `functions.lookup:1|${"x".repeat(64)}`
+      const scrubbed = `functions_lookup_1_${"x".repeat(64)}`
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id, name: "lookup", input: {} })]),
+            Message.tool({ id, name: "lookup", result: "done" }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toMatchObject([
+        { role: "assistant", content: [{ type: "tool_use", id: scrubbed, name: "lookup", input: {} }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: scrubbed }] },
+      ])
+      expect(scrubbed.length).toBeGreaterThan(64)
+    }),
+  )
+
   it.effect("batches parallel tool results into one Anthropic user message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1393,14 +1416,14 @@ describe("Anthropic Messages route", () => {
             Message.assistant([
               {
                 type: "tool-call",
-                id: "srvtoolu_abc",
+                id: "srvtoolu.abc",
                 name: "web_search",
                 input: { query: "effect 4" },
                 providerExecuted: true,
               },
               {
                 type: "tool-result",
-                id: "srvtoolu_abc",
+                id: "srvtoolu.abc",
                 name: "web_search",
                 result: { type: "json", value: [{ url: "https://example.com" }] },
                 providerExecuted: true,
