@@ -101,7 +101,8 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
     .find((line) => line.length > 0)
 })
 
-const REASONING_VARIANTS = ["none", "low"].map((id) => Model.VariantID.make(id))
+/** Variant IDs that minimize reasoning output, in preference order. */
+const MINIMAL_REASONING_VARIANTS = ["none", "low"].map((id) => Model.VariantID.make(id))
 
 const make = (dependencies: Dependencies) => {
   const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (
@@ -122,21 +123,27 @@ const make = (dependencies: Dependencies) => {
       if (!primary) return
       return yield* dependencies.catalog.model.small(primary.ref.providerID)
     })
-    const ref = agent.model ?? (info && Model.Ref.make({ providerID: info.providerID, id: info.id }))
-    const variant = ref?.variant ?? REASONING_VARIANTS.find((id) => info?.variants.some((item) => item.id === id))
+    const variant =
+      agent.model?.variant ?? MINIMAL_REASONING_VARIANTS.find((id) => info?.variants.some((item) => item.id === id))
     const preferred =
-      ref &&
+      info &&
       (yield* dependencies.models
-        .resolve({ ...session, model: Model.Ref.make({ ...ref, ...(variant ? { variant } : {}) }) })
+        .resolve({
+          ...session,
+          model: Model.Ref.make({
+            providerID: info.providerID,
+            id: info.id,
+            ...(variant ? { variant } : {}),
+          }),
+        })
         .pipe(Effect.catch(() => Effect.succeed(undefined))))
-    const attempts = [preferred, primary]
-      .filter((model) => model !== undefined)
-      .filter((model, index, all) => index === all.findIndex((other) => isDeepStrictEqual(other.ref, model.ref)))
-    let title: string | undefined
-    for (const model of attempts) {
-      title = yield* attempt(dependencies, { session, agent, text: firstUser.text, model })
-      if (title) break
-    }
+    const selected = preferred ?? primary
+    if (!selected) return
+    const title =
+      (yield* attempt(dependencies, { session, agent, text: firstUser.text, model: selected })) ??
+      (primary && !isDeepStrictEqual(selected.ref, primary.ref)
+        ? yield* attempt(dependencies, { session, agent, text: firstUser.text, model: primary })
+        : undefined)
     if (!title) return
     const expectedSequence = (yield* Bus.latestSequence(db, sessionID)) + 1
     const current = yield* dependencies.store.get(sessionID)
