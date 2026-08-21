@@ -43,6 +43,28 @@ const itWithSdk = testEffect(
 )
 
 describe("LocationServiceMap", () => {
+  it.live("retries a location after its missing directory is recreated", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const locations = yield* LocationServiceMap.Service
+          const directory = path.join(dir.path, "recreated")
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+
+          const first = yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped, Effect.exit)
+          expect(first._tag).toBe("Failure")
+
+          yield* Effect.promise(() => fs.mkdir(directory))
+          const location = yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
+          expect(location.directory).toBe(ref.directory)
+        }),
+      ),
+    ),
+  )
+
   itWithSdk.live("preserves embedded SDK plugins after Location eviction", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
