@@ -1,0 +1,23 @@
+id: no-effect-catch-succeed
+snapshots:
+  'Effect.catch(effect, () => Effect.succeed({ reason: "fallback" }))':
+    labels:
+      - source: 'Effect.catch(effect, () => Effect.succeed({ reason: "fallback" }))'
+        style: primary
+        start: 0
+        end: 66
+  ? |
+    effect.pipe(
+      Effect.catch(() => Effect.succeed([] as string[])),
+    )
+  : labels:
+      - source: Effect.catch(() => Effect.succeed([] as string[]))
+        style: primary
+        start: 15
+        end: 65
+  effect.pipe(Effect.catch(() => Effect.succeed(fallback))):
+    labels:
+      - source: Effect.catch(() => Effect.succeed(fallback))
+        style: primary
+        start: 12
+        end: 56

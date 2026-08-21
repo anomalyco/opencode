@@ -1,0 +1,11 @@
+id: no-effect-flat-map-suspend
+language: TypeScript
+message: Use effect-form Effect.andThen when the previous value is ignored.
+severity: error
+rule:
+  any:
+    - pattern: Effect.flatMap(() => Effect.suspend($THUNK))
+    - pattern: Effect.flatMap($SELF, () => Effect.suspend($THUNK))
+constraints:
+  THUNK:
+    kind: arrow_function

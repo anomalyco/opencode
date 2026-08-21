@@ -1,0 +1,16 @@
+id: no-effect-catch-succeed
+valid:
+  - effect.pipe(Effect.orElseSucceed(() => fallback))
+  - Effect.orElseSucceed(effect, () => fallback)
+  - effect.pipe(Effect.catch((error) => Effect.succeed(error)))
+  - effect.pipe(Effect.catch(() => Effect.void))
+  - effect.pipe(Effect.catch(() => Effect.sync(fallback)))
+  - effect.pipe(Other.catch(() => Effect.succeed(fallback)))
+  - effect.pipe(Effect.catch(function () { return Effect.succeed(fallback) }))
+invalid:
+  - effect.pipe(Effect.catch(() => Effect.succeed(fallback)))
+  - 'Effect.catch(effect, () => Effect.succeed({ reason: "fallback" }))'
+  - |
+    effect.pipe(
+      Effect.catch(() => Effect.succeed([] as string[])),
+    )

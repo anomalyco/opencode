@@ -1,0 +1,8 @@
+id: no-effect-and-then-succeed-undefined
+language: TypeScript
+message: Use Effect.asVoid to discard the success value.
+severity: error
+rule:
+  any:
+    - pattern: Effect.andThen(Effect.succeed(undefined))
+    - pattern: Effect.andThen($SELF, Effect.succeed(undefined))
