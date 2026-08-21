@@ -354,10 +354,7 @@ export const layer = Layer.effect(
         : undefined
       const options: StreamOptions = {
         ...(http ? { http } : {}),
-        ...(input.webSocket === "session" &&
-        webSocket &&
-        !hasHttpHooks &&
-        resolved.capabilities.responsesWebsockets === true
+        ...(input.webSocket === "session" && webSocket && !hasHttpHooks
           ? { webSocket: transport.bind(session.id) }
           : {}),
       }

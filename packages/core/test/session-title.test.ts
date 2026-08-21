@@ -1,5 +1,13 @@
 import { beforeEach, expect } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import {
+  AIError,
+  LLMClient,
+  LLMEvent,
+  LanguageModel,
+  SystemPart,
+  TransportReason,
+  type LLMRequest,
+} from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -69,7 +77,7 @@ const successfulTitle = () =>
       reason: { normalized: "stop" },
     }),
   )
-let titleStream: () => Stream.Stream<LLMEvent> = successfulTitle
+let titleStream: () => Stream.Stream<LLMEvent, AIError> = successfulTitle
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
@@ -457,6 +465,37 @@ it.effect("retries after a failed title request", () =>
     const store = yield* SessionStore.Service
     expect(requests).toHaveLength(2)
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("does not rename after a failed title stream", () =>
+  Effect.gen(function* () {
+    const agentService = yield* Agent.Service
+    yield* agentService.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.mode = "primary"
+        agent.hidden = true
+        agent.system = "You are a title generator."
+      })
+    })
+    const sessionID = Session.ID.make("ses_title_stream_failure")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Fail this title stream")
+    titleStream = () =>
+      Stream.fail(
+        new AIError({
+          module: "test",
+          method: "stream",
+          reason: new TransportReason({ message: "Disconnected", transport: "http", operation: "request" }),
+        }),
+      )
+
+    const title = yield* SessionTitle.Service
+    yield* title.generateForFirstPrompt(sessionID)
+
+    const store = yield* SessionStore.Service
+    expect(requests).toHaveLength(1)
+    expect((yield* store.get(sessionID))?.title).toBeUndefined()
   }),
 )
 

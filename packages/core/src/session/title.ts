@@ -78,7 +78,7 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
     },
     contextHooks: false,
   })
-  const streamed = yield* dependencies.llm.stream(prepared.request, prepared.options).pipe(
+  yield* dependencies.llm.stream(prepared.request, prepared.options).pipe(
     Stream.runForEach((event) => {
       if (LLMEvent.is.providerError(event)) failed = true
       if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
@@ -88,12 +88,15 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
       }
       return Effect.void
     }),
-    Effect.as(true),
-    Effect.catchTag("AI.Error", () => Effect.succeed(false)),
+    Effect.catchTag("AI.Error", () =>
+      Effect.sync(() => {
+        failed = true
+      }),
+    ),
     Effect.onInterrupt(() => recordUsage.pipe(Effect.asVoid)),
   )
   yield* recordUsage
-  if (!streamed || failed) return
+  if (failed) return
   return chunks
     .join("")
     .split("\n")
