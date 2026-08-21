@@ -74,6 +74,7 @@ const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error"
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
 const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded/i
 const CONTENT_POLICY_TEXT = /content[-_\s]?policy|content_filter|safety/i
+const NETWORK_ERROR_TEXT = /network[-_\s]error/i
 
 export interface ProviderFailure {
   readonly message: string
@@ -127,6 +128,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
       retryAfterMs: input.retryAfterMs,
       rateLimit: input.rateLimit,
     })
+  if (NETWORK_ERROR_TEXT.test(text)) return new ProviderInternalReason({ ...common, status: input.status })
   if (codes.some((code) => SERVER_CODES.has(code) || code.includes("exhausted") || code.includes("unavailable")))
     return new ProviderInternalReason({
       ...common,
