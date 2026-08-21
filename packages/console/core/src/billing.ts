@@ -18,7 +18,6 @@ import { centsToMicroCents } from "./util/price"
 import { User } from "./user"
 import { BlackData } from "./black"
 import { LiteData } from "./lite"
-import { memo } from "./util/memo"
 
 export namespace Billing {
   export const ITEM_CREDIT_NAME = "opencode credits"
@@ -27,13 +26,11 @@ export namespace Billing {
   export const RELOAD_AMOUNT_MIN = 10
   export const RELOAD_TRIGGER = 5
   export const RELOAD_TRIGGER_MIN = 5
-  export const stripe = memo(
-    () =>
-      new Stripe(Resource.STRIPE_SECRET_KEY.value, {
-        apiVersion: "2025-03-31.basil",
-        httpClient: Stripe.createFetchHttpClient(),
-      }),
-  )
+  export const stripe = () =>
+    new Stripe(Resource.STRIPE_SECRET_KEY.value, {
+      apiVersion: "2025-03-31.basil",
+      httpClient: Stripe.createFetchHttpClient(),
+    })
 
   export const get = async () => {
     return Database.use(async (tx) =>

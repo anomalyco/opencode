@@ -36,12 +36,7 @@ describe("withUniqueUsersFallback", () => {
       throw error
     })
 
-    expect(
-      await result.then(
-        () => undefined,
-        (cause: unknown) => cause,
-      ),
-    ).toBe(error)
+    await expect(result).rejects.toBe(error)
     expect(calls).toEqual([true])
   })
 
@@ -55,12 +50,7 @@ describe("withUniqueUsersFallback", () => {
       throw error
     })
 
-    expect(
-      await result.then(
-        () => undefined,
-        (cause: unknown) => cause,
-      ),
-    ).toBe(error)
+    await expect(result).rejects.toBe(error)
     expect(calls).toEqual([true, false])
   })
 })
