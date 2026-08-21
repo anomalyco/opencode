@@ -19,6 +19,7 @@ import {
   homeProjectDirectories,
   homeSessionServerStatus,
   latestRootSession,
+  projectForDirectory,
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "./helpers"
@@ -113,6 +114,14 @@ describe("layout deep links", () => {
 })
 
 describe("layout workspace helpers", () => {
+  test("finds a project by worktree or sandbox directory", () => {
+    const project = projectForDirectory("/workspace/.sandbox/feature", [
+      { name: "OpenCode", worktree: "/workspace", sandboxes: ["/workspace/.sandbox/feature"] },
+    ])
+
+    expect(project?.name).toBe("OpenCode")
+  })
+
   test("normalizes trailing slash in workspace key", () => {
     expect(String(pathKey("/tmp/demo///"))).toBe("/tmp/demo")
     expect(String(pathKey("C:\\tmp\\demo\\\\"))).toBe("C:/tmp/demo")

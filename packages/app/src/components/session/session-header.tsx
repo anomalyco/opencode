@@ -22,6 +22,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { projectForDirectory } from "@/pages/layout/helpers"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { fileManagerApp } from "@/utils/file-manager"
@@ -148,11 +149,15 @@ export function SessionHeader() {
   const terminal = useTerminal()
   const { params, view } = useSessionLayout()
 
-  const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
+  const projectDirectory = createMemo(() => {
+    const directory = decode64(params.dir)
+    if (directory) return directory
+    return params.id ? (sync().session.get(params.id)?.directory ?? "") : ""
+  })
   const project = createMemo(() => {
     const directory = projectDirectory()
     if (!directory) return
-    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+    return projectForDirectory(directory, layout.projects.list())
   })
   const name = createMemo(() => {
     const current = project()
@@ -326,6 +331,7 @@ export function SessionHeader() {
               when={isV2}
               fallback={
                 <div class="flex items-center gap-2">
+                  <SessionProjectName name={name()} />
                   <Show when={projectDirectory()}>
                     <div class="hidden xl:flex items-center">
                       <Show
@@ -507,7 +513,7 @@ export function SessionHeader() {
                 </div>
               }
             >
-              <SessionHeaderV2Actions state={v2ActionsState()} />
+              <SessionHeaderV2Actions state={v2ActionsState()} projectName={name()} />
             </Show>
           </Portal>
         )}
@@ -526,11 +532,12 @@ type SessionHeaderV2ActionsState = {
   onReviewToggle: () => void
 }
 
-function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
+function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState; projectName?: string }) {
   const language = useLanguage()
 
   return (
     <div class="flex items-center gap-2">
+      <SessionProjectName name={props.projectName} v2 />
       <Show when={props.state.statusVisible}>
         <Tooltip placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />
@@ -564,5 +571,25 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
         </TooltipV2>
       </Show>
     </div>
+  )
+}
+
+function SessionProjectName(props: { name?: string; v2?: boolean }) {
+  return (
+    <Show when={props.name}>
+      {(name) => (
+        <div
+          data-slot="session-project-name"
+          class="min-w-0 max-w-[180px] shrink-0 truncate text-12-regular md:max-w-[240px]"
+          classList={{
+            "text-v2-text-text-faint": props.v2,
+            "text-text-weak": !props.v2,
+          }}
+          title={name()}
+        >
+          <bdi dir="auto">{name()}</bdi>
+        </div>
+      )}
+    </Show>
   )
 }
