@@ -113,6 +113,34 @@ it.effect("projects request settings, headers, and body overlays", () =>
   }),
 )
 
+it.effect("uses only the provider timeout signal when the request signal is null", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    let wrappedFetch: typeof fetch | undefined
+    let requestSignal: AbortSignal | null | undefined
+    yield* aisdk.hook.sdk((event) => {
+      wrappedFetch = event.options.fetch
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    yield* aisdk.language(
+      model("test-ai-sdk", {
+        timeout: 60_000,
+        fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          requestSignal = init?.signal
+          return new Response()
+        },
+      }),
+    )
+    const request = wrappedFetch
+    if (!request) return yield* Effect.die("Expected wrapped fetch")
+    yield* Effect.promise(() => request("https://example.com", { signal: null }))
+
+    expect(requestSignal).toBeInstanceOf(AbortSignal)
+    expect(requestSignal?.aborted).toBeFalse()
+  }),
+)
+
 it.effect("lowers chronological system updates to wrapped user messages", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service

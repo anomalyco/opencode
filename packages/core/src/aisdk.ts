@@ -127,7 +127,7 @@ function prepareOptions(model: Info, pkg: string) {
       options.timeout !== undefined && options.timeout !== null && options.timeout !== false
         ? AbortSignal.timeout(options.timeout)
         : undefined,
-    ].filter((item): item is AbortSignal | AbortController => item !== undefined)
+    ].filter((item): item is AbortSignal | AbortController => item !== undefined && item !== null)
     const chunkAbortCtl = signals.find((item): item is AbortController => item instanceof AbortController)
     const abortSignals = signals.map((item) => (item instanceof AbortController ? item.signal : item))
     if (abortSignals.length === 1) opts.signal = abortSignals[0]
