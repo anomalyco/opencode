@@ -197,7 +197,7 @@ describe("toSessionError", () => {
     ).toBeFalse()
     expect(
       SessionRunnerRetry.isRetryable(
-        llm(new InvalidRequestReason({ message: "retry", http: http({ "X-Should-Retry": "true" }) })),
+        llm(new InvalidRequestReason({ message: "retry", http: http({ "x-should-retry": "true" }) })),
       ),
     ).toBeTrue()
   })
