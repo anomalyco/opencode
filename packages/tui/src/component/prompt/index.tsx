@@ -1023,7 +1023,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(-1, input.plainText)
+            const item = history.move(props.sessionID, -1, input.plainText)
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1062,7 +1062,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(1, input.plainText)
+            const item = history.move(props.sessionID, 1, input.plainText)
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1181,7 +1181,6 @@ export function Prompt(props: PromptProps) {
     // snapshot unless the user has started typing something new.
     const currentMode = store.mode
     const entry = { ...store.prompt, mode: currentMode }
-    history.append(entry)
     resetComposer()
     props.onSubmit?.()
     const restoreEntry = () => {
@@ -1256,6 +1255,7 @@ export function Prompt(props: PromptProps) {
     }
 
     const target = sessionID
+    history.append(target, entry)
     const dispatch = (send: () => Promise<unknown>) => {
       const setup = newSession
       if (setup) void setup.gate.then(send).catch(setup.recover)
@@ -1557,7 +1557,7 @@ export function Prompt(props: PromptProps) {
       (store.prompt.files?.length ?? 0) > 0 ||
       (store.prompt.agents?.length ?? 0) > 0
     ) {
-      history.append({
+      history.append(props.sessionID, {
         ...store.prompt,
         mode: store.mode,
       })
