@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import type { ProviderHooks } from "@opencode-ai/plugin/effect/provider"
 import { Provider } from "../../provider.js"
 
 type MantleSDK = {
@@ -59,38 +60,124 @@ function selectMantleModel(sdk: MantleSDK, modelID: string) {
   return sdk.responses(modelID)
 }
 
+type AWSCredentialProvider = () => Promise<{
+  readonly accessKeyId: string
+  readonly secretAccessKey: string
+  readonly sessionToken?: string
+}>
+
+const AWS_CREDENTIAL_REFRESH_INTERVAL = 5 * 60 * 1000
+const awsCredentialChains = new Map<string, AWSCredentialProvider>()
+
+const awsCredentialChain = Effect.fn("AmazonBedrock.awsCredentialChain")(function* (profile: string | undefined) {
+  const key = profile ?? ""
+  const cached = awsCredentialChains.get(key)
+  if (cached !== undefined) return cached
+  const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
+  const chain = fromNodeProviderChain(profile === undefined ? { ignoreCache: true } : { profile, ignoreCache: true })
+  const state = { failed: false, resolvedAt: 0 }
+  const provider = () => {
+    return chain(
+      state.failed || (state.resolvedAt > 0 && Date.now() - state.resolvedAt >= AWS_CREDENTIAL_REFRESH_INTERVAL)
+        ? { forceRefresh: true }
+        : undefined,
+    ).then(
+      (credentials) => {
+        state.failed = false
+        state.resolvedAt = Date.now()
+        return credentials
+      },
+      (error) => {
+        state.failed = true
+        throw error
+      },
+    )
+  }
+  awsCredentialChains.set(key, provider)
+  return provider
+})
+
+const resolveAWSCredentials = (profile: string | undefined, region: string) =>
+  Effect.gen(function* () {
+    const chain = yield* awsCredentialChain(profile)
+    const credentials = yield* Effect.tryPromise(() => chain())
+    return {
+      region,
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+      ...(credentials.sessionToken === undefined ? {} : { sessionToken: credentials.sessionToken }),
+    }
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.as(Effect.logDebug(`Amazon Bedrock credential resolution failed: ${error}`), undefined),
+    ),
+  )
+
+function resolveRegion(settings: Readonly<Record<string, unknown>>) {
+  if (typeof settings.region === "string") return settings.region
+  if (
+    typeof settings.credentials === "object" &&
+    settings.credentials !== null &&
+    "region" in settings.credentials &&
+    typeof settings.credentials.region === "string"
+  )
+    return settings.credentials.region
+  return process.env.AWS_REGION ?? "us-east-1"
+}
+
+function isBedrockProvider(provider: Pick<Provider.Info, "id" | "package">) {
+  return (
+    provider.id === Provider.ID.amazonBedrock ||
+    Provider.packageName(provider.package) === "@ai-sdk/amazon-bedrock" ||
+    provider.package.startsWith("@opencode-ai/ai/providers/amazon-bedrock")
+  )
+}
+
+const detectAvailability = Effect.fn("AmazonBedrock.detectAvailability")(function* (evt: ProviderHooks["available"]) {
+  if (evt.available || !isBedrockProvider(evt.provider)) return
+  const profile =
+    typeof evt.provider.settings?.profile === "string" ? evt.provider.settings.profile : process.env.AWS_PROFILE
+  evt.available = (yield* resolveAWSCredentials(profile, resolveRegion(evt.provider.settings ?? {}))) !== undefined
+})
+
+const prepareNativeModel = Effect.fn("AmazonBedrock.prepareNativeModel")(function* (
+  evt: ProviderHooks["model.prepare"],
+) {
+  if (!evt.package.startsWith("@opencode-ai/ai/providers/amazon-bedrock")) return
+  const region = resolveRegion(evt.settings)
+  if (typeof evt.settings.baseURL === "string")
+    evt.settings.baseURL = evt.settings.baseURL.replaceAll("${AWS_REGION}", region)
+  if (evt.settings.credentials !== undefined) return
+
+  const configured = typeof evt.model.settings?.profile === "string" ? evt.model.settings.profile : undefined
+  if (configured === undefined && typeof evt.settings.apiKey === "string") return
+  const credentials = yield* resolveAWSCredentials(configured ?? process.env.AWS_PROFILE, region)
+  if (credentials === undefined) return
+  delete evt.settings.accessToken
+  delete evt.settings.apiKey
+  delete evt.settings.authToken
+  evt.settings.credentials = credentials
+  evt.settings.region = region
+})
+
 export const AmazonBedrockPlugin = define({
   id: "opencode.provider.amazon.bedrock",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.integration.transform((draft) => {
-      // The catalog lists every AWS variable as a key, so a region or an access key ID
-      // would be sent as a bearer token. Only the Bedrock API key is one; the rest merely
-      // say credentials exist, and SigV4 resolves them through the AWS credential chain.
       draft.method.update({
         integrationID: Provider.ID.amazonBedrock,
         method: {
           type: "env",
           names: ["AWS_BEARER_TOKEN_BEDROCK"],
-          detect: [
-            "AWS_PROFILE",
-            "AWS_ACCESS_KEY_ID",
-            "AWS_SECRET_ACCESS_KEY",
-            "AWS_REGION",
-            "AWS_WEB_IDENTITY_TOKEN_FILE",
-            "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
-            "AWS_CONTAINER_CREDENTIALS_FULL_URI",
-          ],
         },
       })
     })
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (
-          item.provider.id !== Provider.ID.amazonBedrock &&
-          Provider.packageName(item.provider.package) !== "@ai-sdk/amazon-bedrock"
-        )
-          continue
+        if (!isBedrockProvider(item.provider)) continue
         evt.provider.update(item.provider.id, (provider) => {
+          if (provider.activation === "auto" && typeof provider.settings?.profile === "string")
+            provider.activation = "enabled"
           if (typeof provider.settings?.endpoint !== "string") return
           // The AI SDK expects a base URL, but users configure Bedrock private/VPC
           // endpoints as `endpoint`; move it into the catalog endpoint URL once.
@@ -99,6 +186,8 @@ export const AmazonBedrockPlugin = define({
         })
       }
     })
+    yield* ctx.provider.hook("available", detectAvailability)
+    yield* ctx.provider.hook("model.prepare", prepareNativeModel)
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
@@ -110,17 +199,12 @@ export const AmazonBedrockPlugin = define({
           process.env.AWS_BEARER_TOKEN_BEDROCK ??
           (typeof options.bearerToken === "string" ? options.bearerToken : undefined)
         if (bearerToken && !process.env.AWS_BEARER_TOKEN_BEDROCK) process.env.AWS_BEARER_TOKEN_BEDROCK = bearerToken
-        const containerCreds = Boolean(
-          process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
-        )
-
         options.region = region
         if (typeof options.endpoint === "string") options.baseURL = options.endpoint
         if (!bearerToken && options.credentialProvider === undefined) {
           // Do not gate SDK creation on explicit AWS env vars. The default chain
           // also handles ~/.aws/credentials, SSO, process creds, and instance roles.
-          const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
-          options.credentialProvider = fromNodeProviderChain(profile ? { profile } : {})
+          options.credentialProvider = yield* awsCredentialChain(profile)
         }
 
         if (evt.package === "@ai-sdk/amazon-bedrock/mantle") {

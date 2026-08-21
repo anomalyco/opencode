@@ -320,6 +320,9 @@ export const make = Effect.fn("PluginHost.make")(function* (
     plugin: {
       list: () => response(plugin.list()),
     },
+    provider: {
+      hook: (name, callback, options) => hooks.register("provider", name, callback, options),
+    },
     reference: {
       list: () => response(reference.list()),
       reload: reference.reload,

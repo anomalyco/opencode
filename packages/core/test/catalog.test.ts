@@ -11,6 +11,7 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -25,7 +26,7 @@ const locationLayer = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("test") })),
 )
 const catalogLayer = AppNodeBuilder.build(
-  LayerNode.group([Catalog.node, Bus.node, Credential.node, Integration.node]),
+  LayerNode.group([Catalog.node, Bus.node, Credential.node, Integration.node, PluginHooks.node]),
   [[Location.node, locationLayer]],
 )
 const it = testEffect(catalogLayer)
@@ -131,36 +132,34 @@ describe("Catalog", () => {
     }).pipe(Effect.provide(localCatalogLayer))
   })
 
-  it.effect("derives availability from a configured credential profile", () => {
-    const integrationID = Integration.ID.make("aws")
-    const providerID = Provider.ID.make("bedrock-like")
-    const localCatalogLayer = Layer.fresh(
-      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
-        [Location.node, locationLayer],
-      ]),
-    )
-
-    return Effect.gen(function* () {
+  it.effect("lets provider plugins detect automatic availability", () =>
+    Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
-      yield* catalog.transform((editor) =>
-        editor.provider.update(providerID, (provider) => {
-          provider.integrationID = integrationID
-        }),
-      )
-      expect(yield* catalog.provider.available()).toEqual([])
-
-      // A profile is resolved by the provider's own credential chain, so the
-      // integration never reports a stored or environment connection for it.
-      yield* catalog.transform((editor) =>
-        editor.provider.update(providerID, (provider) => {
-          provider.settings = { profile: "opencode" }
-        }),
+      const integrations = yield* Integration.Service
+      const hooks = yield* PluginHooks.Service
+      const providerID = Provider.ID.make("ambient")
+      yield* integrations.transform((editor) => editor.update(Integration.ID.make(providerID), () => {}))
+      yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
+      yield* hooks.register(
+        "provider",
+        "available",
+        (event) =>
+          Effect.sync(() => {
+            event.available = true
+          }),
+        { providerID },
       )
 
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
-    }).pipe(Effect.provide(localCatalogLayer))
-  })
+
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.activation = "disabled"
+        }),
+      )
+      expect(yield* catalog.provider.available()).toEqual([])
+    }),
+  )
 
   it.effect("projects environment connections without a catalog plugin", () =>
     Effect.acquireUseRelease(

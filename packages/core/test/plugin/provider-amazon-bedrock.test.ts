@@ -1,18 +1,22 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { LLM } from "@opencode-ai/ai"
 import { describe, expect } from "bun:test"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
+import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { AmazonBedrockPlugin } from "@opencode-ai/core/plugin/provider/amazon-bedrock"
 import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
+import { Headers } from "effect/unstable/http"
 
 const it = testEffect(PluginTestLayer)
 
@@ -28,9 +32,22 @@ const registerBedrock = (catalog: Catalog.Interface) =>
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* AmazonBedrockPlugin.effect(host)
+})
+
+const bedrockModel = (settings: Model.Info["settings"]) =>
+  Model.Info.make({
+    ...Model.Info.default(Provider.ID.amazonBedrock, Model.ID.make("anthropic.claude-sonnet-4-5-v1:0")),
+    package: Provider.aisdk("@ai-sdk/amazon-bedrock"),
+    settings,
+  })
+
+const resolveBedrock = Effect.fn(function* (settings: Model.Info["settings"], credential?: Credential.Value) {
+  const hooks = yield* PluginHooks.Service
+  return yield* ModelResolver.fromCatalogModel(bedrockModel(settings), credential, {
+    prepareProvider: (event) => hooks.trigger("provider", "model.prepare", event),
+  })
 })
 
 function required<T>(value: T | undefined): T {
@@ -113,6 +130,177 @@ describe("AmazonBedrockPlugin", () => {
     }),
   )
 
+  it.effect("enables providers configured with an AWS profile", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* registerBedrock(catalog)
+      yield* catalog.transform((draft) =>
+        draft.provider.update(Provider.ID.amazonBedrock, (provider) => {
+          provider.settings = { profile: "opencode" }
+        }),
+      )
+      expect(yield* catalog.provider.available()).toEqual([])
+
+      yield* addPlugin()
+
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(Provider.ID.amazonBedrock)
+    }),
+  )
+
+  it.effect("detects a default shared-credentials profile without AWS_PROFILE", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const integrations = yield* Integration.Service
+      const location = yield* Location.Service
+      const credentialsFile = `${location.directory}/aws-default-credentials`
+      yield* Effect.promise(() =>
+        Bun.write(
+          credentialsFile,
+          "[default]\naws_access_key_id = AKIADEFAULT\naws_secret_access_key = default-secret\n",
+        ),
+      )
+
+      yield* withEnv(
+        {
+          AWS_ACCESS_KEY_ID: undefined,
+          AWS_BEARER_TOKEN_BEDROCK: undefined,
+          AWS_EC2_METADATA_DISABLED: "true",
+          AWS_PROFILE: undefined,
+          AWS_SECRET_ACCESS_KEY: undefined,
+          AWS_SESSION_TOKEN: undefined,
+          AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
+        },
+        () =>
+          Effect.gen(function* () {
+            yield* registerBedrock(catalog)
+            yield* addPlugin()
+
+            expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(
+              Provider.ID.amazonBedrock,
+            )
+            expect(yield* integrations.connection.active(bedrockIntegrationID)).toBeUndefined()
+          }),
+      )
+    }),
+  )
+
+  it.effect("recovers availability when a missing AWS profile becomes valid", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const location = yield* Location.Service
+      const profile = "opencode-late-profile"
+      const credentialsFile = `${location.directory}/aws-late-credentials`
+      yield* Effect.promise(() =>
+        Bun.write(credentialsFile, "[other]\naws_access_key_id = OTHER\naws_secret_access_key = other\n"),
+      )
+
+      yield* withEnv(
+        {
+          AWS_ACCESS_KEY_ID: undefined,
+          AWS_BEARER_TOKEN_BEDROCK: undefined,
+          AWS_EC2_METADATA_DISABLED: "true",
+          AWS_PROFILE: profile,
+          AWS_SECRET_ACCESS_KEY: undefined,
+          AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
+        },
+        () =>
+          Effect.gen(function* () {
+            yield* registerBedrock(catalog)
+            yield* addPlugin()
+            expect(yield* catalog.provider.available()).toEqual([])
+
+            yield* Effect.promise(() =>
+              Bun.write(
+                credentialsFile,
+                `[${profile}]\naws_access_key_id = AKIALATE\naws_secret_access_key = late-secret\n`,
+              ),
+            )
+
+            expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(
+              Provider.ID.amazonBedrock,
+            )
+          }),
+      )
+    }),
+  )
+
+  it.effect("prepares native SigV4 credentials from a configured AWS profile", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const profile = "opencode-provider-hook-test"
+      const credentialsFile = `${location.directory}/aws-credentials`
+      yield* Effect.promise(() =>
+        Bun.write(
+          credentialsFile,
+          `[${profile}]\naws_access_key_id = AKIAEXAMPLE\naws_secret_access_key = secret\naws_session_token = session\n`,
+        ),
+      )
+
+      yield* withEnv(
+        {
+          AWS_ACCESS_KEY_ID: undefined,
+          AWS_BEARER_TOKEN_BEDROCK: undefined,
+          AWS_EC2_METADATA_DISABLED: "true",
+          AWS_PROFILE: undefined,
+          AWS_REGION: undefined,
+          AWS_SECRET_ACCESS_KEY: undefined,
+          AWS_SESSION_TOKEN: undefined,
+          AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
+        },
+        () =>
+          Effect.gen(function* () {
+            yield* addPlugin()
+            const resolved = yield* resolveBedrock(
+              { profile, region: "eu-west-1" },
+              Credential.Key.make({ type: "key", key: "ignored-bearer" }),
+            )
+            const headers = yield* resolved.route.auth.apply({
+              request: LLM.request({ model: resolved, prompt: "Hello" }),
+              method: "POST",
+              url: "https://bedrock-runtime.eu-west-1.amazonaws.com/model/anthropic.claude-sonnet-4-5-v1:0/converse-stream",
+              body: "{}",
+              headers: Headers.empty,
+            })
+
+            expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-runtime.eu-west-1.amazonaws.com")
+            expect(headers.authorization).toContain("AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE/")
+            expect(headers.authorization).toContain("/eu-west-1/bedrock/aws4_request")
+            expect(headers["x-amz-security-token"]).toBe("session")
+          }),
+      )
+    }),
+  )
+
+  it.effect("keeps explicit Bedrock credentials and API keys ahead of the AWS chain", () =>
+    withEnv({ AWS_PROFILE: undefined }, () =>
+      Effect.gen(function* () {
+        yield* addPlugin()
+        const configured = yield* resolveBedrock({
+          profile: "ignored",
+          region: "us-east-1",
+          credentials: { accessKeyId: "AKIASTATIC", secretAccessKey: "secret" },
+        })
+        const bearer = yield* resolveBedrock(
+          { region: "us-east-1" },
+          Credential.Key.make({ type: "key", key: "bedrock-api-key" }),
+        )
+        const url =
+          "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-5-v1:0/converse-stream"
+        const sign = (resolved: typeof configured) =>
+          resolved.route.auth.apply({
+            request: LLM.request({ model: resolved, prompt: "Hello" }),
+            method: "POST",
+            url,
+            body: "{}",
+            headers: Headers.empty,
+          })
+
+        expect((yield* sign(configured)).authorization).toContain("AWS4-HMAC-SHA256 Credential=AKIASTATIC/")
+        expect((yield* sign(bearer)).authorization).toBe("Bearer bedrock-api-key")
+      }),
+    ),
+  )
+
   it.effect("preserves region templates until configured provider settings are merged", () =>
     withEnv({ AWS_REGION: undefined }, () =>
       Effect.gen(function* () {
@@ -140,9 +328,7 @@ describe("AmazonBedrockPlugin", () => {
           })
         })
         const configured = required(yield* catalog.model.get(Provider.ID.amazonBedrock, modelID))
-        const resolved = yield* ModelResolver.fromCatalogModel(configured, undefined, {
-          loadAWSCredentials: () => Effect.succeed(undefined),
-        })
+        const resolved = yield* ModelResolver.fromCatalogModel(configured)
 
         expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-mantle.eu-west-1.api.aws/openai/v1")
       }),
@@ -309,7 +495,7 @@ describe("AmazonBedrockPlugin", () => {
             name: "amazon-bedrock",
             bearerToken: "option-token",
             fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-              headers.push(new Headers(init?.headers).get("Authorization"))
+              headers.push(new globalThis.Headers(init?.headers).get("Authorization"))
               return new Response("{}")
             },
           },
@@ -339,7 +525,7 @@ describe("AmazonBedrockPlugin", () => {
             name: "amazon-bedrock",
             bearerToken: "option-token",
             fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-              headers.push(new Headers(init?.headers).get("Authorization"))
+              headers.push(new globalThis.Headers(init?.headers).get("Authorization"))
               return new Response("{}")
             },
           },
@@ -450,7 +636,7 @@ describe("AmazonBedrockPlugin", () => {
             options: {
               name: "amazon-bedrock",
               fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-                headers.push(new Headers(init?.headers).get("Authorization"))
+                headers.push(new globalThis.Headers(init?.headers).get("Authorization"))
                 return new Response("{}")
               },
             },
@@ -656,32 +842,44 @@ describe("AmazonBedrockPlugin", () => {
   )
 
   it.effect("makes the provider available from AWS_PROFILE without treating it as a key", () =>
-    withEnv(
-      {
-        AWS_ACCESS_KEY_ID: undefined,
-        AWS_BEARER_TOKEN_BEDROCK: undefined,
-        AWS_REGION: undefined,
-        AWS_SECRET_ACCESS_KEY: undefined,
-        AWS_PROFILE: "opencode",
-      },
-      () =>
-        Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
-          const integrations = yield* Integration.Service
-          yield* registerBedrock(catalog)
-          yield* addPlugin()
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const integrations = yield* Integration.Service
+      const location = yield* Location.Service
+      const profile = "opencode-availability-profile"
+      const credentialsFile = `${location.directory}/aws-profile-credentials`
+      yield* Effect.promise(() =>
+        Bun.write(
+          credentialsFile,
+          `[${profile}]\naws_access_key_id = AKIAPROFILE\naws_secret_access_key = profile-secret\n`,
+        ),
+      )
 
-          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(
-            Provider.ID.amazonBedrock,
-          )
-          const connection = required(yield* integrations.connection.active(bedrockIntegrationID))
-          expect(connection).toEqual({ type: "env", name: "AWS_PROFILE" })
-          expect(yield* integrations.connection.resolve(connection)).toBeUndefined()
-        }),
-    ),
+      yield* withEnv(
+        {
+          AWS_ACCESS_KEY_ID: undefined,
+          AWS_BEARER_TOKEN_BEDROCK: undefined,
+          AWS_EC2_METADATA_DISABLED: "true",
+          AWS_PROFILE: profile,
+          AWS_REGION: undefined,
+          AWS_SECRET_ACCESS_KEY: undefined,
+          AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
+        },
+        () =>
+          Effect.gen(function* () {
+            yield* registerBedrock(catalog)
+            yield* addPlugin()
+
+            expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(
+              Provider.ID.amazonBedrock,
+            )
+            expect(yield* integrations.connection.active(bedrockIntegrationID)).toBeUndefined()
+          }),
+      )
+    }),
   )
 
-  it.effect("never resolves a region or an access key ID as a credential", () =>
+  it.effect("never projects a region or SigV4 keys as bearer credentials", () =>
     withEnv(
       {
         AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
@@ -698,19 +896,16 @@ describe("AmazonBedrockPlugin", () => {
           yield* addPlugin()
 
           const connections = required(yield* integrations.get(bedrockIntegrationID)).connections
-          expect(connections.map((connection) => connection.type === "env" && connection.name)).toEqual([
-            "AWS_ACCESS_KEY_ID",
-            "AWS_SECRET_ACCESS_KEY",
-            "AWS_REGION",
-          ])
-          for (const connection of connections) {
-            expect(yield* integrations.connection.resolve(connection)).toBeUndefined()
-          }
+          expect(connections).toEqual([])
+          expect(yield* integrations.connection.active(bedrockIntegrationID)).toBeUndefined()
+          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(
+            Provider.ID.amazonBedrock,
+          )
         }),
     ),
   )
 
-  it.effect("prefers the Bedrock API key over detection variables", () =>
+  it.effect("prefers the Bedrock API key over ambient AWS credentials", () =>
     withEnv(
       {
         AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",

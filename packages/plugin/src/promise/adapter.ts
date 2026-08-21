@@ -251,6 +251,12 @@ export function fromPromise(plugin: Plugin) {
           plugin: {
             list: adaptApiMethod(PluginEndpoints["plugin.list"], host.plugin.list),
           },
+          provider: {
+            hook: (name, callback, options) =>
+              register(
+                host.provider.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
+              ),
+          },
           reference: {
             list: adaptApiMethod(ReferenceEndpoints["reference.list"], host.reference.list),
             transform: transform(host.reference),

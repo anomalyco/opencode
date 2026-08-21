@@ -11,6 +11,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Npm } from "@opencode-ai/util/npm"
 import { it } from "./lib/effect"
 
@@ -69,9 +70,6 @@ function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect:
 function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effect.Effect<A, E, R>) {
   return effect().pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env }))))
 }
-
-/** Native Bedrock resolution consults the AWS credential chain; keep tests off the real one. */
-const withoutAWSCredentials: ModelResolver.Dependencies = { loadAWSCredentials: () => Effect.succeed(undefined) }
 
 describe("ModelResolver", () => {
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
@@ -191,7 +189,7 @@ describe("ModelResolver", () => {
             baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
           },
         })
-        const resolved = yield* ModelResolver.fromCatalogModel(catalog, undefined, withoutAWSCredentials)
+        const resolved = yield* ModelResolver.fromCatalogModel(catalog)
 
         expect(resolved.route).toMatchObject({
           id: "bedrock-mantle-responses",
@@ -213,8 +211,6 @@ describe("ModelResolver", () => {
               baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
             },
           }),
-          undefined,
-          withoutAWSCredentials,
         )
 
         expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
@@ -343,7 +339,10 @@ describe("ModelResolver", () => {
       },
       model: () => Effect.die("unused"),
     })
-    const layer = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
+    const pluginHooks = PluginHooks.node.implementation as Layer.Layer<PluginHooks.Service>
+    const layer = ModelResolver.layer.pipe(
+      Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk, pluginHooks)),
+    )
 
     return withConfigEnv({}, () =>
       Effect.gen(function* () {
@@ -952,7 +951,6 @@ describe("ModelResolver", () => {
           }),
           undefined,
           {
-            ...withoutAWSCredentials,
             loadPackage: (specifier) => {
               expect(specifier).toBe(nativePackage)
               return Effect.succeed({
@@ -1064,16 +1062,12 @@ describe("ModelResolver", () => {
           settings: { region: "us-east-1", topP: 0.8, serviceTier: "priority" },
           body: {},
         }),
-        undefined,
-        withoutAWSCredentials,
       )
       const mantle = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
           modelID: "openai.gpt-oss-120b",
           settings: { region: "us-east-1" },
         }),
-        undefined,
-        withoutAWSCredentials,
       )
 
       expect(google.route.id).toBe("gemini")
@@ -1086,124 +1080,6 @@ describe("ModelResolver", () => {
       expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
       expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })
       expect(mantle.route.id).toBe("bedrock-mantle-responses")
-    }),
-  )
-
-  it.effect("resolves the configured AWS profile into native Bedrock SigV4 credentials", () =>
-    Effect.gen(function* () {
-      const requested: Array<{ profile: string | undefined; region: string }> = []
-      const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/amazon-bedrock"), {
-          providerID: Provider.ID.amazonBedrock,
-          modelID: "anthropic.claude-sonnet-4-5-v1:0",
-          settings: { profile: "opencode", region: "eu-west-1" },
-        }),
-        undefined,
-        {
-          loadAWSCredentials: (input) => {
-            requested.push(input)
-            return Effect.succeed({
-              region: input.region,
-              accessKeyId: "AKIAEXAMPLE",
-              secretAccessKey: "secret",
-              sessionToken: "session",
-            })
-          },
-        },
-      )
-      const request = LLM.request({ model: resolved, prompt: "Hello" })
-      const headers = yield* resolved.route.auth.apply({
-        request,
-        method: "POST",
-        url: "https://bedrock-runtime.eu-west-1.amazonaws.com/model/anthropic.claude-sonnet-4-5-v1:0/converse-stream",
-        body: "{}",
-        headers: Headers.empty,
-      })
-
-      expect(requested).toEqual([{ profile: "opencode", region: "eu-west-1" }])
-      expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-runtime.eu-west-1.amazonaws.com")
-      expect(headers.authorization).toContain("AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE/")
-      expect(headers.authorization).toContain("/eu-west-1/bedrock/aws4_request")
-      expect(headers["x-amz-security-token"]).toBe("session")
-    }),
-  )
-
-  it.effect("prefers an explicitly configured Bedrock profile over a credential bearer token", () =>
-    Effect.gen(function* () {
-      const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/amazon-bedrock"), {
-          providerID: Provider.ID.amazonBedrock,
-          modelID: "anthropic.claude-sonnet-4-5-v1:0",
-          settings: { profile: "opencode", region: "us-east-1" },
-        }),
-        // The catalog exposes AWS_REGION and AWS_ACCESS_KEY_ID as "key" credentials for
-        // this provider, and neither is a usable bearer token.
-        Credential.Key.make({ type: "key", key: "us-east-1" }),
-        {
-          loadAWSCredentials: (input) =>
-            Effect.succeed({
-              region: input.region,
-              accessKeyId: "AKIAEXAMPLE",
-              secretAccessKey: "secret",
-            }),
-        },
-      )
-      const request = LLM.request({ model: resolved, prompt: "Hello" })
-      const headers = yield* resolved.route.auth.apply({
-        request,
-        method: "POST",
-        url: "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-5-v1:0/converse-stream",
-        body: "{}",
-        headers: Headers.empty,
-      })
-
-      expect(headers.authorization).toContain("AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE/")
-      expect(headers.authorization).not.toContain("Bearer")
-    }),
-  )
-
-  it.effect("keeps configured Bedrock credentials and API keys ahead of the AWS chain", () =>
-    Effect.gen(function* () {
-      let calls = 0
-      const dependencies: ModelResolver.Dependencies = {
-        loadAWSCredentials: () => {
-          calls = calls + 1
-          return Effect.succeed(undefined)
-        },
-      }
-      const url =
-        "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-5-v1:0/converse-stream"
-      const sign = (resolved: LanguageModel) => {
-        const request = LLM.request({ model: resolved, prompt: "Hello" })
-        return resolved.route.auth.apply({ request, method: "POST", url, body: "{}", headers: Headers.empty })
-      }
-
-      const configured = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/amazon-bedrock"), {
-          providerID: Provider.ID.amazonBedrock,
-          modelID: "anthropic.claude-sonnet-4-5-v1:0",
-          settings: {
-            profile: "ignored",
-            region: "us-east-1",
-            credentials: { accessKeyId: "AKIASTATIC", secretAccessKey: "secret" },
-          },
-        }),
-        undefined,
-        dependencies,
-      )
-      const bearer = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/amazon-bedrock"), {
-          providerID: Provider.ID.amazonBedrock,
-          modelID: "anthropic.claude-sonnet-4-5-v1:0",
-          settings: { region: "us-east-1" },
-        }),
-        Credential.Key.make({ type: "key", key: "bedrock-api-key" }),
-        dependencies,
-      )
-
-      expect((yield* sign(configured)).authorization).toContain("AWS4-HMAC-SHA256 Credential=AKIASTATIC/")
-      expect((yield* sign(bearer)).authorization).toBe("Bearer bedrock-api-key")
-      expect(calls).toBe(0)
     }),
   )
 
@@ -1248,6 +1124,54 @@ describe("ModelResolver", () => {
       )
 
       expect(resolved).toMatchObject({ id: "mistral-api-model", provider: "test-provider" })
+    }),
+  )
+
+  it.effect("prepares native and AI SDK provider models before construction", () =>
+    Effect.gen(function* () {
+      const seen: string[] = []
+      const prepareProvider: NonNullable<ModelResolver.Dependencies["prepareProvider"]> = (event) =>
+        Effect.sync(() => {
+          seen.push(event.package)
+          event.modelID = `prepared-${event.modelID}`
+          event.settings.prepared = true
+          return event
+        })
+      const native = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/openai")))
+
+      const direct = yield* ModelResolver.fromCatalogModel(
+        model("custom-provider", { modelID: "native-model" }),
+        undefined,
+        {
+          prepareProvider,
+          loadPackage: (specifier) => {
+            expect(specifier).toBe("custom-provider")
+            return Effect.succeed({
+              model: (modelID, settings) => {
+                expect(settings.prepared).toBe(true)
+                return LanguageModel.make({ id: modelID, provider: "custom", route: native.route })
+              },
+            })
+          },
+        },
+      )
+      const aisdk = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/mistral"), { modelID: "aisdk-model" }),
+        undefined,
+        {
+          prepareProvider,
+          loadAISDK: (runtime) => {
+            expect(runtime.settings?.prepared).toBe(true)
+            return Effect.succeed(
+              LanguageModel.make({ id: runtime.modelID ?? runtime.id, provider: "mistral", route: native.route }),
+            )
+          },
+        },
+      )
+
+      expect(String(direct.id)).toBe("prepared-native-model")
+      expect(String(aisdk.id)).toBe("prepared-aisdk-model")
+      expect(seen).toEqual(["custom-provider", "@ai-sdk/mistral"])
     }),
   )
 

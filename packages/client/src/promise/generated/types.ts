@@ -74,7 +74,7 @@ export type FormExternalField = { key: string; type: "external"; url: string; ti
 
 export type IntegrationCommandMethod = { id: string; type: "command"; label: string; command: Array<string> }
 
-export type IntegrationEnvMethod = { type: "env"; names: Array<string>; detect?: Array<string> }
+export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
 
 export type ConnectionCredentialInfo = { type: "credential"; id: string; label: string }
 

@@ -20,6 +20,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { define } from "@opencode-ai/plugin/promise/plugin"
 import { Money } from "@opencode-ai/schema/money"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
+import type { ProviderHooks } from "@opencode-ai/plugin/effect/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import { host as testHost } from "./host"
@@ -334,6 +335,36 @@ describe("fromPromise", () => {
 
       expect(event.system.map((part) => part.text)).toEqual(["Initial", "Promise hook"])
       expect(event.tools).toEqual({})
+    }),
+  )
+
+  it.effect("forwards provider model preparation hooks", () =>
+    Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      const hooks = yield* PluginHooks.Service
+      const host = yield* PluginHost.make(plugin)
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-provider-prepare",
+          setup: async (ctx) => {
+            await ctx.provider.hook("model.prepare", (event) => {
+              event.modelID = `promise-${event.modelID}`
+              event.settings.promise = true
+            })
+          },
+        }),
+      ).effect(host)
+      const model = Model.Info.default(Provider.ID.make("test"), Model.ID.make("model"))
+      const event: ProviderHooks["model.prepare"] = {
+        model,
+        package: "test-provider",
+        modelID: model.modelID,
+        settings: {},
+      }
+
+      yield* hooks.trigger("provider", "model.prepare", event)
+
+      expect(event).toMatchObject({ modelID: "promise-model", settings: { promise: true } })
     }),
   )
 

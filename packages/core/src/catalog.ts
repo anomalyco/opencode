@@ -8,6 +8,7 @@ import { Provider } from "./provider.js"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
 import { Integration } from "./integration.js"
+import { PluginHooks } from "./plugin/hooks.js"
 
 export type ProviderRecord = {
   provider: Provider.MutableInfo
@@ -63,14 +64,11 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const integrations = yield* Integration.Service
+    const hooks = yield* PluginHooks.Service
 
     const available = (provider: Provider.Info, integration: Integration.Info | undefined) => {
       if (provider.activation === "disabled") return false
       if (provider.activation === "enabled") return true
-      // A configured profile authenticates through the provider's own credential chain
-      // (Amazon Bedrock SigV4 resolves ~/.aws/config, SSO, and process credentials), so
-      // there is no stored or environment credential for the integration to report.
-      if (typeof provider.settings?.profile === "string") return true
       if (integration?.connections.length) return true
       return provider.integrationID === undefined && !integration
     }
@@ -157,9 +155,16 @@ const layer = Layer.effect(
 
         available: Effect.fn("Catalog.provider.available")(function* () {
           const active = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
-          return (yield* result.provider.all()).filter((provider) =>
-            available(provider, active.get(provider.integrationID ?? Integration.ID.make(provider.id))),
-          )
+          return (yield* Effect.forEach(yield* result.provider.all(), (provider) => {
+            const integration = active.get(provider.integrationID ?? Integration.ID.make(provider.id))
+            const current = available(provider, integration)
+            if (provider.activation !== "auto") return Effect.succeed({ provider, available: current })
+            return hooks
+              .trigger("provider", "available", { provider, integration, available: current })
+              .pipe(Effect.map((event) => ({ provider, available: event.available })))
+          }))
+            .filter((entry) => entry.available)
+            .map((entry) => entry.provider)
         }),
       },
 
@@ -270,4 +275,4 @@ const layer = Layer.effect(
 
 const SMALL_MODEL_RE = /\b(nano|flash|lite|mini|haiku|small|fast)\b/
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node, Integration.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node, Integration.node, PluginHooks.node] })

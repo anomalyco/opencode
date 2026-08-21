@@ -13,6 +13,8 @@ import { Integration } from "./integration.js"
 import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
 import { Npm } from "@opencode-ai/util/npm"
 import { Provider } from "./provider.js"
+import type { ProviderHooks } from "@opencode-ai/plugin/effect/provider"
+import { PluginHooks } from "./plugin/hooks.js"
 
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
@@ -104,22 +106,10 @@ export const withVariant = (
   )
 }
 
-/** Static SigV4 credentials accepted by the native Amazon Bedrock providers. */
-export interface AWSCredentials {
-  readonly region: string
-  readonly accessKeyId: string
-  readonly secretAccessKey: string
-  readonly sessionToken?: string
-}
-
 export interface Dependencies {
   readonly loadPackage?: (specifier: string) => Effect.Effect<Provider.ProviderPackage, Provider.LoadError>
   readonly loadAISDK?: (model: Info) => Effect.Effect<LanguageModel, AISDK.InitError>
-  /** Resolves AWS credentials for native Bedrock SigV4 signing. Defaults to the AWS credential chain. */
-  readonly loadAWSCredentials?: (input: {
-    readonly profile: string | undefined
-    readonly region: string
-  }) => Effect.Effect<AWSCredentials | undefined>
+  readonly prepareProvider?: (event: ProviderHooks["model.prepare"]) => Effect.Effect<ProviderHooks["model.prepare"]>
 }
 
 export const fromCatalogModel = (
@@ -152,15 +142,23 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   if (Provider.isAISDK(resolved.package) && !mapping) {
     const loadAISDK = dependencies?.loadAISDK
     if (!loadAISDK) return yield* unsupported(resolved)
-    const settings = yield* prepareProviderSettings(
-      resolved,
-      Provider.mergeOverlay(resolved.settings, {
-        ...nativeCredentialSettings(resolved.package ?? "", credential),
-        ...credential?.metadata,
-        ...configuration,
-      }) ?? {},
+    const prepared = yield* prepareProvider(
+      {
+        model: resolved,
+        package: Provider.packageName(resolved.package),
+        modelID: resolved.modelID ?? resolved.id,
+        settings:
+          Provider.mergeOverlay(resolved.settings, {
+            ...nativeCredentialSettings(resolved.package ?? "", credential),
+            ...credential?.metadata,
+            ...configuration,
+          }) ?? {},
+      },
+      dependencies,
     )
+    const settings = yield* prepareProviderSettings(resolved, prepared.settings)
     const runtime = produce(resolved, (draft) => {
+      draft.modelID = ID.make(prepared.modelID)
       draft.settings = settings
     })
     return yield* loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
@@ -169,25 +167,27 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
 
   const specifier = native
   const mapped = mapping?.settings ?? configured
-  const nativeSettings = {
-    ...(credential ? withoutNativeAuthSettings(mapped) : mapped),
-    ...nativeCredentialSettings(specifier, credential),
-    headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
-    body: Provider.mergeOverlay(mapping?.body, resolved.body),
-  }
-  const authenticated = yield* withBedrockCredentials({
-    specifier,
-    settings: nativeSettings,
-    configured,
-    load: dependencies?.loadAWSCredentials,
-  })
-  const settings = yield* prepareProviderSettings(resolved, authenticated)
+  const prepared = yield* prepareProvider(
+    {
+      model: resolved,
+      package: specifier,
+      modelID: resolved.modelID ?? resolved.id,
+      settings: {
+        ...(credential ? withoutNativeAuthSettings(mapped) : mapped),
+        ...nativeCredentialSettings(specifier, credential),
+        headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
+        body: Provider.mergeOverlay(mapping?.body, resolved.body),
+      },
+    },
+    dependencies,
+  )
+  const settings = yield* prepareProviderSettings(resolved, prepared.settings)
   const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
     Effect.mapError(() => unsupported(resolved)),
   )
   return yield* Effect.try({
     try: () => {
-      const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+      const runtime = module.model(prepared.modelID, settings)
       return LanguageModel.update(runtime, {
         provider: resolved.providerID,
         compatibility: resolved.compatibility
@@ -198,6 +198,9 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     catch: () => unsupported(resolved),
   })
 })
+
+const prepareProvider = (event: ProviderHooks["model.prepare"], dependencies: Dependencies | undefined) =>
+  dependencies?.prepareProvider?.(event) ?? Effect.succeed(event)
 
 function prepareRuntimeModel(model: Info, credential: Credential.Value | undefined) {
   if (model.settings?.apiKey !== "" && (credential?.type !== "key" || credential.metadata === undefined)) return model
@@ -267,79 +270,6 @@ const withoutNativeAuthSettings = (settings: Record<string, unknown>) => {
   return rest
 }
 
-/**
- * The native Bedrock providers sign each request with static SigV4 keys, so a configured
- * `profile` (or the ambient AWS credential chain) must be resolved into keys before the
- * model is built. Short-lived credentials refresh because the runner rebuilds the model
- * on every step; a single step outliving the credential lifetime fails at request time.
- */
-const withBedrockCredentials = (input: {
-  readonly specifier: string
-  readonly settings: Record<string, unknown>
-  /** Catalog settings before native mapping, which is where `profile` still exists. */
-  readonly configured: Record<string, unknown>
-  readonly load: Dependencies["loadAWSCredentials"]
-}) =>
-  Effect.gen(function* () {
-    if (!input.specifier.startsWith("@opencode-ai/ai/providers/amazon-bedrock")) return input.settings
-    const region =
-      typeof input.settings.region === "string" ? input.settings.region : (process.env.AWS_REGION ?? "us-east-1")
-    const settings =
-      typeof input.settings.baseURL === "string"
-        ? { ...input.settings, baseURL: input.settings.baseURL.replaceAll("${AWS_REGION}", region) }
-        : input.settings
-    // Explicitly configured static keys already select SigV4 and need no chain lookup.
-    if (settings.credentials !== undefined) return settings
-    const configured = typeof input.configured.profile === "string" ? input.configured.profile : undefined
-    // An existing bearer token stays in charge unless a profile is configured explicitly.
-    // The catalog also exposes AWS_REGION and AWS_ACCESS_KEY_ID as "key" credentials for
-    // this provider, and neither is a usable bearer token, so an explicit profile wins.
-    if (configured === undefined && typeof settings.apiKey === "string") return settings
-    const profile = configured ?? process.env.AWS_PROFILE
-    const credentials = yield* (input.load ?? loadAWSCredentials)({ profile, region })
-    // Leave credentials unset when the chain resolves nothing so the route reports missing auth.
-    if (credentials === undefined) return settings
-    // Drop the bearer token the credential produced; SigV4 and bearer are exclusive.
-    return { ...withoutNativeAuthSettings(settings), credentials, region }
-  })
-
-const loadAWSCredentials = (input: { readonly profile: string | undefined; readonly region: string }) =>
-  Effect.gen(function* () {
-    const chain = yield* awsCredentialChain(input.profile)
-    const credentials = yield* Effect.tryPromise(() => chain())
-    return {
-      region: input.region,
-      accessKeyId: credentials.accessKeyId,
-      secretAccessKey: credentials.secretAccessKey,
-      ...(credentials.sessionToken === undefined ? {} : { sessionToken: credentials.sessionToken }),
-    }
-  }).pipe(
-    Effect.catch((error) =>
-      Effect.as(Effect.logDebug(`Amazon Bedrock credential resolution failed: ${error}`), undefined),
-    ),
-  )
-
-const awsCredentialChains = new Map<
-  string,
-  () => Promise<{ readonly accessKeyId: string; readonly secretAccessKey: string; readonly sessionToken?: string }>
->()
-
-/**
- * The AWS chain memoizes credentials inside the provider it returns and refreshes them once
- * they expire, so build it once per profile instead of re-resolving SSO or STS on every step.
- */
-const awsCredentialChain = (profile: string | undefined) =>
-  Effect.gen(function* () {
-    const key = profile ?? ""
-    const cached = awsCredentialChains.get(key)
-    if (cached !== undefined) return cached
-    const { fromNodeProviderChain } = yield* Effect.tryPromise(() => import("@aws-sdk/credential-providers"))
-    // The chain covers env vars, ~/.aws/credentials, SSO, process creds, and instance roles.
-    const chain = fromNodeProviderChain(profile === undefined ? {} : { profile })
-    awsCredentialChains.set(key, chain)
-    return chain
-  })
-
 const unsupported = (model: Info) =>
   new UnsupportedPackageError({
     providerID: model.providerID,
@@ -364,6 +294,7 @@ export const layer = Layer.effect(
     const integrations = yield* Integration.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
+    const hooks = yield* PluginHooks.Service
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
       const provider = yield* catalog.provider.get(selected.providerID)
       const connection = yield* integrations.connection.active(
@@ -374,6 +305,7 @@ export const layer = Layer.effect(
       const model = yield* fromCatalogModel(runtimeInfo, credential, {
         loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
         loadAISDK: (model) => aisdk.model(model),
+        prepareProvider: (event) => hooks.trigger("provider", "model.prepare", event),
       })
       const runtime =
         provider?.activation === "enabled" &&
@@ -447,5 +379,5 @@ function usesAPIKeyAuth(packageName: string | undefined) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Catalog.node, Integration.node, Npm.node, AISDK.node],
+  deps: [Catalog.node, Integration.node, Npm.node, AISDK.node, PluginHooks.node],
 })

@@ -337,23 +337,12 @@ const layer = Layer.effect(
           label: credential.label,
         }))
         .toReversed()
-      const methods = (entry?.methods ?? []).filter((method) => method.type === "env")
-      // Credential-bearing variables come first so a usable key wins the active connection.
-      const env = [...methods.flatMap((method) => method.names), ...methods.flatMap((method) => method.detect ?? [])]
-        .filter((name) => process.env[name])
+      const env = (entry?.methods ?? [])
+        .filter((method) => method.type === "env")
+        .flatMap((method) => method.names.filter((name) => process.env[name]))
         .map((name) => ({ type: "env" as const, name }))
       return [...credentials, ...env]
     }
-
-    /**
-     * Detection-only variables are not secrets, so they resolve to no credential and the
-     * provider authenticates itself. Environment variable names identify one integration,
-     * so the lookup does not need the connection's integration.
-     */
-    const environmentCredential = (name: string) =>
-      Array.from(state.get().integrations.values()).some((entry) =>
-        entry.methods.some((method) => method.type === "env" && method.names.includes(name)),
-      )
 
     const project = (entry: Entry, connections: IntegrationConnection.Info[]): Info =>
       Info.make({
@@ -682,7 +671,6 @@ const layer = Layer.effect(
         }),
         resolve: Effect.fn("Integration.connection.resolve")(function* (connection) {
           if (connection.type === "env") {
-            if (!environmentCredential(connection.name)) return undefined
             const key = process.env[connection.name]
             return key ? Credential.Key.make({ type: "key", key }) : undefined
           }
