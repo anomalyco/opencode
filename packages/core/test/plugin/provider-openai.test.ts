@@ -253,6 +253,16 @@ describe("OpenAIPlugin", () => {
       }).pipe(
         Effect.provide(SessionModelRequest.layer),
         Effect.provideService(SessionModelTransport.Service, transport),
+      )
+
+      const prepared = yield* program.pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({ env: { OPENCODE_EXPERIMENTAL_DEPLOYMENT_RESPONSES_WEBSOCKET: "true" } }),
+          ),
+        ),
+      )
+      const otherProvider = yield* program.pipe(
         Effect.provide(
           ConfigProvider.layer(
             ConfigProvider.fromEnv({ env: { OPENCODE_EXPERIMENTAL_OPENAI_RESPONSES_WEBSOCKET: "true" } }),
@@ -260,10 +270,9 @@ describe("OpenAIPlugin", () => {
         ),
       )
 
-      const prepared = yield* program
-
       expect(prepared.options.webSocket).toBe(executor)
       expect(prepared.options.http).toBeUndefined()
+      expect(otherProvider.options.webSocket).toBeUndefined()
     }),
   )
 })
