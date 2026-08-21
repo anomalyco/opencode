@@ -197,19 +197,28 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, and drops empty / `[DONE]` keep-alive events so the protocol event
- * schema sees one JSON string per element. The SSE channel emits a
+ * decoder, optionally filters named events, and drops empty / `[DONE]`
+ * keep-alive events so the protocol event schema sees one JSON string per
+ * element. The SSE channel emits a
  * `Retry` control event on its error channel; we drop it here (we don't
  * implement client-driven retries). Decoder failures become provider output
  * errors so the public error channel stays `AIError`.
  */
-export const sseFraming = (bytes: Stream.Stream<Uint8Array, AIError>): Stream.Stream<string, AIError> =>
+export const sseFraming = (
+  bytes: Stream.Stream<Uint8Array, AIError>,
+  events?: ReadonlySet<string>,
+): Stream.Stream<string, AIError> =>
   bytes.pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode()),
     Stream.catchTag("Retry", () => Stream.empty),
     Stream.catchTag("SseError", (error) => Stream.fail(eventError("sse", error.message))),
-    Stream.filter((event) => event.data.length > 0 && event.data !== "[DONE]"),
+    Stream.filter(
+      (event) =>
+        (events === undefined || events.has(event.event)) &&
+        event.data.length > 0 &&
+        (event.data !== "[DONE]" || (events !== undefined && event.event !== "message")),
+    ),
     Stream.map((event) => event.data),
   )
 

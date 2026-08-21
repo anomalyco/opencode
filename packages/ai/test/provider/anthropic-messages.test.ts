@@ -8,7 +8,7 @@ import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
 import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
-import { sseEvents } from "../lib/sse.js"
+import { sseEvents, sseNamedEvent, sseRaw } from "../lib/sse.js"
 
 const model = AnthropicMessages.route
   .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
@@ -636,6 +636,59 @@ describe("Anthropic Messages route", () => {
         _tag: "InvalidProviderOutput",
         classification: "incomplete-stream",
         message: "The provider response ended unexpectedly.",
+      })
+    }),
+  )
+
+  it.effect("ignores unknown named SSE events", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseRaw(
+              sseNamedEvent("message_start", {
+                type: "message_start",
+                message: { usage: { input_tokens: 5 } },
+              }),
+              sseNamedEvent("proxy.stats", "not json"),
+              sseNamedEvent("content_block_start", {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "text", text: "" },
+              }),
+              sseNamedEvent("content_block_delta", {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "text_delta", text: "Hello" },
+              }),
+              sseNamedEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+              sseNamedEvent("message_delta", {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn" },
+                usage: { output_tokens: 1 },
+              }),
+              sseNamedEvent("message_stop", { type: "message_stop" }),
+              sseNamedEvent("proxy.done", "still not json"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([{ type: "text", text: "Hello" }])
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("rejects malformed recognized SSE events", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseRaw(sseNamedEvent("message_start", "[DONE]")))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
   )

@@ -33,6 +33,18 @@ export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 export const DEFAULT_MAX_TOKENS = 32_000
 
+const SSE_EVENTS = new Set([
+  "message",
+  "message_start",
+  "message_delta",
+  "message_stop",
+  "content_block_start",
+  "content_block_delta",
+  "content_block_stop",
+  "error",
+])
+export const framing = Framing.sseEvents(SSE_EVENTS)
+
 export type ThinkingInput =
   | {
       readonly type: "adaptive"
@@ -1039,7 +1051,7 @@ export const route = Route.make({
   protocol,
   endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
   auth: Auth.none,
-  framing: Framing.sse,
+  framing,
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 
