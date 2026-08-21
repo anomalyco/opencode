@@ -936,7 +936,9 @@ describe("ShellTool", () => {
                 yield* Effect.promise(() => Bun.sleep(1))
                 return yield* backgroundWhenReady(remaining - 1)
               })
-            expect(yield* backgroundWhenReady()).toMatchObject([{ id: "call-background-signal", type: "shell" }])
+            const backgrounded = yield* backgroundWhenReady()
+            expect(backgrounded).toMatchObject([{ type: "shell" }])
+            expect(backgrounded[0].id).toStartWith("job_")
             const settled = yield* Fiber.join(waiting)
             const shellID = typeof settled.metadata?.shellID === "string" ? settled.metadata.shellID : undefined
             expect(settled.metadata).toMatchObject({ truncated: false })
@@ -957,6 +959,38 @@ describe("ShellTool", () => {
             expect((yield* shell.get(id)).status).toBe("running")
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
             yield* shell.remove(id)
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  it.live("does not collide with a running background job sharing the same tool call id", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const background = yield* executeTool(
+              registry,
+              call({ command: idleCommand, background: true }, "tool_0"),
+            )
+            const shellID = typeof background.metadata?.shellID === "string" ? background.metadata.shellID : undefined
+            expect(shellID).toStartWith("sh_")
+
+            const foreground = yield* executeTool(
+              registry,
+              call({ command: `echo "foreground-output"` }, "tool_0"),
+            )
+            expect(foreground.output).toMatchObject({ output: "foreground-output\n" })
+
+            if (shellID) {
+              const id = ShellSchema.ID.make(shellID)
+              yield* shell.remove(id)
+            }
           }),
         )
       },
