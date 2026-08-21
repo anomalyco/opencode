@@ -106,6 +106,7 @@ it.live("chunkTimeout ignores SSE comment heartbeats", () =>
             } catch (error) {
               return error
             }
+            return undefined
           })
           expect(error).toBeInstanceOf(ProviderError.ResponseStreamError)
         }),
