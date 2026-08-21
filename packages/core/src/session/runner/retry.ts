@@ -14,7 +14,20 @@ export class RetryableFailure extends Data.TaggedError("SessionRunner.RetryableF
   readonly step: number
 }> {}
 
+function providerRetryOverride(error: AIError) {
+  if (!("http" in error.reason)) return undefined
+  const headers = error.reason.http?.response?.headers
+  if (!headers) return undefined
+  const header = Object.entries(headers).find((entry) => entry[0].toLowerCase() === "x-should-retry")
+  const value = header?.[1].trim().toLowerCase()
+  if (value === "true") return true
+  if (value === "false") return false
+  return undefined
+}
+
 export function isRetryable(error: AIError) {
+  const override = providerRetryOverride(error)
+  if (override !== undefined) return override
   switch (error.reason._tag) {
     case "RateLimit":
     case "ProviderInternal":
