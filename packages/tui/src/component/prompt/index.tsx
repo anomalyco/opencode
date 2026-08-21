@@ -1232,7 +1232,6 @@ export function Prompt(props: PromptProps) {
     } else if (slashHead && isCommand) {
       move.startSubmit()
       const model = { providerID: selection.providerID, id: selection.modelID, variant }
-      const cancelCommit = local.model.trackSessionCommit(sessionID, model)
 
       void client.api.session
         .command({
@@ -1247,7 +1246,6 @@ export function Prompt(props: PromptProps) {
           delivery,
         })
         .catch((error) => {
-          cancelCommit()
           toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
         })
     } else if (isSkill) {
@@ -1271,11 +1269,7 @@ export function Prompt(props: PromptProps) {
         (session.model.variant ?? "default") !== (variant ?? "default")
       ) {
         const model = { providerID: selection.providerID, id: selection.modelID, variant }
-        const cancelCommit = local.model.trackSessionCommit(sessionID, model)
-        await client.api.session.switchModel({ sessionID, model }).catch((error) => {
-          cancelCommit()
-          throw error
-        })
+        await client.api.session.switchModel({ sessionID, model })
       }
       if (session?.revert) {
         const error = await client.api.session.revert.commit({ sessionID }).then(
