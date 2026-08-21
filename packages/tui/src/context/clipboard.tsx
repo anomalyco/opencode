@@ -17,7 +17,10 @@ export function ClipboardProvider(props: {
   const clipboardWithSelection =
     props.value ??
     (props.linuxClipboardSelection
-      ? { read, write: (text: string) => write(text, props.linuxClipboardSelection) }
+      ? {
+          read: () => read(props.linuxClipboardSelection === "primary" ? "primary" : "clipboard"),
+          write: (text: string) => write(text, props.linuxClipboardSelection),
+        }
       : clipboard)
   return <ClipboardContext.Provider value={clipboardWithSelection}>{props.children}</ClipboardContext.Provider>
 }

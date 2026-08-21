@@ -3,6 +3,7 @@ export * as TuiConfig from "."
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { Schema } from "effect"
 import { createContext, type JSX, useContext } from "solid-js"
+import { type ClipboardSelection } from "../clipboard"
 import { TuiKeybind } from "./keybind"
 
 export const AttentionSoundName = Schema.Literals([
@@ -40,7 +41,8 @@ export const Cursor = Schema.Struct({
 }).annotate({ description: "Terminal cursor settings" })
 
 export const LinuxClipboardSelection = Schema.Literals(["clipboard", "primary", "both"]).annotate({
-  description: "Linux clipboard selection: 'clipboard' (Ctrl+C), 'primary' (middle-click), or 'both' (default: 'both')",
+  description:
+    "Linux only. The buffer the TUI copy and paste use: 'clipboard' (Ctrl+V), 'primary' (middle-click), or 'both'. Ignored on other platforms.",
 })
 
 export const AttentionSounds = Schema.Record(AttentionSoundName, Schema.optionalKey(Schema.String))
@@ -78,7 +80,7 @@ export const Info = Schema.Struct({
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
   linux_clipboard_selection: Schema.optional(LinuxClipboardSelection).annotate({
     description:
-      "Linux clipboard selection: 'clipboard' (Ctrl+C), 'primary' (middle-click), or 'both' (default: 'both')",
+      "Linux only. The buffer the TUI copy and paste use: 'clipboard' (Ctrl+V), 'primary' (middle-click), or 'both'. Default: 'both'. Ignored on other platforms.",
   }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
@@ -102,7 +104,7 @@ export type Resolved = Omit<
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
-  linux_clipboard_selection: "clipboard" | "primary" | "both"
+  linux_clipboard_selection: ClipboardSelection
 }
 
 export const ResolveOptions = Schema.Struct({

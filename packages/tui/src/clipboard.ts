@@ -27,7 +27,12 @@ function writeOsc52(text: string) {
   process.stdout.write(process.env.TMUX ? sequence + passthrough : process.env.STY ? passthrough : sequence)
 }
 
-export async function read() {
+export type ClipboardSelection = "clipboard" | "primary" | "both"
+export type ClipboardBuffer = Exclude<ClipboardSelection, "both">
+
+export async function read(selection: ClipboardBuffer = "clipboard") {
+  const primary = selection === "primary"
+
   if (platform() === "darwin") {
     const file = path.join(tmpdir(), "opencode-clipboard.png")
     try {
@@ -61,26 +66,38 @@ export async function read() {
   }
 
   if (platform() === "linux") {
-    const wayland = await command("wl-paste", ["-t", "image/png"]).catch(() => Buffer.alloc(0))
-    if (wayland.length) return { data: wayland.toString("base64"), mime: "image/png" }
-    const x11 = await command("xclip", ["-selection", "clipboard", "-t", "image/png", "-o"]).catch(() =>
-      Buffer.alloc(0),
+    const waylandImage = await command("wl-paste", primary ? ["-p", "-t", "image/png"] : ["-t", "image/png"]).catch(
+      () => Buffer.alloc(0),
     )
-    if (x11.length) return { data: x11.toString("base64"), mime: "image/png" }
+    if (waylandImage.length) return { data: waylandImage.toString("base64"), mime: "image/png" }
+    const x11Image = await command("xclip", [
+      "-selection",
+      primary ? "primary" : "clipboard",
+      "-t",
+      "image/png",
+      "-o",
+    ]).catch(() => Buffer.alloc(0))
+    if (x11Image.length) return { data: x11Image.toString("base64"), mime: "image/png" }
+    if (primary) {
+      const waylandText = await command("wl-paste", ["-p"]).catch(() => Buffer.alloc(0))
+      if (waylandText.length) return { data: waylandText.toString("utf8"), mime: "text/plain" }
+      const x11Text = await command("xclip", ["-selection", "primary", "-o"]).catch(() => Buffer.alloc(0))
+      if (x11Text.length) return { data: x11Text.toString("utf8"), mime: "text/plain" }
+    }
   }
 
+  // clipboardy only supports the clipboard; for "primary" this reads back the
+  // buffer the clipboardy fallback in write() targets
   const { default: clipboardy } = await import("clipboardy")
   const text = await clipboardy.read().catch(() => undefined)
   if (text) return { data: text, mime: "text/plain" }
 }
 
-export type ClipboardSelection = "clipboard" | "primary" | "both"
-
 export function copyCommand(
   os: NodeJS.Platform,
   wayland: boolean,
   has: (name: string) => boolean,
-  selection: ClipboardSelection = "clipboard",
+  selection: ClipboardBuffer = "clipboard",
 ): string[] | undefined {
   if (os === "darwin" && has("osascript")) return ["osascript"]
   if (os === "linux" && wayland && has("wl-copy"))
@@ -113,6 +130,10 @@ function getCopyMethod() {
     const clipboardCmd = copyCommand(os, wayland, has, "clipboard")
     const primaryCmd = copyCommand(os, wayland, has, "primary")
     const native = clipboardCmd
+    // platforms without a primary buffer resolve both selections to the same
+    // command, so it must not be spawned twice for "both"
+    const distinctPrimary =
+      Boolean(primaryCmd && clipboardCmd) && JSON.stringify(primaryCmd) !== JSON.stringify(clipboardCmd)
 
     if (native?.[0] === "osascript") {
       return async (text: string, selection?: ClipboardSelection) => {
@@ -122,7 +143,7 @@ function getCopyMethod() {
     }
     if (native) {
       return async (text: string, selection?: ClipboardSelection) => {
-        if (selection === "both" && primaryCmd) {
+        if (selection === "both" && distinctPrimary && primaryCmd) {
           await Promise.allSettled([
             command(native[0], native.slice(1), text),
             command(primaryCmd[0], primaryCmd.slice(1), text),
@@ -136,7 +157,7 @@ function getCopyMethod() {
     }
     return async (text: string, selection?: ClipboardSelection) => {
       const { default: clipboardy } = await import("clipboardy")
-      if (selection === "primary") return
+      // clipboardy only supports the clipboard; "primary" falls back to it
       await clipboardy.write(text).catch(() => undefined)
     }
   })())
