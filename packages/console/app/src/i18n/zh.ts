@@ -244,7 +244,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情况除外",
 
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
-  "go.banner.text": "Hy3 限时享受 8 倍使用额度",
+  "go.banner.text": "Ox Alpha Free 限时加入 Go",
   "go.meta.description": "Go 首月 $5，之后 $10/月，提供充裕的使用限额，并可可靠访问领先的编程模型。",
   "go.hero.title": "人人可用的低成本编程模型",
   "go.hero.body":
@@ -260,6 +260,8 @@ export const dict = {
   "go.graph.freePill": "Big Pickle 和免费模型",
   "go.graph.go": "Go",
   "go.graph.label": "每 5 小时请求数",
+  "go.graph.limitedRegions": "仅限部分地区",
+  "go.graph.limitedTime": "限时",
   "go.graph.usageLimits": "使用限制",
   "go.graph.aria": "每 5 小时请求数: {{free}} vs {{go}}",
 
@@ -650,6 +652,7 @@ export const dict = {
     "在你的 opencode 配置中选择「OpenCode Go」作为提供商，即可使用 Go 模型。",
   "workspace.lite.providers.title": "提供商",
   "workspace.lite.providers.description": "控制用于路由的提供商。",
+  "workspace.lite.providers.allowTraining": "允许使用请求数据进行训练的模型",
   "workspace.lite.providers.useChina": "启用部署在中国的模型",
   "workspace.lite.black.message": "您当前已订阅 OpenCode Black 或在候补名单中。如需切换到 Go，请先取消订阅。",
   "workspace.lite.other.message": "此工作区中的另一位成员已经订阅了 OpenCode Go。每个工作区只有一名成员可以订阅。",

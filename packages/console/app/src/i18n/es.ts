@@ -257,7 +257,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "siguientes excepciones",
 
   "go.title": "OpenCode Go | Modelos de programación de bajo coste para todos",
-  "go.banner.text": "Hy3 tiene límites de uso 8x mayores por tiempo limitado",
+  "go.banner.text": "Ox Alpha Free está disponible en Go por tiempo limitado",
   "go.meta.description":
     "Go comienza en $5 el primer mes, luego 10 $/mes, con límites de uso generosos y acceso fiable a modelos de programación líderes.",
   "go.hero.title": "Modelos de programación de bajo coste para todos",
@@ -275,6 +275,8 @@ export const dict = {
   "go.graph.freePill": "Big Pickle y modelos gratuitos",
   "go.graph.go": "Go",
   "go.graph.label": "Solicitudes por 5 horas",
+  "go.graph.limitedRegions": "regiones limitadas",
+  "go.graph.limitedTime": "tiempo limitado",
   "go.graph.usageLimits": "Límites de uso",
   "go.graph.aria": "Solicitudes por 5h: {{free}} vs {{go}}",
 
@@ -682,6 +684,7 @@ export const dict = {
     'Selecciona "OpenCode Go" como proveedor en tu configuración de opencode para usar los modelos Go.',
   "workspace.lite.providers.title": "Proveedores",
   "workspace.lite.providers.description": "Controla qué proveedores se usan para el enrutamiento.",
+  "workspace.lite.providers.allowTraining": "Permitir modelos que se entrenan con los datos de las solicitudes",
   "workspace.lite.providers.useChina": "Activar modelos alojados en China",
   "workspace.lite.black.message":
     "Actualmente estás suscrito a OpenCode Black o estás en la lista de espera. Por favor, cancela la suscripción primero si deseas cambiar a Go.",

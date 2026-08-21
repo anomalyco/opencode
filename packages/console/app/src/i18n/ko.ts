@@ -250,7 +250,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "다음 예외",
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
-  "go.banner.text": "Hy3 사용 한도가 한시적으로 8배 확대됩니다",
+  "go.banner.text": "Ox Alpha Free가 한정된 기간 동안 Go에서 제공됩니다",
   "go.meta.description":
     "Go는 첫 달 $5, 이후 $10/월로 시작하며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
@@ -268,6 +268,8 @@ export const dict = {
   "go.graph.freePill": "Big Pickle 및 무료 모델",
   "go.graph.go": "Go",
   "go.graph.label": "5시간당 요청 수",
+  "go.graph.limitedRegions": "일부 지역에서만 제공",
+  "go.graph.limitedTime": "한정된 기간",
   "go.graph.usageLimits": "사용 한도",
   "go.graph.aria": "5시간당 요청 수: {{free}} 대 {{go}}",
 
@@ -670,6 +672,7 @@ export const dict = {
     'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
   "workspace.lite.providers.title": "공급자",
   "workspace.lite.providers.description": "라우팅에 사용할 공급자를 제어합니다.",
+  "workspace.lite.providers.allowTraining": "요청 데이터를 학습에 사용하는 모델 허용",
   "workspace.lite.providers.useChina": "중국에서 호스팅되는 모델 활성화",
   "workspace.lite.black.message":
     "현재 OpenCode Black을 구독 중이거나 대기 명단에 등록되어 있습니다. Go로 전환하려면 먼저 구독을 취소해 주세요.",
