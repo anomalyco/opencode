@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect"
+import { create } from "@opencode-ai/schema/identifier"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
@@ -212,7 +213,6 @@ type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 interface ParserState {
   readonly finishReason?: string
   readonly hasToolCalls: boolean
-  readonly nextToolCallId: number
   readonly promptFeedback?: GeminiPromptFeedback
   readonly usage?: Usage
   readonly lifecycle: Lifecycle.State
@@ -577,7 +577,6 @@ const step = (state: ParserState, event: GeminiEvent) => {
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls
   let lifecycle = nextState.lifecycle
-  let nextToolCallId = nextState.nextToolCallId
   let reasoningSignature = nextState.reasoningSignature
 
   for (const part of candidate.content.parts) {
@@ -606,7 +605,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
 
     if ("functionCall" in part) {
       const input = part.functionCall.args === undefined ? {} : part.functionCall.args
-      const id = `tool_${nextToolCallId++}`
+      // Gemini 2.0+ and Vertex supply a unique function call ID on the part; when omitted (e.g. Gemini 1.5),
+      // generate a globally unique ID rather than a per-request counter to prevent cross-request collisions in downstream registries.
+      const id = part.functionCall.id ?? `tool_${create(false)}`
       const metadata = {
         ...(part.functionCall.id === undefined ? {} : { functionCallId: part.functionCall.id }),
         ...(part.thoughtSignature === undefined ? {} : { thoughtSignature: part.thoughtSignature }),
@@ -635,7 +636,6 @@ const step = (state: ParserState, event: GeminiEvent) => {
       ...nextState,
       hasToolCalls,
       lifecycle,
-      nextToolCallId,
       reasoningSignature,
       finishReason: candidate.finishReason ?? nextState.finishReason,
     },
@@ -658,7 +658,7 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(GeminiEvent),
-    initial: () => ({ hasToolCalls: false, nextToolCallId: 0, lifecycle: Lifecycle.initial() }),
+    initial: () => ({ hasToolCalls: false, lifecycle: Lifecycle.initial() }),
     step,
     onHalt: finish,
   },
