@@ -58,9 +58,7 @@ const layer = Layer.effect(
         const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
         return row ? fromRow(row) : undefined
       }),
-      context: Effect.fn("SessionStore.context")(function* (sessionID) {
-        return yield* SessionHistory.load(db, sessionID)
-      }),
+      context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID)),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
         const row = yield* db
           .select()

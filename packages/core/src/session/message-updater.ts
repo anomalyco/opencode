@@ -61,8 +61,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
     Match.discriminatorsExhaustive("type")({
       "session.created": () => Effect.void,
       "session.usage.recorded": () => Effect.void,
-      "session.agent.selected": (event) => {
-        return Effect.gen(function* () {
+      "session.agent.selected": (event) =>
+        Effect.gen(function* () {
           const previous = event.data.previous ?? (yield* adapter.getAgent())
           yield* adapter.appendMessage(
             SessionMessage.AgentSelected.make({
@@ -74,10 +74,9 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               time: { created },
             }),
           )
-        })
-      },
-      "session.model.selected": (event) => {
-        return Effect.gen(function* () {
+        }),
+      "session.model.selected": (event) =>
+        Effect.gen(function* () {
           const previous = event.data.previous ?? (yield* adapter.getModel())
           yield* adapter.appendMessage(
             SessionMessage.ModelSelected.make({
@@ -89,10 +88,9 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               time: { created },
             }),
           )
-        })
-      },
-      "session.moved": (event) => {
-        return Effect.gen(function* () {
+        }),
+      "session.moved": (event) =>
+        Effect.gen(function* () {
           yield* adapter.appendMessage(
             SessionMessage.LocationSwitched.make({
               id: SessionMessage.ID.fromEvent(event.id),
@@ -105,8 +103,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               time: { created },
             }),
           )
-        })
-      },
+        }),
       "session.renamed": () => Effect.void,
       "session.deleted": () => Effect.void,
       "session.forked": () => Effect.void,
@@ -169,8 +166,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           }),
         )
       },
-      "session.shell.ended": (event) => {
-        return Effect.gen(function* () {
+      "session.shell.ended": (event) =>
+        Effect.gen(function* () {
           const currentShell = yield* adapter.getShell(event.data.shell.id)
           if (currentShell) {
             yield* adapter.updateShell(
@@ -182,10 +179,9 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               }),
             )
           }
-        })
-      },
-      "session.step.started": (event) => {
-        return Effect.gen(function* () {
+        }),
+      "session.step.started": (event) =>
+        Effect.gen(function* () {
           const existing = yield* adapter.getAssistant(event.data.assistantMessageID)
           if (existing) {
             yield* adapter.updateAssistant(
@@ -224,8 +220,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
             }),
           )
-        })
-      },
+        }),
       "session.step.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.time.completed = created
@@ -399,8 +394,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             time: { created },
           }),
         ),
-      "session.compaction.ended": (event) => {
-        return Effect.gen(function* () {
+      "session.compaction.ended": (event) =>
+        Effect.gen(function* () {
           const current = yield* adapter.getCompaction()
           if (current?.status === "running") {
             yield* adapter.updateCompaction({
@@ -424,8 +419,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               time: { created },
             }),
           )
-        })
-      },
+        }),
       "session.compaction.failed": (event) =>
         Effect.gen(function* () {
           const current = yield* adapter.getCompaction()

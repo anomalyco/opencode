@@ -29,26 +29,6 @@ export const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService
     .pipe(Effect.orDie)
 })
 
-const messageRows = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  compaction: { readonly seq: number } | undefined,
-) {
-  const rows = yield* db
-    .select()
-    .from(SessionMessageTable)
-    .where(
-      and(
-        eq(SessionMessageTable.session_id, sessionID),
-        compaction ? gte(SessionMessageTable.seq, compaction.seq) : undefined,
-      ),
-    )
-    .orderBy(asc(SessionMessageTable.seq))
-    .all()
-    .pipe(Effect.orDie)
-  return rows
-})
-
 const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
   decode({ ...row.data, id: row.id, type: row.type }).pipe(
     Effect.mapError(
@@ -61,7 +41,19 @@ const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
   )
 
 const messageEntries = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID))
+  const compaction = yield* latestCompaction(db, sessionID)
+  const rows = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, sessionID),
+        compaction ? gte(SessionMessageTable.seq, compaction.seq) : undefined,
+      ),
+    )
+    .orderBy(asc(SessionMessageTable.seq))
+    .all()
+    .pipe(Effect.orDie)
   return yield* Effect.forEach(rows, (row) =>
     decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
   )
