@@ -262,4 +262,30 @@ describe("instance HttpApi", () => {
       )
     }),
   )
+
+  it.live("rejects instance requests for missing project directories", () =>
+    Effect.gen(function* () {
+      const parent = yield* tmpdirScoped({ git: true })
+      const dir = `${parent}/deleted-project`
+      const response = yield* HttpClientRequest.get(InstancePaths.path).pipe(directoryHeader(dir), HttpClient.execute)
+
+      expect(response.status).toBe(404)
+      expect(yield* response.json).toEqual({
+        name: "NotFoundError",
+        data: { message: `Project directory not found: ${dir}` },
+      })
+
+      const prompt = yield* HttpClientRequest.post(SessionPaths.promptAsync.replace(":sessionID", "ses_missing")).pipe(
+        directoryHeader(dir),
+        HttpClientRequest.bodyJson({ agent: "build", parts: [{ type: "text", text: "hello" }] }),
+        Effect.flatMap(HttpClient.execute),
+      )
+
+      expect(prompt.status).toBe(404)
+      expect(yield* prompt.json).toEqual({
+        name: "NotFoundError",
+        data: { message: `Project directory not found: ${dir}` },
+      })
+    }),
+  )
 })
