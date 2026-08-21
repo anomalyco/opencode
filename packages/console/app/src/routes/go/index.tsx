@@ -80,7 +80,7 @@ function LimitsGraph(props: { href: string }) {
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
     { id: "hy3", name: "Hy3", req: 34400, baseReq: 4300, d: "320ms" },
     { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", req: 45300, edge: true, d: "360ms" },
-    { id: "x-preview-f-free", name: "Ox Alpha Free", req: Infinity, infinite: true, edge: true, d: "400ms" },
+    { id: "ox-alpha-free", name: "Ox Alpha Free", req: Infinity, infinite: true, edge: true, d: "400ms" },
   ]
 
   const w = 1040
