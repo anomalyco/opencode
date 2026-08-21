@@ -177,7 +177,7 @@ const layer = Layer.effect(
       return false
     })
 
-    function denied(input: AssertInput, rules: Permission.Ruleset) {
+    function denied(input: Pick<Request, "action" | "resources">, rules: Permission.Ruleset) {
       return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
     }
 
@@ -301,12 +301,11 @@ const layer = Layer.effect(
 
           const rememberedRules = yield* savedRules()
           for (const [id, item] of pending) {
-            const input = { ...item.request }
             const rules = yield* configured(item.request.sessionID, item.agent).pipe(
               Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)),
             )
             if (!rules) continue
-            if (denied(input, rules)) continue
+            if (denied(item.request, rules)) continue
             const effective = [...rules, ...rememberedRules]
             if (
               !item.request.resources.every(

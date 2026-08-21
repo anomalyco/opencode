@@ -51,7 +51,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Cr
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const { db } = yield* Database.Service
+    const db = (yield* Database.Service).db
     const decode = Schema.decodeUnknownSync(Value)
     const stored = (row: typeof CredentialTable.$inferSelect) => {
       if (!row.integration_id) return

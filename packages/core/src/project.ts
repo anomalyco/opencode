@@ -185,7 +185,7 @@ const layer = Layer.effect(
       return `${host.toLowerCase()}/${pathname}`
     }
 
-    const root = Effect.fnUntraced(function* (repo: Git.Repository) {
+    const rootCommit = Effect.fnUntraced(function* (repo: Git.Repository) {
       const root = (yield* git.history.rootCommits(repo))[0]
       return root ? ID.make(root) : undefined
     })
@@ -235,7 +235,7 @@ const layer = Layer.effect(
       const repo = yield* git.repo.discover(input)
       if (repo) {
         const previous = yield* cached(repo.commonDirectory)
-        const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
+        const id = (yield* remote(repo)) ?? previous ?? (yield* rootCommit(repo))
         const canonical =
           repo.gitDirectory === repo.commonDirectory
             ? repo.worktree
