@@ -20,6 +20,11 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
     let write = Promise.resolve()
 
     Flock.withLock(lock, () => readJson<Record<string, unknown>>(file))
+      .catch((error: { code?: string }) => {
+        // Fresh installs have no KV file yet; start from empty state.
+        if (error.code === "ENOENT") return {}
+        throw error
+      })
       .then((x) => {
         setStore(x)
       })
