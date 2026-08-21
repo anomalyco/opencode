@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { NodePath } from "@effect/platform-node"
+import * as NodePath from "@effect/platform-node/NodePath"
 import { Effect } from "effect"
 
 import { isNushell, mergeShellEnv, parseShellEnv, resolveUserShell } from "./shell-env"
