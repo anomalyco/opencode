@@ -236,6 +236,7 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.menu.window": "Window",
   "desktop.menu.help": "Help",
   "desktop.menu.checkForUpdates": "Check for Updates...",
+  "desktop.menu.installCli": "Install CLI...",
   "desktop.menu.settings": "Settings",
   "desktop.menu.reloadWebview": "Reload Webview",
   "desktop.menu.restart": "Restart",
@@ -282,6 +283,11 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.updater.dialog.ready.title": "Update Ready",
   "desktop.updater.dialog.restart": "Restart",
   "desktop.updater.dialog.later": "Later",
+
+  "desktop.cli.installed.title": "CLI Installed",
+  "desktop.cli.installed.message": "CLI installed to {{path}}\n\nRestart your terminal to use the 'opencode2' command.",
+  "desktop.cli.failed.title": "Installation Failed",
+  "desktop.cli.failed.message": "Failed to install CLI: {{error}}",
 
   "desktop.recovery.action.relaunch": "Relaunch",
   "desktop.recovery.action.exportLogs": "Export Logs",

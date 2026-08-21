@@ -1,9 +1,10 @@
 export * as DesktopCli from "./desktop-cli"
 
-import { execFile } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
 import { promisify } from "node:util"
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
+import installer from "../../../../../install?raw"
 import { DesktopPaths } from "../paths"
 import { parseCliVersion } from "./cli-version"
 
@@ -18,6 +19,7 @@ export interface Resolved {
 
 export interface Interface {
   readonly resolve: Effect.Effect<Resolved>
+  readonly install: Effect.Effect<string, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/DesktopCli") {}
@@ -25,10 +27,19 @@ export class Service extends Context.Service<Service, Interface>()("opencode/des
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const path = yield* Path.Path
     const resolve = yield* Effect.cached(
       make().pipe(Effect.provide(yield* Effect.context<FileSystem.FileSystem | Path.Path>()), Effect.orDie),
     )
-    return Service.of({ resolve })
+    const install = Effect.gen(function* () {
+      if (process.platform !== "darwin") return yield* Effect.fail(new Error("CLI installation requires macOS"))
+      const cli = yield* resolve
+      if (!cli.binary) return yield* Effect.fail(new Error("Bundled CLI executable is unavailable"))
+      const home = app.getPath("home")
+      yield* runInstaller(cli.binary, home)
+      return path.join(home, ".opencode", "bin", "opencode2")
+    })
+    return Service.of({ resolve, install })
   }),
 )
 
@@ -132,6 +143,27 @@ const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[
   const stderr = result.stderr.trim()
   yield* Effect.logInfo("v2 CLI command completed", { args, stdout, stderr })
   return stdout
+})
+
+const runInstaller = Effect.fn("DesktopCli.installForUser")(function* (binary: string, home: string) {
+  yield* Effect.tryPromise({
+    try: () =>
+      new Promise<void>((resolve, reject) => {
+        const child = spawn("/bin/bash", ["-s", "--", "--binary", binary], {
+          env: { ...process.env, HOME: home },
+          stdio: ["pipe", "ignore", "pipe"],
+        })
+        let stderr = ""
+        child.stderr.on("data", (chunk) => (stderr += chunk))
+        child.on("error", reject)
+        child.on("close", (code) => {
+          if (code === 0) return resolve()
+          reject(new Error(stderr.trim() || `CLI installer exited with code ${code}`))
+        })
+        child.stdin.end(installer)
+      }),
+    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+  })
 })
 
 function executableName() {

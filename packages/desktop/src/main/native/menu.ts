@@ -16,6 +16,7 @@ import { nativeT } from "./translations"
 type Deps = {
   trigger: (id: string) => void
   checkForUpdates: () => void
+  installCli: () => void
   createWindow: () => void
   openExternal: (url: string) => void
   relaunch: () => void
@@ -60,6 +61,7 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
     item.click = () =>
       runDesktopMenuAction(BrowserWindow.getFocusedWindow(), action, {
         checkForUpdates: deps.checkForUpdates,
+        installCli: deps.installCli,
         createWindow: deps.createWindow,
         relaunch: deps.relaunch,
       })
