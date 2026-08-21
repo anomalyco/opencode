@@ -15,6 +15,10 @@ export interface Registration {
   readonly dispose: Effect.Effect<void>
 }
 
+/**
+ * Registers and applies a scoped transform. Closing the owning Scope removes
+ * the transform and reloads the materialized state.
+ */
 export type Transform<DraftApi> = (
   transform: TransformCallback<DraftApi>,
 ) => Effect.Effect<Registration, never, Scope.Scope>
@@ -69,10 +73,6 @@ export interface Options<State, DraftApi> {
 
 export interface Interface<State, DraftApi> extends Transformable<DraftApi> {
   readonly get: () => State
-  /**
-   * Registers and applies a scoped transform. Closing the owning Scope removes
-   * the transform and reloads the materialized state.
-   */
 }
 
 export function create<State, DraftApi>(options: Options<State, DraftApi>): Interface<State, DraftApi> {
