@@ -157,14 +157,14 @@ export const admit = Effect.fn("SessionInbox.admit")(function* (
       item: request.item,
     })
     .pipe(
-      Effect.flatMap((event) => {
-        const base = {
+      Effect.map((event) =>
+        Info.make({
           id: request.id,
           sessionID: request.sessionID,
           timeCreated: DateTime.makeUnsafe(event.created),
-        }
-        return Effect.succeed(Info.make({ ...base, ...request.item }))
-      }),
+          ...request.item,
+        }),
+      ),
       Effect.catchDefect((defect) =>
         find(db, request.id).pipe(
           Effect.flatMap((stored) =>

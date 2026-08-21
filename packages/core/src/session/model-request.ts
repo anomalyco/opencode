@@ -266,9 +266,9 @@ export const layer = Layer.effect(
           toolChoice: input.toolChoice,
         }),
       )
-      const webSocketEligible =
-        !(yield* hooks.has("session", "http.request", resolved.ref.providerID)) &&
-        !(yield* hooks.has("session", "http.response", resolved.ref.providerID))
+      const hasHttpHooks =
+        (yield* hooks.has("session", "http.request", resolved.ref.providerID)) ||
+        (yield* hooks.has("session", "http.response", resolved.ref.providerID))
       const webSocket =
         resolved.capabilities.responsesWebsockets === true
           ? yield* Config.boolean(responsesWebSocketFlag(resolved.ref.providerID)).pipe(
@@ -276,18 +276,18 @@ export const layer = Layer.effect(
               Effect.orDie,
             )
           : false
-      const http = webSocketEligible
-        ? undefined
-        : SessionModelHttp.middleware(hooks, {
+      const http = hasHttpHooks
+        ? SessionModelHttp.middleware(hooks, {
             sessionID: session.id,
             agent: input.scope.agentID,
             model: resolved.ref,
           })
+        : undefined
       const options: StreamOptions = {
         ...(http ? { http } : {}),
         ...(input.webSocket === "session" &&
         webSocket &&
-        webSocketEligible &&
+        !hasHttpHooks &&
         resolved.capabilities.responsesWebsockets === true
           ? { webSocket: transport.bind(session.id) }
           : {}),
