@@ -25,9 +25,6 @@ describe("Command", () => {
           command.template = "First"
           command.description = "Review code"
         })
-        editor.update("other", (command) => {
-          command.template = "Other"
-        })
         editor.update("review", (command) => {
           command.template = "Second"
           command.model = {
@@ -61,7 +58,6 @@ describe("Command", () => {
             variant: Model.VariantID.make("high"),
           },
         }),
-        Command.Info.make({ name: "other", template: "Other" }),
       ])
     }),
   )

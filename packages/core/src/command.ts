@@ -68,7 +68,7 @@ const layer = () =>
           get: (name) => draft.commands.get(name),
           update: (name, update) => {
             const current = draft.commands.get(name) ?? ({ name, template: "" } as Types.DeepMutable<Info>)
-            draft.commands.set(name, current)
+            if (!draft.commands.has(name)) draft.commands.set(name, current)
             update(current)
             current.name = name
           },

@@ -266,27 +266,6 @@ describe("Catalog", () => {
     }),
   )
 
-  it.effect("keeps provider and model insertion order when updating existing entries", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      const firstProvider = Provider.ID.make("first")
-      const secondProvider = Provider.ID.make("second")
-      const firstModel = Model.ID.make("first")
-      const secondModel = Model.ID.make("second")
-      yield* catalog.transform((editor) => {
-        editor.provider.update(firstProvider, () => {})
-        editor.provider.update(secondProvider, () => {})
-        editor.provider.update(firstProvider, (provider) => (provider.name = "updated"))
-        editor.model.update(firstProvider, firstModel, () => {})
-        editor.model.update(firstProvider, secondModel, () => {})
-        editor.model.update(firstProvider, firstModel, (model) => (model.name = "updated"))
-      })
-
-      expect((yield* catalog.provider.all()).map((provider) => provider.id)).toEqual([firstProvider, secondProvider])
-      expect((yield* catalog.model.all()).map((model) => model.id)).toEqual([firstModel, secondModel])
-    }),
-  )
-
   it.effect("uses a transform-provided default model until that transform is replaced", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

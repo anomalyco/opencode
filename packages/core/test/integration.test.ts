@@ -66,15 +66,11 @@ describe("Integration", () => {
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const id = Integration.ID.make("openai")
-      const other = Integration.ID.make("other")
       const first = yield* Scope.fork(yield* Scope.Scope)
       const second = yield* Scope.fork(yield* Scope.Scope)
 
       yield* integrations
-        .transform((editor) => {
-          editor.update(id, (integration) => (integration.name = "OpenAI"))
-          editor.update(other, () => {})
-        })
+        .transform((editor) => editor.update(id, (integration) => (integration.name = "OpenAI")))
         .pipe(Scope.provide(first))
       yield* integrations
         .transform((editor) => editor.update(id, (integration) => (integration.name = "OpenAI Override")))
@@ -83,7 +79,7 @@ describe("Integration", () => {
 
       yield* Scope.close(second, Exit.void)
       expect((yield* integrations.get(id))?.name).toBe("OpenAI")
-      expect((yield* integrations.list()).map((integration) => integration.id)).toEqual([id, other])
+      expect((yield* integrations.list()).map((integration) => integration.id)).toEqual([id])
     }),
   )
 

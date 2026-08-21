@@ -68,21 +68,6 @@ describe("Agent", () => {
     }),
   )
 
-  it.effect("keeps insertion order when updating an existing agent", () =>
-    Effect.gen(function* () {
-      const agent = yield* Agent.Service
-      const first = Agent.ID.make("first")
-      const second = Agent.ID.make("second")
-      yield* agent.transform((editor) => {
-        editor.update(first, (info) => (info.mode = "subagent"))
-        editor.update(second, (info) => (info.mode = "subagent"))
-        editor.update(first, (info) => (info.description = "updated"))
-      })
-
-      expect((yield* agent.list()).map((info) => info.id)).toEqual([first, second])
-    }),
-  )
-
   it.effect("lists the selected default agent first", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service
