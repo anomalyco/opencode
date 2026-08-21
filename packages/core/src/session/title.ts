@@ -1,6 +1,6 @@
 export * as SessionTitle from "./title.js"
 
-import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, AIError, LLMEvent, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
 import { Agent } from "../agent.js"
@@ -8,14 +8,10 @@ import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { isExactRootFallback } from "@opencode-ai/util/session-title-fallback"
-import { App } from "../app.js"
 import { llmClient } from "../effect/app-node-platform.js"
-import { PluginHooks } from "../plugin/hooks.js"
 import { SessionEvent } from "./event.js"
 import { SessionHistory } from "./history.js"
-import { SessionModelHeaders } from "./model-headers.js"
-import { SessionModelHook } from "./model-hook.js"
-import { SessionModelHttp } from "./model-http.js"
+import { SessionModelRequest } from "./model-request.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { SessionUsage } from "./usage.js"
@@ -25,15 +21,14 @@ const MAX_LENGTH = 100
 const titleChanged = Symbol("Session title changed")
 
 type Dependencies = {
-  readonly app: App.Info
   readonly bus: Bus.Interface
   readonly llm: {
     readonly stream: (request: LLMRequest, options?: StreamOptions) => Stream.Stream<LLMEvent, AIError>
   }
   readonly agents: Agent.Interface
   readonly models: SessionRunnerModel.Interface
+  readonly modelRequests: SessionModelRequest.Interface
   readonly store: SessionStore.Interface
-  readonly hooks: PluginHooks.Interface
 }
 
 export interface Interface {
@@ -81,39 +76,28 @@ const make = (dependencies: Dependencies) => {
           })
         : Effect.void,
     )
-    const request = yield* SessionModelHook.apply(
-      dependencies.hooks,
-      { sessionID: session.id, agent: agent.id, model: resolved.ref },
-      LLM.request({
-        model: resolved.model,
-        http: { headers: SessionModelHeaders.make(session, dependencies.app) },
-        system: agent.system,
+    const prepared = yield* dependencies.modelRequests.prepare({
+      scope: { session, agentID: agent.id, model: resolved },
+      transcript: {
+        system: agent.system ? [SystemPart.make(agent.system)] : [],
         messages: [Message.user(firstUser.text)],
-        tools: [],
+      },
+      contextHooks: false,
+    })
+    const streamed = yield* dependencies.llm.stream(prepared.request, prepared.options).pipe(
+      Stream.runForEach((event) => {
+        if (LLMEvent.is.providerError(event)) failed = true
+        if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+        if (LLMEvent.is.stepFinish(event)) {
+          const step = SessionUsage.record(event.usage, resolved.cost)
+          usage = usage ? SessionUsage.add(usage, step) : step
+        }
+        return Effect.void
       }),
+      Effect.as(true),
+      Effect.catchTag("AI.Error", () => Effect.succeed(false)),
+      Effect.onInterrupt(() => recordUsage.pipe(Effect.asVoid)),
     )
-    const streamed = yield* dependencies.llm
-      .stream(request, {
-        http: SessionModelHttp.middleware(dependencies.hooks, {
-          sessionID: session.id,
-          agent: agent.id,
-          model: resolved.ref,
-        }),
-      })
-      .pipe(
-        Stream.runForEach((event) => {
-          if (LLMEvent.is.providerError(event)) failed = true
-          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
-          if (LLMEvent.is.stepFinish(event)) {
-            const step = SessionUsage.record(event.usage, resolved.cost)
-            usage = usage ? SessionUsage.add(usage, step) : step
-          }
-          return Effect.void
-        }),
-        Effect.as(true),
-        Effect.catchTag("AI.Error", () => Effect.succeed(false)),
-        Effect.onInterrupt(() => recordUsage.pipe(Effect.asVoid)),
-      )
     yield* recordUsage
     if (!streamed || failed) return
     const title = chunks
@@ -146,11 +130,10 @@ export const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const agents = yield* Agent.Service
     const models = yield* SessionRunnerModel.Service
+    const modelRequests = yield* SessionModelRequest.Service
     const store = yield* SessionStore.Service
     const database = yield* Database.Service
-    const app = yield* App.Metadata
-    const hooks = yield* PluginHooks.Service
-    const title = make({ bus, llm, agents, models, store, app, hooks })
+    const title = make({ bus, llm, agents, models, modelRequests, store })
     return Service.of({
       generateForFirstPrompt: (sessionID) => title.generateForFirstPrompt(database.db, sessionID),
     })
@@ -165,9 +148,8 @@ export const node = makeLocationNode({
     llmClient,
     Agent.node,
     SessionRunnerModel.node,
+    SessionModelRequest.node,
     SessionStore.node,
     Database.node,
-    App.node,
-    PluginHooks.node,
   ],
 })

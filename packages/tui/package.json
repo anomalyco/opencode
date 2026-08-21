@@ -59,11 +59,6 @@
       "node": "./src/attention-sounds.node.ts",
       "default": "./src/attention-sounds.bun.ts"
     },
-    "#terminal-win32": {
-      "bun": "./src/terminal-win32.bun.ts",
-      "node": "./src/terminal-win32.node.ts",
-      "default": "./src/terminal-win32.bun.ts"
-    },
     "#string-width": {
       "bun": "./src/util/string-width.bun.ts",
       "node": "./src/util/string-width.node.ts",

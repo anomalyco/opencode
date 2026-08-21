@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -19,6 +19,7 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { App } from "@opencode-ai/core/app"
 import { Agent } from "@opencode-ai/core/agent"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
@@ -76,7 +77,14 @@ const models = Layer.mock(SessionRunnerModel.Service)({
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, SessionCompaction.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      PluginHooks.node,
+      SessionCompaction.node,
+    ]),
     [
       [Bus.node, Bus.configured({ persist: true })],
       [llmClient, client],
@@ -108,6 +116,13 @@ test("compaction describes tool media without embedding base64", () => {
 
   expect(serialized).toBe("Image read successfully\n[Attached image/png: pixel.png]")
   expect(serialized).not.toContain(base64)
+})
+
+test("compaction truncation does not split surrogate pairs", () => {
+  const prefix = "a".repeat(1_999)
+
+  expect(SessionCompaction.truncateToolOutput(`${prefix}😀suffix`)).toBe(`${prefix}😀\n[truncated]`)
+  expect(SessionCompaction.truncateToolOutput("😀".repeat(2_000))).toBe("😀".repeat(2_000))
 })
 
 test("compaction prompt requires the checkpoint headings in order", () => {
@@ -174,6 +189,35 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
   }),
 )
 
+/** Seeds the global project plus one session row, returning the projected session. */
+const insertSession = (id: Session.ID, overrides?: Partial<typeof SessionTable.$inferInsert>) =>
+  Effect.gen(function* () {
+    const db = (yield* Database.Service).db
+    yield* db
+      .insert(ProjectTable)
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .onConflictDoNothing()
+      .run()
+      .pipe(Effect.orDie)
+    yield* db
+      .insert(SessionTable)
+      .values({
+        id,
+        project_id: Project.ID.global,
+        slug: id,
+        directory: "/project",
+        title: id,
+        version: "test",
+        ...overrides,
+      })
+      .run()
+      .pipe(Effect.orDie)
+    const store = yield* SessionStore.Service
+    return yield* store
+      .get(id)
+      .pipe(Effect.flatMap((session) => (session ? Effect.succeed(session) : Effect.die(`session missing: ${id}`))))
+  })
+
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {
     requests = []
@@ -189,33 +233,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       text: "Manual compaction should include this short conversation.",
       time: { created: DateTime.makeUnsafe(0) },
     }
-    yield* db
-      .insert(ProjectTable)
-      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-      .onConflictDoNothing()
-      .run()
-      .pipe(Effect.orDie)
-    yield* db
-      .insert(SessionTable)
-      .values({
-        id: sessionID,
-        project_id: Project.ID.global,
-        parent_id: parentID,
-        slug: "manual-compaction",
-        directory: "/project",
-        title: "Manual compaction",
-        version: "test",
-      })
-      .run()
-      .pipe(Effect.orDie)
-
-    const session = yield* store
-      .get(sessionID)
-      .pipe(
-        Effect.flatMap((session) =>
-          session ? Effect.succeed(session) : Effect.die("manual compaction test session missing"),
-        ),
-      )
+    const session = yield* insertSession(sessionID, { parent_id: parentID })
 
     const delta = yield* bus
       .subscribe(SessionEvent.Compaction.Delta)
@@ -263,5 +281,68 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       { type: Bus.versionedType(SessionEvent.UsageRecorded.type, 1) },
       { type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1) },
     ])
+  }),
+)
+
+it.effect("forked session compaction reuses the fork root prompt cache key", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const sessionID = Session.ID.make("ses_fork_compaction")
+    const rootID = Session.ID.make("ses_fork_compaction_root")
+    const session = yield* insertSession(sessionID, {
+      fork_session_id: rootID,
+      fork_boundary: { type: "before", messageID: SessionMessage.ID.create() },
+    })
+    expect(
+      yield* compaction.compactManual({
+        session,
+        messages: [
+          {
+            id: SessionMessage.ID.create(),
+            type: "user",
+            text: "Summarize the forked conversation.",
+            time: { created: DateTime.makeUnsafe(0) },
+          },
+        ],
+        inputID: SessionMessage.ID.make("msg_fork_compaction"),
+      }),
+    ).toEqual({ status: "completed" })
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.promptCacheKey).toBe(rootID)
+  }),
+)
+
+it.effect("keeps session context hooks away from compaction requests", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    // Context hooks shape the agent conversation; compaction is not part of it,
+    // so it opts out and the transcript passes through unchanged.
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        event.system.push(SystemPart.make("Injected conversation context"))
+      }),
+    )
+    const session = yield* insertSession(Session.ID.make("ses_hook_compaction"))
+    expect(
+      yield* compaction.compactManual({
+        session,
+        messages: [
+          {
+            id: SessionMessage.ID.create(),
+            type: "user",
+            text: "Summarize this conversation.",
+            time: { created: DateTime.makeUnsafe(0) },
+          },
+        ],
+        inputID: SessionMessage.ID.make("msg_hook_compaction"),
+      }),
+    ).toEqual({ status: "completed" })
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.system).toEqual([])
   }),
 )

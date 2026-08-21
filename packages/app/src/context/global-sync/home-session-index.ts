@@ -6,7 +6,12 @@ export const HOME_V2_SESSION_PAGE_LIMIT = 5_000
 
 export async function loadHomeSessionIndex(
   list: (
-    input: { limit: number; order: "desc"; cursor?: string },
+    input: {
+      limit: number
+      order: "desc"
+      parentID: null
+      cursor?: string
+    },
     options: { signal?: AbortSignal },
   ) => Promise<SessionsResponse>,
   signal?: AbortSignal,
@@ -19,6 +24,7 @@ export async function loadHomeSessionIndex(
       {
         limit: HOME_V2_SESSION_PAGE_LIMIT,
         order: "desc",
+        parentID: null,
         ...(cursor ? { cursor } : {}),
       },
       { signal },
@@ -29,8 +35,7 @@ export async function loadHomeSessionIndex(
   }
 }
 
-// The V2 API cannot yet filter roots, archives, or several directories, so Home
-// seeds createData from a full scan and derives its visible index there.
+// Keep this filter for locally known sessions merged into the fetched index.
 export function parseHomeSessionIndex(sessions: SessionInfo[]) {
   return sessions.filter((session) => !session.parentID && typeof session.time.archived !== "number")
 }

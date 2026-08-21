@@ -156,6 +156,8 @@ export type SessionStatus =
     }
   | { type: "busy" }
 
+export type PtyTicketConnectToken = { ticket: string; expires_in: number }
+
 export type ReferenceLocalSource = { type: "local"; path: string; description?: string; hidden?: boolean }
 
 export type ReferenceGitSource = {
@@ -2272,6 +2274,10 @@ export const isPermissionNotFoundError = (value: unknown): value is PermissionNo
 export type PtyNotFoundError = { readonly _tag: "PtyNotFoundError"; readonly ptyID: string; readonly message: string }
 export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyNotFoundError"
+
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
@@ -5466,6 +5472,19 @@ export type PtyRemoveInput = {
 }
 
 export type PtyRemoveOutput = void
+
+export type PtyConnectTokenInput = {
+  readonly ptyID: { readonly ptyID: string }["ptyID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly "x-opencode-ticket"?: { readonly "x-opencode-ticket"?: string | undefined }["x-opencode-ticket"]
+}
+
+export type PtyConnectTokenOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: PtyTicketConnectToken
+}
 
 export type ShellListInput = {
   readonly location?: {

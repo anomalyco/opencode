@@ -182,6 +182,8 @@ import type {
   PtyUpdateOutput,
   PtyRemoveInput,
   PtyRemoveOutput,
+  PtyConnectTokenInput,
+  PtyConnectTokenOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1570,6 +1572,21 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      connect: {
+        token: (input: PtyConnectTokenInput, requestOptions?: RequestOptions) =>
+          request<PtyConnectTokenOutput>(
+            {
+              method: "POST",
+              path: `/api/pty/${encodeURIComponent(input.ptyID)}/connect-token`,
+              query: { location: input["location"] },
+              headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+              successStatus: 200,
+              declaredStatuses: [403, 404, 401, 400],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
     },
     shell: {
       list: (input?: ShellListInput, requestOptions?: RequestOptions) =>

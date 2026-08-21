@@ -2,7 +2,6 @@ export * as ShellTool from "./shell.js"
 
 import path from "path"
 import { ToolFailure } from "@opencode-ai/ai"
-import type { Content } from "@opencode-ai/schema/tool"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
@@ -72,10 +71,27 @@ const Output = Schema.Struct({
 
 type Output = typeof Output.Type
 
-const modelOutput = (output: Output): string | undefined => {
-  if (output.status === "running") return BACKGROUND_INSTRUCTION
-  if (output.timeout) return "Command timed out before completion."
-  return `Command exited with code ${output.exit}.`
+const resultMessages = (output: Output) => {
+  const notice = (() => {
+    if (output.status === "running") return BACKGROUND_INSTRUCTION
+    if (output.timeout) return "Command timed out before completion."
+    if (output.exit !== undefined) return `Command exited with code ${output.exit}.`
+  })()
+  return [output.output, ...(notice ? [notice] : [])]
+}
+
+const toolResult = (output: Output) => {
+  return {
+    output,
+    content: resultMessages(output).map((text) => ({ type: "text" as const, text })),
+    metadata: {
+      status: output.status,
+      truncated: output.truncated,
+      ...(output.exit !== undefined ? { exit: output.exit } : {}),
+      ...(output.shellID !== undefined ? { shellID: output.shellID } : {}),
+      ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
+    },
+  }
 }
 
 export const Plugin = {
@@ -92,32 +108,50 @@ export const Plugin = {
     const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(function* (
       sessionID: SessionSchema.ID,
       id: string,
+      shellID: string,
       command: string,
+      settled: Deferred.Deferred<Output>,
     ) {
       yield* runtime.job.wait({ id: id }).pipe(
-        Effect.flatMap((result) => {
-          const state =
-            result.info?.status === "completed"
-              ? "completed"
-              : result.info?.status === "error"
-                ? "error"
-                : result.info?.status === "cancelled"
-                  ? "cancelled"
-                  : undefined
-          if (state === undefined) return Effect.void
-          const text =
-            state === "completed"
-              ? (result.info!.output ?? "")
+        Effect.flatMap((result) =>
+          Effect.gen(function* () {
+            const info = result.info
+            if (!info) return
+            const state =
+              info.status === "completed"
+                ? "completed"
+                : info.status === "error"
+                  ? "error"
+                  : info.status === "cancelled"
+                    ? "cancelled"
+                    : undefined
+            if (state === undefined) return
+            const output = state === "completed" ? yield* Deferred.await(settled) : undefined
+            const text = output
+              ? resultMessages(output).join("\n\n")
               : state === "error"
-                ? (result.info!.error ?? "Command failed")
+                ? (info.error ?? "Command failed")
                 : "Command cancelled"
-          return runtime.session.synthetic({
-            sessionID,
-            text: `<shell id="${id}" state="${state}" command="${command}">\n${text}\n</shell>`,
-            description: command,
-            metadata: { source: "shell", jobID: id, state },
-          })
-        }),
+            yield* runtime.session.synthetic({
+              sessionID,
+              text: `<shell id="${id}" state="${state}" command="${command}">\n${text}\n</shell>`,
+              description: command,
+              metadata: {
+                source: "shell",
+                jobID: id,
+                shellID,
+                state,
+                ...(output
+                  ? {
+                      truncated: output.truncated,
+                      ...(output.exit !== undefined ? { exit: output.exit } : {}),
+                      ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
+                    }
+                  : {}),
+              },
+            })
+          }),
+        ),
         Effect.forkIn(scope, { startImmediately: true }),
       )
     })
@@ -268,7 +302,7 @@ export const Plugin = {
 
               if (input.background === true) {
                 yield* runtime.job.background(job.id)
-                yield* notifyWhenDone(context.sessionID, context.id, info.command)
+                yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
                 return {
                   output: BACKGROUND_STARTED,
                   shellID: info.id,
@@ -282,7 +316,7 @@ export const Plugin = {
                 .pipe(Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
-                yield* notifyWhenDone(context.sessionID, context.id, info.command)
+                yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
                 return {
                   output: BACKGROUND_STARTED,
                   shellID: info.id,
@@ -296,22 +330,7 @@ export const Plugin = {
 
               return yield* Deferred.await(settled)
             }).pipe(
-              Effect.map((output) => {
-                const content: Array<Content> = [{ type: "text", text: output.output }]
-                const model = modelOutput(output)
-                if (model) content.push({ type: "text", text: model })
-                return {
-                  output,
-                  content,
-                  metadata: {
-                    status: output.status,
-                    truncated: output.truncated,
-                    ...("exit" in output && output.exit !== undefined ? { exit: output.exit } : {}),
-                    ...("shellID" in output && output.shellID !== undefined ? { shellID: output.shellID } : {}),
-                    ...("timeout" in output && output.timeout !== undefined ? { timeout: output.timeout } : {}),
-                  },
-                }
-              }),
+              Effect.map(toolResult),
               Effect.mapError(
                 (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
               ),

@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
@@ -14,6 +14,7 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTitle } from "@opencode-ai/core/session/title"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Session } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -78,7 +79,15 @@ const models = Layer.mock(SessionRunnerModel.Service)({
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Agent.node, SessionTitle.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Agent.node,
+      PluginHooks.node,
+      SessionTitle.node,
+    ]),
     [
       [llmClient, client],
       [SessionRunnerModel.node, models],
@@ -155,6 +164,9 @@ it.effect("generates a title from the sole user message and renames the session"
       "x-opencode-session": sessionID,
       "x-opencode-client": "opencode",
     })
+    expect(requests[0]?.promptCacheKey).toBe(sessionID)
+    expect(requests[0]?.tools).toEqual([])
+    expect(requests[0]?.system.map((part) => part.text)).toEqual(["You are a title generator."])
     expect(JSON.stringify(requests[0]?.messages)).toContain("Help me debug the failing build")
     const renamed = yield* store.get(sessionID)
     expect(renamed?.title).toBe("Generated Title")
@@ -320,6 +332,38 @@ it.effect("retries after a failed title request", () =>
     const store = yield* SessionStore.Service
     expect(requests).toHaveLength(2)
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("keeps session context hooks away from title requests", () =>
+  Effect.gen(function* () {
+    requests = []
+    titleStream = successfulTitle
+    const agentService = yield* Agent.Service
+    yield* agentService.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.mode = "primary"
+        agent.hidden = true
+        agent.system = "You are a title generator."
+      })
+    })
+    // Context hooks shape the agent conversation; title generation is not part of
+    // it, so it opts out and the transcript passes through unchanged.
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        event.system.push(SystemPart.make("Keep titles in sentence case."))
+      }),
+    )
+    const sessionID = Session.ID.make("ses_title_context_hook")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Hook this title request")
+
+    const title = yield* SessionTitle.Service
+    yield* title.generateForFirstPrompt(sessionID)
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.system.map((part) => part.text)).toEqual(["You are a title generator."])
   }),
 )
 

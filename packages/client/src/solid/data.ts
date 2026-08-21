@@ -38,7 +38,7 @@ import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { isPermissionNotFoundError, type SessionPromptInput } from "../promise"
 import { createStore, produce, reconcile } from "solid-js/store"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import { batch, createEffect, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
 
@@ -172,6 +172,9 @@ export function createData(config: CreateDataInput) {
   })
 
   const [defaultLocation, setDefaultLocation] = createSignal<LocationRef>({ directory: config.directory })
+  const sessions = createMemo(() =>
+    Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
+  )
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
 
@@ -1034,7 +1037,7 @@ export function createData(config: CreateDataInput) {
     listen: config.event.listen,
     session: {
       list() {
-        return Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated)
+        return sessions()
       },
       get(sessionID: string) {
         return store.session.info[sessionID]

@@ -24,7 +24,7 @@ import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { useWorkspaceLocation } from "@/context/location"
 import { useData } from "@/context/server"
-import { createSessionTabs } from "@/pages/session/helpers"
+import { createSessionTabs } from "@/session/helpers"
 import { showToast } from "@/utils/toast"
 import { PromptInputV2, type PromptInputV2Suggestion } from "@opencode-ai/session-ui/v2/prompt-input"
 import {

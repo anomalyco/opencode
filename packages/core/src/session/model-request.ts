@@ -61,13 +61,20 @@ interface PrepareInput {
     readonly session: SessionSchema.Info
     readonly agentID: Agent.ID
     readonly model: SessionRunnerModel.Resolved
-    readonly tools: Tool.Snapshot
+    /** Omitted for requests that carry no tools (title, compaction). */
+    readonly tools?: Tool.Snapshot
   }
   readonly transcript: {
     readonly system: Array<SystemPart>
     readonly messages: Array<Message>
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
+  /**
+   * Session context hooks shape the agent conversation. Requests that are not
+   * part of the conversation (title, compaction) opt out: their transcripts
+   * pass through unchanged.
+   */
+  readonly contextHooks?: false
   /** Stateful Session WebSocket channels require an explicit durable-runner opt-in. */
   readonly webSocket?: "session"
 }
@@ -209,7 +216,10 @@ export const layer = Layer.effect(
       const session = input.scope.session
       const resolved = input.scope.model
       const model = resolved.model
-      const tools = input.scope.tools
+      const tools = input.scope.tools ?? {
+        definitions: [],
+        execute: () => new Tool.Error({ message: "Tools are not available for this request" }),
+      }
       const registry = new Map(tools.definitions.map((tool) => [tool.name, tool]))
       // The definition objects we hand to hooks, mapped back to their tools. Hooks rename a
       // tool by moving its definition to a new key; recognizing the object recovers the tool.
@@ -219,14 +229,18 @@ export const layer = Layer.effect(
         ),
       )
       // Hooks mutate this record in place: edit descriptions and schemas, rename, or remove.
-      const context = yield* hooks.trigger("session", "context", {
-        sessionID: session.id,
-        agent: input.scope.agentID,
-        model: resolved.ref,
-        system: input.transcript.system,
-        messages: input.transcript.messages,
-        tools: Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition])),
-      })
+      const definitions = Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition]))
+      const context =
+        input.contextHooks === false
+          ? { system: input.transcript.system, messages: input.transcript.messages, tools: definitions }
+          : yield* hooks.trigger("session", "context", {
+              sessionID: session.id,
+              agent: input.scope.agentID,
+              model: resolved.ref,
+              system: input.transcript.system,
+              messages: input.transcript.messages,
+              tools: definitions,
+            })
       // Match each surviving entry back to its tool, by recognizing a moved definition or
       // by key. Identity wins so a definition moved onto another tool's name still executes
       // the tool it describes. Entries matching neither were invented by a hook and dropped.

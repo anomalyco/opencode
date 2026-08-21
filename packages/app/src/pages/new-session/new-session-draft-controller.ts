@@ -4,10 +4,10 @@ import { usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useComments } from "@/context/comments"
 import { useLocal } from "@/context/local"
 import { usePrompt } from "@/context/prompt"
-import { createPromptInputController, createPromptProjectControls } from "@/pages/session/composer"
-import { createPromptModelSelection } from "@/pages/session/composer/prompt-model-selection"
-import { useSessionKey } from "@/pages/session/session-layout"
-import { useComposerCommands } from "@/pages/session/use-composer-commands"
+import { createPromptInputController, createPromptProjectControls } from "@/session/composer"
+import { createPromptModelSelection } from "@/session/composer/prompt-model-selection"
+import { useSessionKey } from "@/session/session-layout"
+import { useComposerCommands } from "@/session/commands/use-composer-commands"
 
 export function createNewSessionDraftController(props: {
   worktree: () => string

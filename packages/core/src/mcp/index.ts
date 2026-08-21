@@ -5,7 +5,7 @@ import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Command } from "@opencode-ai/schema/command"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream, Types } from "effect"
+import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -111,7 +111,7 @@ export class ToolCallError extends Schema.TaggedError<ToolCallError>()("MCP.Tool
 type ServerEntry = {
   readonly config: Mcp.ServerConfig
   status: Status
-  readonly startup: Deferred.Deferred<void>
+  readonly startup: Latch.Latch
   scope?: Scope.Closeable
   client?: MCPClient.Connection
   tools?: ReadonlyArray<Tool>
@@ -535,7 +535,7 @@ export const layer = (options?: Options) =>
               : { status: "failed", error: error instanceof Error ? error.message : String(error) }
           yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
           yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
-        }).pipe(Effect.ensuring(Deferred.succeed(entry.startup, undefined)))
+        }).pipe(Effect.ensuring(entry.startup.open))
 
       const stopServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
         const scope = entry.scope
@@ -562,7 +562,7 @@ export const layer = (options?: Options) =>
         const entry: ServerEntry = {
           config: serverConfig,
           status: { status: "pending" },
-          startup: Deferred.makeUnsafe<void>(),
+          startup: Latch.makeUnsafe(),
         }
         entries.set(name, entry)
         yield* Effect.gen(function* () {
@@ -575,7 +575,7 @@ export const layer = (options?: Options) =>
           yield* startServer(name, entry)
         }).pipe(
           // Settle startup even when registration fails or replacement is interrupted, so readers cannot hang.
-          Effect.ensuring(Effect.sync(() => Deferred.doneUnsafe(entry.startup, Exit.void))),
+          Effect.ensuring(entry.startup.open),
         )
       })
 
@@ -597,7 +597,7 @@ export const layer = (options?: Options) =>
             entries.set(name, {
               config: server,
               status: { status: "pending" },
-              startup: Deferred.makeUnsafe<void>(),
+              startup: Latch.makeUnsafe(),
             })
           }
           yield* Effect.forEach(entries, ([name, entry]) => register(name, entry), { discard: true })
@@ -607,7 +607,7 @@ export const layer = (options?: Options) =>
           for (const [name, entry] of entries) {
             if (entry.config.disabled) {
               entry.status = { status: "disabled" }
-              Deferred.doneUnsafe(entry.startup, Exit.void)
+              entry.startup.openUnsafe()
               yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
               continue
             }
@@ -685,7 +685,7 @@ export const layer = (options?: Options) =>
 
       // Suspend so each await sees current entries; a bare Map iterator is exhausted after one run.
       const whenAllReady = Effect.suspend(() =>
-        Effect.forEach(Array.from(entries.values()), (entry) => Deferred.await(entry.startup), {
+        Effect.forEach(Array.from(entries.values()), (entry) => entry.startup.await, {
           concurrency: "unbounded",
           discard: true,
         }),
@@ -734,7 +734,7 @@ export const layer = (options?: Options) =>
         }),
         callTool: Effect.fn("MCP.callTool")(function* (input) {
           const target = yield* requireServer(input.server)
-          yield* Deferred.await(target.entry.startup)
+          yield* target.entry.startup.await
           if (!target.entry.client)
             return yield* new ToolCallError({
               server: target.name,
@@ -773,7 +773,7 @@ export const layer = (options?: Options) =>
         }),
         prompt: Effect.fn("MCP.prompt")(function* (input) {
           const target = yield* requireServer(input.server)
-          yield* Deferred.await(target.entry.startup)
+          yield* target.entry.startup.await
           if (!target.entry.client) return undefined
           const result = yield* target.entry.client
             .prompt({ name: input.name, args: input.args })
@@ -827,7 +827,7 @@ export const layer = (options?: Options) =>
         }),
         readResource: Effect.fn("MCP.readResource")(function* (input) {
           const target = yield* requireServer(input.server)
-          yield* Deferred.await(target.entry.startup)
+          yield* target.entry.startup.await
           if (!target.entry.client) return undefined
           const result = yield* target.entry.client
             .readResource({ uri: input.uri })

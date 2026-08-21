@@ -12,8 +12,8 @@ import { ServerConnection } from "@/context/servers"
 import { useServerSDK } from "@/context/server-sdk"
 import { useTabs } from "@/context/tabs"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
-import { createSessionTabs } from "@/pages/session/helpers"
-import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionTabs } from "@/session/helpers"
+import { useSessionLayout } from "@/session/session-layout"
 import { useServer } from "@/context/server"
 
 export type CommandPaletteEntry = {

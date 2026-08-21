@@ -3,7 +3,7 @@ export * as ServerProcess from "./process"
 import { NodeHttpServer } from "@effect/platform-node"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
-import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Ref, Scope } from "effect"
+import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
@@ -47,7 +47,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   if (!password) return yield* Effect.fail(new Error("Missing server password"))
   const hostname = options.hostname ?? "127.0.0.1"
   const port = Option.fromNullishOr(options.port)
-  const shutdown = yield* Deferred.make<void>()
+  const shutdown = yield* Latch.make()
   const status = yield* Status.make()
   const bound = yield* listen({ hostname, port })
   const application = yield* Ref.make(Option.none<App>())
@@ -61,7 +61,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     )
     .pipe(withoutParentSpan)
   if (lifecycle)
-    yield* lifecycle.onListen(bound.http.address, Deferred.succeed(shutdown, undefined).pipe(Effect.asVoid)).pipe(
+    yield* lifecycle.onListen(bound.http.address, shutdown.open.pipe(Effect.asVoid)).pipe(
       Effect.flatMap((cleanup) =>
         Effect.addFinalizer(() => Scope.close(bound.scope, Exit.void).pipe(Effect.andThen(cleanup))),
       ),
@@ -101,7 +101,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     const app = Context.get(context, HttpRouter.HttpRouter).asHttpEffect()
     yield* Ref.set(application, Option.some(transform ? transform(app) : app))
     yield* status.ready
-    return { address: bound.http.address, shutdown: Deferred.await(shutdown) }
+    return { address: bound.http.address, shutdown: shutdown.await }
   }).pipe(
     Effect.catchCause((cause) => {
       if (!lifecycle || Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
@@ -119,7 +119,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     }),
   )
   if (!lifecycle) return yield* boot
-  return yield* Effect.raceFirst(boot, Deferred.await(shutdown).pipe(Effect.andThen(Effect.interrupt)))
+  return yield* Effect.raceFirst(boot, shutdown.await.pipe(Effect.andThen(Effect.interrupt)))
 })
 
 function listen(options: { readonly hostname: string; readonly port: Option.Option<number> }) {

@@ -36,7 +36,7 @@ import { ServerProvider } from "./context/server"
 
 const File = lazy(() => import("@opencode-ai/session-ui/file").then((module) => ({ default: module.File })))
 const loadDraftRoute = () => Promise.all([import("@/pages/draft-route"), File.preload()]).then(([module]) => module)
-const loadSessionRoute = () => Promise.all([import("@/pages/session"), File.preload()]).then(([module]) => module)
+const loadSessionRoute = () => Promise.all([import("@/session/route"), File.preload()]).then(([module]) => module)
 const DraftRoute = lazy(() => loadDraftRoute().then((module) => ({ default: module.DraftRoute })))
 const TargetSessionRouteContent = lazy(() =>
   loadSessionRoute().then((module) => ({ default: module.TargetSessionRouteContent })),

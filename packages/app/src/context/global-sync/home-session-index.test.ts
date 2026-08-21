@@ -20,7 +20,7 @@ const session = (id: string, input: Partial<SessionInfo> = {}) =>
 describe("Home V2 session index", () => {
   test("loads all pages", async () => {
     const first = Array.from({ length: HOME_V2_SESSION_PAGE_LIMIT }, (_, index) => session(`session-${index}`))
-    const calls: Array<{ cursor?: string }> = []
+    const calls: Array<{ cursor?: string; parentID: null }> = []
     const result = await loadHomeSessionIndex(async (input) => {
       calls.push(input)
       if (!input.cursor) return { data: first, cursor: { next: "next" } }
@@ -29,6 +29,7 @@ describe("Home V2 session index", () => {
 
     expect(result).toHaveLength(HOME_V2_SESSION_PAGE_LIMIT + 1)
     expect(calls.map((call) => call.cursor)).toEqual([undefined, "next"])
+    expect(calls.every((call) => call.parentID === null)).toBe(true)
   })
 
   test("keeps only visible roots", () => {

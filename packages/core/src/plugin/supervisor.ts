@@ -3,7 +3,7 @@ export { Service, type Interface } from "./supervisor-service.js"
 
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
-import { Cause, Deferred, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Effect, Latch, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { ConfigPluginSource } from "../config/plugin/source.js"
@@ -137,7 +137,7 @@ export const layer = Layer.effect(
     const sdk = yield* SdkPlugins.Service
     const sources = yield* ConfigPluginSource.Service
     const bus = yield* Bus.Service
-    const ready = { current: yield* Deferred.make<void>() }
+    const ready = yield* Latch.make()
     let observed = 0
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
@@ -164,7 +164,7 @@ export const layer = Layer.effect(
       Stream.mapEffect(() =>
         Effect.gen(function* () {
           observed++
-          if (yield* Deferred.isDone(ready.current)) ready.current = yield* Deferred.make<void>()
+          yield* ready.close
           return observed
         }),
       ),
@@ -176,12 +176,12 @@ export const layer = Layer.effect(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
           yield* activate()
-          if (observed === target) yield* Deferred.succeed(ready.current, undefined)
+          if (observed === target) yield* ready.open
         }).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: Effect.suspend(() => Deferred.await(ready.current)) })
+    return Service.of({ flush: ready.await })
   }),
 )
 
