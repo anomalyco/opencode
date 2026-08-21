@@ -21,11 +21,13 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       overflow: false,
       jump: false,
     },
+    refs: {
+      content: undefined as HTMLDivElement | undefined,
+      dock: undefined as HTMLDivElement | undefined,
+    },
   })
   const autoScroll = createAutoScroll({ working: () => true, overflowAnchor: "none" })
   let scroller: HTMLDivElement | undefined
-  let content: HTMLDivElement | undefined
-  let dock: HTMLDivElement | undefined
   let dockHeight = 0
   let revealMessage = (_id: string) => {}
   let scrollToEnd = () => {}
@@ -249,14 +251,14 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     ),
   )
   createResizeObserver(
-    () => content,
+    () => state.refs.content,
     () => {
       if (scroller) scheduleScrollState(scroller)
       fill()
     },
   )
   createResizeObserver(
-    () => dock,
+    () => state.refs.dock,
     ({ height }) => {
       const next = Math.ceil(height)
       if (next === dockHeight) return
@@ -299,12 +301,12 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       onHistoryScroll,
       scheduleScrollState,
       setContentRef: (element: HTMLDivElement | undefined) => {
-        content = element
+        setState("refs", "content", element)
         autoScroll.contentRef(element)
         if (scroller) scheduleScrollState(scroller)
       },
       setDockRef: (element: HTMLDivElement | undefined) => {
-        dock = element
+        setState("refs", "dock", element)
       },
       setHistoryAnchor: (handlers: { capture: () => void; restore: (done: boolean) => void }) => {
         captureHistoryAnchor = handlers.capture
