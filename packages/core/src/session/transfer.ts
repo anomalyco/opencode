@@ -49,8 +49,6 @@ const layer = Layer.effect(
     const sessions = yield* Session.Service
     const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 
-    const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
-
     return Service.of({
       export: Effect.fn("SessionTransfer.export")(function* (input) {
         const data = {
@@ -69,7 +67,7 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
         if (recorded) return yield* new ImportConflictError({ sessionID })
         const project = yield* projects.resolve(input.location.directory)
-        yield* persistProject(project)
+        yield* upsertProject(db, project).pipe(Effect.orDie)
         const messages = input.data.messages.map((message, index) => {
           const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded

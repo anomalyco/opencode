@@ -206,7 +206,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       .run()
       .pipe(Effect.orDie)
 
-    cursor = rows.at(-1)!.seq
+    cursor = rows[rows.length - 1].seq
   }
   if (copiedSeq !== undefined) yield* Bus.reserveSequence(db, event.data.sessionID, copiedSeq)
   if (event.data.instructions)
@@ -622,15 +622,11 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         yield* run(db, event)
         yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
-        if (event.durable === undefined)
-          return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
       }),
     )
     yield* bus.project(SessionEvent.Compaction.Failed, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
-        if (event.durable === undefined)
-          return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
       }),
     )
     yield* bus.project(SessionEvent.RevertEvent.Staged, (event) =>
