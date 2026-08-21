@@ -6,11 +6,13 @@ import { useGlobal } from "@/context/global"
 import { LocationProvider } from "@/context/location"
 import { ModelsProvider } from "@/context/models"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
-import { ServerProvider } from "@/context/server"
+import { ServerProvider, useServer } from "@/context/server"
 import { ServerConnection } from "@/context/servers"
 import { useTabs, type DraftTab } from "@/context/tabs"
 import { SessionUIProvider } from "@/pages/directory-layout"
 import NewSession from "@/pages/new-session"
+import { IncompatibleServerPanel } from "@/session/incompatible-server-panel"
+import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 
 export function DraftRoute() {
   const [search] = useSearchParams<{ draftId?: string }>()
@@ -35,18 +37,43 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
       <Show when={conn()} keyed>
         {(conn) => (
           <ServerProvider conn={conn}>
-            <ModelsProvider directory={props.draft.directory}>
-              <LocationProvider directory={props.draft.directory}>
-                <SessionUIProvider directory={props.draft.directory} server={props.draft.server}>
-                  <DraftProviders>
-                    <NewSession draftId={props.draft.draftID} />
-                  </DraftProviders>
-                </SessionUIProvider>
-              </LocationProvider>
-            </ModelsProvider>
+            <ResolvedDraftContent draft={props.draft} />
           </ServerProvider>
         )}
       </Show>
+    </Show>
+  )
+}
+
+function ResolvedDraftContent(props: { draft: DraftTab }) {
+  const server = useServer()
+  const tabs = useTabs()
+
+  return (
+    <Show
+      when={!server.health?.incompatible}
+      fallback={
+        <SessionRouteFrame padded>
+          <SessionPanelFrame raised>
+            <IncompatibleServerPanel
+              onClose={() => {
+                const index = tabs.store.findIndex((tab) => tab.type === "draft" && tab.draftID === props.draft.draftID)
+                if (index !== -1) tabs.closeTab(index)
+              }}
+            />
+          </SessionPanelFrame>
+        </SessionRouteFrame>
+      }
+    >
+      <ModelsProvider directory={props.draft.directory}>
+        <LocationProvider directory={props.draft.directory}>
+          <SessionUIProvider directory={props.draft.directory} server={props.draft.server}>
+            <DraftProviders>
+              <NewSession draftId={props.draft.draftID} />
+            </DraftProviders>
+          </SessionUIProvider>
+        </LocationProvider>
+      </ModelsProvider>
     </Show>
   )
 }
