@@ -1570,13 +1570,13 @@ export function Prompt(props: PromptProps) {
     resetComposer()
   }
 
-  // Keep the last resolved identity visible while destination catalogs load;
+  // Keep the last resolved prompt display visible while destination catalogs load;
   // availability and submission still use the live location-scoped catalog.
-  const identity = createMemo<{
-    agent: string | undefined
-    color: RGBA | undefined
-    model: string
-    provider: string
+  const promptDisplay = createMemo<{
+    agentLabel: string | undefined
+    agentColor: RGBA | undefined
+    modelLabel: string
+    providerLabel: string
     variant: string | undefined
   }>(
     (previous) => {
@@ -1584,8 +1584,7 @@ export function Prompt(props: PromptProps) {
       const sessionLocation = props.sessionID ? data.session.get(props.sessionID)?.location : location
       if (!sessionLocation || locationKey(sessionLocation) !== locationKey(location)) return previous
 
-      const loading =
-        data.location.agent.list(location) === undefined || data.location.model.list(location) === undefined
+      const loading = data.location.agent.list(location) === undefined || !local.model.catalogReady
       const error = currentLocation.error
       const failed = error && locationKey(error.location) === locationKey(location)
       if (loading && !failed) return previous
@@ -1593,30 +1592,31 @@ export function Prompt(props: PromptProps) {
       const agent = local.agent.current()
       const model = local.model.parsed()
       return {
-        agent: agent ? Locale.titlecase(agent.id) : undefined,
-        color: agent ? local.agent.color(agent.id) : undefined,
-        model: model.model,
-        provider: model.provider,
+        agentLabel: agent ? Locale.titlecase(agent.id) : undefined,
+        agentColor: agent ? local.agent.color(agent.id) : undefined,
+        modelLabel: model.model,
+        providerLabel: model.provider,
         variant: local.model.variant.current(),
       }
     },
     {
-      agent: undefined,
-      color: undefined,
-      ...local.model.parsed(),
+      agentLabel: undefined,
+      agentColor: undefined,
+      modelLabel: local.model.parsed().model,
+      providerLabel: local.model.parsed().provider,
       variant: undefined,
     },
   )
   const highlight = createMemo(() => {
     if (leader()) return theme.border.default
     if (store.mode === "shell") return theme.text.action.primary.selected
-    return identity().color ?? theme.border.default
+    return promptDisplay().agentColor ?? theme.border.default
   })
-  const agentLabel = createMemo(() => (store.mode === "shell" ? "Shell" : identity().agent))
+  const agentLabel = createMemo(() => (store.mode === "shell" ? "Shell" : promptDisplay().agentLabel))
   const agentMetaAlpha = createFadeIn(() => !!agentLabel(), animationsEnabled)
-  const modelMetaAlpha = createFadeIn(() => !!identity().agent && store.mode === "normal", animationsEnabled)
+  const modelMetaAlpha = createFadeIn(() => !!promptDisplay().agentLabel && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
-    () => !!identity().agent && store.mode === "normal" && !!identity().variant,
+    () => !!promptDisplay().agentLabel && store.mode === "normal" && !!promptDisplay().variant,
     animationsEnabled,
   )
   const borderHighlight = createMemo(() => tint(theme.border.default, highlight(), agentMetaAlpha()))
@@ -1664,8 +1664,7 @@ export function Prompt(props: PromptProps) {
   })
 
   const spinnerDef = createMemo(() => {
-    const agent = status() === "running" ? local.agent.current() : local.agent.current()
-    const color = agent ? local.agent.color(agent.id) : theme.border.default
+    const color = promptDisplay().agentColor ?? theme.border.default
     return {
       frames: createFrames({
         color,
@@ -1880,14 +1879,14 @@ export function Prompt(props: PromptProps) {
                             truncate
                             fg={fadeColor(leader() ? theme.text.subdued : theme.text.default, modelMetaAlpha())}
                           >
-                            {identity().model}
+                            {promptDisplay().modelLabel}
                           </text>
                           <Show when={dimensions().width >= 50}>
                             <text flexShrink={0} fg={fadeColor(theme.text.subdued, modelMetaAlpha())}>
-                              {identity().provider}
+                              {promptDisplay().providerLabel}
                             </text>
                           </Show>
-                          <Show when={identity().variant && dimensions().width >= 70}>
+                          <Show when={promptDisplay().variant && dimensions().width >= 70}>
                             <text fg={fadeColor(theme.text.subdued, variantMetaAlpha())}>·</text>
                             <text>
                               <span
@@ -1896,7 +1895,7 @@ export function Prompt(props: PromptProps) {
                                   bold: true,
                                 }}
                               >
-                                {identity().variant}
+                                {promptDisplay().variant}
                               </span>
                             </text>
                           </Show>

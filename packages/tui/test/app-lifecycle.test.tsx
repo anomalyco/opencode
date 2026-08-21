@@ -296,7 +296,7 @@ test("session startup prompt is submitted exactly once", async () => {
   }
 })
 
-test("keeps the prompt identity visible while a new location catalog loads", async () => {
+test("keeps the prompt display stable while a new location catalog loads", async () => {
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const events = createEventStream()
