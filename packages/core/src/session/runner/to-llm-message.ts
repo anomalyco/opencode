@@ -75,6 +75,11 @@ const attachmentContent = (file: FileAttachment): ContentPart[] => {
 }
 
 const userAttachmentContent = (files: readonly FileAttachment[]) => {
+  const eligible = files.filter(
+    (file) => imageMimes.has(file.mime) && file.source.type === "inline" && file.mention?.text,
+  )
+  if (eligible.length < 2) return files.flatMap(attachmentContent)
+
   const seen = new Map<string, Set<string>>()
   return files.flatMap((file) => {
     if (!imageMimes.has(file.mime) || file.source.type !== "inline" || !file.mention?.text)
