@@ -1,4 +1,4 @@
-export * as ShellScan from "./index.js"
+export * as ShellScan from "./scan.js"
 
 export type OpaqueReason =
   | "command-substitution"

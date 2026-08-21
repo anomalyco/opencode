@@ -50,9 +50,6 @@ await $`bun ./packages/ai/script/publish.ts`
 console.log("\n=== util ===\n")
 await $`bun ./packages/util/script/publish.ts`
 
-console.log("\n=== shell scan ===\n")
-await $`bun ./packages/shell-scan/script/publish.ts`
-
 console.log("\n=== protocol ===\n")
 await $`bun ./packages/protocol/script/publish.ts`
 

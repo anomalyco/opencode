@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ShellScan } from "../src/index.js"
+import { ShellScan } from "../../src/shell/scan.js"
 
 const staticCommands = [
   ["git status", ["git", "status"]],

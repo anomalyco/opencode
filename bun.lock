@@ -365,7 +365,6 @@
         "@opencode-ai/codemode": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/schema": "workspace:*",
-        "@opencode-ai/shell-scan": "workspace:*",
         "@opencode-ai/util": "workspace:*",
         "@parcel/watcher": "2.5.1",
         "@silvia-odwyer/photon-node": "0.3.4",
@@ -733,15 +732,6 @@
         "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
-      },
-    },
-    "packages/shell-scan": {
-      "name": "@opencode-ai/shell-scan",
-      "version": "0.0.0",
-      "devDependencies": {
-        "@tsconfig/bun": "catalog:",
-        "@types/bun": "catalog:",
-        "@typescript/native-preview": "catalog:",
       },
     },
     "packages/simulation": {
@@ -2063,8 +2053,6 @@
     "@opencode-ai/server": ["@opencode-ai/server@workspace:packages/server"],
 
     "@opencode-ai/session-ui": ["@opencode-ai/session-ui@workspace:packages/session-ui"],
-
-    "@opencode-ai/shell-scan": ["@opencode-ai/shell-scan@workspace:packages/shell-scan"],
 
     "@opencode-ai/simulation": ["@opencode-ai/simulation@workspace:packages/simulation"],
 

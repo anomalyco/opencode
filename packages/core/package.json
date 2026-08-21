@@ -118,7 +118,6 @@
     "@opencode-ai/ai": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/shell-scan": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@standard-schema/spec": "catalog:",
     "@parcel/watcher": "2.5.1",
