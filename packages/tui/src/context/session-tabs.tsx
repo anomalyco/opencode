@@ -76,6 +76,13 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     let history: SessionTabHistory = { entries: [], index: -1 }
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
     let closedTabs: ClosedSessionTab[] = []
+    // Storage mutations apply against the on-disk draft under a file lock, so
+    // a registration queued by the route effect can land AFTER a removal that
+    // ran while the write was still in flight — resurrecting a tab that was
+    // just closed. Removing a tab marks it cancelled so any late-applying
+    // registration becomes a no-op; navigating to the session again clears
+    // the mark.
+    const cancelledTabs = new Set<string>()
     const scrollAnchors = new Map<string, ScrollAnchor>()
 
     const onFocus = () => setFocused(true)
@@ -152,6 +159,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       if (!enabled()) return
       if (route.data.type !== "session" || route.data.sessionID === "dummy") return
       const sessionID = root(route.data.sessionID)
+      cancelledTabs.delete(sessionID)
       history = recordSessionTabHistory(history, sessionID)
       const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
       const tabs = openSessionTab(state().tabs, {
@@ -160,6 +168,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       })
       if (tabs === state().tabs) return
       update((draft) => {
+        if (cancelledTabs.has(sessionID)) return
         draft.tabs = openSessionTab(draft.tabs, {
           sessionID,
           title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
@@ -266,6 +275,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
+      cancelledTabs.add(target)
       scrollAnchors.delete(target)
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
@@ -352,6 +362,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         closedTabs = result.stack
         const tabs = result.tabs
         if (!tabs || !result.sessionID) return
+        cancelledTabs.delete(result.sessionID)
         update((draft) => {
           draft.tabs = tabs
         })

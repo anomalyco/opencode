@@ -238,6 +238,12 @@ export function createData(config: CreateDataInput) {
   // to exist server-side instead of failing with "not found".
   const creating = new Map<string, Promise<unknown>>()
 
+  // Per-session send chain: prompts must be admitted in submission order,
+  // and HTTP gives no ordering across concurrent POSTs. Each prompt waits
+  // for the previous prompt's POST (settled, so one failure does not block
+  // the next) before sending its own.
+  const sending = new Map<string, Promise<unknown>>()
+
   // Upsert an admitted inbox item into pending, input, and (for user and
   // synthetic items) the visible transcript. Used by the inbox.enqueued
   // handler and by optimistic prompt admission; the upsert is what reconciles
@@ -1217,18 +1223,28 @@ export function createData(config: CreateDataInput) {
           })
         }
         // Wrapped so even a synchronous client failure reaches the rollback.
-        // The POST additionally waits for the caller's gate and for any
-        // in-flight optimistic create of this session: the row renders now,
-        // the send happens once the session exists server-side.
-        return Promise.resolve()
-          .then(() => Promise.all([gate, creating.get(request.sessionID)]))
+        // The POST additionally waits for the caller's gate, for any
+        // in-flight optimistic create of this session, and for the previous
+        // prompt's POST: the row renders now, the send happens once the
+        // session exists server-side and earlier prompts are admitted.
+        const previous = sending.get(request.sessionID)
+        const send = Promise.resolve()
+          .then(() => Promise.all([gate, creating.get(request.sessionID), previous]))
           .then(() => api().session.prompt({ ...request, id }))
-          .catch((error) => {
-            // Roll back only rows this call admitted and the echo has not
-            // acknowledged: anything else is server state.
-            if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
-            throw error
-          })
+        const settled = send.then(
+          () => undefined,
+          () => undefined,
+        )
+        sending.set(request.sessionID, settled)
+        void settled.then(() => {
+          if (sending.get(request.sessionID) === settled) sending.delete(request.sessionID)
+        })
+        return send.catch((error) => {
+          // Roll back only rows this call admitted and the echo has not
+          // acknowledged: anything else is server state.
+          if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
+          throw error
+        })
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
