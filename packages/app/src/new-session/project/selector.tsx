@@ -292,7 +292,7 @@ export function PromptProjectSelector(props: {
         <Menu.Content
           ref={contentRef}
           id="prompt-project-menu"
-          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 !p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none [&[data-closed]]:!animate-none"
+          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none [&[data-closed]]:animate-none"
           onOpenAutoFocus={(event) => event.preventDefault()}
           onPointerDownOutside={dismiss.preventTriggerRestore}
           onFocusOutside={dismiss.preventTriggerRestore}
@@ -414,7 +414,7 @@ export function PromptProjectSelector(props: {
                   data-option-key={props.controller.actionKey()}
                   class={projectActionClass}
                   classList={{
-                    "!bg-v2-overlay-simple-overlay-hover": props.controller.active() === props.controller.actionKey(),
+                    "bg-v2-overlay-simple-overlay-hover": props.controller.active() === props.controller.actionKey(),
                   }}
                   onMouseEnter={() => props.controller.setActive(props.controller.actionKey())}
                 >
@@ -422,7 +422,7 @@ export function PromptProjectSelector(props: {
                   <span class="min-w-0 flex-1 truncate leading-5">{props.controller.labels.add()}</span>
                 </Menu.SubTrigger>
                 <Menu.Portal>
-                  <Menu.SubContent class="min-w-[180px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 !p-0.5 shadow-[var(--v2-elevation-floating)] focus:outline-none">
+                  <Menu.SubContent class="min-w-[180px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0.5 shadow-[var(--v2-elevation-floating)] focus:outline-none">
                     <For each={props.controller.servers()}>
                       {(server) => <ServerAction server={server!} onSelect={selectAction} />}
                     </For>
@@ -508,18 +508,8 @@ function ProjectItem(props: {
       id={key()}
       value={key()}
       data-option-key={key()}
-      class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
-      classList={{ "!bg-v2-overlay-simple-overlay-hover": props.controller.active() === key() }}
-      style={{
-        "font-family": "var(--v2-font-family-sans)",
-        "font-size": "13px",
-        "font-weight": 440,
-        "line-height": "20px",
-        "letter-spacing": "-0.04px",
-        color: "var(--v2-text-text-base)",
-        height: "28px",
-        padding: "0 12px",
-      }}
+      class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:bg-v2-overlay-simple-overlay-hover"
+      classList={{ "bg-v2-overlay-simple-overlay-hover": props.controller.active() === key() }}
       closeOnSelect
       onMouseEnter={() => {
         props.controller.setActive(key())
@@ -538,7 +528,7 @@ function ProjectItem(props: {
 }
 
 const projectActionClass =
-  "h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
+  "h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:bg-v2-overlay-simple-overlay-hover"
 
 function ProjectAction(props: {
   server?: string
@@ -550,18 +540,8 @@ function ProjectAction(props: {
     <Menu.Item
       id={key()}
       data-option-key={key()}
-      class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
-      classList={{ "!bg-v2-overlay-simple-overlay-hover": props.controller.active() === key() }}
-      style={{
-        "font-family": "var(--v2-font-family-sans)",
-        "font-size": "13px",
-        "font-weight": 440,
-        "line-height": "20px",
-        "letter-spacing": "-0.04px",
-        color: "var(--v2-text-text-base)",
-        height: "28px",
-        padding: "0 12px",
-      }}
+      class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:bg-v2-overlay-simple-overlay-hover"
+      classList={{ "bg-v2-overlay-simple-overlay-hover": props.controller.active() === key() }}
       onMouseEnter={() => {
         props.controller.setActive(key())
         props.controller.focusSearch()
