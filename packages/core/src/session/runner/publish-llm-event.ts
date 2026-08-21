@@ -333,10 +333,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     return true
   })
 
-  const failTools = Effect.fnUntraced(function* (
-    error: SessionError.Error,
-    mode: "all" | "hosted" | "uncalled" = "all",
-  ) {
+  const failTools = Effect.fnUntraced(function* (error: SessionError.Error, mode: "all" | "hosted" | "uncalled") {
     let failed = false
     for (const [id, tool] of tools) {
       if (tool.settled || (mode === "hosted" && !tool.providerExecuted) || (mode === "uncalled" && tool.called))
@@ -373,7 +370,9 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     })
   })
 
-  const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(failTools)
+  const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(
+    (error: SessionError.Error, scope: "hosted" | "all" = "all") => failTools(error, scope),
+  )
 
   const assistantMessageIDForTool = (id: string) => {
     const tool = tools.get(id)
