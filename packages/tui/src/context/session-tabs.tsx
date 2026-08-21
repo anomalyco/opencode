@@ -137,14 +137,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const status = (sessionID: string) => {
       const session = root(sessionID)
       const members = family(session)
-      const unread = members.filter(isUnread)
       return {
-        unread:
-          unread.length === 0
-            ? undefined
-            : unread.some((id) => data.session.get(id)?.outcome === "failed")
-              ? ("error" as const)
-              : ("activity" as const),
+        // Unread reads the root session only: background subagent completions wake the parent,
+        // whose own idle transition then carries the signal.
+        unread: !isUnread(session)
+          ? undefined
+          : data.session.get(session)?.outcome === "failed"
+            ? ("error" as const)
+            : ("activity" as const),
         promptPulse: promptPulses()[session] ?? 0,
         attention: members.some(
           (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
@@ -180,19 +180,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createEffect(() => {
       if (!focused()) return
       if (route.data.type !== "session" || route.data.sessionID === "dummy") return
-      const pending = family(route.data.sessionID).flatMap((id) => {
-        const idle = data.session.get(id)?.time.idle
-        if (idle === undefined || !isUnread(id) || acknowledged.get(id) === idle) return []
-        return [{ id, idle }]
-      })
-      if (pending.length === 0) return
+      const sessionID = root(route.data.sessionID)
+      const idle = data.session.get(sessionID)?.time.idle
+      if (idle === undefined || !isUnread(sessionID) || acknowledged.get(sessionID) === idle) return
       // Record before the request so event-driven re-runs don't re-post the same watermark.
-      for (const entry of pending) acknowledged.set(entry.id, entry.idle)
-      void Promise.all(
-        pending.map((entry) =>
-          client.api.session.view({ sessionID: entry.id }).catch(() => acknowledged.delete(entry.id)),
-        ),
-      )
+      acknowledged.set(sessionID, idle)
+      void client.api.session.view({ sessionID }).catch(() => acknowledged.delete(sessionID))
     })
 
     createEffect(() => {
