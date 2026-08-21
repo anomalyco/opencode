@@ -1,9 +1,10 @@
 export * as SessionModelRequest from "./model-request.js"
 
-import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import { HttpOptions, LanguageModel, LLM, LLMRequest, Message, SystemPart } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import type { Content } from "@opencode-ai/schema/tool"
-import { Cause, Config, Context, Effect, Layer, Result } from "effect"
+import { Cause, Config, Context, Effect, Layer, Result, Stream } from "effect"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app.js"
 import { Model } from "../model.js"
@@ -11,11 +12,7 @@ import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
-import { SessionModelHeaders } from "./model-headers.js"
-import { SessionModelHook } from "./model-hook.js"
-import { SessionModelHttp } from "./model-http.js"
 import { SessionModelTransport } from "./model-transport.js"
-import { SessionPromptCacheKey } from "./prompt-cache-key.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
@@ -191,6 +188,78 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
   )
 }
 
+/** The identity a plugin hook sees for one outbound request. */
+interface HookScope {
+  readonly sessionID: SessionSchema.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+}
+
+const sessionHeaders = (session: Pick<SessionSchema.Info, "id" | "parentID" | "projectID">, app: App.Info) => ({
+  "x-session-affinity": session.id,
+  "X-Session-Id": session.id,
+  ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
+  "User-Agent": App.useragent(app),
+  "x-opencode-project": session.projectID,
+  "x-opencode-session": session.id,
+  "x-opencode-client": app.name,
+})
+
+const promptCacheKey = (sessionID: SessionSchema.ID) =>
+  /^ses_[0-9a-f]{64}$/.test(sessionID) ? sessionID.slice(4) : sessionID
+
+// Lets session.model.request hooks rewrite the base URL and headers before dispatch.
+const applyModelHooks = (hooks: PluginHooks.Interface, scope: HookScope, request: LLMRequest) =>
+  Effect.gen(function* () {
+    const currentBaseURL = request.model.route.endpoint.baseURL
+    const event = yield* hooks.trigger("session", "model.request", {
+      ...scope,
+      baseURL: typeof currentBaseURL === "string" ? currentBaseURL : undefined,
+      headers: { ...request.http?.headers },
+    })
+    const route =
+      event.baseURL !== undefined && event.baseURL !== currentBaseURL
+        ? request.model.route.with({ endpoint: { baseURL: event.baseURL } })
+        : request.model.route
+    return LLMRequest.update(request, {
+      model: route === request.model.route ? request.model : LanguageModel.update(request.model, { route }),
+      http: new HttpOptions({
+        body: request.http?.body,
+        headers: Object.keys(event.headers).length === 0 ? undefined : event.headers,
+        query: request.http?.query,
+      }),
+    })
+  })
+
+// Exposes each outbound HTTP exchange to session.http.request/response hooks
+// through web-standard Request/Response values.
+const httpMiddleware =
+  (hooks: PluginHooks.Interface, scope: HookScope): NonNullable<StreamOptions["http"]> =>
+  (request, handler) =>
+    Effect.gen(function* () {
+      const before = yield* hooks.trigger("session", "http.request", {
+        ...scope,
+        request: yield* HttpClientRequest.toWeb(request),
+      })
+      let sent = HttpClientRequest.fromWeb(before.request)
+      if (before.request.body)
+        sent = HttpClientRequest.bodyUint8Array(
+          sent,
+          new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
+          before.request.headers.get("content-type") ?? undefined,
+        )
+      const response = yield* handler(sent)
+      const after = yield* hooks.trigger("session", "http.response", {
+        ...scope,
+        request: before.request,
+        response: new Response(
+          [204, 205, 304].includes(response.status) ? null : yield* Stream.toReadableStreamEffect(response.stream),
+          { status: response.status, headers: response.headers },
+        ),
+      })
+      return HttpClientResponse.fromWeb(sent, after.response)
+    }).pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))))
+
 /**
  * Builds an outbound model request and captures the tool-call capability that
  * must remain paired with it. It does not execute the request or mutate
@@ -250,16 +319,16 @@ export const layer = Layer.effect(
           return [[name, { ...tool, description: definition.description, inputSchema: definition.input }] as const]
         }),
       )
-      const request = yield* SessionModelHook.apply(
+      const request = yield* applyModelHooks(
         hooks,
         { sessionID: session.id, agent: input.scope.agentID, model: resolved.ref },
         LLM.request({
           model,
           http: {
-            headers: SessionModelHeaders.make(session, app),
+            headers: sessionHeaders(session, app),
           },
           // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
-          promptCacheKey: SessionPromptCacheKey.make(session.fork?.sessionID ?? session.id),
+          promptCacheKey: promptCacheKey(session.fork?.sessionID ?? session.id),
           system: context.system,
           messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
           tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
@@ -277,7 +346,7 @@ export const layer = Layer.effect(
             )
           : false
       const http = hasHttpHooks
-        ? SessionModelHttp.middleware(hooks, {
+        ? httpMiddleware(hooks, {
             sessionID: session.id,
             agent: input.scope.agentID,
             model: resolved.ref,
