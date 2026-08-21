@@ -180,9 +180,9 @@ const layer = Layer.effect(
           }),
         )
       }),
-      resolve: Effect.fn("WellKnown.resolveEntry")(function* (entry, variables) {
-        return yield* resolveEntry(entry, variables).pipe(Effect.provideService(HttpClient.HttpClient, http))
-      }),
+      resolve: Effect.fn("WellKnown.resolveEntry")((entry, variables) =>
+        resolveEntry(entry, variables).pipe(Effect.provideService(HttpClient.HttpClient, http)),
+      ),
     })
   }),
 )

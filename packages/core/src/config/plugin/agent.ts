@@ -160,8 +160,7 @@ function isPathAction(action: string): action is PathAction {
 }
 
 function expandHome(resource: string, home: string) {
-  if (resource === "~") return home
-  if (resource === "$HOME") return home
+  if (resource === "~" || resource === "$HOME") return home
   const relative = resource.startsWith("~/")
     ? resource.slice(2)
     : resource.startsWith("$HOME/") || resource.startsWith("$HOME\\")

@@ -19,7 +19,7 @@ export const EmbeddedSource = Skill.EmbeddedSource
 export type EmbeddedSource = Skill.EmbeddedSource
 
 export const Source = Skill.Source
-export type Source = typeof Source.Type
+export type Source = Skill.Source
 
 export const Info = Skill.Info
 export type Info = Skill.Info
