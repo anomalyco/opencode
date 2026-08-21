@@ -29,6 +29,7 @@ import { PluginSupervisor } from "./plugin/supervisor.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
 import { Shell } from "./shell.js"
+import { ShellPolicy } from "./shell/policy.js"
 import { ShellSelect } from "./shell/select.js"
 import { Reference } from "./reference.js"
 import { WebSearch } from "./websearch.js"
@@ -72,6 +73,7 @@ const locationServiceNodes = [
   Worktree.refreshNode,
   FileSystemSearch.node,
   FileSystem.node,
+  ShellPolicy.node,
   ShellSelect.node,
   Pty.node,
   Shell.node,

@@ -53,6 +53,7 @@ import { Ripgrep } from "../ripgrep.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
 import { Shell } from "../shell.js"
+import { ShellPolicy } from "../shell/policy.js"
 import { ShellSelect } from "../shell/select.js"
 import { Snapshot } from "../snapshot.js"
 import { Skill } from "../skill.js"
@@ -124,6 +125,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const compaction = yield* SessionCompaction.Service
   const instructions = yield* SessionInstructions.Service
   const shell = yield* Shell.Service
+  const shellPolicy = yield* ShellPolicy.Service
   const shellSelect = yield* ShellSelect.Service
   const snapshot = yield* Snapshot.Service
   const skill = yield* Skill.Service
@@ -168,6 +170,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(SessionCompaction.Service, compaction),
     Context.make(SessionInstructions.Service, instructions),
     Context.make(Shell.Service, shell),
+    Context.make(ShellPolicy.Service, shellPolicy),
     Context.make(ShellSelect.Service, shellSelect),
     Context.make(Snapshot.Service, snapshot),
     Context.make(Skill.Service, skill),
@@ -219,6 +222,7 @@ export const requirements = LayerNode.group([
   SessionCompaction.node,
   SessionInstructions.node,
   Shell.node,
+  ShellPolicy.node,
   ShellSelect.node,
   Snapshot.node,
   Skill.node,

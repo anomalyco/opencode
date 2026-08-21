@@ -17,7 +17,7 @@ export const DIRECTORY = "tool-output"
 
 type Result = Tool.Result
 
-type Limits = {
+export type Limits = {
   maxLines: number
   maxBytes: number
 }
@@ -27,6 +27,7 @@ export type Draft = {
 }
 
 export interface Interface extends State.Transformable<Draft> {
+  readonly limits: () => Readonly<Limits>
   readonly truncate: (result: Result) => Effect.Effect<Result>
   readonly cleanup: () => Effect.Effect<void>
 }
@@ -125,6 +126,7 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
+      limits: () => ({ ...state.get() }),
       truncate,
       cleanup: () => cleanup(fs, directory),
     })

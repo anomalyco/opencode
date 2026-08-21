@@ -3,6 +3,7 @@ export * as ConfigShellPlugin from "./shell.js"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
+import { ShellPolicy } from "../../shell/policy.js"
 import { ShellSelect } from "../../shell/select.js"
 
 export const Plugin = define({
@@ -10,10 +11,11 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const shell = yield* ShellSelect.Service
+    const policy = yield* ShellPolicy.Service
     const loaded = { entries: yield* config.entries() }
     const reload = config.entries().pipe(
       Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-      Effect.andThen(shell.reload()),
+      Effect.andThen(Effect.all([shell.reload(), policy.reload()], { concurrency: "unbounded", discard: true })),
     )
     yield* ctx.event.subscribe().pipe(
       Stream.filter((event) => event.type === "config.updated"),
@@ -24,6 +26,10 @@ export const Plugin = define({
     yield* shell.transform((draft) => {
       const configured = Config.latest(loaded.entries, "shell")
       if (configured) draft.configure(configured)
+    })
+    yield* policy.transform((draft) => {
+      const configured = Config.latest(loaded.entries, "experimental")?.portable_shell_scanner
+      if (configured !== undefined) draft.configure(configured)
     })
   }),
 })

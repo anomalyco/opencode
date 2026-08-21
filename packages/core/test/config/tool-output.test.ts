@@ -26,6 +26,7 @@ describe("ConfigToolOutputPlugin.Plugin", () => {
           const plugins = yield* Plugin.Service
           yield* ConfigToolOutputPlugin.Plugin.effect(yield* PluginHost.make(plugins))
 
+          expect(output.limits()).toEqual({ maxLines: 1, maxBytes: ToolOutput.MAX_BYTES })
           expect((yield* output.truncate({ content: "one\ntwo" })).metadata?.truncated).toBe(true)
 
           yield* config.setEntries([
@@ -39,7 +40,10 @@ describe("ConfigToolOutputPlugin.Plugin", () => {
           yield* bus.publish(Event.Updated, {})
           for (let attempt = 0; attempt < 200; attempt++) {
             const result = yield* output.truncate({ content: "one\ntwo" })
-            if (result.metadata?.truncated === false) return
+            if (result.metadata?.truncated === false) {
+              expect(output.limits()).toEqual({ maxLines: 2, maxBytes: 1_000 })
+              return
+            }
             yield* Effect.sleep("10 millis")
           }
           yield* Effect.die(new Error("Timed out waiting for tool output config reload"))

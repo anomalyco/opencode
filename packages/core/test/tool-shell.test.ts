@@ -32,6 +32,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Shell } from "@opencode-ai/core/shell"
+import { ShellPolicy } from "@opencode-ai/core/shell/policy"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
@@ -130,13 +131,14 @@ const shellPluginSupervisor = makeLocationNode({
     registerToolPlugin(ShellTool.Plugin).pipe(Effect.as(PluginSupervisor.Service.of({ flush: Effect.void }))),
   ),
   deps: [
-    Config.node,
     Environment.node,
     LocationMutation.node,
     Permission.node,
     PluginRuntime.node,
     Shell.node,
+    ShellPolicy.node,
     Tool.node,
+    ToolOutput.node,
   ],
 })
 
@@ -542,7 +544,7 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("does not add external-directory permission for an experimental portable heredoc", () =>
+  productionIt.live("does not add external-directory permission for an experimental portable heredoc", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -623,7 +625,7 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("uses configured line limits", () =>
+  productionIt.live("uses configured line limits", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
