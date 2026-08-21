@@ -42,18 +42,18 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
   const updateOwnedAssistant = (messageID: SessionMessage.ID, recipe: (draft: DraftAssistant) => void) =>
     Effect.gen(function* () {
       const assistant = yield* adapter.getAssistant(messageID)
-      if (assistant) yield* adapter.updateAssistant(produce(assistant, recipe))
+      if (!assistant) return
+      yield* adapter.updateAssistant(produce(assistant, recipe))
     })
 
   const clearCurrentRetry = Effect.gen(function* () {
     const assistant = yield* adapter.getCurrentAssistant()
-    if (assistant?.retry) {
-      yield* adapter.updateAssistant(
-        produce(assistant, (draft) => {
-          draft.retry = undefined
-        }),
-      )
-    }
+    if (!assistant?.retry) return
+    yield* adapter.updateAssistant(
+      produce(assistant, (draft) => {
+        draft.retry = undefined
+      }),
+    )
   })
 
   const project = pipe(

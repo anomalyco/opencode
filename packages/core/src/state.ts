@@ -89,15 +89,14 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
     if (options.finalize) yield* options.finalize(options.draft(next))
   })
 
-  const apply = (transform: TransformCallback<DraftApi>, draft: DraftApi) =>
-    Effect.sync(() => {
-      transform(draft)
-    })
-
   const materialize = Effect.fnUntraced(function* () {
     const next = options.initial()
     const api = options.draft(next)
-    for (const transform of transforms) yield* apply(transform.run, api)
+    for (const transform of transforms) {
+      yield* Effect.sync(() => {
+        transform.run(api)
+      })
+    }
     yield* commit(next)
   })
 
@@ -135,7 +134,7 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
     return yield* Deferred.await(done)
   })
 
-  const result: Interface<State, DraftApi> = {
+  return {
     get: () => state,
     transform: Effect.fn("State.transform")(function* (update) {
       yield* Effect.annotateCurrentSpan("state", options.name ?? "anonymous")
@@ -176,5 +175,4 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
     }),
     reload,
   }
-  return result
 }
