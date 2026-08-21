@@ -786,22 +786,8 @@ export class RunFooter implements FooterApi {
       return
     }
 
-    const patch: FooterPatch = {}
-
-    if ("variants" in result) {
-      this.setVariants(result.variants ?? [])
-    }
-
-    if ("variant" in result) {
-      this.setCurrentVariant(result.variant)
-    }
-
-    if (result.modelLabel) {
-      patch.model = result.modelLabel
-    }
-
-    this.patch(patch)
-    this.setNotice(result.status ?? "variant updated")
+    this.applySelectionResult(result)
+    if (result.status === undefined) this.setNotice("variant updated")
   }
 
   private handleModelSelect = (model: NonNullable<RunInput["model"]>): void => {
