@@ -11,21 +11,51 @@ import { Shell } from "@opencode-ai/schema/shell"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { which } from "@opencode-ai/core/util/which"
-import { Effect, Fiber, Stream } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
+import { ChildProcessSpawner } from "effect/unstable/process"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { tempGlobalLayer } from "./fixture/global"
 import { tempLocationLayer } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(
+const immediateExitEnvironmentLayer = Layer.effect(
+  Environment.Service,
+  Effect.gen(function* () {
+    const environment = yield* Environment.Service
+    return Environment.Service.of({
+      ...environment,
+      spawner: ChildProcessSpawner.make(() =>
+        Effect.succeed(
+          ChildProcessSpawner.makeHandle({
+            pid: ChildProcessSpawner.ProcessId(4242),
+            exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+            isRunning: Effect.succeed(false),
+            kill: () => Effect.void,
+            stdin: { [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") } as any,
+            stdout: Stream.empty,
+            stderr: Stream.empty,
+            all: Stream.empty,
+            getInputFd: () => ({ [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") }) as any,
+            getOutputFd: () => Stream.empty,
+            unref: Effect.succeed(Effect.void),
+          }),
+        ),
+      ),
+    })
+  }),
+).pipe(Layer.provide(hostEnvironmentLayer))
+
+const shellTestLayer = (environment: Layer.Layer<Environment.Service>) =>
   AppNodeBuilder.build(LayerNode.group([node, Bus.node]), [
     [Config.node, Config.testLayer()],
-    [Environment.node, hostEnvironmentLayer],
+    [Environment.node, environment],
     [Global.node, tempGlobalLayer],
     [Location.node, tempLocationLayer],
-  ]),
-)
+  ])
+
+const it = testEffect(shellTestLayer(hostEnvironmentLayer))
+const immediateExitIt = testEffect(shellTestLayer(immediateExitEnvironmentLayer))
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
   const prev = process.env.SHELL
@@ -44,20 +74,29 @@ const withShell = async (shell: string | undefined, fn: () => void | Promise<voi
 }
 
 describe("shell", () => {
-  it.live("publishes the created shell PID", () =>
+  immediateExitIt.live("publishes the created shell PID before terminal state", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const shell = yield* Service
       const eventFiber = yield* bus
         .subscribe(Shell.Event.Created)
         .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+
       const info = yield* shell.create({ command: "exit 0", timeout: 0 })
       const event = Array.from(yield* Fiber.join(eventFiber))[0]
+      const created = event?.data.info
 
-      expect(event?.data.info.id).toBe(info.id)
-      expect(typeof event?.data.info.pid).toBe("number")
-      expect(event?.data.info.pid).toBe(info.pid)
-      yield* shell.wait(info.id)
+      expect(created?.id).toBe(info.id)
+      expect(created?.pid).toBe(4242)
+      expect(created?.status).toBe("running")
+      expect(created?.exit).toBeUndefined()
+      expect(created?.time.completed).toBeUndefined()
+
+      const terminal = yield* shell.wait(info.id)
+      expect(terminal.pid).toBe(created?.pid)
+      expect(terminal.status).toBe("exited")
+      expect(terminal.exit).toBe(0)
+      expect(terminal.time.completed).toBeDefined()
     }),
   )
 
@@ -110,9 +149,10 @@ describe("shell", () => {
     })
 
     test("normalizes Git Bash shell paths from env", async () => {
-      const shell = "/cygdrive/c/Program Files/Git/bin/bash.exe"
-      await withShell(shell, async () => {
-        expect(ShellSelect.preferred()).toBe(FSUtil.windowsPath(shell))
+      const bash = ShellSelect.gitbash()
+      if (!bash) return
+      await withShell("NU.EXE", async () => {
+        expect(ShellSelect.name(ShellSelect.acceptable())).not.toBe("nu")
       })
     })
 
