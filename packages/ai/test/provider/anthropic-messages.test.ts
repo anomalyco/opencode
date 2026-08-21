@@ -327,6 +327,44 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("normalizes tool call IDs without breaking result pairing", () =>
+    Effect.gen(function* () {
+      const ids = ["functions.echo:1", "functions.echo.1", "functions_echo_1", `call|${"x".repeat(80)}`]
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant(
+              ids.map((id, index) => ToolCallPart.make({ id, name: "echo", input: { index } })),
+            ),
+            ...ids.map((id, index) => Message.tool({ id, name: "echo", result: { index } })),
+          ],
+          cache: "none",
+        }),
+      )
+
+      const calls = prepared.body.messages.flatMap((message) =>
+        message.role === "assistant"
+          ? message.content.flatMap((block) => (block.type === "tool_use" ? [block.id] : []))
+          : [],
+      )
+      const results = prepared.body.messages.flatMap((message) =>
+        message.role === "user"
+          ? message.content.flatMap((block) => (block.type === "tool_result" ? [block.tool_use_id] : []))
+          : [],
+      )
+
+      expect(calls).toEqual([
+        "functions_echo_1_2",
+        "functions_echo_1_3",
+        "functions_echo_1",
+        `call_${"x".repeat(59)}`,
+      ])
+      expect(results).toEqual(calls)
+      expect(calls.every((id) => /^[a-zA-Z0-9_-]{1,64}$/.test(id))).toBe(true)
+    }),
+  )
+
   it.effect("batches parallel tool results into one Anthropic user message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

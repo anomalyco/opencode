@@ -31,6 +31,7 @@ flow correctness.
 | --- | --- | --- |
 | Merged | Accept nullable Anthropic input usage without losing the `message_start` count | [#43759](https://github.com/anomalyco/opencode/issues/43759), [#43761](https://github.com/anomalyco/opencode/pull/43761) |
 | In progress | Ignore unknown named SSE events before JSON decoding | [#43765](https://github.com/anomalyco/opencode/issues/43765), [#43767](https://github.com/anomalyco/opencode/pull/43767) |
+| In progress | Normalize Anthropic tool-call IDs without breaking result pairing | [#43782](https://github.com/anomalyco/opencode/issues/43782) |
 
 Anthropic's `AnthropicVertex` client reuses the Messages API implementation. It
 rewrites Google authentication, the endpoint URL, `model`, and
@@ -56,9 +57,8 @@ same model.
 - [ ] Suppress unsupported `temperature`, `top_p`, and `top_k` values for newer models.
 - [ ] Reject unsupported thinking and effort combinations before network I/O.
 - [ ] Normalize or reject final assistant prefills according to model capability and whitespace rules.
-- [ ] Normalize Anthropic tool-call IDs to the provider's accepted character and length constraints.
+- [x] Normalize Anthropic tool-call IDs to the provider's accepted character and length constraints without breaking result pairing. Tracked by [#43782](https://github.com/anomalyco/opencode/issues/43782).
 - [ ] Filter empty request text blocks at the AI-package boundary rather than relying on Core history conversion.
-- [ ] Restrict base64 image MIME types to JPEG, PNG, GIF, and WebP.
 - [ ] Support URL image/document sources, plain-text/content documents, search-result blocks, and tool references where available.
 - [ ] Model typed request metadata and current request controls instead of requiring raw HTTP body overlays.
 
@@ -153,7 +153,7 @@ capability policy rather than a change to the canonical Messages protocol.
 | Response ID and refusal details | Missing | Preserved |
 | Unsigned thinking replay | Emits invalid thinking | Safely lowers to text by default |
 | Empty request content | Core filters some paths | Adapter filters directly |
-| Tool-call ID normalization | Missing | Implemented |
+| Tool-call ID normalization | Implemented | Implemented, with truncation collision risk |
 | Temperature compatibility | Missing | Model compatibility driven |
 | One-hour cache-write accounting | Raw metadata only | Normalized for costing |
 | Vertex Anthropic | First-class route | Available through custom `AnthropicVertex` client injection |
@@ -175,7 +175,6 @@ capability policy rather than a change to the canonical Messages protocol.
 
 - [x] Merge nullable input usage support in [PR #43761](https://github.com/anomalyco/opencode/pull/43761).
 - [ ] Handle unsigned reasoning replay.
-- [ ] Restrict image MIME types.
 - [ ] Validate manual thinking budgets.
 - [ ] Preserve response identity and refusal details.
 - [x] Filter unknown named SSE events while preserving strict recognized-event decoding.

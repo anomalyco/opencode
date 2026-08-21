@@ -374,16 +374,44 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ type: "tool" as const, name }),
   })
 
-const lowerToolCall = (part: ToolCallPart): AnthropicToolUseBlock => ({
+const TOOL_CALL_ID = /^[a-zA-Z0-9_-]{1,64}$/
+
+const availableToolCallID = (base: string, used: ReadonlySet<string>): string => {
+  for (let attempt = 1; ; attempt++) {
+    const suffix = attempt === 1 ? "" : `_${attempt}`
+    const candidate = `${base.slice(0, 64 - suffix.length)}${suffix}`
+    if (!used.has(candidate)) return candidate
+  }
+}
+
+const normalizeToolCallIDs = (messages: LLMRequest["messages"]) => {
+  const ids = messages.flatMap((message) =>
+    message.content.flatMap((part) => (part.type === "tool-call" || part.type === "tool-result" ? [part.id] : [])),
+  )
+  // Reserve native-valid IDs before allocating replacements so imported history never displaces them.
+  const used = new Set(ids.filter((id) => TOOL_CALL_ID.test(id)))
+  const normalized = new Map<string, string>()
+  return (id: string) => {
+    if (TOOL_CALL_ID.test(id)) return id
+    const previous = normalized.get(id)
+    if (previous !== undefined) return previous
+    const value = availableToolCallID(id.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64) || "tool", used)
+    normalized.set(id, value)
+    used.add(value)
+    return value
+  }
+}
+
+const lowerToolCall = (part: ToolCallPart, id: string): AnthropicToolUseBlock => ({
   type: "tool_use",
-  id: part.id,
+  id,
   name: part.name,
   input: part.input,
 })
 
-const lowerServerToolCall = (part: ToolCallPart): AnthropicServerToolUseBlock => ({
+const lowerServerToolCall = (part: ToolCallPart, id: string): AnthropicServerToolUseBlock => ({
   type: "server_tool_use",
-  id: part.id,
+  id,
   name: part.name,
   input: part.input,
 })
@@ -398,14 +426,17 @@ const serverToolResultType = (name: string): AnthropicServerToolResultType | und
   return undefined
 }
 
-const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult")(function* (part: ToolResultPart) {
+const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult")(function* (
+  part: ToolResultPart,
+  toolUseID: string,
+) {
   const wireType = serverToolResultType(part.name)
   if (!wireType)
     return yield* invalid(`Anthropic Messages does not know how to round-trip server tool result for ${part.name}`)
   // Prefer the provider-owned replay payload; fall back to the result value for
   // histories constructed directly from provider events.
   const payload = part.providerMetadata?.anthropic?.["result"] ?? part.result.value
-  return { type: wireType, tool_use_id: part.id, content: payload } satisfies AnthropicServerToolResultBlock
+  return { type: wireType, tool_use_id: toolUseID, content: payload } satisfies AnthropicServerToolResultBlock
 })
 
 const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: MediaPart) {
@@ -510,6 +541,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   breakpoints: Cache.Breakpoints,
 ) {
   const messages: AnthropicMessage[] = []
+  const toolCallID = normalizeToolCallIDs(request.messages)
 
   for (const [index, message] of request.messages.entries()) {
     if (message.role === "system") {
@@ -566,11 +598,12 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "tool-call") {
-          content.push(part.providerExecuted ? lowerServerToolCall(part) : lowerToolCall(part))
+          const id = toolCallID(part.id)
+          content.push(part.providerExecuted ? lowerServerToolCall(part, id) : lowerToolCall(part, id))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted) {
-          content.push(yield* lowerServerToolResult(part))
+          content.push(yield* lowerServerToolResult(part, toolCallID(part.id)))
           continue
         }
         return yield* invalid(
@@ -587,7 +620,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "tool", ["tool-result"])
       content.push({
         type: "tool_result",
-        tool_use_id: part.id,
+        tool_use_id: toolCallID(part.id),
         content: yield* lowerToolResultContent(part),
         is_error: part.result.type === "error" ? true : undefined,
         cache_control: cacheControl(breakpoints, part.cache),
