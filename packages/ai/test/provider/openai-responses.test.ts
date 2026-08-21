@@ -725,6 +725,100 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("builds Azure WebSocket requests with v1 URLs and bearer auth", () =>
+    Effect.gen(function* () {
+      const deps = Layer.succeed(
+        RequestExecutor.Service,
+        RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
+      )
+      const cases = [
+        {
+          model: Azure.configure({ resourceName: "opencode-test", apiKey: "azure-key" }).responses("deployment"),
+          authorization: "Bearer azure-key",
+        },
+        {
+          model: Azure.configure({ resourceName: "opencode-test", auth: Auth.bearer("entra-token") }).responses(
+            "deployment",
+          ),
+          authorization: "Bearer entra-token",
+        },
+      ]
+
+      yield* Effect.forEach(cases, (item) =>
+        LLMClient.generate(LLM.request({ model: item.model, prompt: "Say hello." }), {
+          webSocket: {
+            execute: (exchange) =>
+              Effect.gen(function* () {
+                expect(exchange.connect.url).toBe("wss://opencode-test.openai.azure.com/openai/v1/responses")
+                expect(exchange.connect.rotateAfterMs).toBe(55 * 60 * 1000)
+                expect(exchange.connect.headers.authorization).toBe(item.authorization)
+                expect(exchange.connect.headers["api-key"]).toBeUndefined()
+                expect(exchange.connect.headers["openai-beta"]).toBeUndefined()
+                expect(JSON.parse((yield* exchange.driver.create(undefined)).message)).toMatchObject({
+                  type: "response.create",
+                  model: "deployment",
+                  store: false,
+                })
+                return {
+                  frames: Stream.make(
+                    JSON.stringify({ type: "response.created", response: { id: "resp_azure" } }),
+                    JSON.stringify({ type: "response.completed", response: { id: "resp_azure" } }),
+                  ),
+                  complete: Effect.void,
+                }
+              }),
+          },
+        }).pipe(Effect.provide(LLMClient.layer.pipe(Layer.provide(deps)))),
+      )
+    }),
+  )
+
+  it.effect("keeps unsupported Azure endpoints and API versions on HTTP", () =>
+    Effect.gen(function* () {
+      const cases = [
+        {
+          model: Azure.configure({
+            resourceName: "opencode-test",
+            apiKey: "azure-key",
+            apiVersion: "2025-04-01-preview",
+          }).responses("deployment"),
+          url: "https://opencode-test.openai.azure.com/openai/v1/responses?api-version=2025-04-01-preview",
+        },
+        {
+          model: Azure.configure({
+            resourceName: "opencode-test",
+            apiKey: "azure-key",
+            useDeploymentBasedUrls: true,
+          }).responses("deployment"),
+          url: "https://opencode-test.openai.azure.com/openai/deployments/deployment/responses?api-version=v1",
+        },
+        {
+          model: Azure.configure({ baseURL: "https://gateway.example/azure", apiKey: "azure-key" }).responses(
+            "deployment",
+          ),
+          url: "https://gateway.example/azure/responses",
+        },
+      ]
+
+      yield* Effect.forEach(cases, (item) =>
+        LLMClient.generate(LLM.request({ model: item.model, prompt: "Say hello." }), {
+          webSocket: { execute: () => Effect.die("unexpected WebSocket request") },
+        }).pipe(
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                expect(input.request.url).toBe(item.url)
+                return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+                  headers: { "content-type": "text/event-stream" },
+                })
+              }),
+            ),
+          ),
+        ),
+      )
+    }),
+  )
+
   it.effect("uses exactly one HTTP request when no WebSocket executor is supplied", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)

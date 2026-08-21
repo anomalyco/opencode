@@ -205,7 +205,7 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("selects WebSocket from deployment capability with built-in provider hooks enabled", () =>
+  it.effect("selects Azure WebSocket from capability and the Azure flag only", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       yield* credentials.create({
@@ -224,7 +224,7 @@ describe("OpenAIPlugin", () => {
       const agentID = Agent.ID.make("build")
       const route = OpenAIResponses.route.with({
         id: "deployment-responses",
-        provider: Provider.ID.make("deployment"),
+        provider: Provider.ID.azure,
       })
       const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
         capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
@@ -258,7 +258,7 @@ describe("OpenAIPlugin", () => {
       const prepared = yield* program.pipe(
         Effect.provide(
           ConfigProvider.layer(
-            ConfigProvider.fromEnv({ env: { OPENCODE_EXPERIMENTAL_DEPLOYMENT_RESPONSES_WEBSOCKET: "true" } }),
+            ConfigProvider.fromEnv({ env: { OPENCODE_EXPERIMENTAL_AZURE_RESPONSES_WEBSOCKET: "true" } }),
           ),
         ),
       )

@@ -1,3 +1,4 @@
+import { Headers } from "effect/unstable/http"
 import { Auth } from "../route/auth.js"
 import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
 import type { Route as RouteDef, RouteDefaultsInput } from "../route/client.js"
@@ -10,6 +11,7 @@ import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-opt
 
 export const id = ProviderID.make("azure")
 const routeAuth = Auth.remove("authorization")
+const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 55 * 60 * 1000
 
 // Azure needs the customer's resource URL; supply either `resourceName`
 // (helper builds the URL) or `baseURL` directly.
@@ -40,6 +42,30 @@ const responsesRoute = OpenAIResponses.route.with({
   id: "azure-openai-responses",
   provider: id,
   auth: routeAuth,
+  transport: OpenAIResponses.channelTransport({
+    id: "azure-openai-responses",
+    name: "Azure OpenAI Responses",
+    rotateAfterMs: RESPONSES_WEBSOCKET_ROTATE_AFTER_MS,
+    enabled: (value) => {
+      const url = new URL(value)
+      return (
+        url.protocol === "https:" &&
+        url.hostname.endsWith(".openai.azure.com") &&
+        url.pathname.endsWith("/openai/v1/responses") &&
+        url.searchParams.get("api-version") === "v1"
+      )
+    },
+    url: (value) => {
+      const url = new URL(value)
+      url.searchParams.delete("api-version")
+      return url.toString()
+    },
+    headers: (headers) => {
+      const apiKey = headers["api-key"]
+      if (!apiKey) return headers
+      return Headers.remove(Headers.set(headers, "authorization", `Bearer ${apiKey}`), "api-key")
+    },
+  }),
 })
 
 const chatRoute = OpenAIChat.route.with({
