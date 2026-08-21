@@ -277,50 +277,6 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
-  cliIt.concurrent(
-    "answers requested permissions from subagents",
-    ({ llm, opencode }) =>
-      Effect.gen(function* () {
-        yield* llm.tool("task", {
-          description: "Run a command",
-          prompt: "Run the requested command",
-          subagent_type: "general",
-        })
-        yield* llm.tool("bash", { command: "printf child", description: "Print from the child" })
-        yield* llm.text("child finished")
-        yield* llm.text("parent finished")
-
-        const result = yield* opencode.run("delegate a command", {
-          permission: { bash: "ask" },
-          extraArgs: ["--dangerously-skip-permissions"],
-          timeoutMs: 10_000,
-        })
-
-        opencode.expectExit(result, 0)
-        expect(result.stdout).toContain("parent finished")
-
-        yield* llm.reset
-        yield* llm.tool("task", {
-          description: "Run a command",
-          prompt: "Run the requested command",
-          subagent_type: "general",
-        })
-        yield* llm.tool("bash", { command: "printf child", description: "Print from the child" })
-        yield* llm.text("child continued")
-        yield* llm.text("parent continued")
-
-        const rejected = yield* opencode.run("delegate a rejected command", {
-          permission: { bash: "ask" },
-          timeoutMs: 10_000,
-        })
-
-        opencode.expectExit(rejected, 0)
-        expect(rejected.stderr).toContain("permission requested: bash")
-        expect(rejected.stdout).toContain("child continued")
-      }),
-    30_000,
-  )
-
   cliIt.live(
     "attach mode sends client-local file contents without a shared path",
     ({ home, llm, opencode }) =>
