@@ -66,7 +66,7 @@ app.message(async ({ message, say }) => {
   console.log("✅ Processing message:", message.text)
 
   const channel = message.channel
-  const thread = (message as any).thread_ts || message.ts
+  const thread = ("thread_ts" in message && typeof message.thread_ts === "string" && message.thread_ts) || message.ts
   const sessionKey = `${channel}-${thread}`
 
   let session = sessions.get(sessionKey)
@@ -116,16 +116,12 @@ app.message(async ({ message, say }) => {
     return
   }
 
-  const response = result.data
-
   // Build response text
   const responseText =
-    response.info?.content ||
-    response.parts
-      ?.filter((p: any) => p.type === "text")
-      .map((p: any) => p.text)
-      .join("\n") ||
-    "I received your message but didn't have a response."
+    result.data.parts
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n") || "I received your message but didn't have a response."
 
   console.log("💬 Sending response:", responseText)
 
