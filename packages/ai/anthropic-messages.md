@@ -30,7 +30,7 @@ flow correctness.
 | Status | Change | Tracking |
 | --- | --- | --- |
 | Merged | Accept nullable Anthropic input usage without losing the `message_start` count | [#43759](https://github.com/anomalyco/opencode/issues/43759), [#43761](https://github.com/anomalyco/opencode/pull/43761) |
-| In progress | Ignore unknown named SSE events before JSON decoding | [#43765](https://github.com/anomalyco/opencode/issues/43765), [#43767](https://github.com/anomalyco/opencode/pull/43767) |
+| Merged | Ignore unknown named SSE events before JSON decoding | [#43765](https://github.com/anomalyco/opencode/issues/43765), [#43767](https://github.com/anomalyco/opencode/pull/43767) |
 | In progress | Normalize Anthropic tool-call IDs without breaking result pairing | [#43782](https://github.com/anomalyco/opencode/issues/43782), [#43783](https://github.com/anomalyco/opencode/pull/43783) |
 
 Anthropic's `AnthropicVertex` client reuses the Messages API implementation. It
