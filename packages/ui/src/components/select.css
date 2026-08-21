@@ -106,6 +106,14 @@
     animation: select-open 0.15s ease-out;
   }
 
+  /* A closed dropdown still sits over the rows around its trigger until it is
+     unmounted, and that unmount waits on an animation frame that never arrives
+     when the window is throttled or occluded. Never let it swallow clicks.
+     `!important` beats the inline `pointer-events` Kobalte's layer stack writes. */
+  &[data-closed] {
+    pointer-events: none !important;
+  }
+
   [data-slot="select-select-content-list"] {
     overflow-y: auto;
     max-height: 12rem;

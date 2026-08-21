@@ -20,8 +20,14 @@
   animation: select-v2-content-in 120ms ease-out;
 }
 
+/* A closing dropdown is on its way out and must never swallow clicks: it stays
+   laid out over the rows around the trigger, and if its exit animation never
+   completes (throttled/occluded window) the invisible element lingers and eats
+   every click in that area. `!important` is required because Kobalte's dismissable
+   layer stack writes `pointer-events` inline on the content node. */
 [data-component="menu-v2-content"][data-slot="select-v2-content"][data-closed] {
   animation: select-v2-content-out 80ms ease-in forwards;
+  pointer-events: none !important;
 }
 
 @keyframes select-v2-content-in {
