@@ -1,9 +1,9 @@
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Show } from "solid-js"
-import { useLanguage } from "@/context/language"
-import { useServer } from "@/context/server"
-import { serverName } from "@/context/servers"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useServer } from "@/runtime/server/current"
+import { serverName } from "@/runtime/server/registry"
 
 export function IncompatibleServerPanel(props: { onClose?: () => void }) {
   const language = useLanguage()

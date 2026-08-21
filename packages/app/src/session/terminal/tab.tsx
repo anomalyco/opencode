@@ -4,9 +4,9 @@ import { createStore } from "solid-js/store"
 import { useSortable } from "@dnd-kit/solid/sortable"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Menu } from "@opencode-ai/ui/menu"
-import { isDefaultTitle } from "@/context/terminal-title"
-import { useTerminal, type LocalPTY } from "@/context/terminal"
-import { useLanguage } from "@/context/language"
+import { isDefaultTitle } from "@/session/terminal/title"
+import { useTerminal, type LocalPTY } from "@/session/terminal/context"
+import { useLanguage } from "@/runtime/i18n/language"
 import { focusTerminalById } from "@/session/helpers"
 
 export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; onClose?: () => void }): JSX.Element {

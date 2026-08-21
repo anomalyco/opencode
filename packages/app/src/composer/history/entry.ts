@@ -1,5 +1,5 @@
 import type { Prompt } from "@/composer/state"
-import type { SelectedLineRange } from "@/context/file"
+import type { SelectedLineRange } from "@/workspaces/files/model"
 
 export const MAX_HISTORY = 100
 

@@ -4,9 +4,9 @@ import { useSortable } from "@dnd-kit/solid/sortable"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { useFile } from "@/context/file"
-import { useLanguage } from "@/context/language"
-import { useCommand } from "@/context/command"
+import { useFile } from "@/workspaces/files/model"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useCommand } from "@/shell/commands/command"
 import { FileVisual } from "./session-sortable-tab"
 
 export function SortableTab(props: {

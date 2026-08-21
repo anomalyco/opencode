@@ -1,9 +1,9 @@
 import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
-import { useLayout } from "@/context/layout"
-import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
-import { useWorkspaceLocation } from "@/context/location"
-import { useServerSDK } from "@/context/server-sdk"
+import { useLayout } from "@/shell/state/layout"
+import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
+import { useWorkspaceLocation } from "@/workspaces/location"
+import { useServerSDK } from "@/runtime/server/client"
 import { base64Encode } from "@opencode-ai/util/encode"
 
 export const useSessionKey = () => {

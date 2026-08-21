@@ -13,7 +13,7 @@ import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { ThemeProvider, useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { Font } from "@opencode-ai/ui/font"
-import { LanguageProvider, UiI18nBridge, useLanguage } from "@/context/language"
+import { LanguageProvider, UiI18nBridge, useLanguage } from "@/runtime/i18n/language"
 
 function resolveScheme(value: unknown): ColorScheme {
   if (value === "light" || value === "dark" || value === "system") return value

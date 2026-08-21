@@ -1,10 +1,10 @@
 import { createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLanguage } from "@/context/language"
-import { usePlatform } from "@/context/platform"
-import { Persist, persisted } from "@/utils/persist"
-import { showToast } from "@/utils/toast"
-import { useServer } from "@/context/server"
+import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
+import { Persist, persisted } from "@/runtime/persistence/storage"
+import { showToast } from "@/shell/notifications/toast"
+import { useServer } from "@/runtime/server/current"
 
 export const OPEN_APPS = [
   "vscode",

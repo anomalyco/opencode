@@ -1,4 +1,4 @@
-import { isDefaultTitle } from "@/context/terminal-title"
+import { isDefaultTitle } from "@/session/terminal/title"
 
 export const terminalTabLabel = (input: {
   title?: string

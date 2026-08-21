@@ -1,5 +1,5 @@
 const model_id = "claude-3-7-sonnet"
-export { popularProviders } from "@/hooks/provider-order"
+export { popularProviders } from "@/providers/catalog/order"
 
 const provider = {
   id: "anthropic",

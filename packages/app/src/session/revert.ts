@@ -1,11 +1,11 @@
 import type { SessionMessageUser } from "@opencode-ai/client/promise"
 import { useComposerState } from "@/composer/persistence"
-import { useData } from "@/context/server"
-import { useServerSDK } from "@/context/server-sdk"
-import { useWorkspaceLocation } from "@/context/location"
-import { useLanguage } from "@/context/language"
-import { extractPromptComments, extractPromptFromMessage } from "@/utils/prompt"
-import { showToast } from "@/utils/toast"
+import { useData } from "@/runtime/server/current"
+import { useServerSDK } from "@/runtime/server/client"
+import { useWorkspaceLocation } from "@/workspaces/location"
+import { useLanguage } from "@/runtime/i18n/language"
+import { extractPromptComments, extractPromptFromMessage } from "@/composer/prompt"
+import { showToast } from "@/shell/notifications/toast"
 import type { SessionModel } from "./model"
 
 export function createSessionRevert(input: {

@@ -5,7 +5,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Menu } from "@opencode-ai/ui/menu"
 import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "@opencode-ai/ui/split-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { useLanguage } from "@/context/language"
+import { useLanguage } from "@/runtime/i18n/language"
 import { type OpenApp, useOpenInApp } from "@/session/files/open-in-app"
 
 export function OpenInAppButton(props: { directory: () => string }) {

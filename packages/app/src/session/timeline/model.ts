@@ -1,5 +1,5 @@
 import { createMemo, createResource, type Accessor } from "solid-js"
-import { useData } from "@/context/server"
+import { useData } from "@/runtime/server/current"
 import type { SessionModel } from "../model"
 
 export {

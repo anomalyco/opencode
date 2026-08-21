@@ -1,8 +1,8 @@
 import { getFilename } from "@opencode-ai/util/path"
-import type { FileSelection } from "@/context/file"
-import { encodeFilePath } from "@/context/file/path"
+import type { FileSelection } from "@/workspaces/files/model"
+import { encodeFilePath } from "@/workspaces/files/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt, SkillPart } from "@/composer/state"
-import { formatCommentNote, type PromptComment } from "@/utils/comment-note"
+import { formatCommentNote, type PromptComment } from "@/composer/comment-note"
 
 // Network fields feed both boundaries; display fields keep desktop-only rendering details in the local echo.
 type PromptRequest = {

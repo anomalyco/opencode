@@ -1,10 +1,10 @@
 import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { same } from "@/utils/same"
-import { SESSION_OPEN_FILE_TAB } from "@/context/layout-tabs"
+import { same } from "@/runtime/persistence/equality"
+import { SESSION_OPEN_FILE_TAB } from "@/shell/state/session-tabs"
 
-export { SESSION_OPEN_FILE_TAB } from "@/context/layout-tabs"
+export { SESSION_OPEN_FILE_TAB } from "@/shell/state/session-tabs"
 
 const emptyTabs: string[] = []
 

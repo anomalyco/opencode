@@ -1,5 +1,5 @@
-import { useLanguage } from "@/context/language"
-import { useCommand } from "@/context/command"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useCommand } from "@/shell/commands/command"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { For, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"

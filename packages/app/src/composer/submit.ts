@@ -7,7 +7,7 @@ import type { ComposerAdapter, ComposerSelection, ComposerSession } from "./adap
 import { createComposerSubmission } from "./submission-state"
 import { buildPromptRequest } from "./request"
 import { setCursorPosition } from "./editor/dom"
-import { blobDataUrl } from "@/utils/draft-store"
+import { blobDataUrl } from "@/runtime/persistence/drafts"
 
 const submitting = new WeakSet<object>()
 

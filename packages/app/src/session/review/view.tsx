@@ -3,7 +3,7 @@ import { SessionReviewV2SidebarToggle } from "@opencode-ai/session-ui/v2/session
 import { Select } from "@opencode-ai/ui/select"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Match, Show, Suspense, Switch } from "solid-js"
-import { useLanguage } from "@/context/language"
+import { useLanguage } from "@/runtime/i18n/language"
 import { SessionSidePanel } from "../files/session-side-panel"
 import { ReviewPanel } from "./panel"
 import { SessionReviewTab } from "./review-tab"

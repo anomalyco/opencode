@@ -2,12 +2,12 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useParams, useSearchParams } from "@solidjs/router"
 import { createMemo, createResource, createRoot, getOwner, onCleanup } from "solid-js"
-import { requireServerKey } from "@/utils/session-route"
-import { ServerConnection } from "@/context/servers"
-import { useServerSDK } from "@/context/server-sdk"
-import { useWorkspaceLocation } from "@/context/location"
-import { useTabs, type Tab } from "@/context/tabs"
-import type { ServerScope } from "@/utils/server-scope"
+import { requireServerKey } from "@/shell/routes/session"
+import { ServerConnection } from "@/runtime/server/registry"
+import { useServerSDK } from "@/runtime/server/client"
+import { useWorkspaceLocation } from "@/workspaces/location"
+import { useTabs, type Tab } from "@/shell/tabs/tabs"
+import type { ServerScope } from "@/runtime/server/scope"
 import {
   createComposerReady,
   createComposerState,

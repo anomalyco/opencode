@@ -1,6 +1,6 @@
 import { type Accessor, createEffect, createMemo, createResource } from "solid-js"
 import type { useComposerState } from "@/composer/persistence"
-import { useData } from "@/context/server"
+import { useData } from "@/runtime/server/current"
 import { getSessionHandoff, setSessionHandoff } from "@/session/handoff"
 import type { SessionRequestModel } from "../requests/model"
 

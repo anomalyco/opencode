@@ -1,4 +1,4 @@
-import type { SelectedLineRange } from "@/context/file"
+import type { SelectedLineRange } from "@/workspaces/files/model"
 
 type HandoffSession = {
   prompt: string

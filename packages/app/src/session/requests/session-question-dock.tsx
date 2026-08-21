@@ -6,13 +6,13 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { showToast } from "@/utils/toast"
+import { showToast } from "@/shell/notifications/toast"
 import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode-ai/client/promise"
-import { useLanguage } from "@/context/language"
+import { useLanguage } from "@/runtime/i18n/language"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { useServerSDK } from "@/context/server-sdk"
-import { ScopedKey } from "@/utils/server-scope"
+import { useServerSDK } from "@/runtime/server/client"
+import { ScopedKey } from "@/runtime/server/scope"
 
 const cache = new Map<string, { tab: number; answers: string[][]; custom: string[]; customOn: boolean[] }>()
 

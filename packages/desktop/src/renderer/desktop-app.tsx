@@ -10,7 +10,7 @@ import {
   useLanguage,
   useWslServers,
   type UpdaterPlatform,
-} from "@opencode-ai/app"
+} from "@opencode-ai/app/desktop"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"

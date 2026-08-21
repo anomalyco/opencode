@@ -2,7 +2,7 @@ import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualIt
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
 import { normalizeWheelDelta, shouldMarkBoundaryGesture } from "@/session/message-gesture"
-import { useLanguage } from "@/context/language"
+import { useLanguage } from "@/runtime/i18n/language"
 import {
   createEffect,
   createMemo,

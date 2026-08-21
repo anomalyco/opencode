@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import type { Project } from "@/types"
+import type { Project } from "@/runtime/server/types"
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 

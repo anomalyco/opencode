@@ -1,17 +1,17 @@
-import { useCommand, type CommandOption } from "@/context/command"
+import { useCommand, type CommandOption } from "@/shell/commands/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
-import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
-import { useLanguage } from "@/context/language"
-import { useLayout } from "@/context/layout"
-import { usePermission } from "@/context/permission"
+import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useLayout } from "@/shell/state/layout"
+import { usePermission } from "@/session/requests/permission"
 import { useComposerState } from "@/composer/persistence"
-import { useWorkspaceLocation } from "@/context/location"
-import { useServerSDK } from "@/context/server-sdk"
-import { useSettings } from "@/context/settings"
-import { useTerminal } from "@/context/terminal"
-import { showToast } from "@/utils/toast"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
+import { useWorkspaceLocation } from "@/workspaces/location"
+import { useServerSDK } from "@/runtime/server/client"
+import { useSettings } from "@/settings/model"
+import { useTerminal } from "@/session/terminal/context"
+import { showToast } from "@/shell/notifications/toast"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
 import type { SessionModel } from "@/session/model"
 import type { SessionRevert } from "@/session/revert"
 
@@ -128,7 +128,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const openFile = () => {
     void openDialog(
-      () => import("@/components/dialog-command-palette"),
+      () => import("@/shell/commands/dialog"),
       (x) => dialog.show(() => <x.DialogCommandPalette onOpenFile={showAllFiles} />),
     )
   }
@@ -174,7 +174,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const chooseMcp = () => {
     void openDialog(
-      () => import("@/components/dialog-select-mcp"),
+      () => import("@/providers/connect/mcp-dialog"),
       (x) => dialog.show(() => <x.DialogSelectMcp />),
     )
   }
@@ -211,7 +211,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
     void openDialog(
-      () => import("@/components/dialog-fork"),
+      () => import("@/session/commands/fork-dialog"),
       (x) => dialog.show(() => <x.DialogFork />),
     )
   }

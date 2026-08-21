@@ -2,10 +2,10 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import "@opencode-ai/ui/file-tree.css"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
-import { kindChange, kindLabel, type Kind } from "@/components/file-tree-v2"
+import { kindChange, kindLabel, type Kind } from "@/session/files/file-tree-v2"
 import { normalizePath } from "@/session/review/review-diff-kinds"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
-import { virtualScrollElement } from "@/components/virtual-scroll-element"
+import { virtualScrollElement } from "@/session/files/virtual-scroll"
 
 // Drives the highlight/selection of the flat search-result list from the filter
 // input's keyboard events.

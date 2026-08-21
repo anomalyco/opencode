@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { ModelSelection } from "@/context/local"
+import type { ModelSelection } from "@/providers/models/selection"
 import { Skill } from "@opencode-ai/schema/skill"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
 import { createMemoryComposerState } from "./state"

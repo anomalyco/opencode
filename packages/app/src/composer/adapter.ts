@@ -1,7 +1,7 @@
 import type { Data } from "@opencode-ai/client/solid"
 import type { Accessor } from "solid-js"
-import type { ModelSelection } from "@/context/local"
-import type { ServerSDK } from "@/context/server-sdk"
+import type { ModelSelection } from "@/providers/models/selection"
+import type { ServerSDK } from "@/runtime/server/client"
 import type { ComposerStateTarget } from "./submission-state"
 import type { createComposerSubmission } from "./submission-state"
 

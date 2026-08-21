@@ -6,8 +6,8 @@ import {
 } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { Platform } from "@/context/platform"
-import { Persist, persisted } from "@/utils/persist"
+import type { Platform } from "@/runtime/platform/platform"
+import { Persist, persisted } from "@/runtime/persistence/storage"
 
 export function createReviewPanelState(platform?: Platform) {
   const [store, setStore, , ready] = persisted(

@@ -7,11 +7,11 @@ import type {
   SessionReviewCommentDelete,
   SessionReviewCommentUpdate,
 } from "@opencode-ai/session-ui/session-review"
-import type { SelectedLineRange } from "@/context/file"
-import { useWorkspaceLocation } from "@/context/location"
-import { useServerSDK } from "@/context/server-sdk"
-import { useLayout } from "@/context/layout"
-import type { LineComment } from "@/context/comments"
+import type { SelectedLineRange } from "@/workspaces/files/model"
+import { useWorkspaceLocation } from "@/workspaces/location"
+import { useServerSDK } from "@/runtime/server/client"
+import { useLayout } from "@/shell/state/layout"
+import type { LineComment } from "@/composer/comments"
 
 export type DiffStyle = "unified" | "split"
 

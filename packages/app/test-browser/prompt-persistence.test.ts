@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { createEffect, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { Platform } from "@/context/platform"
+import type { Platform } from "@/runtime/platform/platform"
 import { createComposerReady, createComposerState } from "@/composer/state"
-import { ServerScope } from "@/utils/server-scope"
-import { createDraftStore } from "@/utils/draft-store"
-import { Persist, persisted } from "@/utils/persist"
+import { ServerScope } from "@/runtime/server/scope"
+import { createDraftStore } from "@/runtime/persistence/drafts"
+import { Persist, persisted } from "@/runtime/persistence/storage"
 
 let read: ((value: string | null) => void) | undefined
 

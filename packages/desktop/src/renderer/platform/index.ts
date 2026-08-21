@@ -1,4 +1,9 @@
-import { ACCEPTED_FILE_EXTENSIONS, ServerConnection, type Platform, type UpdaterPlatform } from "@opencode-ai/app"
+import {
+  ACCEPTED_FILE_EXTENSIONS,
+  ServerConnection,
+  type Platform,
+  type UpdaterPlatform,
+} from "@opencode-ai/app/desktop"
 import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"

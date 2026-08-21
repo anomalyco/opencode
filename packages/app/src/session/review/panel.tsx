@@ -17,10 +17,10 @@ import type {
   SessionReviewFocus,
   SessionReviewLineComment,
 } from "@opencode-ai/session-ui/session-review"
-import FileTreeV2 from "@/components/file-tree-v2"
-import { useLanguage } from "@/context/language"
-import { useWorkspaceLocation } from "@/context/location"
-import { useServerSDK } from "@/context/server-sdk"
+import FileTreeV2 from "@/session/files/file-tree-v2"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useWorkspaceLocation } from "@/workspaces/location"
+import { useServerSDK } from "@/runtime/server/client"
 import {
   filterRenderableDiff,
   filterReviewFiles,

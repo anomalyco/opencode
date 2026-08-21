@@ -6,10 +6,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./desktop": "./src/desktop.ts",
-    "./desktop-menu": "./src/desktop-menu.ts",
-    "./i18n/desktop-native": "./src/i18n/desktop-native.ts",
-    "./updater": "./src/updater.ts",
-    "./wsl/types": "./src/wsl/types.ts",
+    "./desktop-menu": "./src/shell/commands/desktop-menu.ts",
+    "./i18n/desktop-native": "./src/runtime/i18n/desktop-native.ts",
+    "./updater": "./src/shell/updates/types.ts",
+    "./wsl/types": "./src/servers/wsl/types.ts",
     "./vite": "./vite.js",
     "./index.css": "./src/index.css"
   },

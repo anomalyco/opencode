@@ -1,6 +1,6 @@
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import type { Prompt } from "@/composer/state"
-import { Persist, persisted } from "@/utils/persist"
+import { Persist, persisted } from "@/runtime/persistence/storage"
 import {
   clonePromptHistoryComments,
   clonePromptParts,

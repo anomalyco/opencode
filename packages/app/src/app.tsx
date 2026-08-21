@@ -4,72 +4,26 @@ import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { Font } from "@opencode-ai/ui/font"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Route, Router, useParams } from "@solidjs/router"
+import { type BaseRouterProps, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import {
-  type Component,
-  createMemo,
-  createRenderEffect,
-  ErrorBoundary,
-  type JSX,
-  lazy,
-  type ParentProps,
-  Show,
-} from "solid-js"
+import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
-import { GlobalProvider, useGlobal } from "@/context/global"
-import { HighlightsProvider } from "@/context/highlights"
-import { LanguageProvider, UiI18nBridge, type Locale, useLanguage } from "@/context/language"
-import { LayoutProvider } from "@/context/layout"
-import { usePlatform } from "@/context/platform"
-import { ServerConnection, ServersProvider } from "@/context/servers"
-import { SettingsProvider } from "@/context/settings"
-import { TabsProvider } from "@/context/tabs"
-import { WslServersProvider } from "@/wsl/context"
-import Layout from "@/pages/layout"
-import { ErrorPage } from "./pages/error"
-import { requireServerKey } from "./utils/session-route"
+import { CommandProvider } from "@/shell/commands/command"
+import { DesktopCommands } from "@/shell/commands/desktop"
+import { GlobalProvider } from "@/runtime/server/runtime"
+import { HighlightsProvider } from "@/shell/updates/highlights"
+import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/language"
+import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
+import { SettingsProvider } from "@/settings/model"
+import { TabsProvider } from "@/shell/tabs/tabs"
+import { WslServersProvider } from "@/servers/wsl/context"
+import { ErrorPage } from "@/shell/errors/error"
+import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
 
-import { Home } from "@/pages/home"
-import { ServerProvider } from "./context/server"
-
-const File = lazy(() => import("@opencode-ai/session-ui/file").then((module) => ({ default: module.File })))
-const loadDraftRoute = () => Promise.all([import("@/pages/draft-route"), File.preload()]).then(([module]) => module)
-const loadSessionRoute = () => Promise.all([import("@/session/route"), File.preload()]).then(([module]) => module)
-const DraftRoute = lazy(() => loadDraftRoute().then((module) => ({ default: module.DraftRoute })))
-const TargetSessionRouteContent = lazy(() =>
-  loadSessionRoute().then((module) => ({ default: module.TargetSessionRouteContent })),
-)
-
-export function preloadRoute(url: string) {
-  const pathname = url.split(/[?#]/, 1)[0]
-  if (pathname === "/new-session") return DraftRoute.preload().then(() => undefined)
-  if (/^\/server\/[^/]+\/session\/[^/]+$/.test(pathname))
-    return TargetSessionRouteContent.preload().then(() => undefined)
-  return Promise.resolve()
-}
-
-function TargetServerRoute(props: ParentProps) {
-  const params = useParams<{ serverKey: string }>()
-  const global = useGlobal()
-  const conn = createMemo(() =>
-    global.servers.list().find((item) => ServerConnection.key(item) === requireServerKey(params.serverKey)),
-  )
-
-  return (
-    // Owns the server-identity remount. Session changes must not remount this subtree.
-    <Show when={conn()} keyed>
-      {(conn) => <ServerProvider conn={conn}>{props.children}</ServerProvider>}
-    </Show>
-  )
-}
+export { preloadRoute }
 
 declare global {
   interface Window {
-    __OPENCODE__?: {
-      deepLinks?: string[]
-    }
     api?: {
       setTitlebar?: (theme: { mode: "light" | "dark"; scheme?: "system" | "light" | "dark" }) => Promise<void>
       exportDebugLogs?: () => Promise<string>
@@ -98,39 +52,6 @@ function BodyTypography() {
   })
 
   return null
-}
-
-// Server-agnostic providers shared across every route. These live in the shared
-// shell (router root) so they stay mounted regardless of the active server/route.
-function DesktopCommands() {
-  const command = useCommand()
-  const language = useLanguage()
-  const platform = usePlatform()
-
-  command.register("desktop", () => {
-    const commands: CommandOption[] = []
-    if (platform.platform === "desktop" && platform.exportDebugLogs) {
-      commands.push({
-        id: "logs.export",
-        title: language.t("command.logs.export"),
-        category: language.t("command.category.settings"),
-        onSelect: () => {
-          void platform.exportDebugLogs?.()
-        },
-      })
-    }
-    return commands
-  })
-
-  return null
-}
-
-function AppLayout(props: ParentProps) {
-  return (
-    <LayoutProvider>
-      <Layout>{props.children}</Layout>
-    </LayoutProvider>
-  )
 }
 
 export function AppBaseProviders(
@@ -204,18 +125,7 @@ export function AppInterface(props: {
       <SettingsProvider>
         <GlobalProvider>
           <Dynamic component={props.router ?? Router} root={Root}>
-            <Route component={AppLayout}>
-              <Route path="/" component={Home} />
-              <Route
-                path="/server/:serverKey/session/:id"
-                component={() => (
-                  <TargetServerRoute>
-                    <TargetSessionRouteContent />
-                  </TargetServerRoute>
-                )}
-              />
-              <Route path="/new-session" component={DraftRoute} />
-            </Route>
+            <AppRoutes />
           </Dynamic>
         </GlobalProvider>
       </SettingsProvider>

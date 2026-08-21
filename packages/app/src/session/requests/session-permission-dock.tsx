@@ -3,7 +3,7 @@ import type { PermissionRequest } from "@opencode-ai/client/promise"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
-import { useLanguage } from "@/context/language"
+import { useLanguage } from "@/runtime/i18n/language"
 
 export function SessionPermissionDock(props: {
   request: PermissionRequest

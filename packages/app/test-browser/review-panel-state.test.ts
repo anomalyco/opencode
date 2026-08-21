@@ -1,7 +1,7 @@
 import { beforeAll, expect, mock, test } from "bun:test"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { createEffect, createRoot } from "solid-js"
-import type { Platform } from "@/context/platform"
+import type { Platform } from "@/runtime/platform/platform"
 import type { ReviewPanelState } from "@/session/review/panel-state"
 
 let createReviewPanelState: (platform?: Platform) => ReviewPanelState

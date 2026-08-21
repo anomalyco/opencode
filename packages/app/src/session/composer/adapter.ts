@@ -1,9 +1,9 @@
 import type { Accessor } from "solid-js"
 import type { ActiveComposerAdapter, ComposerControls } from "@/composer/adapter"
 import { useComposerState } from "@/composer/persistence"
-import { useData } from "@/context/server"
-import { useServerSDK } from "@/context/server-sdk"
-import { useWorkspaceLocation } from "@/context/location"
+import { useData } from "@/runtime/server/current"
+import { useServerSDK } from "@/runtime/server/client"
+import { useWorkspaceLocation } from "@/workspaces/location"
 import type { SessionModel } from "../model"
 
 export function createActiveComposerAdapter(input: {

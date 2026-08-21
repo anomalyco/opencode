@@ -306,7 +306,7 @@
   }
 
   @supports (animation-timeline: --manage-models-scroll) and (timeline-scope: --manage-models-scroll) {
-    [data-slot="manage-models-scroll"] .settings-v2-panel {
+    [data-slot="manage-models-scroll"] .settings-panel {
       scroll-timeline: --manage-models-scroll y;
     }
 

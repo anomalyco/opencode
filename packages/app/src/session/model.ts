@@ -1,11 +1,11 @@
 import type { SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createMemo } from "solid-js"
-import { useFile } from "@/context/file"
-import { useWorkspaceLocation } from "@/context/location"
-import { useData } from "@/context/server"
-import { same } from "@/utils/same"
-import { containsDirectory, isWorkspaceDirectory } from "@/utils/workspace"
+import { useFile } from "@/workspaces/files/model"
+import { useWorkspaceLocation } from "@/workspaces/location"
+import { useData } from "@/runtime/server/current"
+import { same } from "@/runtime/persistence/equality"
+import { containsDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { createSessionTabs } from "./helpers"
 import {
   normalizeSessionTab,

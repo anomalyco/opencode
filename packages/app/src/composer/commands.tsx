@@ -1,6 +1,6 @@
-import { useCommand, type CommandOption } from "@/context/command"
-import { useLanguage } from "@/context/language"
-import { useLocal, type ModelSelection } from "@/context/local"
+import { useCommand, type CommandOption } from "@/shell/commands/command"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "./editor/dom"
 import { useSessionLayout } from "@/session/session-layout"
@@ -40,7 +40,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
         if (cursor !== null) setCursorPosition(editor, cursor)
       })
     }
-    const { DialogSelectModel } = await import("@/components/dialog-select-model")
+    const { DialogSelectModel } = await import("@/providers/models/select-dialog")
     owner.run(() => {
       void dialog.show(() => <DialogSelectModel model={model} />, restoreComposer)
     })

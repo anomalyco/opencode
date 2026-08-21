@@ -1,5 +1,5 @@
 import { Show, type JSX } from "solid-js"
-import { useLanguage } from "@/context/language"
+import { useLanguage } from "@/runtime/i18n/language"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
 import { SessionBackgroundDock } from "@/session/requests/session-background-dock"
