@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
+import { Shell } from "@opencode-ai/schema/shell"
 import { Agent } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -887,6 +888,134 @@ describe("Session.create", () => {
 })
 
 describe("SessionTransfer", () => {
+  it.effect("exports only settled projected messages", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const source = yield* session.create({ location })
+      yield* session.prompt({ sessionID: source.id, text: "Settled", resume: false })
+      yield* SessionInbox.promote(db, bus, source.id, "steer")
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: source.id,
+        assistantMessageID: SessionMessage.ID.create(),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+      })
+      yield* bus.publish(SessionEvent.Shell.Started, {
+        sessionID: source.id,
+        shell: Shell.Info.make({
+          id: Shell.ID.make("sh_transfer_export"),
+          status: "running",
+          command: "sleep 10",
+          cwd: location.directory,
+          shell: "/bin/sh",
+          file: "/tmp/sh_transfer_export.out",
+          metadata: {},
+          time: { started: 0 },
+        }),
+      })
+      yield* bus.publish(SessionEvent.Compaction.Started, {
+        sessionID: source.id,
+        reason: "manual",
+        recent: "pending",
+      })
+
+      expect((yield* transfer.export({ sessionID: source.id })).messages).toMatchObject([
+        { type: "user", text: "Settled" },
+      ])
+    }),
+  )
+
+  it.effect("imports only settled projected messages", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const { db } = yield* Database.Service
+      const template = yield* session.create({ location, title: "Transfer source" })
+      const sessionID = Session.ID.create()
+      const userID = SessionMessage.ID.create()
+      const runningAssistantID = SessionMessage.ID.create()
+      const completedAssistantID = SessionMessage.ID.create()
+      const runningShellID = SessionMessage.ID.create()
+      const completedShellID = SessionMessage.ID.create()
+      const runningCompactionID = SessionMessage.ID.create()
+      const completedCompactionID = SessionMessage.ID.create()
+      const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+
+      yield* transfer.import({
+        data: {
+          info: { ...template, id: sessionID },
+          messages: [
+            { id: userID, type: "user", text: "Settled", time: { created: DateTime.makeUnsafe(1) } },
+            {
+              id: runningAssistantID,
+              type: "assistant",
+              agent: Agent.ID.make("build"),
+              model,
+              content: [],
+              time: { created: DateTime.makeUnsafe(2) },
+            },
+            {
+              id: completedAssistantID,
+              type: "assistant",
+              agent: Agent.ID.make("build"),
+              model,
+              content: [],
+              time: { created: DateTime.makeUnsafe(3), completed: DateTime.makeUnsafe(4) },
+            },
+            {
+              id: runningShellID,
+              type: "shell",
+              shellID: Shell.ID.make("sh_transfer_running"),
+              command: "sleep 10",
+              status: "running",
+              time: { created: DateTime.makeUnsafe(5) },
+            },
+            {
+              id: completedShellID,
+              type: "shell",
+              shellID: Shell.ID.make("sh_transfer_completed"),
+              command: "pwd",
+              status: "exited",
+              exit: 0,
+              output: { output: "/project", cursor: 8, size: 8, truncated: false },
+              time: { created: DateTime.makeUnsafe(6), completed: DateTime.makeUnsafe(7) },
+            },
+            {
+              id: runningCompactionID,
+              type: "compaction",
+              status: "running",
+              reason: "manual",
+              summary: "pending",
+              recent: "pending",
+              time: { created: DateTime.makeUnsafe(8) },
+            },
+            {
+              id: completedCompactionID,
+              type: "compaction",
+              status: "completed",
+              reason: "manual",
+              summary: "summary",
+              recent: "recent",
+              time: { created: DateTime.makeUnsafe(9) },
+            },
+          ],
+        },
+        location,
+      })
+
+      expect((yield* session.messages({ sessionID, order: "asc" })).map((message) => message.id)).toEqual([
+        userID,
+        completedAssistantID,
+        completedShellID,
+        completedCompactionID,
+      ])
+      expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
+    }),
+  )
+
   it.effect("imports projected messages and reserves their aggregate sequence", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

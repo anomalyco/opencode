@@ -53,7 +53,7 @@ const layer = Layer.effect(
       export: Effect.fn("SessionTransfer.export")(function* (input) {
         const data = {
           info: yield* sessions.get(input.sessionID),
-          messages: yield* sessions.messages({ sessionID: input.sessionID, order: "asc" }),
+          messages: (yield* sessions.messages({ sessionID: input.sessionID, order: "asc" })).filter(isSettled),
         }
         return input.sanitize ? sanitize(data) : data
       }),
@@ -68,7 +68,7 @@ const layer = Layer.effect(
         if (recorded) return yield* new ImportConflictError({ sessionID })
         const project = yield* projects.resolve(input.location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
-        const messages = input.data.messages.map((message, index) => {
+        const messages = input.data.messages.filter(isSettled).map((message, index) => {
           const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded
           return {
@@ -143,6 +143,12 @@ export const node = makeGlobalNode({
   layer,
   deps: [App.node, Bus.node, Database.node, Project.node, Session.node],
 })
+
+function isSettled(message: SessionMessage.Info) {
+  if (message.type === "assistant") return message.time.completed !== undefined
+  if (message.type === "shell" || message.type === "compaction") return message.status !== "running"
+  return true
+}
 
 function redact(kind: string, id: string, value: string) {
   return value.trim() ? `[redacted:${kind}:${id}]` : value
