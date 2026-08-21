@@ -393,9 +393,11 @@ const layer = Layer.effect(
         const snapshot = yield* snapshots.capture()
         const files =
           startSnapshot && snapshot
-            ? yield* snapshots
-                .files({ from: startSnapshot, to: snapshot })
-                .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            ? startSnapshot === snapshot
+              ? []
+              : yield* snapshots
+                  .files({ from: startSnapshot, to: snapshot })
+                  .pipe(Effect.catch(() => Effect.succeed(undefined)))
             : undefined
         return { snapshot, files }
       })
