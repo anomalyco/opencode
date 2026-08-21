@@ -105,6 +105,7 @@ export const dict = {
   "command.category.provider": "Penyedia",
   "command.category.server": "Server",
   "command.category.session": "Sesi",
+  "command.category.session.archived": "Diarsipkan",
   "command.category.theme": "Tema",
   "command.category.language": "Bahasa",
   "command.category.file": "Berkas",
@@ -135,6 +136,7 @@ export const dict = {
   "command.session.previous.unseen": "Sesi sebelumnya yang belum dibaca",
   "command.session.next.unseen": "Sesi berikutnya yang belum dibaca",
   "command.session.archive": "Arsipkan sesi",
+  "command.session.unarchive": "Batalkan arsip sesi",
 
   "command.palette": "Palet perintah",
 
@@ -912,6 +914,7 @@ export const dict = {
   "common.export": "Ekspor",
   "common.reset": "Atur ulang",
   "common.archive": "Arsipkan",
+  "common.unarchive": "Batalkan arsip",
   "common.delete": "Hapus",
   "common.close": "Tutup",
   "common.edit": "Sunting",

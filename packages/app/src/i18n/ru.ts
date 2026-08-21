@@ -104,6 +104,7 @@ export const dict = {
   "command.category.provider": "Провайдер",
   "command.category.server": "Сервер",
   "command.category.session": "Сессия",
+  "command.category.session.archived": "Архивные",
   "command.category.theme": "Тема",
   "command.category.language": "Язык",
   "command.category.file": "Файл",
@@ -134,6 +135,7 @@ export const dict = {
   "command.session.previous.unseen": "Предыдущая непрочитанная сессия",
   "command.session.next.unseen": "Следующая непрочитанная сессия",
   "command.session.archive": "Архивировать сессию",
+  "command.session.unarchive": "Извлечь сессию из архива",
 
   "command.palette": "Палитра команд",
 
@@ -873,6 +875,7 @@ export const dict = {
   "common.export": "Экспортировать",
   "common.reset": "Сбросить",
   "common.archive": "Архивировать",
+  "common.unarchive": "Извлечь из архива",
   "common.delete": "Удалить",
   "common.close": "Закрыть",
   "common.edit": "Редактировать",
