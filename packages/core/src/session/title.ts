@@ -103,6 +103,10 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
 const sameModel = (left: SessionRunnerModel.Resolved, right: SessionRunnerModel.Resolved) =>
   left.ref.providerID === right.ref.providerID && left.ref.id === right.ref.id && left.ref.variant === right.ref.variant
 
+const leastReasoningVariant = (model: Model.Info | undefined) =>
+  model?.variants.find((variant) => variant.id === "none")?.id ??
+  model?.variants.find((variant) => variant.id === "low")?.id
+
 const make = (dependencies: Dependencies) => {
   const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (
     db: Database.Interface["db"],
@@ -117,8 +121,24 @@ const make = (dependencies: Dependencies) => {
     const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
     if (!agent) return
     const primary = yield* dependencies.models.resolve(session).pipe(Effect.catch(() => Effect.succeed(undefined)))
-    const small = agent.model || !primary ? undefined : yield* dependencies.catalog.model.small(primary.ref.providerID)
-    const preferredRef = agent.model ?? (small && Model.Ref.make({ providerID: small.providerID, id: small.id }))
+    const preferredModel = agent.model
+      ? yield* dependencies.catalog.model.get(agent.model.providerID, agent.model.id)
+      : primary
+        ? yield* dependencies.catalog.model.small(primary.ref.providerID)
+        : undefined
+    const preferredVariant = agent.model?.variant ?? leastReasoningVariant(preferredModel)
+    const preferredRef = agent.model
+      ? Model.Ref.make({
+          ...agent.model,
+          ...(preferredVariant ? { variant: preferredVariant } : {}),
+        })
+      : preferredModel
+        ? Model.Ref.make({
+            providerID: preferredModel.providerID,
+            id: preferredModel.id,
+            ...(preferredVariant ? { variant: preferredVariant } : {}),
+          })
+        : undefined
     const preferred = preferredRef
       ? yield* dependencies.models
           .resolve({ ...session, model: preferredRef })

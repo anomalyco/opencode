@@ -29,6 +29,7 @@ import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
 let selectedSmall: Model.Info | undefined
+let selections: Array<Session.Info["model"]> = []
 const model = LanguageModel.make({
   id: "title-model",
   provider: "test",
@@ -77,14 +78,17 @@ const client = Layer.mock(LLMClient.Service)({
   generate: () => Effect.die("unused"),
 })
 const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: (session) =>
-    Effect.succeed(
+  resolve: (session) => {
+    selections.push(session.model)
+    return Effect.succeed(
       SessionRunnerModel.resolved(session.model?.id === "title-small" ? smallModel : model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         cost,
         limit: { context: 200_000, output: 32_000 },
+        variant: session.model?.variant,
       }),
-    ),
+    )
+  },
 })
 const catalog = Layer.mock(Catalog.Service, {
   provider: {
@@ -119,7 +123,7 @@ const it = testEffect(
   ),
 )
 
-const insertSession = (id: Session.ID, title?: string, created?: number) =>
+const insertSession = (id: Session.ID, title?: string, created?: number, model?: Model.Ref) =>
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     yield* db
@@ -136,6 +140,7 @@ const insertSession = (id: Session.ID, title?: string, created?: number) =>
         slug: id,
         directory: "/project",
         title,
+        model,
         time_created: created,
         version: "test",
       })
@@ -163,11 +168,21 @@ const small = Model.Info.make({
   ...Model.Info.default(Provider.ID.make("test"), Model.ID.make("title-small")),
   family: Model.Family.make("gpt-nano"),
   capabilities: { tools: false, input: ["text"], output: ["text"] },
+  variants: [
+    { id: Model.VariantID.make("low") },
+    { id: Model.VariantID.make("none") },
+    { id: Model.VariantID.make("high") },
+  ],
+})
+const lowSmall = Model.Info.make({
+  ...small,
+  variants: [{ id: Model.VariantID.make("low") }, { id: Model.VariantID.make("high") }],
 })
 
 beforeEach(() => {
   requests = []
   selectedSmall = undefined
+  selections = []
   titleStream = successfulTitle
 })
 
@@ -232,6 +247,7 @@ it.effect("uses a small model from the primary provider", () =>
     yield* title.generateForFirstPrompt(sessionID)
 
     expect(requests.map((request) => String(request.model.id))).toEqual(["title-small"])
+    expect(selections[1]?.variant).toBe(Model.VariantID.make("none"))
     const store = yield* SessionStore.Service
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
   }),
@@ -244,7 +260,7 @@ it.effect("falls back to the primary model when the small model fails", () =>
       requests.length === 1
         ? Stream.make(LLMEvent.providerError({ message: "Small model unavailable" }))
         : successfulTitle()
-    selectedSmall = small
+    selectedSmall = lowSmall
     const agentService = yield* Agent.Service
     yield* agentService.transform((editor) => {
       editor.update(Agent.ID.make("title"), (agent) => {
@@ -254,13 +270,31 @@ it.effect("falls back to the primary model when the small model fails", () =>
       })
     })
     const sessionID = Session.ID.make("ses_title_small_fallback")
-    yield* insertSession(sessionID)
+    yield* insertSession(
+      sessionID,
+      undefined,
+      undefined,
+      Model.Ref.make({
+        providerID: Provider.ID.make("test"),
+        id: Model.ID.make("title-model"),
+        variant: Model.VariantID.make("high"),
+      }),
+    )
     yield* prompt(sessionID, "Fall back when title generation fails")
+
+    const attempted: Model.Ref[] = []
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "model.request", (event) =>
+      Effect.sync(() => {
+        attempted.push(event.model)
+      }),
+    )
 
     const title = yield* SessionTitle.Service
     yield* title.generateForFirstPrompt(sessionID)
 
     expect(requests.map((request) => String(request.model.id))).toEqual(["title-small", "title-model"])
+    expect(attempted.map((model) => String(model.variant))).toEqual(["low", "high"])
     const store = yield* SessionStore.Service
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
   }),
