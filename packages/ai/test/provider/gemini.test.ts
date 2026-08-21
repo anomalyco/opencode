@@ -848,7 +848,7 @@ describe("Gemini route", () => {
         providerMetadata: { google: { thoughtSignature: "thought_sig" } },
       })
       expect(toolCall).toMatchObject({
-        id: "tool_0",
+        id: "provider_call",
         providerMetadata: { google: { functionCallId: "provider_call", thoughtSignature: "tool_sig" } },
       })
       expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
@@ -862,14 +862,14 @@ describe("Gemini route", () => {
             Message.assistant([
               { type: "reasoning", text: "thinking", providerMetadata: reasoningEnd?.providerMetadata },
               ToolCallPart.make({
-                id: "tool_0",
+                id: "provider_call",
                 name: "lookup",
                 input: { query: "weather" },
                 providerMetadata: toolCall?.providerMetadata,
               }),
             ]),
             Message.tool({
-              id: "tool_0",
+              id: "provider_call",
               name: "lookup",
               result: "done",
               resultType: "text",
@@ -1101,21 +1101,17 @@ describe("Gemini route", () => {
         providerMetadata: { google: { promptTokenCount: 5, candidatesTokenCount: 1 } },
       })
 
-      expect(response.toolCalls).toEqual([
-        {
-          type: "tool-call",
-          id: "tool_0",
-          name: "lookup",
-          input: { query: "weather" },
-          providerExecuted: undefined,
-          providerMetadata: undefined,
-        },
-      ])
+      expect(response.toolCalls[0].id).toMatch(/^tool_[0-9a-zA-Z]+$/)
+      expect(response.toolCalls[0]).toMatchObject({
+        type: "tool-call",
+        name: "lookup",
+        input: { query: "weather" },
+      })
       expect(response.events).toEqual([
         { type: "step-start", index: 0 },
         {
           type: "tool-call",
-          id: "tool_0",
+          id: response.toolCalls[0].id,
           name: "lookup",
           input: { query: "weather" },
           providerExecuted: undefined,
@@ -1158,7 +1154,8 @@ describe("Gemini route", () => {
         ),
       )
 
-      expect(response.toolCalls).toEqual([{ type: "tool-call", id: "tool_0", name: "ping", input: {} }])
+      expect(response.toolCalls[0].id).toMatch(/^tool_[0-9a-zA-Z]+$/)
+      expect(response.toolCalls).toMatchObject([{ type: "tool-call", name: "ping", input: {} }])
     }),
   )
 
@@ -1198,7 +1195,7 @@ describe("Gemini route", () => {
             content: {
               role: "model",
               parts: [
-                { functionCall: { id: "tool_0", name: "lookup", args: { query: "weather" } } },
+                { functionCall: { id: "call_0", name: "lookup", args: { query: "weather" } } },
                 { functionCall: { name: "lookup", args: { query: "news" } } },
               ],
             },
@@ -1212,20 +1209,49 @@ describe("Gemini route", () => {
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
 
-      expect(response.toolCalls).toEqual([
-        {
-          type: "tool-call",
-          id: "tool_0",
-          name: "lookup",
-          input: { query: "weather" },
-          providerMetadata: { google: { functionCallId: "tool_0" } },
-        },
-        { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "news" } },
-      ])
+      expect(response.toolCalls[0]).toMatchObject({
+        type: "tool-call",
+        id: "call_0",
+        name: "lookup",
+        input: { query: "weather" },
+        providerMetadata: { google: { functionCallId: "call_0" } },
+      })
+      expect(response.toolCalls[1]).toMatchObject({
+        type: "tool-call",
+        name: "lookup",
+        input: { query: "news" },
+      })
+      expect(response.toolCalls[1].id).toMatch(/^tool_[0-9a-zA-Z]+$/)
+      expect(response.toolCalls[0].id).not.toBe(response.toolCalls[1].id)
       expect(response.events.at(-1)).toMatchObject({
         type: "finish",
         reason: { normalized: "tool-calls", raw: "STOP" },
       })
+    }),
+  )
+
+  it.effect("assigns distinct unique fallback ids across separate requests", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
+            },
+            finishReason: "STOP",
+          },
+        ],
+      })
+      const req = LLMRequest.update(request, {
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+      })
+      const first = yield* LLMClient.generate(req).pipe(Effect.provide(fixedResponse(body)))
+      const second = yield* LLMClient.generate(req).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(first.toolCalls[0].id).toMatch(/^tool_[0-9a-zA-Z]+$/)
+      expect(second.toolCalls[0].id).toMatch(/^tool_[0-9a-zA-Z]+$/)
+      expect(first.toolCalls[0].id).not.toBe(second.toolCalls[0].id)
     }),
   )
 
