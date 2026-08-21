@@ -361,7 +361,7 @@ Recent work
     ])
   })
 
-  test("uses materialized image data as provider media and drops unsupported attachments", () => {
+  test("uses materialized image and PDF data as provider media", () => {
     const data = Base64.make("AAECAw==")
     const messages = toLLMMessages(
       [
@@ -387,6 +387,7 @@ Recent work
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Inspect this image" },
       { type: "media", mediaType: "image/png", data, filename: "image.png" },
+      { type: "media", mediaType: "application/pdf", data: "JVBERg==", filename: "document.pdf" },
     ])
   })
 
