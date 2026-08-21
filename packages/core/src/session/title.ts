@@ -1,5 +1,6 @@
 export * as SessionTitle from "./title.js"
 
+import { isDeepStrictEqual } from "node:util"
 import { LLMClient, AIError, LLMEvent, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
@@ -100,19 +101,7 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
     .find((line) => line.length > 0)
 })
 
-const sameModel = (left: SessionRunnerModel.Resolved, right: SessionRunnerModel.Resolved) =>
-  left.ref.providerID === right.ref.providerID && left.ref.id === right.ref.id && left.ref.variant === right.ref.variant
-
-const leastReasoningVariant = (model: Model.Info | undefined) =>
-  model?.variants.find((variant) => variant.id === "none")?.id ??
-  model?.variants.find((variant) => variant.id === "low")?.id
-
-const preferredRef = (configured: Model.Ref | undefined, model: Model.Info | undefined) => {
-  const ref = configured ?? (model ? Model.Ref.make({ providerID: model.providerID, id: model.id }) : undefined)
-  if (!ref || ref.variant) return ref
-  const variant = leastReasoningVariant(model)
-  return variant ? Model.Ref.make({ ...ref, variant }) : ref
-}
+const REASONING_VARIANTS = ["none", "low"].map((id) => Model.VariantID.make(id))
 
 const make = (dependencies: Dependencies) => {
   const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (
@@ -128,24 +117,26 @@ const make = (dependencies: Dependencies) => {
     const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
     if (!agent) return
     const primary = yield* dependencies.models.resolve(session).pipe(Effect.catch(() => Effect.succeed(undefined)))
-    const preferredModel = yield* Effect.gen(function* () {
+    const info = yield* Effect.gen(function* () {
       if (agent.model) return yield* dependencies.catalog.model.get(agent.model.providerID, agent.model.id)
       if (!primary) return
       return yield* dependencies.catalog.model.small(primary.ref.providerID)
     })
-    const selectedRef = preferredRef(agent.model, preferredModel)
-    const preferred = selectedRef
-      ? yield* dependencies.models
-          .resolve({ ...session, model: selectedRef })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)))
-      : undefined
-    const selected = preferred ?? primary
-    if (!selected) return
-    const generated = yield* attempt(dependencies, { session, agent, text: firstUser.text, model: selected })
-    const fallback = primary && !sameModel(selected, primary) ? primary : undefined
-    const title =
-      generated ??
-      (fallback ? yield* attempt(dependencies, { session, agent, text: firstUser.text, model: fallback }) : undefined)
+    const ref = agent.model ?? (info && Model.Ref.make({ providerID: info.providerID, id: info.id }))
+    const variant = ref?.variant ?? REASONING_VARIANTS.find((id) => info?.variants.some((item) => item.id === id))
+    const preferred =
+      ref &&
+      (yield* dependencies.models
+        .resolve({ ...session, model: Model.Ref.make({ ...ref, ...(variant ? { variant } : {}) }) })
+        .pipe(Effect.catch(() => Effect.succeed(undefined))))
+    const attempts = [preferred, primary]
+      .filter((model) => model !== undefined)
+      .filter((model, index, all) => index === all.findIndex((other) => isDeepStrictEqual(other.ref, model.ref)))
+    let title: string | undefined
+    for (const model of attempts) {
+      title = yield* attempt(dependencies, { session, agent, text: firstUser.text, model })
+      if (title) break
+    }
     if (!title) return
     const expectedSequence = (yield* Bus.latestSequence(db, sessionID)) + 1
     const current = yield* dependencies.store.get(sessionID)
