@@ -6,7 +6,6 @@ describe("ShellScan adversarial corpus", () => {
     ['FOO=bar BAR="x y" git status', ["git"]],
     ["git status && npm test || printf failed", ["git", "npm", "printf"]],
     [`printf '%s\\n' "$(rm -rf /)"`, ["printf", "rm"]],
-    ["echo ${arr[$(rm -rf /)]}", ["echo", "rm"]],
     ["cat <(printf secret)", ["cat", "printf"]],
     ["(git status)", ["git"]],
     ["{ git status; }", ["git"]],
@@ -46,6 +45,7 @@ describe("ShellScan adversarial corpus", () => {
     "echo $((1 + 2))",
     "f(){ rm -rf /; }; f",
     "! rm -rf /",
+    "echo ${arr[$(rm -rf /)]}",
   ])("keeps structurally uncertain Bash input opaque: %s", (input) => {
     expect(ShellScan.scan(input).kind).toBe("opaque")
   })

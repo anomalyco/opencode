@@ -321,6 +321,107 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("does not apply scoped wildcard allows to exact resources", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "shell", resource: "*", effect: "ask" },
+        { action: "shell", resource: "echo *", effect: "allow" },
+      ])
+      const service = yield* Permission.Service
+      const resource = "echo ok; for x in 1; do touch /tmp/victim; done"
+
+      expect(
+        yield* service.ask(assertion({ action: "shell", resources: [resource], resourceMode: "wildcard" })),
+      ).toMatchObject({ effect: "allow" })
+      expect(
+        yield* service.ask(
+          assertion({
+            id: Permission.ID.create("per_exact"),
+            action: "shell",
+            resources: [resource],
+            resourceMode: "exact",
+          }),
+        ),
+      ).toMatchObject({ effect: "ask" })
+      expect(yield* service.get(Permission.ID.create("per_exact"))).not.toHaveProperty("resourceMode")
+    }),
+  )
+
+  it.effect("conservatively applies scoped denies to exact resources", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "shell", resource: "*", effect: "allow" },
+        { action: "shell", resource: "touch *", effect: "deny" },
+      ])
+      const service = yield* Permission.Service
+      expect(
+        yield* service.ask(
+          assertion({
+            action: "shell",
+            resources: ["echo ok; for x in 1; do touch /tmp/victim; done"],
+            resourceMode: "exact",
+          }),
+        ),
+      ).toMatchObject({ effect: "deny" })
+
+      yield* setRules([{ action: "shell", resource: "*", effect: "allow" }])
+      expect(
+        yield* service.ask(
+          assertion({
+            id: Permission.ID.create("per_unconditional"),
+            action: "shell",
+            resources: ["echo ok; for x in 1; do touch /tmp/victim; done"],
+            resourceMode: "exact",
+          }),
+        ),
+      ).toMatchObject({ effect: "allow" })
+    }),
+  )
+
+  it.effect("does not persist wildcard-shaped exact resources", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "shell", resource: "*", effect: "ask" }])
+      const service = yield* Permission.Service
+      yield* service.ask(assertion({ action: "shell", resources: ["*"], save: [], resourceMode: "exact" }))
+      yield* service.reply({ requestID: Permission.ID.create("per_test"), reply: "always" })
+
+      const saved = yield* PermissionSaved.Service
+      expect(yield* saved.list({ projectID: Project.ID.global })).toEqual([])
+    }),
+  )
+
+  it.effect("conservatively applies external-directory denies to unknown locations", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "external_directory", resource: "*", effect: "ask" },
+        { action: "external_directory", resource: "/etc/*", effect: "deny" },
+      ])
+      const service = yield* Permission.Service
+      expect(
+        yield* service.ask(
+          assertion({ action: "external_directory", resources: ["*"], save: [], resourceMode: "exact" }),
+        ),
+      ).toMatchObject({ effect: "deny" })
+    }),
+  )
+
+  it.effect("allows an exact resource after it is explicitly saved", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "shell", resource: "*", effect: "ask" },
+        { action: "shell", resource: "echo *", effect: "allow" },
+      ])
+      const resource = "echo ok; for x in 1; do touch /tmp/victim; done"
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({ projectID: Project.ID.global, action: "shell", resources: [resource] })
+
+      const service = yield* Permission.Service
+      expect(
+        yield* service.ask(assertion({ action: "shell", resources: [resource], resourceMode: "exact" })),
+      ).toMatchObject({ effect: "allow" })
+    }),
+  )
+
   it.effect("resolves an asked permission once", () =>
     Effect.gen(function* () {
       yield* setup()

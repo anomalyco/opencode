@@ -71,7 +71,6 @@ describe("ShellScan generated properties", () => {
   test("keeps wrappers and shell evaluators at their delegated boundary", () => {
     const prefixes = ["", "FOO=bar ", "FOO=bar BAR=baz "]
     const wrapped = [
-      "time git status",
       "command git status",
       "builtin printf ok",
       "exec git status",
@@ -90,6 +89,7 @@ describe("ShellScan generated properties", () => {
 
     for (const prefix of prefixes) {
       for (const command of wrapped) expect(ShellScan.scan(prefix + command).kind).toBe("scanned")
+      expect(ShellScan.scan(`${prefix}time git status`).kind).toBe("opaque")
     }
   })
 })

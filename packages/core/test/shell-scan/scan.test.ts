@@ -186,6 +186,30 @@ describe("ShellScan", () => {
   test("does not invent a command for assignment-only input", () => {
     expect(ShellScan.scan("FOO=bar")).toEqual({ kind: "scanned", commands: [] })
   })
+
+  test("fails closed when assignment-only statements affect later commands", () => {
+    expect(ShellScan.scan("PATH=.; git status").kind).toBe("opaque")
+  })
+
+  test.each(["echo ${url:-http://example.test}", "printf '%s' \"${PATH//:/$'\\n'}\""])(
+    "keeps non-executing parameter expansions scannable: %s",
+    (command) => expect(ShellScan.scan(command).kind).toBe("scanned"),
+  )
+
+  test.each([
+    "FOO=bar > /tmp/victim",
+    ":; { touch /tmp/victim; }",
+    "t{ouch,ouch} /tmp/victim",
+    "{fd}>/tmp/log touch /tmp/victim",
+    "time touch /tmp/victim",
+    "printf '%s' \"$(printf safe ${x%)}; touch /tmp/victim)\"",
+    'echo "${ /usr/bin/touch /tmp/victim; }"',
+    "s=abc; x='a[$(touch /tmp/victim)0]'; printf '%s' \"${s:x}\"",
+    "ref='x[$(touch /tmp/victim)0]'; printf '%s' \"${!ref}\"",
+    `printf '%s' "${"${".repeat(1000)}x${"}".repeat(1000)}"`,
+  ])("fails closed when Bash can execute an unreported side effect: %s", (command) => {
+    expect(ShellScan.scan(command).kind).toBe("opaque")
+  })
 })
 
 describe("ShellScan PowerShell", () => {
@@ -274,6 +298,17 @@ describe("ShellScan PowerShell", () => {
         { resource: 'Write-Output "a`"; still string"', words: ["Write-Output", 'a"; still string'] },
       ],
     })
+  })
+
+  test("does not treat backticks as escapes in verbatim strings", () => {
+    const result = ShellScan.scanPowerShell("Write-Output 'safe`'; Remove-Item victim; '`'")
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toContain("Remove-Item")
+  })
+
+  test("fails closed for PowerShell smart quotes", () => {
+    expect(ShellScan.scanPowerShell("Write-Output 'safe’; Remove-Item victim; ‘tail'").kind).toBe("opaque")
   })
 
   test("excludes PowerShell redirects and their targets from words", () => {

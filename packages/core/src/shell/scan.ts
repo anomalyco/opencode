@@ -33,8 +33,18 @@ const BASH_COMPOUND_KEYWORDS = new Set([
   "do",
   "done",
   "coproc",
+  "time",
 ])
-const POWERSHELL_LOCATIONS = new Set(["set-location", "cd", "chdir", "sl", "push-location", "pushd"])
+const POWERSHELL_LOCATIONS = new Set([
+  "set-location",
+  "cd",
+  "chdir",
+  "sl",
+  "push-location",
+  "pushd",
+  "pop-location",
+  "popd",
+])
 const BASH_REDIRECTS = ["&>>", "&>", "<<<", "<<-", "<<", "<>", "<&", ">&", ">|", ">>", ">", "<"]
 const MAX_BASH_INPUT_LENGTH = 64 * 1024
 const MAX_SUBSTITUTION_DEPTH = 32
@@ -83,6 +93,7 @@ function scanBash(input: string, depth: number): Result {
   let redirectTarget = false
   let hasRedirect = false
   let terminalBackground = false
+  let parameterExpansion = 0
 
   const finishWord = () => {
     if (!wordStarted) return
@@ -106,8 +117,10 @@ function scanBash(input: string, depth: number): Result {
         resource,
         words: words.slice(name),
       })
-    else if (!(assignmentWords.length > 0 && assignmentWords.every(Boolean)) && (hasRedirect || boundary || separated))
-      invalidStructure = true
+    else if (hasRedirect || boundary || separated) {
+      const assignmentOnly = assignmentWords.length > 0 && assignmentWords.every(Boolean)
+      if (!assignmentOnly || hasRedirect || boundary) invalidStructure = true
+    }
     commands.push(...nestedCommands.splice(0))
     words.length = 0
     assignmentWords.length = 0
@@ -132,6 +145,8 @@ function scanBash(input: string, depth: number): Result {
           index++
           if (next !== "\n") word += next
         } else word += char
+      } else if (char === "$" && input[index + 1] === "{" && bashParameterUnsafe(input, index)) {
+        return { kind: "opaque", reason: "dynamic-execution" }
       } else if ((char === "$" && input[index + 1] === "(") || char === "`") {
         const substitution = bashSubstitution(input, index)
         if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "command-substitution" }
@@ -182,6 +197,8 @@ function scanBash(input: string, depth: number): Result {
       index = substitution.end
       continue
     }
+    if (char === "$" && input[index + 1] === "{" && bashParameterUnsafe(input, index))
+      return { kind: "opaque", reason: "dynamic-execution" }
     if ((char === "<" || char === ">") && input[index + 1] === "(") {
       const substitution = bashParenthesized(input, index + 1)
       if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "command-substitution" }
@@ -222,7 +239,12 @@ function scanBash(input: string, depth: number): Result {
       index += redirect.length - 1
       continue
     }
-    if ("()".includes(char) || (char === "!" && !wordStarted)) compound = true
+    const emptyBrace = (char === "{" && input[index + 1] === "}") || (char === "}" && input[index - 1] === "{")
+    if (!emptyBrace) {
+      if (char === "{" && input[index - 1] === "$") parameterExpansion++
+      else if (char === "}" && parameterExpansion > 0) parameterExpansion--
+      else if ("(){}".includes(char) || (char === "!" && !wordStarted)) compound = true
+    }
     if (/\s/.test(char) && char !== "\n") {
       finishWord()
       continue
@@ -400,6 +422,7 @@ function bashSubstitution(input: string, start: number) {
   let level = 1
   for (let index = start + 2; index < input.length; index++) {
     const char = input[index]
+    if (char === "$" && input[index + 1] === "{") return
     if (quote === "single") {
       if (char === "'") quote = undefined
       continue
@@ -436,6 +459,25 @@ function bashSubstitution(input: string, start: number) {
   }
 }
 
+function bashParameterUnsafe(input: string, start: number) {
+  for (let index = start + 2; index < input.length; index++) {
+    const char = input[index]
+    if (char === "\\") {
+      index++
+      continue
+    }
+    if (char === "$" && input[index + 1] === "{") return true
+    if (char !== "}") continue
+    const body = input.slice(start + 2, index)
+    if (/^[\s|!]/.test(body) || body.includes("[")) return true
+    const parameter = /^#?(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[-#$?*@])/.exec(body)?.[0]
+    if (!parameter) return true
+    const operator = body.slice(parameter.length)
+    return operator.startsWith(":") && !/^:[-=?+]/.test(operator)
+  }
+  return true
+}
+
 export function scanPowerShell(input: string): Result {
   return scanPowerShellNested(input, 0)
 }
@@ -443,6 +485,7 @@ export function scanPowerShell(input: string): Result {
 function scanPowerShellNested(input: string, depth: number): Result {
   if (input.length > MAX_BASH_INPUT_LENGTH || depth >= MAX_SUBSTITUTION_DEPTH)
     return { kind: "opaque", reason: "invalid-structure" }
+  if (/[‘’“”]/.test(input)) return { kind: "opaque", reason: "invalid-structure" }
   const commands: Array<{ resource: string; words: string[] }> = []
   const nestedCommands: Array<{ resource: string; words: string[] }> = []
   const words: string[] = []
@@ -482,7 +525,7 @@ function scanPowerShellNested(input: string, depth: number): Result {
         word += "'"
         index++
       } else if ((quote === "single" && char === "'") || (quote === "double" && char === '"')) quote = undefined
-      else if (char === "`" && index + 1 < input.length) word += input[++index]
+      else if (quote === "double" && char === "`" && index + 1 < input.length) word += input[++index]
       else {
         if (quote === "double" && char === "$" && input[index + 1] === "(") dynamic = true
         word += char

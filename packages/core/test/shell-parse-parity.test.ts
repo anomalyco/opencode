@@ -9,20 +9,40 @@ describe("ShellParse portable parity", () => {
       const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
       const portable = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true }))
 
-      if (scanned.kind === "opaque") {
+      if (portable.analysis === "opaque") {
         expect({ command, portable }).toEqual({
           command,
-          portable: { commands: [{ resource: command, save: command }], directories: [] },
+          portable: {
+            commands: [{ resource: command, save: command }],
+            directories: [],
+            analysis: "opaque",
+            directoryUnknown: true,
+          },
         })
         continue
       }
-      if (shell === "pwsh" && /\r(?!\n)/.test(command)) {
-        expect(portable).toEqual({ commands: [], directories: [] })
-        continue
-      }
+      if (scanned.kind === "opaque") throw new Error(`Portable parse unexpectedly completed opaque input: ${command}`)
 
       const legacy = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
-      expect({ command, portable }).toEqual({ command, portable: legacy })
+      if (shell === "pwsh" && /\r(?!\n)/.test(command)) {
+        expect(
+          portable.commands.length + portable.directories.length + Number(portable.directoryUnknown),
+          command,
+        ).toBeGreaterThan(0)
+        continue
+      }
+      expect({
+        command,
+        commandsCovered: portable.commands.every((item) =>
+          legacy.commands.some((candidate) => candidate.resource === item.resource),
+        ),
+      }).toEqual({ command, commandsCovered: true })
+      if (portable.commands.length !== legacy.commands.length)
+        expect(portable.directories.length + Number(portable.directoryUnknown), command).toBeGreaterThan(0)
+      expect({
+        command,
+        coversLegacyDirectories: legacy.directories.every((directory) => portable.directories.includes(directory)),
+      }).toEqual({ command, coversLegacyDirectories: true })
     }
   })
 })
