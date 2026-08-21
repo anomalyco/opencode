@@ -8,8 +8,7 @@ const updateClient = pkg.autoUpdater
 const restartTimeout = 10_000
 
 export const make = Effect.gen(function* () {
-  const context = yield* Effect.context()
-  const runFork = Effect.runForkWith(context)
+  const runFork = Effect.runForkWith(yield* Effect.context())
   updateClient.logger = {
     info: (...args) => runFork(Effect.logInfo(...args)),
     warn: (...args) => runFork(Effect.logWarning(...args)),
@@ -38,67 +37,70 @@ export const make = Effect.gen(function* () {
       },
       catch: (error) => error,
     }),
-    stageUpdate: Effect.tryPromise({
-      try: async () => {
-        await stageUpdate()
-      },
-      catch: (error) => error,
-    }),
-    installAndRestart: Effect.tryPromise({
-      try: installAndRestart,
-      catch: (error) => error,
-    }),
+    stageUpdate: stageUpdate(),
+    installAndRestart,
     dispose: () => autoUpdater.off("before-quit-for-update", beforeQuit),
   } satisfies Platform
 })
 
 function stageUpdate() {
-  if (process.platform !== "darwin") return updateClient.downloadUpdate()
+  if (process.platform !== "darwin")
+    return Effect.tryPromise({
+      try: () => updateClient.downloadUpdate(),
+      catch: (error) => error,
+    }).pipe(Effect.asVoid)
 
-  return new Promise<void>((resolve, reject) => {
+  return Effect.callback<void, Error>((resume) => {
     const cleanup = () => {
       autoUpdater.removeListener("update-downloaded", complete)
       updateClient.removeListener("error", fail)
     }
     const complete = () => {
       cleanup()
-      resolve()
+      resume(Effect.void)
     }
     const fail = (error: Error) => {
       cleanup()
-      reject(error)
+      resume(Effect.fail(error))
     }
 
     autoUpdater.once("update-downloaded", complete)
     updateClient.once("error", fail)
     void updateClient.downloadUpdate().catch(fail)
+    return Effect.sync(cleanup)
   })
 }
 
-function installAndRestart() {
-  return new Promise<never>((_resolve, reject) => {
-    const timeout = setTimeout(() => {
-      Effect.runFork(Effect.logError("update restart did not start"))
-      fail(new Error())
-    }, restartTimeout)
-    const started = () => {
-      clearTimeout(timeout)
-      autoUpdater.removeListener("before-quit-for-update", started)
-    }
-    const fail = (error: Error) => {
-      clearTimeout(timeout)
-      autoUpdater.removeListener("before-quit-for-update", started)
-      updateClient.removeListener("error", fail)
-      setAppQuitting(false)
-      reject(error)
-    }
+const installAndRestart = Effect.callback<void, Error>((resume) => {
+  const cleanup = () => {
+    autoUpdater.removeListener("before-quit-for-update", started)
+    updateClient.removeListener("error", fail)
+  }
+  const started = () => {
+    cleanup()
+    resume(Effect.void)
+  }
+  const fail = (error: Error) => {
+    cleanup()
+    resume(Effect.fail(error))
+  }
 
-    autoUpdater.once("before-quit-for-update", started)
-    updateClient.once("error", fail)
-    try {
-      updateClient.quitAndInstall()
-    } catch (error) {
-      fail(error instanceof Error ? error : new Error(String(error)))
-    }
-  })
-}
+  autoUpdater.once("before-quit-for-update", started)
+  updateClient.once("error", fail)
+  try {
+    updateClient.quitAndInstall()
+  } catch (error) {
+    fail(error instanceof Error ? error : new Error(String(error)))
+  }
+  return Effect.sync(cleanup)
+}).pipe(
+  Effect.timeoutOrElse({
+    duration: restartTimeout,
+    orElse: () =>
+      Effect.logError("update restart did not start").pipe(
+        Effect.andThen(Effect.fail(new Error("Update restart did not start"))),
+      ),
+  }),
+  Effect.tapError(() => Effect.sync(() => setAppQuitting(false))),
+  Effect.andThen(Effect.never),
+)

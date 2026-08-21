@@ -33,8 +33,7 @@ export const IpcServerProtocolLive = Layer.unwrap(
           const serialization = yield* RpcSerialization.RpcSerialization
           const disconnects = yield* Queue.unbounded<number>()
           const inbound = yield* Queue.unbounded<readonly [number, RpcMessage.FromClientEncoded]>()
-          const context = yield* Effect.context()
-          const runFork = Effect.runForkWith(context)
+          const runFork = Effect.runForkWith(yield* Effect.context())
           let nextClientId = 0
 
           const disconnect = Effect.fnUntraced(function* (id: number) {

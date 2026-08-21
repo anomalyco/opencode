@@ -25,8 +25,9 @@ export class Service extends Context.Service<Service, Interface>()("opencode/des
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>()
-    const resolve = yield* Effect.cached(make().pipe(Effect.provide(context), Effect.orDie))
+    const resolve = yield* Effect.cached(
+      make().pipe(Effect.provide(yield* Effect.context<FileSystem.FileSystem | Path.Path>()), Effect.orDie),
+    )
     return Service.of({ resolve })
   }),
 )
@@ -85,9 +86,9 @@ export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (binary
       if (target === current) return
       const stat = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
       if (stat?.type !== "Directory") return
-      yield* fs.remove(target, { recursive: true, force: true }).pipe(
-        Effect.catch((error) => Effect.logError("failed to clean staged v2 CLI", { path: target, error })),
-      )
+      yield* fs
+        .remove(target, { recursive: true, force: true })
+        .pipe(Effect.catch((error) => Effect.logError("failed to clean staged v2 CLI", { path: target, error })))
     }),
     { concurrency: "unbounded" },
   )

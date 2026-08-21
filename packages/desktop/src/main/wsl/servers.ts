@@ -55,8 +55,7 @@ export function wslServerIdForDistro(distro: string) {
 export const createWslServersController = Effect.fn("WslServers.make")(function* (
   options: WslServersControllerOptions,
 ) {
-  const context = yield* Effect.context()
-  const runFork = Effect.runForkWith(context)
+  const runFork = Effect.runForkWith(yield* Effect.context())
   let state: WslServersState = initialState()
   const listeners = new Set<(event: WslServersEvent) => void>()
   const sidecars = new Map<string, RunningSidecar>()

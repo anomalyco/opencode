@@ -27,8 +27,7 @@ const start = Effect.fn("BackgroundService.start")(function* () {
   yield* Effect.logInfo("starting v2 background service")
   const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
-  const context = yield* Effect.context()
-  const runFork = Effect.runForkWith(context)
+  const runFork = Effect.runForkWith(yield* Effect.context())
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")

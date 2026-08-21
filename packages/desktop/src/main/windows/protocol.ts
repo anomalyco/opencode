@@ -1,9 +1,9 @@
 import { net, protocol } from "electron"
 import type { BrowserWindow } from "electron"
 import { pathToFileURL } from "node:url"
-import { Effect } from "effect"
-import type { Path } from "effect"
+import { Effect, Path } from "effect"
 import { scoped } from "../native/logging"
+import { DesktopPaths } from "../paths"
 
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
@@ -22,20 +22,23 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
-export function registerRendererProtocol(path: Path.Path, rendererRoot: string) {
+export const registerRendererProtocol = Effect.fn("Window.registerRendererProtocol")(function* () {
+  const path = yield* Path.Path
+  const paths = yield* DesktopPaths.resolve
+  const runFork = Effect.runForkWith(yield* Effect.context<never>())
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
   protocol.handle(rendererProtocol, async (request) => {
     const url = new URL(request.url)
     if (url.host !== rendererHost) {
-      Effect.runFork(scoped("protocol", Effect.logWarning("rejected host", { url: request.url })))
+      runFork(scoped("protocol", Effect.logWarning("rejected host", { url: request.url })))
       return new Response("Not found", { status: 404 })
     }
 
-    const file = path.resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
-    const rel = path.relative(rendererRoot, file)
+    const file = path.resolve(paths.rendererRoot, `.${decodeURIComponent(url.pathname)}`)
+    const rel = path.relative(paths.rendererRoot, file)
     if (rel.startsWith("..") || path.isAbsolute(rel)) {
-      Effect.runFork(scoped("protocol", Effect.logWarning("rejected path", { url: request.url, file })))
+      runFork(scoped("protocol", Effect.logWarning("rejected path", { url: request.url, file })))
       return new Response("Not found", { status: 404 })
     }
 
@@ -43,7 +46,7 @@ export function registerRendererProtocol(path: Path.Path, rendererRoot: string) 
       const range = request.headers.get("range")
       const response = await net.fetch(pathToFileURL(file).toString(), { headers: range ? { range } : undefined })
       if (response.status >= 400) {
-        Effect.runFork(
+        runFork(
           scoped(
             "protocol",
             Effect.logError("fetch failed", {
@@ -57,11 +60,11 @@ export function registerRendererProtocol(path: Path.Path, rendererRoot: string) 
       }
       return addDocumentPolicy(response, file)
     } catch (error) {
-      Effect.runFork(scoped("protocol", Effect.logError("fetch error", { url: request.url, file, error })))
+      runFork(scoped("protocol", Effect.logError("fetch error", { url: request.url, file, error })))
       return new Response("Not found", { status: 404 })
     }
   })
-}
+})
 
 export function loadWindow(win: BrowserWindow, html: string) {
   const devUrl = process.env.ELECTRON_RENDERER_URL

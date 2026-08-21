@@ -2,13 +2,12 @@ export * as ApplicationLifecycle from "./index"
 
 import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
-import { Context, Effect, FileSystem, Layer, Path } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { DeepLinksOpened } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import { DesktopLogging, scoped } from "../native/logging"
-import { DesktopPaths } from "../paths"
 import { safeWebContentsURL } from "../windows/state"
-import { createMainWindow, getLastFocusedWindow, restoreMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import { getLastFocusedWindow, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
 import { acquireApplicationLock, configureApplication } from "./environment"
 import { Shutdown } from "./shutdown"
 
@@ -25,17 +24,11 @@ export class Service extends Context.Service<Service, Interface>()("opencode/des
 const runtime = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const logging = yield* DesktopLogging.Service
     const shutdown = yield* Shutdown.Service
-    const fs = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
-    const paths = yield* DesktopPaths.resolve
-    const context = yield* Effect.context()
-    const runFork = Effect.runForkWith(context)
-    const runPromise = Effect.runPromiseWith(context)
-    const windows = { fs, path, paths, runFork, exportDebug: () => runPromise(logging.exportDebug) }
-    const createWindow = () => createMainWindow(windows)
-    const restoreWindows = () => restoreMainWindows(windows)
+    const runFork = Effect.runForkWith(yield* Effect.context())
+    const windows = yield* makeMainWindows()
+    const createWindow = windows.create
+    const restoreWindows = windows.restore
     const pendingDeepLinks: string[] = []
     let shutdownReady = false
     const prepareToRestart = shutdown.run.pipe(Effect.ensuring(Effect.sync(() => (shutdownReady = true))))
@@ -92,7 +85,9 @@ const runtime = Layer.effect(
       webContents: Electron.WebContents,
       details: Electron.RenderProcessGoneDetails,
     ) => {
-      runFork(scoped("window", Effect.logError("app render process gone", { url: safeWebContentsURL(webContents), details })))
+      runFork(
+        scoped("window", Effect.logError("app render process gone", { url: safeWebContentsURL(webContents), details })),
+      )
     }
     const signal = () => {
       setAppQuitting()

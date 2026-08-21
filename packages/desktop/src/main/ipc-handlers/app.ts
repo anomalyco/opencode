@@ -24,8 +24,7 @@ export const appHandlers = AppRpcs.toLayer(
     const background = yield* BackgroundService.Service
     const updater = yield* Updater.Service
     const logging = yield* DesktopLogging.Service
-    const context = yield* Effect.context()
-    const runFork = Effect.runForkWith(context)
+    const runFork = Effect.runForkWith(yield* Effect.context())
     return AppRpcs.of({
       AppAwaitInitialization: () => background.connection,
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),

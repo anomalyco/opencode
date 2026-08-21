@@ -43,8 +43,7 @@ export class Service extends Context.Service<Service, Interface>()("opencode/des
 export const layerWith = (dependencies: Dependencies) => Layer.effect(Service, make(dependencies))
 
 export const make = Effect.fn("Updater.make")(function* (dependencies: Dependencies) {
-  const context = yield* Effect.context()
-  const runFork = Effect.runForkWith(context)
+  const runFork = Effect.runForkWith(yield* Effect.context())
   let state: UpdaterState = dependencies.platform ? { status: "idle" } : { status: "disabled" }
   let pending: Deferred.Deferred<UpdaterState> | undefined
   let installing: Deferred.Deferred<void, unknown> | undefined

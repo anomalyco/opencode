@@ -12,8 +12,7 @@ export const menuHandlers = MenuRpcs.toLayer(
     const handoff = yield* IpcPortHandoff
     const lifecycle = yield* ApplicationLifecycle.Service
     const updater = yield* Updater.Service
-    const context = yield* Effect.context()
-    const runFork = Effect.runForkWith(context)
+    const runFork = Effect.runForkWith(yield* Effect.context())
     return MenuRpcs.of({
       MenuRunAction: ({ action }, context) =>
         Effect.sync(() =>

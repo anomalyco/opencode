@@ -84,7 +84,7 @@ export const prepareDesktop = Effect.gen(function* () {
   )
   if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
     app.setAsDefaultProtocolClient("opencode")
-  registerRendererProtocol(path, paths.rendererRoot)
+  yield* registerRendererProtocol()
   setDockIcon(path, paths)
 })
 
