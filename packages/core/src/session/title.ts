@@ -107,6 +107,13 @@ const leastReasoningVariant = (model: Model.Info | undefined) =>
   model?.variants.find((variant) => variant.id === "none")?.id ??
   model?.variants.find((variant) => variant.id === "low")?.id
 
+const preferredRef = (configured: Model.Ref | undefined, model: Model.Info | undefined) => {
+  const ref = configured ?? (model ? Model.Ref.make({ providerID: model.providerID, id: model.id }) : undefined)
+  if (!ref || ref.variant) return ref
+  const variant = leastReasoningVariant(model)
+  return variant ? Model.Ref.make({ ...ref, variant }) : ref
+}
+
 const make = (dependencies: Dependencies) => {
   const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (
     db: Database.Interface["db"],
@@ -121,27 +128,15 @@ const make = (dependencies: Dependencies) => {
     const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
     if (!agent) return
     const primary = yield* dependencies.models.resolve(session).pipe(Effect.catch(() => Effect.succeed(undefined)))
-    const preferredModel = agent.model
-      ? yield* dependencies.catalog.model.get(agent.model.providerID, agent.model.id)
-      : primary
-        ? yield* dependencies.catalog.model.small(primary.ref.providerID)
-        : undefined
-    const preferredVariant = agent.model?.variant ?? leastReasoningVariant(preferredModel)
-    const preferredRef = agent.model
-      ? Model.Ref.make({
-          ...agent.model,
-          ...(preferredVariant ? { variant: preferredVariant } : {}),
-        })
-      : preferredModel
-        ? Model.Ref.make({
-            providerID: preferredModel.providerID,
-            id: preferredModel.id,
-            ...(preferredVariant ? { variant: preferredVariant } : {}),
-          })
-        : undefined
-    const preferred = preferredRef
+    const preferredModel = yield* Effect.gen(function* () {
+      if (agent.model) return yield* dependencies.catalog.model.get(agent.model.providerID, agent.model.id)
+      if (!primary) return
+      return yield* dependencies.catalog.model.small(primary.ref.providerID)
+    })
+    const selectedRef = preferredRef(agent.model, preferredModel)
+    const preferred = selectedRef
       ? yield* dependencies.models
-          .resolve({ ...session, model: preferredRef })
+          .resolve({ ...session, model: selectedRef })
           .pipe(Effect.catch(() => Effect.succeed(undefined)))
       : undefined
     const selected = preferred ?? primary
