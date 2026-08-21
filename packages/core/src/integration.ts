@@ -695,11 +695,11 @@ const layer = Layer.effect(
             ?.methods.find((method) => method.type === "key")
           if (!method) return yield* Effect.die(new Error(`Key method not found: ${input.integrationID}`))
           const answer = input.answer ?? {}
-          if (method.type === "key" && method.form) {
+          if (method.form) {
             const invalid = Form.validateFields(method.form) ?? Form.validateAnswer(method.form, answer)
             if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
           }
-          if (method.type === "key" && !method.form && Object.keys(answer).length > 0) {
+          if (!method.form && Object.keys(answer).length > 0) {
             return yield* new AuthorizationError({ cause: new Error("Key method does not accept a form answer") })
           }
           yield* credentials.create({
