@@ -1154,6 +1154,10 @@ export function Prompt(props: PromptProps) {
     let sessionID = props.sessionID
     let session = sessionID ? data.session.get(sessionID) : undefined
     let finishMoveProgress = false
+    // For a brand-new session: the setup chain (create, then environment)
+    // that session-dependent sends gate on, plus the recovery that unwinds
+    // the optimistic navigation when setup or the send fails.
+    let newSession: { gate: Promise<unknown>; recover: (error: unknown) => void } | undefined
     if (sessionID == null) {
       const directory = await move.getDirectory()
       if (move.pending() && !directory) {
@@ -1166,61 +1170,64 @@ export function Prompt(props: PromptProps) {
       // by /cd before a session exists.
       const location = currentLocation.ref ?? data.location.default()
 
-      const created = await client.api.session
-        .create({
-          location: directory ? { directory } : location,
-          agent: agent.id,
-          model: {
-            providerID: selection.providerID,
-            id: selection.modelID,
-            variant,
-          },
-        })
-        .catch(() => undefined)
-
-      if (!created) {
-        if (finishMoveProgress) move.finishSubmit()
-        toast.show({
-          message: "Creating a session failed. Open console for more details.",
-          variant: "error",
-        })
-        restoreEntry()
-        return true
-      }
-
+      // Optimistic create: the data layer mints the ID client-side and admits
+      // a local session record synchronously, so the navigation below happens
+      // immediately — enter feels sent even while the create round-trip is in
+      // flight. Sends against the new session gate on the request.
+      const created = data.session.create({
+        location: directory ? { directory } : location,
+        agent: agent.id,
+        model: {
+          providerID: selection.providerID,
+          id: selection.modelID,
+          variant,
+        },
+      })
       sessionID = created.id
-      session = created
-      if (created.location.workspaceID === undefined && terminalEnvironment.variables !== undefined) {
-        const error = await client.api.session
-          .environment({ sessionID, variables: terminalEnvironment.variables })
-          .then(
-            () => undefined,
-            (error) => error,
-          )
-        if (error) {
-          if (finishMoveProgress) move.finishSubmit()
-          toast.show({ title: "Failed to set session environment", message: errorMessage(error), variant: "error" })
-          restoreEntry()
-          return true
-        }
+      session = data.session.get(created.id)
+      newSession = {
+        gate: created.request.then(async (info) => {
+          if (info.location.workspaceID === undefined && terminalEnvironment.variables !== undefined) {
+            await client.api.session.environment({ sessionID: created.id, variables: terminalEnvironment.variables })
+          }
+        }),
+        recover: (error) => {
+          // Setup or the send failed after the optimistic navigation. A
+          // failed create has already rolled back the local record (and the
+          // prompt row rolls back via its own catch). Put the draft back for
+          // the home composer and unwind the navigation.
+          toast.show({
+            title: data.session.get(created.id) ? "Failed to set up session" : "Creating a session failed",
+            message: errorMessage(error),
+            variant: "error",
+          })
+          saveDraft(undefined, { prompt: entry, cursor: entry.text.length })
+          if (route.data.type === "session" && route.data.sessionID === created.id) {
+            route.navigate({ type: "home" })
+          }
+        },
       }
     }
 
+    const target = sessionID
     if (currentMode === "shell") {
       move.startSubmit()
-      void client.api.session.shell({
-        sessionID,
-        command: inputText,
-      })
+      const send = () => client.api.session.shell({ sessionID: target, command: inputText })
+      if (newSession) {
+        const recover = newSession.recover
+        void newSession.gate.then(send).catch(recover)
+      } else {
+        void send()
+      }
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
       move.startSubmit()
       const model = { providerID: selection.providerID, id: selection.modelID, variant }
-      const cancelCommit = local.model.trackSessionCommit(sessionID, model)
+      const cancelCommit = local.model.trackSessionCommit(target, model)
 
-      void client.api.session
-        .command({
-          sessionID,
+      const send = () =>
+        client.api.session.command({
+          sessionID: target,
           command: slashHead.name,
           arguments: slashHead.arguments,
           agent: agent.id,
@@ -1230,17 +1237,21 @@ export function Prompt(props: PromptProps) {
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
         })
-        .catch((error) => {
-          cancelCommit()
-          toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
-          restoreEntry()
-        })
+      void (newSession ? newSession.gate.then(send) : send()).catch((error) => {
+        cancelCommit()
+        if (newSession) return newSession.recover(error)
+        toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
+        restoreEntry()
+      })
     } else if (isSkill) {
       move.startSubmit()
-      void client.api.session.skill({
-        sessionID,
-        skill: slashHead.name,
-      })
+      const send = () => client.api.session.skill({ sessionID: target, skill: slashHead.name })
+      if (newSession) {
+        const recover = newSession.recover
+        void newSession.gate.then(send).catch(recover)
+      } else {
+        void send()
+      }
     } else {
       move.startSubmit()
       if (!session) {
@@ -1281,20 +1292,26 @@ export function Prompt(props: PromptProps) {
       }
       if (pendingEditorSelection) {
         // Keep editor context hidden while admitting it before the corresponding user prompt.
-        const error = await client.api.session
-          .synthetic({
-            sessionID,
+        const send = () =>
+          client.api.session.synthetic({
+            sessionID: target,
             text: formatEditorContext(pendingEditorSelection),
             resume: false,
           })
-          .then(
+        if (newSession) {
+          // Fold into the setup gate so the context still admits before the
+          // user prompt once the session exists.
+          newSession = { ...newSession, gate: newSession.gate.then(send) }
+        } else {
+          const error = await send().then(
             () => undefined,
             (error) => error,
           )
-        if (error) {
-          toast.show({ title: "Failed to send editor context", message: errorMessage(error), variant: "error" })
-          restoreEntry()
-          return false
+          if (error) {
+            toast.show({ title: "Failed to send editor context", message: errorMessage(error), variant: "error" })
+            restoreEntry()
+            return false
+          }
         }
       }
       // The data layer admits optimistically: the prompt renders immediately
@@ -1303,14 +1320,16 @@ export function Prompt(props: PromptProps) {
       // the composer unless the user has started typing something new.
       data.session
         .prompt({
-          sessionID,
+          sessionID: target,
           text: inputText,
           files: entry.files,
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
+          gate: newSession?.gate,
         })
         .catch((error) => {
+          if (newSession) return newSession.recover(error)
           toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
           restoreEntry()
         })
