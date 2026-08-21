@@ -255,7 +255,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "następującymi wyjątkami",
 
   "go.title": "OpenCode Go | Niskokosztowe modele do kodowania dla każdego",
-  "go.banner.text": "Hy3 oferuje 8x wyższe limity użycia przez ograniczony czas",
+  "go.banner.text": "Ox Alpha Free jest dostępny w Go przez ograniczony czas",
   "go.meta.description":
     "Go kosztuje $5 za pierwszy miesiąc, a następnie $10/miesiąc, oferując hojne limity użycia i niezawodny dostęp do wiodących modeli do kodowania.",
   "go.hero.title": "Niskokosztowe modele do kodowania dla każdego",
@@ -274,6 +274,7 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "Żądania na 5 godzin",
   "go.graph.limitedRegions": "ograniczone regiony",
+  "go.graph.limitedTime": "ograniczony czas",
   "go.graph.usageLimits": "Limity użycia",
   "go.graph.aria": "Żądania na 5h: {{free}} vs {{go}}",
 

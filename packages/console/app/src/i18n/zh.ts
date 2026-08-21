@@ -244,7 +244,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情况除外",
 
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
-  "go.banner.text": "Hy3 限时享受 8 倍使用额度",
+  "go.banner.text": "Ox Alpha Free 限时加入 Go",
   "go.meta.description": "Go 首月 $5，之后 $10/月，提供充裕的使用限额，并可可靠访问领先的编程模型。",
   "go.hero.title": "人人可用的低成本编程模型",
   "go.hero.body":
@@ -261,6 +261,7 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "每 5 小时请求数",
   "go.graph.limitedRegions": "仅限部分地区",
+  "go.graph.limitedTime": "限时",
   "go.graph.usageLimits": "使用限制",
   "go.graph.aria": "每 5 小时请求数: {{free}} vs {{go}}",
 
