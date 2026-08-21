@@ -14,11 +14,11 @@ import {
   MessageNotFoundError,
   ServiceUnavailableError,
   SessionBusyError,
-  SessionNotFoundError,
   SkillNotFoundError,
   UnknownError,
 } from "@opencode-ai/protocol/errors"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { failedMessageDecode, missingSession } from "./session-error"
 
 const DefaultSessionsLimit = 50
 
@@ -26,25 +26,11 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
   Effect.gen(function* () {
     const session = yield* Session.Service
     const transfer = yield* SessionTransfer.Service
-    const missingSession = (error: Session.NotFoundError) =>
-      new SessionNotFoundError({
-        sessionID: error.sessionID,
-        message: `Session not found: ${error.sessionID}`,
-      })
     const busySession = (error: Session.BusyError) =>
       new SessionBusyError({
         sessionID: error.sessionID,
         message: `Session is busy: ${error.sessionID}`,
       })
-    const failedMessageDecode = (error: Session.MessageDecodeError) => {
-      const ref = `err_${crypto.randomUUID().slice(0, 8)}`
-      return Effect.logError("failed to decode session message").pipe(
-        Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
-        Effect.andThen(
-          Effect.fail(new UnknownError({ message: "Unexpected server error. Check server logs for details.", ref })),
-        ),
-      )
-    }
     const pendingMutation = (effect: ReturnType<typeof session.cancelInbox>, conflict: string) =>
       effect.pipe(
         Effect.catchTag("Session.NotFoundError", missingSession),
@@ -214,7 +200,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         Effect.fn(function* (ctx) {
           yield* session
             .switchAgent({ sessionID: ctx.params.sessionID, agent: ctx.payload.agent })
-            .pipe(Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))))
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -223,7 +209,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         Effect.fn(function* (ctx) {
           yield* session
             .switchModel({ sessionID: ctx.params.sessionID, model: ctx.payload.model })
-            .pipe(Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))))
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -232,7 +218,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         Effect.fn(function* (ctx) {
           yield* session
             .rename({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
-            .pipe(Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))))
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -247,7 +233,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               delivery: ctx.payload.delivery,
             })
             .pipe(
-              Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))),
+              Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Session.DestinationNotFoundError", (error) =>
                 Effect.fail(new InvalidRequestError({ message: `Directory does not exist: ${error.directory}` })),
               ),
@@ -275,7 +261,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 resume: ctx.payload.resume,
               })
               .pipe(
-                Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))),
+                Effect.catchTag("Session.NotFoundError", missingSession),
                 Effect.catchTag("Session.PromptConflictError", (error) =>
                   Effect.fail(
                     new ConflictError({
@@ -313,7 +299,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 resume: ctx.payload.resume,
               })
               .pipe(
-                Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))),
+                Effect.catchTag("Session.NotFoundError", missingSession),
                 Effect.catchTag("Command.NotFoundError", (error) =>
                   Effect.fail(
                     new CommandNotFoundError({
@@ -359,7 +345,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               resume: ctx.payload.resume,
             })
             .pipe(
-              Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))),
+              Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Session.SkillNotFoundError", (error) =>
                 Effect.fail(new SkillNotFoundError({ skill: error.skill, message: `Skill not found: ${error.skill}` })),
               ),
@@ -381,7 +367,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               resume: ctx.payload.resume,
             })
             .pipe(
-              Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))),
+              Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Session.SyntheticConflictError", (error) =>
                 Effect.fail(
                   new ConflictError({
@@ -399,7 +385,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         Effect.fn(function* (ctx) {
           yield* session
             .shell({ sessionID: ctx.params.sessionID, id: ctx.payload.id, command: ctx.payload.command })
-            .pipe(Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))))
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -410,7 +396,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             data: yield* session
               .compact({ sessionID: ctx.params.sessionID, id: ctx.payload.id, delivery: ctx.payload.delivery })
               .pipe(
-                Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))),
+                Effect.catchTag("Session.NotFoundError", missingSession),
                 Effect.catchTag("Session.CompactionConflictError", (error) =>
                   Effect.fail(
                     new ConflictError({
@@ -426,9 +412,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.wait",
         Effect.fn(function* (ctx) {
-          yield* session
-            .wait(ctx.params.sessionID)
-            .pipe(Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))))
+          yield* session.wait(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -511,10 +495,12 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.context",
         Effect.fn(function* (ctx) {
           return {
-            data: yield* session.context(ctx.params.sessionID).pipe(
-              Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))),
-              Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
-            ),
+            data: yield* session
+              .context(ctx.params.sessionID)
+              .pipe(
+                Effect.catchTag("Session.NotFoundError", missingSession),
+                Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
+              ),
           }
         }),
       )
@@ -524,7 +510,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           return {
             data: yield* session
               .inbox(ctx.params.sessionID)
-              .pipe(Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error)))),
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession)),
           }
         }),
       )
@@ -612,9 +598,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.background",
         Effect.fn(function* (ctx) {
-          yield* session
-            .background(ctx.params.sessionID)
-            .pipe(Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(missingSession(error))))
+          yield* session.background(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
       )
