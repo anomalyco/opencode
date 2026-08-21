@@ -356,9 +356,11 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>Qwen3.6 Plus</li>
             <li>DeepSeek V4 Pro</li>
             <li>DeepSeek V4 Flash</li>
+            <li>DeepSeek V4 Flash Vision Exp</li>
             <li>MiMo-V2.5</li>
             <li>MiMo-V2.5-Pro</li>
             <li>Hy3</li>
+            <li>Ox Alpha Free</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
           <div data-slot="subscribe-actions">
