@@ -319,7 +319,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                     }).pipe(
                       Effect.andThen(metric("connect_failure")),
                       Effect.andThen(metric("fallback")),
-                      Effect.andThen(Effect.succeed(undefined)),
+                      Effect.asVoid,
                     ),
               ),
             )

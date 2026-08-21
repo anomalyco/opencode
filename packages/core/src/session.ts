@@ -964,7 +964,8 @@ const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
   const requested = input.skills
   const selected = yield* Effect.gen(function* () {
     if (!requested?.length) return undefined
-    const available = yield* (yield* skills).list()
+    const skillService = yield* skills
+    const available = yield* skillService.list()
     return yield* Effect.forEach(requested, (attachment) => {
       const skill = available.find((item) => item.id === attachment.id)
       if (!skill) return Effect.fail(new SkillNotFoundError({ skill: attachment.id }))

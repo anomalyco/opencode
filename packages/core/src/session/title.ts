@@ -117,7 +117,7 @@ const make = (dependencies: Dependencies) => {
     if (!firstUser) return
     const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
     if (!agent) return
-    const primary = yield* dependencies.models.resolve(session).pipe(Effect.catch(() => Effect.succeed(undefined)))
+    const primary = yield* dependencies.models.resolve(session).pipe(Effect.orElseSucceed(() => undefined))
     const info = yield* Effect.gen(function* () {
       if (agent.model) return yield* dependencies.catalog.model.get(agent.model.providerID, agent.model.id)
       if (!primary) return
@@ -136,7 +136,7 @@ const make = (dependencies: Dependencies) => {
             ...(variant ? { variant } : {}),
           }),
         })
-        .pipe(Effect.catch(() => Effect.succeed(undefined))))
+        .pipe(Effect.orElseSucceed(() => undefined)))
     const selected = preferred ?? primary
     if (!selected) return
     const title =

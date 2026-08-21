@@ -405,7 +405,7 @@ const layer = Layer.effect(
               ? []
               : yield* snapshots
                   .files({ from: startSnapshot, to: snapshot })
-                  .pipe(Effect.catch(() => Effect.succeed(undefined)))
+                  .pipe(Effect.orElseSucceed(() => undefined))
             : undefined
         return { snapshot, files }
       })
@@ -440,11 +440,13 @@ const layer = Layer.effect(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
-            if (LLMEvent.is.providerError(event)) {
-              if (isContextOverflowFailure(event) && !publisher.record().outputStarted) {
-                overflowFailure = event
-                return
-              }
+            if (
+              LLMEvent.is.providerError(event) &&
+              isContextOverflowFailure(event) &&
+              !publisher.record().outputStarted
+            ) {
+              overflowFailure = event
+              return
             }
             yield* publisher.publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return

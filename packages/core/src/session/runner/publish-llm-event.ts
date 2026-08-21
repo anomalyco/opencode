@@ -316,9 +316,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     })
   })
 
-  const flush = Effect.fn("SessionRunner.flush")(function* () {
-    yield* flushFragments()
-  })
+  const flush = Effect.fn("SessionRunner.flush")(flushFragments)
 
   const failTool = Effect.fnUntraced(function* (id: string, error: SessionError.Error, metadata?: Tool.Metadata) {
     const tool = tools.get(id)
@@ -335,7 +333,10 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     return true
   })
 
-  const failTools = Effect.fnUntraced(function* (error: SessionError.Error, mode: "all" | "hosted" | "uncalled") {
+  const failTools = Effect.fnUntraced(function* (
+    error: SessionError.Error,
+    mode: "all" | "hosted" | "uncalled" = "all",
+  ) {
     let failed = false
     for (const [id, tool] of tools) {
       if (tool.settled || (mode === "hosted" && !tool.providerExecuted) || (mode === "uncalled" && tool.called))
@@ -372,12 +373,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     })
   })
 
-  const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(function* (
-    error: SessionError.Error,
-    scope: "hosted" | "all" = "all",
-  ) {
-    return yield* failTools(error, scope)
-  })
+  const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(failTools)
 
   const assistantMessageIDForTool = (id: string) => {
     const tool = tools.get(id)

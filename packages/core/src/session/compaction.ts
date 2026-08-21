@@ -345,11 +345,10 @@ const make = (dependencies: Dependencies) => {
         reason: "auto",
         ...content,
       })
-    const error = { type: "compaction.unavailable" as const, message: "Nothing to compact yet" }
     return yield* failed({
       sessionID: input.session.id,
       reason: "auto",
-      error,
+      error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
     })
   })
   const required = (input: RequiredInput) => {
