@@ -444,6 +444,8 @@ export const dict = {
   "wsl.onboarding.adding": "Adding...",
 
   "server.row.noUsername": "no username",
+  "server.row.incompatible":
+    "This server is running OpenCode {{version}}, which isn't compatible with this app. Upgrade it to OpenCode V2 to continue.",
 
   "dialog.project.edit.title": "Edit project",
   "dialog.project.edit.name": "Name",

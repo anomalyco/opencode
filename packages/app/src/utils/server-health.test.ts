@@ -29,6 +29,23 @@ describe("checkServerHealth", () => {
     expect(request?.pathname).toBe("/api/health")
   })
 
+  test("identifies a V1 server without a version as incompatible", async () => {
+    const requests: string[] = []
+    const fetch = (async (input: RequestInfo | URL) => {
+      const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
+      requests.push(url.pathname)
+      return new Response(JSON.stringify(url.pathname === "/global/health" ? { version: "1.18.15" } : { healthy: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    }) as unknown as typeof globalThis.fetch
+
+    const result = await checkServerHealth(server, fetch)
+
+    expect(result).toEqual({ healthy: false, version: "1.18.15", incompatible: true })
+    expect(requests).toEqual(["/api/health", "/global/health"])
+  })
+
   test("allows slow servers thirty seconds by default", async () => {
     const timeout = Object.getOwnPropertyDescriptor(AbortSignal, "timeout")
     let timeoutMs = 0

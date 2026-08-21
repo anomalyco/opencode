@@ -1,4 +1,5 @@
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Icon } from "@opencode-ai/ui/icon"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import {
   children,
@@ -119,13 +120,20 @@ export function ServerRow(props: ServerRowProps) {
 
 export function ServerHealthIndicator(props: { health?: ServerHealth }) {
   return (
-    <div
-      classList={{
-        "size-1.5 rounded-full shrink-0 my-[3.5px]": true,
-        "bg-icon-success-base": props.health?.healthy === true,
-        "bg-icon-critical-base": props.health?.healthy === false,
-        "bg-border-weak-base": props.health === undefined,
-      }}
-    />
+    <Show
+      when={props.health?.incompatible}
+      fallback={
+        <div
+          classList={{
+            "size-1.5 rounded-full shrink-0 my-[3.5px]": true,
+            "bg-icon-success-base": props.health?.healthy === true,
+            "bg-icon-critical-base": props.health?.healthy === false,
+            "bg-border-weak-base": props.health === undefined,
+          }}
+        />
+      }
+    >
+      <Icon name="warning" size="small" class="shrink-0 text-icon-warning-base" />
+    </Show>
   )
 }

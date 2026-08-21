@@ -5,7 +5,7 @@ import { ClientError, OpenCode } from "@opencode-ai/client"
 import { Accessor, createEffect, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 
-export type ServerHealth = { healthy: boolean; version?: string }
+export type ServerHealth = { healthy: boolean; version?: string; incompatible?: boolean }
 
 interface CheckServerHealthOptions {
   timeoutMs?: number
@@ -78,6 +78,11 @@ export async function checkServerHealth(
   const signal = opts?.signal ?? timeout?.signal
   const retryCount = opts?.retryCount ?? defaultRetryCount
   const retryDelayMs = opts?.retryDelayMs ?? defaultRetryDelayMs
+  const headers = server.password
+    ? {
+        Authorization: `Basic ${authTokenFromCredentials({ username: server.username, password: server.password })}`,
+      }
+    : undefined
   const next = (count: number, error: unknown) => {
     if (count >= retryCount || !retryable(error, signal)) return Promise.resolve({ healthy: false } as const)
     return wait(retryDelayMs * (count + 1), signal)
@@ -88,18 +93,23 @@ export async function checkServerHealth(
     const current = await OpenCode.make({
       baseUrl: server.url,
       fetch,
-      headers: server.password
-        ? {
-            Authorization: `Basic ${authTokenFromCredentials({ username: server.username, password: server.password })}`,
-          }
-        : undefined,
+      headers,
     })
       .health.get({ signal })
-      .then((x) =>
-        typeof x.healthy === "boolean"
-          ? { data: { healthy: x.healthy, version: x.version } }
-          : { error: new Error("Invalid health response") },
-      )
+      .then(async (x) => {
+        if (typeof x.healthy !== "boolean") return { error: new Error("Invalid health response") }
+        if (x.healthy && typeof x.version !== "string") {
+          const legacy = await fetch(new URL("/global/health", server.url), { headers, signal })
+            .then((response) => response.json())
+            .catch(() => undefined)
+          const version =
+            typeof legacy === "object" && legacy !== null && "version" in legacy && typeof legacy.version === "string"
+              ? legacy.version
+              : "1"
+          return { data: { healthy: false, version, incompatible: true } }
+        }
+        return { data: { healthy: x.healthy, version: x.version } }
+      })
       .catch((error) => ({ error }))
     if ("data" in current && current.data) return current.data
     if (signal?.aborted) return { healthy: false }
