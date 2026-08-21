@@ -22,7 +22,6 @@ import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { projectForDirectory } from "@/pages/layout/helpers"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { fileManagerApp } from "@/utils/file-manager"
@@ -154,11 +153,7 @@ export function SessionHeader() {
     if (directory) return directory
     return params.id ? (sync().session.get(params.id)?.directory ?? "") : ""
   })
-  const project = createMemo(() => {
-    const directory = projectDirectory()
-    if (!directory) return
-    return projectForDirectory(directory, layout.projects.list())
-  })
+  const project = createMemo(() => sync().project)
   const name = createMemo(() => {
     const current = project()
     if (current) return current.name || getFilename(current.worktree)

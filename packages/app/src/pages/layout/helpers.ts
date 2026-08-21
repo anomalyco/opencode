@@ -49,13 +49,6 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree) || project.worktree
 
-export function projectForDirectory<T extends { worktree: string; sandboxes?: string[] }>(
-  directory: string,
-  projects: T[],
-) {
-  return projects.find((project) => project.worktree === directory || project.sandboxes?.includes(directory))
-}
-
 export function toggleHomeProjectSelection(
   current: HomeProjectSelection | undefined,
   server: ServerConnection.Key,
