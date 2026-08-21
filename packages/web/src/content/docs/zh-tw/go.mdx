@@ -68,6 +68,7 @@ OpenCode Go 的運作方式與 OpenCode 中的任何其他供應商相同。
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
+- **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
 - **Ox Alpha Free** (限時)
 
@@ -108,6 +109,7 @@ OpenCode Go 包含以下限制：
 | Qwen3.6 Plus               | 3,300           | 8,200      | 16,300     |
 | DeepSeek V4 Pro            | 1,050           | 2,600      | 5,200      |
 | DeepSeek V4 Flash          | 7,600           | 18,900     | 37,800     |
+| DeepSeek V4 Flash Vision Exp | 3,800           | 9,450      | 18,900     |
 | Hy3                        | 4,300           | 10,750     | 21,500     |
 | Ox Alpha Free              | -               | -          | -          |
 
@@ -120,6 +122,7 @@ OpenCode Go 包含以下限制：
 - Kimi K2.7/K2.6 — 每次請求 870 個輸入 token、55,000 個快取 token、200 個輸出 token
 - DeepSeek V4 Pro — 每次請求 750 個輸入 token、82,000 個快取 token、290 個輸出 token
 - DeepSeek V4 Flash — 每次請求 410 個輸入 token、71,300 個快取 token、310 個輸出 token
+- DeepSeek V4 Flash Vision Exp — 每次請求 410 個輸入 token、71,300 個快取 token、310 個輸出 token
 - MiniMax M3 — 每次請求 510 個輸入 token、56,000 個快取 token、190 個輸出 token
 - MiniMax M2.7 — 每次請求 300 個輸入 token、55,000 個快取 token、125 個輸出 token
 - Muse Spark 1.2 Contributor — 每次請求 620 個輸入 token、71,400 個快取 token、300 個輸出 token
@@ -160,10 +163,14 @@ OpenCode Go 包含以下限制：
 | DeepSeek V4 Pro (Peak)       | $1.32  | $3.96  | $0.044    | -        | $15    |
 | DeepSeek V4 Flash (Off-Peak) | $0.22  | $0.66  | $0.007    | -        | $30    |
 | DeepSeek V4 Flash (Peak)     | $0.44  | $1.32  | $0.014    | -        | $30    |
+| DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007    | -        | $15    |
+| DeepSeek V4 Flash Vision Exp (Peak) | $0.44  | $1.32  | $0.014    | -        | $15    |
 | Hy3                          | $0.14  | $0.58  | $0.035    | -        | $60    |
 | Ox Alpha Free                | -      | -      | -         | -        | -      |
 
-**DeepSeek V4 Flash / Pro:** Peak 時段為 01:00-04:00 和 06:00-10:00 UTC；其他所有時段均為 Off-Peak。[了解更多](https://api-docs.deepseek.com/quick_start/pricing/)。
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak 時段為 01:00-04:00 和 06:00-10:00 UTC；其他所有時段均為 Off-Peak。[了解更多](https://api-docs.deepseek.com/quick_start/pricing/)。
+
+**DeepSeek V4 Flash Vision Exp:** 圖片會根據尺寸轉換為 token，並與文字 token 一起按輸入 token 計費。 [了解更多](https://api-docs.deepseek.com/quick_start/pricing/)。
 
 **Ox Alpha Free:** 限時免費。
 
@@ -211,6 +218,7 @@ OpenCode Go 包含以下限制：
 | Kimi K2.6                  | kimi-k2.6                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro            | deepseek-v4-pro            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash          | deepseek-v4-flash          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5                  | mimo-v2.5                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro              | mimo-v2.5-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M3                 | minimax-m3                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -261,6 +269,7 @@ https://opencode.ai/zen/go/v1/models
 | Muse Spark 1.2 Contributor | 是       | 非 ZDR   |
 | DeepSeek V4 Pro            | 不使用   | 0 天     |
 | DeepSeek V4 Flash          | 不使用   | 0 天     |
+| DeepSeek V4 Flash Vision Exp | 不使用      | 0 天      |
 | Hy3                        | 不使用   | 0 天     |
 | Ox Alpha Free              | 不使用   | 0 天     |
 

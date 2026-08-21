@@ -72,6 +72,7 @@ Obecna lista modeli obejmuje:
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
+- **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
 - **Ox Alpha Free** (przez ograniczony czas)
 
@@ -112,6 +113,7 @@ Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych 
 | Qwen3.6 Plus               | 3,300               | 8,200              | 16,300             |
 | DeepSeek V4 Pro            | 1,050               | 2,600              | 5,200              |
 | DeepSeek V4 Flash          | 7,600               | 18,900             | 37,800             |
+| DeepSeek V4 Flash Vision Exp | 3,800               | 9,450              | 18,900             |
 | Hy3                        | 4,300               | 10,750             | 21,500             |
 | Ox Alpha Free              | -                   | -                  | -                  |
 
@@ -124,6 +126,7 @@ Szacunki te opierają się na zaobserwowanych wzorcach żądań:
 - Kimi K2.7/K2.6 — 870 tokenów wejściowych, 55 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
 - DeepSeek V4 Pro — 750 tokenów wejściowych, 82 000 w pamięci podręcznej, 290 tokenów wyjściowych na żądanie
 - DeepSeek V4 Flash — 410 tokenów wejściowych, 71 300 w pamięci podręcznej, 310 tokenów wyjściowych na żądanie
+- DeepSeek V4 Flash Vision Exp — 410 tokenów wejściowych, 71 300 w pamięci podręcznej, 310 tokenów wyjściowych na żądanie
 - MiniMax M3 — 510 tokenów wejściowych, 56 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
 - MiniMax M2.7 — 300 tokenów wejściowych, 55 000 w pamięci podręcznej, 125 tokenów wyjściowych na żądanie
 - Muse Spark 1.2 Contributor — 620 tokenów wejściowych, 71 400 w pamięci podręcznej, 300 tokenów wyjściowych na żądanie
@@ -164,10 +167,14 @@ Szacunki opierają się również na następujących cenach za 1M tokenów oraz 
 | DeepSeek V4 Pro (Peak)       | $1.32   | $3.96   | $0.044         | -              | $15    |
 | DeepSeek V4 Flash (Off-Peak) | $0.22   | $0.66   | $0.007         | -              | $30    |
 | DeepSeek V4 Flash (Peak)     | $0.44   | $1.32   | $0.014         | -              | $30    |
+| DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22   | $0.66   | $0.007         | -              | $15    |
+| DeepSeek V4 Flash Vision Exp (Peak) | $0.44   | $1.32   | $0.014         | -              | $15    |
 | Hy3                          | $0.14   | $0.58   | $0.035         | -              | $60    |
 | Ox Alpha Free                | -       | -       | -              | -              | -      |
 
-**DeepSeek V4 Flash / Pro:** Godziny Peak to 01:00-04:00 i 06:00-10:00 UTC; wszystkie pozostałe godziny to Off-Peak. [Dowiedz się więcej](https://api-docs.deepseek.com/quick_start/pricing/).
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Godziny Peak to 01:00-04:00 i 06:00-10:00 UTC; wszystkie pozostałe godziny to Off-Peak. [Dowiedz się więcej](https://api-docs.deepseek.com/quick_start/pricing/).
+
+**DeepSeek V4 Flash Vision Exp:** Obrazy są przeliczane na tokeny na podstawie ich wymiarów i rozliczane jako tokeny wejściowe razem z tokenami tekstowymi. [Dowiedz się więcej](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **Ox Alpha Free:** Bezpłatny przez ograniczony czas.
 
@@ -215,6 +222,7 @@ Możesz również uzyskać dostęp do modeli Go za pośrednictwem następującyc
 | Kimi K2.6                  | kimi-k2.6                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro            | deepseek-v4-pro            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash          | deepseek-v4-flash          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5                  | mimo-v2.5                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro              | mimo-v2.5-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M3                 | minimax-m3                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -267,6 +275,7 @@ https://opencode.ai/zen/go/v1/models
 | Muse Spark 1.2 Contributor | Tak               | Nie ZDR         |
 | DeepSeek V4 Pro            | Niewykorzystywane | 0 dni           |
 | DeepSeek V4 Flash          | Niewykorzystywane | 0 dni           |
+| DeepSeek V4 Flash Vision Exp | Niewykorzystywane | 0 dni           |
 | Hy3                        | Niewykorzystywane | 0 dni           |
 | Ox Alpha Free              | Niewykorzystywane | 0 dni           |
 

@@ -78,6 +78,7 @@ The current list of models includes:
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
+- **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
 - **Ox Alpha Free** (limited time)
 
@@ -118,6 +119,7 @@ The table below provides an estimated request count based on typical Go usage pa
 | Qwen3.6 Plus               | 3,300               | 8,200             | 16,300             |
 | DeepSeek V4 Pro            | 1,050               | 2,600             | 5,200              |
 | DeepSeek V4 Flash          | 7,600               | 18,900            | 37,800             |
+| DeepSeek V4 Flash Vision Exp | 3,800               | 9,450             | 18,900             |
 | Hy3                        | 4,300               | 10,750            | 21,500             |
 | Ox Alpha Free              | -                   | -                 | -                  |
 
@@ -130,6 +132,7 @@ The estimates are based on observed request patterns:
 - Kimi K2.7/K2.6 — 870 input, 55,000 cached, 200 output tokens per request
 - DeepSeek V4 Pro — 750 input, 82,000 cached, 290 output tokens per request
 - DeepSeek V4 Flash — 410 input, 71,300 cached, 310 output tokens per request
+- DeepSeek V4 Flash Vision Exp — 410 input, 71,300 cached, 310 output tokens per request
 - MiniMax M3 — 510 input, 56,000 cached, 190 output tokens per request
 - MiniMax M2.7 — 300 input, 55,000 cached, 125 output tokens per request
 - Muse Spark 1.2 Contributor — 620 input, 71,400 cached, 300 output tokens per request
@@ -170,10 +173,14 @@ The estimates are also based on the following prices per 1M tokens and the month
 | DeepSeek V4 Pro (Peak)       | $1.32  | $3.96  | $0.044      | -            | $15   |
 | DeepSeek V4 Flash (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $30   |
 | DeepSeek V4 Flash (Peak)     | $0.44  | $1.32  | $0.014      | -            | $30   |
+| DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15   |
+| DeepSeek V4 Flash Vision Exp (Peak) | $0.44  | $1.32  | $0.014      | -            | $15   |
 | Hy3                          | $0.14  | $0.58  | $0.035      | -            | $60   |
 | Ox Alpha Free                | -      | -      | -           | -            | -     |
 
-**DeepSeek V4 Flash / Pro:** Peak hours are 01:00-04:00 and 06:00-10:00 UTC; all other hours are Off-Peak. [Learn more](https://api-docs.deepseek.com/quick_start/pricing/).
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak hours are 01:00-04:00 and 06:00-10:00 UTC; all other hours are Off-Peak. [Learn more](https://api-docs.deepseek.com/quick_start/pricing/).
+
+**DeepSeek V4 Flash Vision Exp:** Images are converted into tokens based on their dimensions and billed as input tokens alongside text tokens. [Learn more](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **Ox Alpha Free:** Free for a limited time.
 
@@ -223,6 +230,7 @@ You can also access Go models through the following API endpoints.
 | Kimi K2.6                  | kimi-k2.6                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro            | deepseek-v4-pro            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash          | deepseek-v4-flash          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5                  | mimo-v2.5                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro              | mimo-v2.5-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M3                 | minimax-m3                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -275,6 +283,7 @@ https://opencode.ai/zen/go/v1/models
 | Muse Spark 1.2 Contributor | Yes            | Not ZDR        |
 | DeepSeek V4 Pro            | Not used       | 0 days\*       |
 | DeepSeek V4 Flash          | Not used       | 0 days\*       |
+| DeepSeek V4 Flash Vision Exp | Not used       | 0 days\*       |
 | Hy3                        | Not used       | 0 days         |
 | Ox Alpha Free              | Not used       | 0 days         |
 

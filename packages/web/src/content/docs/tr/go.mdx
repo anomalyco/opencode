@@ -68,6 +68,7 @@ Mevcut model listesi şunları içerir:
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
+- **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
 - **Ox Alpha Free** (sınırlı bir süre için)
 
@@ -108,6 +109,7 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 | Qwen3.6 Plus               | 3,300              | 8,200          | 16,300      |
 | DeepSeek V4 Pro            | 1,050              | 2,600          | 5,200       |
 | DeepSeek V4 Flash          | 7,600              | 18,900         | 37,800      |
+| DeepSeek V4 Flash Vision Exp | 3,800              | 9,450          | 18,900      |
 | Hy3                        | 4,300              | 10,750         | 21,500      |
 | Ox Alpha Free              | -                  | -              | -           |
 
@@ -120,6 +122,7 @@ Tahminler, gözlemlenen istek modellerine dayanır:
 - Kimi K2.7/K2.6 — İstek başına 870 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
 - DeepSeek V4 Pro — İstek başına 750 girdi, 82.000 önbelleğe alınmış, 290 çıktı token'ı
 - DeepSeek V4 Flash — İstek başına 410 girdi, 71.300 önbelleğe alınmış, 310 çıktı token'ı
+- DeepSeek V4 Flash Vision Exp — İstek başına 410 girdi, 71.300 önbelleğe alınmış, 310 çıktı token'ı
 - MiniMax M3 — İstek başına 510 girdi, 56.000 önbelleğe alınmış, 190 çıktı token'ı
 - MiniMax M2.7 — İstek başına 300 girdi, 55.000 önbelleğe alınmış, 125 çıktı token'ı
 - Muse Spark 1.2 Contributor — İstek başına 620 girdi, 71.400 önbelleğe alınmış, 300 çıktı token'ı
@@ -160,10 +163,14 @@ Tahminler ayrıca 1M token başına aşağıdaki fiyatlara ve her modelle birlik
 | DeepSeek V4 Pro (Peak)       | $1.32  | $3.96  | $0.044      | -            | $15      |
 | DeepSeek V4 Flash (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $30      |
 | DeepSeek V4 Flash (Peak)     | $0.44  | $1.32  | $0.014      | -            | $30      |
+| DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15      |
+| DeepSeek V4 Flash Vision Exp (Peak) | $0.44  | $1.32  | $0.014      | -            | $15      |
 | Hy3                          | $0.14  | $0.58  | $0.035      | -            | $60      |
 | Ox Alpha Free                | -      | -      | -           | -            | -        |
 
-**DeepSeek V4 Flash / Pro:** Peak saatleri 01:00-04:00 ve 06:00-10:00 UTC'dir; diğer tüm saatler Off-Peak'tir. [Daha fazla bilgi](https://api-docs.deepseek.com/quick_start/pricing/).
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak saatleri 01:00-04:00 ve 06:00-10:00 UTC'dir; diğer tüm saatler Off-Peak'tir. [Daha fazla bilgi](https://api-docs.deepseek.com/quick_start/pricing/).
+
+**DeepSeek V4 Flash Vision Exp:** Görseller boyutlarına göre token'lara dönüştürülür ve metin token'larıyla birlikte girdi token'ları olarak ücretlendirilir. [Daha fazla bilgi](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **Ox Alpha Free:** Sınırlı bir süre için ücretsiz.
 
@@ -211,6 +218,7 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 | Kimi K2.6                  | kimi-k2.6                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro            | deepseek-v4-pro            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash          | deepseek-v4-flash          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5                  | mimo-v2.5                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro              | mimo-v2.5-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M3                 | minimax-m3                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -261,6 +269,7 @@ https://opencode.ai/zen/go/v1/models
 | Muse Spark 1.2 Contributor | Evet          | ZDR değil    |
 | DeepSeek V4 Pro            | Kullanılmaz   | 0 gün        |
 | DeepSeek V4 Flash          | Kullanılmaz   | 0 gün        |
+| DeepSeek V4 Flash Vision Exp | Kullanılmaz   | 0 gün        |
 | Hy3                        | Kullanılmaz   | 0 gün        |
 | Ox Alpha Free              | Kullanılmaz   | 0 gün        |
 
