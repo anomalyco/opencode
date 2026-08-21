@@ -45,7 +45,10 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
     request: { settings: {}, headers: {}, body: {} },
     mode: "primary",
     hidden: false,
-    permissions: [{ action: "*", resource: "*", effect: "allow" }],
+    permissions: [
+      { action: "*", resource: "*", effect: "allow" },
+      { action: "external_directory", resource: "*", effect: "ask" },
+    ],
   } satisfies Types.DeepMutable<Agent.Info>
   const driver = Environment.makeMemoryDriver()
   yield* PlanPlugin.Plugin.effect(
@@ -261,9 +264,13 @@ describe("plan plugin mutations", () => {
     Effect.gen(function* () {
       const { planAgent } = yield* run()
       expect(
+        Permission.evaluate("external_directory", path.join(planDirectory, "*"), planAgent.permissions).effect,
+      ).toBe("allow")
+      expect(
         Permission.evaluate("external_directory", path.join(planDirectory, "nested", "*"), planAgent.permissions)
           .effect,
       ).toBe("allow")
+      expect(Permission.evaluate("external_directory", "/outside/*", planAgent.permissions).effect).toBe("ask")
     }),
   )
 
