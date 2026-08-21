@@ -3,6 +3,7 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
+import path from "node:path"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
@@ -300,7 +301,7 @@ test("keeps the prompt identity visible while a new location catalog loads", asy
   setup.renderer.start()
   const events = createEventStream()
   const source = process.cwd()
-  const target = "/tmp/opencode-target"
+  const target = path.join(path.parse(source).root, "opencode-target")
   const locationCatalog = Promise.withResolvers<void>()
   const catalog = Promise.withResolvers<void>()
   const providerCatalog = Promise.withResolvers<void>()
@@ -372,6 +373,13 @@ test("keeps the prompt identity visible while a new location catalog loads", asy
 
     await ready.promise
     await setup.waitForFrame((frame) => frame.includes("Build · Source Model Provider"))
+    const agentSpan = () =>
+      setup
+        .captureSpans()
+        .lines.flatMap((line) => line.spans)
+        .find((span) => span.text.trim() === "Build")
+    const sourceAgentColor = agentSpan()?.fg.toInts()
+    expect(sourceAgentColor).toBeDefined()
     await setup.mockInput.typeText(`/cd ${target}`)
     await setup.renderOnce()
     expect(setup.captureCharFrame()).toContain(`/cd ${target}`)
@@ -396,6 +404,7 @@ test("keeps the prompt identity visible while a new location catalog loads", asy
     await setup.renderOnce()
 
     expect(setup.captureCharFrame()).toContain("Build · Source Model Provider")
+    expect(agentSpan()?.fg.toInts()).toEqual(sourceAgentColor)
 
     catalog.resolve()
     const resolved = await setup.waitForFrame((frame) => frame.includes("Build · Target Model provider"))

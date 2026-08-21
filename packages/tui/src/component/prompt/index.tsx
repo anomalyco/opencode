@@ -1570,17 +1570,11 @@ export function Prompt(props: PromptProps) {
     resetComposer()
   }
 
-  const highlight = createMemo(() => {
-    if (leader()) return theme.border.default
-    if (store.mode === "shell") return theme.text.action.primary.selected
-    const agent = local.agent.current()
-    if (!agent) return theme.border.default
-    return local.agent.color(agent.id)
-  })
   // Keep the last resolved identity visible while destination catalogs load;
   // availability and submission still use the live location-scoped catalog.
   const identity = createMemo<{
     agent: string | undefined
+    color: RGBA | undefined
     model: string
     provider: string
     variant: string | undefined
@@ -1600,6 +1594,7 @@ export function Prompt(props: PromptProps) {
       const model = local.model.parsed()
       return {
         agent: agent ? Locale.titlecase(agent.id) : undefined,
+        color: agent ? local.agent.color(agent.id) : undefined,
         model: model.model,
         provider: model.provider,
         variant: local.model.variant.current(),
@@ -1607,10 +1602,16 @@ export function Prompt(props: PromptProps) {
     },
     {
       agent: undefined,
+      color: undefined,
       ...local.model.parsed(),
       variant: undefined,
     },
   )
+  const highlight = createMemo(() => {
+    if (leader()) return theme.border.default
+    if (store.mode === "shell") return theme.text.action.primary.selected
+    return identity().color ?? theme.border.default
+  })
   const agentLabel = createMemo(() => (store.mode === "shell" ? "Shell" : identity().agent))
   const agentMetaAlpha = createFadeIn(() => !!agentLabel(), animationsEnabled)
   const modelMetaAlpha = createFadeIn(() => !!identity().agent && store.mode === "normal", animationsEnabled)
