@@ -466,17 +466,22 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
       ...(input.label ? { label: input.label } : {}),
     }
   }
+  if (input.method.type === "env") {
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: input.method,
+    }
+  }
   if (input.method.type === "command") {
     return {
       integrationID: Integration.ID.make(input.integrationID),
       method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
     }
   }
-  // TypeScript loses the registration-method correlation across the nested discriminant checks.
   return {
     integrationID: Integration.ID.make(input.integrationID),
     method: input.method,
-  } as Integration.KeyImplementation | Integration.EnvImplementation
+  }
 }
 
 function credential(value: CredentialOAuth) {
