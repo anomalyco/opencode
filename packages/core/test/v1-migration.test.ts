@@ -1124,6 +1124,34 @@ describe("V1Migration database workflow", () => {
     )
   })
 
+  test("rebuilding a projection does not lower its event sequence", async () => {
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('global', '/tmp/test', 1, 2, '[]')`,
+        )
+        yield* db.run(sql`INSERT INTO session (
+          id, project_id, slug, directory, title, version, cost, time_created, time_updated
+        ) VALUES ('ses_test', 'global', 'test', '/tmp/test', 'Test', '1', 0, 1, 2)`)
+        const source = user("msg_000000000040aaaaaaaaaaaaaa")
+        yield* db.run(
+          sql`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (${source.id}, 'ses_test', 10, 11, ${source.data})`,
+        )
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_test', 9)`)
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES ('event_existing', 'ses_test', 9, 1, 'session.renamed.1', '{}' )`,
+        )
+        yield* db.run(
+          sql`INSERT INTO kv (key, value, time_created, time_updated) VALUES ('migration.v1-v2', '{"phase":"sessions"}', 1, 1)`,
+        )
+
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* db.get(sql`SELECT seq FROM event_sequence WHERE aggregate_id = 'ses_test'`)).toEqual({ seq: 9 })
+      }),
+    )
+  })
+
   test("rolls back one session atomically and resumes from the committed cursor", async () => {
     await database(
       Effect.gen(function* () {
