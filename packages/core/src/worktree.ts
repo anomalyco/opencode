@@ -220,8 +220,6 @@ const layer = Layer.effect(
     const gitStrategy = yield* WorktreeGit.make
     yield* register(gitStrategy).pipe(Effect.orDie)
 
-    const strategies = () => Array.from(registry.values())
-
     const source = Effect.fnUntraced(function* (input: AbsolutePath | undefined, projectID: ProjectSchema.ID) {
       const sourceDirectory = input ?? (yield* ops.primary(projectID))?.directory
       if (!sourceDirectory) return yield* new SourceDirectoryNotFoundError({ projectID })
@@ -290,7 +288,7 @@ const layer = Layer.effect(
       const discovered = yield* Effect.forEach(
         sourceDirectories,
         (sourceDirectory) =>
-          Effect.forEach(strategies(), (strategy) =>
+          Effect.forEach(Array.from(registry.values()), (strategy) =>
             strategy.list(sourceDirectory).pipe(
               Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.succeed([])),
               Effect.map((items) =>

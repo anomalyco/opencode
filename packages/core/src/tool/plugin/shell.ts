@@ -94,6 +94,13 @@ const toolResult = (output: Output) => {
   }
 }
 
+const backgroundResult = (shellID: string) => ({
+  output: BACKGROUND_STARTED,
+  shellID,
+  truncated: false,
+  status: "running" as const,
+})
+
 export const Plugin = {
   id: "opencode.tool.shell",
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: PluginContext) {
@@ -303,12 +310,7 @@ export const Plugin = {
               if (input.background === true) {
                 yield* runtime.job.background(job.id)
                 yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
-                return {
-                  output: BACKGROUND_STARTED,
-                  shellID: info.id,
-                  truncated: false,
-                  status: "running" as const,
-                }
+                return backgroundResult(info.id)
               }
 
               const result = yield* runtime.job
@@ -317,12 +319,7 @@ export const Plugin = {
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
                 yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
-                return {
-                  output: BACKGROUND_STARTED,
-                  shellID: info.id,
-                  truncated: false,
-                  status: "running" as const,
-                }
+                return backgroundResult(info.id)
               }
               if (result?.info.status === "error")
                 return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
