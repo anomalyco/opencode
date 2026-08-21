@@ -29,7 +29,7 @@ export const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService
     .pipe(Effect.orDie)
 })
 
-const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
+export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
   decode({ ...row.data, id: row.id, type: row.type }).pipe(
     Effect.mapError(
       () =>

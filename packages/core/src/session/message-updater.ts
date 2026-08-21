@@ -46,6 +46,18 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       yield* adapter.updateAssistant(produce(assistant, recipe))
     })
 
+  const projectTerminalSnapshot = (
+    draft: DraftAssistant,
+    event: SessionEvent.Step.Ended | SessionEvent.Step.Failed,
+  ) => {
+    if (event.data.snapshot || event.data.files)
+      draft.snapshot = {
+        ...draft.snapshot,
+        end: event.data.snapshot,
+        files: event.data.files ? Array.from(event.data.files) : undefined,
+      }
+  }
+
   const clearCurrentRetry = Effect.gen(function* () {
     const assistant = yield* adapter.getCurrentAssistant()
     if (!assistant?.retry) return
@@ -229,12 +241,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           draft.providerState = castDraft(event.data.providerState)
           draft.cost = event.data.cost
           draft.tokens = event.data.tokens
-          if (event.data.snapshot || event.data.files)
-            draft.snapshot = {
-              ...draft.snapshot,
-              end: event.data.snapshot,
-              files: event.data.files ? Array.from(event.data.files) : undefined,
-            }
+          projectTerminalSnapshot(draft, event)
         })
       },
       "session.step.failed": (event) => {
@@ -249,12 +256,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             draft.cost = event.data.cost
             draft.tokens = castDraft(event.data.tokens)
           }
-          if (event.data.snapshot || event.data.files)
-            draft.snapshot = {
-              ...draft.snapshot,
-              end: event.data.snapshot,
-              files: event.data.files ? Array.from(event.data.files) : undefined,
-            }
+          projectTerminalSnapshot(draft, event)
         })
       },
       "session.text.started": (event) => {

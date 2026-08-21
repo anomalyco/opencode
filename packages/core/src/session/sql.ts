@@ -16,7 +16,8 @@ import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } fr
 import type { RevertV1 } from "@opencode-ai/schema/session-revert"
 import type { Schema } from "effect"
 
-type SessionMessageData = Omit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+type SessionMessageData = DistributiveOmit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
 
 export const SessionTable = sqliteTable(
   "session_v2",

@@ -53,6 +53,7 @@ import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { fileURLToPath } from "url"
 import { SessionEnvironment } from "./session/environment.js"
+import { SessionHistory } from "./session/history.js"
 
 // get project -> project.locations
 //
@@ -324,19 +325,8 @@ const layer = Layer.effect(
         Effect.provide(locations.get(location)),
       )
     })
-    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
-    const decode = (row: typeof SessionMessageTable.$inferSelect) =>
-      decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
-        Effect.mapError(
-          () =>
-            new MessageDecodeError({
-              sessionID: SessionSchema.ID.make(row.session_id),
-              messageID: SessionMessage.ID.make(row.id),
-            }),
-        ),
-      )
 
     const pendingConflict = Effect.fn("Session.pendingConflict")(function* (input: InboxItemRef) {
       yield* result.get(input.sessionID)
@@ -543,7 +533,10 @@ const layer = Layer.effect(
         const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
           Effect.orDie,
         )
-        return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
+        return yield* Effect.forEach(
+          direction === "previous" ? rows.toReversed() : rows,
+          SessionHistory.decodeMessageRow,
+        )
       }),
       message: Effect.fn("Session.message")(function* (input) {
         const stored = yield* store.message(input.messageID)
