@@ -60,6 +60,10 @@ export interface FindInput {
   readonly onEntry?: (entry: Entry) => Effect.Effect<void>
 }
 
+export interface ScanInput extends Omit<FindInput, "onEntry"> {
+  readonly onEntry: (entry: Entry) => Effect.Effect<void>
+}
+
 export interface GlobInput {
   readonly cwd: string
   readonly pattern: string
@@ -80,6 +84,7 @@ export interface GrepInput {
 
 export interface Interface {
   readonly find: (input: FindInput) => Effect.Effect<readonly Entry[], Error>
+  readonly scan: (input: ScanInput) => Effect.Effect<void, Error>
   readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[], Error>
   readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[], Error | InvalidPatternError>
 }
@@ -105,6 +110,7 @@ const layer = Layer.effect(
       readonly parse: (line: string) => Effect.Effect<A | undefined, Error>
       readonly pattern?: string
       readonly onItem?: (item: A) => Effect.Effect<void>
+      readonly collect?: boolean
     }) => {
       const program = Effect.scoped(
         Effect.gen(function* () {
@@ -127,11 +133,17 @@ const layer = Layer.effect(
               return input.onItem(row)
             }),
             Stream.take(input.limit + 1),
-            Stream.runCollect,
-            Effect.map((chunk) => [...chunk]),
+            Stream.runFold(
+              () => ({ count: 0, items: [] as A[] }),
+              (result, row) => {
+                result.count++
+                if (input.collect !== false) result.items.push(row)
+                return result
+              },
+            ),
           )
-          const truncated = rows.length > input.limit
-          if (truncated) return { items: rows.slice(0, input.limit), truncated, partial: false }
+          const truncated = rows.count > input.limit
+          if (truncated) return { items: rows.items.slice(0, input.limit), truncated, partial: false }
 
           const code = yield* handle.exitCode
           const stderr = yield* Fiber.join(stderrFiber)
@@ -141,7 +153,7 @@ const layer = Layer.effect(
           if (code !== 0 && code !== 1 && code !== 2) {
             return yield* failure(stderr.trim() || `ripgrep failed with code ${code}`)
           }
-          return { items: code === 1 ? [] : rows, truncated: false, partial: code === 2 }
+          return { items: code === 1 ? [] : rows.items, truncated: false, partial: code === 2 }
         }),
       )
       const abortable = input.signal ? program.pipe(Effect.raceFirst(waitForAbort(input.signal))) : program
@@ -153,6 +165,40 @@ const layer = Layer.effect(
         ),
       )
     }
+
+    const find = (input: FindInput, collect = true) =>
+      run<Entry>({
+        cwd: input.cwd,
+        limit: input.limit,
+        signal: input.signal,
+        args: [
+          "--no-config",
+          "--files",
+          ...(input.hidden ? ["--hidden"] : []),
+          ...(input.follow ? ["--follow"] : []),
+          ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),
+          ...(input.exclude ?? []).map((pattern) => `--glob=!${pattern}`),
+          "--glob=!**/.git/**",
+          ".",
+        ],
+        parse: (line) => {
+          const relative = line
+            .replace(/^(?:\.[\\/])+/u, "")
+            .replace(/^[\\/]+/u, "")
+            .replaceAll("\\", "/")
+          return Effect.succeed(
+            Entry.make({
+              path: RelativePath.make(relative),
+              type: "file",
+            }),
+          )
+        },
+        onItem: input.onEntry,
+        collect,
+      }).pipe(
+        Effect.map((result) => result.items),
+        Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
+      )
 
     return Service.of({
       glob: (input) =>
@@ -187,38 +233,8 @@ const layer = Layer.effect(
           ),
           Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
         ),
-      find: (input) =>
-        run<Entry>({
-          cwd: input.cwd,
-          limit: input.limit,
-          signal: input.signal,
-          args: [
-            "--no-config",
-            "--files",
-            ...(input.hidden ? ["--hidden"] : []),
-            ...(input.follow ? ["--follow"] : []),
-            ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),
-            ...(input.exclude ?? []).map((pattern) => `--glob=!${pattern}`),
-            "--glob=!**/.git/**",
-            ".",
-          ],
-          parse: (line) => {
-            const relative = line
-              .replace(/^(?:\.[\\/])+/u, "")
-              .replace(/^[\\/]+/u, "")
-              .replaceAll("\\", "/")
-            return Effect.succeed(
-              Entry.make({
-                path: RelativePath.make(relative),
-                type: "file",
-              }),
-            )
-          },
-          onItem: input.onEntry,
-        }).pipe(
-          Effect.map((result) => result.items),
-          Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
-        ),
+      find,
+      scan: (input) => find(input, false).pipe(Effect.asVoid),
       grep: (input) =>
         run<RawMatchData>({
           ...input,
