@@ -42,6 +42,18 @@ export function loadDialogSessionList<T>(input: {
   )
 }
 
+/**
+ * Category heading for a session in the list. Archived sessions are grouped
+ * together so they stay discoverable without being interleaved into the date
+ * buckets alongside active sessions.
+ */
+export function dialogSessionListCategory(input: { archived?: number; updated: number; now?: Date }): string {
+  if (input.archived) return "Archived"
+  const today = (input.now ?? new Date()).toDateString()
+  const label = new Date(input.updated).toDateString()
+  return label === today ? "Today" : label
+}
+
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
@@ -206,7 +218,6 @@ export function DialogSessionList() {
   })
 
   const options = createMemo(() => {
-    const today = new Date().toDateString()
     const sessionMap = new Map(
       sessions()
         .filter((x) => x.parentID === undefined)
@@ -257,8 +268,7 @@ export function DialogSessionList() {
       .map((id) => {
         const x = sessionMap.get(id)
         if (!x) return undefined
-        const label = new Date(x.time.updated).toDateString()
-        return buildOption(id, label === today ? "Today" : label)
+        return buildOption(id, dialogSessionListCategory({ archived: x.time?.archived, updated: x.time.updated }))
       })
       .filter((x) => x !== undefined)
 
@@ -349,6 +359,30 @@ export function DialogSessionList() {
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
+          },
+        },
+        {
+          command: "session.archive",
+          title: "archive/unarchive",
+          onTrigger: async (option) => {
+            const session = sessions().find((item) => item.id === option.value)
+            if (!session) return
+            const archived = session.time?.archived
+            await sdk.client.session
+              .update({
+                sessionID: option.value,
+                // Omitting `archived` clears it; the body serializes to {"time":{}}.
+                time: archived ? {} : { archived: Date.now() },
+              })
+              .catch((err) => {
+                toast.show({
+                  variant: "error",
+                  title: archived ? "Failed to unarchive session" : "Failed to archive session",
+                  message: errorMessage(err),
+                })
+              })
+            await sync.session.refresh()
+            if (search()) await refetch()
           },
         },
       ]}

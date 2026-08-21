@@ -70,7 +70,10 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     time_created: info.time.created,
     time_updated: info.time.updated,
     time_compacting: info.time.compacting,
-    time_archived: info.time.archived,
+    // Use null rather than undefined so Drizzle emits an explicit SQL NULL when
+    // a session is unarchived. Drizzle omits undefined keys from .set(), which
+    // would otherwise leave a stale time_archived value in place.
+    time_archived: info.time.archived ?? null,
   }
 }
 

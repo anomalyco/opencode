@@ -169,6 +169,9 @@ export function applyDirectoryEvent(input: {
       const trimmed = trimSessions(next, { limit, permission: input.permission ?? input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
       cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
+      // Counterpart to the decrement in the archived branch above: an unarchived
+      // session re-enters the store and must be counted again.
+      if (!info.parentID) input.setStore("sessionTotal", (value) => value + 1)
       break
     }
     case "session.deleted": {

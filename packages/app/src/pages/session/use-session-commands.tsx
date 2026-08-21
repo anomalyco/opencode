@@ -509,6 +509,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         if (id) void sessionArchive.archive(id)
       },
     }),
+    sessionCommand({
+      id: "session.unarchive",
+      title: language.t("command.session.unarchive"),
+      disabled: !params.id,
+      onSelect: () => {
+        const id = params.id
+        if (id) void sessionArchive.unarchive(id)
+      },
+    }),
   ]
 
   const fileCmds = () => {
