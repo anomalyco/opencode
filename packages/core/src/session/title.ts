@@ -102,7 +102,7 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
 })
 
 /** Variant IDs that minimize reasoning output, in preference order. */
-const MINIMAL_REASONING_VARIANTS = ["none", "low"].map((id) => Model.VariantID.make(id))
+const MINIMAL_REASONING_VARIANTS = ["none", "minimal", "low"].map((id) => Model.VariantID.make(id))
 
 const make = (dependencies: Dependencies) => {
   const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (
