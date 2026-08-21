@@ -28,7 +28,10 @@ export type Info = import("../service.js").Info
 // Never spawns; escalation to ensure() is the caller's policy.
 /** Discover a healthy, compatible local service without starting one. */
 export const discover = Effect.fn("service.discover")(function* (options: DiscoverOptions = {}) {
-  return (yield* discoverLocal(options))?.endpoint
+  const found = (yield* registered(options.file)).service
+  if (found?.state !== "ready") return undefined
+  if (!matchesVersion(found.version, options)) return undefined
+  return found.endpoint
 })
 
 /** Recognize an authenticated compatible service bound to an expected URL, including while it starts or fails. */
@@ -40,13 +43,6 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
   if (found === undefined || found.legacy) return undefined
   if (!matchesVersion(found.version, options)) return undefined
   return { endpoint: found.endpoint, state: found.state }
-})
-
-const discoverLocal = Effect.fnUntraced(function* (options: DiscoverOptions) {
-  const found = (yield* registered(options.file)).service
-  if (found?.state !== "ready") return undefined
-  if (!matchesVersion(found.version, options)) return undefined
-  return found
 })
 
 // Idempotent ensure-running: reuses a healthy compatible server, replaces a

@@ -24,10 +24,17 @@ const levels: Record<LogLevel, Logger.Options<unknown>["logLevel"]> = {
   error: "Error",
   fatal: "Fatal",
 }
+const levelNames = new Map<Logger.Options<unknown>["logLevel"], LogLevel>([
+  [levels.trace, "trace"],
+  [levels.debug, "debug"],
+  [levels.info, "info"],
+  [levels.warn, "warn"],
+  [levels.error, "error"],
+  [levels.fatal, "fatal"],
+])
 
 function normalizeLevel(level: Logger.Options<unknown>["logLevel"]): LogLevel | undefined {
-  const output = Object.fromEntries(Object.entries(levels).map(([name, effect]) => [effect, name]))
-  return output[level] as LogLevel
+  return levelNames.get(level)
 }
 
 export function layer(log?: LogOptions) {
