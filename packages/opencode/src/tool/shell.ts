@@ -291,11 +291,13 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
 })
 
 function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
-  const nonInteractiveEnv = { CI: "1", npm_config_yes: "true", GIT_TERMINAL_PROMPT: "0", NONINTERACTIVE: "1" }
+  // Import shared non-interactive env constants from core
+  const { mergeNonInteractiveEnv } = require("@opencode/core/env");
+  
   if (process.platform === "win32" && Shell.ps(shell)) {
     return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       cwd,
-      env: { ...env, ...nonInteractiveEnv },
+      env: mergeNonInteractiveEnv(env), // User env takes precedence
       stdin: "ignore",
       detached: false,
     })
@@ -304,7 +306,7 @@ function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv
   return ChildProcess.make(command, [], {
     shell,
     cwd,
-    env: { ...env, ...nonInteractiveEnv },
+    env: mergeNonInteractiveEnv(env), // User env takes precedence
     stdin: "ignore",
     detached: process.platform !== "win32",
   })
