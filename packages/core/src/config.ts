@@ -157,6 +157,37 @@ export const layer = (options?: Options) =>
         return new Document({ type: "document", path: AbsolutePath.make(filepath), info })
       })
 
+      const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
+        const auth = entry.manifest.auth
+        if (!auth) return []
+        const credential = (yield* credentials.list(entry.integrationID)).findLast(
+          (credential) => credential.value.type === "key",
+        )
+        if (!credential || credential.value.type !== "key") return []
+        const variables = { [auth.env]: credential.value.key }
+        const configs = yield* wellknown
+          .resolve(entry, variables)
+          .pipe(
+            Effect.catch(() =>
+              Effect.logWarning("failed to load wellknown config", { source: entry.origin }).pipe(
+                Effect.as([] as const),
+              ),
+            ),
+          )
+        return yield* Effect.forEach(configs, (config) =>
+          ConfigVariable.substitute({
+            type: "virtual",
+            source: entry.origin,
+            dir: entry.origin,
+            text: JSON.stringify(config),
+            env: variables,
+          }).pipe(
+            Effect.flatMap((text) => parseInfo(text, entry.origin)),
+            Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
+          ),
+        ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
+      })
+
       const loadWellknown = Effect.fn("Config.loadWellknown")(function* () {
         const entries = yield* wellknown
           .entries()
@@ -165,38 +196,7 @@ export const layer = (options?: Options) =>
               Effect.logWarning("failed to discover wellknown config", { error }).pipe(Effect.as([] as const)),
             ),
           )
-        return yield* Effect.forEach(entries, (entry) =>
-          Effect.gen(function* () {
-            const auth = entry.manifest.auth
-            if (!auth) return []
-            const credential = (yield* credentials.list(entry.integrationID)).findLast(
-              (credential) => credential.value.type === "key",
-            )
-            if (!credential || credential.value.type !== "key") return []
-            const variables = { [auth.env]: credential.value.key }
-            const configs = yield* wellknown
-              .resolve(entry, variables)
-              .pipe(
-                Effect.catch(() =>
-                  Effect.logWarning("failed to load wellknown config", { source: entry.origin }).pipe(
-                    Effect.as([] as const),
-                  ),
-                ),
-              )
-            return yield* Effect.forEach(configs, (config) =>
-              ConfigVariable.substitute({
-                type: "virtual",
-                source: entry.origin,
-                dir: entry.origin,
-                text: JSON.stringify(config),
-                env: variables,
-              }).pipe(
-                Effect.flatMap((text) => parseInfo(text, entry.origin)),
-                Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
-              ),
-            ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
-          }),
-        ).pipe(Effect.map((documents) => documents.flat()))
+        return yield* Effect.forEach(entries, loadWellknownEntry).pipe(Effect.map((documents) => documents.flat()))
       })
 
       const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {

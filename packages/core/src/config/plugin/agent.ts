@@ -53,10 +53,11 @@ export const Plugin = define({
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const load = Effect.fn("ConfigAgentPlugin.load")(function* () {
-      return yield* Effect.forEach(yield* config.entries(), (entry) => {
-        if (entry.type === "document") return Effect.succeed([entry])
-        if (entry.type !== "directory") return Effect.succeed([])
-        return Effect.gen(function* () {
+      return yield* Effect.forEach(
+        yield* config.entries(),
+        Effect.fnUntraced(function* (entry) {
+          if (entry.type === "document") return [entry]
+          if (entry.type !== "directory") return []
           const files = yield* discover(fs, entry.path)
           return yield* Effect.forEach(files, (file) =>
             fs.readFileStringSafe(file.filepath).pipe(
@@ -66,8 +67,8 @@ export const Plugin = define({
           ).pipe(
             Effect.map((documents) => documents.filter((document): document is Document => document !== undefined)),
           )
-        })
-      }).pipe(Effect.map((documents) => documents.flat()))
+        }),
+      ).pipe(Effect.map((documents) => documents.flat()))
     })
     const loaded = { documents: [] as Document[] }
     const reload = load().pipe(
