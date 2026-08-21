@@ -3,34 +3,9 @@ import { Effect, Schema } from "effect"
 import { type streamText } from "ai"
 import { errorMessage } from "@/util/error"
 import { ProviderError } from "@/provider/error"
-import type { LanguageModelV3Middleware, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 
 type Result = Awaited<ReturnType<typeof streamText>>
 type AISDKEvent = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
-
-export const networkErrorMiddleware = {
-  specificationVersion: "v3",
-  async wrapStream({ doStream }) {
-    const result = await doStream()
-    return {
-      ...result,
-      stream: result.stream.pipeThrough(
-        new TransformStream<LanguageModelV3StreamPart, LanguageModelV3StreamPart>({
-          transform(part, controller) {
-            if (part.type === "finish" && part.finishReason.raw === "network_error") {
-              controller.enqueue({
-                type: "error",
-                error: new ProviderError.ResponseStreamError("Provider finish_reason: network_error"),
-              })
-              return
-            }
-            controller.enqueue(part)
-          },
-        }),
-      ),
-    }
-  },
-} satisfies LanguageModelV3Middleware
 
 export function adapterState() {
   return {
@@ -111,6 +86,8 @@ export function toLLMEvents(
       return Effect.succeed([LLMEvent.stepStart({ index: state.step })])
 
     case "finish-step":
+      if (event.rawFinishReason === "network_error")
+        return Effect.fail(new ProviderError.ResponseStreamError("Provider finish_reason: network_error"))
       return Effect.sync(() => {
         const original = providerMetadata(event.providerMetadata)
         const metadata =
