@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test"
 import { assistantMessage, setupTimeline, toolPart, userMessage } from "../performance/timeline-stability/fixture"
 import { createTwoFilesPatch } from "diff"
 
-test("preserves nested patch file state through outer collapse and reopen", async ({ page }) => {
+test("keeps patch file disclosures independent", async ({ page }) => {
   const patchID = "prt_nested_patch"
   const files = [patchFile("src/a.ts", "modified"), patchFile("src/b.ts", "added"), patchFile("src/old.ts", "deleted")]
   await setupTimeline(page, {
@@ -21,15 +21,17 @@ test("preserves nested patch file state through outer collapse and reopen", asyn
     settings: { editToolPartsExpanded: true },
   })
   const wrapper = page.locator(`[data-timeline-part-id="${patchID}"]`)
-  const outer = wrapper.locator('[data-slot="collapsible-trigger"]').first()
+  const modified = wrapper.locator('[data-scope="apply-patch"] [data-type="update"]')
   const deleted = wrapper.locator('[data-scope="apply-patch"] [data-type="delete"]')
+  await expect(wrapper.locator('[data-scope="apply-patch"] [aria-expanded="false"]')).toHaveCount(3)
   await deleted.getByRole("button").click()
   await expect(deleted.getByRole("button")).toHaveAttribute("aria-expanded", "true")
-  await outer.click()
-  await expect(outer).toHaveAttribute("aria-expanded", "false")
-  await outer.click()
-  await expect(outer).toHaveAttribute("aria-expanded", "true")
-  await expect(deleted.getByRole("button")).toHaveAttribute("aria-expanded", "true")
+  await expect(modified.getByRole("button")).toHaveAttribute("aria-expanded", "false")
+  await modified.getByRole("button").click()
+  await expect(modified.getByRole("button")).toHaveAttribute("aria-expanded", "true")
+  await deleted.getByRole("button").click()
+  await expect(deleted.getByRole("button")).toHaveAttribute("aria-expanded", "false")
+  await expect(modified.getByRole("button")).toHaveAttribute("aria-expanded", "true")
 })
 
 function patchFile(file: string, status: "added" | "modified" | "deleted") {

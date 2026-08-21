@@ -47,5 +47,10 @@ test("renders a completed single-file patch", async ({ page }) => {
     settings: { editToolPartsExpanded: true },
   })
 
-  await expect(page.locator(`[data-timeline-part-id="${id}"] [data-component="apply-patch-file-diff"]`)).toBeVisible()
+  const wrapper = page.locator(`[data-timeline-part-id="${id}"]`)
+  const file = wrapper.locator('[data-scope="apply-patch"]')
+  await expect(file.getByRole("button")).toHaveAttribute("aria-expanded", "false")
+  await expect(wrapper.locator('[data-component="apply-patch-file-diff"]')).toHaveCount(0)
+  await file.getByRole("button").click()
+  await expect(wrapper.locator('[data-component="apply-patch-file-diff"]')).toBeVisible()
 })
