@@ -1,0 +1,45 @@
+<div class="counter" data-counter>
+  <span>Clicks</span>
+  <output>0</output>
+  <button type="button">Increment</button>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-counter]").forEach((counter) => {
+    const output = counter.querySelector("output")
+    counter.querySelector("button")?.addEventListener("click", () => {
+      if (output) output.value = String(Number(output.value) + 1)
+    })
+  })
+</script>
+
+<style>
+  .counter {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 0.75rem 1rem;
+    margin-block: 2.5rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    background: var(--code);
+  }
+
+  output {
+    color: var(--muted);
+  }
+
+  button {
+    grid-column: 1 / -1;
+    padding: 0.65rem 1rem;
+    border: 0;
+    color: var(--background);
+    background: var(--foreground);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  button:hover {
+    opacity: 0.85;
+  }
+</style>

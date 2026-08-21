@@ -10,7 +10,7 @@ import { configuredSettings } from "./configured.js"
 const providerID = Provider.ID.make("cloudflare-ai-gateway")
 
 export const CloudflareAIGatewayPlugin = define({
-  id: "opencode.provider.cloudflare-ai-gateway",
+  id: "opencode.provider.cloudflare.ai.gateway",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
     const form = iife(() => {

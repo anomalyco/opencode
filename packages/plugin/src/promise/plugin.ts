@@ -7,10 +7,12 @@ import type { CatalogDomain } from "./catalog.js"
 import type { CommandDomain } from "./command.js"
 import type { EventDomain } from "./event.js"
 import type { IntegrationDomain } from "./integration.js"
+import type { MCPDomain } from "./mcp.js"
 import type { ReferenceDomain } from "./reference.js"
 import type { SessionDomain } from "./session.js"
 import type { ShellDomain } from "./shell.js"
 import type { SkillDomain } from "./skill.js"
+import type { StorageDomain } from "./storage.js"
 import type { ToolDomain } from "./tool.js"
 import type { WebSearchDomain } from "./websearch.js"
 
@@ -23,11 +25,13 @@ export interface Context {
   readonly command: CommandDomain
   readonly event: EventDomain
   readonly integration: IntegrationDomain
+  readonly mcp: MCPDomain
   readonly plugin: PluginApi
   readonly reference: ReferenceDomain
   readonly session: SessionDomain
   readonly shell: ShellDomain
   readonly skill: SkillDomain
+  readonly storage: StorageDomain
   readonly tool: ToolDomain
   readonly websearch: WebSearchDomain
 }
@@ -36,6 +40,7 @@ export type Cleanup = () => Promise<void> | void
 
 export interface Plugin {
   readonly id: string
+  readonly tui?: boolean
   readonly setup: (context: Context) => Promise<Cleanup | void> | Cleanup | void
 }
 

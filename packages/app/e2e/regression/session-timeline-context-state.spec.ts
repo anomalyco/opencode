@@ -10,7 +10,7 @@ import {
 test("preserves a collapsed context group through count and status updates", async ({ page }) => {
   const ids = ["prt_closed_01_read", "prt_closed_02_glob"]
   const inputs = {
-    read: { filePath: "src/a.ts", offset: 0, limit: 120 },
+    read: { path: "src/a.ts", offset: 0, limit: 120 },
     glob: { path: ".", pattern: "**/*.ts" },
   }
   const timeline = await setupTimeline(page, {

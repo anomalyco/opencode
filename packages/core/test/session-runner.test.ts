@@ -146,29 +146,20 @@ const modelTransport = Layer.succeed(
     closeAll: Effect.void,
   }),
 )
-const model = LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
+type ModelLimit = { readonly context: number; readonly input?: number; readonly output: number }
+const defaultModelLimit = { context: 200_000, output: 32_000 }
+const modelLimits = new Map<string, ModelLimit>()
+const testModel = (id: string, limit: ModelLimit = defaultModelLimit) => {
+  modelLimits.set(id, limit)
+  return LanguageModel.make({ id, provider: "fake", route: OpenAIChat.route })
+}
+const model = testModel("fake-model")
 const defaultSystem = SessionSystemPrompt.make([])
-const replacementModel = LanguageModel.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
-const compactModel = LanguageModel.make({
-  id: "compact",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 4_000, output: 50 } }),
-})
-const fullOutputModel = LanguageModel.make({
-  id: "full-output",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 262_144, output: 262_144 } }),
-})
-const undersizedContextModel = LanguageModel.make({
-  id: "undersized-context",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 1, output: 1_000 } }),
-})
-const recoveryModel = LanguageModel.make({
-  id: "recovery",
-  provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 20_000, output: 1_000 } }),
-})
+const replacementModel = testModel("replacement")
+const compactModel = testModel("compact", { context: 4_000, output: 50 })
+const fullOutputModel = testModel("full-output", { context: 262_144, output: 262_144 })
+const undersizedContextModel = testModel("undersized-context", { context: 1, output: 1_000 })
+const recoveryModel = testModel("recovery", { context: 20_000, output: 1_000 })
 
 test("calculates step cost using the matching context tier", () => {
   expect(
@@ -195,6 +186,29 @@ test("calculates step cost using the matching context tier", () => {
       { input: 80, output: 10, reasoning: 2, cache: { read: 20, write: 1 } },
     ),
   ).toBeCloseTo(0.0002926)
+})
+
+test("ignores malformed model cost fields", () => {
+  const costs = [
+    {
+      input: Money.USDPerMillionTokens.make(3),
+      output: Money.USDPerMillionTokens.make(15),
+      cache: {
+        read: Money.USDPerMillionTokens.make(0.3),
+        write: Money.USDPerMillionTokens.make(3.75),
+      },
+    },
+  ]
+  Object.assign(costs[0], { input: {} })
+
+  expect(
+    SessionUsage.calculateCost(costs, {
+      input: 1_000_000,
+      output: 100_000,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    }),
+  ).toBe(Money.USD.make(1.5))
 })
 
 test("does not apply an ineligible tier without base pricing", () => {
@@ -281,13 +295,15 @@ let currentModel = model
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: (session) =>
     modelResolveHook.pipe(
-      Effect.as(
-        SessionRunnerModel.resolved(session.model?.id === "replacement" ? replacementModel : currentModel, {
+      Effect.map(() => {
+        const selected = session.model?.id === "replacement" ? replacementModel : currentModel
+        return SessionRunnerModel.resolved(selected, {
           capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
           cost: [],
+          limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
           variant: session.model?.variant,
-        }),
-      ),
+        })
+      }),
     ),
 })
 const systemContextKey = Instructions.Key.make("test/context")
@@ -413,7 +429,6 @@ const execution = Layer.effect(
       active: coordinator.active,
       resume: coordinator.run,
       wake: coordinator.wake,
-      wakeActive: coordinator.wakeActive,
       interrupt: (sessionID) => coordinator.interrupt(sessionID),
       awaitIdle: coordinator.awaitIdle,
     })
@@ -543,6 +558,17 @@ const providerUnavailable = () =>
       message: "Provider unavailable",
       transport: "http",
       operation: "request",
+    }),
+  })
+
+const streamDisconnected = () =>
+  new AIError({
+    module: "test",
+    method: "stream",
+    reason: new TransportReason({
+      message: "The socket connection was closed unexpectedly",
+      transport: "http",
+      operation: "read",
     }),
   })
 
@@ -997,6 +1023,43 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("keeps WebSocket eligibility after model request hooks", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "model.request", (event) =>
+        Effect.sync(() => {
+          event.headers["x-model-request-hook"] = "active"
+        }),
+      )
+      yield* hooks.register("session", "http.request", () => Effect.die("Other-provider HTTP hook should not apply"), {
+        providerID: Provider.ID.githubCopilot,
+      })
+      const context = yield* SessionContext.Service
+      const modelRequests = yield* SessionModelRequest.Service
+      const selected = yield* context.select(sessionID)
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      yield* InstructionState.prepare(database.db, bus, selected.instructions, sessionID)
+      const loaded = yield* context.load(selected)
+
+      const prepared = yield* modelRequests.prepare({
+        scope: {
+          session: loaded.session,
+          agentID: loaded.agent.id,
+          model: loaded.model,
+          tools: loaded.tools,
+        },
+        transcript: { system: [], messages: [] },
+        webSocket: "session",
+      })
+
+      expect(prepared.request.http?.headers?.["x-model-request-hook"]).toBe("active")
+      // No forced HTTP middleware: the other-provider hook must not revoke eligibility.
+      expect(prepared.options.http).toBeUndefined()
+    }),
+  )
+
   it.effect("forces HTTP and triggers active request and response hooks once", () =>
     Effect.gen(function* () {
       yield* setup
@@ -1021,9 +1084,16 @@ describe("SessionRunnerLLM", () => {
       const database = yield* Database.Service
       const bus = yield* Bus.Service
       yield* InstructionState.prepare(database.db, bus, selected.instructions, sessionID)
+      const loaded = yield* context.load(selected)
       const prepared = yield* modelRequests.prepare({
-        context: yield* context.load(selected),
-        step: 1,
+        scope: {
+          session: loaded.session,
+          agentID: loaded.agent.id,
+          model: loaded.model,
+          tools: loaded.tools,
+        },
+        transcript: { system: [], messages: [] },
+        webSocket: "session",
       })
       const http = prepared.options.http ?? (yield* Effect.die("Expected Session HTTP middleware"))
 
@@ -1032,7 +1102,7 @@ describe("SessionRunnerLLM", () => {
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("network")))
       })
 
-      expect(prepared.webSocketEligible).toBe(false)
+      expect(prepared.options.webSocket).toBeUndefined()
       expect(response.headers["x-response-hook"]).toBe("active")
       expect(requestTriggers).toBe(1)
       expect(responseTriggers).toBe(1)
@@ -2056,7 +2126,7 @@ describe("SessionRunnerLLM", () => {
       const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* stream.started
 
-      const first = yield* session.compact({ sessionID })
+      const first = yield* session.compact({ sessionID, delivery: "queue" })
       expect(yield* SessionInbox.find((yield* Database.Service).db, first.id)).toMatchObject({
         id: first.id,
       })
@@ -2169,6 +2239,68 @@ describe("SessionRunnerLLM", () => {
         type: "compaction",
         status: "completed",
         summary: "Manual summary",
+      })
+    }),
+  )
+
+  it.effect("runs manual compaction at the next step boundary before queued prompts", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      currentModel = recoveryModel
+      const stream = yield* TestLLM.gate
+      yield* TestLLM.push(
+        TestLLM.text("Active complete", "text-active-steer-compact"),
+        [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
+        TestLLM.text("Queue complete", "text-queue-after-compact"),
+      )
+      yield* admit(session, "Active work")
+      const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* stream.started
+
+      const compaction = yield* session.compact({ sessionID })
+      yield* session.prompt({ sessionID, text: "Queued prompt", delivery: "queue", resume: false })
+      yield* stream.release
+      yield* Fiber.join(active)
+
+      // Steer-delivered compaction runs at the boundary after the active step, ahead of
+      // the queued prompt, and consuming it does not trigger an input-free model call.
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
+      expect(userTexts(requests[2])).toContain("Queued prompt")
+      expect(yield* SessionInbox.find((yield* Database.Service).db, compaction.id)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "completed",
+        summary: "durable summary",
+      })
+    }),
+  )
+
+  it.effect("runs manual compaction before the continuation of an active tool turn", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      currentModel = recoveryModel
+      const stream = yield* TestLLM.gate
+      yield* TestLLM.push(
+        TestLLM.tool("call-active", "echo", { text: "active" }),
+        [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
+        TestLLM.text("Continued", "text-continued-after-compact"),
+      )
+      yield* admit(session, "Active work")
+      const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* stream.started
+
+      const compaction = yield* session.compact({ sessionID })
+      yield* stream.release
+      yield* Fiber.join(active)
+
+      // The compaction summary is requested before the tool turn's continuation step.
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "completed",
+        summary: "durable summary",
       })
     }),
   )
@@ -2798,11 +2930,17 @@ describe("SessionRunnerLLM", () => {
 
       yield* TestLLM.push(
         TestLLM.stop(
-          LLMEvent.textStart({ id: "commentary", providerMetadata: { openai: { phase: "commentary" } } }),
+          LLMEvent.textStart({
+            id: "commentary",
+            providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+          }),
           LLMEvent.textDelta({ id: "commentary", text: "Checking." }),
           LLMEvent.textEnd({
             id: "commentary",
-            providerMetadata: { openai: { phase: "commentary" }, anthropic: { ignored: true } },
+            providerMetadata: {
+              openai: { itemId: "msg_commentary", phase: "commentary" },
+              anthropic: { ignored: true },
+            },
           }),
         ),
       )
@@ -2813,7 +2951,7 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Check first" },
         {
           type: "assistant",
-          content: [{ type: "text", text: "Checking.", state: { phase: "commentary" } }],
+          content: [{ type: "text", text: "Checking.", state: { itemId: "msg_commentary", phase: "commentary" } }],
         },
       ])
 
@@ -2825,7 +2963,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "text",
           text: "Checking.",
-          providerMetadata: { openai: { phase: "commentary" } },
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
         },
       ])
     }),
@@ -3158,6 +3296,54 @@ describe("SessionRunnerLLM", () => {
       expect(userTexts(requests[0])).toEqual(["Steer now"])
       expect(yield* SessionInbox.has(db, sessionID, "steer")).toBe(false)
       expect(yield* SessionInbox.has(db, sessionID, "queue")).toBe(true)
+    }),
+  )
+
+  it.effect("a steer-scoped drain runs a queued manual compaction next in line", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      const bus = yield* Bus.Service
+      // Admit without waking so the steer-scoped drain below is the first consumer.
+      const compaction = yield* SessionInbox.admitCompaction(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        delivery: "queue",
+      })
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+      // Control work is scope-independent between turns: the barrier is consumed
+      // even though the drain never promotes queued input.
+      expect(yield* SessionInbox.find(db, compaction.id)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+        error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+      })
+    }),
+  )
+
+  it.effect("a steer-scoped drain leaves a compaction parked behind a queued prompt", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      const bus = yield* Bus.Service
+      yield* session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
+      const compaction = yield* SessionInbox.admitCompaction(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        delivery: "queue",
+      })
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+      // Enqueue order holds: the queued prompt is next in line, so nothing runs.
+      expect(requests).toHaveLength(0)
+      expect(yield* SessionInbox.has(db, sessionID, "queue")).toBe(true)
+      expect(yield* SessionInbox.find(db, compaction.id)).toMatchObject({ id: compaction.id })
     }),
   )
 
@@ -4108,13 +4294,49 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("persists raw finish reasons and provider state", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* TestLLM.push(
+        TestLLM.complete(
+          {
+            reason: { normalized: "stop", raw: "end_turn" },
+            providerMetadata: { openai: { responseId: "response-1", serviceTier: "priority" } },
+          },
+          LLMEvent.textStart({ id: "answer" }),
+          LLMEvent.textDelta({ id: "answer", text: "Complete" }),
+          LLMEvent.textEnd({ id: "answer" }),
+        ),
+      )
+
+      yield* runPrompt(session, "Keep provider finish details")
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        {
+          type: "assistant",
+          finish: "stop",
+          rawFinish: "end_turn",
+          providerState: { responseId: "response-1", serviceTier: "priority" },
+          content: [{ type: "text", text: "Complete" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("projects content-filter finishes as visible terminal failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* TestLLM.push(
         TestLLM.complete(
           {
-            reason: { normalized: "content-filter" },
+            reason: { normalized: "content-filter", raw: "SAFETY" },
+            providerMetadata: {
+              openai: {
+                responseId: "response-blocked",
+                refusal: { category: "safety", explanation: "Prompt blocked" },
+              },
+            },
             usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1 },
           },
           LLMEvent.textStart({ id: "partial" }),
@@ -4129,7 +4351,12 @@ describe("SessionRunnerLLM", () => {
         { type: "user" },
         {
           type: "assistant",
-          finish: "error",
+          finish: "content-filter",
+          rawFinish: "SAFETY",
+          providerState: {
+            responseId: "response-blocked",
+            refusal: { category: "safety", explanation: "Prompt blocked" },
+          },
           error: { type: "provider.content-filter" },
           cost: 0,
           tokens: { input: 8, output: 2, reasoning: 1, cache: { read: 0, write: 0 } },
@@ -4403,6 +4630,54 @@ describe("SessionRunnerLLM", () => {
         { type: "user" },
         { type: "assistant", finish: "error", content: [{ type: "reasoning", text: "Partial thought" }] },
         { type: "synthetic" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("continues after a transport read failure with durable reasoning state", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Recover disconnected reasoning")
+      yield* TestLLM.push(
+        TestLLM.failAfter(
+          streamDisconnected(),
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.reasoningStart({
+            id: "disconnected-reasoning",
+            providerMetadata: {
+              openai: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
+            },
+          }),
+        ),
+      )
+      yield* TestLLM.push(TestLLM.text("Recovered", "reasoning-transport-recovery"))
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      yield* TestClock.adjust("2400 millis")
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
+      expect(requests[1]?.messages.slice(-2)).toMatchObject([
+        { role: "user", content: [{ type: "text", text: "Recover disconnected reasoning" }] },
+        { role: "user", content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }] },
+      ])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        {
+          type: "assistant",
+          finish: "error",
+          content: [
+            {
+              type: "reasoning",
+              text: "",
+              state: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
+            },
+          ],
+        },
+        { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
         { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
       ])
     }),

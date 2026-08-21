@@ -16,6 +16,7 @@ export const MAX_READ_BYTES = 50 * 1024
 export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const FIRST_CHUNK = 256 * 1024
 const MAX_LINE_LENGTH = 2_000
+const TREE_BASE = 6
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
 
@@ -159,19 +160,59 @@ export const read = Effect.fn("ReadTool.read")(function* (
     }
   }
 
-  const chunks = [first.bytes]
+  if (first.bytes.length >= first.info.size) {
+    const result = textPage(first.bytes, true, page)
+    if (result === undefined) return yield* Effect.die("Read page did not settle for a complete first chunk")
+    return yield* makeTextPage(input, resource, result, first.bytes.subarray(0, result.consumed).includes(0))
+  }
+
+  const offset = page.offset || 1
+  const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
+  const leaves = [textLeaf(first.bytes)]
+  let bytes = first.bytes.length
+  let lines = leaves[0].summary.lines
+  let ended = false
   while (true) {
-    const bytes = Buffer.concat(chunks)
-    const eof = bytes.length >= first.info.size
-    const result = textPage(bytes, eof, page)
-    if (result !== undefined) return yield* makeTextPage(bytes, input, resource, result)
-    const next = yield* readFile(files, input, resource, { offset: bytes.length, length: FIRST_CHUNK })
-    if (next.bytes.length === 0) {
-      const result = textPage(bytes, true, page)
-      if (result === undefined) return yield* Effect.die("Read page did not settle at EOF")
-      return yield* makeTextPage(bytes, input, resource, result)
+    const eof = ended || bytes >= first.info.size
+    if (lines >= offset - 1 || eof) {
+      const tree = textTree(leaves)
+      const start = textOffset(tree, offset - 1)
+      let position = 0
+      const selected = Buffer.concat(
+        leaves.flatMap((leaf) => {
+          const leafStart = position
+          position += leaf.summary.bytes
+          if (position <= start) return []
+          return [leaf.bytes.subarray(Math.max(0, start - leafStart))]
+        }),
+      )
+      const result = textPage(selected, eof, { limit })
+      if (result !== undefined) {
+        const translated = {
+          ...result,
+          offset,
+          ...(result.next === undefined ? { next: undefined } : { next: offset + result.next - 1 }),
+        }
+        const consumed = start + result.consumed
+        let checked = 0
+        const binary = leaves.some((leaf) => {
+          const length = Math.min(leaf.summary.bytes, consumed - checked)
+          checked += leaf.summary.bytes
+          return length > 0 && leaf.bytes.subarray(0, length).includes(0)
+        })
+        return yield* makeTextPage(input, resource, translated, binary)
+      }
     }
-    chunks.push(next.bytes)
+
+    const next = yield* readFile(files, input, resource, { offset: bytes, length: FIRST_CHUNK })
+    if (next.bytes.length === 0) {
+      ended = true
+      continue
+    }
+    const leaf = textLeaf(next.bytes)
+    leaves.push(leaf)
+    bytes += leaf.summary.bytes
+    lines += leaf.summary.lines
   }
 })
 
@@ -188,12 +229,12 @@ const readFile = (
     )
 
 const makeTextPage = Effect.fnUntraced(function* (
-  bytes: Uint8Array,
   input: AbsolutePath,
   resource: string,
   result: NonNullable<ReturnType<typeof textPage>>,
+  binary: boolean,
 ) {
-  if (bytes.subarray(0, result.consumed).includes(0)) return yield* new BinaryFileError({ resource })
+  if (binary) return yield* new BinaryFileError({ resource })
   if (result.entries.length === 0 && result.offset !== 1)
     return yield* new OffsetOutOfRangeError({ offset: result.offset })
   return new TextPage({
@@ -272,6 +313,60 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
   const consumedLines = next === undefined ? available.length : next - 1
   const consumed = consumedLines === 0 ? 0 : (nthNewline(bytes, consumedLines) ?? bytes.length)
   return { entries, offset, next, consumed }
+}
+
+type TextSummary = { readonly bytes: number; readonly lines: number }
+// Request-local augmented rope. Subtree byte and newline weights locate a line
+// like an order-statistic query without repeatedly decoding the accumulated text.
+// https://doi.org/10.1002/spe.4380251203
+type TextNode =
+  | { readonly type: "leaf"; readonly bytes: Uint8Array; readonly summary: TextSummary }
+  | { readonly type: "branch"; readonly children: ReadonlyArray<TextNode>; readonly summary: TextSummary }
+
+const textLeaf = (bytes: Uint8Array): Extract<TextNode, { readonly type: "leaf" }> => {
+  let lines = 0
+  for (const byte of bytes) if (byte === 10) lines++
+  return { type: "leaf", bytes, summary: { bytes: bytes.length, lines } }
+}
+
+const textTree = (nodes: ReadonlyArray<TextNode>): TextNode => {
+  if (nodes.length === 1) return nodes[0]
+  return textTree(
+    Array.from({ length: Math.ceil(nodes.length / (TREE_BASE * 2)) }, (_, index) => {
+      const children = nodes.slice(index * TREE_BASE * 2, (index + 1) * TREE_BASE * 2)
+      return {
+        type: "branch" as const,
+        children,
+        summary: {
+          bytes: children.reduce((total, child) => total + child.summary.bytes, 0),
+          lines: children.reduce((total, child) => total + child.summary.lines, 0),
+        },
+      }
+    }),
+  )
+}
+
+const textOffset = (tree: TextNode, newline: number) => {
+  if (newline === 0) return 0
+  let node = tree
+  let remaining = newline
+  let offset = 0
+  while (node.type === "branch") {
+    const child = node.children.find((candidate) => {
+      if (remaining <= candidate.summary.lines) return true
+      remaining -= candidate.summary.lines
+      offset += candidate.summary.bytes
+      return false
+    })
+    if (!child) return tree.summary.bytes
+    node = child
+  }
+  for (const [index, byte] of node.bytes.entries()) {
+    if (byte !== 10) continue
+    remaining--
+    if (remaining === 0) return offset + index + 1
+  }
+  return tree.summary.bytes
 }
 
 const nthNewline = (bytes: Uint8Array, count: number) => {

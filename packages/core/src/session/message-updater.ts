@@ -195,6 +195,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 draft.retry = undefined
                 draft.error = undefined
                 draft.finish = undefined
+                draft.rawFinish = undefined
+                draft.providerState = undefined
                 draft.time.completed = undefined
                 if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, start: event.data.snapshot }
               }),
@@ -228,6 +230,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.time.completed = created
           draft.finish = event.data.finish
+          draft.rawFinish = event.data.rawFinish
+          draft.providerState = castDraft(event.data.providerState)
           draft.cost = event.data.cost
           draft.tokens = event.data.tokens
           if (event.data.snapshot || event.data.files)
@@ -241,7 +245,9 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.step.failed": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.time.completed = created
-          draft.finish = "error"
+          draft.finish = event.data.finish ?? "error"
+          draft.rawFinish = event.data.rawFinish
+          draft.providerState = castDraft(event.data.providerState)
           draft.error = castDraft(event.data.error)
           draft.retry = undefined
           if (event.data.cost !== undefined && event.data.tokens !== undefined) {

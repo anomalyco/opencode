@@ -6,8 +6,6 @@ import { HttpApiClient } from "effect/unstable/httpapi"
 import { ClientApi } from "../../contract"
 import type {
   Endpoint0_0Output,
-  Endpoint0_1Input,
-  Endpoint0_1Output,
   Endpoint1_0Output,
   Endpoint2_0Input,
   Endpoint2_0Output,
@@ -188,6 +186,8 @@ import type {
   Endpoint20_3Output,
   Endpoint20_4Input,
   Endpoint20_4Output,
+  Endpoint20_5Input,
+  Endpoint20_5Output,
   Endpoint21_0Input,
   Endpoint21_0Output,
   Endpoint21_1Input,
@@ -248,12 +248,7 @@ const preserveStream =
 const Endpoint0_0 = (raw: RawClient["server.health"]) => () =>
   preserveEffect<Endpoint0_0Output>()(raw["health.get"]({}).pipe(Effect.mapError(mapClientError)))
 
-const Endpoint0_1 = (raw: RawClient["server.health"]) => (input: Endpoint0_1Input) =>
-  preserveEffect<Endpoint0_1Output>()(
-    raw["health.stop"]({ payload: { instanceID: input["instanceID"] } }).pipe(Effect.mapError(mapClientError)),
-  )
-
-const adaptGroup0 = (raw: RawClient["server.health"]) => ({ get: Endpoint0_0(raw), stop: Endpoint0_1(raw) })
+const adaptGroup0 = (raw: RawClient["server.health"]) => ({ get: Endpoint0_0(raw) })
 
 const Endpoint1_0 = (raw: RawClient["server.server"]) => () =>
   preserveEffect<Endpoint1_0Output>()(raw["server.get"]({}).pipe(Effect.mapError(mapClientError)))
@@ -1100,12 +1095,22 @@ const Endpoint20_4 = (raw: RawClient["server.pty"]) => (input: Endpoint20_4Input
     ),
   )
 
+const Endpoint20_5 = (raw: RawClient["server.pty"]) => (input: Endpoint20_5Input) =>
+  preserveEffect<Endpoint20_5Output>()(
+    raw["pty.connectToken"]({
+      params: { ptyID: input["ptyID"] },
+      query: { location: input["location"] },
+      headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroup20 = (raw: RawClient["server.pty"]) => ({
   list: Endpoint20_0(raw),
   create: Endpoint20_1(raw),
   get: Endpoint20_2(raw),
   update: Endpoint20_3(raw),
   remove: Endpoint20_4(raw),
+  connect: { token: Endpoint20_5(raw) },
 })
 
 const Endpoint21_0 = (raw: RawClient["server.shell"]) => (input?: Endpoint21_0Input) =>

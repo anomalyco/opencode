@@ -7,6 +7,7 @@ import type {
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { isolatedEnv } from "../fixture/environment"
 
 type JsonRpcRequest = {
   readonly jsonrpc: "2.0"
@@ -100,33 +101,30 @@ export async function createAcpFixture(options: { readonly skill?: string } = {}
     llm: { requests },
     spawn(extraEnv: Record<string, string | undefined> = {}) {
       const acp = spawnAcp({
-        env: {
-          ...process.env,
-          HOME: root,
+        env: isolatedEnv(root, {
           USERPROFILE: root,
           OPENCODE_CONFIG: undefined,
           OPENCODE_CONFIG_CONTENT: undefined,
-          OPENCODE_CONFIG_DIR: config,
-          OPENCODE_DB: path.join(root, "opencode.db"),
           OPENCODE_DISABLE_AUTOUPDATE: "true",
-          OPENCODE_DISABLE_FILEWATCHER: "true",
-          OPENCODE_DISABLE_MODELS_FETCH: "true",
           OPENCODE_MODELS_PATH: undefined,
-          OPENCODE_TEST_HOME: root,
-          XDG_CACHE_HOME: path.join(root, "cache"),
-          XDG_CONFIG_HOME: path.join(root, "xdg-config"),
-          XDG_DATA_HOME: path.join(root, "data"),
-          XDG_STATE_HOME: path.join(root, "state"),
           ...extraEnv,
-        },
+        }),
       })
       processes.add(acp)
       return acp
     },
     async [Symbol.asyncDispose]() {
-      await Promise.all([...processes].map((process) => process[Symbol.asyncDispose]()))
-      await llm.stop(true)
-      await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      const processResults = await Promise.allSettled(
+        [...processes].map((process) => process.close().catch(() => process[Symbol.asyncDispose]())),
+      )
+      const serverResults = await Promise.allSettled([llm.stop(true)])
+      const directoryResults = await Promise.allSettled([
+        fs.rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }),
+      ])
+      const failure = [...processResults, ...serverResults, ...directoryResults].find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      )
+      if (failure) throw failure.reason
     },
   }
 }

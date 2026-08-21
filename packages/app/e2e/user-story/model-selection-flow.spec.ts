@@ -78,9 +78,9 @@ test("creates a session in a new project and selects its model", async ({ page }
   await selectFolder.click()
 
   await page.locator('[data-action="home-new-session"]').click()
-  await expectAppVisible(page.locator('[data-component="prompt-input-v2"]'))
+  await expectAppVisible(page.locator('[data-component="composer"]'))
 
-  const modelControl = page.locator('[data-action="prompt-model"]')
+  const modelControl = page.locator('[data-action="composer-model"]')
   await modelControl.click()
   await expect(page.locator('[data-option-key="opencode:free-model"]')).toBeVisible()
   const goModel = page.locator('[data-option-key="opencode-go:go-model-1"]')

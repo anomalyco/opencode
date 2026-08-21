@@ -22,6 +22,5 @@
     }
   },
   "include": ["src", "package.json"],
-  "exclude": ["dist", "ts-dist"],
-  "references": [{ "path": "../core" }]
+  "exclude": ["dist", "ts-dist"]
 }

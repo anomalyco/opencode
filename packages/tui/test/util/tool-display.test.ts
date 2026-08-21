@@ -21,9 +21,14 @@ test("normalizes shared tool primitives", () => {
 
 describe("webSearchProviderLabel", () => {
   test("labels known providers", () => {
-    expect(webSearchProviderLabel("parallel")).toBe("Parallel Web Search")
-    expect(webSearchProviderLabel("exa")).toBe("Exa Web Search")
-    expect(webSearchProviderLabel("tavily")).toBe("Tavily Web Search")
+    expect(webSearchProviderLabel("parallel")).toBe("Web Search via Parallel")
+    expect(webSearchProviderLabel("exa")).toBe("Web Search via Exa")
+    expect(webSearchProviderLabel("firecrawl")).toBe("Web Search via Firecrawl")
+    expect(webSearchProviderLabel("tavily")).toBe("Web Search via Tavily")
+  })
+
+  test("labels providers dynamically", () => {
+    expect(webSearchProviderLabel("other")).toBe("Web Search via Other")
   })
 
   for (const [name, provider] of [
@@ -32,7 +37,7 @@ describe("webSearchProviderLabel", () => {
     ["an object", {}],
     ["an array", []],
     ["a number", 1],
-    ["an unexpected string", "other"],
+    ["an empty string", ""],
   ] as const) {
     test(`uses the generic label for ${name}`, () => {
       expect(webSearchProviderLabel(provider)).toBe("Web Search")

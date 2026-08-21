@@ -35,6 +35,8 @@ export interface StepRecord {
   /** Present once the provider finished the step normally. */
   readonly finish?: {
     readonly finish: Extract<LLMEvent, { type: "step-finish" }>["reason"]["normalized"]
+    readonly rawFinish?: string
+    readonly providerState?: SessionMessage.ProviderState
     readonly tokens: ReturnType<typeof SessionUsage.tokens>
   }
   readonly calls: ReadonlyArray<{
@@ -364,6 +366,9 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       sessionID: input.sessionID,
       assistantMessageID,
       error: stepFailure,
+      finish: stepSettlement?.finish === "content-filter" ? stepSettlement.finish : undefined,
+      rawFinish: stepSettlement?.rawFinish,
+      providerState: stepSettlement?.providerState,
       ...details,
     })
   })
@@ -517,7 +522,12 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       case "step-finish":
         yield* flush()
         if (stepSettlement) return yield* Effect.die(new Error("Duplicate step finish"))
-        stepSettlement = { finish: event.reason.normalized, tokens: SessionUsage.tokens(event.usage) }
+        stepSettlement = {
+          finish: event.reason.normalized,
+          rawFinish: event.reason.raw,
+          providerState: providerState(event.providerMetadata),
+          tokens: SessionUsage.tokens(event.usage),
+        }
         if (event.reason.normalized === "content-filter") {
           providerFailed = true
           yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" })

@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
 import type { SessionMessageAssistant } from "@opencode-ai/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import {

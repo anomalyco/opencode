@@ -11,7 +11,7 @@ import {
 } from "./timeline-test-helpers"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 
-const contentSelector = '[data-message-id], [data-component="prompt-input"]'
+const contentSelector = '[data-message-id], [data-component="composer-editor"]'
 const draftID = "draft_first_navigation"
 
 benchmark.describe("performance: first navigation paint", () => {
@@ -41,11 +41,11 @@ benchmark.describe("performance: first navigation paint", () => {
       href,
       destinationPath: href,
       sourceSelector: messageSelector(fixture.expected.sourceMessageIDs.at(-1)!),
-      destinationSelector: '[data-component="prompt-input"]',
+      destinationSelector: '[data-component="composer-editor"]',
       contentSelector,
       navigate: async () => {
         await page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first().click()
-        await expect(page.locator('[data-component="prompt-input"]')).toBeVisible()
+        await expect(page.locator('[data-component="composer-editor"]')).toBeVisible()
       },
     })
     report(result)

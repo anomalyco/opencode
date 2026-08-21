@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { createEffect, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { Platform } from "@/context/platform"
-import { createPromptReady, createPromptSession } from "@/context/prompt-state"
-import { ServerScope } from "@/utils/server-scope"
-import { createDraftStore } from "@/utils/draft-store"
-import { Persist, persisted } from "@/utils/persist"
+import type { Platform } from "@/runtime/platform/platform"
+import { createComposerReady, createComposerState } from "@/composer/state"
+import { ServerScope } from "@/runtime/server/scope"
+import { createDraftStore } from "@/runtime/persistence/drafts"
+import { Persist, persisted } from "@/runtime/persistence/storage"
 
 let read: ((value: string | null) => void) | undefined
 
@@ -34,7 +34,7 @@ const platform: Platform = {
 }
 
 describe("prompt persistence", () => {
-  test("relocates a previous V2 key into canonical storage", () => {
+  test("relocates a previous key into canonical storage", () => {
     localStorage.setItem("server.v3", JSON.stringify({ list: ["https://example.com"] }))
 
     const [state] = persisted(
@@ -51,8 +51,8 @@ describe("prompt persistence", () => {
   test("waits for an async draft to hydrate before reporting ready", async () => {
     await new Promise<void>((resolve, reject) => {
       createRoot((dispose) => {
-        const session = createPromptSession(ServerScope.local, { draftID: "draft-async" }, undefined, platform)
-        const ready = createPromptReady(() => session)
+        const session = createComposerState(ServerScope.local, { draftID: "draft-async" }, undefined, platform)
+        const ready = createComposerReady(() => session)
 
         expect(ready()).toBe(false)
         expect(session.current()[0]).toMatchObject({ type: "text", content: "" })
@@ -100,7 +100,7 @@ describe("prompt persistence", () => {
       }),
     )
 
-    const session = createPromptSession(ServerScope.local, { draftID: "draft-relocate" }, undefined, {
+    const session = createComposerState(ServerScope.local, { draftID: "draft-relocate" }, undefined, {
       ...platform,
       draftStore: store,
     })
@@ -111,7 +111,7 @@ describe("prompt persistence", () => {
     expect(localStorage.getItem(key)).toBeNull()
   })
 
-  test("relocates a previous V2 prompt key into the draft store", async () => {
+  test("relocates a previous prompt key into the draft store", async () => {
     const documents = new Map<string, string>()
     const store = createDraftStore({
       get: async (key) => documents.get(key) ?? null,
@@ -127,17 +127,17 @@ describe("prompt persistence", () => {
     localStorage.setItem(
       oldKey,
       JSON.stringify({
-        prompt: [{ type: "text", content: "previous V2 draft", start: 0, end: 17 }],
+        prompt: [{ type: "text", content: "previous draft", start: 0, end: 14 }],
         cursor: 17,
         context: { items: [] },
       }),
     )
 
-    const session = createPromptSession(ServerScope.local, { dir }, undefined, { ...platform, draftStore: store })
+    const session = createComposerState(ServerScope.local, { dir }, undefined, { ...platform, draftStore: store })
     await session.ready.promise
 
-    expect(session.current()[0]).toMatchObject({ type: "text", content: "previous V2 draft" })
-    expect(documents.get(key)).toContain("previous V2 draft")
+    expect(session.current()[0]).toMatchObject({ type: "text", content: "previous draft" })
+    expect(documents.get(key)).toContain("previous draft")
     expect(localStorage.getItem(oldKey)).toBeNull()
   })
 })

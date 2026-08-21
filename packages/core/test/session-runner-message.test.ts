@@ -205,18 +205,18 @@ Recent work
     })
   })
 
-  test("lowers selected skill instructions with the original user prompt", () => {
+  test("does not inject skill content for reference-only attachments", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
-          id: id("user-skill"),
+          id: id("user-skill-reference"),
           type: "user",
-          text: "Design this API",
+          text: "Use @api-design",
           skills: [
             SkillAttachment.make({
               id: Skill.ID.make("api-design"),
               name: Skill.Name.make("API design"),
-              text: "Start from the ideal call site.",
+              mention: { start: 4, end: 15, text: "@api-design" },
             }),
           ],
           time: { created },
@@ -225,17 +225,9 @@ Recent work
       model,
     )
 
-    expect(messages).toHaveLength(1)
     expect(messages[0]).toMatchObject({
-      id: id("user-skill"),
       role: "user",
-      content: [
-        {
-          type: "text",
-          text: "Start from the ideal call site.",
-        },
-        { type: "text", text: "Design this API" },
-      ],
+      content: [{ type: "text", text: "Use @api-design" }],
     })
   })
 
@@ -369,7 +361,7 @@ Recent work
     ])
   })
 
-  test("uses materialized image data as provider media and drops unsupported attachments", () => {
+  test("uses materialized image and PDF data as provider media", () => {
     const data = Base64.make("AAECAw==")
     const messages = toLLMMessages(
       [
@@ -395,6 +387,7 @@ Recent work
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Inspect this image" },
       { type: "media", mediaType: "image/png", data, filename: "image.png" },
+      { type: "media", mediaType: "application/pdf", data: "JVBERg==", filename: "document.pdf" },
     ])
   })
 

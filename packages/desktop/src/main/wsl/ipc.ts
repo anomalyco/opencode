@@ -1,14 +1,32 @@
-import { app, ipcMain } from "electron"
-import type { IpcMainInvokeEvent } from "electron"
-import type { WslServersController } from "./servers"
-import type { WslServersState } from "../../preload/types"
-import { nativeT } from "../native-translations"
+export * as WslIpc from "./ipc"
 
-export function registerWslIpcHandlers(controller?: WslServersController) {
-  if (!controller) {
-    registerUnavailableWslIpcHandlers()
-    return
-  }
+import { app } from "electron"
+import type { WebContents } from "electron"
+import type { WslServerConfig, WslServersState } from "@opencode-ai/app/wsl/types"
+import { Effect } from "effect"
+import { WslServersChanged } from "../../shared/ipc-rpc/events"
+import { emitIpcEvent } from "../ipc-events"
+import type { WslServersController } from "./servers"
+import { nativeT } from "../native/translations"
+
+export interface Interface {
+  readonly subscribe: (sender: WebContents) => Effect.Effect<void>
+  readonly unsubscribe: (id: number) => Effect.Effect<void>
+  readonly getState: () => Effect.Effect<WslServersState>
+  readonly probeRuntime: () => Effect.Effect<void>
+  readonly refreshDistros: () => Effect.Effect<void>
+  readonly installWsl: () => Effect.Effect<void>
+  readonly installDistro: (value: string) => Effect.Effect<void>
+  readonly probeAddable: (value: string[]) => Effect.Effect<void>
+  readonly installOpencode: (value: string) => Effect.Effect<void>
+  readonly openTerminal: (value: string) => Effect.Effect<void>
+  readonly addServer: (value: string) => Effect.Effect<WslServerConfig>
+  readonly removeServer: (value: string) => Effect.Effect<void>
+  readonly startServer: (value: string) => Effect.Effect<void>
+}
+
+export function create(controller?: WslServersController): Interface {
+  if (!controller) return createUnavailableWslIpc()
 
   const subscriptions = new Map<number, () => void>()
   const unsubscribe = (id: number) => {
@@ -23,47 +41,80 @@ export function registerWslIpcHandlers(controller?: WslServersController) {
     subscriptions.clear()
   })
 
-  ipcMain.handle("wsl-servers-subscribe", (event) => {
-    const id = event.sender.id
-    if (subscriptions.has(id)) return
-    subscriptions.set(
-      id,
-      controller.subscribe((payload) => {
-        if (event.sender.isDestroyed()) {
-          unsubscribe(id)
-          return
-        }
-        event.sender.send("wsl-servers-event", payload)
+  return {
+    subscribe: (sender) =>
+      Effect.sync(() => {
+        const id = sender.id
+        if (subscriptions.has(id)) return
+        subscriptions.set(
+          id,
+          controller.subscribe((payload) => {
+            if (sender.isDestroyed()) {
+              unsubscribe(id)
+              return
+            }
+            emitIpcEvent(sender, new WslServersChanged({ event: payload }))
+          }),
+        )
+        sender.once("destroyed", () => unsubscribe(id))
       }),
-    )
-    event.sender.once("destroyed", () => unsubscribe(id))
+    unsubscribe: (id) => Effect.sync(() => unsubscribe(id)),
+    getState: () => Effect.sync(() => controller.getState()),
+    probeRuntime: () => promise(() => controller.probeRuntime()),
+    refreshDistros: () => promise(() => controller.refreshDistros()),
+    installWsl: () => promise(() => controller.installWsl()),
+    installDistro: (value) => promise(() => controller.installDistro(requireWslIpcString("distro", value))),
+    probeAddable: (value) => promise(() => controller.probeAddable(requireWslIpcStrings("distro", value))),
+    installOpencode: (value) => promise(() => controller.installOpencode(requireWslIpcString("distro", value))),
+    openTerminal: (value) => promise(() => controller.openTerminal(requireWslIpcString("distro", value))),
+    addServer: (value) => promise(() => controller.addServer(requireWslIpcString("distro", value))),
+    removeServer: (value) => promise(() => controller.removeServer(requireWslIpcString("server id", value))),
+    startServer: (value) => promise(() => controller.startServer(requireWslIpcString("server id", value))),
+  }
+}
+
+function promise<A>(evaluate: () => Promise<A>) {
+  return Effect.tryPromise(evaluate).pipe(Effect.orDie)
+}
+
+function createUnavailableWslIpc(): Interface {
+  const message = nativeT(
+    process.platform === "win32" ? "desktop.wsl.error.unavailable" : "desktop.wsl.error.windowsOnly",
+  )
+  const unavailable = () => {
+    throw new Error(message)
+  }
+  const state = (): WslServersState => ({
+    runtime: {
+      available: false,
+      version: null,
+      error: message,
+    },
+    installed: [],
+    online: [],
+    distroProbes: {},
+    opencodeChecks: {},
+    pendingRestart: false,
+    servers: [],
+    job: null,
   })
-  ipcMain.handle("wsl-servers-unsubscribe", (event) => unsubscribe(event.sender.id))
-  ipcMain.handle("wsl-servers-get-state", () => controller.getState())
-  ipcMain.handle("wsl-servers-probe-runtime", () => controller.probeRuntime())
-  ipcMain.handle("wsl-servers-refresh-distros", () => controller.refreshDistros())
-  ipcMain.handle("wsl-servers-install-wsl", () => controller.installWsl())
-  ipcMain.handle("wsl-servers-install-distro", (_event: IpcMainInvokeEvent, name: string) =>
-    controller.installDistro(requireWslIpcString("distro", name)),
-  )
-  ipcMain.handle("wsl-servers-probe-addable", (_event: IpcMainInvokeEvent, distros: string[]) =>
-    controller.probeAddable(requireWslIpcStrings("distro", distros)),
-  )
-  ipcMain.handle("wsl-servers-install-opencode", (_event: IpcMainInvokeEvent, name: string) =>
-    controller.installOpencode(requireWslIpcString("distro", name)),
-  )
-  ipcMain.handle("wsl-servers-open-terminal", (_event: IpcMainInvokeEvent, name: string) =>
-    controller.openTerminal(requireWslIpcString("distro", name)),
-  )
-  ipcMain.handle("wsl-servers-add", (_event: IpcMainInvokeEvent, distro: string) =>
-    controller.addServer(requireWslIpcString("distro", distro)),
-  )
-  ipcMain.handle("wsl-servers-remove", (_event: IpcMainInvokeEvent, id: string) =>
-    controller.removeServer(requireWslIpcString("server id", id)),
-  )
-  ipcMain.handle("wsl-servers-start", (_event: IpcMainInvokeEvent, id: string) =>
-    controller.startServer(requireWslIpcString("server id", id)),
-  )
+
+  return {
+    subscribe: (sender) =>
+      Effect.sync(() => emitIpcEvent(sender, new WslServersChanged({ event: { type: "state", state: state() } }))),
+    unsubscribe: () => Effect.void,
+    getState: () => Effect.sync(state),
+    probeRuntime: () => Effect.sync(unavailable),
+    refreshDistros: () => Effect.sync(unavailable),
+    installWsl: () => Effect.sync(unavailable),
+    installDistro: () => Effect.sync(unavailable),
+    probeAddable: () => Effect.sync(unavailable),
+    installOpencode: () => Effect.sync(unavailable),
+    openTerminal: () => Effect.sync(unavailable),
+    addServer: () => Effect.sync(unavailable),
+    removeServer: () => Effect.sync(unavailable),
+    startServer: () => Effect.sync(unavailable),
+  }
 }
 
 function requireWslIpcString(name: string, value: unknown) {
@@ -76,40 +127,4 @@ function requireWslIpcStrings(name: string, value: unknown) {
   const values = value.map((item) => requireWslIpcString(name, item))
   if (values.length) return values
   throw new Error(`Invalid ${name}`)
-}
-
-function registerUnavailableWslIpcHandlers() {
-  const unavailable = () => {
-    throw new Error(nativeT("desktop.wsl.error.windowsOnly"))
-  }
-  const state = (): WslServersState => ({
-    runtime: {
-      available: false,
-      version: null,
-      error: nativeT("desktop.wsl.error.windowsOnly"),
-    },
-    installed: [],
-    online: [],
-    distroProbes: {},
-    opencodeChecks: {},
-    pendingRestart: false,
-    servers: [],
-    job: null,
-  })
-
-  ipcMain.handle("wsl-servers-subscribe", (event) => {
-    event.sender.send("wsl-servers-event", { type: "state", state: state() })
-  })
-  ipcMain.handle("wsl-servers-unsubscribe", () => undefined)
-  ipcMain.handle("wsl-servers-get-state", () => state())
-  ipcMain.handle("wsl-servers-probe-runtime", unavailable)
-  ipcMain.handle("wsl-servers-refresh-distros", unavailable)
-  ipcMain.handle("wsl-servers-install-wsl", unavailable)
-  ipcMain.handle("wsl-servers-install-distro", unavailable)
-  ipcMain.handle("wsl-servers-probe-addable", unavailable)
-  ipcMain.handle("wsl-servers-install-opencode", unavailable)
-  ipcMain.handle("wsl-servers-open-terminal", unavailable)
-  ipcMain.handle("wsl-servers-add", unavailable)
-  ipcMain.handle("wsl-servers-remove", unavailable)
-  ipcMain.handle("wsl-servers-start", unavailable)
 }

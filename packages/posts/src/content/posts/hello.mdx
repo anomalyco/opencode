@@ -1,0 +1,17 @@
+---
+title: "Example one"
+description: "Markdown for the words, components for everything else."
+published: 2026-08-20
+---
+
+import Counter from "../../components/Counter.astro"
+
+This is a post written in MDX. Most of it is ordinary Markdown, rendered to static HTML with no client-side JavaScript.
+
+## Interactive when it matters
+
+Components can appear directly between paragraphs. This one is an Astro component with a tiny browser script:
+
+<Counter />
+
+The component could also come from another workspace package or use React, Solid, Svelte, or Vue when the interaction calls for it.

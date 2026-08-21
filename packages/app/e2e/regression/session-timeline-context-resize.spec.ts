@@ -78,7 +78,7 @@ test.describe("regression: session timeline context group resize", () => {
             id("msg_assistant", 10),
             ["read", "glob", "grep", "list"][index]!,
             [
-              { filePath: "src/recent-a.ts" },
+              { path: "src/recent-a.ts" },
               { path: directory, pattern: "**/*.ts" },
               { path: directory, pattern: "Explored" },
               { path: "src" },
@@ -213,7 +213,7 @@ function turn(index: number, target: boolean, status: "running" | "completed" = 
             contextIDs[0]!,
             assistantID,
             "read",
-            { filePath: "src/recent-a.ts", offset: 0, limit: 120 },
+            { path: "src/recent-a.ts", offset: 0, limit: 120 },
             status,
           ),
         ),
@@ -270,7 +270,7 @@ function contextTool(
       status,
       input,
       output: `Completed ${tool}.\n${"detail line\n".repeat(8)}`,
-      title: input.filePath || input.path || input.pattern || "completed",
+      title: input.path || input.pattern || "completed",
       metadata: {},
       time: { start: 1700000000000, end: 1700000000100 },
     },
@@ -310,45 +310,10 @@ function toolContent(part: ContextTool): SessionMessageAssistant["content"][numb
   }
 }
 
-let eventSequence = 0
+let eventSequence = -1
 
 function toolEvents(part: ContextTool): OpenCodeEvent[] {
-  const events = [
-    eventValue(
-      "session.tool.input.started",
-      {
-        sessionID,
-        assistantMessageID: part.messageID,
-        id: part.callID,
-        name: part.tool,
-      },
-      1,
-    ),
-    eventValue(
-      "session.tool.input.ended",
-      {
-        sessionID,
-        assistantMessageID: part.messageID,
-        id: part.callID,
-        text: JSON.stringify(part.state.input),
-      },
-      1,
-    ),
-    eventValue(
-      "session.tool.called",
-      {
-        sessionID,
-        assistantMessageID: part.messageID,
-        id: part.callID,
-        input: part.state.input,
-        executed: true,
-      },
-      1,
-    ),
-  ] satisfies OpenCodeEvent[]
-  if (part.state.status === "running") return events
   return [
-    ...events,
     eventValue(
       "session.tool.success",
       {
@@ -381,6 +346,7 @@ function eventValue<Type extends OpenCodeEvent["type"]>(
 }
 
 async function mockServer(page: Page, events: OpenCodeEvent[] = [], fixtureMessages = messages) {
+  eventSequence = -1
   await mockOpenCodeServer(page, {
     directory,
     project: project(),

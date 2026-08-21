@@ -1,226 +1,75 @@
-// @ts-nocheck
-import { onCleanup, Show } from "solid-js"
+import { Button } from "@opencode-ai/ui/button"
 import { createStore } from "solid-js/store"
 import { AnimatedCountList, type CountItem } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 
+const text = {
+  active: "Exploring",
+  done: "Explored",
+} as const
+
+function ContextProgress() {
+  const [state, setState] = createStore({ reads: 2, searches: 1, lists: 0, active: true })
+  const items = (): CountItem[] => [
+    { key: "ui.messagePart.context.read", count: state.reads },
+    { key: "ui.messagePart.context.search", count: state.searches },
+    { key: "ui.messagePart.context.list", count: state.lists },
+  ]
+  const reset = () => setState({ reads: 2, searches: 1, lists: 0, active: true })
+  return (
+    <div class="flex max-w-[620px] flex-col gap-5 rounded-lg border border-border-weak-base bg-background-base p-5">
+      <span class="flex min-w-0 items-center gap-2 text-14-medium text-text-strong">
+        <span class="shrink-0">
+          <ToolStatusTitle active={state.active} activeText={text.active} doneText={text.done} split={false} />
+        </span>
+        <span class="min-w-0 truncate text-14-regular text-text-base">
+          <AnimatedCountList items={items()} fallback="" />
+        </span>
+      </span>
+      <div class="flex flex-wrap gap-2">
+        <Button size="small" variant="neutral" onClick={() => setState("reads", (value) => value + 1)}>
+          Read file
+        </Button>
+        <Button size="small" variant="neutral" onClick={() => setState("searches", (value) => value + 1)}>
+          Search code
+        </Button>
+        <Button size="small" variant="neutral" onClick={() => setState("lists", (value) => value + 1)}>
+          List directory
+        </Button>
+        <Button size="small" variant="contrast" onClick={() => setState("active", false)}>
+          Finish
+        </Button>
+        <Button size="small" variant="ghost" onClick={reset}>
+          Reset
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export default {
-  title: "UI/AnimatedCountList",
+  title: "OpenCode/Work/Context progress",
   id: "components-animated-count-list",
-  tags: ["autodocs"],
+  component: AnimatedCountList,
   parameters: {
     docs: {
       description: {
-        component: `### Overview
-Animated count list that smoothly transitions items in/out as counts change.
-
-Uses \`grid-template-columns: 0fr → 1fr\` for width animations and the odometer
-digit roller for count transitions. Shown here with \`ToolStatusTitle\` exactly
-as it appears in the context tool group on the session page.`,
+        component:
+          "The production summary for grouped read, search, and list tools. The controls advance deterministic user actions without timers or random state.",
       },
     },
   },
 }
 
-const TEXT = {
-  active: "Exploring",
-  done: "Explored",
-} as const
-
-function rand(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min
+export const Exploring = {
+  render: () => <ContextProgress />,
 }
 
-const btn = (accent?: boolean) =>
-  ({
-    padding: "6px 14px",
-    "border-radius": "6px",
-    border: "1px solid var(--color-divider, #333)",
-    background: accent ? "var(--color-danger-fill, #c33)" : "var(--color-fill-element, #222)",
-    color: "var(--color-text, #eee)",
-    cursor: "pointer",
-    "font-size": "13px",
-  }) as const
-
-const smallBtn = (active?: boolean) =>
-  ({
-    padding: "4px 12px",
-    "border-radius": "6px",
-    border: active ? "1px solid var(--color-accent, #58f)" : "1px solid var(--color-divider, #333)",
-    background: active ? "var(--color-accent, #58f)" : "var(--color-fill-element, #222)",
-    color: "var(--color-text, #eee)",
-    cursor: "pointer",
-    "font-size": "12px",
-  }) as const
-
-export const Playground = {
-  render: () => {
-    const [state, setState] = createStore({
-      reads: 0,
-      searches: 0,
-      lists: 0,
-      active: false,
-      reducedMotion: false,
-    })
-    const reads = () => state.reads
-    const searches = () => state.searches
-    const lists = () => state.lists
-    const active = () => state.active
-    const reducedMotion = () => state.reducedMotion
-
-    let timeouts: ReturnType<typeof setTimeout>[] = []
-
-    const clearAll = () => {
-      for (const t of timeouts) clearTimeout(t)
-      timeouts = []
-    }
-
-    onCleanup(clearAll)
-
-    const startSim = () => {
-      clearAll()
-      setState("reads", 0)
-      setState("searches", 0)
-      setState("lists", 0)
-      setState("active", true)
-      const steps = rand(3, 10)
-      let elapsed = 0
-
-      for (let i = 0; i < steps; i++) {
-        const delay = rand(300, 800)
-        elapsed += delay
-        const t = setTimeout(() => {
-          const pick = rand(0, 2)
-          if (pick === 0) setState("reads", (value) => value + 1)
-          else if (pick === 1) setState("searches", (value) => value + 1)
-          else setState("lists", (value) => value + 1)
-        }, elapsed)
-        timeouts.push(t)
-      }
-
-      const end = setTimeout(() => setState("active", false), elapsed + 100)
-      timeouts.push(end)
-    }
-
-    const stopSim = () => {
-      clearAll()
-      setState("active", false)
-    }
-
-    const reset = () => {
-      stopSim()
-      setState("reads", 0)
-      setState("searches", 0)
-      setState("lists", 0)
-    }
-
-    const items = (): CountItem[] => [
-      { key: "ui.messagePart.context.read", count: reads() },
-      { key: "ui.messagePart.context.search", count: searches() },
-      { key: "ui.messagePart.context.list", count: lists() },
-    ]
-
-    return (
-      <div style={{ display: "grid", gap: "24px", padding: "20px", "max-width": "520px" }}>
-        <Show when={reducedMotion()}>
-          <style>
-            {`[data-reduced-motion="true"] *,
-              [data-reduced-motion="true"] *::before,
-              [data-reduced-motion="true"] *::after {
-                transition-duration: 0ms !important;
-              }`}
-          </style>
-        </Show>
-
-        {/* Matches context-tool-group-trigger layout from message-part.tsx */}
-        <span
-          data-reduced-motion={reducedMotion()}
-          style={{
-            display: "flex",
-            "align-items": "center",
-            gap: "8px",
-            "font-size": "14px",
-            "font-weight": "500",
-            color: "var(--text-strong, #eee)",
-            "min-width": "0",
-          }}
-        >
-          <span style={{ "flex-shrink": "0" }}>
-            <ToolStatusTitle active={active()} activeText={TEXT.active} doneText={TEXT.done} split={false} />
-          </span>
-          <span
-            style={{
-              "min-width": "0",
-              overflow: "hidden",
-              "text-overflow": "ellipsis",
-              "white-space": "nowrap",
-              "font-weight": "400",
-              color: "var(--text-base, #ccc)",
-            }}
-          >
-            <AnimatedCountList items={items()} fallback="" />
-          </span>
-        </span>
-
-        <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
-          <button onClick={() => (active() ? stopSim() : startSim())} style={btn(active())}>
-            {active() ? "Stop" : "Simulate"}
-          </button>
-          <button onClick={reset} style={btn()}>
-            Reset
-          </button>
-          <button onClick={() => setState("reducedMotion", (value) => !value)} style={smallBtn(reducedMotion())}>
-            {reducedMotion() ? "Motion: reduced" : "Motion: normal"}
-          </button>
-        </div>
-
-        <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
-          <button onClick={() => setState("reads", (value) => value + 1)} style={smallBtn()}>
-            + read
-          </button>
-          <button onClick={() => setState("searches", (value) => value + 1)} style={smallBtn()}>
-            + search
-          </button>
-          <button onClick={() => setState("lists", (value) => value + 1)} style={smallBtn()}>
-            + list
-          </button>
-        </div>
-
-        <div
-          style={{
-            "font-size": "11px",
-            color: "var(--color-text-weak, #888)",
-            "font-family": "monospace",
-          }}
-        >
-          motion: {reducedMotion() ? "reduced" : "normal"} · active: {active() ? "true" : "false"} · reads: {reads()} ·
-          searches: {searches()} · lists: {lists()}
-        </div>
-      </div>
-    )
-  },
-}
-
-export const Empty = {
+export const Completed = {
   render: () => (
-    <span style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "14px", "font-weight": "500" }}>
-      <ToolStatusTitle active activeText="Exploring" doneText="Explored" split={false} />
-      <AnimatedCountList
-        items={[
-          { key: "ui.messagePart.context.read", count: 0 },
-          { key: "ui.messagePart.context.search", count: 0 },
-        ]}
-        fallback=""
-      />
-    </span>
-  ),
-}
-
-export const Done = {
-  render: () => (
-    <span style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "14px", "font-weight": "500" }}>
-      <ToolStatusTitle active={false} activeText="Exploring" doneText="Explored" split={false} />
-      <span style={{ "font-weight": "400", color: "var(--text-base, #ccc)" }}>
+    <span class="flex items-center gap-2 text-14-medium text-text-strong">
+      <ToolStatusTitle active={false} activeText={text.active} doneText={text.done} split={false} />
+      <span class="text-14-regular text-text-base">
         <AnimatedCountList
           items={[
             { key: "ui.messagePart.context.read", count: 5 },

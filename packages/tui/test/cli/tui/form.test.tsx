@@ -14,7 +14,13 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { createApi, createEventStream, createFetch } from "../../fixture/tui-client"
 
-async function mountForm(root: string, width = 80, fields?: FormWithLocation["fields"], height = 20) {
+async function mountForm(
+  root: string,
+  width = 80,
+  fields?: FormWithLocation["fields"],
+  height = 20,
+  clipboardText?: string,
+) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
 
@@ -58,7 +64,7 @@ async function mountForm(root: string, width = 80, fields?: FormWithLocation["fi
         }}
         clipboard={{
           async read() {
-            return undefined
+            return clipboardText === undefined ? undefined : { data: clipboardText, mime: "text/plain" }
           },
           write(text) {
             copied.push(text)
@@ -207,6 +213,34 @@ test("pasting on a custom choice opens its editor without submitting", async () 
   ])
   try {
     await prompt.app.mockInput.pasteBracketedText("production\nwest")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "production\nwest")
+
+    await prompt.app.waitForFrame((frame) => frame.includes("production"))
+    expect(prompt.app.captureCharFrame()).not.toContain("Type your own answer")
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("clipboard shortcut opens a custom choice editor without submitting", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(
+    tmp.path,
+    80,
+    [
+      {
+        key: "target",
+        type: "string",
+        options: [{ value: "staging", label: "Staging" }],
+        custom: true,
+      },
+    ],
+    20,
+    "production\nwest",
+  )
+  try {
+    prompt.app.mockInput.pressKey("v", { ctrl: true })
     await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "production\nwest")
 
     await prompt.app.waitForFrame((frame) => frame.includes("production"))

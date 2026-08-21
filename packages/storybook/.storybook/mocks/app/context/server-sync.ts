@@ -1,4 +1,6 @@
-import type { ProviderAuthMethod } from "@opencode-ai/sdk/v2/client"
+import type { IntegrationMethod } from "@opencode-ai/client/promise"
+
+type ProviderAuthMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
 
 const data = {
   provider: {
@@ -20,14 +22,4 @@ export function mockProviderAuth(provider: string, methods: ProviderAuthMethod[]
     }
     delete data.provider_auth[provider]
   }
-}
-
-export function useServerSync() {
-  return () => ({
-    data,
-    set(key: "provider_auth", value: typeof data.provider_auth) {
-      data[key] = value
-    },
-    updateConfig: async () => {},
-  })
 }

@@ -11,6 +11,8 @@ if (mode === "record-start") {
   await writeFile(registration + ".started", "")
   process.exit(1)
 }
+if (mode === "environment")
+  await writeFile(registration + ".environment", process.env.OPENCODE_SERVICE_ENV_TEST ?? "")
 if (mode === "signal") process.kill(process.pid, process.platform === "win32" ? "SIGTERM" : "SIGKILL")
 
 if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" || mode === "coordinated-failed-loser") {
@@ -28,7 +30,7 @@ if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" ||
 
 let requests = 0
 let version = "test"
-if (mode === "old" || mode === "reject-stop") version = "old"
+if (mode === "old") version = "old"
 if (mode === "incompatible") version = "1.9.0"
 if (mode === "compatible" || mode === "delayed-compatible") version = "2.1.0-next.1"
 const id = crypto.randomUUID()
@@ -36,17 +38,6 @@ const server = Bun.serve({
   port: 0,
   async fetch(request) {
     const pathname = new URL(request.url).pathname
-    if (pathname === "/api/service/stop" && mode === "reject-stop") {
-      await appendFile(registration + ".stop-attempts", process.pid + "\n")
-      return Response.json({ accepted: false })
-    }
-    if (pathname === "/api/service/stop" && mode === "graceful") {
-      const body = await request.json()
-      if (typeof body !== "object" || body === null || body.instanceID !== id) return Response.json({ accepted: false })
-      await writeFile(registration + ".stop", JSON.stringify(body))
-      setTimeout(shutdown, 25)
-      return Response.json({ accepted: true })
-    }
     if (pathname !== "/api/health") return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".health-request", "")
@@ -63,7 +54,7 @@ const server = Bun.serve({
     if (mode === "starting" && !(await Bun.file(registration + ".release").exists()))
       return Response.json({ healthy: true, version, pid: process.pid }, { status: 503 })
     if (mode === "failed-owner") return Response.json({ healthy: true, version, pid: process.pid }, { status: 500 })
-    if (mode === "starting" || mode === "graceful" || mode === "reject-stop")
+    if (mode === "starting" || mode === "graceful")
       return Response.json({ healthy: true, version, pid: process.pid })
     return Response.json({ healthy: true, version, pid: process.pid })
   },
@@ -81,9 +72,10 @@ await writeFile(
 )
 await rename(registration + ".tmp", registration)
 
-function shutdown() {
+async function shutdown(signal?: NodeJS.Signals) {
+  if (signal !== undefined) await writeFile(registration + ".signal", signal)
   server.stop(true)
   process.exit()
 }
-process.on("SIGTERM", shutdown)
-process.on("SIGINT", shutdown)
+process.on("SIGTERM", () => void shutdown("SIGTERM"))
+process.on("SIGINT", () => void shutdown("SIGINT"))

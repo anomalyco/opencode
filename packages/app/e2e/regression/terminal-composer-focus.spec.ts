@@ -1,4 +1,4 @@
-import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
+import { base64Encode, checksum } from "@opencode-ai/util/encode"
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
@@ -77,7 +77,7 @@ test("routes typing to the composer unless the open terminal is focused", async 
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, "Terminal composer focus")
 
-  const composer = page.locator('[data-component="prompt-input"]')
+  const composer = page.locator('[data-component="composer-editor"]')
   const terminal = page.locator('[data-component="terminal"]')
   await page.keyboard.press("Control+Backquote")
   await expect(terminal).toBeVisible()
@@ -116,7 +116,7 @@ test("keeps composer focus when a cached terminal finishes mounting", async ({ p
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`, { waitUntil: "commit" })
   await expectSessionTitle(page, "Terminal composer focus")
 
-  const composer = page.locator('[data-component="prompt-input"]')
+  const composer = page.locator('[data-component="composer-editor"]')
   const terminal = page.locator('[data-component="terminal"]')
   await expect(terminal).toBeVisible()
   expect(created.count).toBe(0)
@@ -142,7 +142,7 @@ test("keeps newer composer focus while an explicit terminal open finishes", asyn
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, "Terminal composer focus")
 
-  const composer = page.locator('[data-component="prompt-input"]')
+  const composer = page.locator('[data-component="composer-editor"]')
   const terminal = page.locator('[data-component="terminal"]')
   await page.keyboard.press("Control+Backquote")
   await expect(terminal).toBeVisible()
@@ -187,7 +187,7 @@ test("focuses a terminal created from the new-terminal button", async ({ page })
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, "Terminal composer focus")
 
-  const composer = page.locator('[data-component="prompt-input"]')
+  const composer = page.locator('[data-component="composer-editor"]')
   const terminal = page.locator('[data-component="terminal"]')
   await page.keyboard.press("Control+Backquote")
   await expect(terminal.locator("textarea")).toHaveCount(1)

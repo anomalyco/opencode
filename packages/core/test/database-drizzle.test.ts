@@ -6,7 +6,7 @@ import { expect, test } from "bun:test"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { eq, sql } from "drizzle-orm"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { Effect } from "effect"
+import { Effect, Tracer } from "effect"
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 import { isSqlError } from "effect/unstable/sql/SqlError"
 import { EffectDrizzleSqlite } from "@opencode-ai/core/database/drizzle"
@@ -47,6 +47,31 @@ test("selects rows through Effect-yieldable query builders", async () => {
       expect(yield* db.select({ id: users.id }).from(users).where(eq(users.name, "Ada")).get()).toEqual({ id: 1 })
     }),
   )
+})
+
+test("suppresses statement spans", async () => {
+  const spans: Tracer.NativeSpan[] = []
+  const tracer = Tracer.make({
+    span(options) {
+      const span = new Tracer.NativeSpan(options)
+      spans.push(span)
+      return span
+    },
+  })
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+      yield* db.transaction((tx) => tx.insert(users).values({ name: "Grace" }))
+      yield* db.select().from(users)
+    }).pipe(
+      Effect.provideService(Tracer.Tracer, tracer),
+      Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })),
+      Effect.scoped,
+    ),
+  )
+
+  expect(spans.map((span) => span.name)).not.toContain("sql.execute")
 })
 
 test("commits successful transactions", async () => {

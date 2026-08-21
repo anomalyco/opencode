@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
@@ -26,7 +26,7 @@ test("navigates to a subagent child session missing from the session list", asyn
   await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
 })
 
-test("keeps the parent visible while child lineage resolves", async ({ page }) => {
+test("keeps the parent visible while the child session resolves", async ({ page }) => {
   await setup(page)
   const requested = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
@@ -167,14 +167,14 @@ function parentMessages(): SessionMessageInfo[] {
       content: [
         {
           type: "tool",
-          id: "call_task_0001",
-          name: "task",
+          id: "call_subagent_0001",
+          name: "subagent",
           time: { created: 1700000001000, ran: 1700000001000, completed: 1700000002000 },
           state: {
             status: "completed",
-            input: { description: taskDescription, subagent_type: "explore" },
+            input: { description: taskDescription, agent: "explore", prompt: "Inspect the delegated work." },
             content: [{ type: "text", text: "Subagent finished" }],
-            metadata: { sessionId: childID },
+            metadata: { sessionID: childID },
           },
         },
       ],

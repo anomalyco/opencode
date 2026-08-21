@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { expect, test } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
@@ -60,7 +60,7 @@ test("expands a folder whose path has a trailing Windows separator", async ({ pa
       if (path) return []
       return [
         {
-          name: "frontend",
+          name: "",
           path: "frontend\\",
           absolute: `${directory}/frontend`,
           type: "directory" as const,
@@ -116,6 +116,7 @@ test("expands a folder whose path has a trailing Windows separator", async ({ pa
 
   const frontendRow = panel.locator('[data-slot="file-tree-v2-row"][data-path="frontend"]')
   await expect(frontendRow).toBeVisible()
+  await expect(frontendRow.getByText("frontend", { exact: true })).toBeVisible()
   await expect(frontendRow).toHaveAttribute("aria-expanded", "false")
   await frontendRow.click()
   await expect(frontendRow).toHaveAttribute("aria-expanded", "true")

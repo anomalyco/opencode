@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 
+import { NodeFileSystem } from "@effect/platform-node"
 import { Service } from "@opencode-ai/client/effect/service"
 import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -63,28 +64,22 @@ try {
   })
   if (unauthorizedOpenApi.status !== 401)
     throw new Error("Compiled service exposed application routes without authentication")
-  const unauthorizedStop = await fetch(new URL("/api/service/stop", info.url), {
+  const stopRoute = await fetch(new URL("/api/service/stop", info.url), {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...headers, "content-type": "application/json" },
     body: JSON.stringify({ instanceID: info.id }),
     signal: AbortSignal.timeout(5_000),
   })
-  if (unauthorizedStop.status !== 401) throw new Error("Compiled service accepted unauthenticated stop")
+  if (stopRoute.status !== 404) throw new Error("Compiled service exposed the removed HTTP stop route")
 
   const winner = processes.find((process) => process.pid === info.pid)
   const loser = processes.find((process) => process.pid !== info.pid)
   if (!winner || !loser) throw new Error("Compiled contenders did not elect one registered owner")
   if (!(await exitsWithin(loser, 10_000))) throw new Error("Losing compiled contender did not exit")
 
-  const stopped = await Schema.decodeUnknownPromise(ServiceStatus.StopResponse)(
-    await fetch(new URL("/api/service/stop", info.url), {
-      method: "POST",
-      headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ instanceID: info.id }),
-      signal: AbortSignal.timeout(5_000),
-    }).then((response) => response.json()),
+  await Effect.runPromise(
+    Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)),
   )
-  if (!stopped.accepted) throw new Error("Compiled service rejected exact-instance stop")
   if (!(await exitsWithin(winner, 10_000))) throw new Error("Compiled service did not stop")
   for (let attempt = 0; attempt < 200 && (await Bun.file(registration).exists()); attempt++) await Bun.sleep(25)
   if (await Bun.file(registration).exists()) throw new Error("Compiled service registration was not removed")

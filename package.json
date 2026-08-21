@@ -15,6 +15,7 @@
     "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",
     "dev:www": "bun run --cwd packages/www dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
+    "bench:devex": "bun run --cwd packages/app test:bench:devex",
     "lint": "oxlint",
     "lint:effect-patterns": "ast-grep scan -c script/ast-grep/sgconfig.yml packages/util/src packages/core/src packages/server/src packages/protocol/src packages/cli/src",
     "test:lint-rules": "ast-grep test -c script/ast-grep/sgconfig.yml",
@@ -26,7 +27,6 @@
     "prepare": "husky",
     "random": "echo 'Random script'",
     "sso": "aws sso login --sso-session=opencode --no-browser",
-    "translate:app": "bun run script/translate-app.ts",
     "test": "echo 'do not run tests from root' && exit 1"
   },
   "workspaces": {
@@ -37,19 +37,19 @@
       "packages/slack"
     ],
     "catalog": {
-      "@effect/opentelemetry": "4.0.0-beta.107",
-      "@effect/platform-node": "4.0.0-beta.107",
-      "@effect/platform-node-shared": "4.0.0-beta.107",
-      "@effect/sql-sqlite-bun": "4.0.0-beta.107",
+      "@effect/opentelemetry": "4.0.0-rc.110",
+      "@effect/platform-node": "4.0.0-rc.110",
+      "@effect/platform-node-shared": "4.0.0-rc.110",
+      "@effect/sql-sqlite-bun": "4.0.0-rc.110",
       "@npmcli/arborist": "9.4.0",
       "@types/bun": "1.3.13",
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
       "@hono/standard-validator": "0.2.0",
       "@hono/zod-validator": "0.4.2",
-      "@opentui/core": "0.5.3",
-      "@opentui/keymap": "0.5.3",
-      "@opentui/solid": "0.5.3",
+      "@opentui/core": "0.5.6",
+      "@opentui/keymap": "0.5.6",
+      "@opentui/solid": "0.5.6",
       "@tanstack/solid-virtual": "3.13.32",
       "@shikijs/stream": "4.2.0",
       "@standard-schema/spec": "1.1.0",
@@ -71,7 +71,7 @@
       "dompurify": "3.3.1",
       "drizzle-kit": "1.0.0-rc.2",
       "drizzle-orm": "1.0.0-rc.2",
-      "effect": "4.0.0-beta.107",
+      "effect": "4.0.0-rc.110",
       "ai": "6.0.168",
       "cross-spawn": "7.0.6",
       "hono": "4.10.7",
@@ -121,8 +121,7 @@
     "prettier": "3.6.2",
     "semver": "^7.6.0",
     "sst": "catalog:",
-    "turbo": "2.10.2",
-    "vitest": "4.1.10"
+    "turbo": "2.10.2"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",

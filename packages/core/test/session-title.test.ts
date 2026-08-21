@@ -1,7 +1,8 @@
-import { expect } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode-ai/ai"
+import { beforeEach, expect } from "bun:test"
+import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Agent } from "@opencode-ai/core/agent"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -14,20 +15,30 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTitle } from "@opencode-ai/core/session/title"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Session } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { App } from "@opencode-ai/core/app"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
+let selectedSmall: Model.Info | undefined
+let selections: Array<Session.Info["model"]> = []
 const model = LanguageModel.make({
   id: "title-model",
   provider: "test",
-  route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
+  route: OpenAIChat.route,
+})
+const smallModel = LanguageModel.make({
+  id: "title-small",
+  provider: "test",
+  route: OpenAIChat.route,
 })
 const cost = [
   {
@@ -67,25 +78,52 @@ const client = Layer.mock(LLMClient.Service)({
   generate: () => Effect.die("unused"),
 })
 const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: () =>
-    Effect.succeed(
-      SessionRunnerModel.resolved(model, {
+  resolve: (session) => {
+    selections.push(session.model)
+    return Effect.succeed(
+      SessionRunnerModel.resolved(session.model?.id === "title-small" ? smallModel : model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         cost,
+        limit: { context: 200_000, output: 32_000 },
+        variant: session.model?.variant,
       }),
-    ),
+    )
+  },
+})
+const catalog = Layer.mock(Catalog.Service, {
+  provider: {
+    get: () => Effect.die("unused"),
+    all: () => Effect.die("unused"),
+    available: () => Effect.die("unused"),
+  },
+  model: {
+    get: () => Effect.die("unused"),
+    all: () => Effect.die("unused"),
+    available: () => Effect.die("unused"),
+    default: () => Effect.die("unused"),
+    small: () => Effect.succeed(selectedSmall),
+  },
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Agent.node, SessionTitle.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Agent.node,
+      PluginHooks.node,
+      SessionTitle.node,
+    ]),
     [
       [llmClient, client],
+      [Catalog.node, catalog],
       [SessionRunnerModel.node, models],
     ],
   ),
 )
 
-const insertSession = (id: Session.ID, title?: string, created?: number) =>
+const insertSession = (id: Session.ID, title?: string, created?: number, model?: Model.Ref) =>
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     yield* db
@@ -102,6 +140,7 @@ const insertSession = (id: Session.ID, title?: string, created?: number) =>
         slug: id,
         directory: "/project",
         title,
+        model,
         time_created: created,
         version: "test",
       })
@@ -124,6 +163,28 @@ const prompt = (sessionID: Session.ID, text: string) =>
       inboxID: messageID,
     })
   })
+
+const small = Model.Info.make({
+  ...Model.Info.default(Provider.ID.make("test"), Model.ID.make("title-small")),
+  family: Model.Family.make("gpt-luna"),
+  capabilities: { tools: false, input: ["text"], output: ["text"] },
+  variants: [
+    { id: Model.VariantID.make("low") },
+    { id: Model.VariantID.make("none") },
+    { id: Model.VariantID.make("high") },
+  ],
+})
+const lowSmall = Model.Info.make({
+  ...small,
+  variants: [{ id: Model.VariantID.make("low") }, { id: Model.VariantID.make("high") }],
+})
+
+beforeEach(() => {
+  requests = []
+  selectedSmall = undefined
+  selections = []
+  titleStream = successfulTitle
+})
 
 it.effect("generates a title from the sole user message and renames the session", () =>
   Effect.gen(function* () {
@@ -154,11 +215,88 @@ it.effect("generates a title from the sole user message and renames the session"
       "x-opencode-session": sessionID,
       "x-opencode-client": "opencode",
     })
+    expect(requests[0]?.promptCacheKey).toBe(sessionID)
+    expect(requests[0]?.tools).toEqual([])
+    expect(requests[0]?.system.map((part) => part.text)).toEqual(["You are a title generator."])
     expect(JSON.stringify(requests[0]?.messages)).toContain("Help me debug the failing build")
     const renamed = yield* store.get(sessionID)
     expect(renamed?.title).toBe("Generated Title")
     expect(renamed?.tokens).toEqual({ input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } })
     expect(renamed?.cost).toBeCloseTo(0.0000233)
+  }),
+)
+
+it.effect("uses a small model from the primary provider", () =>
+  Effect.gen(function* () {
+    requests = []
+    titleStream = successfulTitle
+    selectedSmall = small
+    const agentService = yield* Agent.Service
+    yield* agentService.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.mode = "primary"
+        agent.hidden = true
+        agent.system = "You are a title generator."
+      })
+    })
+    const sessionID = Session.ID.make("ses_title_small_model")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Use a small model for this title")
+
+    const title = yield* SessionTitle.Service
+    yield* title.generateForFirstPrompt(sessionID)
+
+    expect(requests.map((request) => String(request.model.id))).toEqual(["title-small"])
+    expect(selections[1]?.variant).toBe(Model.VariantID.make("none"))
+    const store = yield* SessionStore.Service
+    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("falls back to the primary model when the small model fails", () =>
+  Effect.gen(function* () {
+    requests = []
+    titleStream = () =>
+      requests.length === 1
+        ? Stream.make(LLMEvent.providerError({ message: "Small model unavailable" }))
+        : successfulTitle()
+    selectedSmall = lowSmall
+    const agentService = yield* Agent.Service
+    yield* agentService.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.mode = "primary"
+        agent.hidden = true
+        agent.system = "You are a title generator."
+      })
+    })
+    const sessionID = Session.ID.make("ses_title_small_fallback")
+    yield* insertSession(
+      sessionID,
+      undefined,
+      undefined,
+      Model.Ref.make({
+        providerID: Provider.ID.make("test"),
+        id: Model.ID.make("title-model"),
+        variant: Model.VariantID.make("high"),
+      }),
+    )
+    yield* prompt(sessionID, "Fall back when title generation fails")
+
+    const attempted: Model.Ref[] = []
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "model.request", (event) =>
+      Effect.sync(() => {
+        attempted.push(event.model)
+      }),
+    )
+
+    const title = yield* SessionTitle.Service
+    yield* title.generateForFirstPrompt(sessionID)
+
+    expect(requests.map((request) => String(request.model.id))).toEqual(["title-small", "title-model"])
+    expect(attempted.map((model) => String(model.variant))).toEqual(["low", "high"])
+    const store = yield* SessionStore.Service
+    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
   }),
 )
 
@@ -319,6 +457,38 @@ it.effect("retries after a failed title request", () =>
     const store = yield* SessionStore.Service
     expect(requests).toHaveLength(2)
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("keeps session context hooks away from title requests", () =>
+  Effect.gen(function* () {
+    requests = []
+    titleStream = successfulTitle
+    const agentService = yield* Agent.Service
+    yield* agentService.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.mode = "primary"
+        agent.hidden = true
+        agent.system = "You are a title generator."
+      })
+    })
+    // Context hooks shape the agent conversation; title generation is not part of
+    // it, so it opts out and the transcript passes through unchanged.
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        event.system.push(SystemPart.make("Keep titles in sentence case."))
+      }),
+    )
+    const sessionID = Session.ID.make("ses_title_context_hook")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Hook this title request")
+
+    const title = yield* SessionTitle.Service
+    yield* title.generateForFirstPrompt(sessionID)
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.system.map((part) => part.text)).toEqual(["You are a title generator."])
   }),
 )
 

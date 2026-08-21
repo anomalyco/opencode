@@ -13,7 +13,9 @@
     "shell-prod": "sst shell --target Teams --stage production"
   },
   "dependencies": {
+    "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/session-ui": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@opencode-ai/util": "workspace:*",
@@ -25,6 +27,7 @@
     "@hono/standard-validator": "catalog:",
     "hono": "catalog:",
     "hono-openapi": "catalog:",
+    "effect": "catalog:",
     "js-base64": "3.7.7",
     "luxon": "catalog:",
     "nitro": "3.0.1-alpha.1",

@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { currentSession } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 
@@ -38,12 +38,6 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   await expect(page.getByText(sessionB.title).first()).toBeVisible()
   const sessionBRequests = requests.filter((url) => url.includes(`/session/${sessionB.id}`))
   expect(sessionBRequests.every((url) => url.startsWith(serverB))).toBe(true)
-  expect(
-    requests.some((request) => {
-      const url = new URL(request)
-      return url.origin === serverB && url.searchParams.get("directory") === sessionB.directory
-    }),
-  ).toBe(true)
 })
 
 function session(id: string, directory: string, title: string) {

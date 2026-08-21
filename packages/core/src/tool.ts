@@ -50,7 +50,7 @@ const layer = Layer.effect(
     const image = yield* Image.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
-    const normalizeImages = Effect.fn("Tool.normalizeImages")(function* (content: ReadonlyArray<Tool.Content>) {
+    const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
       const normalized = yield* Effect.forEach(content, (item): Effect.Effect<NormalizedItem> => {
         if (item.type !== "file" || !item.mime.startsWith("image/")) return Effect.succeed(item)
         const base64 = /^data:[^,]*;base64,(.*)$/s.exec(item.uri)?.[1]

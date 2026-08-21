@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { createTwoFilesPatch } from "diff"
 import {
   defineVisualRegions,
   reportVisualStability,
@@ -58,14 +59,14 @@ test("expands and collapses a long completed shell without overlap", async ({ pa
   await startVisualProbe(page, regions)
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
-  await page.waitForTimeout(500)
+  await waitForVisualSettle(page, [regions.shell.selector, regions.following.selector])
   const expanded = await stopVisualProbe<keyof typeof regions>(page)
   await reportVisualStability(testInfo, "shell-expand", expanded, plan)
 
   await startVisualProbe(page, regions)
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
-  await page.waitForTimeout(500)
+  await waitForVisualSettle(page, [regions.shell.selector, regions.following.selector])
   const collapsed = await stopVisualProbe<keyof typeof regions>(page)
   await reportVisualStability(testInfo, "shell-collapse", collapsed, plan)
 })
@@ -83,7 +84,7 @@ test("expands and collapses a completed context group without overlap", async ({
     messages: [
       userMessage(),
       assistantMessage([
-        toolPart(ids[0]!, "read", "completed", { filePath: "src/a.ts" }),
+        toolPart(ids[0]!, "read", "completed", { path: "src/a.ts" }),
         toolPart(ids[1]!, "glob", "completed", { path: ".", pattern: "**/*.ts" }),
         toolPart(ids[2]!, "grep", "completed", { path: ".", pattern: "stable" }),
         toolPart(ids[3]!, "list", "completed", { path: "src" }),
@@ -110,7 +111,7 @@ test("expands and collapses a completed context group without overlap", async ({
     await startVisualProbe(page, regions)
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", String(expanded))
-    await page.waitForTimeout(500)
+    await waitForVisualSettle(page, [regions.context.selector, regions.following.selector])
     const trace = await stopVisualProbe<keyof typeof regions>(page)
     await reportVisualStability(
       testInfo,
@@ -142,16 +143,23 @@ test("expands and collapses an edit diff without moving twice", async ({ page },
           editID,
           "edit",
           "completed",
-          { filePath: "src/edit.ts" },
+          { path: "src/edit.ts", oldString: "export const value = 1", newString: "export const value = 2" },
           {
             metadata: {
-              filediff: {
-                file: "src/edit.ts",
-                additions: 40,
-                deletions: 40,
-                before: source(40, false),
-                after: source(40, true),
-              },
+              files: [
+                {
+                  file: "src/edit.ts",
+                  patch: createTwoFilesPatch(
+                    "a/src/edit.ts",
+                    "b/src/edit.ts",
+                    source(40, false),
+                    source(40, true),
+                  ),
+                  additions: 40,
+                  deletions: 40,
+                  status: "modified",
+                },
+              ],
             },
           },
         ),
@@ -182,7 +190,7 @@ test("expands and collapses an edit diff without moving twice", async ({ page },
   await startVisualProbe(page, regions)
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
-  await page.waitForTimeout(900)
+  await waitForVisualSettle(page, [regions.edit.selector, regions.following.selector])
   const trace = await stopVisualProbe<keyof typeof regions>(page)
   await reportVisualStability(
     testInfo,

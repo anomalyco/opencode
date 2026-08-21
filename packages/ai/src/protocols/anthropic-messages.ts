@@ -16,7 +16,6 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderOptions,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
@@ -32,6 +31,19 @@ import { ToolStream } from "./utils/tool-stream.js"
 const ADAPTER = "anthropic-messages"
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
+export const DEFAULT_MAX_TOKENS = 32_000
+
+const SSE_EVENTS = new Set([
+  "message",
+  "message_start",
+  "message_delta",
+  "message_stop",
+  "content_block_start",
+  "content_block_delta",
+  "content_block_stop",
+  "error",
+])
+export const framing = Framing.sseEvents(SSE_EVENTS)
 
 export type ThinkingInput =
   | {
@@ -52,9 +64,7 @@ export interface OptionsInput {
   readonly effort?: string
 }
 
-export type ProviderOptionsInput = ProviderOptions & {
-  readonly anthropic?: OptionsInput
-}
+export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
 // Request Body Schema
@@ -236,7 +246,7 @@ export type AnthropicMessagesBody = Schema.Schema.Type<typeof AnthropicMessagesB
 
 const AnthropicUsage = Schema.StructWithRest(
   Schema.Struct({
-    input_tokens: Schema.optional(Schema.Number),
+    input_tokens: optionalNull(Schema.Number),
     output_tokens: Schema.optional(Schema.Number),
     cache_creation_input_tokens: optionalNull(Schema.Number),
     cache_read_input_tokens: optionalNull(Schema.Number),
@@ -364,16 +374,18 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ type: "tool" as const, name }),
   })
 
+const scrubToolCallID = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
+
 const lowerToolCall = (part: ToolCallPart): AnthropicToolUseBlock => ({
   type: "tool_use",
-  id: part.id,
+  id: scrubToolCallID(part.id),
   name: part.name,
   input: part.input,
 })
 
 const lowerServerToolCall = (part: ToolCallPart): AnthropicServerToolUseBlock => ({
   type: "server_tool_use",
-  id: part.id,
+  id: scrubToolCallID(part.id),
   name: part.name,
   input: part.input,
 })
@@ -395,7 +407,7 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
   // Prefer the provider-owned replay payload; fall back to the result value for
   // histories constructed directly from provider events.
   const payload = part.providerMetadata?.anthropic?.["result"] ?? part.result.value
-  return { type: wireType, tool_use_id: part.id, content: payload } satisfies AnthropicServerToolResultBlock
+  return { type: wireType, tool_use_id: scrubToolCallID(part.id), content: payload } satisfies AnthropicServerToolResultBlock
 })
 
 const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: MediaPart) {
@@ -437,10 +449,19 @@ const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
-// Mid-conversation system messages are a native Claude API feature only for
-// Opus 4.8. Other Anthropic models intentionally use the same visible wrapped-
-// user fallback as non-Anthropic routes rather than sending a role they reject.
-const supportsNativeSystemUpdates = (request: LLMRequest) => String(request.model.id) === "claude-opus-4-8"
+// Mid-conversation system messages became available with Opus 4.8 and version
+// 5 of the other supported Claude families. Treat later family versions as
+// compatible without assuming that every Anthropic Messages model is Claude.
+const supportsNativeSystemUpdates = (request: LLMRequest) => {
+  const match = /(?:^|[./])claude-(fable|haiku|mythos|opus|sonnet)-(\d+)(?:[.-](\d+))?/.exec(
+    String(request.model.id).toLowerCase(),
+  )
+  if (!match) return false
+  const major = Number(match[2])
+  if (match[1] !== "opus") return major >= 5
+  if (major !== 4) return major >= 5
+  return match[3] !== undefined && match[3].length <= 2 && Number(match[3]) >= 8
+}
 
 const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
   const last = message.content.at(-1)
@@ -568,7 +589,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "tool", ["tool-result"])
       content.push({
         type: "tool_result",
-        tool_use_id: part.id,
+        tool_use_id: scrubToolCallID(part.id),
         content: yield* lowerToolResultContent(part),
         is_error: part.result.type === "error" ? true : undefined,
         cache_control: cacheControl(breakpoints, part.cache),
@@ -584,7 +605,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 })
 
 const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (request: LLMRequest) {
-  const input = request.providerOptions?.anthropic
+  const input = request.providerOptions
   return {
     thinking: yield* resolveThinking(input?.thinking),
     effort: typeof input?.effort === "string" ? input.effort : undefined,
@@ -618,7 +639,6 @@ const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function*
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
-  const outputLimit = request.model.defaults?.limits?.output ?? request.model.route.defaults.limits?.output ?? 4096
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
@@ -657,7 +677,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tools,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: generation?.maxTokens ?? outputLimit,
+    max_tokens: generation?.maxTokens ?? DEFAULT_MAX_TOKENS,
     temperature: generation?.temperature,
     top_p: generation?.topP,
     top_k: generation?.topK,
@@ -686,7 +706,7 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // expose that subset through `output_tokens_details.thinking_tokens`.
 const mapUsage = (usage: AnthropicUsage | undefined): Usage | undefined => {
   if (!usage) return undefined
-  const nonCached = usage.input_tokens
+  const nonCached = usage.input_tokens ?? undefined
   const cacheRead = usage.cache_read_input_tokens ?? undefined
   const cacheWrite = usage.cache_creation_input_tokens ?? undefined
   const inputTokens = ProviderShared.sumTokens(nonCached, cacheRead, cacheWrite)
@@ -896,6 +916,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
 
   if (delta?.type === "input_json_delta" && event.index !== undefined) {
     if (!delta.partial_json) return [state, NO_EVENTS] satisfies StepResult
+    if (!state.tools[event.index]) return [state, NO_EVENTS] satisfies StepResult
     const result = ToolStream.appendExisting(
       ADAPTER,
       state.tools,
@@ -957,9 +978,12 @@ const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult =
   ]
 }
 
-const onMessageStop = (state: ParserState): StepResult => {
+const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (state: ParserState) {
+  const result = yield* ToolStream.finishAll(ADAPTER, state.tools)
   const events: LLMEvent[] = []
-  const lifecycle = Lifecycle.finish(state.lifecycle, events, {
+  const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+  events.push(...result.events)
+  const finished = Lifecycle.finish(lifecycle, events, {
     reason: state.pendingFinish?.reason ?? {
       normalized: "unknown",
       raw: undefined,
@@ -967,8 +991,8 @@ const onMessageStop = (state: ParserState): StepResult => {
     usage: state.usage,
     providerMetadata: state.pendingFinish?.providerMetadata,
   })
-  return [{ ...state, lifecycle }, events]
-}
+  return [{ ...state, lifecycle: finished, tools: result.tools }, events] satisfies StepResult
+})
 
 // Prefix `error.type` so overloads, rate limits, and quota errors are visible
 // even when the provider message is generic or empty.
@@ -992,7 +1016,7 @@ const step = (state: ParserState, event: AnthropicEvent) => {
   if (event.type === "content_block_delta") return onContentBlockDelta(state, event)
   if (event.type === "content_block_stop") return onContentBlockStop(state, event)
   if (event.type === "message_delta") return Effect.succeed(onMessageDelta(state, event))
-  if (event.type === "message_stop") return Effect.succeed(onMessageStop(state))
+  if (event.type === "message_stop") return onMessageStop(state)
   if (event.type === "error") return onError(event)
   return Effect.succeed<StepResult>([state, NO_EVENTS])
 }
@@ -1002,8 +1026,8 @@ const step = (state: ParserState, event: AnthropicEvent) => {
 // =============================================================================
 /**
  * The Anthropic Messages protocol — request body construction, body schema,
- * and the streaming-event state machine. Used by native Anthropic Cloud and
- * (once registered) Vertex Anthropic / Bedrock-hosted Anthropic passthrough.
+ * and the streaming-event state machine shared by Anthropic-compatible and
+ * Vertex-hosted Messages routes.
  */
 export const protocol = Protocol.make({
   id: ADAPTER,
@@ -1029,7 +1053,7 @@ export const route = Route.make({
   protocol,
   endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
   auth: Auth.none,
-  framing: Framing.sse,
+  framing,
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 

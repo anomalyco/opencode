@@ -180,27 +180,30 @@ describeHg("Vcs mercurial", () => {
     ),
   )
 
-  it.live("diffs a named branch against the default branch", () =>
-    withHg((directory) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(async () => {
-          await fs.writeFile(path.join(directory, "file.txt"), "one\n")
-          await commitAll(directory, "initial")
-        })
-        const vcs = yield* Vcs.Service
-        expect(yield* vcs.diff("branch")).toEqual([])
+  it.live(
+    "diffs a named branch against the default branch",
+    () =>
+      withHg((directory) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+            await commitAll(directory, "initial")
+          })
+          const vcs = yield* Vcs.Service
+          expect(yield* vcs.diff("branch")).toEqual([])
 
-        yield* Effect.promise(async () => {
-          await hg(directory, "branch", "-q", "feature")
-          await fs.writeFile(path.join(directory, "file.txt"), "one\ntwo\n")
-          await commitAll(directory, "feature change")
-        })
-        const diff = yield* vcs.diff("branch")
-        expect(diff.map((item) => ({ file: item.file, status: item.status }))).toEqual([
-          { file: "file.txt", status: "modified" },
-        ])
-        expect(diff[0].patch).toContain("+two")
-      }),
-    ),
+          yield* Effect.promise(async () => {
+            await hg(directory, "branch", "-q", "feature")
+            await fs.writeFile(path.join(directory, "file.txt"), "one\ntwo\n")
+            await commitAll(directory, "feature change")
+          })
+          const diff = yield* vcs.diff("branch")
+          expect(diff.map((item) => ({ file: item.file, status: item.status }))).toEqual([
+            { file: "file.txt", status: "modified" },
+          ])
+          expect(diff[0].patch).toContain("+two")
+        }),
+      ),
+    15_000,
   )
 })

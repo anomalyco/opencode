@@ -203,7 +203,12 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
     page.locator('[data-timeline-part-id="call_shell_backgrounded"] [data-component="text-shimmer"]'),
   ).toHaveAttribute("data-active", "true")
 
-  await timeline.send(event("session.status", { sessionID: backgroundID, status: { type: "idle" } }))
+  await timeline.transport.send({
+    id: "evt_background_succeeded",
+    created: Date.now(),
+    type: "session.execution.succeeded",
+    data: { sessionID: backgroundID },
+  } as never)
   await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
   await expect(backgroundCard).toContainText("Background task (background)")
 })

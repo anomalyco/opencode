@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import type { Project } from "@/types"
+import type { Project } from "@/runtime/server/types"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { createRoot } from "solid-js"
-import { createServerSessionEntries } from "@/components/command-palette"
-import type { LocalProject } from "@/context/layout"
-import { ServerConnection } from "@/context/servers"
-import { getProjectAvatarSource } from "@/pages/layout/helpers"
+import { createServerSessionEntries } from "@/shell/commands/palette"
+import type { LocalProject } from "@/shell/state/layout"
+import { ServerConnection } from "@/runtime/server/registry"
+import { getProjectAvatarSource } from "@/shell/layout/helpers"
 
 const stored: Project = {
   id: "project-1",

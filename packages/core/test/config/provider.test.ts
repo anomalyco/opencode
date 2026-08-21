@@ -77,7 +77,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("defaults custom models to agent capabilities", () =>
+  it.effect("defaults custom model metadata", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.make("custom")
@@ -100,6 +100,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.capabilities).toEqual({ tools: true, input: ["text", "image"], output: ["text"] })
+      expect(model.limit).toEqual({ context: 200_000, output: 32_000 })
     }),
   )
 

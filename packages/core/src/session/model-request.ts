@@ -12,15 +12,17 @@ import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
-import { SessionContext } from "./context.js"
 import { SessionModelHeaders } from "./model-headers.js"
+import { SessionModelHook } from "./model-hook.js"
 import { SessionModelHttp } from "./model-http.js"
 import { SessionModelTransport } from "./model-transport.js"
 import { SessionPromptCacheKey } from "./prompt-cache-key.js"
-import { PromptCacheDiagnostics } from "./prompt-cache-diagnostics.js"
-import { MAX_STEPS_PROMPT } from "./runner/max-steps.js"
+import { SessionRunnerModel } from "./runner/model.js"
+import { SessionSchema } from "./schema.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
+import type { SessionMessage } from "./message.js"
+import type { Agent } from "../agent.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
@@ -47,20 +49,56 @@ const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
 interface Prepared {
   readonly request: LLMRequest
   readonly options: StreamOptions
-  /** False when Session HTTP hooks require the request to remain on HTTP. */
-  readonly webSocketEligible: boolean
   /**
-   * One request-scoped execution operation. Unknown, hook-removed, and
-   * step-limit-violating calls fail individually through the same seam.
+   * One request-scoped execution operation. Unknown and hook-removed calls
+   * fail individually through the same seam.
    */
   readonly executeTool: (input: Parameters<Tool.Snapshot["execute"]>[0]) => Effect.Effect<Tool.Result, ExecuteError>
-  /** True when this request is the final Step; violating calls are rejected and no continuation follows. */
-  readonly stepLimitReached: boolean
 }
 
 interface PrepareInput {
-  readonly context: SessionContext.Loaded
-  readonly step: number
+  readonly scope: {
+    readonly session: SessionSchema.Info
+    readonly agentID: Agent.ID
+    readonly model: SessionRunnerModel.Resolved
+    /** Omitted for requests that carry no tools (title, compaction). */
+    readonly tools?: Tool.Snapshot
+  }
+  readonly transcript: {
+    readonly system: Array<SystemPart>
+    readonly messages: Array<Message>
+  }
+  readonly toolChoice?: LLM.RequestInput["toolChoice"]
+  /**
+   * Session context hooks shape the agent conversation. Requests that are not
+   * part of the conversation (title, compaction) opt out: their transcripts
+   * pass through unchanged.
+   */
+  readonly contextHooks?: false
+  /** Stateful Session WebSocket channels require an explicit durable-runner opt-in. */
+  readonly webSocket?: "session"
+}
+
+export const baseTranscript = (input: {
+  readonly agent: Agent.Info
+  readonly model: SessionRunnerModel.Resolved
+  readonly tools: Tool.Snapshot
+  readonly initial: string
+  readonly messages: ReadonlyArray<SessionMessage.Info>
+}) => {
+  const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
+  return {
+    providerMetadataKey,
+    system: [
+      input.agent.system
+        ? input.agent.system
+        : SessionSystemPrompt.make(input.tools.definitions.map((tool) => tool.name)),
+      input.initial,
+    ]
+      .filter((part) => part.length > 0)
+      .map(SystemPart.make),
+    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+  }
 }
 
 const mimeToModality = (mime: string) => {
@@ -174,30 +212,14 @@ export const layer = Layer.effect(
       Config.withDefault(false),
       Effect.orDie,
     )
-    const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
-      Config.withDefault(false),
-      Effect.orDie,
-    )
-    const promptCacheSnapshots = diagnostics ? new Map<string, PromptCacheDiagnostics.Snapshot>() : undefined
-
     const prepare = Effect.fn("SessionModelRequest.prepare")(function* (input: PrepareInput) {
-      const session = input.context.session
-      const agent = input.context.agent
-      const resolved = input.context.model
+      const session = input.scope.session
+      const resolved = input.scope.model
       const model = resolved.model
-      const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
-      const stepLimitReached = agent.info.steps !== undefined && input.step >= agent.info.steps
-      // The final Step keeps definitions available to protocols with native "none",
-      // preserving their prompt cache prefix. Calls are still rejected at execution.
-      const tools = input.context.tools
-      const system = [
-        agent.info.system ? agent.info.system : SessionSystemPrompt.make(tools.definitions.map((tool) => tool.name)),
-        input.context.initial,
-      ]
-        .filter((part) => part.length > 0)
-        .map(SystemPart.make)
-      const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey)
-      const messages = stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history
+      const tools = input.scope.tools ?? {
+        definitions: [],
+        execute: () => new Tool.Error({ message: "Tools are not available for this request" }),
+      }
       const registry = new Map(tools.definitions.map((tool) => [tool.name, tool]))
       // The definition objects we hand to hooks, mapped back to their tools. Hooks rename a
       // tool by moving its definition to a new key; recognizing the object recovers the tool.
@@ -207,14 +229,18 @@ export const layer = Layer.effect(
         ),
       )
       // Hooks mutate this record in place: edit descriptions and schemas, rename, or remove.
-      const context = yield* hooks.trigger("session", "context", {
-        sessionID: session.id,
-        agent: agent.id,
-        model: resolved.ref,
-        system,
-        messages,
-        tools: Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition])),
-      })
+      const definitions = Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition]))
+      const context =
+        input.contextHooks === false
+          ? { system: input.transcript.system, messages: input.transcript.messages, tools: definitions }
+          : yield* hooks.trigger("session", "context", {
+              sessionID: session.id,
+              agent: input.scope.agentID,
+              model: resolved.ref,
+              system: input.transcript.system,
+              messages: input.transcript.messages,
+              tools: definitions,
+            })
       // Match each surviving entry back to its tool, by recognizing a moved definition or
       // by key. Identity wins so a definition moved onto another tool's name still executes
       // the tool it describes. Entries matching neither were invented by a hook and dropped.
@@ -226,54 +252,43 @@ export const layer = Layer.effect(
           return [[name, { ...tool, description: definition.description, inputSchema: definition.input }] as const]
         }),
       )
-      const request = LLM.request({
-        model,
-        http: {
-          headers: SessionModelHeaders.make(session, app),
-        },
-        promptCacheKey: SessionPromptCacheKey.make(session.id),
-        system: context.system,
-        messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
-        tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
-        toolChoice: stepLimitReached ? "none" : undefined,
-      })
+      const request = yield* SessionModelHook.apply(
+        hooks,
+        { sessionID: session.id, agent: input.scope.agentID, model: resolved.ref },
+        LLM.request({
+          model,
+          http: {
+            headers: SessionModelHeaders.make(session, app),
+          },
+          // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
+          promptCacheKey: SessionPromptCacheKey.make(session.fork?.sessionID ?? session.id),
+          system: context.system,
+          messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
+          tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
+          toolChoice: input.toolChoice,
+        }),
+      )
       const webSocketEligible =
-        !(yield* hooks.has("session", "http.request")) && !(yield* hooks.has("session", "http.response"))
+        !(yield* hooks.has("session", "http.request", resolved.ref.providerID)) &&
+        !(yield* hooks.has("session", "http.response", resolved.ref.providerID))
       const http = webSocketEligible
         ? undefined
         : SessionModelHttp.middleware(hooks, {
             sessionID: session.id,
-            agent: agent.id,
+            agent: input.scope.agentID,
             model: resolved.ref,
           })
       const options: StreamOptions = {
         ...(http ? { http } : {}),
-        ...(webSocket &&
+        ...(input.webSocket === "session" &&
+        webSocket &&
         webSocketEligible &&
         resolved.ref.providerID === Provider.ID.openai &&
-        model.route.id === "openai-responses"
+        request.model.route.id === "openai-responses"
           ? { webSocket: transport.bind(session.id) }
           : {}),
       }
-      if (promptCacheSnapshots) {
-        const current = PromptCacheDiagnostics.snapshot(request)
-        const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(session.id), current)
-        promptCacheSnapshots.delete(session.id)
-        promptCacheSnapshots.set(session.id, current)
-        const oldest = promptCacheSnapshots.keys().next().value
-        if (promptCacheSnapshots.size > 100 && oldest !== undefined) promptCacheSnapshots.delete(oldest)
-        yield* Effect.logInfo("prompt cache prefix").pipe(
-          Effect.annotateLogs({
-            sessionID: session.id,
-            toolCount: current.tools.length,
-            systemParts: current.system.length,
-            messageCount: current.messages.length,
-            ...comparison,
-          }),
-        )
-      }
       const executeTool: Prepared["executeTool"] = (input) => {
-        if (stepLimitReached) return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
         const tool = hooked.get(input.call.name)
         // A registered tool absent from the hooked set was removed or renamed by a hook.
         if (!tool && registry.has(input.call.name))
@@ -285,9 +300,7 @@ export const layer = Layer.effect(
       return {
         request,
         options,
-        webSocketEligible,
         executeTool,
-        stepLimitReached,
       }
     })
 

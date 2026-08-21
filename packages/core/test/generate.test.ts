@@ -92,6 +92,7 @@ resolverIt.effect("resolves dynamic models with their catalog metadata", () =>
       ref: Ref.make({ providerID: selected.providerID, id: selected.id }),
       capabilities: selected.capabilities,
       cost: selected.cost,
+      limit: selected.limit,
     })
   }),
 )

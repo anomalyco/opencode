@@ -1,9 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
-import { Config } from "@opencode-ai/core/config"
-import { Document, Info } from "@opencode-ai/schema/config"
-import { ConfigToolOutput } from "@opencode-ai/schema/config/tool-output"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
@@ -15,18 +12,18 @@ import { it } from "./lib/effect"
 
 const withStore = <A, E, R>(
   body: (output: ToolOutput.Interface, fs: FSUtil.Interface, root: string) => Effect.Effect<A, E, R>,
-  info = new Info(),
+  limits?: { maxLines?: number; maxBytes?: number },
 ) =>
   Effect.acquireUseRelease(
     Effect.promise(() => tmpdir()),
     (tmp) => {
-      const config = Config.testLayer([new Document({ type: "document", info })])
       const layer = AppNodeBuilder.build(LayerNode.group([ToolOutput.node, FSUtil.node]), [
-        [Config.node, config],
         [Global.node, Global.layerWith({ data: tmp.path })],
       ])
       return Effect.gen(function* () {
-        return yield* body(yield* ToolOutput.Service, yield* FSUtil.Service, tmp.path)
+        const output = yield* ToolOutput.Service
+        if (limits) yield* output.transform((draft) => draft.configure(limits))
+        return yield* body(output, yield* FSUtil.Service, tmp.path)
       }).pipe(Effect.provide(layer))
     },
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -50,7 +47,7 @@ describe("ToolOutput", () => {
             { type: "text", text: `... 1 line truncated; full content saved to ${outputPath} ...` },
           ])
         }),
-      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
+      { maxLines: 2, maxBytes: 1_000 },
     ),
   )
 
@@ -67,7 +64,7 @@ describe("ToolOutput", () => {
             },
           ])
         }),
-      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 100, max_bytes: 5 }) }),
+      { maxLines: 100, maxBytes: 5 },
     ),
   )
 
@@ -86,7 +83,7 @@ describe("ToolOutput", () => {
             { type: "text", text: expect.stringMatching(/^\.\.\. 1 line truncated; full content saved to /) },
           ])
         }),
-      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
+      { maxLines: 2, maxBytes: 1_000 },
     ),
   )
 
@@ -119,7 +116,7 @@ describe("ToolOutput", () => {
             metadata: { truncated: false },
           })
         }),
-      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
+      { maxLines: 2, maxBytes: 1_000 },
     ),
   )
 
@@ -133,7 +130,7 @@ describe("ToolOutput", () => {
             { type: "text", text: expect.stringMatching(/^\.\.\. 1 byte truncated; full content saved to /) },
           ])
         }),
-      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 3 }) }),
+      { maxLines: 2, maxBytes: 3 },
     ),
   )
 

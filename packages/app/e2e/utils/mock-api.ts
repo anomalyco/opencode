@@ -1,7 +1,13 @@
-import { Schema } from "effect"
+import { Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
 
-const Json = Schema.Unknown.pipe(HttpApiSchema.asJson())
+const Json = Schema.Json.pipe(
+  Schema.decodeTo(Schema.Unknown, {
+    decode: SchemaGetter.passthrough(),
+    encode: SchemaGetter.transform(jsonValue),
+  }),
+  HttpApiSchema.asJson(),
+)
 const JsonPayload = Schema.Unknown.pipe(HttpApiSchema.asJson())
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
@@ -58,6 +64,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(HttpApiEndpoint.get("command", "/api/command", { success: Json }))
+  .add(HttpApiEndpoint.get("skill", "/api/skill", { success: Json }))
   .add(HttpApiEndpoint.get("plugin", "/api/plugin", { success: Json }))
   .add(HttpApiEndpoint.get("mcp", "/api/mcp", { success: Json }))
   .add(HttpApiEndpoint.get("mcpResource", "/api/mcp/resource", { success: Json }))
@@ -168,6 +175,12 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.get("sessionPermission", "/api/session/:sessionID/permission", {
+      params: SessionParams,
+      success: Json,
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("sessionPermissionReply", "/api/session/:sessionID/permission/:permissionID/reply", {
       params: { ...SessionParams, permissionID: Schema.String },
       payload: JsonPayload,
@@ -185,6 +198,14 @@ const Group = HttpApiGroup.make("mock")
     HttpApiEndpoint.post("sessionInterrupt", "/api/session/:sessionID/interrupt", {
       params: SessionParams,
       success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionRevertStage", "/api/session/:sessionID/revert/stage", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
+      error: MockBadRequest.pipe(HttpApiSchema.status(400)),
     }),
   )
   .add(
@@ -216,3 +237,13 @@ const Group = HttpApiGroup.make("mock")
   )
 
 export const MockApi = HttpApi.make("mock").add(Group)
+
+function jsonValue(value: unknown): Schema.Json {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value
+  if (typeof value === "number") return Number.isFinite(value) ? value : null
+  if (Array.isArray(value)) return value.map(jsonValue)
+  if (!value || typeof value !== "object") return null
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, item]) => (item === undefined ? [] : [[key, jsonValue(item)]])),
+  )
+}

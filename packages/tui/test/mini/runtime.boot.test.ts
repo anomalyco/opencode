@@ -21,7 +21,7 @@ describe("run runtime boot", () => {
     expect(result.keybinds.get("prompt.history.next")?.[0]?.key).toBe("down")
     expect(result.keybinds.get("prompt.clear")?.[0]?.key).toBe("ctrl+c")
     expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("return")
-    expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("shift+return,ctrl+return,ctrl+j")
+    expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("shift+return,ctrl+return,alt+return,ctrl+j")
     expect(result.keybinds.get("prompt.queue")?.[0]?.key).toBe("<leader>return")
   })
 
@@ -30,11 +30,13 @@ describe("run runtime boot", () => {
       createTuiResolvedConfig({
         theme: { mode: "light" },
         leader: { timeout: 450 },
+        cursor: { style: "underline", blinking: false },
       }),
     )
 
     expect(result.theme).toEqual({ mode: "light" })
     expect(result.leader.timeout).toBe(450)
+    expect(result.cursor).toEqual({ style: "underline", blinking: false })
     expect(resolveMiniSettings(result)).toEqual({
       thinking: "hide",
       shell_output: "hide",

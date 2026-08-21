@@ -176,4 +176,29 @@ describe("toSessionError", () => {
     expect(retryable.map(SessionRunnerRetry.isRetryable)).toEqual([true, true])
     expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false])
   })
+
+  test("honors provider retry header overrides", () => {
+    const http = (headers: Record<string, string>) =>
+      new HttpContext({
+        request: new HttpRequestDetails({ method: "POST", url: "https://example.com", headers: {} }),
+        response: new HttpResponseDetails({ status: 500, headers }),
+      })
+
+    expect(
+      SessionRunnerRetry.isRetryable(
+        llm(
+          new ProviderInternalReason({
+            message: "do not retry",
+            status: 500,
+            http: http({ "x-should-retry": "false" }),
+          }),
+        ),
+      ),
+    ).toBeFalse()
+    expect(
+      SessionRunnerRetry.isRetryable(
+        llm(new InvalidRequestReason({ message: "retry", http: http({ "x-should-retry": "true" }) })),
+      ),
+    ).toBeTrue()
+  })
 })

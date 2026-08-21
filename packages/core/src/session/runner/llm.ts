@@ -4,11 +4,12 @@ import {
   LLMClient,
   AIError,
   LLMEvent,
+  Message,
   isContextOverflowFailure,
   type ProviderErrorEvent,
   type ToolCall,
 } from "@opencode-ai/ai"
-import { Cause, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Stream } from "effect"
+import { Cause, Config, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Stream } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
@@ -34,6 +35,10 @@ import { toSessionError } from "../to-session-error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionUsage } from "../usage.js"
 import { ToolOutput } from "../../tool-output.js"
+import { PluginSupervisor } from "../../plugin/supervisor.js"
+import { Tool } from "../../tool.js"
+import { PromptCacheDiagnostics } from "../prompt-cache-diagnostics.js"
+import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 /** How one model call ended: settled, awaiting retry/recovery, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
@@ -54,6 +59,13 @@ const isDecline = (
   error: SessionModelRequest.ExecuteError,
 ): error is Permission.DeclinedError | QuestionTool.CancelledError =>
   error._tag === "Permission.DeclinedError" || error._tag === "QuestionTool.CancelledError"
+
+const isInterruptedStream = (failure: AIError) => {
+  if (failure.reason._tag === "InvalidProviderOutput")
+    return failure.reason.classification === "incomplete-stream"
+  if (failure.reason._tag === "Transport") return failure.reason.operation === "read"
+  return false
+}
 
 /**
  * Classifies how the owned tool fibers ended. Interrupts abort the step; a user decline
@@ -84,7 +96,15 @@ const classifyToolExits = (
     .flatMap((cause) => {
       if (Cause.hasInterrupts(cause)) return []
       const reasons = cause.reasons.flatMap(
-        (reason): Array<Cause.Reason<never>> => (Cause.isFailReason(reason) ? [] : [reason]),
+        (reason): Array<Cause.Reason<never>> =>
+          Cause.isFailReason(reason)
+            ? isDecline(reason.error)
+              ? []
+              : // A typed failure here broke the ExecuteError contract (the per-fiber
+                // `catchTag("Tool.Error")` consumes honest ones). Surfacing it as a defect
+                // keeps it from being dropped, which would leave its call unsettled forever.
+                [Cause.makeDieReason(reason.error)]
+            : [reason],
       )
       return reasons.length > 0 ? [Cause.fromReasons(reasons)] : []
     })
@@ -114,8 +134,35 @@ const layer = Layer.effect(
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
+    const plugins = yield* PluginSupervisor.Service
     const title = yield* SessionTitle.Service
     const toolOutput = yield* ToolOutput.Service
+    const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
+      Config.withDefault(false),
+      Effect.orDie,
+    )
+    const promptCacheSnapshots = diagnostics ? new Map<string, PromptCacheDiagnostics.Snapshot>() : undefined
+    const diagnosePromptCache = Effect.fn("SessionRunner.diagnosePromptCache")(function* (
+      sessionID: SessionSchema.ID,
+      request: Parameters<typeof PromptCacheDiagnostics.snapshot>[0],
+    ) {
+      if (!promptCacheSnapshots) return
+      const current = PromptCacheDiagnostics.snapshot(request)
+      const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(sessionID), current)
+      promptCacheSnapshots.delete(sessionID)
+      promptCacheSnapshots.set(sessionID, current)
+      const oldest = promptCacheSnapshots.keys().next().value
+      if (promptCacheSnapshots.size > 100 && oldest !== undefined) promptCacheSnapshots.delete(oldest)
+      yield* Effect.logInfo("prompt cache prefix").pipe(
+        Effect.annotateLogs({
+          sessionID,
+          toolCount: current.tools.length,
+          systemParts: current.system.length,
+          messageCount: current.messages.length,
+          ...comparison,
+        }),
+      )
+    })
     // Title generation starts once input is visible and must not delay model execution.
     // The in-flight set coalesces overlapping prompts while title presence records success durably.
     const titlesRunning = new Set<SessionSchema.ID>()
@@ -133,23 +180,35 @@ const layer = Layer.effect(
       let force = input.force
       let continuation = input.continuation
       const promotable = input.promotable ?? "input"
-      if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
+      if (!force && !continuation && !(yield* eligible(input.sessionID, promotable)))
         return { type: "complete" as const }
+      yield* plugins.flush
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
-        if (yield* runPendingCompaction(input.sessionID, promotable)) {
+        // Between-turn control items run under any drain scope: scope gates which user
+        // input may promote, not whether admitted housekeeping runs. Steered control
+        // items go ahead of any queued input; only a queue-delivered control item
+        // parked behind a queued prompt is not the next eligible item.
+        if (yield* runPendingCompaction(input.sessionID, "input")) {
           force = false
           continue
         }
-        if (yield* runPendingMove(input.sessionID, promotable)) return { type: "moved" as const }
+        if (yield* runPendingMove(input.sessionID, "input")) return { type: "moved" as const }
         if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
           return { type: "complete" as const }
         const result = yield* runSteps(input.sessionID, continuation, promotable)
         if (result.type === "moved") return result
-        if (promotable === "steer") return { type: "complete" as const }
         force = false
         continuation = undefined
       }
+    })
+
+    /** Work this drain may perform: scoped input, or a between-turn control item next in line. */
+    const eligible = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, promotable: SessionInbox.Promotable) {
+      if (yield* SessionInbox.has(db, sessionID, promotable)) return true
+      if (promotable === "input") return false
+      const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
+      return next?.type === "compaction" || next?.type === "move"
     })
 
     /**
@@ -165,15 +224,23 @@ const layer = Layer.effect(
       let promotable: SessionInbox.Promotable = continuation ? "steer" : drainPromotable
       let step = continuation?.step ?? 1
       let next = continuation
+      // The drain admitted this work, so the first step always runs — even after a
+      // control item consumed at this boundary (unlike drain's one-shot force).
+      let first = true
+      // Every boundary has the same shape: control items first, then one exit decision,
+      // then the model. The turn continues only while the first step, a continuation, or
+      // steer input is owed. Deciding after control items means consuming the last
+      // steered compaction ends the turn instead of issuing an input-free model call.
       while (true) {
         if (yield* runPendingCompaction(sessionID, "steer")) continue
         if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
-        const result = yield* runStep(sessionID, promotable, step)
-        next = result.needsContinuation ? { step: result.step + 1 } : undefined
-        if (!result.needsContinuation && !(yield* SessionInbox.has(db, sessionID, "steer")))
+        if (!first && !next && !(yield* SessionInbox.has(db, sessionID, "steer")))
           return { type: "complete" as const }
+        const result = yield* runStep(sessionID, promotable, step)
+        first = false
         promotable = "steer"
         step = result.step + 1
+        next = result.needsContinuation ? { step } : undefined
       }
     })
 
@@ -272,20 +339,41 @@ const layer = Layer.effect(
       const loaded = yield* context.load(selected)
       const { session, agent } = loaded
       const resolved = loaded.model
-      const model = resolved.model
       // Make room: history must fit the context window before the call. A pending manual
       // compaction owns this instead; the runner executes it between steps.
-      const compactionInput = { session, messages: loaded.messages, model, ref: resolved.ref, cost: resolved.cost }
+      const compactionInput = { session, messages: loaded.messages, resolved }
       if (compaction.required(compactionInput)) {
         const compacted = yield* compaction.compact(compactionInput)
         if (compacted.status === "completed")
           return CallOutcome.Restart({ step: currentStep, recoveredOverflow: false })
         return yield* new StepFailedError({ error: compacted.error })
       }
-      const prepared = yield* modelRequests.prepare({
-        context: loaded,
-        step: currentStep,
+      const stepLimitReached = agent.info.steps !== undefined && currentStep >= agent.info.steps
+      const transcript = SessionModelRequest.baseTranscript({
+        agent: agent.info,
+        model: resolved,
+        tools: loaded.tools,
+        initial: loaded.initial,
+        messages: loaded.messages,
       })
+      const prepared = yield* modelRequests.prepare({
+        scope: { session, agentID: agent.id, model: resolved, tools: loaded.tools },
+        transcript: {
+          system: transcript.system,
+          messages: stepLimitReached
+            ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
+            : transcript.messages,
+        },
+        // The final Step keeps definitions available to protocols with native "none",
+        // preserving their prompt cache prefix. Calls are still rejected at execution.
+        toolChoice: stepLimitReached ? "none" : undefined,
+        webSocket: "session",
+      })
+      yield* diagnosePromptCache(session.id, prepared.request)
+      const executeTool = (input: Parameters<typeof prepared.executeTool>[0]) => {
+        if (stepLimitReached) return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
+        return prepared.executeTool(input)
+      }
       // Every local tool call forked here is owned until it reaches one durable settlement.
       const toolRuns: Array<{
         readonly call: ToolCall
@@ -299,7 +387,7 @@ const layer = Layer.effect(
         // The selected catalog identity, not model.id: route-level ids are provider API
         // model ids (for example gpt-5.5-fast resolves to api id gpt-5.5).
         model: resolved.ref,
-        providerMetadataKey: model.route.providerMetadataKey ?? model.provider,
+        providerMetadataKey: transcript.providerMetadataKey,
         snapshot: startSnapshot,
         assistantMessageID,
       })
@@ -312,9 +400,11 @@ const layer = Layer.effect(
         const snapshot = yield* snapshots.capture()
         const files =
           startSnapshot && snapshot
-            ? yield* snapshots
-                .files({ from: startSnapshot, to: snapshot })
-                .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            ? startSnapshot === snapshot
+              ? []
+              : yield* snapshots
+                  .files({ from: startSnapshot, to: snapshot })
+                  .pipe(Effect.catch(() => Effect.succeed(undefined)))
             : undefined
         return { snapshot, files }
       })
@@ -326,6 +416,8 @@ const layer = Layer.effect(
             sessionID: session.id,
             assistantMessageID: yield* publisher.startAssistant(),
             finish: finish.finish,
+            rawFinish: finish.rawFinish,
+            providerState: finish.providerState,
             ...stepUsage(finish),
             ...end,
           })
@@ -360,7 +452,7 @@ const layer = Layer.effect(
               call: event,
               fiber: yield* Effect.uninterruptibleMask((restore) =>
                 restore(
-                  prepared.executeTool({
+                  executeTool({
                     sessionID: session.id,
                     agent: agent.id,
                     messageID: assistantMessageID,
@@ -488,11 +580,14 @@ const layer = Layer.effect(
             })
           }
 
-          const incompleteStream =
-            llmFailure?.reason._tag === "InvalidProviderOutput" &&
-            llmFailure.reason.classification === "incomplete-stream"
-          const toolsAllowContinuation = tools.declines.length === 0 && !tools.interrupted
-          if (llmError && incompleteStream && record.outputStarted && toolsAllowContinuation)
+          if (
+            llmFailure &&
+            llmError &&
+            isInterruptedStream(llmFailure) &&
+            record.outputStarted &&
+            tools.declines.length === 0 &&
+            !tools.interrupted
+          )
             return CallOutcome.Continue({
               cause: llmFailure,
               error: llmError,
@@ -508,8 +603,7 @@ const layer = Layer.effect(
             // A local call or malformed tool input requires another model step, unless
             // this step already exhausted the agent's allowance.
             needsContinuation:
-              !prepared.stepLimitReached &&
-              record.calls.some((call) => !call.providerExecuted && (call.called || call.settled)),
+              !stepLimitReached && record.calls.some((call) => !call.providerExecuted && (call.called || call.settled)),
             step: currentStep,
           })
         }),
@@ -644,6 +738,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
+    PluginSupervisor.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,

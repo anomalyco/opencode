@@ -1,6 +1,6 @@
 @import "@opencode-ai/ui/styles/tailwind";
 @import "@opencode-ai/session-ui/styles";
-@import "@opencode-ai/ui/v2/styles/tailwind.css";
+@import "@opencode-ai/ui/styles/tokens";
 @import "tw-animate-css";
 
 @font-face {
@@ -30,23 +30,22 @@
     container-name: getting-started;
   }
 
-  [data-component="dropdown-menu-content"].desktop-app-menu,
-  [data-component="dropdown-menu-sub-content"].desktop-app-menu {
+  [data-component="menu-v2-content"].desktop-app-menu {
     min-width: 160px;
     padding: 2px;
   }
 
-  [data-component="dropdown-menu-content"].desktop-app-menu {
+  [data-component="menu-v2-content"].desktop-app-menu:not(.desktop-app-menu-sub) {
     width: 160px;
   }
 
-  [data-component="dropdown-menu-sub-content"].desktop-app-menu {
+  [data-component="menu-v2-content"].desktop-app-menu-sub {
     width: max-content;
     min-width: 240px;
     max-width: min(320px, calc(100vw - 24px));
   }
 
-  [data-component="dropdown-menu-content"].desktop-app-menu [data-slot="dropdown-menu-group-label"] {
+  [data-component="menu-v2-content"].desktop-app-menu [data-slot="menu-v2-group-label"] {
     display: flex;
     align-items: center;
     height: 28px;
@@ -57,10 +56,7 @@
     color: var(--text-weak);
   }
 
-  [data-component="dropdown-menu-content"].desktop-app-menu [data-slot="dropdown-menu-item"],
-  [data-component="dropdown-menu-content"].desktop-app-menu [data-slot="dropdown-menu-sub-trigger"],
-  [data-component="dropdown-menu-sub-content"].desktop-app-menu [data-slot="dropdown-menu-item"],
-  [data-component="dropdown-menu-sub-content"].desktop-app-menu [data-slot="dropdown-menu-sub-trigger"] {
+  [data-component="menu-v2-content"].desktop-app-menu [data-component="menu-v2-item"] {
     min-height: 28px;
     padding: 0 12px;
     gap: 8px;
@@ -68,23 +64,16 @@
     line-height: 1;
   }
 
-  [data-component="dropdown-menu-content"].desktop-app-menu [data-slot="dropdown-menu-item-label"],
-  [data-component="dropdown-menu-sub-content"].desktop-app-menu [data-slot="dropdown-menu-item-label"] {
+  [data-component="menu-v2-content"].desktop-app-menu [data-slot="menu-v2-item-content"] {
     white-space: nowrap;
   }
 
-  [data-slot="desktop-app-menu-keybind"] {
+  [data-component="menu-v2-content"].desktop-app-menu [data-slot="menu-v2-item-shortcut"] {
     margin-left: auto;
     color: var(--text-weak);
     font-size: var(--font-size-x-small);
     font-weight: var(--font-weight-regular);
     white-space: nowrap;
-  }
-
-  [data-slot="desktop-app-menu-chevron"] {
-    display: flex;
-    margin-left: auto;
-    color: var(--icon-base);
   }
 
   [data-component="getting-started-actions"] {
@@ -93,7 +82,7 @@
     gap: 0.75rem; /* gap-3 */
   }
 
-  [data-component="getting-started-actions"] > [data-component="button"] {
+  [data-component="getting-started-actions"] > [data-component="button-v2"] {
     width: 100%;
   }
 
@@ -103,7 +92,7 @@
       align-items: center;
     }
 
-    [data-component="getting-started-actions"] > [data-component="button"] {
+    [data-component="getting-started-actions"] > [data-component="button-v2"] {
       width: auto;
     }
   }
@@ -317,7 +306,7 @@
   }
 
   @supports (animation-timeline: --manage-models-scroll) and (timeline-scope: --manage-models-scroll) {
-    [data-slot="manage-models-scroll"] .settings-v2-panel {
+    [data-slot="manage-models-scroll"] .settings-panel {
       scroll-timeline: --manage-models-scroll y;
     }
 

@@ -53,6 +53,7 @@ export const resolved = (
     readonly capabilities: Capabilities
     readonly variant?: VariantID
     readonly cost: Info["cost"]
+    readonly limit: Info["limit"]
   },
 ): Resolved => ({
   model,
@@ -63,6 +64,7 @@ export const resolved = (
   }),
   capabilities: options.capabilities,
   cost: options.cost,
+  limit: options.limit,
 })
 
 const layer = Layer.effect(

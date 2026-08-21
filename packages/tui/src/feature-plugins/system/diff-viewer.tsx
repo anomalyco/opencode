@@ -1079,7 +1079,7 @@ function Commands(props: { context: Plugin.Context }) {
 }
 
 export default Plugin.define({
-  id: "diff-viewer",
+  id: "opencode.diffs",
   setup(context) {
     context.ui.router.register({
       name: ROUTE,

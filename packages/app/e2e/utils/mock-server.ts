@@ -26,6 +26,7 @@ export interface MockServerConfig {
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
   onMessage?: (input: { sessionID: string; messageID: string }) => void
+  onRevertStage?: (input: { sessionID: string; messageID: string }) => void
   events?: () => OpenCodeEvent[]
   eventRetry?: number
   permissions?: unknown[] | (() => unknown[])
@@ -244,6 +245,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
           ),
         credentialRemove: () => noContent,
         command: () => Effect.succeed({ location: location(config), data: [] }),
+        skill: () => Effect.succeed({ location: location(config), data: [] }),
         plugin: () => Effect.succeed({ location: location(config), data: [] }),
         mcp: () => Effect.succeed({ location: location(config), data: [] }),
         mcpResource: () => Effect.succeed({ location: location(config), data: { resources: [], templates: [] } }),
@@ -396,9 +398,28 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         sessionFormCancel: () => noContent,
         sessionBackground: () => noContent,
         sessionInbox: () => Effect.succeed({ data: [] }),
+        sessionPermission: (ctx) => {
+          const permissions =
+            typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])
+          return Effect.succeed({
+            data: permissions
+              .map(currentPermission)
+              .filter((permission) => permission.sessionID === ctx.params.sessionID),
+          })
+        },
         sessionPermissionReply: () => noContent,
         sessionRename: () => noContent,
         sessionInterrupt: () => noContent,
+        sessionRevertStage: (ctx) => {
+          const payload = record(ctx.payload) ? ctx.payload : {}
+          const messageID = payload.messageID
+          if (typeof messageID !== "string") {
+            return Effect.fail(new MockBadRequest({ message: "Invalid revert request" }))
+          }
+          return Effect.sync(() => config.onRevertStage?.({ sessionID: ctx.params.sessionID, messageID })).pipe(
+            Effect.as({ data: { messageID } }),
+          )
+        },
         sessionRevertClear: () => noContent,
         sessionRevertCommit: () => noContent,
         messageGet: (ctx) =>

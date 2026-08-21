@@ -20,7 +20,7 @@ export function selectionFromLines(selection?: SelectedLineRange): FileSelection
   }
 }
 
-const pool = ["src/session/timeline.tsx", "src/session/composer.tsx", "src/components/prompt-input.tsx", "README.md"]
+const pool = ["src/session/timeline.tsx", "src/session/composer.tsx", "src/composer/composer.tsx", "README.md"]
 
 export function useFile() {
   return {

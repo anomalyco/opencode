@@ -8,24 +8,27 @@
     "build": "storybook build"
   },
   "devDependencies": {
+    "@opencode-ai/client": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@opencode-ai/session-ui": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
-    "@storybook/addon-a11y": "^10.2.13",
-    "@storybook/addon-docs": "^10.2.13",
-    "@storybook/addon-links": "^10.2.13",
-    "@storybook/addon-onboarding": "^10.2.13",
-    "@storybook/addon-vitest": "^10.2.13",
+    "@storybook/addon-a11y": "10.4.4",
+    "@storybook/addon-docs": "10.4.4",
+    "@storybook/addon-links": "10.4.4",
+    "@storybook/addon-onboarding": "10.4.4",
+    "@storybook/addon-vitest": "10.4.4",
+    "@storybook/builder-vite": "10.4.4",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "18.0.25",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "solid-js": "catalog:",
-    "storybook": "^10.2.13",
-    "storybook-solidjs-vite": "^10.0.9",
+    "storybook": "10.4.4",
+    "storybook-solidjs-vite": "10.5.2",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "7.1.11",
+    "vite-plugin-solid": "2.11.12"
   }
 }

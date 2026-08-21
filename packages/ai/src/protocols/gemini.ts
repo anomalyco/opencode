@@ -12,7 +12,6 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderOptions,
   type ProviderMetadata,
   type TextPart,
   type ToolCallPart,
@@ -67,9 +66,7 @@ export interface OptionsInput {
   }
 }
 
-export type ProviderOptionsInput = ProviderOptions & {
-  readonly gemini?: OptionsInput
-}
+export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
 // Request Body Schema
@@ -292,7 +289,9 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Gemini", message)
       const previous = contents.at(-1)
-      if (previous?.role === "user")
+      // Gemini rejects a continuation whose function-response turn carries extra
+      // parts, so an update after a tool result starts its own user turn.
+      if (previous?.role === "user" && !previous.parts.some((item) => "functionResponse" in item))
         contents[contents.length - 1] = { role: "user", parts: [...previous.parts, { text: part.text }] }
       else contents.push({ role: "user", parts: [{ text: part.text }] })
       continue
@@ -380,14 +379,19 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         },
       })
     }
-    contents.push({ role: "user", parts })
+    // Gemini requires every response to a parallel call batch in one user turn,
+    // so consecutive tool results join the open function-response turn.
+    const previous = contents.at(-1)
+    if (previous?.role === "user" && previous.parts.some((item) => "functionResponse" in item))
+      contents[contents.length - 1] = { role: "user", parts: [...previous.parts, ...parts] }
+    else contents.push({ role: "user", parts })
   }
 
   return contents
 })
 
 const resolveOptions = (request: LLMRequest) => {
-  const input = request.providerOptions?.gemini
+  const input = request.providerOptions
   const value = input?.thinkingConfig
   const thinkingConfig = {
     thinkingBudget:
@@ -630,8 +634,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
 // =============================================================================
 /**
  * The Gemini protocol — request body construction, body schema, and the
- * streaming-event state machine. Used by Google AI Studio Gemini and (once
- * registered) Vertex Gemini.
+ * streaming-event state machine shared by Google AI Studio and Vertex Gemini.
  */
 export const protocol = Protocol.make({
   id: ADAPTER,

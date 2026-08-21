@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { createEffect, For, on, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { TextShimmer } from "./text-shimmer"
+import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { TextReveal } from "./text-reveal"
 
 export default {

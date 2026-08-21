@@ -9,7 +9,7 @@ import { action, type Policy } from "./updater-action"
 
 declare const OPENCODE_CLI_NAME: string | undefined
 
-type Method = "npm" | "pnpm" | "bun" | "yarn"
+type Method = "npm" | "pnpm" | "bun" | "yarn" | "curl"
 
 const packageName =
   typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-node"
@@ -68,6 +68,14 @@ export const layer = Layer.effect(
     })
 
     const method = Effect.fnUntraced(function* () {
+      const binary = path.join(
+        global.home,
+        ".opencode",
+        "bin",
+        process.platform === "win32" ? "opencode2.exe" : "opencode2",
+      )
+      if (path.resolve(process.execPath) === path.resolve(binary)) return "curl"
+
       const checks: ReadonlyArray<{ method: Method; command: string[] }> = [
         { method: "npm", command: ["npm", "list", "-g", "--depth=0", packageName] },
         { method: "pnpm", command: ["pnpm", "list", "-g", "--depth=0", packageName] },
@@ -104,21 +112,33 @@ export const layer = Layer.effect(
 
     const upgrade = Effect.fnUntraced(function* (method: Method, version: string) {
       const target = `${packageName}@${version}`
-      const commands: Record<Exclude<Method, "bun">, string[]> = {
+      const commands: Record<Exclude<Method, "bun" | "curl">, string[]> = {
         npm: ["npm", "install", "--global", target],
-        pnpm: ["pnpm", "install", "--global", target],
+        pnpm: ["pnpm", "add", "--global", `--allow-build=${packageName}`, target],
         yarn: ["yarn", "global", "add", target],
       }
-      const result = yield* method === "bun"
-        ? Effect.scoped(
-            Effect.gen(function* () {
-              // Bun does not prune old versions from its shared package cache.
-              yield* fs.makeDirectory(global.cache, { recursive: true })
-              const cache = yield* fs.makeTempDirectoryScoped({ directory: global.cache, prefix: "update-" })
-              return yield* run(["bun", "install", "--global", "--cache-dir", cache, target], "5 minutes")
-            }),
-          )
-        : run(commands[method], "5 minutes")
+      const result = yield* Effect.scoped(
+        Effect.gen(function* () {
+          if (method === "bun") {
+            // Bun does not prune old versions from its shared package cache.
+            yield* fs.makeDirectory(global.cache, { recursive: true })
+            const cache = yield* fs.makeTempDirectoryScoped({ directory: global.cache, prefix: "update-" })
+            return yield* run(["bun", "install", "--global", "--trust", "--cache-dir", cache, target], "5 minutes")
+          }
+          if (method === "curl") {
+            yield* fs.makeDirectory(global.cache, { recursive: true })
+            const directory = yield* fs.makeTempDirectoryScoped({ directory: global.cache, prefix: "update-" })
+            const installer = path.join(directory, "install")
+            const download = yield* run(
+              ["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"],
+              "5 minutes",
+            )
+            if (download.code !== 0) return download
+            return yield* run(["bash", installer, "--version", version, "--no-modify-path"], "5 minutes")
+          }
+          return yield* run(commands[method], "5 minutes")
+        }),
+      )
       if (result.code === 0) return
       return yield* Effect.fail(new Error(result.stderr.trim() || `Failed to update with ${method}`))
     })

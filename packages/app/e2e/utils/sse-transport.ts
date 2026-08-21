@@ -148,7 +148,7 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
         }))
         encoded.forEach((item) => marker(item.delivery.options?.marker))
         if (input.burst) {
-          const bytes = encoder.encode(encoded.map((item) => frame(item.payload, item.delivery.options)).join(""))
+          const bytes = encoder.encode(encoded.map((item) => new TextDecoder().decode(item.bytes)).join(""))
           connection.controller.enqueue(bytes)
           return encoded.map((item) => acknowledge(connection, item.bytes.byteLength, 1, item.delivery.options?.id))
         }

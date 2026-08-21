@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { For } from "solid-js"
 import { ToolErrorCard } from "./tool-error-card"
 
@@ -6,7 +5,7 @@ const docs = `### Overview
 Tool call failure summary styled like a tool trigger.
 
 ### API
-- Required: \`tool\` (tool id, e.g. apply_patch, bash)
+- Required: \`tool\` (tool id, e.g. patch, shell)
 - Required: \`error\` (error string)
 
 ### Behavior
@@ -15,13 +14,13 @@ Tool call failure summary styled like a tool trigger.
 
 const samples = [
   {
-    tool: "apply_patch",
+    tool: "patch",
     error:
-      "apply_patch verification failed: Failed to find expected lines in /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/session-turn.tsx",
+      "patch verification failed: Failed to find expected lines in packages/session-ui/src/timeline/session-timeline.tsx",
   },
   {
-    tool: "bash",
-    error: "bash Command failed: exit code 1: bun test --watch",
+    tool: "shell",
+    error: "shell Command failed: exit code 1: bun test src/timeline",
   },
   {
     tool: "read",
@@ -51,7 +50,7 @@ const samples = [
 ]
 
 export default {
-  title: "UI/ToolErrorCard",
+  title: "OpenCode/Tools/Failure details",
   id: "components-tool-error-card",
   component: ToolErrorCard,
   tags: ["autodocs"],
@@ -63,13 +62,13 @@ export default {
     },
   },
   args: {
-    tool: "apply_patch",
+    tool: "patch",
     error: samples[0].error,
   },
   argTypes: {
     tool: {
       control: "select",
-      options: ["apply_patch", "bash", "read", "glob", "grep", "webfetch", "websearch", "question"],
+      options: ["patch", "shell", "read", "glob", "grep", "webfetch", "websearch", "question"],
     },
     error: {
       control: "text",
