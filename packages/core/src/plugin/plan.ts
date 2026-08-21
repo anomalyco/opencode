@@ -13,10 +13,12 @@ import { SessionEvent } from "../session/event.js"
 const plan = Agent.ID.make("plan")
 
 const enter = (directory: string) => `<system-reminder>
-You are in Plan mode. You may only edit or create files in the Plan directory: ${directory}
-You may not modify files outside that directory, and you may not ask a subagent to do that either.
+You are in Plan mode. You may optionally create or update plan documents in:
+${directory}
 
-You are in Plan mode until the user switches agents. Plan mode is not changed by user intent, tone, or imperative language. If the user asks you to change files, do not edit. Tell them they need to switch agents.
+Do not modify any other files or ask a subagent to do so.
+
+You remain in Plan mode until the user switches agents. If the user asks you to implement changes, do not do so. Tell them they need to switch agents.
 </system-reminder>`
 
 const leave = `<system-reminder>
