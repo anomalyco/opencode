@@ -61,13 +61,16 @@ OpenCode Go 的運作方式與 OpenCode 中的任何其他供應商相同。
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Muse Spark 1.2 Contributor** ([僅限部分地區](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
+- **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
+- **Ox Alpha Free** (限時)
 
 隨著我們測試並加入新模型，模型清單可能會有所變動。
 
@@ -85,27 +88,30 @@ OpenCode Go 包含以下限制：
 
 下表提供了基於典型 Go 使用模式的預估請求次數：
 
-| Model             | 每 5 小時請求數 | 每週請求數 | 每月請求數 |
-| ----------------- | --------------- | ---------- | ---------- |
-| Grok 4.5          | 120             | 300        | 600        |
-| GPT 5.6 Luna      | 2,050           | 5,100      | 10,250     |
-| GLM-5.3           | 220             | 540        | 1,080      |
-| GLM-5.2           | 880             | 2,150      | 4,300      |
-| GLM-5.1           | 880             | 2,150      | 4,300      |
-| Kimi K3           | 110             | 250        | 490        |
-| Kimi K2.7 Code    | 1,350           | 3,380      | 6,750      |
-| Kimi K2.6         | 1,150           | 2,880      | 5,750      |
-| MiMo-V2.5         | 30,100          | 75,200     | 150,400    |
-| MiMo-V2.5-Pro     | 3,250           | 8,150      | 16,300     |
-| MiniMax M3        | 3,200           | 8,000      | 16,000     |
-| MiniMax M2.7      | 3,400           | 8,500      | 17,000     |
-| Qwen3.8 Max       | 160             | 400        | 810        |
-| Qwen3.7 Max       | 340             | 840        | 1,690      |
-| Qwen3.7 Plus      | 4,300           | 10,800     | 21,600     |
-| Qwen3.6 Plus      | 3,300           | 8,200      | 16,300     |
-| DeepSeek V4 Pro   | 1,050           | 2,600      | 5,200      |
-| DeepSeek V4 Flash | 7,600           | 18,900     | 37,800     |
-| Hy3               | 4,300           | 10,750     | 21,500     |
+| Model                        | 每 5 小時請求數 | 每週請求數 | 每月請求數 |
+| ---------------------------- | --------------- | ---------- | ---------- |
+| Grok 4.5                     | 120             | 300        | 600        |
+| GPT 5.6 Luna                 | 2,050           | 5,100      | 10,250     |
+| GLM-5.3                      | 220             | 540        | 1,080      |
+| GLM-5.2                      | 880             | 2,150      | 4,300      |
+| GLM-5.1                      | 880             | 2,150      | 4,300      |
+| Kimi K3                      | 110             | 250        | 490        |
+| Kimi K2.7 Code               | 1,350           | 3,380      | 6,750      |
+| Kimi K2.6                    | 1,150           | 2,880      | 5,750      |
+| MiMo-V2.5                    | 30,100          | 75,200     | 150,400    |
+| MiMo-V2.5-Pro                | 3,250           | 8,150      | 16,300     |
+| MiniMax M3                   | 3,200           | 8,000      | 16,000     |
+| MiniMax M2.7                 | 3,400           | 8,500      | 17,000     |
+| Muse Spark 1.2 Contributor   | 45,300          | 113,300    | 226,600    |
+| Qwen3.8 Max                  | 160             | 400        | 810        |
+| Qwen3.7 Max                  | 340             | 840        | 1,690      |
+| Qwen3.7 Plus                 | 4,300           | 10,800     | 21,600     |
+| Qwen3.6 Plus                 | 3,300           | 8,200      | 16,300     |
+| DeepSeek V4 Pro              | 1,050           | 2,600      | 5,200      |
+| DeepSeek V4 Flash            | 7,600           | 18,900     | 37,800     |
+| DeepSeek V4 Flash Vision Exp | 3,800           | 9,450      | 18,900     |
+| Hy3                          | 4,300           | 10,750     | 21,500     |
+| Ox Alpha Free                | -               | -          | -          |
 
 這些預估值是基於觀察到的請求模式：
 
@@ -116,8 +122,10 @@ OpenCode Go 包含以下限制：
 - Kimi K2.7/K2.6 — 每次請求 870 個輸入 token、55,000 個快取 token、200 個輸出 token
 - DeepSeek V4 Pro — 每次請求 750 個輸入 token、82,000 個快取 token、290 個輸出 token
 - DeepSeek V4 Flash — 每次請求 410 個輸入 token、71,300 個快取 token、310 個輸出 token
+- DeepSeek V4 Flash Vision Exp — 每次請求 410 個輸入 token、71,300 個快取 token、310 個輸出 token
 - MiniMax M3 — 每次請求 510 個輸入 token、56,000 個快取 token、190 個輸出 token
 - MiniMax M2.7 — 每次請求 300 個輸入 token、55,000 個快取 token、125 個輸出 token
+- Muse Spark 1.2 Contributor — 每次請求 620 個輸入 token、71,400 個快取 token、300 個輸出 token
 - Qwen3.8 Max — 每次請求 420 個輸入 token、66,000 個快取 token、200 個輸出 token
 - Qwen3.7 Max — 每次請求 420 個輸入 token、66,000 個快取 token、200 個輸出 token
 - Qwen3.7 Plus — 每次請求 500 個輸入 token、57,000 個快取 token、190 個輸出 token
@@ -128,35 +136,43 @@ OpenCode Go 包含以下限制：
 
 這些預估值也基於以下每 1M tokens 的價格，以及每個模型所包含的每月使用量：
 
-| 模型                         | 輸入   | 輸出   | 快取讀取  | 快取寫入 | 使用量 |
-| ---------------------------- | ------ | ------ | --------- | -------- | ------ |
-| Grok 4.5                     | $2.00  | $6.00  | $0.30     | -        | $15    |
-| GPT 5.6 Luna (≤ 272K tokens) | $0.20  | $1.20  | $0.02     | $0.25    | $15    |
-| GPT 5.6 Luna (> 272K tokens) | $0.40  | $1.80  | $0.04     | $0.50    | $15    |
-| GLM-5.3                      | $1.40  | $4.40  | $0.26     | -        | $15    |
-| GLM-5.2                      | $1.40  | $4.40  | $0.26     | -        | $60    |
-| GLM-5.1                      | $1.40  | $4.40  | $0.26     | -        | $60    |
-| Kimi K3                      | $3.00  | $15.00 | $0.30     | -        | $15    |
-| Kimi K2.7 Code               | $0.95  | $4.00  | $0.19     | -        | $60    |
-| Kimi K2.6                    | $0.95  | $4.00  | $0.16     | -        | $60    |
-| MiMo V2.5                    | $0.14  | $0.28  | $0.0028   | -        | $60    |
-| MiMo V2.5 Pro                | $0.435 | $0.87  | $0.003625 | -        | $15    |
-| MiniMax M3                   | $0.30  | $1.20  | $0.06     | -        | $60    |
-| MiniMax M2.7                 | $0.30  | $1.20  | $0.06     | $0.375   | $60    |
-| MiniMax M2.5                 | $0.30  | $1.20  | $0.06     | $0.375   | $60    |
-| Qwen3.8 Max                  | $2.00  | $6.00  | $0.25     | $2.50    | $15    |
-| Qwen3.7 Max                  | $2.50  | $7.50  | $0.50     | $3.125   | $60    |
-| Qwen3.7 Plus (≤ 256K tokens) | $0.40  | $1.60  | $0.04     | $0.50    | $60    |
-| Qwen3.7 Plus (> 256K tokens) | $1.20  | $4.80  | $0.12     | $1.50    | $60    |
-| Qwen3.6 Plus (≤ 256K tokens) | $0.50  | $3.00  | $0.05     | $0.625   | $60    |
-| Qwen3.6 Plus (> 256K tokens) | $2.00  | $6.00  | $0.20     | $2.50    | $60    |
-| DeepSeek V4 Pro (Off-Peak)   | $0.66  | $1.98  | $0.022    | -        | $15    |
-| DeepSeek V4 Pro (Peak)       | $1.32  | $3.96  | $0.044    | -        | $15    |
-| DeepSeek V4 Flash (Off-Peak) | $0.22  | $0.66  | $0.007    | -        | $30    |
-| DeepSeek V4 Flash (Peak)     | $0.44  | $1.32  | $0.014    | -        | $30    |
-| Hy3                          | $0.14  | $0.58  | $0.035    | -        | $60    |
+| 模型                                    | 輸入   | 輸出   | 快取讀取  | 快取寫入 | 使用量 |
+| --------------------------------------- | ------ | ------ | --------- | -------- | ------ |
+| Grok 4.5                                | $2.00  | $6.00  | $0.30     | -        | $15    |
+| GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02     | $0.25    | $15    |
+| GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04     | $0.50    | $15    |
+| GLM-5.3                                 | $1.40  | $4.40  | $0.26     | -        | $15    |
+| GLM-5.2                                 | $1.40  | $4.40  | $0.26     | -        | $60    |
+| GLM-5.1                                 | $1.40  | $4.40  | $0.26     | -        | $60    |
+| Kimi K3                                 | $3.00  | $15.00 | $0.30     | -        | $15    |
+| Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19     | -        | $60    |
+| Kimi K2.6                               | $0.95  | $4.00  | $0.16     | -        | $60    |
+| MiMo V2.5                               | $0.14  | $0.28  | $0.0028   | -        | $60    |
+| MiMo V2.5 Pro                           | $0.435 | $0.87  | $0.003625 | -        | $15    |
+| MiniMax M3                              | $0.30  | $1.20  | $0.06     | -        | $60    |
+| MiniMax M2.7                            | $0.30  | $1.20  | $0.06     | $0.375   | $60    |
+| MiniMax M2.5                            | $0.30  | $1.20  | $0.06     | $0.375   | $60    |
+| Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002    | -        | $60    |
+| Qwen3.8 Max                             | $2.00  | $6.00  | $0.25     | $2.50    | $15    |
+| Qwen3.7 Max                             | $2.50  | $7.50  | $0.50     | $3.125   | $60    |
+| Qwen3.7 Plus (≤ 256K tokens)            | $0.40  | $1.60  | $0.04     | $0.50    | $60    |
+| Qwen3.7 Plus (> 256K tokens)            | $1.20  | $4.80  | $0.12     | $1.50    | $60    |
+| Qwen3.6 Plus (≤ 256K tokens)            | $0.50  | $3.00  | $0.05     | $0.625   | $60    |
+| Qwen3.6 Plus (> 256K tokens)            | $2.00  | $6.00  | $0.20     | $2.50    | $60    |
+| DeepSeek V4 Pro (Off-Peak)              | $0.66  | $1.98  | $0.022    | -        | $15    |
+| DeepSeek V4 Pro (Peak)                  | $1.32  | $3.96  | $0.044    | -        | $15    |
+| DeepSeek V4 Flash (Off-Peak)            | $0.22  | $0.66  | $0.007    | -        | $30    |
+| DeepSeek V4 Flash (Peak)                | $0.44  | $1.32  | $0.014    | -        | $30    |
+| DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007    | -        | $15    |
+| DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014    | -        | $15    |
+| Hy3                                     | $0.14  | $0.58  | $0.035    | -        | $60    |
+| Ox Alpha Free                           | -      | -      | -         | -        | -      |
 
-**DeepSeek V4 Flash / Pro:** Peak 時段為 01:00-04:00 和 06:00-10:00 UTC；其他所有時段均為 Off-Peak。[了解更多](https://api-docs.deepseek.com/quick_start/pricing/)。
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak 時段為 01:00-04:00 和 06:00-10:00 UTC；其他所有時段均為 Off-Peak。[了解更多](https://api-docs.deepseek.com/quick_start/pricing/)。
+
+**DeepSeek V4 Flash Vision Exp:** 圖片會根據尺寸轉換為 token，並與文字 token 一起按輸入 token 計費。 [了解更多](https://api-docs.deepseek.com/quick_start/pricing/)。
+
+**Ox Alpha Free:** 限時免費。
 
 您可以在 **<a href={console}>console</a>** 中追蹤您目前的使用量。
 
@@ -190,28 +206,31 @@ OpenCode Go 包含以下限制：
 
 您也可以透過以下 API 端點存取 Go 模型。
 
-| 模型              | 模型 ID           | 端點                                             | AI SDK 套件                 |
-| ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
-| Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
-| GPT 5.6 Luna      | gpt-5.6-luna      | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
-| GLM-5.3           | glm-5.3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.7 Code    | kimi-k2.7-code    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.8 Max       | qwen3.8-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Hy3               | hy3               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| 模型                         | 模型 ID                      | 端點                                             | AI SDK 套件                 |
+| ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
+| Grok 4.5                     | grok-4.5                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5.1                      | glm-5.1                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K3                      | kimi-k3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.7 Code               | kimi-k2.7-code               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6                    | kimi-k2.6                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5                    | mimo-v2.5                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro                | mimo-v2.5-pro                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 您的 OpenCode 設定中的 [model id](/docs/config/#models) 使用 `opencode-go/<model-id>` 格式。例如，Kimi K3 在設定中應使用 `opencode-go/kimi-k3`。
 
@@ -229,30 +248,34 @@ https://opencode.ai/zen/go/v1/models
 
 ## 隱私權
 
-| 模型              | 模型訓練 | 資料保留 |
-| ----------------- | -------- | -------- |
-| Grok 4.5          | 不使用   | 30 天    |
-| GPT 5.6 Luna      | 不使用   | 30 天    |
-| GLM-5.3           | 不使用   | 0 天     |
-| GLM-5.2           | 不使用   | 0 天     |
-| GLM-5.1           | 不使用   | 0 天     |
-| Kimi K3           | 不使用   | 0 天     |
-| Kimi K2.7 Code    | 不使用   | 0 天     |
-| Kimi K2.6         | 不使用   | 0 天     |
-| MiMo-V2.5-Pro     | 不使用   | 0 天     |
-| MiMo-V2.5         | 不使用   | 0 天     |
-| Qwen3.8 Max       | 不使用   | 0 天     |
-| Qwen3.7 Max       | 不使用   | 0 天     |
-| Qwen3.7 Plus      | 不使用   | 0 天     |
-| Qwen3.6 Plus      | 不使用   | 0 天     |
-| MiniMax M3        | 不使用   | 0 天     |
-| MiniMax M2.7      | 不使用   | 0 天     |
-| DeepSeek V4 Pro   | 不使用   | 0 天     |
-| DeepSeek V4 Flash | 不使用   | 0 天     |
-| Hy3               | 不使用   | 0 天     |
+| 模型                         | 模型訓練 | 資料保留 |
+| ---------------------------- | -------- | -------- |
+| Grok 4.5                     | 不使用   | 30 天    |
+| GPT 5.6 Luna                 | 不使用   | 30 天    |
+| GLM-5.3                      | 不使用   | 0 天     |
+| GLM-5.2                      | 不使用   | 0 天     |
+| GLM-5.1                      | 不使用   | 0 天     |
+| Kimi K3                      | 不使用   | 0 天     |
+| Kimi K2.7 Code               | 不使用   | 0 天     |
+| Kimi K2.6                    | 不使用   | 0 天     |
+| MiMo-V2.5-Pro                | 不使用   | 0 天     |
+| MiMo-V2.5                    | 不使用   | 0 天     |
+| Qwen3.8 Max                  | 不使用   | 0 天     |
+| Qwen3.7 Max                  | 不使用   | 0 天     |
+| Qwen3.7 Plus                 | 不使用   | 0 天     |
+| Qwen3.6 Plus                 | 不使用   | 0 天     |
+| MiniMax M3                   | 不使用   | 0 天     |
+| MiniMax M2.7                 | 不使用   | 0 天     |
+| Muse Spark 1.2 Contributor   | 是       | 非 ZDR   |
+| DeepSeek V4 Pro              | 不使用   | 0 天     |
+| DeepSeek V4 Flash            | 不使用   | 0 天     |
+| DeepSeek V4 Flash Vision Exp | 不使用   | 0 天     |
+| Hy3                          | 不使用   | 0 天     |
+| Ox Alpha Free                | 不使用   | 0 天     |
 
 - **Grok 4.5:** ZDR 會停用依賴儲存資料的重要 API 功能，包括具狀態的 Responses API、Files and Collections 與 Batch API。[了解更多](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
 - **GPT 5.6 Luna:** 所有 API 功能的使用都會產生濫用監控日誌，並保留最多 30 天。[了解更多](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
+- **Muse Spark 1.2 Contributor:** 以允許使用您的提示詞和生成結果來訓練未來的 Meta 模型為交換，token 價格可享大幅折扣。僅在 Meta 的[地理使用政策](https://ai.developer.meta.com/legal/geographic-use-policy)允許的地區提供。[了解更多](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 - **DeepSeek V4 Flash:** ZDR 協議每月續簽。目前的協議有效至 2026 年 8 月 31 日。
 
 ---

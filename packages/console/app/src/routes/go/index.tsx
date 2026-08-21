@@ -39,6 +39,7 @@ const models = [
   { name: "Qwen3.6 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M2.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Muse Spark 1.2 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "DeepSeek V4 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "DeepSeek V4 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -72,12 +73,14 @@ function LimitsGraph(props: { href: string }) {
     { id: "qwen3.8-max", name: "Qwen3.8 Max", req: 160, d: "90ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 1050, d: "150ms" },
+    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 2050, d: "290ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
-    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 4100, baseReq: 2050, d: "290ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
-    { id: "hy3", name: "Hy3", req: 4300, d: "320ms" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 7600, d: "330ms" },
-    { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, edge: true, d: "340ms" },
+    { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
+    { id: "hy3", name: "Hy3", req: 34400, baseReq: 4300, d: "320ms" },
+    { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", req: 45300, edge: true, d: "360ms" },
+    { id: "ox-alpha-free", name: "Ox Alpha Free", req: Infinity, infinite: true, edge: true, d: "400ms" },
   ]
 
   const w = 1040
@@ -87,9 +90,10 @@ function LimitsGraph(props: { href: string }) {
   const top = 18
   const bottom = 44
   const plot = chartW - left - right
+  const infiniteX = w - 180
 
   const ratio = (n: number) => n / baseline
-  const rmax = Math.max(1, ...graph.map((m) => ratio(m.req)))
+  const rmax = Math.max(1, ...graph.filter((m) => !("infinite" in m)).map((m) => ratio(m.req)))
   const log = (n: number) => Math.log10(Math.max(n, 1))
   const base = 24
   const p = 2.2
@@ -151,10 +155,10 @@ function LimitsGraph(props: { href: string }) {
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
-                    width={Math.max(0, x(ratio(m.baseReq ?? m.req)) - left)}
+                    width={Math.max(0, ("infinite" in m ? infiniteX : x(ratio(m.baseReq ?? m.req))) - left)}
                     height={bh}
                     data-bar
-                    data-kind="go"
+                    data-kind={"infinite" in m ? "infinite" : "go"}
                     data-model={m.id}
                   />
                   {m.baseReq && (
@@ -190,7 +194,7 @@ function LimitsGraph(props: { href: string }) {
           </For>
         </div>
 
-        <div data-slot="pills" aria-hidden="true">
+        <div data-slot="pills">
           <For each={graph}>
             {(m, i) => (
               <span
@@ -198,11 +202,24 @@ function LimitsGraph(props: { href: string }) {
                 data-kind="go"
                 data-model={m.id}
                 data-edge={"edge" in m ? "" : undefined}
-                style={{ "--x": px(x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any}
+                data-infinite={"infinite" in m ? "" : undefined}
+                style={
+                  { "--x": px("infinite" in m ? infiniteX : x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any
+                }
               >
-                <span data-value>{m.req.toLocaleString()}</span>
+                <span data-value>{"infinite" in m ? "∞" : m.req.toLocaleString()}</span>
                 <span data-name>{m.name}</span>
-                {m.baseReq && <span data-bonus>2x usage</span>}
+                {m.id === "muse-spark-1.2-contributor" && (
+                  <span data-regions>
+                    (
+                    <a href="https://ai.developer.meta.com/legal/geographic-use-policy">
+                      {i18n.t("go.graph.limitedRegions")}
+                    </a>
+                    )
+                  </span>
+                )}
+                {"infinite" in m && <span data-limited>({i18n.t("go.graph.limitedTime")})</span>}
+                {m.baseReq && <span data-bonus>8x usage</span>}
               </span>
             )}
           </For>
@@ -252,6 +269,12 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
+            <div data-component="desktop-app-banner">
+              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
+              <div data-slot="content">
+                <span data-slot="text">{i18n.t("go.banner.text")}</span>
+              </div>
+            </div>
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />
@@ -501,6 +524,13 @@ export default function Home() {
                     <p>
                       <strong>GPT 5.6 Luna:</strong> {i18n.t("go.faq.a5.gptRetention")}{" "}
                       <a href="https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring">
+                        {i18n.t("go.faq.a5.learnMore")}
+                      </a>
+                      .
+                    </p>
+                    <p>
+                      <strong>Muse Spark 1.2 Contributor:</strong> {i18n.t("go.faq.a5.museRetention")}{" "}
+                      <a href="https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>
                       .

@@ -253,6 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "following exceptions",
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
+  "go.banner.text": "Ox Alpha Free is available on Go for a limited time",
   "go.meta.description":
     "Go starts at $5 for your first month, then $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
@@ -269,6 +270,8 @@ export const dict = {
   "go.graph.freePill": "Big Pickle and free models",
   "go.graph.go": "Go",
   "go.graph.label": "Requests per 5 hour",
+  "go.graph.limitedRegions": "limited regions",
+  "go.graph.limitedTime": "limited time",
   "go.graph.tick": "{{n}}x",
   "go.graph.usageLimits": "Usage limits",
   "go.graph.aria": "Requests per 5h: {{free}} vs {{go}}",
@@ -343,10 +346,13 @@ export const dict = {
   "go.faq.a5.used": "Used",
   "go.faq.a5.notUsed": "Not used",
   "go.faq.a5.noAgreement": "No agreement",
+  "go.faq.a5.notZdr": "Not ZDR",
   "go.faq.a5.grokRetention":
     "ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API.",
   "go.faq.a5.gptRetention":
     "Abuse monitoring logs are generated for all API feature usage and retained for up to 30 days.",
+  "go.faq.a5.museRetention":
+    "Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models.",
   "go.faq.a5.deepseekRetention":
     "ZDR agreement is renewed monthly. The current agreement is valid through August 31, 2026.",
   "go.faq.a5.learnMore": "Learn more",
@@ -390,6 +396,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Model is disabled",
   "zen.api.error.regionNotAllowed":
     "The latest version of this model is only available hosted in China and requires explicit opt in: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "This model is not available in your country.",
+  "zen.api.error.trainingNotAllowed":
+    "This model collects data used to improve its quality and requires explicit opt in: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Free promotion has ended for {{model}}. You can continue using the model by subscribing to OpenCode Go - {{link}}",
 
@@ -671,7 +680,8 @@ export const dict = {
     'Select "OpenCode Go" as the provider in your opencode configuration to use Go models.',
   "workspace.lite.providers.title": "Providers",
   "workspace.lite.providers.description": "Control which providers are used for routing.",
-  "workspace.lite.providers.useChina": "Enable models hosted in China",
+  "workspace.lite.providers.allowTraining": "Allow models that train on request data",
+  "workspace.lite.providers.useChina": "Allow models hosted in China",
   "workspace.lite.black.message":
     "You're currently subscribed to OpenCode Black or on the waitlist. Please unsubscribe first if you'd like to switch to Go.",
   "workspace.lite.other.message":

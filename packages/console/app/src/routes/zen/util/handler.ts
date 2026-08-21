@@ -22,6 +22,7 @@ import {
   UserLimitError,
   ModelError,
   RegionError,
+  DataPolicyError,
   RateLimitError,
   FreeUsageLimitError,
   GoUsageLimitError,
@@ -51,7 +52,7 @@ import { createModelTpsLimiter } from "./modelTpsLimiter"
 import { createProviderBudgetTracker } from "./providerBudgetTracker"
 import { accumulateUsage, HOT_WORKSPACES } from "./usageBatcher"
 import { Workspace } from "@opencode-ai/console-core/workspace.js"
-import { countryFromRequest } from "~/lib/request-country"
+import { countryFromRequest, isModelCountryRestricted } from "~/lib/request-country"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -121,6 +122,8 @@ export async function handler(
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
+    const country = countryFromRequest(input.request)
+    if (isModelCountryRestricted(modelInfo.id, country)) throw new RegionError(t("zen.api.error.countryNotAllowed"))
     const trialLimiter = createTrialLimiter(modelInfo.trialProvider, ip)
     const trialProviders = await trialLimiter?.check()
     const rateLimiter = modelInfo.allowAnonymous
@@ -128,12 +131,23 @@ export async function handler(
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
     const authInfo = await authenticate(modelInfo, zenApiKey)
+    if (
+      authInfo &&
+      opts.modelList === "lite" &&
+      modelInfo.id === "muse-spark-1.2-contributor" &&
+      !authInfo.allowTraining
+    )
+      throw new DataPolicyError(
+        t("zen.api.error.trainingNotAllowed", {
+          consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
+        }),
+      )
     const allowedRegions = authInfo?.region
       ? authInfo.region
       : await (async () => {
           if (!authInfo) return
           return Actor.provide("system", { workspaceID: authInfo.workspaceID }, () =>
-            Workspace.setDefaultRegion({ country: countryFromRequest(input.request) }),
+            Workspace.setDefaultRegion({ country }),
           )
         })()
     if (
@@ -247,7 +261,7 @@ export async function handler(
             headers.delete("host")
             headers.delete("content-length")
             headers.delete("x-opencode-request")
-            headers.delete("x-opencode-session")
+            if (!isNewInference) headers.delete("x-opencode-session")
             headers.delete("x-opencode-project")
             headers.delete("x-opencode-client")
             return headers
@@ -477,7 +491,7 @@ export async function handler(
       } catch {}
     }
 
-    if (error instanceof RegionError)
+    if (error instanceof RegionError || error instanceof DataPolicyError)
       return new Response(
         JSON.stringify({
           type: "error",
@@ -708,6 +722,7 @@ export async function handler(
           workspace: {
             id: WorkspaceTable.id,
             region: WorkspaceTable.region,
+            allowTraining: WorkspaceTable.allow_training,
             isBlocked: WorkspaceTable.is_blocked,
             isFlaggedByAnthropic: WorkspaceTable.is_flagged_by_anthropic,
             isFlaggedByOpenAI: WorkspaceTable.is_flagged_by_openai,
@@ -820,6 +835,7 @@ export async function handler(
       apiKeyId: data.apiKey,
       workspaceID: data.workspace.id,
       region: data.workspace.region,
+      allowTraining: data.workspace.allowTraining ?? false,
       billing: data.billing,
       user: data.user,
       black: data.black,

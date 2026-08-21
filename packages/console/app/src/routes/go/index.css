@@ -592,6 +592,16 @@ body {
           white-space: nowrap;
         }
 
+        :is([data-regions], [data-limited]) {
+          color: var(--color-text-weak);
+          white-space: nowrap;
+
+          a {
+            color: inherit;
+            pointer-events: auto;
+          }
+        }
+
         [data-value] {
           color: var(--color-text-strong);
           font-weight: 600;
@@ -686,6 +696,11 @@ body {
 
       [data-bar][data-kind="promo"] {
         fill: color-mix(in srgb, var(--bar-go) 50%, transparent);
+      }
+
+      [data-item][data-infinite] [data-value] {
+        font-size: 18px;
+        line-height: 1;
       }
 
       [data-val] {
