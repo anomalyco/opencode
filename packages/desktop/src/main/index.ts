@@ -1,4 +1,6 @@
-import { NodeFileSystem, NodePath, NodeRuntime } from "@effect/platform-node"
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
+import * as NodePath from "@effect/platform-node/NodePath"
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import { app } from "electron"
 import { Effect, Layer } from "effect"
 import { Ipc } from "./ipc"

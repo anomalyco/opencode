@@ -100,7 +100,11 @@ const FileTreeNodeV2 = (
     >
       {local.children}
       <span class="flex-1 min-w-0 text-start text-12-medium whitespace-nowrap truncate">
-        <bdi dir="auto">{local.node.name}</bdi>
+        <bdi dir="auto">
+          {local.node.type === "directory"
+            ? normalizeFileTreeV2Path(local.node.path).split("/").at(-1)
+            : local.node.name}
+        </bdi>
       </span>
       {(() => {
         const value = kind()

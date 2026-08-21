@@ -379,7 +379,12 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         },
       })
     }
-    contents.push({ role: "user", parts })
+    // Gemini requires every response to a parallel call batch in one user turn,
+    // so consecutive tool results join the open function-response turn.
+    const previous = contents.at(-1)
+    if (previous?.role === "user" && previous.parts.some((item) => "functionResponse" in item))
+      contents[contents.length - 1] = { role: "user", parts: [...previous.parts, ...parts] }
+    else contents.push({ role: "user", parts })
   }
 
   return contents

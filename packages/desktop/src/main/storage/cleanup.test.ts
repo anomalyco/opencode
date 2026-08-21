@@ -1,4 +1,5 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
+import * as NodePath from "@effect/platform-node/NodePath"
 import { afterEach, describe, expect, test } from "bun:test"
 import { tmpdir } from "node:os"
 import { Effect, FileSystem, Layer, Path } from "effect"
