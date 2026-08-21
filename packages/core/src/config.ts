@@ -30,9 +30,8 @@ import { ConfigNormalize } from "./config/normalize.js"
 import { WellKnown } from "./wellknown.js"
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
-  return entries
-    .filter((entry): entry is Document => entry.type === "document")
-    .findLast((entry) => entry.info[key] !== undefined)?.info[key]
+  return entries.findLast((entry): entry is Document => entry.type === "document" && entry.info[key] !== undefined)
+    ?.info[key]
 }
 
 export interface Interface {

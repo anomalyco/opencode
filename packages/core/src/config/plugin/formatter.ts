@@ -5,11 +5,12 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Npm } from "@opencode-ai/util/npm"
 import { AppProcess } from "@opencode-ai/util/process"
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Formatter } from "../../formatter.js"
 import { make, type Info } from "../../formatter/builtins.js"
 import { Location } from "../../location.js"
+import { ConfigEntryObserver } from "./entry-observer.js"
 
 export const Plugin = define({
   id: "opencode.config.formatter",
@@ -21,20 +22,7 @@ export const Plugin = define({
     const location = yield* Location.Service
     const npm = yield* Npm.Service
     const processes = yield* AppProcess.Service
-    const loaded = { entries: yield* config.entries() }
-    const reload = config.entries().pipe(
-      Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-      Effect.andThen(formatter.reload()),
-    )
-
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
-      Stream.runForEach(() => reload),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    // Refetch after subscribing so a config update between the first read and
-    // the live subscription cannot leave the transform on a stale snapshot.
-    loaded.entries = yield* config.entries()
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, formatter.reload())
 
     yield* formatter.transform((draft) => {
       const configured = Config.latest(loaded.entries, "formatter")
