@@ -112,15 +112,15 @@ export const create = (
           files: collected,
           ...(result.ok ? {} : { error: true }),
         }
-        const content: Array<Content> = [{ type: "text", text: value.output }]
-        content.push(
+        const content: Array<Content> = [
+          { type: "text", text: value.output },
           ...value.files.map((file) => ({
             type: "file" as const,
             uri: `data:${file.mime};base64,${file.data}`,
             mime: file.mime,
             ...(file.name === undefined ? {} : { name: file.name }),
           })),
-        )
+        ]
         const metadata: Metadata = {
           toolCalls: value.toolCalls,
           ...(value.error ? { error: true } : {}),
