@@ -256,7 +256,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
-  "go.banner.text": "Hy3 sınırlı bir süre için 8x kullanım limiti sunuyor",
+  "go.banner.text": "Ox Alpha Free sınırlı bir süre için Go'da kullanılabilir",
   "go.meta.description":
     "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
@@ -275,6 +275,7 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "5 saat başına istekler",
   "go.graph.limitedRegions": "sınırlı bölgeler",
+  "go.graph.limitedTime": "sınırlı süre",
   "go.graph.usageLimits": "Kullanım limitleri",
   "go.graph.aria": "5 saatlik istekler: {{free}} vs {{go}}",
 
