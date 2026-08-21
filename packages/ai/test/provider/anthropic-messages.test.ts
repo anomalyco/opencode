@@ -640,7 +640,7 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("maps thinking tokens and preserves unknown Anthropic usage fields", () =>
+  it.effect("maps nullable input tokens and preserves unknown Anthropic usage fields", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
@@ -663,6 +663,7 @@ describe("Anthropic Messages route", () => {
                 type: "message_delta",
                 delta: { stop_reason: "end_turn" },
                 usage: {
+                  input_tokens: null,
                   output_tokens: 8,
                   server_tool_use: { web_search_requests: 2, terminal_counter: 3 },
                   output_tokens_details: { terminal_detail: "preserved" },
@@ -682,7 +683,7 @@ describe("Anthropic Messages route", () => {
         totalTokens: 15,
         providerMetadata: {
           anthropic: {
-            input_tokens: 5,
+            input_tokens: null,
             cache_read_input_tokens: 2,
             service_tier: "standard",
             cache_creation: { ephemeral_5m_input_tokens: 1 },
