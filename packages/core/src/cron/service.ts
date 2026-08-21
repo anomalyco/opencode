@@ -78,7 +78,7 @@ const make = Effect.gen(function* () {
       // Reserve the pending slot atomically before forking so a fast delivery
       // cannot complete and clear the slot before the fiber reference is stored.
       const reserved = yield* Ref.modify(pending, (m) =>
-        m.has(job.id) ? [false, m] as const : [true, m.set(job.id, PENDING_RESERVED)] as const,
+        m.has(job.id) ? ([false, m] as const) : ([true, m.set(job.id, PENDING_RESERVED)] as const),
       )
       if (!reserved) {
         // Coalesced: a delivery is already pending for this job. Advance the
@@ -88,24 +88,20 @@ const make = Effect.gen(function* () {
       }
 
       const fiber = yield* Effect.forkScoped(
-        port
-          .deliver(job.sessionID, job.prompt, { agent: job.agent, model: job.model, context: job.context })
-          .pipe(
-            Effect.catch((e) =>
-              Effect.logError("cron delivery failed", { sessionID: job.sessionID, error: String(e) }),
-            ),
-            Effect.catchCause((cause) =>
-              Cause.hasInterrupts(cause)
-                ? Effect.failCause(cause)
-                : Effect.logError("cron delivery defect", { sessionID: job.sessionID, cause: Cause.pretty(cause) }),
-            ),
-            Effect.ensuring(
-              Ref.update(pending, (m) => {
-                if (m.get(job.id) === PENDING_RESERVED || m.get(job.id) === fiber) m.delete(job.id)
-                return m
-              }),
-            ),
+        port.deliver(job.sessionID, job.prompt, { agent: job.agent, model: job.model, context: job.context }).pipe(
+          Effect.catch((e) => Effect.logError("cron delivery failed", { sessionID: job.sessionID, error: String(e) })),
+          Effect.catchCause((cause) =>
+            Cause.hasInterrupts(cause)
+              ? Effect.failCause(cause)
+              : Effect.logError("cron delivery defect", { sessionID: job.sessionID, cause: Cause.pretty(cause) }),
           ),
+          Effect.ensuring(
+            Ref.update(pending, (m) => {
+              if (m.get(job.id) === PENDING_RESERVED || m.get(job.id) === fiber) m.delete(job.id)
+              return m
+            }),
+          ),
+        ),
       )
       yield* Ref.update(pending, (m) => {
         if (m.get(job.id) === PENDING_RESERVED) m.set(job.id, fiber)
@@ -173,19 +169,13 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const before = yield* Ref.get(heap)
       const removedIds = new Set(
-        before
-          .filter((j) => j.sessionID === sessionID && (jobId === "all" || j.id === jobId))
-          .map((j) => j.id),
+        before.filter((j) => j.sessionID === sessionID && (jobId === "all" || j.id === jobId)).map((j) => j.id),
       )
-      const removed = yield* filterInPlace(
-        (j) => j.sessionID !== sessionID || (jobId !== "all" && j.id !== jobId),
-      )
+      const removed = yield* filterInPlace((j) => j.sessionID !== sessionID || (jobId !== "all" && j.id !== jobId))
       yield* Ref.get(pending).pipe(
         Effect.flatMap((m) =>
           Effect.forEach([...m.entries()], ([id, fiber]) =>
-            removedIds.has(id) && fiber !== PENDING_RESERVED
-              ? Fiber.interrupt(fiber).pipe(Effect.asVoid)
-              : Effect.void,
+            removedIds.has(id) && fiber !== PENDING_RESERVED ? Fiber.interrupt(fiber).pipe(Effect.asVoid) : Effect.void,
           ),
         ),
       )

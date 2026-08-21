@@ -26,12 +26,7 @@ const mockSession = Layer.mock(Session.Service)({
   get: () => Effect.die("unexpected session.get in this test"),
 })
 
-const it = testEffect(
-  CronDeliveryPortLive.pipe(
-    Layer.provide(mockPrompt),
-    Layer.provide(mockSession),
-  ),
-)
+const it = testEffect(CronDeliveryPortLive.pipe(Layer.provide(mockPrompt), Layer.provide(mockSession)))
 
 describe("legacy cron delivery port", () => {
   it.effect("deliver replays the captured InstanceRef so SessionPrompt can read InstanceState.context", () =>
@@ -44,14 +39,16 @@ describe("legacy cron delivery port", () => {
       })
       expect(promptCalled).toBe(true)
       expect(seenInstance).toBe(mockInstance)
-    }))
+    }),
+  )
 
   it.effect("deliver with no captured context and no ambient InstanceRef fails (documents the requirement)", () =>
     Effect.gen(function* () {
       const port = yield* CronDeliveryPort
       const exit = yield* port.deliver("ses_test", "hi", { context: undefined }).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
-    }))
+    }),
+  )
 })
 
 // --- exists ---
@@ -60,9 +57,7 @@ const existsSessionLayer = Layer.succeed(
   Session.Service,
   Session.Service.of({
     get: (id: SessionID) =>
-      id === SessionID.make("ses_test")
-        ? Effect.succeed({ id } as any)
-        : Effect.fail(new Error("Session not found")),
+      id === SessionID.make("ses_test") ? Effect.succeed({ id } as any) : Effect.fail(new Error("Session not found")),
   } as any),
 )
 
@@ -83,14 +78,16 @@ describe("legacy cron delivery port — exists", () => {
       const port = yield* CronDeliveryPort
       const exists = yield* port.exists(SessionID.make("ses_test"))
       expect(exists).toBe(true)
-    }))
+    }),
+  )
 
   existsHappyIt.effect("returns false when session.get fails (orElseSucceed fallback)", () =>
     Effect.gen(function* () {
       const port = yield* CronDeliveryPort
       const exists = yield* port.exists("ses_missing")
       expect(exists).toBe(false)
-    }))
+    }),
+  )
 })
 
 // --- deliver error mapping ---
@@ -114,13 +111,12 @@ describe("legacy cron delivery port — deliver error mapping", () => {
   deliverErrorIt.effect("maps prompt failures to CronDeliveryError", () =>
     Effect.gen(function* () {
       const port = yield* CronDeliveryPort
-      const exit = yield* port
-        .deliver("ses_test", "hello", { context: { instance: mockInstance } })
-        .pipe(Effect.exit)
+      const exit = yield* port.deliver("ses_test", "hello", { context: { instance: mockInstance } }).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
       if (!Exit.isFailure(exit)) return
       const err = Cause.squash(exit.cause)
       expect(err).toBeInstanceOf(CronDeliveryError)
       expect(String(err)).toContain("prompt service down")
-    }))
+    }),
+  )
 })

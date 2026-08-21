@@ -23,11 +23,12 @@ const DeleteParameters = Schema.Struct({
 
 type Metadata = { [key: string]: any }
 
-const renderError = (e: unknown) => Effect.succeed({
-  title: "cron error",
-  output: JSON.stringify({ error: String(e) }),
-  metadata: {},
-} satisfies Tool.ExecuteResult)
+const renderError = (e: unknown) =>
+  Effect.succeed({
+    title: "cron error",
+    output: JSON.stringify({ error: String(e) }),
+    metadata: {},
+  } satisfies Tool.ExecuteResult)
 
 export const CronAddTool = Tool.define<typeof AddParameters, Metadata, never>(
   "cron_add",

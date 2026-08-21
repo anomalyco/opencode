@@ -24,9 +24,7 @@ export const CronDeliveryPortLive = Layer.effect(
             model: opts?.model ? ModelV2.parse(opts.model) : undefined,
           })
           .pipe(Effect.asVoid)
-        return attachWith(work, refs).pipe(
-          Effect.mapError((e) => new CronDeliveryError({ message: String(e) })),
-        )
+        return attachWith(work, refs).pipe(Effect.mapError((e) => new CronDeliveryError({ message: String(e) })))
       },
       exists: (sessionID) =>
         sessionSvc.get(SessionID.make(sessionID)).pipe(

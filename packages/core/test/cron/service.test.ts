@@ -23,8 +23,7 @@ const run = <A, E, R, E2>(value: Body<A, E, R | Scope.Scope>, layer: Layer.Layer
 
 const makeTest = <R, E>(baseLayer: Layer.Layer<R, E>) => {
   const fullLayer = Layer.provideMerge(baseLayer, testEnv)
-  return <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>) =>
-    test(name, () => run(value, fullLayer))
+  return <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>) => test(name, () => run(value, fullLayer))
 }
 
 describe("CronService", () => {
@@ -61,9 +60,7 @@ describe("CronService", () => {
   it("add rejects interval < 60s", () =>
     Effect.gen(function* () {
       const cron = yield* CronService
-      const result = yield* cron.add({ sessionID: "s1", prompt: "test", intervalMs: 30_000 }).pipe(
-        Effect.exit,
-      )
+      const result = yield* cron.add({ sessionID: "s1", prompt: "test", intervalMs: 30_000 }).pipe(Effect.exit)
       expect(Exit.isFailure(result)).toBe(true)
     }))
 
@@ -73,9 +70,7 @@ describe("CronService", () => {
       for (let i = 0; i < 50; i++) {
         yield* cron.add({ sessionID: "s2", prompt: `p${i}`, intervalMs: 120_000 })
       }
-      const result = yield* cron.add({ sessionID: "s2", prompt: "overflow", intervalMs: 120_000 }).pipe(
-        Effect.exit,
-      )
+      const result = yield* cron.add({ sessionID: "s2", prompt: "overflow", intervalMs: 120_000 }).pipe(Effect.exit)
       expect(Exit.isFailure(result)).toBe(true)
     }))
 

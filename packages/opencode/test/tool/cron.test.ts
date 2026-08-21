@@ -95,8 +95,7 @@ const testLayer = Layer.provideMerge(
   Layer.mergeAll(TestConsole.layer, TestClock.layer()),
 )
 
-const run = (effect: Effect.Effect<any, any, any>) =>
-  (Effect.runPromise as any)(effect.pipe(Effect.provide(testLayer)))
+const run = (effect: Effect.Effect<any, any, any>) => (Effect.runPromise as any)(effect.pipe(Effect.provide(testLayer)))
 
 describe("cron tools", () => {
   test("cron_add registers a job and returns JSON output", async () => {
