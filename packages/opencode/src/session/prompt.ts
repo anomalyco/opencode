@@ -841,9 +841,9 @@ const layer = Layer.effect(
                       let r: LSP.Range | undefined
                       if ("range" in symbol) r = symbol.range
                       else if ("location" in symbol) r = symbol.location.range
-                      if (r?.start?.line && r?.start?.line === start) {
-                        start = r.start.line
-                        end = r?.end?.line ?? start
+                      if (r && r.start.line + 1 === start) {
+                        start = r.start.line + 1
+                        end = r.end.line + 1
                         break
                       }
                     }
