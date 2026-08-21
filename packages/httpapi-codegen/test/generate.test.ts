@@ -144,6 +144,52 @@ describe("HttpApiCodegen.generate", () => {
     expect(source).toContain("export type SessionEventsOutput = OpenCodeEvent")
   })
 
+  test("rejects authoritative Effect types colliding with generated aliases", () => {
+    expect(() =>
+      emitEffectShape(compileContract(api(HttpApiEndpoint.get("get", "/session", { success: Schema.String }))), {
+        outputTypes: {
+          "session.get": {
+            name: "SessionGetOutput",
+            import: 'import type { SessionGetOutput } from "@example/schema/session"',
+          },
+        },
+      }),
+    ).toThrow("Generated Effect type collides with imported type: SessionGetOutput")
+  })
+
+  test("rejects qualified Effect imports colliding with generated interfaces", () => {
+    const Info = Schema.Struct({ id: Schema.String }).annotate({ identifier: "Session.Info" })
+
+    expect(() =>
+      emitEffectShape(compileContract(api(HttpApiEndpoint.get("get", "/session", { success: Info }))), {
+        typeReferences: [
+          {
+            schema: Info,
+            name: "SessionApi.Info",
+            import: 'import type { SessionApi } from "@example/schema/session"',
+          },
+        ],
+      }),
+    ).toThrow("Generated Effect type collides with imported type: SessionApi")
+  })
+
+  test("rejects imported endpoints colliding with generated adapter values", () => {
+    const contract = compileContract(api(HttpApiEndpoint.get("session.get", "/session", { success: Schema.String })))
+
+    expect(() =>
+      emitEffectImported(contract, {
+        module: "@example/api",
+        endpoints: { "session.session.get": "EndpointSessionGet" },
+      }),
+    ).toThrow("Generated Effect adapter collides with imported endpoint: EndpointSessionGet")
+    expect(() =>
+      emitEffectImported(contract, {
+        module: "@example/api",
+        api: "EndpointSessionGet",
+      }),
+    ).toThrow("Generated Effect adapter collides with imported endpoint: EndpointSessionGet")
+  })
+
   test("exposes an imported Effect client through its generated shape", () => {
     const output = emitEffectImported(
       compileContract(api(HttpApiEndpoint.get("get", "/session", { success: Schema.String }))),
@@ -276,7 +322,7 @@ describe("HttpApiCodegen.generate", () => {
 
     const imported = emitEffectImported(contract, { module: "@example/api", api: "Api" })
     expect(imported.files.find((file) => file.path === "client.ts")?.content).toContain(
-      '"instructions": { "list": SessionInstructionsList(raw), "put": SessionInstructionsPut(raw), "remove": SessionInstructionsRemove(raw) }',
+      '"instructions": { "list": EndpointSessionInstructionsList(raw), "put": EndpointSessionInstructionsPut(raw), "remove": EndpointSessionInstructionsRemove(raw) }',
     )
 
     const shape = emitEffectShape(contract)
@@ -504,7 +550,9 @@ describe("HttpApiCodegen.generate", () => {
 
     expect(contract.groups[0]?.endpoints[0]?.operation.name).toBe("get")
     expect(promise).toContain('"get": (input: SessionGetInput, requestOptions?: RequestOptions)')
-    expect(effect).toContain('const adaptGroupSession = (raw: RawClient["session"]) => ({ "get": SessionGet(raw) })')
+    expect(effect).toContain(
+      'const adaptGroupSession = (raw: RawClient["session"]) => ({ "get": EndpointSessionGet(raw) })',
+    )
     expect(effect).toContain('raw["session.get"]')
   })
 
@@ -657,7 +705,7 @@ describe("HttpApiCodegen.generate", () => {
     expect(types).toContain('readonly "session": Session, readonly "sessionID": SessionID')
   })
 
-  test("merges identical Promise references whose names flatten together", () => {
+  test("disambiguates flattened Promise reference names", () => {
     const First = Schema.String.annotate({ identifier: "ExampleName" })
     const Second = Schema.String.annotate({ identifier: "Example_Name" })
     const output = emitPromise(
@@ -668,10 +716,10 @@ describe("HttpApiCodegen.generate", () => {
     const types = output.files.find((file) => file.path === "types.ts")?.content
 
     expect(types).toContain("export type ExampleName = string")
-    expect(types).toContain('readonly "first": ExampleName, readonly "second": ExampleName')
+    expect(types).toContain("export type ExampleName2 = string")
   })
 
-  test("names JSON-normalized Promise reference variants without positional suffixes", () => {
+  test("keeps conflicting Promise reference identifiers distinct", () => {
     const First = Schema.Struct({ value: Schema.String }).annotate({ identifier: "Shared" })
     const Second = Schema.Struct({ value: Schema.Number }).annotate({ identifier: "Shared" })
 
@@ -683,8 +731,8 @@ describe("HttpApiCodegen.generate", () => {
     const types = output.files.find((file) => file.path === "types.ts")?.content
 
     expect(types).toContain('export type Shared = { readonly "value": string }')
-    expect(types).toContain('export type SharedJson = { readonly "value": number }')
-    expect(types).toContain('readonly "first": Shared, readonly "second": SharedJson')
+    expect(types).toContain('export type Shared1 = { readonly "value": number }')
+    expect(types).toContain('readonly "first": Shared, readonly "second": Shared1')
   })
 
   test("deduplicates equivalent Promise references with the same identifier", () => {
@@ -1520,17 +1568,17 @@ describe("HttpApiCodegen.generate", () => {
     expect(output.files[0]?.content).toContain('HttpApiGroup.make("../session"')
   })
 
-  test("rejects group identifiers colliding with support module names", () => {
-    expect(() =>
-      compile(
-        HttpApi.make("test").add(
-          HttpApiGroup.make("INDEX").add(HttpApiEndpoint.get("get", "/index", { success: Schema.String })),
-        ),
-      ),
-    ).toThrow("Client module name collision: INDEX")
+  test("prefixes group modules that collide with support or Windows-reserved names", () => {
+    const output = compile(
+      HttpApi.make("test")
+        .add(HttpApiGroup.make("INDEX").add(HttpApiEndpoint.get("get", "/index", { success: Schema.String })))
+        .add(HttpApiGroup.make("CON").add(HttpApiEndpoint.get("get", "/con", { success: Schema.String }))),
+    )
+
+    expect(output.files.slice(0, 2).map((file) => file.path)).toEqual(["group-INDEX.ts", "group-CON.ts"])
   })
 
-  test("rejects module names colliding after sanitization", () => {
+  test("rejects module names colliding after normalization", () => {
     expect(() =>
       compile(
         HttpApi.make("test")

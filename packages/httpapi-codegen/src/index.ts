@@ -221,8 +221,10 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
         throw new GenerationError({ reason: `Client group name collision: ${identifier}` })
       }
       // Module names derive from the group identifier so unrelated groups never rename.
-      const module = identifier.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "")
-      if (module === "" || modules.has(module.toLowerCase())) {
+      const sanitized = identifier.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "")
+      const reserved = /^(aux|client|client-error|con|index|nul|prn|com[1-9]|lpt[1-9])$/i.test(sanitized)
+      const module = sanitized === "" || reserved ? `group-${sanitized}` : sanitized
+      if (modules.has(module.toLowerCase())) {
         throw new GenerationError({ reason: `Client module name collision: ${module}` })
       }
       modules.add(module.toLowerCase())
@@ -366,6 +368,25 @@ function renderEffectShape(
 ) {
   const references = effectTypeReferences(typeReferences)
   const imports = new Set<string>()
+  const externalNames = new Set([
+    "AppApi",
+    "Effect",
+    "Stream",
+    ...typeReferences.flatMap((reference) => reference.name.match(/^[A-Za-z_$][A-Za-z0-9_$]*/) ?? []),
+    ...Object.values(outputTypes ?? {}).flatMap((output) => output.name.match(/^[A-Za-z_$][A-Za-z0-9_$]*/) ?? []),
+  ])
+  const generatedNames = groups.flatMap((group) => [
+    groupShapeName(group),
+    ...group.endpoints.flatMap((endpoint) => [
+      ...(endpoint.operation.inputMode === "none" ? [] : [`${endpointTypeName(group, endpoint)}Input`]),
+      `${endpointTypeName(group, endpoint)}Output`,
+      groupShapeTypeName(group, endpoint),
+    ]),
+  ])
+  const collision = generatedNames.find((name) => externalNames.has(name))
+  if (collision !== undefined) {
+    throw new GenerationError({ reason: `Generated Effect type collides with imported type: ${collision}` })
+  }
   const endpointTypes = groups.map((group) => {
     const endpoints = group.endpoints.map((endpoint) => {
       const prefix = endpointTypeName(group, endpoint)
@@ -544,6 +565,10 @@ function endpointTypeName(group: Group, endpoint: Endpoint) {
   return `${groupTypeName(group)}${endpoint.clientPath.map(identifierPart).join("")}`
 }
 
+function endpointAdapterName(group: Group, endpoint: Endpoint) {
+  return `Endpoint${endpointTypeName(group, endpoint)}`
+}
+
 function groupShapeTypeName(group: Group, endpoint: Endpoint) {
   return `${endpointTypeName(group, endpoint)}Operation`
 }
@@ -628,6 +653,7 @@ function renderImportedEffectFiles(
     const rawGroup = group.endpoints[0]?.topLevel ? "RawClient" : `RawClient[${JSON.stringify(group.sourceIdentifier)}]`
     const methods = group.endpoints.map((item) => {
       const prefix = endpointTypeName(group, item)
+      const adapter = endpointAdapterName(group, item)
       const schemaBySource = {
         params: item.params,
         query: item.query,
@@ -674,11 +700,11 @@ function renderImportedEffectFiles(
           : isOpaquePayload(item)
             ? `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.identifier)}]>[0]\n`
             : ""
-      return `${declarations}const ${prefix} = (raw: ${rawGroup}) => (${argument}) => ${output}`
+      return `${declarations}const ${adapter} = (raw: ${rawGroup}) => (${argument}) => ${output}`
     })
     const fields = renderClientTree(
       group.endpoints,
-      (item) => `${endpointTypeName(group, item)}(raw)`,
+      (item) => `${endpointAdapterName(group, item)}(raw)`,
       (name, value) => `${JSON.stringify(name)}: ${value}`,
       ", ",
     )
@@ -699,6 +725,15 @@ function renderImportedEffectFiles(
       ? renderImportedGroup(options.group)
       : renderImportedProjection(groups, options.endpoints)
   const api = imported ? options.api : "Api"
+  const adapterNames = new Set(
+    groups.flatMap((group) => group.endpoints.map((endpoint) => endpointAdapterName(group, endpoint))),
+  )
+  const adapterCollision = (projection?.imports ?? [api]).find((name) => adapterNames.has(name))
+  if (adapterCollision !== undefined) {
+    throw new GenerationError({
+      reason: `Generated Effect adapter collides with imported endpoint: ${adapterCollision}`,
+    })
+  }
   const imports =
     projection === undefined
       ? `import { ${api} } from ${JSON.stringify(options.module)}`
@@ -991,11 +1026,12 @@ function renderClientTree(
 }
 
 function identifierPart(value: string) {
-  return value
+  const identifier = value
     .split(/[^A-Za-z0-9]+/)
     .filter(Boolean)
     .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
     .join("")
+  return /^[A-Za-z_$]/.test(identifier) ? identifier : `_${identifier}`
 }
 
 function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, reservedNames: ReadonlySet<string>) {
@@ -1037,13 +1073,15 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
     }
     return type
   }
-  // SchemaRepresentation suffixes colliding reference names in encounter order (`Form.Fields_2`),
-  // so an unrelated schema addition can renumber every later type. Strip the positional suffix
-  // here and resolve residual collisions from content below.
   const names = new Map<string, string>()
+  const usedNames = new Set(reservedNames)
   const references = document.references.nonRecursives.filter((reference) => !anonymous.has(reference.$ref))
+  const referenceNames = new Set(references.map((reference) => reference.$ref))
   for (const reference of references) {
-    names.set(reference.$ref, identifierPart(reference.$ref.replace(/_\d+$/, "")))
+    const seed = identifierPart(reference.$ref)
+    const name = uniqueTypeName(seed, usedNames)
+    names.set(reference.$ref, name)
+    usedNames.add(name)
   }
   const render = (type: string) => {
     for (const [reference, name] of names) {
@@ -1056,44 +1094,19 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
       .replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
     return mutable ? mutableType(preserveStringSuggestions(output)) : preserveStringSuggestions(output)
   }
-  // Keep authored base references on the bare public name. Effect may emit additional
-  // references (`Form_Field_1`) when the same schema appears through a JSON-normalized
-  // boundary; those become `FormFieldJson` instead of inheriting encounter-order numbers.
-  // Parent definitions can embed these variants, so recompute every name group to a fixpoint.
-  const groups = Map.groupBy(references, (reference) => identifierPart(reference.$ref.replace(/_\d+$/, "")))
-  for (const [name, claimants] of groups) {
-    if (!reservedNames.has(name)) continue
-    throw new GenerationError({
-      reason: `Generated type name is reserved: ${name} (${claimants.map((reference) => reference.$ref).join(", ")})`,
-    })
-  }
-  for (let previous = ""; previous !== JSON.stringify([...names]); ) {
-    previous = JSON.stringify([...names])
-    const next = new Map(names)
-    for (const [name, claimants] of groups) {
-      const rendered = new Map(
-        claimants.map((reference) => [reference.$ref, render(inlineAnonymous(reference.code.Type))]),
-      )
-      const bases = claimants.filter((reference) => !/_\d+$/.test(reference.$ref))
-      const baseShapes = [...new Set(bases.map((reference) => rendered.get(reference.$ref)!))]
-      if (baseShapes.length > 1) {
-        throw new GenerationError({
-          reason: `Schemas with different shapes flatten to one generated type name: ${name} (${bases.map((reference) => reference.$ref).join(", ")}); give them distinct identifier annotations`,
-        })
-      }
-      const base = baseShapes[0] ?? rendered.get(claimants[0].$ref)!
-      const variants = [...new Set([...rendered.values()].filter((shape) => shape !== base))].sort()
-      for (const reference of claimants) {
-        const shape = rendered.get(reference.$ref)!
-        if (shape === base) {
-          next.set(reference.$ref, name)
-          continue
-        }
-        const index = variants.indexOf(shape)
-        next.set(reference.$ref, `${name}Json${index === 0 ? "" : index + 1}`)
-      }
+  const equivalent = new Map<string, string>()
+  for (const reference of references) {
+    const base = reference.$ref.replace(/_\d+$/, "")
+    const identifier = referenceNames.has(base) ? base : reference.$ref
+    const key = `${identifier}\0${render(inlineAnonymous(reference.code.Type))}`
+    const existing = equivalent.get(key)
+    if (existing !== undefined) {
+      names.set(reference.$ref, existing)
+      continue
     }
-    for (const [reference, name] of next) names.set(reference, name)
+    const name = names.get(reference.$ref)
+    if (name === undefined) throw new GenerationError({ reason: `Missing Promise type name: ${reference.$ref}` })
+    equivalent.set(key, name)
   }
   const emitted = new Set<string>()
   return {
@@ -1106,6 +1119,11 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
       return [`export type ${name} = ${render(inlineAnonymous(reference.code.Type))}`]
     }),
   }
+}
+
+function uniqueTypeName(seed: string, used: ReadonlySet<string>, suffix = 1): string {
+  const name = suffix === 1 ? seed : `${seed}${suffix}`
+  return used.has(name) ? uniqueTypeName(seed, used, suffix + 1) : name
 }
 
 function structuralType(schema: Schema.Top) {

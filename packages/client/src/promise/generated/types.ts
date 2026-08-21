@@ -52,11 +52,11 @@ export type InstructionEntryKey = string
 
 export type SessionGenerateResponse = { data: { text: string } }
 
-export type SessionInboxSyntheticPayloadJson = { text: string; description?: string; metadata?: { [x: string]: any } }
+export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
-export type SessionMessageProviderStateJson = { [x: string]: any }
+export type SessionMessageProviderState1 = { [x: string]: any }
 
-export type ToolFileContentJson = { type: "file"; uri: string; mime: string; name?: string | undefined }
+export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
 
 export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: number }
 
@@ -141,9 +141,9 @@ export type Pty = {
   exitCode?: number
 }
 
-export type FormMetadataJson = { [x: string]: any }
+export type FormMetadata1 = { [x: string]: any }
 
-export type FormWhenJson = { key: string; op: "eq" | "neq"; value: string | number | boolean }
+export type FormWhen1 = { key: string; op: "eq" | "neq"; value: string | number | boolean }
 
 export type SessionStatus =
   | { type: "idle" }
@@ -870,7 +870,7 @@ export type ShellInfo = {
   time: { started: number; completed?: number }
 }
 
-export type ShellInfoJson = {
+export type ShellInfo1 = {
   id: string
   status: "running" | "exited" | "timeout" | "killed"
   command: string
@@ -895,7 +895,7 @@ export type SessionTextEnded = {
     assistantMessageID: string
     ordinal: number
     text: string
-    state?: SessionMessageProviderStateJson
+    state?: SessionMessageProviderState1
   }
 }
 
@@ -906,7 +906,7 @@ export type SessionReasoningStarted = {
   type: "session.reasoning.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; ordinal: number; state?: SessionMessageProviderStateJson }
+  data: { sessionID: string; assistantMessageID: string; ordinal: number; state?: SessionMessageProviderState1 }
 }
 
 export type SessionReasoningEnded = {
@@ -921,7 +921,7 @@ export type SessionReasoningEnded = {
     assistantMessageID: string
     ordinal: number
     text: string
-    state?: SessionMessageProviderStateJson
+    state?: SessionMessageProviderState1
   }
 }
 
@@ -938,11 +938,11 @@ export type SessionToolCalled = {
     id: string
     input: { [x: string]: any }
     executed: boolean
-    state?: SessionMessageProviderStateJson
+    state?: SessionMessageProviderState1
   }
 }
 
-export type ToolContentJson = ToolTextContent | ToolFileContentJson
+export type ToolContent1 = ToolTextContent | ToolFileContent1
 
 export type SessionCompactionStarted = {
   id: string
@@ -1118,7 +1118,7 @@ export type SessionStepEnded = {
     assistantMessageID: string
     finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
     rawFinish?: string
-    providerState?: SessionMessageProviderStateJson
+    providerState?: SessionMessageProviderState1
     cost: MoneyUSD
     tokens: TokenUsageInfo
     snapshot?: string
@@ -1158,7 +1158,7 @@ export type SessionStepFailed = {
     error: SessionStructuredError
     finish?: "content-filter"
     rawFinish?: string
-    providerState?: SessionMessageProviderStateJson
+    providerState?: SessionMessageProviderState1
     cost?: MoneyUSD
     tokens?: TokenUsageInfo
     snapshot?: string
@@ -1364,10 +1364,10 @@ export type SessionToolSuccess = {
     sessionID: string
     assistantMessageID: string
     id: string
-    content: [ToolContentJson, ...Array<ToolContentJson>]
+    content: [ToolContent1, ...Array<ToolContent1>]
     metadata?: { [x: string]: JsonValue }
     executed: boolean
-    resultState?: SessionMessageProviderStateJson
+    resultState?: SessionMessageProviderState1
   }
 }
 
@@ -1383,10 +1383,10 @@ export type SessionToolFailed = {
     assistantMessageID: string
     id: string
     error: SessionStructuredError
-    content?: [ToolContentJson, ...Array<ToolContentJson>]
+    content?: [ToolContent1, ...Array<ToolContent1>]
     metadata?: { [x: string]: JsonValue }
     executed: boolean
-    resultState?: SessionMessageProviderStateJson
+    resultState?: SessionMessageProviderState1
   }
 }
 
@@ -1421,12 +1421,12 @@ export type FormReplied = {
   data: { id: string; sessionID: string; answer: FormAnswer }
 }
 
-export type FormStringFieldJson = {
+export type FormStringField1 = {
   key: string
   title?: string
   description?: string
   required?: boolean
-  when?: Array<FormWhenJson>
+  when?: Array<FormWhen1>
   type: "string"
   format?: "email" | "uri" | "date" | "date-time"
   minLength?: number
@@ -1438,46 +1438,46 @@ export type FormStringFieldJson = {
   custom?: boolean
 }
 
-export type FormNumberFieldJson = {
+export type FormNumberField1 = {
   key: string
   title?: string
   description?: string
   required?: boolean
-  when?: Array<FormWhenJson>
+  when?: Array<FormWhen1>
   type: "number"
   minimum?: number
   maximum?: number
   default?: number
 }
 
-export type FormIntegerFieldJson = {
+export type FormIntegerField1 = {
   key: string
   title?: string
   description?: string
   required?: boolean
-  when?: Array<FormWhenJson>
+  when?: Array<FormWhen1>
   type: "integer"
   minimum?: number
   maximum?: number
   default?: number
 }
 
-export type FormBooleanFieldJson = {
+export type FormBooleanField1 = {
   key: string
   title?: string
   description?: string
   required?: boolean
-  when?: Array<FormWhenJson>
+  when?: Array<FormWhen1>
   type: "boolean"
   default?: boolean
 }
 
-export type FormMultiselectFieldJson = {
+export type FormMultiselectField1 = {
   key: string
   title?: string
   description?: string
   required?: boolean
-  when?: Array<FormWhenJson>
+  when?: Array<FormWhen1>
   type: "multiselect"
   options: Array<FormOption>
   minItems?: number
@@ -1724,7 +1724,7 @@ export type SessionInboxUserPayload = {
   metadata?: { [x: string]: JsonValue }
 }
 
-export type SessionInboxUserPayloadJson = {
+export type SessionInboxUserPayload1 = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
@@ -1815,12 +1815,12 @@ export type SessionMessageToolStateError = {
   metadata?: { [x: string]: JsonValue }
 }
 
-export type FormFieldJson =
-  | FormStringFieldJson
-  | FormNumberFieldJson
-  | FormIntegerFieldJson
-  | FormBooleanFieldJson
-  | FormMultiselectFieldJson
+export type FormField1 =
+  | FormStringField1
+  | FormNumberField1
+  | FormIntegerField1
+  | FormBooleanField1
+  | FormMultiselectField1
   | FormExternalField
 
 export type SessionsResponse = { data: Array<SessionInfo>; cursor: { previous?: string | null; next?: string | null } }
@@ -1835,8 +1835,8 @@ export type SessionInboxUser = {
 }
 
 export type SessionInboxItem =
-  | { type: "user"; payload: SessionInboxUserPayloadJson; delivery: SessionInboxDelivery }
-  | { type: "synthetic"; payload: SessionInboxSyntheticPayloadJson; delivery: SessionInboxDelivery }
+  | { type: "user"; payload: SessionInboxUserPayload1; delivery: SessionInboxDelivery }
+  | { type: "synthetic"; payload: SessionInboxSyntheticPayload1; delivery: SessionInboxDelivery }
   | { type: "compaction"; payload: SessionInboxCompactionPayload; delivery: SessionInboxDelivery }
   | { type: "move"; payload: SessionInboxMovePayload; delivery: SessionInboxDelivery }
 
@@ -1920,7 +1920,7 @@ export type SessionMessageAssistantTool = {
   time: { created: number; ran?: number; completed?: number }
 }
 
-export type FormFieldsJson = [FormFieldJson, ...Array<FormFieldJson>]
+export type FormFields2 = [FormField1, ...Array<FormField1>]
 
 export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove
 
@@ -1960,13 +1960,7 @@ export type SessionMessageAssistant = {
   retry?: SessionMessageAssistantRetry
 }
 
-export type FormInfoJson = {
-  id: string
-  sessionID: string
-  title: string
-  metadata?: FormMetadataJson
-  fields: FormFieldsJson
-}
+export type FormInfo1 = { id: string; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
 
 export type SessionEventDurable =
   | SessionCreated
@@ -2031,7 +2025,7 @@ export type FormCreated = {
   metadata?: { [x: string]: any }
   type: "form.created"
   location?: LocationRef
-  data: { form: FormInfoJson }
+  data: { form: FormInfo1 }
 }
 
 export type SessionLogItem = SessionEventDurable | EventLogSynced
@@ -5554,7 +5548,7 @@ export type ShellListInput = {
 
 export type ShellListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: Array<ShellInfoJson>
+  data: Array<ShellInfo1>
 }
 
 export type ShellCreateInput = {
@@ -5589,7 +5583,7 @@ export type ShellCreateInput = {
 
 export type ShellCreateOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: ShellInfoJson
+  data: ShellInfo1
 }
 
 export type ShellGetInput = {
@@ -5601,7 +5595,7 @@ export type ShellGetInput = {
 
 export type ShellGetOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: ShellInfoJson
+  data: ShellInfo1
 }
 
 export type ShellTimeoutInput = {
@@ -5614,7 +5608,7 @@ export type ShellTimeoutInput = {
 
 export type ShellTimeoutOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: ShellInfoJson
+  data: ShellInfo1
 }
 
 export type ShellOutputInput = {

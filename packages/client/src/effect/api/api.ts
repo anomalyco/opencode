@@ -960,9 +960,9 @@ export type SessionEnvironmentOperation<E = never> = (
   input: SessionEnvironmentInput,
 ) => Effect.Effect<SessionEnvironmentOutput, E>
 
-export type Endpoint5_36Input = { readonly sessionID: Session.ID; readonly idle: number }
-export type Endpoint5_36Output = void
-export type SessionViewOperation<E = never> = (input: Endpoint5_36Input) => Effect.Effect<Endpoint5_36Output, E>
+export type SessionViewInput = { readonly sessionID: Session.ID; readonly idle: number }
+export type SessionViewOutput = void
+export type SessionViewOperation<E = never> = (input: SessionViewInput) => Effect.Effect<SessionViewOutput, E>
 
 export interface SessionApi<E = never> {
   readonly list: SessionListOperation<E>
