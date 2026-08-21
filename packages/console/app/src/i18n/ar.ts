@@ -270,6 +270,7 @@ export const dict = {
   "go.graph.freePill": "Big Pickle ونماذج مجانية",
   "go.graph.go": "Go",
   "go.graph.label": "الطلبات كل 5 ساعات",
+  "go.graph.limitedRegions": "مناطق محدودة",
   "go.graph.usageLimits": "حدود الاستخدام",
   "go.graph.aria": "الطلبات كل 5 ساعات: {{free}} مقابل {{go}}",
 
@@ -671,6 +672,7 @@ export const dict = {
     'اختر "OpenCode Go" كمزود في إعدادات opencode الخاصة بك لاستخدام نماذج Go.',
   "workspace.lite.providers.title": "المزودون",
   "workspace.lite.providers.description": "تحكم في المزودين المستخدمين للتوجيه.",
+  "workspace.lite.providers.allowTraining": "السماح بالنماذج التي تتدرب على بيانات الطلبات",
   "workspace.lite.providers.useChina": "تفعيل النماذج المستضافة في الصين",
   "workspace.lite.black.message":
     "أنت مشترك حاليًا في OpenCode Black أو في قائمة الانتظار. يرجى إلغاء الاشتراك أولاً إذا كنت ترغب في التبديل إلى Go.",
