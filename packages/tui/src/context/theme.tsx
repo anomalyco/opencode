@@ -291,8 +291,7 @@ const themeContext = createSimpleContext({
         }, delay),
       )
     }
-    let unsubscribeRefresh: (() => void) | undefined
-    unsubscribeRefresh = themes.subscribeRefresh?.(refresh)
+    const unsubscribeRefresh = themes.subscribeRefresh?.(refresh)
 
     onCleanup(() => {
       renderer.off(CliRenderEvents.THEME_MODE, handle)

@@ -9,9 +9,7 @@ import { ServiceConfig } from "../../../services/service-config"
 export default Runtime.handler(
   Commands.commands.debug.commands.config,
   Effect.fn("cli.debug.config")(function* () {
-    const options = yield* ServiceConfig.options()
-    const found = yield* Service.discover(options)
-    const endpoint = found ?? (yield* Service.ensure(options))
+    const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const entries = yield* Effect.promise(() => client.config.get({ location: { directory: process.cwd() } }))
     process.stdout.write(JSON.stringify(entries, null, 2) + EOL)

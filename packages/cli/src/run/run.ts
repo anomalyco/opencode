@@ -10,6 +10,7 @@ import { toolInlineInfo } from "@opencode-ai/tui/mini/tool"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { UI } from "./ui"
 import { Env } from "../env"
+import { errorMessage } from "../util/error"
 
 export type RunCommandInput = {
   server: ServerConnection.Resolved
@@ -241,13 +242,6 @@ async function renderTool(part: SessionMessageAssistantTool, directory: string) 
 async function renderToolError(part: SessionMessageAssistantTool, directory: string) {
   const info = toolInlineInfo(part, directory)
   UI.println(UI.Style.TEXT_NORMAL + "✗", UI.Style.TEXT_NORMAL + `${info.title} failed`)
-}
-
-function errorMessage(error: unknown) {
-  if (error instanceof Error) return error.message
-  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string")
-    return error.message
-  return String(error)
 }
 
 /** @internal Used by the V1 command boundary before a Session exists. */
