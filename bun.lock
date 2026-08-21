@@ -380,6 +380,8 @@
         "google-auth-library": "10.5.0",
         "gray-matter": "4.0.3",
         "htmlparser2": "8.0.2",
+        "http-proxy-agent": "7.0.2",
+        "https-proxy-agent": "7.0.6",
         "ignore": "7.0.5",
         "immer": "11.1.4",
         "jsonc-parser": "3.3.1",

@@ -78,14 +78,15 @@ const collectComplete = (
 const automatic = () => {
   const connections: Array<{
     readonly messages: Queue.Queue<string | Uint8Array, AIError>
+    readonly headers: Headers.Headers
     closed: number
     sent: string[]
   }> = []
   const connector: WebSocketConnector = {
-    open: () =>
+    open: (input) =>
       Effect.gen(function* () {
         const messages = yield* Queue.unbounded<string | Uint8Array, AIError>()
-        const record = { messages, closed: 0, sent: [] as string[] }
+        const record = { messages, headers: input.headers, closed: 0, sent: [] as string[] }
         connections.push(record)
         const connection: WebSocketConnection = {
           sendText: (message) =>
@@ -598,6 +599,7 @@ describe("SessionModelTransport", () => {
         yield* collect(executor, exchange("fourth", { headers: { authorization: "two" }, rotateAfterMs: 1 }))
         expect(fixture.connections).toHaveLength(3)
         expect(fixture.connections.slice(0, 2).map((item) => item.closed)).toEqual([1, 1])
+        expect(fixture.connections.map((item) => item.headers.authorization)).toEqual(["one", "two", "two"])
       }),
     )
   })

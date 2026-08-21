@@ -1,8 +1,8 @@
 import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
-import { NodeSocket } from "@effect/platform-node"
 import { Socket } from "effect/unstable/socket"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
+import { WebSocketConstructor } from "./websocket-constructor.js"
 
 export const requestExecutor = makeGlobalNode({
   service: RequestExecutor.Service,
@@ -14,7 +14,8 @@ export const llmClient = makeGlobalNode({ service: LLMClient.Service, layer: LLM
 
 export const webSocketConstructor = makeGlobalNode({
   service: Socket.WebSocketConstructor,
-  layer: NodeSocket.layerWebSocketConstructorWS,
+  // Leave TLS trust on the runtime default store so NODE_EXTRA_CA_CERTS remains additive.
+  layer: WebSocketConstructor.layer,
   deps: [],
 })
 

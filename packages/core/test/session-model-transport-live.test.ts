@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { NodeSocket } from "@effect/platform-node"
 import { AIError, LLM, Message } from "@opencode-ai/ai"
 import {
   LLMClient,
@@ -10,6 +9,7 @@ import {
 } from "@opencode-ai/ai/route"
 import { configure } from "@opencode-ai/ai/providers/openai"
 import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
+import { WebSocketConstructor } from "@opencode-ai/core/effect/websocket-constructor"
 import { Session } from "@opencode-ai/schema/session"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
@@ -48,7 +48,7 @@ const withServer = <A>(
           }),
         ),
       )
-    }).pipe(Effect.scoped, Effect.provide(NodeSocket.layerWebSocketConstructorWS)),
+    }).pipe(Effect.scoped, Effect.provide(WebSocketConstructor.layer)),
   )
 
 const collect = (transport: SessionModelTransport.Interface, item: WebSocketChannelExchange) =>
