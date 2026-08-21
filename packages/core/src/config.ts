@@ -17,6 +17,7 @@ import {
   Event,
 } from "@opencode-ai/schema/config"
 import { Integration } from "@opencode-ai/schema/integration"
+import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Credential } from "./credential.js"
 import { Bus } from "./bus.js"
 import { Watcher } from "./filesystem/watcher.js"
@@ -457,8 +458,4 @@ function changes(before: unknown, after: unknown, path: (string | number)[] = []
     })
   }
   return [{ path, value: after }]
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
 }
