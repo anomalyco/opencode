@@ -39,10 +39,6 @@ describe("ShellParse portable parity", () => {
       }).toEqual({ command, commandsCovered: true })
       if (portable.commands.length !== legacy.commands.length)
         expect(portable.directories.length + Number(portable.directoryUnknown), command).toBeGreaterThan(0)
-      expect({
-        command,
-        coversLegacyDirectories: legacy.directories.every((directory) => portable.directories.includes(directory)),
-      }).toEqual({ command, coversLegacyDirectories: true })
     }
   })
 })

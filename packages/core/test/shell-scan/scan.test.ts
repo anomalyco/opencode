@@ -122,7 +122,6 @@ describe("ShellScan", () => {
     ["(git status)", ["git"]],
     ["{ git status; }", ["git"]],
     ["{ rm -rf /; } &", ["rm"]],
-    ["{ rm -rf /; } >out", ["rm"]],
     ["{ rm -rf /; }; echo safe", ["rm", "echo"]],
     ["if true; then rm -rf /; else echo safe; fi", ["true", "rm", "echo"]],
     ["if true; then rm x; elif false; then echo y; else echo z; fi", ["true", "rm", "false", "echo", "echo"]],
@@ -207,6 +206,9 @@ describe("ShellScan", () => {
     "s=abc; x='a[$(touch /tmp/victim)0]'; printf '%s' \"${s:x}\"",
     "ref='x[$(touch /tmp/victim)0]'; printf '%s' \"${!ref}\"",
     `printf '%s' "${"${".repeat(1000)}x${"}".repeat(1000)}"`,
+    "{ echo safe; } > /tmp/victim",
+    "if true; then echo safe; fi > /tmp/victim",
+    "if true; then :; 'if' victim; fi",
   ])("fails closed when Bash can execute an unreported side effect: %s", (command) => {
     expect(ShellScan.scan(command).kind).toBe("opaque")
   })
@@ -330,6 +332,8 @@ describe("ShellScan PowerShell", () => {
     "Get-ChildItem |",
     "Set-Location $target; git status",
     "Set-Location $(Resolve-Path ..); git status",
+    "Set-Alias jump Set-Location; jump /etc; Get-Content passwd",
+    "Set-Item alias:jump Set-Location; jump /etc; Get-Content passwd",
   ])("returns opaque for dynamic PowerShell execution: %s", (command) => {
     expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
   })

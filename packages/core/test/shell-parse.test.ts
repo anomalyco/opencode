@@ -106,12 +106,21 @@ describe("ShellParse", () => {
     expect(portable.directories).toEqual(["/tmp"])
   })
 
-  test("keeps a line-spliced directory command uncertain", async () => {
+  test("recognizes a line-spliced directory command", async () => {
     const portable = await Effect.runPromise(
       ShellParse.scan("c\\\nd /tmp", "/bin/bash", "/workspace", { portable: true }),
     )
     expect(portable.commands).toEqual([])
-    expect(portable.directoryUnknown).toBe(true)
+    expect(portable.directories).toEqual(["/tmp"])
+    expect(portable.directoryUnknown).toBe(false)
+  })
+
+  test("resolves line splices inside directory operands", async () => {
+    const portable = await Effect.runPromise(
+      ShellParse.scan("cd before\\\nafter", "/bin/bash", "/workspace", { portable: true }),
+    )
+    expect(portable.directories).toEqual(["beforeafter"])
+    expect(portable.directoryUnknown).toBe(false)
   })
 
   test.each(["command cd /tmp", "builtin cd /tmp"])(
@@ -134,6 +143,13 @@ describe("ShellParse", () => {
     })
   })
 
+  test("does not widen saved permissions across line splices", async () => {
+    const portable = await Effect.runPromise(
+      ShellParse.scan("rm\\\necho harmless", "/bin/bash", "/workspace", { portable: true }),
+    )
+    expect(portable.commands).toEqual([{ resource: "rm\\\necho harmless", save: "rm\\\necho *" }])
+  })
+
   test("keeps a genuinely different quoted command under shell authorization", async () => {
     const command = 'c"\\d" relative'
     const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
@@ -150,6 +166,29 @@ describe("ShellParse", () => {
     },
   )
 
+  test("extracts colon-separated PowerShell path parameters", async () => {
+    const portable = await Effect.runPromise(
+      ShellParse.scan("Set-Location -LiteralPath:/etc", "pwsh", "C:\\workspace", {
+        portable: true,
+        env: { HOME: "C:\\workspace" },
+      }),
+    )
+    expect(portable.commands).toEqual([])
+    expect(portable.directories).toEqual(["/etc"])
+    expect(portable.directoryUnknown).toBe(false)
+  })
+
+  test("keeps leading-hyphen Bash directory operands", async () => {
+    const portable = await Effect.runPromise(
+      ShellParse.scan("cd -- -/../../../etc; cat passwd", "/bin/bash", "/tmp/project", {
+        portable: true,
+        env: { HOME: "/tmp/project" },
+      }),
+    )
+    expect(portable.directories).toEqual(["-/../../../etc"])
+    expect(portable.directoryUnknown).toBe(false)
+  })
+
   test("keeps session CDPATH and sequential directory changes uncertain", async () => {
     const cdpath = await Effect.runPromise(
       ShellParse.scan("cd foo; pwd", "/bin/bash", "/workspace", {
@@ -163,6 +202,29 @@ describe("ShellParse", () => {
       ShellParse.scan("cd deep; cd ../../denied; pwd", "/bin/bash", "/workspace", { portable: true }),
     )
     expect(sequential.directoryUnknown).toBe(true)
+  })
+
+  test.each([
+    ["export H''OME=/etc; cd; cat passwd", "/bin/bash", { HOME: "/workspace" }],
+    ["Set-Item Env:T /etc; Set-Location $env:T; Get-Content passwd", "pwsh", { HOME: "/workspace", T: "/workspace" }],
+  ] as const)("keeps same-invocation directory environment mutation uncertain: %s", async (command, shell, env) => {
+    const portable = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true, env }))
+    expect(portable.directoryUnknown).toBe(true)
+  })
+
+  test.each([
+    ["/bin/bash", { HOME: "/workspace", BASH_ENV: "/tmp/hook" }],
+    ["/bin/zsh", { HOME: "/workspace", ZDOTDIR: "/tmp/hooks" }],
+    ["/bin/ksh", { HOME: "/workspace", ENV: "/tmp/hook" }],
+  ] as const)("fails closed for shell startup hooks: %s", async (shell, env) => {
+    const command = "echo safe"
+    const portable = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true, env }))
+    expect(portable).toEqual({
+      commands: [{ resource: command, save: command }],
+      directories: [],
+      analysis: "opaque",
+      directoryUnknown: true,
+    })
   })
 
   test("splits PowerShell commands case-insensitively", async () => {

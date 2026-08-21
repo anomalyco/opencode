@@ -143,11 +143,14 @@ permission scanner. The default remains the tree-sitter scanner.
 When enabled, the portable scanner is authoritative and tree-sitter is not
 consulted. It analyzes Bash-compatible shells (`bash`, `dash`, `ksh`, `sh`, and
 `zsh`) and PowerShell. Other shells and unsupported syntax, including heredocs,
-are treated as opaque.
+are treated as opaque. Shell startup-hook environments such as `BASH_ENV`,
+`ZDOTDIR`, and `ENV` are also opaque because they can execute code outside the
+submitted command.
 
 Opaque input requests permission for the complete original command. A scoped
 wildcard allow such as `echo *` cannot authorize opaque input; only an exact
-rule, an exact saved approval, or an unconditional action-wide allow can do so.
+rule, a previously saved exact approval, or an unconditional action-wide allow
+can do so. Opaque prompts are one-time and cannot create a saved approval.
 Because opaque input may also hide a directory change, it requests unknown
 external-directory access without offering to save that broad access.
 

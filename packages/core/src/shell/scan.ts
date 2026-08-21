@@ -65,7 +65,8 @@ function scanBash(input: string, depth: number): Result {
     const separator = /^(?:&&|\|\||\|&|[;&|])/.exec(suffix)?.[0]
     const remaining = separator ? suffix.slice(separator.length).trim() : suffix
     if (separator && !remaining) return nested
-    const prefixed = separator ? remaining : /^[<>]/.test(remaining) ? `: ${remaining}` : undefined
+    if (!separator && /^[<>]/.test(remaining)) return { kind: "opaque", reason: "invalid-structure" }
+    const prefixed = separator ? remaining : undefined
     if (!prefixed) return { kind: "opaque", reason: "compound-command" }
     const rest = scanBash(prefixed, depth + 1)
     if (rest.kind === "opaque") return rest
@@ -78,8 +79,10 @@ function scanBash(input: string, depth: number): Result {
   const nestedCommands: Array<{ resource: string; words: string[] }> = []
   const words: string[] = []
   const assignmentWords: boolean[] = []
+  const quotedWords: boolean[] = []
   let word = ""
   let wordStarted = false
+  let wordQuoted = false
   let assignmentWord = false
   let assignmentHeadUnsafe = false
   let segment = 0
@@ -100,10 +103,12 @@ function scanBash(input: string, depth: number): Result {
     if (!redirectTarget) {
       words.push(word)
       assignmentWords.push(assignmentWord)
+      quotedWords.push(wordQuoted)
     }
     redirectTarget = false
     word = ""
     wordStarted = false
+    wordQuoted = false
     assignmentWord = false
     assignmentHeadUnsafe = false
   }
@@ -112,6 +117,7 @@ function scanBash(input: string, depth: number): Result {
     const resource = input.slice(segment, end).trim()
     const name = assignmentWords.findIndex((assignment) => !assignment)
     if (name >= 0 && /[*?[]/.test(words[name])) compound = true
+    if (name >= 0 && quotedWords[name] && BASH_COMPOUND_KEYWORDS.has(words[name] ?? "")) invalidStructure = true
     if (resource && name >= 0)
       commands.push({
         resource,
@@ -124,6 +130,7 @@ function scanBash(input: string, depth: number): Result {
     commands.push(...nestedCommands.splice(0))
     words.length = 0
     assignmentWords.length = 0
+    quotedWords.length = 0
     separated = true
     hasRedirect = false
   }
@@ -167,12 +174,14 @@ function scanBash(input: string, depth: number): Result {
     if (char === "'") {
       quote = "single"
       wordStarted = true
+      wordQuoted = true
       if (!assignmentWord) assignmentHeadUnsafe = true
       continue
     }
     if (char === '"') {
       quote = "double"
       wordStarted = true
+      wordQuoted = true
       if (!assignmentWord) assignmentHeadUnsafe = true
       continue
     }
@@ -181,6 +190,7 @@ function scanBash(input: string, depth: number): Result {
       wordStarted = true
       if (input[index + 1] === "\n") index++
       else {
+        wordQuoted = true
         if (!assignmentWord) assignmentHeadUnsafe = true
         word += input[++index]
       }
@@ -307,10 +317,12 @@ function bashConditionalCommands(commands: Array<{ resource: string; words: stri
       continue
     }
     const offset = command.resource.indexOf(keyword!) + keyword!.length
+    const trailing = command.resource.slice(offset).trim()
     const inline =
       command.words.length > 1
         ? { resource: command.resource.slice(offset).trim(), words: command.words.slice(1) }
         : undefined
+    if (!inline && trailing) return
     if (index === 0) {
       if (inline) normalized.push(inline)
       hasCommand = Boolean(inline)
@@ -679,6 +691,8 @@ function powerShellOpaqueReason(command: Command): OpaqueReason | undefined {
     return "dynamic-execution"
 
   const name = shellCommandName(head)
+  if (["new-alias", "nal", "sal", "set-alias"].includes(name)) return "dynamic-execution"
+  if (command.words.some((word) => /^alias:/i.test(word))) return "dynamic-execution"
   if (["return", "throw", "exit", "break", "continue"].includes(name) && command.words.length > 1)
     return "dynamic-execution"
   if (!POWERSHELL_LOCATIONS.has(name)) return

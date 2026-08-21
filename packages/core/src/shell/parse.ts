@@ -214,12 +214,14 @@ async function scanPortable(
 ): Promise<Result> {
   const { ShellScan } = await import("./scan.js")
   const powershell = ShellSelect.ps(shell)
-  const supported = powershell || PORTABLE_BASH_SHELLS.has(ShellSelect.name(shell))
-  const result = supported
-    ? powershell
-      ? ShellScan.scanPowerShell(command)
-      : ShellScan.scan(command)
-    : ({ kind: "opaque", reason: "invalid-structure" } as const)
+  const shellName = ShellSelect.name(shell)
+  const supported = powershell || PORTABLE_BASH_SHELLS.has(shellName)
+  const result =
+    supported && !shellStartupUnknown(shellName, env)
+      ? powershell
+        ? ShellScan.scanPowerShell(command)
+        : ShellScan.scan(command)
+      : ({ kind: "opaque", reason: "invalid-structure" } as const)
   if (result.kind === "opaque")
     return {
       commands: [{ resource: command, save: command }],
@@ -274,7 +276,8 @@ async function scanPortable(
       cursor: 0,
     },
   )
-  const changesDirectoryEnvironment = !powershell && parsed.directoryChanges > 0 && /\b(?:CDPATH|HOME)\b/.test(command)
+  const changesDirectoryEnvironment =
+    parsed.directoryChanges > 0 && result.commands.some((item) => mutatesDirectoryEnvironment(item.words, powershell))
   if (parsed.opaque)
     return {
       commands: [{ resource: command, save: command }],
@@ -383,13 +386,17 @@ function portableDirectoryArgs(
   if (!powershell) {
     const start = tokens.findIndex((token) => token.value === command[0])
     if (start < 0) return { values: [], unknown: true }
-    const args = tokens.slice(start + 1).filter((token) => token.raw === "-" || !token.raw.startsWith("-"))
+    const tokensAfterCommand = tokens.slice(start + 1)
+    const endOfOptions = tokensAfterCommand.findIndex((token) => token.value === "--")
+    const args = tokensAfterCommand.filter((token, index) =>
+      endOfOptions >= 0 ? index > endOfOptions : token.raw === "-" || !token.raw.startsWith("-"),
+    )
     if (args.length === 0) {
       const home = environment(env, "HOME")
       if (["cd", "chdir"].includes(name) && home) return { values: [home], unknown: start > 0 }
       return { values: [], unknown: true }
     }
-    const values = args.map((token) => directoryArgument(token.raw, false, cwd, shell, env))
+    const values = args.map((token) => directoryArgument(token.value, false, cwd, shell, env))
     return {
       values: values.filter((value) => value !== undefined),
       unknown:
@@ -417,6 +424,19 @@ function portableDirectoryArgs(
       continue
     }
     if (part.startsWith("-")) {
+      const separator = part.indexOf(":")
+      if (separator > 0) {
+        const parameter = part.slice(1, separator).toLowerCase()
+        if (["literalpath", "path"].some((name) => name.startsWith(parameter))) {
+          const value = directoryArgument(part.slice(separator + 1), true, cwd, shell, env)
+          if (value) directories.push(value)
+          else unknown = true
+          argumentsSeen++
+          expectsPath = false
+          continue
+        }
+        unknown = true
+      }
       expectsPath = POWERSHELL_PATH_FLAGS.has(part.toLowerCase())
       continue
     }
@@ -442,6 +462,29 @@ function directoryCommand(words: string[], powershell: boolean) {
   const wrapped = words[index]
   if (!CWD.has(wrapped)) return
   return { name: wrapped, words: words.slice(index), wrapped: true }
+}
+
+function mutatesDirectoryEnvironment(words: string[], powershell: boolean) {
+  const name = powershell ? powerShellCommandName(words[0]) : words[0]
+  if (powershell)
+    return (
+      ["clear-item", "move-item", "new-item", "remove-item", "rename-item", "set-item"].includes(name ?? "") &&
+      words.slice(1).some((word) => /^env:/i.test(word))
+    )
+
+  const variable = (word: string | undefined) => /^(?:CDPATH|HOME)(?:\+?=|$)/.test(word ?? "")
+  if (["declare", "export", "local", "read", "readonly", "typeset", "unset"].includes(name ?? ""))
+    return words.slice(1).some(variable)
+  const target = name === "printf" ? words[words.findIndex((word) => word === "-v") + 1] : undefined
+  return variable(target)
+}
+
+function shellStartupUnknown(shell: string, env: Record<string, string | undefined>) {
+  if (shell === "bash")
+    return Boolean(environment(env, "BASH_ENV")) || Object.keys(env).some((key) => key.startsWith("BASH_FUNC_"))
+  if (shell === "zsh") return Boolean(environment(env, "ZDOTDIR"))
+  if (shell === "ksh") return Boolean(environment(env, "ENV"))
+  return false
 }
 
 function sourceTokens(resource: string) {
@@ -504,8 +547,7 @@ function sourceTokens(resource: string) {
     }
     if (char === "\\" && index + 1 < resource.length) {
       if (resource[index + 1] === "\n") {
-        finish()
-        index++
+        raw += char + resource[++index]
         continue
       }
       if (!raw && /\s/.test(resource[index + 1])) {
@@ -769,7 +811,9 @@ function expandKnownDirectory(value: string, env: Record<string, string | undefi
 
 function environment(env: Record<string, string | undefined>, key: string) {
   if (process.platform !== "win32") return env[key]
-  const name = Object.keys(env).find((item) => item.toLowerCase() === key.toLowerCase())
+  const name = Object.keys(env)
+    .filter((item) => item.toLowerCase() === key.toLowerCase())
+    .sort()[0]
   return name ? env[name] : undefined
 }
 
