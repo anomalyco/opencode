@@ -292,7 +292,7 @@ export function PromptProjectSelector(props: {
         <Menu.Content
           ref={contentRef}
           id="prompt-project-menu"
-          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none [&[data-closed]]:!animate-none"
+          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 !p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none [&[data-closed]]:!animate-none"
           onOpenAutoFocus={(event) => event.preventDefault()}
           onPointerDownOutside={dismiss.preventTriggerRestore}
           onFocusOutside={dismiss.preventTriggerRestore}
@@ -422,7 +422,7 @@ export function PromptProjectSelector(props: {
                   <span class="min-w-0 flex-1 truncate leading-5">{props.controller.labels.add()}</span>
                 </Menu.SubTrigger>
                 <Menu.Portal>
-                  <Menu.SubContent class="min-w-[180px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0.5 shadow-[var(--v2-elevation-floating)] focus:outline-none">
+                  <Menu.SubContent class="min-w-[180px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 !p-0.5 shadow-[var(--v2-elevation-floating)] focus:outline-none">
                     <For each={props.controller.servers()}>
                       {(server) => <ServerAction server={server!} onSelect={selectAction} />}
                     </For>
@@ -517,6 +517,7 @@ function ProjectItem(props: {
         "line-height": "20px",
         "letter-spacing": "-0.04px",
         color: "var(--v2-text-text-base)",
+        height: "28px",
         padding: "0 12px",
       }}
       closeOnSelect
@@ -558,6 +559,7 @@ function ProjectAction(props: {
         "line-height": "20px",
         "letter-spacing": "-0.04px",
         color: "var(--v2-text-text-base)",
+        height: "28px",
         padding: "0 12px",
       }}
       onMouseEnter={() => {
