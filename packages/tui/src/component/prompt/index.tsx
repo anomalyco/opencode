@@ -262,6 +262,7 @@ export function Prompt(props: PromptProps) {
       (props.sessionID ? data.session.get(props.sessionID)?.projectID : undefined) ?? data.location.info()?.project.id,
     sessionID: () => props.sessionID,
   })
+  const [pendingDirectory, setPendingDirectory] = createSignal<string>()
   Keymap.createLayer(() => ({
     mode: "global",
     commands: [
@@ -285,13 +286,18 @@ export function Prompt(props: PromptProps) {
             expanded,
           )
           if (!sessionID) {
+            setPendingDirectory(directory)
             const location = await client.api.location.get({ location: { directory } }).catch((error) => {
               toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" })
               return undefined
             })
-            if (!location) return
+            if (!location) {
+              setPendingDirectory(undefined)
+              return
+            }
             if (sourceProjectID) directoryRecents.touch(sourceProjectID, location.directory)
             currentLocation.set(location)
+            setPendingDirectory(undefined)
             return
           }
           const error = await client.api.session.move({ sessionID, directory: input }).then(
@@ -1596,13 +1602,12 @@ export function Prompt(props: PromptProps) {
         agent: agent ? Locale.titlecase(agent.id) : undefined,
         model: model.model,
         provider: model.provider,
-        variant: local.model.variant.list().length > 0 ? local.model.variant.current() : undefined,
+        variant: local.model.variant.current(),
       }
     },
     {
       agent: undefined,
-      model: "No provider selected",
-      provider: "Connect a provider",
+      ...local.model.parsed(),
       variant: undefined,
     },
   )
@@ -1639,7 +1644,8 @@ export function Prompt(props: PromptProps) {
     return data.session.get(props.sessionID)?.location
   })
   const locationLabel = createMemo(() => {
-    const location = footerLocation()
+    const pending = pendingDirectory()
+    const location = pending ? { directory: pending } : footerLocation()
     if (!location) return
     const directory = abbreviateHome(location.directory, paths.home)
     const branch = data.location.vcs.info(location)?.branch.current

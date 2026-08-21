@@ -301,8 +301,10 @@ test("keeps the prompt identity visible while a new location catalog loads", asy
   const events = createEventStream()
   const source = process.cwd()
   const target = "/tmp/opencode-target"
+  const locationCatalog = Promise.withResolvers<void>()
   const catalog = Promise.withResolvers<void>()
   const providerCatalog = Promise.withResolvers<void>()
+  const locationRequested = Promise.withResolvers<void>()
   const modelRequested = Promise.withResolvers<void>()
   const ready = Promise.withResolvers<void>()
   const calls = createFetch(async (url) => {
@@ -315,7 +317,13 @@ test("keeps the prompt identity visible while a new location catalog loads", asy
         canonical: requestedDirectory,
       },
     }
-    if (url.pathname === "/api/location") return json(location)
+    if (url.pathname === "/api/location") {
+      if (requestedDirectory === target) {
+        locationRequested.resolve()
+        await locationCatalog.promise
+      }
+      return json(location)
+    }
     if (url.pathname === "/api/agent") {
       if (requestedDirectory === target) await catalog.promise
       return json({
@@ -370,6 +378,16 @@ test("keeps the prompt identity visible while a new location catalog loads", asy
     setup.mockInput.pressEscape()
     setup.mockInput.pressEnter()
     await Promise.race([
+      locationRequested.promise,
+      Bun.sleep(2_000).then(() => {
+        throw new Error("target location was not requested")
+      }),
+    ])
+    await setup.renderOnce()
+    expect(setup.captureCharFrame()).toContain(target)
+
+    locationCatalog.resolve()
+    await Promise.race([
       modelRequested.promise,
       Bun.sleep(2_000).then(() => {
         throw new Error("target model catalog was not requested")
@@ -389,6 +407,7 @@ test("keeps the prompt identity visible while a new location catalog loads", asy
     setup.renderer.destroy()
     await task
   } finally {
+    locationCatalog.resolve()
     catalog.resolve()
     providerCatalog.resolve()
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
