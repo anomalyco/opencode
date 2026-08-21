@@ -30,7 +30,7 @@ flow correctness.
 | Status | Change | Tracking |
 | --- | --- | --- |
 | Merged | Accept nullable Anthropic input usage without losing the `message_start` count | [#43759](https://github.com/anomalyco/opencode/issues/43759), [#43761](https://github.com/anomalyco/opencode/pull/43761) |
-| In progress | Ignore unknown named SSE events before JSON decoding | [#43765](https://github.com/anomalyco/opencode/issues/43765) |
+| In progress | Ignore unknown named SSE events before JSON decoding | [#43765](https://github.com/anomalyco/opencode/issues/43765), [#43767](https://github.com/anomalyco/opencode/pull/43767) |
 
 Anthropic's `AnthropicVertex` client reuses the Messages API implementation. It
 rewrites Google authentication, the endpoint URL, `model`, and
@@ -78,7 +78,7 @@ same model.
 - [ ] Require a valid terminal message delta and stop reason before accepting `message_stop`.
 - [ ] Reject a standalone `message_stop` instead of manufacturing an unknown successful finish.
 - [ ] Preserve abnormal closure state for interrupted text, reasoning, and tool input.
-- [x] Ignore unknown named SSE events before decoding their data payload while keeping recognized non-empty event payloads strict. Tracked by [#43765](https://github.com/anomalyco/opencode/issues/43765).
+- [x] Ignore unknown named SSE events before decoding their data payload while keeping recognized non-empty event payloads strict. Tracked by [#43765](https://github.com/anomalyco/opencode/issues/43765) and [#43767](https://github.com/anomalyco/opencode/pull/43767).
 - [ ] Preserve citation deltas and attach them to their text blocks.
 - [ ] Fail safely on unknown replay-critical content blocks instead of silently dropping them.
 
