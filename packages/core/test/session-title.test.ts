@@ -166,7 +166,7 @@ const prompt = (sessionID: Session.ID, text: string) =>
 
 const small = Model.Info.make({
   ...Model.Info.default(Provider.ID.make("test"), Model.ID.make("title-small")),
-  family: Model.Family.make("gpt-nano"),
+  family: Model.Family.make("gpt-luna"),
   capabilities: { tools: false, input: ["text"], output: ["text"] },
   variants: [
     { id: Model.VariantID.make("low") },

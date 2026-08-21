@@ -233,6 +233,6 @@ const layer = Layer.effect(
   }),
 )
 
-const SMALL_MODEL_FAMILY_PRIORITY = ["gemini-flash", "gpt-luna", "gpt-nano", "claude-haiku"]
+const SMALL_MODEL_FAMILY_PRIORITY = ["gpt-luna", "gemini-flash-lite", "gemini-flash", "claude-haiku"]
 
 export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node, Integration.node] })
