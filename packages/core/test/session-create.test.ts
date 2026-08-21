@@ -83,6 +83,27 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("Session.create", () => {
+  liveIt.live("uses on-disk macOS casing for creation and directory listing", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        if (process.platform !== "darwin") return
+        const session = yield* Session.Service
+        const actual = path.join(directory, "Academic", "Project")
+        yield* Effect.promise(() => fs.mkdir(actual, { recursive: true }))
+        const requested = path.join(directory, "academic", "project")
+        if (!(yield* Effect.promise(() => fs.access(requested).then(() => true, () => false)))) return
+
+        const created = yield* session.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(requested) }),
+        })
+
+        expect(created.location.directory).toBe(AbsolutePath.make(actual))
+        expect((yield* session.list({ directory: AbsolutePath.make(requested) })).data).toEqual([created])
+        expect((yield* session.list({ directory: AbsolutePath.make(actual) })).data).toEqual([created])
+      }),
+    ),
+  )
+
   liveIt.live("follows the directory's project identity established after creation", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

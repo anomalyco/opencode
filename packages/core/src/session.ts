@@ -366,9 +366,15 @@ const layer = Layer.effect(
         if (recorded) return recorded
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
-        const location = parent?.location ?? input.location
-        if (location === undefined)
+        const requestedLocation = parent?.location ?? input.location
+        if (requestedLocation === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
+        const location = parent
+          ? parent.location
+          : Location.Ref.make({
+              ...requestedLocation,
+              directory: AbsolutePath.make(yield* fs.resolve(requestedLocation.directory)),
+            })
         const project = yield* projects.resolve(location.directory)
         yield* persistProject(project)
         const projected = yield* bus
@@ -474,7 +480,8 @@ const layer = Layer.effect(
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
         const sortColumn = SessionTable.time_updated
         const conditions: SQL[] = []
-        if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
+        if ("directory" in input)
+          conditions.push(eq(SessionTable.directory, AbsolutePath.make(yield* fs.resolve(input.directory))))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
@@ -775,7 +782,7 @@ const layer = Layer.effect(
         const value = input.directory.trim()
         const expanded =
           value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
-        const directory = AbsolutePath.make(path.resolve(current.location.directory, expanded))
+        const directory = AbsolutePath.make(yield* fs.resolve(path.resolve(current.location.directory, expanded)))
         const info = yield* fs.stat(directory).pipe(Effect.orElseSucceed(() => undefined))
         if (!info) return yield* new DestinationNotFoundError({ directory })
         if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
