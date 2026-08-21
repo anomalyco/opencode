@@ -2158,7 +2158,7 @@
             }
           }
         },
-        "description": "Queue a durable session compaction request.",
+        "description": "Durably admit a session compaction request. Steers by default: it runs at the next step boundary instead of waiting behind queued prompts.",
         "summary": "Compact session",
         "requestBody": {
           "content": {
@@ -3844,8 +3844,30 @@
             }
           }
         },
-        "description": "Mark the latest recorded idle transition as viewed.",
-        "summary": "View session"
+        "description": "Mark the idle transition observed by the viewer as viewed.",
+        "summary": "View session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idle": {
+                    "type": "integer",
+                    "allOf": [
+                      {
+                        "minimum": 0
+                      }
+                    ]
+                  }
+                },
+                "required": ["idle"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/session/{sessionID}/message": {
@@ -8031,6 +8053,14 @@
             "required": true
           },
           {
+            "name": "x-opencode-ticket",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
             "name": "location",
             "in": "query",
             "schema": {
@@ -12136,6 +12166,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "responsesWebsockets": {
+            "type": "boolean"
           }
         },
         "required": ["tools", "input", "output"],

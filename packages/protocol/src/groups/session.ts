@@ -5,7 +5,7 @@ import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
 import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import { Project } from "@opencode-ai/schema/project"
-import { AbsolutePath, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
+import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Event } from "@opencode-ai/schema/event"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
@@ -711,13 +711,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     .add(
       HttpApiEndpoint.post("session.view", "/api/session/:sessionID/view", {
         params: { sessionID: Session.ID },
+        payload: Schema.Struct({ idle: NonNegativeInt }),
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "v2.session.view",
           summary: "View session",
-          description: "Mark the latest recorded idle transition as viewed.",
+          description: "Mark the idle transition observed by the viewer as viewed.",
         }),
       ),
     )

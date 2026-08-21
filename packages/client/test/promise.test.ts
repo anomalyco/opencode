@@ -524,7 +524,7 @@ test("session methods use the public HTTP contract", async () => {
   const page = await client.session.list({ limit: 10, order: "desc", parentID: null })
   const active = await client.session.active()
   const created = await client.session.create({ location: { directory: "/tmp/project" } })
-  await client.session.view({ sessionID: "ses_test" })
+  await client.session.view({ sessionID: "ses_test", idle: session.data.time.idle })
   await client.session.switchAgent({ sessionID: "ses_test", agent: "build" })
   await client.session.switchModel({
     sessionID: "ses_test",
@@ -577,6 +577,9 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/interrupt?continue=true"],
     ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
   ])
+  const viewBody = requests.find((request) => request.url.endsWith("/api/session/ses_test/view"))?.init?.body
+  if (typeof viewBody !== "string") throw new Error("Expected JSON view request body")
+  expect(JSON.parse(viewBody)).toEqual({ idle: session.data.time.idle })
   const body = requests.find((request) => request.url.endsWith("/api/session/ses_test/prompt"))?.init?.body
   if (typeof body !== "string") throw new Error("Expected JSON request body")
   expect(JSON.parse(body)).toEqual({

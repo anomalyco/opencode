@@ -916,4 +916,31 @@ describe("SessionTransfer", () => {
       expect(yield* session.messages({ sessionID: existing.id })).toEqual([])
     }),
   )
+
+  it.effect("clamps an imported viewed watermark to its idle transition", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const template = yield* session.create({ location })
+      const imported = yield* transfer.import({
+        data: {
+          info: {
+            ...template,
+            id: Session.ID.create(),
+            outcome: "succeeded",
+            time: {
+              ...template.time,
+              idle: DateTime.makeUnsafe(200),
+              viewed: DateTime.makeUnsafe(250),
+            },
+          },
+          messages: [],
+        },
+        location,
+      })
+
+      expect(imported.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(200) })
+      expect(imported.outcome).toBe("succeeded")
+    }),
+  )
 })

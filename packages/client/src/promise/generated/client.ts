@@ -905,6 +905,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/view`,
+            body: { idle: input["idle"] },
             successStatus: 204,
             declaredStatuses: [404, 401, 400],
             empty: true,

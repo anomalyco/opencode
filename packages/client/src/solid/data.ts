@@ -1,7 +1,7 @@
 // Client data layer: apply server events and cache API reads into a Solid store.
-// Prefer straightforward projection. Do not add generation counters, stale-response
-// merges, live/history overlays, or other race machinery here—last write wins.
-// Reconnect invalidates cached reads; active UI owners decide what to sync again.
+// Prefer straightforward projection. Invalidated reads revalidate serially so an older
+// response cannot commit after its replacement. Reconnect invalidates cached reads;
+// active UI owners decide what to sync again.
 
 import type {
   AgentInfo,
@@ -120,32 +120,46 @@ function locationQuery(ref?: LocationRef) {
 }
 
 function createSync() {
-  const state = new Map<string, true | Promise<void>>()
+  type Pending = { promise: Promise<void>; invalidated: boolean }
+  const state = new Map<string, true | Pending>()
+  const start = (key: string, load: () => Promise<void>, wait?: Promise<void>) => {
+    const entry: Pending = { promise: Promise.resolve(), invalidated: false }
+    state.set(key, entry)
+    entry.promise = (wait ? wait.catch(() => undefined).then(load) : load())
+      .then(() => {
+        if (state.get(key) === entry) state.set(key, true)
+      })
+      .finally(() => {
+        if (state.get(key) === entry) state.delete(key)
+      })
+    return entry.promise
+  }
   return {
     run(key: string, load: () => Promise<void>) {
       const active = state.get(key)
       if (active === true) return Promise.resolve()
-      if (active) return active
-      const pending = load()
-        .then(() => {
-          if (state.get(key) === pending) state.set(key, true)
-        })
-        .finally(() => {
-          if (state.get(key) === pending) state.delete(key)
-        })
-      state.set(key, pending)
-      return pending
+      if (!active) return start(key, load)
+      if (!active.invalidated) return active.promise
+      return start(key, load, active.promise)
     },
     complete(key: string) {
       if (state.has(key)) return
       state.set(key, true)
     },
+    has(key: string) {
+      return state.has(key)
+    },
     invalidate(key?: string) {
       if (key) {
-        state.delete(key)
+        const active = state.get(key)
+        if (active === true) state.delete(key)
+        if (active !== undefined && active !== true) active.invalidated = true
         return
       }
-      state.clear()
+      state.forEach((active, current) => {
+        if (active === true) state.delete(current)
+        if (active !== true) active.invalidated = true
+      })
     },
   }
 }
@@ -883,13 +897,13 @@ export function createData(config: CreateDataInput) {
           if (currentAssistant) currentAssistant.retry = undefined
         })
         if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
-        // Refresh only sessions this client already loaded; unloaded sessions hydrate on demand.
-        if (!store.session.info[event.data.sessionID]) return
+        // An event can overtake the first read; queue a revalidation when that read is still active.
+        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
         void result.session.sync(event.data.sessionID)
         return
       case "session.viewed":
-        if (!store.session.info[event.data.sessionID]) return
+        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
         void result.session.sync(event.data.sessionID)
         return

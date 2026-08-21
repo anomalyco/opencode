@@ -619,7 +619,9 @@ const Endpoint5_35 = (raw: RawClient["server.session"]) => (input: Endpoint5_35I
 
 const Endpoint5_36 = (raw: RawClient["server.session"]) => (input: Endpoint5_36Input) =>
   preserveEffect<Endpoint5_36Output>()(
-    raw["session.view"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["session.view"]({ params: { sessionID: input["sessionID"] }, payload: { idle: input["idle"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
   )
 
 const adaptGroup5 = (raw: RawClient["server.session"]) => ({

@@ -185,7 +185,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     const created = yield* client.session.create({
       location: Location.Ref.make({ directory: AbsolutePath.make("/tmp/project") }),
     })
-    yield* client.session.view({ sessionID: Session.ID.make("ses_test") })
+    yield* client.session.view({ sessionID: Session.ID.make("ses_test"), idle: session.data.time.idle })
     yield* client.session.switchAgent({ sessionID: Session.ID.make("ses_test"), agent: Agent.ID.make("build") })
     yield* client.session.switchModel({
       sessionID: Session.ID.make("ses_test"),

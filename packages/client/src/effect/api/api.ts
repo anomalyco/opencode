@@ -928,7 +928,7 @@ export type Endpoint5_35Input = { readonly sessionID: Session.ID; readonly varia
 export type Endpoint5_35Output = void
 export type SessionEnvironmentOperation<E = never> = (input: Endpoint5_35Input) => Effect.Effect<Endpoint5_35Output, E>
 
-export type Endpoint5_36Input = { readonly sessionID: Session.ID }
+export type Endpoint5_36Input = { readonly sessionID: Session.ID; readonly idle: number }
 export type Endpoint5_36Output = void
 export type SessionViewOperation<E = never> = (input: Endpoint5_36Input) => Effect.Effect<Endpoint5_36Output, E>
 

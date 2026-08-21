@@ -71,12 +71,29 @@ it.live("serves the session view operation and missing-session error", () =>
       return yield* Effect.die(new Error("Expected a session ID"))
 
     const viewed = yield* Effect.promise(() =>
-      handler(new Request(`http://opencode.local/api/session/${data.id}/view`, { method: "POST" })),
+      handler(
+        new Request(`http://opencode.local/api/session/${data.id}/view`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ idle: 0 }),
+        }),
+      ),
     )
     expect(viewed.status).toBe(204)
 
+    const invalid = yield* Effect.promise(() =>
+      handler(new Request(`http://opencode.local/api/session/${data.id}/view`, { method: "POST" })),
+    )
+    expect(invalid.status).toBe(400)
+
     const missing = yield* Effect.promise(() =>
-      handler(new Request("http://opencode.local/api/session/ses_missing_view/view", { method: "POST" })),
+      handler(
+        new Request("http://opencode.local/api/session/ses_missing_view/view", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ idle: 0 }),
+        }),
+      ),
     )
     expect(missing.status).toBe(404)
   }).pipe(Effect.scoped),

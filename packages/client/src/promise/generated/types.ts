@@ -4014,7 +4014,10 @@ export type SessionEnvironmentInput = {
 
 export type SessionEnvironmentOutput = void
 
-export type SessionViewInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionViewInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly idle: { readonly idle: number }["idle"]
+}
 
 export type SessionViewOutput = void
 

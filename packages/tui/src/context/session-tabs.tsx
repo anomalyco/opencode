@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import { useRenderer } from "@opentui/solid"
+import { useKeyboard, useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
@@ -47,6 +47,8 @@ const empty = (): TabsState => ({ tabs: [] })
 
 // Deliberately after connect settles: the visible session's mount syncs win the first slots.
 const TAB_PREFETCH_DELAY = 300
+const VIEW_RETRY_DELAY = 250
+const VIEW_RETRY_MAX_DELAY = 5_000
 
 export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimpleContext({
   name: "SessionTabs",
@@ -60,8 +62,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const paths = useTuiPaths()
     const renderer = useRenderer()
     const enabled = () => config.tabs.enabled
-    // Focus reporting emits transitions, so an interactive launch may acknowledge viewed sessions until its first blur.
-    const [focused, setFocused] = createSignal(true)
+    const [focused, setFocused] = createSignal<boolean>()
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
     // mutating in place, which per-row animations and drag state depend on.
     const [store, updateStore] = useStorage().store<PersistedState>("tabs", {
@@ -87,6 +88,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     const onFocus = () => setFocused(true)
     const onBlur = () => setFocused(false)
+    useKeyboard(onFocus)
     renderer.on("focus", onFocus)
     renderer.on("blur", onBlur)
     onCleanup(() => {
@@ -177,15 +179,37 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     // Viewed state is server-global, so acknowledgement runs even with tabs disabled: other
     // clients rely on this client reporting what its user has seen.
     const acknowledged = new Map<string, number>()
+    const [viewRetry, setViewRetry] = createSignal(0)
+    let viewRetryTimer: ReturnType<typeof setTimeout> | undefined
+    let viewRetryAttempt = 0
+    onCleanup(() => clearTimeout(viewRetryTimer))
     createEffect(() => {
-      if (!focused()) return
+      viewRetry()
+      if (focused() !== true) return
       if (route.data.type !== "session" || route.data.sessionID === "dummy") return
       const sessionID = root(route.data.sessionID)
       const idle = data.session.get(sessionID)?.time.idle
       if (idle === undefined || !isUnread(sessionID) || acknowledged.get(sessionID) === idle) return
       // Record before the request so event-driven re-runs don't re-post the same watermark.
       acknowledged.set(sessionID, idle)
-      void client.api.session.view({ sessionID }).catch(() => acknowledged.delete(sessionID))
+      void client.api.session.view({ sessionID, idle }).then(
+        () => {
+          clearTimeout(viewRetryTimer)
+          viewRetryTimer = undefined
+          viewRetryAttempt = 0
+        },
+        () => {
+          if (acknowledged.get(sessionID) !== idle) return
+          acknowledged.delete(sessionID)
+          if (viewRetryTimer) return
+          const delay = Math.min(VIEW_RETRY_DELAY * 2 ** viewRetryAttempt, VIEW_RETRY_MAX_DELAY)
+          viewRetryAttempt++
+          viewRetryTimer = setTimeout(() => {
+            viewRetryTimer = undefined
+            setViewRetry((value) => value + 1)
+          }, delay)
+        },
+      )
     })
 
     createEffect(() => {

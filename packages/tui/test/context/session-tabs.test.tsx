@@ -40,6 +40,7 @@ async function renderSessionTabs(
     sessionOutcomes?: Record<string, "succeeded" | "failed" | "interrupted">
     newLocation?: "launch" | "inherit"
     tabsEnabled?: boolean
+    viewFailures?: number
   },
 ) {
   const temporary = options?.state ? undefined : await tmpdir()
@@ -63,6 +64,7 @@ async function renderSessionTabs(
   const events = createEventStream()
   const sessions: string[] = []
   const views: string[] = []
+  const viewWatermarks: number[] = []
   const locations: string[] = []
   const vcsLocations: string[] = []
   const sessionTimes = Object.fromEntries(
@@ -95,8 +97,13 @@ async function renderSessionTabs(
     const viewed = url.pathname.match(/^\/api\/session\/([^/]+)\/view$/)?.[1]
     if (viewed && request.method === "POST") {
       views.push(viewed)
+      const payload: unknown = await request.json()
+      if (typeof payload !== "object" || payload === null || !("idle" in payload) || typeof payload.idle !== "number")
+        throw new Error("Expected an idle watermark")
+      viewWatermarks.push(payload.idle)
+      if (views.length <= (options?.viewFailures ?? 0)) return new Response(null, { status: 503 })
       const time = (sessionTimes[viewed] ??= {})
-      time.viewed = time.idle
+      time.viewed = Math.min(payload.idle, time.idle ?? payload.idle)
       return new Response(null, { status: 204 })
     }
     const sessionID = url.pathname.match(/^\/api\/session\/([^/]+)$/)?.[1]
@@ -170,6 +177,7 @@ async function renderSessionTabs(
     data,
     sessions,
     views,
+    viewWatermarks,
     locations,
     vcsLocations,
     state,
@@ -319,6 +327,7 @@ test("acknowledges viewed sessions even when tabs are disabled", async () => {
     sessionTimes: { first: { idle: 2 } },
   })
   try {
+    setup.focus()
     await setup.data.session.sync("first")
     await wait(() => setup.views.includes("first"))
     expect(setup.tabs.tabs()).toEqual([])
@@ -384,6 +393,36 @@ test("views a selected unread session only while focused", async () => {
     })
     await wait(() => setup.tabs.status("first").unread === undefined)
     expect(setup.views).toEqual(["first"])
+    expect(setup.viewWatermarks).toEqual([2])
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("does not acknowledge an unread session until focus is confirmed", async () => {
+  const setup = await renderSessionTabs("first", { sessionTimes: { first: { idle: 2 } } })
+  try {
+    await wait(() => setup.tabs.status("first").unread === "activity")
+    await Bun.sleep(20)
+    expect(setup.views).toEqual([])
+
+    setup.focus()
+    await wait(() => setup.views.includes("first"))
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("retries a failed view acknowledgement", async () => {
+  const setup = await renderSessionTabs("first", {
+    sessionTimes: { first: { idle: 2 } },
+    viewFailures: 1,
+  })
+  try {
+    setup.focus()
+    await wait(() => setup.views.length === 2)
+    expect(setup.views).toEqual(["first", "first"])
+    expect(setup.viewWatermarks).toEqual([2, 2])
   } finally {
     await setup.destroy()
   }
@@ -406,6 +445,7 @@ test("ignores subagent unread state on the root tab", async () => {
 
     // A background subagent completion wakes the parent; the parent's own idle transition
     // then carries the unread signal and is the only state acknowledged.
+    setup.focus()
     setup.setSessionTime("root", { idle: 3 })
     setup.emit({
       id: "evt_done_root",
