@@ -561,6 +561,17 @@ const providerUnavailable = () =>
     }),
   })
 
+const streamDisconnected = () =>
+  new AIError({
+    module: "test",
+    method: "stream",
+    reason: new TransportReason({
+      message: "The socket connection was closed unexpectedly",
+      transport: "http",
+      operation: "read",
+    }),
+  })
+
 const continuationRejected = (recovery: "retry-full" | "rotate-and-retry-full") =>
   new AIError({
     module: "test",
@@ -4619,6 +4630,54 @@ describe("SessionRunnerLLM", () => {
         { type: "user" },
         { type: "assistant", finish: "error", content: [{ type: "reasoning", text: "Partial thought" }] },
         { type: "synthetic" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("continues after a transport read failure with durable reasoning state", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Recover disconnected reasoning")
+      yield* TestLLM.push(
+        TestLLM.failAfter(
+          streamDisconnected(),
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.reasoningStart({
+            id: "disconnected-reasoning",
+            providerMetadata: {
+              openai: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
+            },
+          }),
+        ),
+      )
+      yield* TestLLM.push(TestLLM.text("Recovered", "reasoning-transport-recovery"))
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      yield* TestClock.adjust("2400 millis")
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
+      expect(requests[1]?.messages.slice(-2)).toMatchObject([
+        { role: "user", content: [{ type: "text", text: "Recover disconnected reasoning" }] },
+        { role: "user", content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }] },
+      ])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        {
+          type: "assistant",
+          finish: "error",
+          content: [
+            {
+              type: "reasoning",
+              text: "",
+              state: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
+            },
+          ],
+        },
+        { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
         { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
       ])
     }),

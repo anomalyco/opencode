@@ -571,9 +571,11 @@ const layer = Layer.effect(
             })
           }
 
+          // A transport read failure is an interrupted provider stream, not a failed request.
           const incompleteStream =
-            llmFailure?.reason._tag === "InvalidProviderOutput" &&
-            llmFailure.reason.classification === "incomplete-stream"
+            (llmFailure?.reason._tag === "InvalidProviderOutput" &&
+              llmFailure.reason.classification === "incomplete-stream") ||
+            (llmFailure?.reason._tag === "Transport" && llmFailure.reason.operation === "read")
           const toolsAllowContinuation = tools.declines.length === 0 && !tools.interrupted
           if (llmError && incompleteStream && record.outputStarted && toolsAllowContinuation)
             return CallOutcome.Continue({
