@@ -5,7 +5,6 @@ import { Effect } from "effect"
 
 import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
 import PROMPT_CODEX from "./system-prompt/codex.txt"
-import PROMPT_GEMINI from "./system-prompt/gemini.txt"
 import PROMPT_GPT from "./system-prompt/gpt.txt"
 import PROMPT_KIMI from "./system-prompt/kimi.txt"
 import PROMPT_META from "./system-prompt/meta.txt"
@@ -19,7 +18,6 @@ export const OpenAIPlugin = make("openai", (id) => {
   if (id.includes("o1") || id.includes("o3")) return PROMPT_GPT
 })
 
-export const GooglePlugin = make("google", (id) => (id.includes("gemini-") ? PROMPT_GEMINI : undefined))
 export const AnthropicPlugin = make("anthropic", (id) => (id.includes("claude") ? PROMPT_ANTHROPIC : undefined))
 export const KimiPlugin = make("kimi", (id) => (id.includes("kimi") ? PROMPT_KIMI : undefined))
 export const ArceePlugin = make("arcee", (id) => (id.includes("trinity") ? PROMPT_TRINITY : undefined))
@@ -29,7 +27,7 @@ export const MetaPlugin = make("meta", (id) => {
   return PROMPT_META.replaceAll("{{MODEL_NAME}}", name)
 })
 
-export const Plugins = [OpenAIPlugin, GooglePlugin, AnthropicPlugin, KimiPlugin, ArceePlugin, MetaPlugin] as const
+export const Plugins = [OpenAIPlugin, AnthropicPlugin, KimiPlugin, ArceePlugin, MetaPlugin] as const
 
 function make(id: string, select: (modelID: string) => string | undefined) {
   return define({
