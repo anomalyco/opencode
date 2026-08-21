@@ -172,62 +172,87 @@ export const {
     // TUI misses them (e.g. mid-stream delivery race), the agent blocks silently.
     // Mirrors the CLI transport's recoverQuestion (stream.transport.ts:556-598):
     // poll the list endpoint every 250ms until the pending request appears in
-    // the store, the tool part finishes, or the abort signal fires.
+    // the store, no tool part for the session is still running, or the cap is
+    // reached.
+    //
+    // One poller per (kind, session) so N parallel tool parts share a single
+    // loop (a 30s bash command polls GET /permission 120× total, not 120×N).
+    // Bounded by MAX_RECOVERY_ATTEMPTS so a wedged or GC'd part can't poll
+    // forever (120 × 250ms = 30s; the reviewer's "~30–60s" guidance).
     const recovering = new Map<string, AbortController>()
+    const MAX_RECOVERY_ATTEMPTS = 120
     function recoverPending(
       kind: "question" | "permission",
       sessionID: string,
-      partID: string,
-      messageID: string,
+      _partID: string,
+      _messageID: string,
     ) {
-      const key = `${kind}:${partID}`
+      const key = `${kind}:${sessionID}`
       if (recovering.has(key)) return
       const ctrl = new AbortController()
       recovering.set(key, ctrl)
       ;(async () => {
         try {
-          while (!ctrl.signal.aborted) {
+          let attempts = 0
+          while (!ctrl.signal.aborted && attempts < MAX_RECOVERY_ATTEMPTS) {
+            attempts++
             if ((store[kind][sessionID]?.length ?? 0) > 0) return
-            // stop if the part is no longer running. If the parts array is
-            // absent (GC'd, late seeding, or a message.part.removed between
-            // ticks), treat it as "unknown, keep polling" — exiting here
-            // would leave the prompt invisible (the bug we're fixing).
-            const parts = store.part[messageID]
-            if (parts !== undefined) {
-              const stillRunning = parts.some(
-                (p) => p.id === partID && p.type === "tool" && (p as { state?: { status?: string } }).state?.status === "running",
-              )
-              if (!stillRunning) return
+            // Stop once no tool part for this session is still running. If the
+            // parts array is absent (GC'd, late seeding, or a message.part.removed
+            // between ticks) we can't tell — keep polling, bounded by the cap so
+            // a wedged part can't poll forever (the bug the reviewer flagged).
+            let anyRunning = false
+            for (const parts of Object.values(store.part)) {
+              for (const p of parts) {
+                if (p.type === "tool" && p.sessionID === sessionID && p.state.status === "running") {
+                  anyRunning = true
+                  break
+                }
+              }
+              if (anyRunning) break
             }
-            let list: Array<{ id: string; sessionID: string }> = []
+            if (!anyRunning) return
             try {
               // Use the v1 global endpoints (GET /question, GET /permission),
               // NOT the v2 session-scoped ones. The v2 endpoints return empty
               // even when a question is pending server-side (the question is
               // stored in the global pending map, not per-session). The CLI
               // transport uses the same v1 endpoints (stream.transport.ts:568).
-              const res =
-                kind === "question"
-                  ? await sdk.client.question.list()
-                  : await sdk.client.permission.list()
-              // v1 returns { data: QuestionRequest[] } (Array, not enveloped).
-              // Filter to this session client-side, like the CLI does.
-              const all = (res as { data?: Array<{ id: string; sessionID: string }> }).data ?? []
-              list = all.filter((r) => r.sessionID === sessionID)
+              if (kind === "question") {
+                const res = await sdk.client.question.list()
+                const all = (res as { data?: QuestionRequest[] }).data ?? []
+                const list = all.filter((r) => r.sessionID === sessionID)
+                if ((store.question[sessionID]?.length ?? 0) > 0) return
+                if (list.length > 0) {
+                  batch(() => {
+                    const existing = store.question[sessionID] ?? []
+                    const merged = [...existing]
+                    for (const req of list) {
+                      if (!merged.some((r) => r.id === req.id)) merged.push(req)
+                    }
+                    setStore("question", sessionID, merged)
+                  })
+                  return
+                }
+              } else {
+                const res = await sdk.client.permission.list()
+                const all = (res as { data?: PermissionRequest[] }).data ?? []
+                const list = all.filter((r) => r.sessionID === sessionID)
+                if ((store.permission[sessionID]?.length ?? 0) > 0) return
+                if (list.length > 0) {
+                  batch(() => {
+                    const existing = store.permission[sessionID] ?? []
+                    const merged = [...existing]
+                    for (const req of list) {
+                      if (!merged.some((r) => r.id === req.id)) merged.push(req)
+                    }
+                    setStore("permission", sessionID, merged)
+                  })
+                  return
+                }
+              }
             } catch {
               // ignore — retry on next tick
-            }
-            if ((store[kind][sessionID]?.length ?? 0) > 0) return
-            if (list.length > 0) {
-              batch(() => {
-                const existing = store[kind][sessionID] ?? []
-                const merged = [...existing]
-                for (const req of list) {
-                  if (!merged.some((r) => r.id === req.id)) merged.push(req as never)
-                }
-                setStore(kind, sessionID, merged as never)
-              })
-              return
             }
             await new Promise((resolve) => setTimeout(resolve, 250))
           }
@@ -470,7 +495,9 @@ export const {
           // Mirror that here: if a tool part is running and we have no pending
           // question/permission for its session, poll the list endpoints until it
           // appears. Without this, the TUI never shows the prompt and the agent
-          // blocks silently until the user interrupts.
+          // blocks silently until the user interrupts. recoverPending is keyed
+          // per (kind, session) and self-capped, so N parallel parts share one
+          // loop and a read-only tool that never asks still stops after 30s.
           const part = event.properties.part
           if (part.type === "tool" && part.state?.status === "running") {
             const sessionID = part.sessionID

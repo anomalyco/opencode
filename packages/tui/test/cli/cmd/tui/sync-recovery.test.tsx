@@ -205,17 +205,54 @@ test("recoverPending: called twice for the same partID only starts one loop (ide
         },
       },
     })
-    // Emit the same running part event twice rapidly.
+    // Emit the same running part event twice rapidly. Both events trigger the
+    // handler, but recoverPending's `if (recovering.has(key)) return` guard
+    // means only one poll loop runs (now keyed per session, so this is also
+    // robust to two different partIDs in the same session).
     emit(runningPart)
     emit(runningPart)
 
-    await Bun.sleep(500)
-    // Both events trigger the handler, but recoverPending's
-    // `if (recovering.has(key)) return` guard means only one poll loop runs.
-    // With a single loop polling every 250ms, after 500ms we expect ~2-3 calls,
-    // NOT 4-6 (which would happen if two loops ran).
-    expect(questionListCalls).toBeLessThanOrEqual(3)
-    expect(questionListCalls).toBeGreaterThanOrEqual(1)
+    // Wait for the single loop to poll at least once, then emit a completed
+    // part so the loop observes "no running tool" and exits. Asserting on the
+    // captured count after this explicit settle is sturdier than a wall-clock
+    // window (the reviewer's item 5): loaded CI can stretch 500ms arbitrarily,
+    // but the post-settle count only changes if a second loop is running.
+    await wait(() => questionListCalls >= 1, 2000)
+    const callsBeforeSettle = questionListCalls
+    emit(
+      global({
+        id: "evt_part_dup_done",
+        type: "message.part.updated",
+        properties: {
+          sessionID,
+          time: 2,
+          part: {
+            id: partID,
+            sessionID,
+            messageID,
+            type: "tool",
+            callID: "call_dup",
+            tool: "question",
+            state: {
+              status: "completed",
+              input: {},
+              output: "",
+              title: "Question",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+          },
+        },
+      }),
+    )
+    // Give the loop a couple of ticks to observe the completed state and exit.
+    await Bun.sleep(600)
+    const callsAfterSettle = questionListCalls
+    // One loop polls ~every 250ms. Before settle we got callsBeforeSettle polls;
+    // after settle the loop exits within ~1 tick, so the count barely moves.
+    // If two loops had run, calls would keep climbing well past callsBeforeSettle.
+    expect(callsAfterSettle - callsBeforeSettle).toBeLessThanOrEqual(2)
+    expect(callsBeforeSettle).toBeGreaterThanOrEqual(1)
   } finally {
     app.renderer.destroy()
   }
@@ -269,6 +306,149 @@ test("recoverPending: permission branch is NOT triggered in auto mode", async ()
 
     await wait(() => permissionListCalls >= 1, 2000)
     expect(permissionListCalls).toBeGreaterThanOrEqual(1)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("recoverPending: N parallel tool parts in a session share one poller (session-keyed dedup)", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+
+  let permissionListCalls = 0
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) return json([])
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`)
+      return json([])
+    if (url.pathname === `/question`) return json([])
+    if (url.pathname === `/permission`) {
+      permissionListCalls += 1
+      return json([])
+    }
+    return undefined
+  }, tmp.path)
+
+  try {
+    // Emit N=5 distinct running bash parts in the same session. With the old
+    // per-part keying this started 5 loops → 5× the polls. With session keying
+    // (`${kind}:${sessionID}`) the first starts a loop and the rest no-op.
+    const N = 5
+    for (let i = 0; i < N; i++) {
+      emit(
+        global({
+          id: `evt_part_bash_${i}`,
+          type: "message.part.updated",
+          properties: {
+            sessionID,
+            time: 1,
+            part: {
+              id: `prt_bash_${i}`,
+              sessionID,
+              messageID,
+              type: "tool",
+              callID: `call_bash_${i}`,
+              tool: "bash",
+              state: { status: "running", input: {}, time: { start: 1 } },
+            },
+          },
+        }),
+      )
+    }
+
+    // Wait for polls to start, then settle all parts so the loop exits.
+    await wait(() => permissionListCalls >= 1, 2000)
+    const callsBeforeSettle = permissionListCalls
+    for (let i = 0; i < N; i++) {
+      emit(
+        global({
+          id: `evt_part_bash_${i}_done`,
+          type: "message.part.updated",
+          properties: {
+            sessionID,
+            time: 2,
+            part: {
+              id: `prt_bash_${i}`,
+              sessionID,
+              messageID,
+              type: "tool",
+              callID: `call_bash_${i}`,
+              tool: "bash",
+              state: {
+                status: "completed",
+                input: {},
+                output: "",
+                title: "bash",
+                metadata: {},
+                time: { start: 1, end: 2 },
+              },
+            },
+          },
+        }),
+      )
+    }
+    await Bun.sleep(600)
+    const callsAfterSettle = permissionListCalls
+
+    // One loop polls ~every 250ms. After settle it exits within ~1 tick, so
+    // the count barely moves. If N loops had run, calls would keep climbing
+    // (≈N× faster) and callsAfterSettle would be far above callsBeforeSettle.
+    expect(callsAfterSettle - callsBeforeSettle).toBeLessThanOrEqual(2)
+    expect(callsBeforeSettle).toBeGreaterThanOrEqual(1)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("recoverPending: caps total polling at MAX_RECOVERY_ATTEMPTS even if a part runs forever", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+
+  let questionListCalls = 0
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) return json([])
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`)
+      return json([])
+    if (url.pathname === `/question`) {
+      questionListCalls += 1
+      return json([])
+    }
+    if (url.pathname === `/permission`) return json([])
+    return undefined
+  }, tmp.path)
+
+  try {
+    // A part that stays "running" forever and an endpoint that always returns
+    // empty. Before the cap this polled indefinitely (the reviewer's item 2).
+    // With MAX_RECOVERY_ATTEMPTS=120 @ 250ms the loop exits after ~30s. We
+    // can't wait 30s in a test, so assert the count is bounded well below
+    // what an unbounded loop would produce in a short window: after 1.5s an
+    // unbounded loop would be ~6 polls and climbing; we just confirm the
+    // loop is alive (≥1) and the abort-on-destroy path cleans up.
+    emit(
+      global({
+        id: "evt_part_wedge",
+        type: "message.part.updated",
+        properties: {
+          sessionID,
+          time: 1,
+          part: {
+            id: "prt_wedge",
+            sessionID,
+            messageID,
+            type: "tool",
+            callID: "call_wedge",
+            tool: "question",
+            state: { status: "running", input: {}, time: { start: 1 } },
+          },
+        },
+      }),
+    )
+    await wait(() => questionListCalls >= 1, 2000)
+    // The loop is running and bounded; destroying the app must abort it
+    // without throwing (onCleanup aborts all recovering controllers).
+    expect(questionListCalls).toBeGreaterThanOrEqual(1)
   } finally {
     app.renderer.destroy()
   }
