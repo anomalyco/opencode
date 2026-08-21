@@ -143,6 +143,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
 
 async function expectTree(page: Page, total: number, file: string) {
   await expectMountedTree(page, total)
+  await expect(page.getByText(".github", { exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: file })).toBeVisible()
 }
 
