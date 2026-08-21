@@ -768,7 +768,7 @@ const layer = Layer.effect(
         const expanded =
           value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
         const directory = AbsolutePath.make(path.resolve(current.location.directory, expanded))
-        const info = yield* fs.stat(directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const info = yield* fs.stat(directory).pipe(Effect.orElseSucceed(() => undefined))
         if (!info) return yield* new DestinationNotFoundError({ directory })
         if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
         const project = yield* projects.resolve(directory)
@@ -787,7 +787,7 @@ const layer = Layer.effect(
           input.sessionID,
           Effect.gen(function* () {
             const latest = yield* result.get(input.sessionID)
-            const source = yield* fs.stat(latest.location.directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            const source = yield* fs.stat(latest.location.directory).pipe(Effect.orElseSucceed(() => undefined))
             if (!source || source.type !== "Directory") {
               const cancellations = (yield* SessionInbox.moveIDs(db, input.sessionID)).map(
                 (item) => [SessionEvent.InboxCancelled, { sessionID: input.sessionID, inboxID: item.id }] as const,

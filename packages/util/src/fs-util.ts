@@ -188,7 +188,7 @@ export namespace FSUtil {
         let current = start
         while (true) {
           const matches = yield* scan(pattern, { cwd: current, absolute: true, include: "file", dot: true }).pipe(
-            Effect.catch(() => Effect.succeed([] as string[])),
+            Effect.orElseSucceed(() => [] as string[]),
           )
           result.push(...matches)
           if (stop === current) break

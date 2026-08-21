@@ -98,12 +98,12 @@ export const fileSystem = (
       const pathFor = (name: string) => cassettePath(directory, name)
       const walk = (current: string): Effect.Effect<ReadonlyArray<string>> =>
         Effect.gen(function* () {
-          const entries = yield* fs.readDirectory(current).pipe(Effect.catch(() => Effect.succeed([] as string[])))
+          const entries = yield* fs.readDirectory(current).pipe(Effect.orElseSucceed(() => [] as string[]))
           const nested = yield* Effect.forEach(entries, (entry) => {
             const full = path.join(current, entry)
             return fs.stat(full).pipe(
               Effect.flatMap((stat) => (stat.type === "Directory" ? walk(full) : Effect.succeed([full]))),
-              Effect.catch(() => Effect.succeed([] as string[])),
+              Effect.orElseSucceed(() => [] as string[]),
             )
           })
           return nested.flat()
@@ -147,7 +147,7 @@ export const fileSystem = (
         exists: (name) =>
           fs.access(pathFor(name)).pipe(
             Effect.as(true),
-            Effect.catch(() => Effect.succeed(false)),
+            Effect.orElseSucceed(() => false),
           ),
         list: () =>
           walk(directory).pipe(

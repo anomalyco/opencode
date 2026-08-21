@@ -258,7 +258,7 @@ export function migrateV1(legacy: TuiConfigV1.Info | undefined, kv: Record<strin
 
 const readJson = Effect.fnUntraced(function* (target: string) {
   const fs = yield* FileSystem.FileSystem
-  const text = yield* fs.readFileString(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  const text = yield* fs.readFileString(target).pipe(Effect.orElseSucceed(() => undefined))
   if (text === undefined) return undefined
   const errors: ParseError[] = []
   const value: any = parse(text, errors, { allowTrailingComma: true })

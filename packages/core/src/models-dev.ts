@@ -622,7 +622,7 @@ export const layer = (options?: Options) =>
       const loadFromFile = options?.file
         ? fs.readJson(options.file).pipe(
             Effect.map((input) => input as Record<string, SourceProvider>),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           )
         : Effect.succeed(undefined)
 

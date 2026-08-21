@@ -120,7 +120,7 @@ export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(fun
     .get()
     .pipe(Effect.orDie)
   if (!row) return undefined
-  const message = yield* decodeMessageRow(row).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  const message = yield* decodeMessageRow(row).pipe(Effect.orElseSucceed(() => undefined))
   return message?.type === "user" ? message : undefined
 })
 

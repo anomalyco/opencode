@@ -1,0 +1,33 @@
+id: no-effect-flat-map-suspend
+valid:
+  - effect.pipe(Effect.andThen(Effect.suspend(() => next)))
+  - Effect.andThen(effect, Effect.suspend(() => next))
+  - effect.pipe(Effect.flatMap((value) => Effect.suspend(() => use(value))))
+  - effect.pipe(Effect.flatMap((_) => Effect.suspend(() => use(_))))
+  - effect.pipe(Effect.flatMap((_) => { return Effect.suspend(() => use(_)) }))
+  - effect.pipe(Effect.flatMap(() => Effect.suspend(thunk)))
+  - effect.pipe(Effect.flatMap(() => Effect.suspend(getThunk())))
+  - effect.pipe(Effect.flatMap(() => Effect.suspend(function thunk() { return next })))
+  - effect.pipe(Effect.flatMap(() => Effect.sync(thunk)))
+  - effect.pipe(Stream.flatMap(() => Effect.suspend(() => next)))
+  - Effect.flatMap(effect, options, () => Effect.suspend(() => next))
+  - Effect.flatMap(first, second, third, () => Effect.suspend(() => next))
+  - effect.pipe(Effect.flatMap(() => { log(); return Effect.suspend(() => next) }))
+  - effect.pipe(Effect.flatMap(function () { return Effect.suspend(() => this.next) }))
+  - effect.pipe(Effect.flatMap(function () { return Effect.suspend(() => arguments[0]) }))
+  - effect.pipe(Effect.flatMap(function (_) { return Effect.suspend(() => use(_)) }))
+invalid:
+  - effect.pipe(Effect.flatMap(() => Effect.suspend(() => next)))
+  - Effect.flatMap(effect, () => Effect.suspend(() => next))
+  - effect.pipe(Effect.flatMap((_) => Effect.suspend(() => next)))
+  - effect.pipe(Effect.flatMap(_ => Effect.suspend(() => next)))
+  - effect.pipe(Effect.flatMap(_ => { return Effect.suspend(() => next) }))
+  - effect.pipe(Effect.flatMap(() => { return Effect.suspend(() => next) }))
+  - effect.pipe(Effect.flatMap(function () { return Effect.suspend(() => next) }))
+  - effect.pipe(Effect.flatMap(function (_) { return Effect.suspend(() => next) }))
+  - |
+    effect.pipe(
+      Effect.flatMap(() =>
+        Effect.suspend(() => next),
+      ),
+    )

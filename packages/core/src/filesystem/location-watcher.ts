@@ -35,14 +35,12 @@ const layer = Layer.effect(
       Effect.gen(function* () {
         if (location.vcs?.type === "git") {
           const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
-          const vcs = resolved
-            ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved)))
-            : undefined
+          const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.orElseSucceed(() => resolved)) : undefined
           if (vcs) return { path: path.join(vcs, "HEAD"), aliases: [".git", vcs, ...(resolved ? [resolved] : [])] }
         }
         if (location.vcs?.type === "hg") {
           const store = location.vcs.store
-          const vcs = yield* fs.realPath(store).pipe(Effect.catch(() => Effect.succeed(store)))
+          const vcs = yield* fs.realPath(store).pipe(Effect.orElseSucceed(() => store))
           return { path: path.join(vcs, "branch"), aliases: [".hg", vcs] }
         }
       }).pipe(

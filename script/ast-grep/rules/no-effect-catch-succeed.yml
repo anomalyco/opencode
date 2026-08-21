@@ -1,8 +1,0 @@
-id: no-effect-catch-succeed
-language: TypeScript
-message: Use Effect.orElseSucceed for constant failure recovery.
-severity: error
-rule:
-  any:
-    - pattern: Effect.catch(() => Effect.succeed($VALUE))
-    - pattern: Effect.catch($SELF, () => Effect.succeed($VALUE))

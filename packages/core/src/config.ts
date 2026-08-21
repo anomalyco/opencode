@@ -347,7 +347,7 @@ export const layer = (options?: Options) =>
         Stream.filterEffect((event) =>
           wellknown.entries().pipe(
             Effect.map((entries) => entries.some((entry) => entry.integrationID === event.data.integrationID)),
-            Effect.catch(() => Effect.succeed(false)),
+            Effect.orElseSucceed(() => false),
           ),
         ),
         Stream.runForEach(() =>

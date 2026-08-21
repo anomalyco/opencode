@@ -1,0 +1,50 @@
+id: no-effect-flat-map-suspend
+language: TypeScript
+message: Use effect-form Effect.andThen when the previous value is ignored.
+severity: error
+rule:
+  all:
+    - any:
+        - pattern: Effect.flatMap($$$SELF, () => Effect.suspend($THUNK))
+        - pattern: Effect.flatMap($$$SELF, () => { return Effect.suspend($THUNK) })
+        - pattern: Effect.flatMap($$$SELF, (_) => Effect.suspend($IGNORED_THUNK))
+        - pattern: Effect.flatMap($$$SELF, (_) => { return Effect.suspend($IGNORED_THUNK) })
+        - pattern: Effect.flatMap($$$SELF, _ => Effect.suspend($IGNORED_THUNK))
+        - pattern: Effect.flatMap($$$SELF, _ => { return Effect.suspend($IGNORED_THUNK) })
+        - pattern: Effect.flatMap($$$SELF, function () { return Effect.suspend($FUNCTION_THUNK) })
+        - pattern: Effect.flatMap($$$SELF, function (_) { return Effect.suspend($IGNORED_FUNCTION_THUNK) })
+    - not:
+        pattern: Effect.flatMap($_FIRST, $_SECOND, $$$REST)
+constraints:
+  THUNK:
+    kind: arrow_function
+  IGNORED_THUNK:
+    all:
+      - kind: arrow_function
+      - not:
+          has:
+            kind: identifier
+            regex: ^_$
+            stopBy: end
+  FUNCTION_THUNK:
+    all:
+      - kind: arrow_function
+      - not:
+          has:
+            any:
+              - all:
+                  - kind: identifier
+                  - regex: ^arguments$
+              - kind: this
+            stopBy: end
+  IGNORED_FUNCTION_THUNK:
+    all:
+      - kind: arrow_function
+      - not:
+          has:
+            any:
+              - all:
+                  - kind: identifier
+                  - regex: ^(_|arguments)$
+              - kind: this
+            stopBy: end

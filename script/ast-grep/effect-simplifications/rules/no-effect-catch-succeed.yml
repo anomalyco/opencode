@@ -1,0 +1,52 @@
+id: no-effect-catch-succeed
+language: TypeScript
+message: Use Effect.orElseSucceed for constant failure recovery.
+severity: error
+rule:
+  all:
+    - any:
+        - pattern: Effect.catch($$$SELF, () => Effect.succeed($VALUE))
+        - pattern: Effect.catch($$$SELF, () => { return Effect.succeed($VALUE) })
+        - pattern: Effect.catch($$$SELF, (_) => Effect.succeed($IGNORED_VALUE))
+        - pattern: Effect.catch($$$SELF, (_) => { return Effect.succeed($IGNORED_VALUE) })
+        - pattern: Effect.catch($$$SELF, _ => Effect.succeed($IGNORED_VALUE))
+        - pattern: Effect.catch($$$SELF, _ => { return Effect.succeed($IGNORED_VALUE) })
+        - pattern: Effect.catch($$$SELF, function () { return Effect.succeed($FUNCTION_VALUE) })
+        - pattern: Effect.catch($$$SELF, function (_) { return Effect.succeed($IGNORED_FUNCTION_VALUE) })
+    - not:
+        pattern: Effect.catch($_FIRST, $_SECOND, $$$REST)
+constraints:
+  IGNORED_VALUE:
+    all:
+      - not:
+          regex: ^_$
+      - not:
+          has:
+            kind: identifier
+            regex: ^_$
+            stopBy: end
+  FUNCTION_VALUE:
+    all:
+      - not:
+          regex: ^arguments$
+      - not:
+          has:
+            kind: identifier
+            regex: ^arguments$
+            stopBy: end
+      - not:
+          has:
+            kind: this
+            stopBy: end
+  IGNORED_FUNCTION_VALUE:
+    all:
+      - not:
+          regex: ^(_|arguments)$
+      - not:
+          has:
+            any:
+              - all:
+                  - kind: identifier
+                  - regex: ^(_|arguments)$
+              - kind: this
+            stopBy: end

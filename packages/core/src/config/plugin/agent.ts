@@ -59,7 +59,7 @@ export const Plugin = define({
       return yield* Effect.forEach(files, (file) =>
         fs.readFileStringSafe(file.filepath).pipe(
           Effect.map((content) => (content ? decode(file, content) : undefined)),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         ),
       ).pipe(Effect.map((documents) => documents.filter((document): document is Document => document !== undefined)))
     })
@@ -176,7 +176,7 @@ function discover(fs: FSUtil.Interface, directory: string) {
       ),
   ).pipe(
     Effect.map((files) => files.flat()),
-    Effect.catch(() => Effect.succeed([])),
+    Effect.orElseSucceed(() => []),
   )
 }
 

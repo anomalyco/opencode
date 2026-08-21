@@ -28,7 +28,7 @@ const checkMacosApp = Effect.fn("DesktopFiles.checkMacosApp")(function* (appName
 
   return yield* Effect.tryPromise(() => execFilePromise("which", [appName])).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
   )
 })
 
@@ -36,7 +36,7 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const result = yield* Effect.tryPromise(() => execFilePromise("where", [appName])).pipe(
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   )
   if (!result) return null
 
@@ -108,9 +108,13 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
 
   if (key) {
     for (const file of paths) {
-      const dirs = [path.dirname(file), path.dirname(path.dirname(file)), path.dirname(path.dirname(path.dirname(file)))]
+      const dirs = [
+        path.dirname(file),
+        path.dirname(path.dirname(file)),
+        path.dirname(path.dirname(path.dirname(file))),
+      ]
       for (const dir of dirs) {
-        const entries = yield* fs.readDirectory(dir).pipe(Effect.catch(() => Effect.succeed([])))
+        const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => []))
         for (const entry of entries) {
           const candidate = path.join(dir, entry)
           if (!hasExt(candidate, "exe")) continue
@@ -132,6 +136,6 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
 function exists(fs: FileSystem.FileSystem, path: string) {
   return fs.access(path).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
   )
 }

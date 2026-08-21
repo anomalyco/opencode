@@ -106,11 +106,7 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
     env: (yield* read()).env,
-    command: [
-      ...selfCommand(),
-      "serve",
-      "--service",
-    ],
+    command: [...selfCommand(), "serve", "--service"],
   }
 })
 
@@ -119,7 +115,7 @@ export const read = Effect.fn("cli.service-config.read")(function* () {
   if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
   return yield* fs.readFileString(configFile).pipe(
     Effect.flatMap(decodeInfo),
-    Effect.catch(() => Effect.succeed({} as Info)),
+    Effect.orElseSucceed(() => ({}) as Info),
   )
 })
 
