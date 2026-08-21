@@ -37,6 +37,10 @@ const requiresThoughtSignatureFallback = (modelID: string) => {
   return !/(^|\/)gemini-robotics-er-1\.5(?:[.-]|$)/i.test(modelID)
 }
 
+// Gemini 3 accepts media nested inside function responses; matched Gemini 2.5 variants reject it,
+// so their tool-result attachments lower as a separate user turn instead.
+const routesLegacyToolMedia = (modelID: string) => /gemini-2[.-]5(?:[.-]|$)/i.test(modelID)
+
 export interface OptionsInput {
   readonly [key: string]: unknown
   readonly cachedContent?: string
@@ -284,8 +288,16 @@ const lowerToolCall = (part: ToolCallPart) => ({
 
 const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
+  const legacyToolMedia = routesLegacyToolMedia(request.model.id)
+  let pendingMedia: GeminiInlineDataPart[] | undefined
+  const flushMedia = () => {
+    if (!pendingMedia) return
+    contents.push({ role: "user", parts: [{ text: "Attached media from tool result:" }, ...pendingMedia] })
+    pendingMedia = undefined
+  }
 
   for (const message of request.messages) {
+    if (message.role !== "tool") flushMedia()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Gemini", message)
       const previous = contents.at(-1)
@@ -367,6 +379,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         const value = ProviderShared.normalizeToolFile(item)
         media.push({ inlineData: { mimeType: value.mime, data: value.base64 } })
       }
+      if (legacyToolMedia && media.length > 0) (pendingMedia ??= []).push(...media)
       parts.push({
         functionResponse: {
           id: functionCallId(part.providerMetadata),
@@ -375,7 +388,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
             name: part.name,
             content: text.join("\n"),
           },
-          parts: media.length > 0 ? media : undefined,
+          parts: legacyToolMedia || media.length === 0 ? undefined : media,
         },
       })
     }
@@ -387,6 +400,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     else contents.push({ role: "user", parts })
   }
 
+  flushMedia()
   return contents
 })
 

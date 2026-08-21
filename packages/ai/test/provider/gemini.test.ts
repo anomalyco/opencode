@@ -328,12 +328,16 @@ describe("Gemini route", () => {
               functionResponse: {
                 name: "read",
                 response: { name: "read", content: "Image read successfully" },
-                parts: [
-                  { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
-                  { inlineData: { mimeType: "application/pdf", data: "JVBERi0xLjQ=" } },
-                ],
               },
             },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            { text: "Attached media from tool result:" },
+            { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
+            { inlineData: { mimeType: "application/pdf", data: "JVBERi0xLjQ=" } },
           ],
         },
       ])
@@ -368,9 +372,159 @@ describe("Gemini route", () => {
               functionResponse: {
                 name: "read",
                 response: { name: "read", content: "" },
-                parts: [{ inlineData: { mimeType: "image/jpeg", data: "/9j/" } }],
               },
             },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            { text: "Attached media from tool result:" },
+            { inlineData: { mimeType: "image/jpeg", data: "/9j/" } },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("nests media inside function responses for gemini 3", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: gemini3,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({
+                id: "call_image",
+                name: "read",
+                input: { path: "pixel.png" },
+                providerMetadata: { google: { thoughtSignature: "sig_1" } },
+              }),
+            ]),
+            Message.tool({
+              id: "call_image",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Image read successfully" },
+                  { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" },
+                ],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [{ functionCall: { name: "read", args: { path: "pixel.png" } }, thoughtSignature: "sig_1" }],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                name: "read",
+                response: { name: "read", content: "Image read successfully" },
+                parts: [{ inlineData: { mimeType: "image/png", data: "AAECAw==" } }],
+              },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("flushes pending media before system update text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "shot", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "shot",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAEC", mime: "image/png" }],
+              },
+            }),
+            Message.system("Update."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        { role: "model", parts: [{ functionCall: { name: "shot", args: {} } }] },
+        {
+          role: "user",
+          parts: [{ functionResponse: { name: "shot", response: { name: "shot", content: "" } } }],
+        },
+        {
+          role: "user",
+          parts: [
+            { text: "Attached media from tool result:" },
+            { inlineData: { mimeType: "image/png", data: "AAEC" } },
+            { text: "<system-update>\nUpdate.\n</system-update>" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("collects legacy tool media into one turn after merged responses", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "call_1", name: "shot", input: {} }),
+              ToolCallPart.make({ id: "call_2", name: "shot", input: {} }),
+            ]),
+            Message.tool({
+              id: "call_1",
+              name: "shot",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAEC", mime: "image/png" }],
+              },
+            }),
+            Message.tool({
+              id: "call_2",
+              name: "shot",
+              result: {
+                type: "content",
+                value: [{ type: "text", text: "no image here" }],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            { functionCall: { name: "shot", args: {} } },
+            { functionCall: { name: "shot", args: {} } },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            { functionResponse: { name: "shot", response: { name: "shot", content: "" } } },
+            { functionResponse: { name: "shot", response: { name: "shot", content: "no image here" } } },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            { text: "Attached media from tool result:" },
+            { inlineData: { mimeType: "image/png", data: "AAEC" } },
           ],
         },
       ])
