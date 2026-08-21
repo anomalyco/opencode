@@ -13,6 +13,7 @@ export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInp
 export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
 
 const VERSION = "vertex-2023-10-16" as const
+const HEADER_VERSION = "2023-06-01" as const
 
 export const id = ProviderID.make("google-vertex")
 
@@ -57,6 +58,7 @@ const route = Route.make({
   endpoint: Endpoint.path(({ request }) => `/${request.model.id}:streamRawPredict`),
   auth: Auth.none,
   framing: AnthropicMessages.framing,
+  headers: () => ({ "anthropic-version": HEADER_VERSION }),
 })
 
 export const routes = [route]
