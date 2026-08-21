@@ -34,6 +34,29 @@ describe("Composer history", () => {
     expect(dedupedComments).toBe(commentsOnly)
   })
 
+  test("insertion isolates canonical entries from source mutations", () => {
+    const prompt: Prompt = [
+      {
+        type: "file",
+        path: "src/a.ts",
+        content: "@src/a.ts",
+        start: 0,
+        end: 9,
+        selection: { startLine: 1, startChar: 0, endLine: 2, endChar: 0 },
+      },
+    ]
+    const comments = [comment("c1")]
+    const entries = prependHistoryEntry([], prompt, comments)
+    const stored = entries[0]
+
+    if (prompt[0]?.type !== "file" || stored?.prompt[0]?.type !== "file") throw new Error("expected file")
+    prompt[0].selection!.startLine = 9
+    comments[0].selection.start = 9
+
+    expect(stored.prompt[0].selection?.startLine).toBe(1)
+    expect(stored.comments[0]?.selection.start).toBe(2)
+  })
+
   test("upgrades stored prompt arrays once at the persistence boundary", () => {
     expect(upgradeHistoryState({ entries: [text("stored")] })).toEqual({
       entries: [{ prompt: text("stored"), comments: [] }],

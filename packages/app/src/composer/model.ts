@@ -18,7 +18,7 @@ import { formatServerError } from "@/runtime/server/errors"
 import { Skill } from "@opencode-ai/schema/skill"
 import type { ComposerAdapter, ComposerControls } from "./adapter"
 import type { ImageAttachmentPart } from "./state"
-import { normalizePromptHistoryEntry, type PromptHistoryComment } from "./history/entry"
+import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
 import { composerPlaceholder } from "./placeholder"
 import { createComposerSubmit } from "./submit"
@@ -284,11 +284,7 @@ export function createComposerModel(adapter: ComposerAdapter): ComposerModel {
     store: prompt.store,
     state: interaction,
     history: {
-      entries: (mode) =>
-        history.entries(mode).map((value) => {
-          const entry = normalizePromptHistoryEntry(value)
-          return { prompt: entry.prompt, metadata: entry.comments }
-        }),
+      entries: (mode) => history.entries(mode).map((entry) => ({ prompt: entry.prompt, metadata: entry.comments })),
       add: (value, mode) => history.add(value, mode, mode === "shell" ? [] : historyComments()),
       capture: historyComments,
       restore: (metadata) => restoreHistoryComments(metadata as PromptHistoryComment[]),

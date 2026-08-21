@@ -1,6 +1,6 @@
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { createMemo, createResource, For, type JSXElement, Show } from "solid-js"
+import { createMemo, createResource, For, Index, type JSXElement, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useMcpToggle } from "@/providers/connect/mcp"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -71,9 +71,10 @@ export function StatusPopoverBody(props: { shown: boolean }) {
                   <div class="text-14-regular text-text-base text-center my-auto">{language.t("dialog.mcp.empty")}</div>
                 }
               >
-                <For each={mcpServers()}>
+                <Index each={mcpServers()}>
                   {(server) => {
-                    const status = () => server.status.status
+                    const name = () => server().name
+                    const status = () => server().status.status
                     const enabled = () => status() === "connected"
                     return (
                       <button
@@ -81,9 +82,9 @@ export function StatusPopoverBody(props: { shown: boolean }) {
                         class="flex items-center gap-2 w-full min-h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                         onClick={() => {
                           if (toggleMcp.isPending) return
-                          toggleMcp.mutate(server.name)
+                          toggleMcp.mutate(name())
                         }}
-                        disabled={toggleMcp.isPending && toggleMcp.variables === server.name}
+                        disabled={toggleMcp.isPending && toggleMcp.variables === name()}
                       >
                         <div
                           classList={{
@@ -96,7 +97,7 @@ export function StatusPopoverBody(props: { shown: boolean }) {
                         />
                         <span class="flex flex-col min-w-0 flex-1">
                           <span class="flex items-center gap-2 min-w-0">
-                            <span class="text-14-regular text-text-base truncate">{server.name}</span>
+                            <span class="text-14-regular text-text-base truncate">{name()}</span>
                           </span>
                           <Show when={status() === "needs_auth"}>
                             <span class="text-11-regular text-text-weaker truncate">
@@ -108,17 +109,17 @@ export function StatusPopoverBody(props: { shown: boolean }) {
                           <Switch
                             appearance="standard"
                             checked={enabled()}
-                            disabled={toggleMcp.isPending && toggleMcp.variables === server.name}
+                            disabled={toggleMcp.isPending && toggleMcp.variables === name()}
                             onChange={() => {
                               if (toggleMcp.isPending) return
-                              toggleMcp.mutate(server.name)
+                              toggleMcp.mutate(name())
                             }}
                           />
                         </div>
                       </button>
                     )
                   }}
-                </For>
+                </Index>
               </Show>
             </div>
           </div>

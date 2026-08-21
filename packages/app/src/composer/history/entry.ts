@@ -37,13 +37,6 @@ export function clonePromptHistoryComments(comments: PromptHistoryComment[]) {
   }))
 }
 
-export function normalizePromptHistoryEntry(entry: PromptHistoryStoredEntry): PromptHistoryEntry {
-  return {
-    prompt: clonePrompt(entry.prompt),
-    comments: clonePromptHistoryComments(entry.comments),
-  }
-}
-
 export function prependHistoryEntry(
   entries: PromptHistoryStoredEntry[],
   prompt: Prompt,
@@ -80,9 +73,7 @@ function isCommentEqual(commentA: PromptHistoryComment, commentB: PromptHistoryC
   )
 }
 
-function isPromptEqual(promptA: PromptHistoryStoredEntry, promptB: PromptHistoryStoredEntry) {
-  const entryA = normalizePromptHistoryEntry(promptA)
-  const entryB = normalizePromptHistoryEntry(promptB)
+function isPromptEqual(entryA: PromptHistoryStoredEntry, entryB: PromptHistoryStoredEntry) {
   if (entryA.prompt.length !== entryB.prompt.length) return false
   for (let i = 0; i < entryA.prompt.length; i++) {
     const partA = entryA.prompt[i]
