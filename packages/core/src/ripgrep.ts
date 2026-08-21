@@ -88,6 +88,12 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ri
 
 const failure = (message: string, cause?: unknown) => new Error({ message, cause })
 
+const normalizePath = (value: string) =>
+  value
+    .replace(/^(?:\.[\\/])+/u, "")
+    .replace(/^[\\/]+/u, "")
+    .replaceAll("\\", "/")
+
 const isInvalidPattern = (stderr: string) =>
   stderr.includes("regex parse error") || stderr.includes("error parsing regex")
 
@@ -169,13 +175,7 @@ const layer = Layer.effect(
             "--glob=!**/.git/**",
             ".",
           ],
-          parse: (line) =>
-            Effect.succeed(
-              line
-                .replace(/^(?:\.[\\/])+/u, "")
-                .replace(/^[\\/]+/u, "")
-                .replaceAll("\\", "/"),
-            ),
+          parse: (line) => Effect.succeed(normalizePath(line)),
         }).pipe(
           Effect.map((result) =>
             result.items.map((relative) =>
@@ -203,10 +203,7 @@ const layer = Layer.effect(
             ".",
           ],
           parse: (line) => {
-            const relative = line
-              .replace(/^(?:\.[\\/])+/u, "")
-              .replace(/^[\\/]+/u, "")
-              .replaceAll("\\", "/")
+            const relative = normalizePath(line)
             return Effect.succeed(
               Entry.make({
                 path: RelativePath.make(relative),
@@ -252,10 +249,7 @@ const layer = Layer.effect(
         }).pipe(
           Effect.map((result) =>
             result.items.map((match) => {
-              const relative = match.path.text
-                .replace(/^(?:\.[\\/])+/u, "")
-                .replace(/^[\\/]+/u, "")
-                .replaceAll("\\", "/")
+              const relative = normalizePath(match.path.text)
               return Match.make({
                 entry: Entry.make({
                   path: RelativePath.make(relative),
