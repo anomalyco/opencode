@@ -178,10 +178,11 @@ describe("toSessionError", () => {
   })
 
   test("honors provider retry header overrides", () => {
-    const http = (headers: Record<string, string>) =>
+    const http = (retryable: boolean) =>
       new HttpContext({
         request: new HttpRequestDetails({ method: "POST", url: "https://example.com", headers: {} }),
-        response: new HttpResponseDetails({ status: 500, headers }),
+        response: new HttpResponseDetails({ status: 500, headers: {} }),
+        retryable,
       })
 
     expect(
@@ -190,15 +191,13 @@ describe("toSessionError", () => {
           new ProviderInternalReason({
             message: "do not retry",
             status: 500,
-            http: http({ "x-should-retry": "false" }),
+            http: http(false),
           }),
         ),
       ),
     ).toBeFalse()
     expect(
-      SessionRunnerRetry.isRetryable(
-        llm(new InvalidRequestReason({ message: "retry", http: http({ "x-should-retry": "true" }) })),
-      ),
+      SessionRunnerRetry.isRetryable(llm(new InvalidRequestReason({ message: "retry", http: http(true) }))),
     ).toBeTrue()
   })
 })
