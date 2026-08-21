@@ -11,6 +11,7 @@ import { useConfig } from "../config"
 import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
+import { usePermission } from "./permission"
 import { newSessionLocation } from "../config/new-session-location"
 import {
   closeSessionTab,
@@ -59,6 +60,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const location = useLocation()
     const paths = useTuiPaths()
     const renderer = useRenderer()
+    const permission = usePermission()
     const enabled = () => config.tabs.enabled
     // Focus reporting emits transitions, so an interactive launch owns unread state until its first blur.
     const [focused, setFocused] = createSignal(true)
@@ -124,6 +126,28 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       }, {}),
     })
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
+    const autoApproved = new Set<string>()
+    createEffect(() => {
+      if (permission.mode !== "auto") return
+      const active = current()
+      const roots = [
+        ...(active ? [active] : []),
+        ...(enabled() ? state().tabs.map((tab) => root(tab.sessionID)) : []),
+      ]
+      const sessions = Array.from(new Set(roots.flatMap((sessionID) => [sessionID, ...data.session.family(sessionID)])))
+      sessions
+        .flatMap((sessionID) => data.session.permission.list(sessionID) ?? [])
+        .forEach((request) => {
+          if (autoApproved.has(request.id)) return
+          autoApproved.add(request.id)
+          void data.session.permission
+            .reply({ sessionID: request.sessionID, reply: "once", requestID: request.id })
+            .catch((error) => {
+              console.error("Failed to auto-approve permission", error)
+            })
+            .finally(() => autoApproved.delete(request.id))
+        })
+    })
     const newTab = createMemo((open = false) => {
       if (route.data.type === "home") return true
       if (!open) return false
@@ -229,16 +253,19 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         )
       })()
       const timer = setTimeout(async () => {
-        const sessions = state()
-          .tabs.map((tab) => tab.sessionID)
-          .filter((sessionID) => sessionID !== current())
+        const sessions = state().tabs.map((tab) => tab.sessionID)
         for (const sessionID of sessions) {
           if (stale) return
+          const family = Array.from(new Set([sessionID, ...data.session.family(sessionID)]))
           await Promise.allSettled([
-            data.session.message.sync(sessionID),
-            data.session.pending.sync(sessionID),
-            data.session.permission.sync(sessionID),
-            data.session.form.sync(sessionID),
+            ...(sessionID === current()
+              ? []
+              : [
+                  data.session.message.sync(sessionID),
+                  data.session.pending.sync(sessionID),
+                  data.session.form.sync(sessionID),
+                ]),
+            ...family.map((id) => data.session.permission.sync(id)),
           ])
         }
       }, TAB_PREFETCH_DELAY)

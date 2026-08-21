@@ -5,9 +5,11 @@ import { testRender } from "@opentui/solid"
 import { mkdirSync, watch } from "fs"
 import path from "path"
 import { ConfigProvider } from "../../src/config"
+import { ArgsProvider } from "../../src/context/args"
 import { ClientProvider, useClient } from "../../src/context/client"
 import { DataProvider, useData } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
+import { PermissionProvider } from "../../src/context/permission"
 import { RouteProvider, useRoute } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
 import { SessionTabsProvider, useSessionTabs } from "../../src/context/session-tabs"
@@ -36,6 +38,7 @@ async function renderSessionTabs(
     sessionGate?: Promise<void>
     sessionDirectories?: Record<string, string>
     newLocation?: "launch" | "inherit"
+    auto?: boolean
   },
 ) {
   const temporary = options?.state ? undefined : await tmpdir()
@@ -55,6 +58,7 @@ async function renderSessionTabs(
   const sessions: string[] = []
   const locations: string[] = []
   const vcsLocations: string[] = []
+  const permissionReplies: string[] = []
   const calls = createFetch(async (url) => {
     if (url.pathname === "/api/location") {
       const requested = url.searchParams.get("location[directory]") ?? directory
@@ -71,6 +75,11 @@ async function renderSessionTabs(
         location: { directory: requested },
         data: { branch: { current: "main", default: "main" } },
       })
+    }
+    const permissionReply = url.pathname.match(/^\/api\/session\/[^/]+\/permission\/([^/]+)\/reply$/)?.[1]
+    if (permissionReply) {
+      permissionReplies.push(permissionReply)
+      return new Response(null, { status: 204 })
     }
     const sessionID = url.pathname.match(/^\/api\/session\/([^/]+)$/)?.[1]
     if (!sessionID) return undefined
@@ -107,26 +116,30 @@ async function renderSessionTabs(
     <TestTuiContexts paths={{ state }}>
       <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
         <StorageProvider>
-          <ConfigProvider
-            config={createTuiResolvedConfig({
-              tabs: { enabled: true },
-              session: { new_location: options?.newLocation ?? "launch" },
-            })}
-          >
-            <RouteProvider
-              initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
+          <ArgsProvider auto={options?.auto}>
+            <ConfigProvider
+              config={createTuiResolvedConfig({
+                tabs: { enabled: true },
+                session: { new_location: options?.newLocation ?? "launch" },
+              })}
             >
-              <ClientProvider api={createApi(calls.fetch)}>
-                <DataProvider>
-                  <LocationProvider>
-                    <SessionTabsProvider>
-                      <Probe />
-                    </SessionTabsProvider>
-                  </LocationProvider>
-                </DataProvider>
-              </ClientProvider>
-            </RouteProvider>
-          </ConfigProvider>
+              <RouteProvider
+                initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
+              >
+                <ClientProvider api={createApi(calls.fetch)}>
+                  <PermissionProvider>
+                    <DataProvider>
+                      <LocationProvider>
+                        <SessionTabsProvider>
+                          <Probe />
+                        </SessionTabsProvider>
+                      </LocationProvider>
+                    </DataProvider>
+                  </PermissionProvider>
+                </ClientProvider>
+              </RouteProvider>
+            </ConfigProvider>
+          </ArgsProvider>
         </StorageProvider>
       </TuiAppProvider>
     </TestTuiContexts>
@@ -140,6 +153,7 @@ async function renderSessionTabs(
     sessions,
     locations,
     vcsLocations,
+    permissionReplies,
     state,
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
     focus: () => app.renderer.emit("focus"),
@@ -152,6 +166,31 @@ async function renderSessionTabs(
     },
   }
 }
+
+test("auto-approves a permission requested by a background tab", async () => {
+  const setup = await renderSessionTabs("background", { auto: true })
+  try {
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "background"))
+    setup.route.navigate({ type: "session", sessionID: "active" })
+    await wait(() => setup.tabs.current() === "active" && setup.tabs.tabs().length === 2)
+
+    setup.emit({
+      id: "evt_permission_background",
+      created: Date.now(),
+      type: "permission.asked",
+      data: {
+        id: "per_background",
+        sessionID: "background",
+        action: "external_directory",
+        resources: ["/tmp/background-worktree/*"],
+      },
+    })
+
+    await wait(() => setup.permissionReplies.includes("per_background"))
+  } finally {
+    await setup.destroy()
+  }
+})
 
 const executionSucceeded = (sessionID: string): OpenCodeEvent => ({
   id: `evt_done_${sessionID}`,
