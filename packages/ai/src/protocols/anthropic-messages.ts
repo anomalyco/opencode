@@ -359,6 +359,8 @@ const redactedDataFromMetadata = (metadata: ProviderMetadata | undefined): strin
   return typeof anthropic.redactedData === "string" ? anthropic.redactedData : undefined
 }
 
+const hasText = (part: { readonly text: string }) => part.text.trim().length > 0
+
 const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition, inputSchema: JsonSchema): AnthropicTool => ({
   name: tool.name,
   description: tool.description,
@@ -534,6 +536,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       const content: AnthropicUserBlock[] = []
       for (const part of message.content) {
         if (part.type === "text") {
+          if (!hasText(part)) continue
           content.push({ type: "text", text: part.text, cache_control: cacheControl(breakpoints, part.cache) })
           continue
         }
@@ -543,7 +546,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         }
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
       }
-      messages.push({ role: "user", content })
+      if (content.length > 0) messages.push({ role: "user", content })
       continue
     }
 
@@ -551,6 +554,11 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       const content: AnthropicAssistantBlock[] = []
       for (const part of message.content) {
         if (part.type === "text") {
+          if (!hasText(part)) {
+            if (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+              return yield* invalid("Anthropic Messages cannot discard provider state attached to empty assistant text")
+            continue
+          }
           content.push({ type: "text", text: part.text, cache_control: cacheControl(breakpoints, part.cache) })
           continue
         }
@@ -579,7 +587,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           `Anthropic Messages assistant messages only support text, reasoning, and tool-call content for now`,
         )
       }
-      messages.push({ role: "assistant", content })
+      if (content.length > 0) messages.push({ role: "assistant", content })
       continue
     }
 

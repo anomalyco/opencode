@@ -1031,7 +1031,7 @@ Recent work
           content: [
             SessionMessage.AssistantText.make({
               type: "text",
-              text: "Checking.",
+              text: "",
               state: { phase: "commentary" },
             }),
           ],
@@ -1045,7 +1045,7 @@ Recent work
     expect(messages[0]?.content).toEqual([
       {
         type: "text",
-        text: "Checking.",
+        text: "",
         providerMetadata: { provider: { phase: "commentary" } },
       },
     ])

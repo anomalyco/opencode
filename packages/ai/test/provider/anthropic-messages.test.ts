@@ -58,6 +58,79 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("filters empty user and assistant text while preserving replay state", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user(" \n\t"),
+            Message.user([
+              { type: "text", text: "" },
+              { type: "text", text: "  Use the tool.  " },
+              { type: "text", text: " \n\t" },
+            ]),
+            Message.assistant([
+              { type: "text", text: "" },
+              { type: "reasoning", text: "", providerMetadata: { anthropic: { signature: "sig_1" } } },
+              ToolCallPart.make({ id: "call_1", name: "lookup", input: {} }),
+            ]),
+            Message.tool({
+              id: "call_1",
+              name: "lookup",
+              resultType: "text",
+              result: "Tool result.",
+            }),
+            Message.assistant(" \n\t"),
+            Message.user("Continue."),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        messages: [
+          { role: "user", content: [{ type: "text", text: "  Use the tool.  " }] },
+          {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "", signature: "sig_1" },
+              { type: "tool_use", id: "call_1", name: "lookup", input: {} },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "call_1",
+                content: "Tool result.",
+              },
+            ],
+          },
+          { role: "user", content: [{ type: "text", text: "Continue." }] },
+        ],
+      })
+    }),
+  )
+
+  it.effect("rejects empty assistant text carrying provider state", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "text", text: "", providerMetadata: { anthropic: { encryptedContent: "opaque" } } },
+            ]),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("cannot discard provider state attached to empty assistant text")
+    }),
+  )
+
   it.effect("lowers adaptive thinking settings with effort", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

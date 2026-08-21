@@ -7,6 +7,9 @@ import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
+const hasProviderMetadata = (metadata: ProviderMetadata | undefined) =>
+  metadata !== undefined && Object.keys(metadata).length > 0
+
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
   mediaType: file.mime,
@@ -188,9 +191,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     return result ? [call, result] : [call]
   })
   const meaningful = content.filter((part) => {
-    if (part.type === "text") return part.text !== ""
+    if (part.type === "text") return part.text !== "" || hasProviderMetadata(part.providerMetadata)
     if (part.type !== "reasoning") return true
-    return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+    return part.text !== "" || hasProviderMetadata(part.providerMetadata)
   })
   const results = message.content
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
