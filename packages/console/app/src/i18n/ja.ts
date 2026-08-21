@@ -272,6 +272,7 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "5時間あたりのリクエスト数",
   "go.graph.limitedRegions": "一部の地域に限定",
+  "go.graph.limitedTime": "期間限定",
   "go.graph.usageLimits": "利用制限",
   "go.graph.aria": "5時間あたりのリクエスト数: {{free}} 対 {{go}}",
 

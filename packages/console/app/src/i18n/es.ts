@@ -276,6 +276,7 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "Solicitudes por 5 horas",
   "go.graph.limitedRegions": "regiones limitadas",
+  "go.graph.limitedTime": "tiempo limitado",
   "go.graph.usageLimits": "Límites de uso",
   "go.graph.aria": "Solicitudes por 5h: {{free}} vs {{go}}",
 

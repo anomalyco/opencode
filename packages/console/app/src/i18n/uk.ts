@@ -274,6 +274,7 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "Запитів за 5 годин",
   "go.graph.limitedRegions": "обмежені регіони",
+  "go.graph.limitedTime": "обмежений час",
   "go.graph.usageLimits": "Ліміти використання",
   "go.graph.aria": "Запитів за 5 год: {{free}} vs {{go}}",
 

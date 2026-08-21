@@ -261,6 +261,7 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "每 5 小时请求数",
   "go.graph.limitedRegions": "仅限部分地区",
+  "go.graph.limitedTime": "限时",
   "go.graph.usageLimits": "使用限制",
   "go.graph.aria": "每 5 小时请求数: {{free}} vs {{go}}",
 
