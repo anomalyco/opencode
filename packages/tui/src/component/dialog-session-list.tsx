@@ -48,7 +48,9 @@ export function loadDialogSessionList<T>(input: {
  * buckets alongside active sessions.
  */
 export function dialogSessionListCategory(input: { archived?: number; updated: number; now?: Date }): string {
-  if (input.archived) return "Archived"
+  // ArchivedTimestamp permits 0 and negative values for legacy compatibility, so
+  // presence must be tested rather than truthiness.
+  if (typeof input.archived === "number") return "Archived"
   const today = (input.now ?? new Date()).toDateString()
   const label = new Date(input.updated).toDateString()
   return label === today ? "Today" : label
@@ -365,12 +367,14 @@ export function DialogSessionList() {
           command: "session.archive",
           // Label reflects what ctrl+a will do to the highlighted session, which is
           // both shorter than a static "archive/unarchive" and unambiguous.
-          title: (option) =>
-            option && sessions().find((item) => item.id === option.value)?.time?.archived ? "unarchive" : "archive",
+          title: (option) => {
+            const session = option ? sessions().find((item) => item.id === option.value) : undefined
+            return typeof session?.time?.archived === "number" ? "unarchive" : "archive"
+          },
           onTrigger: async (option) => {
             const session = sessions().find((item) => item.id === option.value)
             if (!session) return
-            const archived = session.time?.archived
+            const archived = typeof session.time?.archived === "number"
             await sdk.client.session
               .update({
                 sessionID: option.value,

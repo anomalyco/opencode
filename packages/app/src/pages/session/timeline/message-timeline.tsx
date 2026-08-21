@@ -1545,7 +1545,7 @@ export function MessageTimeline(props: {
                                   <DropdownMenu.ItemLabel>{language.t("common.export")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
                                 <Show
-                                  when={info()?.time?.archived}
+                                  when={typeof info()?.time?.archived === "number"}
                                   fallback={
                                     <DropdownMenu.Item onSelect={() => void sessionArchive.archive(id)}>
                                       <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
@@ -1628,7 +1628,7 @@ export function MessageTimeline(props: {
                                 {language.t("common.export")}...
                               </MenuV2.Item>
                               <Show
-                                when={info()?.time?.archived}
+                                when={typeof info()?.time?.archived === "number"}
                                 fallback={
                                   <MenuV2.Item onSelect={() => void sessionArchive.archive(id)}>
                                     {language.t("common.archive")}

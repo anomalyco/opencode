@@ -29,6 +29,9 @@ type CompatibleSessionApi = Omit<
   rename: (input: Parameters<SessionApi["rename"]>[0] & LegacyLocation) => ReturnType<SessionApi["rename"]>
   // archive: (input: Parameters<SessionApi["archive"]>[0] & LegacyLocation) => ReturnType<SessionApi["archive"]>
   remove: (input: Parameters<SessionApi["remove"]>[0] & LegacyLocation) => ReturnType<SessionApi["remove"]>
+  // `archived` is only honoured on the search path, which routes to
+  // /experimental/session — the only list endpoint that accepts it. Directory
+  // listings intentionally ignore it so default lists stay archive-free.
   list: (
     input?: Parameters<SessionApi["list"]>[0] & { parentID?: string | null; archived?: boolean },
     options?: Parameters<SessionApi["list"]>[1],

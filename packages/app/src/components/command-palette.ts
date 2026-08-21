@@ -264,7 +264,7 @@ export function createServerSessionEntries(props: {
           .map((session) => {
             const project =
               projectForSession(session, opened, openedByID) ?? projectForSession(session, stored, storedByID)
-            const archived = session.time.archived
+            const archived = typeof session.time.archived === "number" ? session.time.archived : undefined
             return {
               id: `session:${props.server}:${session.id}`,
               type: "session" as const,

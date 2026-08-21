@@ -71,5 +71,15 @@ describe("dialog session list", () => {
     test("treats a missing archived timestamp as active", () => {
       expect(dialogSessionListCategory({ archived: undefined, updated: now.getTime(), now })).toBe("Today")
     })
+
+    // ArchivedTimestamp is Schema.Finite and accepts 0 and negatives for legacy
+    // compatibility, so a truthiness check would misreport these as active.
+    test("treats a zero archived timestamp as archived", () => {
+      expect(dialogSessionListCategory({ archived: 0, updated: now.getTime(), now })).toBe("Archived")
+    })
+
+    test("treats a negative archived timestamp as archived", () => {
+      expect(dialogSessionListCategory({ archived: -1, updated: now.getTime(), now })).toBe("Archived")
+    })
   })
 })
