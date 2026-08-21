@@ -40,6 +40,7 @@ describe("inference stat normalization", () => {
 
   test("merges renamed models under their current name", () => {
     expect(statModel("x-preview-f", "")).toBe("ox-alpha")
+    expect(statModel("xiaomi/mimo-v2.5", "")).toBe("mimo-v2.5")
     expect(toModelAggregate(aggregate("x-preview-f", "openai"))).toMatchObject([
       {
         provider: "openai",

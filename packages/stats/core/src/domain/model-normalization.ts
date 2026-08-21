@@ -15,6 +15,7 @@ export const MODEL_AUTHOR_RULES = [
 export const EXCLUDED_MODELS = new Set(["alpha-gpt-next"])
 export const MODEL_NAME_ALIASES: Record<string, string> = {
   "x-preview-f": "ox-alpha",
+  "xiaomi/mimo-v2.5": "mimo-v2.5",
 }
 export const RETIRED_STAT_MODELS = ["big-pickle", ...Object.keys(MODEL_NAME_ALIASES)]
 export const RETIRED_STAT_PROVIDERS = ["opencode"]
