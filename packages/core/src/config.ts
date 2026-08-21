@@ -449,21 +449,16 @@ type Edit = { readonly path: (string | number)[]; readonly value: unknown }
 
 function changes(before: unknown, after: unknown, path: (string | number)[] = []): Edit[] {
   if (Object.is(before, after)) return []
-  if (
-    before !== null &&
-    after !== null &&
-    typeof before === "object" &&
-    typeof after === "object" &&
-    !Array.isArray(before) &&
-    !Array.isArray(after)
-  ) {
-    const previous = before as Record<string, unknown>
-    const next = after as Record<string, unknown>
-    return [...new Set([...Object.keys(previous), ...Object.keys(next)])].flatMap((key) => {
-      if (!(key in next)) return [{ path: [...path, key], value: undefined }]
-      if (!(key in previous)) return [{ path: [...path, key], value: next[key] }]
-      return changes(previous[key], next[key], [...path, key])
+  if (isRecord(before) && isRecord(after)) {
+    return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap((key) => {
+      if (!(key in after)) return [{ path: [...path, key], value: undefined }]
+      if (!(key in before)) return [{ path: [...path, key], value: after[key] }]
+      return changes(before[key], after[key], [...path, key])
     })
   }
   return [{ path, value: after }]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
 }

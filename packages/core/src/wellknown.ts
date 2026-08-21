@@ -106,6 +106,10 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const cache = yield* Ref.make(new Map<string, Entry>())
     const lock = Semaphore.makeUnsafe(1)
+    const loadEntry = Effect.fn("WellKnown.loadEntry")(function* (origin: string) {
+      const manifest = yield* inspect(origin).pipe(Effect.provideService(HttpClient.HttpClient, http))
+      return { origin, integrationID: Integration.ID.make(origin), manifest }
+    })
 
     const load = Effect.fn("WellKnown.load")(function* () {
       const value = yield* kv.get(sourcesKey)
@@ -114,10 +118,7 @@ const layer = Layer.effect(
       const entries = yield* Effect.forEach(origins, (origin) => {
         const cached = current.get(origin)
         if (cached) return Effect.succeed(cached)
-        return inspect(origin).pipe(
-          Effect.provideService(HttpClient.HttpClient, http),
-          Effect.map((manifest) => ({ origin, integrationID: Integration.ID.make(origin), manifest })),
-        )
+        return loadEntry(origin)
       })
       yield* Ref.set(cache, new Map(entries.map((entry) => [entry.origin, entry])))
       return entries
@@ -129,12 +130,7 @@ const layer = Layer.effect(
           const value = yield* kv.get(sourcesKey)
           const origins = Schema.is(Sources)(value) ? value : []
           if (!origins.length) return false
-          const entries = yield* Effect.forEach(origins, (origin) =>
-            inspect(origin).pipe(
-              Effect.provideService(HttpClient.HttpClient, http),
-              Effect.map((manifest) => ({ origin, integrationID: Integration.ID.make(origin), manifest })),
-            ),
-          )
+          const entries = yield* Effect.forEach(origins, loadEntry)
           const next = new Map(entries.map((entry) => [entry.origin, entry]))
           const changed = !isDeepStrictEqual(Ref.getUnsafe(cache), next)
           if (!changed) return false
@@ -153,9 +149,9 @@ const layer = Layer.effect(
         return yield* lock.withPermit(
           Effect.gen(function* () {
             const origin = value.replace(/\/+$/, "")
-            const manifest = yield* inspect(origin).pipe(Effect.provideService(HttpClient.HttpClient, http))
-            if (!manifest.auth) return yield* Effect.fail(new Error(`No authentication method found at ${origin}`))
-            const entry = { origin, integrationID: Integration.ID.make(origin), manifest }
+            const entry = yield* loadEntry(origin)
+            if (!entry.manifest.auth)
+              return yield* Effect.fail(new Error(`No authentication method found at ${origin}`))
             const sources = yield* kv.get(sourcesKey)
             const origins = Schema.is(Sources)(sources) ? sources : []
             yield* kv.set(sourcesKey, Array.from(new Set([...origins, origin])))

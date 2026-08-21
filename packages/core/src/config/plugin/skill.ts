@@ -54,7 +54,7 @@ export const Plugin = define({
       "ConfigSkillPlugin.watchDirectory",
     )(function* (directory: string) {
       const target = path.resolve(directory)
-      const resolved = yield* fs.realPath(directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const resolved = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => undefined))
       if (resolved) {
         yield* watch(resolved, "directory")
         if (resolved !== target) yield* watch(target, "file")
@@ -65,7 +65,7 @@ export const Plugin = define({
       if (
         yield* fs.realPath(directory).pipe(
           Effect.as(true),
-          Effect.catch(() => Effect.succeed(false)),
+          Effect.orElseSucceed(() => false),
         )
       ) {
         if (missing) yield* FiberMap.remove(watches, `file:${path.resolve(missing)}`)
@@ -124,11 +124,11 @@ export const Plugin = define({
       for (const directory of directories) {
         const files = yield* fs
           .scan("{*.md,**/SKILL.md}", { cwd: directory, absolute: true, include: "file", symlink: true, dot: true })
-          .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+          .pipe(Effect.orElseSucceed(() => [] as string[]))
         for (const filepath of files.toSorted()) {
-          const resolved = yield* fs.realPath(filepath).pipe(Effect.catch(() => Effect.succeed(filepath)))
+          const resolved = yield* fs.realPath(filepath).pipe(Effect.orElseSucceed(() => filepath))
           if (!roots.some((root) => FSUtil.contains(root, resolved))) yield* watch(path.dirname(resolved), "directory")
-          const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.orElseSucceed(() => undefined))
           if (!content) continue
           const parsed = SkillFile.parse(directory, filepath, content)
           if (parsed._tag === "Skipped") {
