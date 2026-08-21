@@ -10,6 +10,11 @@ interface WebSocketOptions {
   readonly protocols?: string | Array<string>
 }
 
+type BunWebSocketConstructor = new (
+  url: string,
+  options: WebSocketOptions & { readonly proxy?: string },
+) => globalThis.WebSocket
+
 type Environment = Readonly<Record<string, string | undefined>>
 
 const environmentValue = (environment: Environment, name: string) =>
@@ -59,7 +64,9 @@ const layer = Layer.succeed(Socket.WebSocketConstructor, (url, input) => {
   const selectedProxy = proxy(url)
   // Keep trust on the runtime store so NODE_EXTRA_CA_CERTS remains additive.
   if (typeof Bun !== "undefined") {
-    return new globalThis.WebSocket(url, {
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Bun extends the browser constructor with handshake and network options.
+    const WebSocket = globalThis.WebSocket as unknown as BunWebSocketConstructor
+    return new WebSocket(url, {
       headers: config.headers,
       protocols: config.protocols,
       ...(selectedProxy ? { proxy: selectedProxy } : {}),
