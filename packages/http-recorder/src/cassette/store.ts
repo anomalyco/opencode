@@ -144,11 +144,7 @@ export const fileSystem = (
               recorded.set(name, { interactions, findings: interactionFindings })
             }),
           ),
-        exists: (name) =>
-          fs.access(pathFor(name)).pipe(
-            Effect.as(true),
-            Effect.orElseSucceed(() => false),
-          ),
+        exists: (name) => fs.exists(pathFor(name)).pipe(Effect.orElseSucceed(() => false)),
         list: () =>
           walk(directory).pipe(
             Effect.map((files) =>

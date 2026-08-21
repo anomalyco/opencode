@@ -134,8 +134,5 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
 })
 
 function exists(fs: FileSystem.FileSystem, path: string) {
-  return fs.access(path).pipe(
-    Effect.as(true),
-    Effect.orElseSucceed(() => false),
-  )
+  return fs.exists(path).pipe(Effect.orElseSucceed(() => false))
 }
