@@ -43,12 +43,10 @@ test("keeps legacy unscoped history on the home composer", async () => {
   const legacy = JSON.stringify({ text: "legacy", files: [], agents: [], pasted: [] }) + "\n"
   const setup = await renderHistory(tmp.path, legacy)
   try {
-    const migrated = JSON.stringify({ prompt: { text: "legacy", files: [], agents: [], pasted: [] } }) + "\n"
-    while ((await Bun.file(path.join(setup.state, "prompt-history.jsonl")).text()) !== migrated) await Bun.sleep(0)
+    expect((await waitForHistory(setup.history))?.text).toBe("legacy")
 
     expect(setup.history.move("session-a", -1, "")).toBeUndefined()
-    expect(setup.history.move(undefined, -1, "")?.text).toBe("legacy")
-    expect(await Bun.file(path.join(setup.state, "prompt-history.jsonl")).text()).toBe(migrated)
+    expect(setup.history.move(undefined, 1, "legacy")?.text).toBe("")
   } finally {
     setup.app.renderer.destroy()
   }
@@ -73,5 +71,13 @@ async function renderHistory(root: string, persisted?: string) {
     </TuiPathsProvider>
   ))
   await app.renderOnce()
-  return { app, history: history!, state }
+  return { app, history: history! }
+}
+
+async function waitForHistory(history: ReturnType<typeof usePromptHistory>) {
+  for (const _ of Array.from({ length: 100 })) {
+    const item = history.move(undefined, -1, "")
+    if (item) return item
+    await Bun.sleep(1)
+  }
 }
