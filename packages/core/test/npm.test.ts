@@ -55,6 +55,84 @@ describe("Npm.add", () => {
 
     expect(entry.entrypoint).toBeDefined()
   })
+
+  // Seeds a fake installed copy of `name@version` (with an index.js entry) into the
+  // package cache slot for `spec` so Npm.add takes its cache-hit branch.
+  const seedCachedPackage = async (cache: string, spec: string, name: string, version: string) => {
+    const target = path.join(cache, "packages", Npm.sanitize(spec), "node_modules", name)
+    await fs.mkdir(target, { recursive: true })
+    await writePackage(target, { name, version, main: "index.js" })
+    await Bun.write(path.join(target, "index.js"), "export const fixture = true\n")
+    return target
+  }
+
+  const addWithCache = (cache: string, spec: string) =>
+    Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+  test("returns exact-version cache hits without contacting the registry", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const spec = "acme@1.0.0"
+    await seedCachedPackage(cache, spec, "acme", "1.0.0")
+
+    let registryCalls = 0
+    const originalFetch = global.fetch
+    global.fetch = (() => {
+      registryCalls++
+      throw new Error("registry must not be contacted for exact versions")
+    }) as typeof fetch
+
+    try {
+      const entry = await addWithCache(cache, spec)
+      expect(entry.entrypoint).toBeDefined()
+      expect(registryCalls).toBe(0)
+    } finally {
+      global.fetch = originalFetch
+    }
+  })
+
+  test("keeps dist-tag cache hits when the registry reports the same version", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const spec = "acme@latest"
+    await seedCachedPackage(cache, spec, "acme", "1.0.0")
+
+    const originalFetch = global.fetch
+    global.fetch = (async () =>
+      new Response(JSON.stringify({ version: "1.0.0" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch
+
+    try {
+      const entry = await addWithCache(cache, "acme@latest")
+      expect(entry.entrypoint).toBeDefined()
+    } finally {
+      global.fetch = originalFetch
+    }
+  })
+
+  test("keeps dist-tag cache hits when the registry is unreachable", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const spec = "acme@latest"
+    await seedCachedPackage(cache, spec, "acme", "1.0.0")
+
+    const originalFetch = global.fetch
+    global.fetch = (async () => {
+      throw new Error("offline")
+    }) as typeof fetch
+
+    try {
+      const entry = await addWithCache(cache, "acme@latest")
+      expect(entry.entrypoint).toBeDefined()
+    } finally {
+      global.fetch = originalFetch
+    }
+  })
 })
 
 describe("Npm.install", () => {

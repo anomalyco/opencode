@@ -112,24 +112,64 @@ const layer = Layer.effect(
         }),
       )
 
+    // Dist-tag specs ("@latest", "@dev", ...) point at a moving target. A bare
+    // existence check would pin whatever version was current at first install,
+    // so compare the cached version against the registry before reusing it.
+    // Returns true when the cache is stale and a reinstall is needed; any
+    // registry or read failure conservatively keeps the cached copy.
+    const isDistTagOutdated = Effect.fn("Npm.isDistTagOutdated")(function* (name: string, target: string) {
+      const cached = yield* afs.readJson(path.join(target, "package.json")).pipe(
+        Effect.orElseSucceed(() => undefined),
+      )
+      const cachedVersion =
+        typeof cached === "object" && cached !== null && typeof (cached as any).version === "string"
+          ? ((cached as any).version as string)
+          : undefined
+      if (!cachedVersion) return true
+
+      const encoded = name.includes("/") ? name.replace("/", "%2f") : name
+      const res = yield* Effect.promise(() =>
+        fetch(`https://registry.npmjs.org/${encoded}/latest`, {
+          headers: { Accept: "application/vnd.npm.install-v1+json" },
+          signal: AbortSignal.timeout(10_000),
+        }).catch(() => undefined),
+      )
+      if (!res?.ok) return false
+      const data = yield* Effect.promise(() =>
+        res
+          .json()
+          .catch(() => undefined)
+          .then((data) => data as { version?: string } | undefined),
+      )
+      const latestVersion = data?.version
+      if (!latestVersion) return false
+      return latestVersion !== cachedVersion
+    })
+
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const dir = directory(pkg)
-      const name = (() => {
+      const parsed = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(pkg)
         } catch {
-          return pkg
+          return undefined
         }
       })()
+      const name = parsed?.name ?? pkg
+      const target = path.join(dir, "node_modules", name)
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+      if (yield* afs.existsSafe(target)) {
+        if (parsed?.type === "tag") {
+          if (!(yield* isDistTagOutdated(name, target))) return resolveEntryPoint(name, target)
+        } else {
+          return resolveEntryPoint(name, target)
+        }
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
-        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        const result = resolveEntryPoint(name, target)
         if (result.entrypoint) return result
         return yield* new InstallFailedError({ add: [pkg], dir })
       }
