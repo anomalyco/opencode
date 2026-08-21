@@ -65,6 +65,6 @@ describe("Model.Capabilities", () => {
     const base = { tools: true, input: ["text"], output: ["text"] }
 
     expect(decode(base)).toEqual(base)
-    expect(decode({ ...base, responsesWebSocket: true })).toEqual({ ...base, responsesWebSocket: true })
+    expect(decode({ ...base, responsesWebsockets: true })).toEqual({ ...base, responsesWebsockets: true })
   })
 })

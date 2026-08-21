@@ -197,7 +197,7 @@ describe("OpenAIPlugin", () => {
       expect(model.package).toBe(Provider.aisdk("@ai-sdk/openai"))
       expect(model.enabled).toBe(true)
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
-      expect(model.capabilities.responsesWebSocket).toBe(true)
+      expect(model.capabilities.responsesWebsockets).toBe(true)
       expect(direct.headers).not.toHaveProperty("originator")
       expect(direct.hasHttpHooks).toBe(false)
       expect(provider.headers).not.toHaveProperty("originator")
@@ -227,7 +227,7 @@ describe("OpenAIPlugin", () => {
         provider: Provider.ID.make("deployment"),
       })
       const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
-        capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebSocket: true },
+        capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
         cost: [],
         limit: { context: 200_000, output: 32_000 },
       })

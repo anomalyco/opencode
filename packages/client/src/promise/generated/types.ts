@@ -1000,7 +1000,7 @@ export type ModelCapabilities = {
   tools: boolean
   input: Array<string>
   output: Array<string>
-  responsesWebSocket?: boolean
+  responsesWebsockets?: boolean
 }
 
 export type ModelCost = {

@@ -282,7 +282,7 @@ export const layer = Layer.effect(
         ...(input.webSocket === "session" &&
         webSocket &&
         webSocketEligible &&
-        resolved.capabilities.responsesWebSocket === true
+        resolved.capabilities.responsesWebsockets === true
           ? { webSocket: transport.bind(session.id) }
           : {}),
       }
