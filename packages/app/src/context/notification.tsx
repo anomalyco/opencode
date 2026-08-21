@@ -10,13 +10,16 @@ import { useSettings } from "@/context/settings"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
 import { Persist, persisted } from "@/utils/persist"
 import { playSoundById } from "@/utils/sound"
 import { useGlobal } from "./global"
+import { usePermission } from "./permission"
 import { ServerConnection, useServer } from "./server"
 import { type DraftTab, useTabs } from "./tabs"
 import { requireServerKey } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
+import { createTaskbarAttentionState } from "./taskbar-attention"
 
 type NotificationBase = {
   directory?: string
@@ -116,6 +119,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const params = useParams<{ serverKey?: string; dir?: string; id?: string }>()
     const [search] = useSearchParams<{ draftId?: string }>()
     const global = useGlobal()
+    const permission = usePermission()
     const server = useServer()
     const tabs = useTabs()
     const navigate = useNavigate()
@@ -124,6 +128,14 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const language = useLanguage()
     const owner = getOwner()
     const states = new Map<ServerScope, { dispose: () => void; state: NotificationState }>()
+
+    const syncTaskbarAttention = () => {
+      const sessions = new Set<string>()
+      states.forEach((value, scope) => {
+        value.state.taskbarAttentionSessions().forEach((sessionID) => sessions.add(`${scope}\0${sessionID}`))
+      })
+      void platform.setTaskbarAttention?.(sessions.size)
+    }
 
     const activeServer = createMemo(() => {
       if (params.serverKey) return requireServerKey(params.serverKey)
@@ -142,6 +154,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       const ctx = global.ensureServerCtx(conn)
       const existing = states.get(ctx.sdk.scope)
       if (existing) return existing.state
+      const permissionState = permission.ensureServerState(key)
       const root = createRoot(
         (dispose) => ({
           dispose,
@@ -155,11 +168,14 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             settings,
             language,
             navigate,
+            isPermissionAutoResponded: permissionState.autoResponds,
+            onTaskbarAttentionChanged: syncTaskbarAttention,
           }),
         }),
         owner ?? undefined,
       )
       states.set(ctx.sdk.scope, root)
+      syncTaskbarAttention()
       return root.state
     }
 
@@ -174,6 +190,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         value.dispose()
         states.delete(scope)
       })
+      syncTaskbarAttention()
     })
 
     onCleanup(() => states.forEach((value) => value.dispose()))
@@ -186,6 +203,15 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       if (!conn) throw new Error("Notification server not found")
       return ensure(ServerConnection.key(conn))
     }
+
+    const clearFocusedSessionTaskbarAttention = () => {
+      if (!platform.setTaskbarAttention) return
+      const sessionID = activeSession()
+      if (!sessionID) return
+      selected().session.markViewed(sessionID)
+    }
+    window.addEventListener("focus", clearFocusedSessionTaskbarAttention)
+    onCleanup(() => window.removeEventListener("focus", clearFocusedSessionTaskbarAttention))
 
     return {
       ready: () => selected().ready(),
@@ -220,17 +246,24 @@ function createServerNotificationState(input: {
   settings: ReturnType<typeof useSettings>
   language: ReturnType<typeof useLanguage>
   navigate: (href: string) => void
+  isPermissionAutoResponded: (request: PermissionRequest, directory?: string) => boolean
+  onTaskbarAttentionChanged: () => void
 }) {
   const serverSDK = () => input.sdk
   const serverSync = () => input.sync
   const platform = input.platform
   const settings = input.settings
   const language = input.language
+  const windowFocused = () => {
+    if (!input.platform.getWindowFocused) return Promise.resolve(true)
+    return input.platform.getWindowFocused().catch(() => document.hasFocus())
+  }
 
   const empty: Notification[] = []
 
   const currentDirectory = input.directory
   const currentSession = input.sessionID
+  const taskbarAttention = createTaskbarAttentionState()
 
   const [store, setStore, _, ready] = persisted(
     Persist.serverGlobal(serverSDK().scope, "notification", ["notification.v1"]),
@@ -239,6 +272,26 @@ function createServerNotificationState(input: {
     }),
   )
   const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.list))
+  const taskbarAttentionSessions = () => {
+    const unread = Object.entries(index.session.unseen).flatMap(([session, notifications]) =>
+      notifications.length ? [session] : [],
+    )
+    const pending = new Map<string, string>()
+    Object.entries(input.sync.session.data.permission).forEach(([sessionID, requests]) => {
+      const active = requests.filter(
+        (request) => !input.isPermissionAutoResponded(request, input.sync.session.data.info[sessionID]?.directory),
+      )
+      if (!active.length) return
+      pending.set(sessionID, `permission:${active.map((request) => request.id).join(",")}`)
+    })
+    Object.entries(input.sync.session.data.question).forEach(([sessionID, requests]) => {
+      if (!requests.length) return
+      const token = `question:${requests.map((request) => request.id).join(",")}`
+      pending.set(sessionID, pending.has(sessionID) ? `${pending.get(sessionID)}|${token}` : token)
+    })
+    taskbarAttention.sync([...pending].map(([sessionID, token]) => ({ sessionID, token })))
+    return taskbarAttention.sessions(unread)
+  }
 
   const meta = { pruned: false, disposed: false }
 
@@ -302,6 +355,12 @@ function createServerNotificationState(input: {
     })
   })
 
+  createEffect(() => {
+    if (!ready()) return
+    taskbarAttentionSessions()
+    input.onTaskbarAttentionChanged()
+  })
+
   const append = (notification: Notification) => {
     const list = pruneNotifications([...store.list, notification])
     const keep = new Set(list)
@@ -312,6 +371,7 @@ function createServerNotificationState(input: {
       removed.forEach((n) => removeFromIndex(n))
       setStore("list", list)
     })
+    input.onTaskbarAttentionChanged()
   }
 
   const lookup = async (directory: string, sessionID?: string) => {
@@ -337,10 +397,15 @@ function createServerNotificationState(input: {
 
   const handleSessionIdle = (directory: string, event: { properties: { sessionID?: string } }, time: number) => {
     const sessionID = event.properties.sessionID
-    void lookup(directory, sessionID).then((session) => {
+    void lookup(directory, sessionID).then(async (session) => {
       if (meta.disposed) return
       if (!session) return
       if (session.parentID) return
+
+      taskbarAttention.remove(sessionID ?? "global")
+      const focused = await windowFocused()
+      const viewed = viewedInCurrentSession(directory, sessionID)
+      if (!viewed || !focused) taskbarAttention.add(sessionID ?? "global")
 
       if (settings.sounds.agentEnabled()) {
         void playSoundById(settings.sounds.agent())
@@ -349,7 +414,7 @@ function createServerNotificationState(input: {
       append({
         directory,
         time,
-        viewed: viewedInCurrentSession(directory, sessionID),
+        viewed,
         type: "turn-complete",
         session: sessionID,
       })
@@ -369,9 +434,14 @@ function createServerNotificationState(input: {
     time: number,
   ) => {
     const sessionID = event.properties.sessionID
-    void lookup(directory, sessionID).then((session) => {
+    void lookup(directory, sessionID).then(async (session) => {
       if (meta.disposed) return
       if (session?.parentID) return
+
+      taskbarAttention.remove(sessionID ?? "global")
+      const focused = await windowFocused()
+      const viewed = viewedInCurrentSession(directory, sessionID)
+      if (!viewed || !focused) taskbarAttention.add(sessionID ?? "global")
 
       if (settings.sounds.errorsEnabled()) {
         void playSoundById(settings.sounds.errors())
@@ -381,7 +451,7 @@ function createServerNotificationState(input: {
       append({
         directory,
         time,
-        viewed: viewedInCurrentSession(directory, sessionID),
+        viewed,
         type: "error",
         session: sessionID ?? "global",
         error,
@@ -398,6 +468,29 @@ function createServerNotificationState(input: {
 
   const unsub = serverSDK().event.listen((e) => {
     const event = e.details
+    if (event.type === "permission.asked" || event.type === "question.asked") {
+      const sessionID = event.properties.sessionID
+      if (!sessionID) return
+      if (event.type === "permission.asked" && input.isPermissionAutoResponded(event.properties, e.name)) return
+      void windowFocused().then((focused) => {
+        const viewed = viewedInCurrentSession(e.name, sessionID)
+        if (viewed && focused) return
+        const prefix = event.type === "permission.asked" ? "permission" : "question"
+        taskbarAttention.add(sessionID, `${prefix}:${event.properties.id}`)
+        input.onTaskbarAttentionChanged()
+      })
+      return
+    }
+    if (
+      event.type === "permission.replied" ||
+      event.type === "question.replied" ||
+      event.type === "question.rejected"
+    ) {
+      const prefix = event.type === "permission.replied" ? "permission" : "question"
+      taskbarAttention.removePending(event.properties.sessionID, `${prefix}:${event.properties.requestID}`)
+      input.onTaskbarAttentionChanged()
+      return
+    }
     if (event.type !== "session.idle" && event.type !== "session.error") return
 
     const directory = e.name
@@ -429,8 +522,12 @@ function createServerNotificationState(input: {
         return index.session.unseenHasError[session] ?? false
       },
       markViewed(session: string) {
+        taskbarAttention.remove(session)
         const unseen = index.session.unseen[session] ?? empty
-        if (!unseen.length) return
+        if (!unseen.length) {
+          input.onTaskbarAttentionChanged()
+          return
+        }
 
         const projects = [
           ...new Set(unseen.flatMap((notification) => (notification.directory ? [notification.directory] : []))),
@@ -445,6 +542,7 @@ function createServerNotificationState(input: {
             updateUnseen("project", directory, next)
           })
         })
+        input.onTaskbarAttentionChanged()
       },
     },
     project: {
@@ -471,13 +569,16 @@ function createServerNotificationState(input: {
           setStore("list", (n) => n.directory === directory && !n.viewed, "viewed", true)
           updateUnseen("project", directory, [])
           sessions.forEach((session) => {
+            taskbarAttention.remove(session)
             const next = (index.session.unseen[session] ?? empty).filter(
               (notification) => notification.directory !== directory,
             )
             updateUnseen("session", session, next)
           })
         })
+        input.onTaskbarAttentionChanged()
       },
     },
+    taskbarAttentionSessions,
   }
 }

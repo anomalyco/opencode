@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360">
+  <rect width="1200" height="360" fill="#f3f4f6"/>
+  <rect x="40" y="40" width="1120" height="190" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="70" y="82" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#111827">OpenCode Desktop</text>
+  <text x="70" y="116" font-family="Arial, sans-serif" font-size="16" fill="#4b5563">After: distinct sessions needing attention appear as a taskbar badge</text>
+  <rect x="40" y="260" width="1120" height="60" rx="10" fill="#202124"/>
+  <circle cx="600" cy="290" r="19" fill="#f5f5f5"/>
+  <text x="600" y="297" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#202124">O</text>
+  <circle cx="616" cy="274" r="12" fill="#d70015" stroke="#202124" stroke-width="3"/>
+  <text x="616" y="279" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#ffffff">3</text>
+  <text x="600" y="348" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#374151">Illustrative Windows taskbar state</text>
+</svg>

@@ -50,6 +50,12 @@ type PlatformBase = {
   /** Send a system notification */
   notify(title: string, description?: string, onClick?: () => void): Promise<void>
 
+  /** Show the number of sessions needing attention on the native taskbar icon (desktop only) */
+  setTaskbarAttention?(count: number): Promise<void> | void
+
+  /** Read whether the native desktop window is focused. */
+  getWindowFocused?(): Promise<boolean>
+
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?(
     opts: OpenAttachmentPickerOptions,

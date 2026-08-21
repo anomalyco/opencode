@@ -308,7 +308,6 @@ function MarkSessionNotificationsViewed(props: { sessionID?: () => string | unde
   createEffect(() => {
     const sessionID = props.sessionID?.()
     if (!notification.ready() || !sessionID) return
-    if (notification.session.unseenCount(sessionID) === 0) return
     notification.session.markViewed(sessionID)
   })
   return null

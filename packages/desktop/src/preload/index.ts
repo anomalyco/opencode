@@ -103,6 +103,7 @@ const api: ElectronAPI = {
   revealPath: (path) => ipcRenderer.invoke("reveal-path", path),
   readClipboardImage: () => ipcRenderer.invoke("read-clipboard-image"),
   getWindowFocused: () => ipcRenderer.invoke("get-window-focused"),
+  setTaskbarAttention: (count) => ipcRenderer.invoke("set-taskbar-attention", count),
   getWindowFullscreen: () => ipcRenderer.invoke("get-window-fullscreen"),
   onWindowFullscreenChanged: (cb) => {
     const handler = (_: unknown, fullscreen: boolean) => cb(fullscreen)

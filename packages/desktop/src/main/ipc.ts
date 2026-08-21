@@ -17,6 +17,7 @@ import {
   openExternalURL,
   openLocalFileURL,
   setPinchZoomEnabled,
+  setTaskbarAttention,
   setTitlebar,
   updateTitlebar,
 } from "./windows"
@@ -254,6 +255,12 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("get-window-focused", (event: IpcMainInvokeEvent) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return win?.isFocused() ?? false
+  })
+
+  ipcMain.handle("set-taskbar-attention", (event: IpcMainInvokeEvent, count: number) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    setTaskbarAttention(win, count)
   })
 
   ipcMain.handle("get-window-fullscreen", (event: IpcMainInvokeEvent) => {

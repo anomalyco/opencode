@@ -267,6 +267,13 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       }
     },
 
+    setTaskbarAttention: (count) => {
+      if (os !== "windows") return
+      return window.api.setTaskbarAttention(count)
+    },
+
+    getWindowFocused: () => window.api.getWindowFocused(),
+
     fetch: (input, init) => {
       if (input instanceof Request) return fetch(input)
       return fetch(input, init)
