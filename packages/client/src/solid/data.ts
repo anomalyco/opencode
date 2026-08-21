@@ -230,7 +230,8 @@ export function createData(config: CreateDataInput) {
 
   // Session IDs of optimistic create admissions still awaiting acknowledgement
   // (the session.created echo or the create response itself). A failed create
-  // only rolls back a session the server never acknowledged.
+  // only rolls back a session the server never acknowledged. Unlike
+  // `creating`, this clears on the echo rather than request settlement.
   const sessionOutbox = new Set<string>()
 
   // In-flight optimistic creates by session ID. prompt() gates its POST on
@@ -243,6 +244,16 @@ export function createData(config: CreateDataInput) {
   // for the previous prompt's POST (settled, so one failure does not block
   // the next) before sending its own.
   const sending = new Map<string, Promise<unknown>>()
+
+  // Register `promise` under `key` until it settles. A later registration
+  // replaces an earlier one; settlement only clears its own entry.
+  function track(map: Map<string, Promise<unknown>>, key: string, promise: Promise<unknown>) {
+    map.set(key, promise)
+    const settle = () => {
+      if (map.get(key) === promise) map.delete(key)
+    }
+    void promise.then(settle, settle)
+  }
 
   // Upsert an admitted inbox item into pending, input, and (for user and
   // synthetic items) the visible transcript. Used by the inbox.enqueued
@@ -1145,7 +1156,7 @@ export function createData(config: CreateDataInput) {
         if (fresh) {
           const now = Date.now()
           sessionOutbox.add(id)
-          setStore("session", "info", id, {
+          result.session.remember({
             id,
             projectID: projectID ?? store.location[locationKey(location)]?.info?.project.id ?? "",
             agent: payload.agent,
@@ -1156,16 +1167,11 @@ export function createData(config: CreateDataInput) {
             title: payload.title,
             location,
           })
-          // A view mounting this session would sync these and fail while the
-          // create is in flight. Mark them fresh: a new session starts empty,
-          // so live events are its source of truth (the session.created
-          // handler applies the same band-aid), and the session.created echo
-          // invalidates and re-syncs the info record itself.
-          sync.complete(`session:${id}`)
+          // A mounted optimistic session must not fetch its empty collections
+          // before creation settles. The session.created echo re-syncs info.
           sync.complete(`session.family:${id}`)
           sync.complete(`session.pending:${id}`)
           sync.complete(`session.message:${id}`)
-          registerSession(id)
         }
         // Wrapped so even a synchronous client failure reaches the rollback.
         const request = Promise.resolve()
@@ -1181,13 +1187,7 @@ export function createData(config: CreateDataInput) {
             if (fresh && sessionOutbox.delete(id)) removeSession(id)
             throw error
           })
-        if (fresh) {
-          creating.set(id, request)
-          const settle = () => {
-            if (creating.get(id) === request) creating.delete(id)
-          }
-          void request.then(settle, settle)
-        }
+        if (fresh) track(creating, id, request)
         return { id, request }
       },
       // Optimistic prompt admission: render the prompt immediately under a
@@ -1231,14 +1231,14 @@ export function createData(config: CreateDataInput) {
         const send = Promise.resolve()
           .then(() => Promise.all([gate, creating.get(request.sessionID), previous]))
           .then(() => api().session.prompt({ ...request, id }))
-        const settled = send.then(
-          () => undefined,
-          () => undefined,
+        track(
+          sending,
+          request.sessionID,
+          send.then(
+            () => undefined,
+            () => undefined,
+          ),
         )
-        sending.set(request.sessionID, settled)
-        void settled.then(() => {
-          if (sending.get(request.sessionID) === settled) sending.delete(request.sessionID)
-        })
         return send.catch((error) => {
           // Roll back only rows this call admitted and the echo has not
           // acknowledged: anything else is server state.

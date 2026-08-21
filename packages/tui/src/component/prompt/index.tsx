@@ -19,6 +19,7 @@ import { useClipboard } from "../../context/clipboard"
 import { Spinner } from "../spinner"
 import { useClient } from "../../context/client"
 import { useRoute } from "../../context/route"
+import { usePromptRef } from "../../context/prompt"
 import { useSessionTabs } from "../../context/session-tabs"
 import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
@@ -200,6 +201,7 @@ export function Prompt(props: PromptProps) {
   const client = useClient()
   const editor = useEditorContext()
   const route = useRoute()
+  const promptRef = usePromptRef()
   const sessionTabs = useSessionTabs()
   const data = useData()
   const directoryRecents = useDirectoryRecents()
@@ -649,14 +651,18 @@ export function Prompt(props: PromptProps) {
       input.gotoBufferEnd()
     },
     reset() {
-      input.clear()
-      input.extmarks.clear()
-      setStore("prompt", emptyPrompt())
-      setStore("extmarkToPart", new Map())
+      resetComposer()
     },
     submit() {
       void submit()
     },
+  }
+
+  function resetComposer() {
+    input.extmarks.clear()
+    setStore("prompt", emptyPrompt())
+    setStore("extmarkToPart", new Map())
+    input.clear()
   }
 
   // Captured once: the session route is keyed by sessionID, so this Prompt
@@ -834,10 +840,7 @@ export function Prompt(props: PromptProps) {
         run: () => {
           if (!store.prompt.text) return
           stash.push({ prompt: store.prompt })
-          input.extmarks.clear()
-          input.clear()
-          setStore("prompt", emptyPrompt())
-          setStore("extmarkToPart", new Map())
+          resetComposer()
           dialog.clear()
         },
       },
@@ -1138,10 +1141,7 @@ export function Prompt(props: PromptProps) {
     const currentMode = store.mode
     const entry = { ...store.prompt, mode: currentMode }
     history.append(entry)
-    input.extmarks.clear()
-    setStore("prompt", emptyPrompt())
-    setStore("extmarkToPart", new Map())
-    input.clear()
+    resetComposer()
     props.onSubmit?.()
     const restoreEntry = () => {
       if (disposed || input.isDestroyed || input.plainText !== "") return
@@ -1156,9 +1156,7 @@ export function Prompt(props: PromptProps) {
     let sessionID = props.sessionID
     let session = sessionID ? data.session.get(sessionID) : undefined
     let finishMoveProgress = false
-    // For a brand-new session: the setup chain (create, then environment)
-    // that session-dependent sends gate on, plus the recovery that unwinds
-    // the optimistic navigation when setup or the send fails.
+    // New-session sends wait for creation and environment setup.
     let newSession: { gate: Promise<unknown>; recover: (error: unknown) => void } | undefined
     if (sessionID == null) {
       const directory = await move.getDirectory()
@@ -1194,16 +1192,19 @@ export function Prompt(props: PromptProps) {
           }
         }),
         recover: (error) => {
-          // Setup or the send failed after the optimistic navigation. A
-          // failed create has already rolled back the local record (and the
-          // prompt row rolls back via its own catch). Put the draft back for
-          // the home composer and unwind the navigation.
           toast.show({
             title: data.session.get(created.id) ? "Failed to set up session" : "Creating a session failed",
             message: errorMessage(error),
             variant: "error",
           })
-          saveDraft(undefined, { prompt: entry, cursor: entry.text.length })
+          const active =
+            route.data.type === "session" && route.data.sessionID === created.id ? promptRef.current : undefined
+          const current = active?.current
+          const draft = current?.text
+            ? { prompt: { ...unwrap(current) }, cursor: current.text.length }
+            : (takeDraft(created.id) ?? { prompt: entry, cursor: entry.text.length })
+          saveDraft(undefined, draft)
+          active?.reset()
           if (sessionTabs.enabled()) {
             sessionTabs.close(created.id)
           } else if (route.data.type === "session" && route.data.sessionID === created.id) {
@@ -1214,15 +1215,14 @@ export function Prompt(props: PromptProps) {
     }
 
     const target = sessionID
+    const dispatch = (send: () => Promise<unknown>) => {
+      const setup = newSession
+      if (setup) void setup.gate.then(send).catch(setup.recover)
+      else void send()
+    }
     if (currentMode === "shell") {
       move.startSubmit()
-      const send = () => client.api.session.shell({ sessionID: target, command: inputText })
-      if (newSession) {
-        const recover = newSession.recover
-        void newSession.gate.then(send).catch(recover)
-      } else {
-        void send()
-      }
+      dispatch(() => client.api.session.shell({ sessionID: target, command: inputText }))
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
       move.startSubmit()
@@ -1241,29 +1241,30 @@ export function Prompt(props: PromptProps) {
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
         })
-      void (newSession ? newSession.gate.then(send) : send()).catch((error) => {
+      const setup = newSession
+      void (setup ? setup.gate.then(send) : send()).catch((error) => {
         cancelCommit()
-        if (newSession) return newSession.recover(error)
+        if (setup) return setup.recover(error)
         toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
         restoreEntry()
       })
     } else if (isSkill) {
       move.startSubmit()
-      const send = () => client.api.session.skill({ sessionID: target, skill: slashHead.name })
-      if (newSession) {
-        const recover = newSession.recover
-        void newSession.gate.then(send).catch(recover)
-      } else {
-        void send()
-      }
+      dispatch(() => client.api.session.skill({ sessionID: target, skill: slashHead.name }))
     } else {
       move.startSubmit()
-      if (!session) {
-        await data.session.sync(sessionID)
-        session = data.session.get(sessionID)
-      }
-      if (session?.agent !== agent.id) {
-        await client.api.session.switchAgent({ sessionID, agent: agent.id })
+      try {
+        if (!session) {
+          await data.session.sync(target)
+          session = data.session.get(target)
+        }
+        if (session?.agent !== agent.id) {
+          await client.api.session.switchAgent({ sessionID: target, agent: agent.id })
+        }
+      } catch (error) {
+        toast.show({ title: "Failed to prepare session", message: errorMessage(error), variant: "error" })
+        restoreEntry()
+        return true
       }
       if (
         session?.model?.providerID !== selection.providerID ||
@@ -1271,8 +1272,8 @@ export function Prompt(props: PromptProps) {
         (session.model.variant ?? "default") !== (variant ?? "default")
       ) {
         const model = { providerID: selection.providerID, id: selection.modelID, variant }
-        const cancelCommit = local.model.trackSessionCommit(sessionID, model)
-        const switchError = await client.api.session.switchModel({ sessionID, model }).then(
+        const cancelCommit = local.model.trackSessionCommit(target, model)
+        const switchError = await client.api.session.switchModel({ sessionID: target, model }).then(
           () => undefined,
           (error) => error,
         )
@@ -1284,7 +1285,7 @@ export function Prompt(props: PromptProps) {
         }
       }
       if (session?.revert) {
-        const error = await client.api.session.revert.commit({ sessionID }).then(
+        const error = await client.api.session.revert.commit({ sessionID: target }).then(
           () => undefined,
           (error) => error,
         )
@@ -1305,7 +1306,7 @@ export function Prompt(props: PromptProps) {
         if (newSession) {
           // Fold into the setup gate so the context still admits before the
           // user prompt once the session exists.
-          newSession = { ...newSession, gate: newSession.gate.then(send) }
+          newSession.gate = newSession.gate.then(send)
         } else {
           const error = await send().then(
             () => undefined,
@@ -1350,12 +1351,9 @@ export function Prompt(props: PromptProps) {
       // it, and clear it here so onCleanup does not also stash it for home.
       if (!disposed && !input.isDestroyed && store.prompt.text) {
         // Copy before clearing: unwrap returns the live store target, and the
-        // setStore(emptyPrompt()) below merges into that same object.
+        // resetComposer store write merges into that same object.
         saveDraft(sessionID, { prompt: { ...unwrap(store.prompt) }, cursor: input.cursorOffset })
-        input.extmarks.clear()
-        setStore("prompt", emptyPrompt())
-        setStore("extmarkToPart", new Map())
-        input.clear()
+        resetComposer()
       }
       route.navigate({
         type: "session",
@@ -1523,10 +1521,7 @@ export function Prompt(props: PromptProps) {
         mode: store.mode,
       })
     }
-    input.clear()
-    input.extmarks.clear()
-    setStore("prompt", emptyPrompt())
-    setStore("extmarkToPart", new Map())
+    resetComposer()
   }
 
   const highlight = createMemo(() => {
