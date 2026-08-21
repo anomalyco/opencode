@@ -17,16 +17,14 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const fs = yield* FSUtil.Service
+    const loadEntry = Effect.fnUntraced(function* (entry: Entry) {
+      if (entry.type === "document") return [{ commands: entry.info.commands }]
+      if (entry.type !== "directory") return []
+      const commands = yield* loadDirectory(fs, entry.path)
+      return [{ commands: Object.fromEntries(commands.map((command) => [command.name, command.info])) }]
+    })
     const load = Effect.fn("ConfigCommandPlugin.load")(function* () {
-      return yield* Effect.forEach(
-        yield* config.entries(),
-        Effect.fnUntraced(function* (entry) {
-          if (entry.type === "document") return [{ commands: entry.info.commands }]
-          if (entry.type !== "directory") return []
-          const commands = yield* loadDirectory(fs, entry.path)
-          return [{ commands: Object.fromEntries(commands.map((command) => [command.name, command.info])) }]
-        }),
-      ).pipe(Effect.map((documents) => documents.flat()))
+      return yield* Effect.forEach(yield* config.entries(), loadEntry).pipe(Effect.map((documents) => documents.flat()))
     })
     const loaded = { documents: [] as { commands: Info["commands"] }[] }
     const reload = load().pipe(

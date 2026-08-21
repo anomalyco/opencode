@@ -71,65 +71,69 @@ const layer = Layer.effect(
       return provider.integrationID === undefined && !integration
     }
 
-    const projectModel = (model: Model.Info, provider: Provider.Info) =>
-      ({
+    const projectModel = (model: Model.Info, provider: Provider.Info) => {
+      return {
         ...model,
         package: model.package ?? provider.package,
         settings: Provider.mergeOverlay(provider.settings, model.settings),
         headers: Provider.mergeHeaders(provider.headers, model.headers),
         body: Provider.mergeOverlay(provider.body, model.body),
-      }) satisfies Model.Info
+      } satisfies Model.Info
+    }
 
     const state = State.create<Data, Draft>({
       name: "catalog",
       initial: () => ({ providers: new Map() }),
-      draft: (draft): Draft => ({
-        provider: {
-          list: () => Array.fromIterable(draft.providers.values()) as ProviderRecord[],
-          get: (providerID) => draft.providers.get(providerID),
-          update: (providerID, fn) => {
-            let current = draft.providers.get(providerID)
-            if (!current) {
-              current = {
-                provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
-                models: new Map<Model.ID, Model.MutableInfo>(),
+      draft: (draft) => {
+        const result: Draft = {
+          provider: {
+            list: () => Array.fromIterable(draft.providers.values()) as ProviderRecord[],
+            get: (providerID) => draft.providers.get(providerID),
+            update: (providerID, fn) => {
+              let current = draft.providers.get(providerID)
+              if (!current) {
+                current = {
+                  provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
+                  models: new Map<Model.ID, Model.MutableInfo>(),
+                }
+                draft.providers.set(providerID, current)
               }
-              draft.providers.set(providerID, current)
-            }
-            fn(current.provider)
-          },
-          remove: (providerID) => {
-            draft.providers.delete(providerID)
-          },
-        },
-        model: {
-          get: (providerID, modelID) => draft.providers.get(providerID)?.models.get(modelID),
-          update: (providerID, modelID, fn) => {
-            let record = draft.providers.get(providerID)
-            if (!record) {
-              record = {
-                provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
-                models: new Map<Model.ID, Model.MutableInfo>(),
-              }
-              draft.providers.set(providerID, record)
-            }
-            const model = record.models.get(modelID) ?? (Model.Info.default(providerID, modelID) as Model.MutableInfo)
-            if (!record.models.has(modelID)) record.models.set(modelID, model)
-            fn(model)
-            model.id = modelID
-            model.providerID = providerID
-          },
-          remove: (providerID, modelID) => {
-            draft.providers.get(providerID)?.models.delete(modelID)
-          },
-          default: {
-            get: () => draft.defaultModel,
-            set: (providerID, modelID) => {
-              draft.defaultModel = { providerID, modelID }
+              fn(current.provider)
+            },
+            remove: (providerID) => {
+              draft.providers.delete(providerID)
             },
           },
-        },
-      }),
+          model: {
+            get: (providerID, modelID) => draft.providers.get(providerID)?.models.get(modelID),
+            update: (providerID, modelID, fn) => {
+              let record = draft.providers.get(providerID)
+              if (!record) {
+                record = {
+                  provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
+                  models: new Map<Model.ID, Model.MutableInfo>(),
+                }
+                draft.providers.set(providerID, record)
+              }
+              const model = record.models.get(modelID) ?? (Model.Info.default(providerID, modelID) as Model.MutableInfo)
+              if (!record.models.has(modelID)) record.models.set(modelID, model)
+              fn(model)
+              model.id = modelID
+              model.providerID = providerID
+            },
+            remove: (providerID, modelID) => {
+              draft.providers.get(providerID)?.models.delete(modelID)
+            },
+            default: {
+              get: () => draft.defaultModel,
+              set: (providerID, modelID) => {
+                draft.defaultModel = { providerID, modelID }
+              },
+            },
+          },
+        }
+        return result
+      },
       finalize: Effect.fn("Catalog.finalize")(function* () {
         yield* bus.publish(Catalog.Event.Updated, {})
       }),
