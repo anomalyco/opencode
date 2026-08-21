@@ -159,16 +159,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.view",
         Effect.fn(function* (ctx) {
-          yield* session.view({ sessionID: ctx.params.sessionID }).pipe(
-            Effect.catchTag(
-              "Session.NotFoundError",
-              (error) =>
-                new SessionNotFoundError({
-                  sessionID: error.sessionID,
-                  message: `Session not found: ${error.sessionID}`,
-                }),
-            ),
-          )
+          yield* session
+            .view({ sessionID: ctx.params.sessionID })
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
       )
