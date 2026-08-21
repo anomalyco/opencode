@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
+import { Shell } from "@opencode-ai/schema/shell"
 import { Agent } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -448,6 +449,49 @@ describe("Session.create", () => {
         },
       ])
       expect(yield* session.context(forked.id)).toMatchObject([{ type: "user", text: "Run both tools" }])
+    }),
+  )
+
+  it.effect("copies only settled shell messages into forks", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location })
+      yield* session.prompt({ sessionID: parent.id, text: "Run a shell", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      const shell = Shell.Info.make({
+        id: Shell.ID.make("sh_fork_running"),
+        status: "running",
+        command: "sleep 10",
+        cwd: location.directory,
+        shell: "/bin/sh",
+        file: "/tmp/sh_fork_running.out",
+        metadata: {},
+        time: { started: 0 },
+      })
+      yield* bus.publish(SessionEvent.Shell.Started, { sessionID: parent.id, shell })
+
+      const running = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+
+      expect(yield* session.context(parent.id)).toMatchObject([
+        { type: "user", text: "Run a shell" },
+        { type: "shell", command: "sleep 10", status: "running" },
+      ])
+      expect(yield* session.context(running.id)).toMatchObject([{ type: "user", text: "Run a shell" }])
+
+      yield* bus.publish(SessionEvent.Shell.Ended, {
+        sessionID: parent.id,
+        shell: { ...shell, status: "exited", exit: 0, time: { started: 0, completed: 1 } },
+        output: { output: "complete", cursor: 8, size: 8, truncated: false },
+      })
+      const completed = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+
+      expect(yield* session.context(running.id)).toMatchObject([{ type: "user", text: "Run a shell" }])
+      expect(yield* session.context(completed.id)).toMatchObject([
+        { type: "user", text: "Run a shell" },
+        { type: "shell", command: "sleep 10", status: "exited", output: { output: "complete" } },
+      ])
     }),
   )
 
