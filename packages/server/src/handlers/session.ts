@@ -240,6 +240,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               Effect.catchTag("Session.DestinationNotDirectoryError", (error) =>
                 Effect.fail(new InvalidRequestError({ message: `Not a directory: ${error.directory}` })),
               ),
+              Effect.catchTag("Session.DestinationUnavailableError", (error) =>
+                Effect.fail(new InvalidRequestError({ message: `Directory is unavailable: ${error.directory}` })),
+              ),
             )
           return HttpApiSchema.NoContent.make()
         }),

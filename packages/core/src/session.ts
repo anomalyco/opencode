@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { Effect, Layer, Schema, Context, RcMap, Stream, Scope } from "effect"
+import { Cause, Effect, Layer, Schema, Context, RcMap, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { Project } from "./project.js"
@@ -156,6 +156,11 @@ export class DestinationNotDirectoryError extends Schema.TaggedError<Destination
   "Session.DestinationNotDirectoryError",
   { directory: AbsolutePath },
 ) {}
+
+export class DestinationUnavailableError extends Schema.TaggedError<DestinationUnavailableError>()(
+  "Session.DestinationUnavailableError",
+  { directory: AbsolutePath },
+) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
@@ -218,7 +223,10 @@ export interface Interface {
     directory: AbsolutePath
     workspaceID?: Location.Ref["workspaceID"]
     delivery?: SessionInbox.Delivery
-  }) => Effect.Effect<void, NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError>
+  }) => Effect.Effect<
+    void,
+    NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError | DestinationUnavailableError
+  >
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -772,12 +780,22 @@ const layer = Layer.effect(
         if (!info) return yield* new DestinationNotFoundError({ directory })
         if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
         const project = yield* projects.resolve(directory)
-        yield* persistProject(project)
         const payload: SessionInbox.MovePayload = {
           location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
           projectID: project.id,
           subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
         }
+        yield* Location.Service.pipe(
+          Effect.provide(locations.get(payload.location)),
+          Effect.scoped,
+          Effect.catchCause((cause) => {
+            if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
+            return Effect.logWarning("session move destination unavailable", { directory, cause }).pipe(
+              Effect.andThen(Effect.fail(new DestinationUnavailableError({ directory }))),
+            )
+          }),
+        )
+        yield* persistProject(project)
         const item = SessionInbox.Item.make({
           type: "move",
           payload,
