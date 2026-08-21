@@ -60,6 +60,13 @@ const isDecline = (
 ): error is Permission.DeclinedError | QuestionTool.CancelledError =>
   error._tag === "Permission.DeclinedError" || error._tag === "QuestionTool.CancelledError"
 
+const isInterruptedStream = (failure: AIError) => {
+  if (failure.reason._tag === "InvalidProviderOutput")
+    return failure.reason.classification === "incomplete-stream"
+  if (failure.reason._tag === "Transport") return failure.reason.operation === "read"
+  return false
+}
+
 /**
  * Classifies how the owned tool fibers ended. Interrupts abort the step; a user decline
  * settles its own call and then aborts the step; a defect from a tool implementation
@@ -571,13 +578,14 @@ const layer = Layer.effect(
             })
           }
 
-          // A transport read failure is an interrupted provider stream, not a failed request.
-          const incompleteStream =
-            (llmFailure?.reason._tag === "InvalidProviderOutput" &&
-              llmFailure.reason.classification === "incomplete-stream") ||
-            (llmFailure?.reason._tag === "Transport" && llmFailure.reason.operation === "read")
-          const toolsAllowContinuation = tools.declines.length === 0 && !tools.interrupted
-          if (llmError && incompleteStream && record.outputStarted && toolsAllowContinuation)
+          if (
+            llmFailure &&
+            llmError &&
+            isInterruptedStream(llmFailure) &&
+            record.outputStarted &&
+            tools.declines.length === 0 &&
+            !tools.interrupted
+          )
             return CallOutcome.Continue({
               cause: llmFailure,
               error: llmError,
