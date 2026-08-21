@@ -31,6 +31,16 @@ test("validates the session tabs setting", () => {
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
 })
 
+test("validates the session tool details setting", () => {
+  const config = resolve(
+    decodeInfo({ session: { tool_details: "collapse" } }),
+    { terminalSuspend: true },
+  )
+  expect(config.session.tool_details).toBe("collapse")
+  expect(() => decodeInfo({ session: { tool_details: "hidden" } })).toThrow()
+  expect(settings.find((setting) => setting.path.join(".") === "session.tool_details")?.default).toBe("show")
+})
+
 test("resolves nested config and keybind defaults", () => {
   const config = resolve(
     {
