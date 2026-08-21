@@ -1,6 +1,5 @@
 import { Location } from "@opencode-ai/core/location"
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
-import { Git } from "@opencode-ai/core/git"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
@@ -47,7 +46,7 @@ function badRequest<A, R>(effect: Effect.Effect<A, ProjectCopy.Error, R>) {
           name: "ProjectCopyError",
           data: {
             message: message(error),
-            forceRequired: error instanceof Git.WorktreeError ? error.forceRequired : undefined,
+            forceRequired: error._tag === "Git.WorktreeError" ? error.forceRequired : undefined,
           },
         }),
     ),
@@ -55,14 +54,14 @@ function badRequest<A, R>(effect: Effect.Effect<A, ProjectCopy.Error, R>) {
 }
 
 function message(error: ProjectCopy.Error) {
-  if (error instanceof ProjectCopy.SourceDirectoryNotFoundError)
+  if (error._tag === "ProjectCopy.SourceDirectoryNotFoundError")
     return `Project copy source not found: ${error.directory}`
-  if (error instanceof ProjectCopy.DestinationExistsError)
+  if (error._tag === "ProjectCopy.DestinationExistsError")
     return `Project copy destination already exists: ${error.directory}`
-  if (error instanceof ProjectCopy.DirectoryUnavailableError)
+  if (error._tag === "ProjectCopy.DirectoryUnavailableError")
     return `Project copy directory unavailable: ${error.directory}`
-  if (error instanceof ProjectCopy.InvalidDirectoryError) return `Invalid project copy directory: ${error.directory}`
-  if (error instanceof ProjectCopy.StrategyUnavailableError)
+  if (error._tag === "ProjectCopy.InvalidDirectoryError") return `Invalid project copy directory: ${error.directory}`
+  if (error._tag === "ProjectCopy.StrategyUnavailableError")
     return `Project copy strategy unavailable: ${error.strategy}`
   return error.message
 }
