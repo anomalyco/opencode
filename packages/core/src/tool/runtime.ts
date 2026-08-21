@@ -101,15 +101,13 @@ const standardFailure = (prefix: string, error: unknown) =>
 
 const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (schema === undefined || schema === null) return {}
-  if (isStandardSchema(schema))
-    return schema["~standard"].jsonSchema.input({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
-  return Schema.isSchema(schema) ? toJsonSchema(schema) : (schema as JsonSchema.JsonSchema)
+  if (isStandardSchema(schema)) return schema["~standard"].jsonSchema.input({ target: "draft-2020-12" })
+  return Schema.isSchema(schema) ? toJsonSchema(schema) : schema
 }
 
 const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
-  if (isStandardSchema(schema))
-    return schema["~standard"].jsonSchema.output({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
-  return Schema.isSchema(schema) ? toJsonSchema(schema) : (schema as JsonSchema.JsonSchema)
+  if (isStandardSchema(schema)) return schema["~standard"].jsonSchema.output({ target: "draft-2020-12" })
+  return Schema.isSchema(schema) ? toJsonSchema(schema) : schema
 }
 
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {

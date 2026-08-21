@@ -111,7 +111,7 @@ export function convertHTMLToMarkdown(html: string) {
   }
   const prefixQuote = () => {
     if (!needsQuotePrefix || quoteDepth === 0 || activeCell) return
-    append(`${"> ".repeat(Math.min(8, quoteDepth))}`)
+    append("> ".repeat(Math.min(8, quoteDepth)))
     needsQuotePrefix = false
   }
   const flushSpace = () => {
@@ -228,8 +228,7 @@ export function convertHTMLToMarkdown(html: string) {
     const fence = marker.repeat(length)
     block()
     const prefix = `${fence}${code.language ?? ""}\n`
-    const quote = quoteDepth > 0 ? `${"> ".repeat(Math.min(8, quoteDepth))}` : ""
-    const closing = `${code.text.endsWith("\n") ? "" : "\n"}${fence}`
+    const quote = quoteDepth > 0 ? "> ".repeat(Math.min(8, quoteDepth)) : ""
     let payload = code.text
     for (;;) {
       const candidate = `${prefix}${payload}${payload.endsWith("\n") ? "" : "\n"}${fence}`
@@ -606,7 +605,7 @@ export function convertHTMLToMarkdown(html: string) {
               block()
             }
             if (!table.fallback && rectangular) {
-              const prefix = `${quoteDepth > 0 ? `${"> ".repeat(Math.min(8, quoteDepth))}` : ""}${pendingIndent}`
+              const prefix = `${quoteDepth > 0 ? "> ".repeat(Math.min(8, quoteDepth)) : ""}${pendingIndent}`
               pendingIndent = ""
               append(`${prefix}| ${table.rows[0].join(" | ")} |\n${prefix}|${" --- |".repeat(width)}`)
               for (const row of table.rows.slice(1)) append(`\n${prefix}| ${row.join(" | ")} |`)
