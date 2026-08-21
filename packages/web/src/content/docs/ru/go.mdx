@@ -79,6 +79,7 @@ OpenCode Go работает так же, как и любой другой пр
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 - **Hy3**
+- **Ox Alpha Free** (ограниченное время)
 
 Список моделей может меняться по мере того, как мы тестируем и добавляем новые.
 
@@ -118,6 +119,7 @@ OpenCode Go включает следующие лимиты:
 | DeepSeek V4 Pro            | 1,050               | 2,600             | 5,200            |
 | DeepSeek V4 Flash          | 7,600               | 18,900            | 37,800           |
 | Hy3                        | 4,300               | 10,750            | 21,500           |
+| Ox Alpha Free              | -                   | -                 | -                |
 
 Эти оценки основаны на наблюдаемых показателях запросов:
 
@@ -169,8 +171,11 @@ OpenCode Go включает следующие лимиты:
 | DeepSeek V4 Flash (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $30           |
 | DeepSeek V4 Flash (Peak)     | $0.44  | $1.32  | $0.014      | -            | $30           |
 | Hy3                          | $0.14  | $0.58  | $0.035      | -            | $60           |
+| Ox Alpha Free                | -      | -      | -           | -            | -             |
 
 **DeepSeek V4 Flash / Pro:** Часы Peak: 01:00-04:00 и 06:00-10:00 UTC; все остальные часы относятся к Off-Peak. [Подробнее](https://api-docs.deepseek.com/quick_start/pricing/).
+
+**Ox Alpha Free:** Бесплатно в течение ограниченного времени.
 
 Вы можете отслеживать текущее использование в **<a href={console}>консоли</a>**.
 
@@ -229,6 +234,7 @@ OpenCode Go включает следующие лимиты:
 | Qwen3.7 Plus               | qwen3.7-plus               | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus               | qwen3.6-plus               | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy3                        | hy3                        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Ox Alpha Free              | x-preview-f-free           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [ID модели](/docs/config/#models) в вашем конфиге OpenCode
 использует формат `opencode-go/<model-id>`. Например, для Kimi K3 вам нужно
@@ -270,6 +276,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Pro            | Не используется  | 0 дней          |
 | DeepSeek V4 Flash          | Не используется  | 0 дней          |
 | Hy3                        | Не используется  | 0 дней          |
+| Ox Alpha Free              | Не используется  | 0 дней          |
 
 - **Grok 4.5:** ZDR отключает важные функции API, зависящие от сохраненных данных, включая Responses API с сохранением состояния, Files and Collections и Batch API. [Подробнее](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Журналы мониторинга злоупотреблений создаются при любом использовании функций API и хранятся до 30 дней. [Подробнее](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

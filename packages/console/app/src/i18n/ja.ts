@@ -253,7 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下の例外",
 
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
-  "go.banner.text": "Hy3の利用上限が期間限定で8倍に",
+  "go.banner.text": "Ox Alpha Freeは期間限定でGoで利用できます",
   "go.meta.description":
     "Goは最初の月$5、その後$10/月で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",

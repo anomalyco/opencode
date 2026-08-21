@@ -73,6 +73,7 @@ Obecna lista modeli obejmuje:
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 - **Hy3**
+- **Ox Alpha Free** (przez ograniczony czas)
 
 Lista modeli może ulec zmianie w miarę testowania i dodawania nowych.
 
@@ -112,6 +113,7 @@ Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych 
 | DeepSeek V4 Pro            | 1,050               | 2,600              | 5,200              |
 | DeepSeek V4 Flash          | 7,600               | 18,900             | 37,800             |
 | Hy3                        | 4,300               | 10,750             | 21,500             |
+| Ox Alpha Free              | -                   | -                  | -                  |
 
 Szacunki te opierają się na zaobserwowanych wzorcach żądań:
 
@@ -163,8 +165,11 @@ Szacunki opierają się również na następujących cenach za 1M tokenów oraz 
 | DeepSeek V4 Flash (Off-Peak) | $0.22   | $0.66   | $0.007         | -              | $30    |
 | DeepSeek V4 Flash (Peak)     | $0.44   | $1.32   | $0.014         | -              | $30    |
 | Hy3                          | $0.14   | $0.58   | $0.035         | -              | $60    |
+| Ox Alpha Free                | -       | -       | -              | -              | -      |
 
 **DeepSeek V4 Flash / Pro:** Godziny Peak to 01:00-04:00 i 06:00-10:00 UTC; wszystkie pozostałe godziny to Off-Peak. [Dowiedz się więcej](https://api-docs.deepseek.com/quick_start/pricing/).
+
+**Ox Alpha Free:** Bezpłatny przez ograniczony czas.
 
 Możesz śledzić swoje bieżące zużycie w **<a href={console}>konsoli</a>**.
 
@@ -221,6 +226,7 @@ Możesz również uzyskać dostęp do modeli Go za pośrednictwem następującyc
 | Qwen3.7 Plus               | qwen3.7-plus               | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus               | qwen3.6-plus               | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy3                        | hy3                        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Ox Alpha Free              | x-preview-f-free           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [ID modelu](/docs/config/#models) w Twojej konfiguracji OpenCode
 używa formatu `opencode-go/<model-id>`. Na przykład dla Kimi K3 należy użyć
@@ -262,6 +268,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Pro            | Niewykorzystywane | 0 dni           |
 | DeepSeek V4 Flash          | Niewykorzystywane | 0 dni           |
 | Hy3                        | Niewykorzystywane | 0 dni           |
+| Ox Alpha Free              | Niewykorzystywane | 0 dni           |
 
 - **Grok 4.5:** ZDR wyłącza ważne funkcje API zależne od przechowywanych danych, w tym stanowy Responses API, Files and Collections oraz Batch API. [Dowiedz się więcej](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Dzienniki monitorowania nadużyć są generowane dla każdego użycia funkcji API i przechowywane przez maksymalnie 30 dni. [Dowiedz się więcej](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
