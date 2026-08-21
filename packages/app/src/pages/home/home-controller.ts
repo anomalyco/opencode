@@ -1,9 +1,11 @@
 import { useGlobal } from "@/context/global"
+import { useLanguage } from "@/context/language"
 import { type HomeProjectSelection, useLayout } from "@/context/layout"
 import { ServerConnection, useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { useTabs } from "@/context/tabs"
-import { toggleHomeProjectSelection } from "@/pages/layout/helpers"
+import { errorMessage, toggleHomeProjectSelection } from "@/pages/layout/helpers"
+import { showToast } from "@/utils/toast"
 import { createEffect, createMemo } from "solid-js"
 
 export function createHomeController() {
@@ -11,6 +13,7 @@ export function createHomeController() {
   const layout = useLayout()
   const server = useServer()
   const global = useGlobal()
+  const language = useLanguage()
   const tabs = useTabs()
   const selection = layout.home.selection
   const focusedServer = createMemo(
@@ -93,16 +96,24 @@ export function createHomeController() {
         directories.forEach((item) => {
           if (ctx.projects.list().some((project) => project.worktree === item)) return
           const location = { directory: item }
-          void ctx.sdk.api.file
-            .list({ path: ".", location })
-            .then(async (files) => {
-              if (files.data.length > 0) return ctx.sdk.api.project.current({ location })
-              const result = await ctx.sdk.client.project.initGit({ directory: item })
-              return result.data ?? ctx.sdk.api.project.current({ location })
+          ctx.projects.open(item)
+          void ctx.sdk.api.project
+            .current({ location })
+            .then(async (project) => {
+              const files = await ctx.sdk.api.file.list({ path: ".", location }).catch(() => undefined)
+              if (files?.data && files.data.length === 0) {
+                const result = await ctx.sdk.client.project.initGit({ directory: item })
+                return result.data ?? project
+              }
+              return project
             })
             .then((project) => ctx.sync.child(item, { bootstrap: false })[1]("project", project.id))
-            .catch(() => undefined)
-          ctx.projects.open(item)
+            .catch((cause: unknown) => {
+              showToast({
+                title: language.t("common.requestFailed"),
+                description: errorMessage(cause, language.t("common.requestFailed")),
+              })
+            })
         })
         ctx.projects.touch(directory)
         setSelection({ server: ServerConnection.key(conn), directory })

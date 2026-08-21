@@ -52,6 +52,13 @@ describe("file HttpApi", () => {
     expect(await status.json()).toEqual([])
   })
 
+  test("lists a git repository that only contains .git", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const list = await request(FilePaths.list, tmp.path, { path: "." })
+    expect(list.status).toBe(200)
+    expect(await list.json()).toContainEqual(expect.objectContaining({ name: ".git", type: "directory" }))
+  })
+
   test("serves search endpoints", async () => {
     await using tmp = await tmpdir({ git: true })
     await Bun.write(path.join(tmp.path, "hello.txt"), "needle")

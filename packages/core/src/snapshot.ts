@@ -93,7 +93,7 @@ const layer = Layer.effect(
     const location = yield* Location.Service
     const source = yield* git.repo.discover(location.project.directory)
     const worktree = source
-      ? AbsolutePath.make(yield* fs.realPath(source.worktree).pipe(Effect.orDie))
+      ? AbsolutePath.make(yield* fs.realPath(source.worktree).pipe(Effect.catch(() => Effect.succeed(source.worktree))))
       : location.project.directory
     const gitDirectory = AbsolutePath.make(path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)))
 
