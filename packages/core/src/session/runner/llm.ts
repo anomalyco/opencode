@@ -3,6 +3,7 @@ export * as SessionRunnerLLM from "./llm.js"
 import {
   LLMClient,
   AIError,
+  InvalidProviderOutputReason,
   LLMEvent,
   Message,
   isContextOverflowFailure,
@@ -514,7 +515,18 @@ const layer = Layer.effect(
           if (overflowFailure) yield* publisher.publish(overflowFailure)
           // A thrown LLM failure not already recorded as the provider error either
           // escapes as a scheduled retry or fails the assistant durably.
-          const llmFailure = streamFailure instanceof AIError ? streamFailure : undefined
+          const unknownFinish =
+            stream._tag === "Success" && publisher.record().finish?.finish === "unknown"
+              ? new AIError({
+                  module: "session",
+                  method: "stream",
+                  reason: new InvalidProviderOutputReason({
+                    classification: "incomplete-stream",
+                    message: "The provider response ended with an unknown finish reason.",
+                  }),
+                })
+              : undefined
+          const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
           const llmError = llmFailure && !publisher.record().providerFailed ? toSessionError(llmFailure) : undefined
           if (
             recoverContinuation &&

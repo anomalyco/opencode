@@ -4519,6 +4519,31 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("retries an unknown finish before output", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Retry unknown finish")
+      yield* TestLLM.push([
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.stepFinish({ index: 0, reason: { normalized: "unknown" } }),
+        LLMEvent.finish({ reason: { normalized: "unknown" } }),
+      ])
+      yield* TestLLM.push(TestLLM.text("Recovered", "unknown-finish-success"))
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      yield* TestClock.adjust("2400 millis")
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
   it.effect("uses a larger provider retry-after delay", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -4591,6 +4616,39 @@ describe("SessionRunnerLLM", () => {
       expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
       yield* replaySessionProjection(sessionID)
       expect(yield* session.context(sessionID)).toMatchObject(context)
+    }),
+  )
+
+  it.effect("continues an unknown finish after observable text", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Continue unknown finish")
+      yield* TestLLM.push([
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "unknown-partial" }),
+        LLMEvent.textDelta({ id: "unknown-partial", text: "Partial" }),
+        LLMEvent.textEnd({ id: "unknown-partial" }),
+        LLMEvent.stepFinish({ index: 0, reason: { normalized: "unknown" } }),
+        LLMEvent.finish({ reason: { normalized: "unknown" } }),
+      ])
+      yield* TestLLM.push(TestLLM.text(" continuation", "unknown-continuation"))
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      yield* TestClock.adjust("2400 millis")
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.messages.at(-1)).toMatchObject({
+        role: "user",
+        content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
+      })
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        { type: "assistant", finish: "error", content: [{ type: "text", text: "Partial" }] },
+        { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: " continuation" }] },
+      ])
     }),
   )
 
