@@ -180,33 +180,33 @@ const layer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
       }),
-      create: Effect.fnUntraced(function* (input: StoredInput, tx?: Transaction) {
-        return (
-          (yield* (tx ?? db)
-            .insert(WorktreeTable)
-            .values({ project_id: input.projectID, directory: input.directory, strategy: input.strategy })
-            .onConflictDoUpdate({
-              target: [WorktreeTable.project_id, WorktreeTable.directory],
-              set: { strategy: input.strategy ?? null },
-              setWhere: input.strategy
-                ? or(isNull(WorktreeTable.strategy), ne(WorktreeTable.strategy, input.strategy))
-                : isNotNull(WorktreeTable.strategy),
-            })
-            .returning({ directory: WorktreeTable.directory })
-            .get()
-            .pipe(Effect.orDie)) !== undefined
-        )
-      }),
-      remove: Effect.fnUntraced(function* (projectID: ProjectSchema.ID, directory: AbsolutePath, tx?: Transaction) {
-        return (
-          (yield* (tx ?? db)
-            .delete(WorktreeTable)
-            .where(and(eq(WorktreeTable.project_id, projectID), eq(WorktreeTable.directory, directory)))
-            .returning({ directory: WorktreeTable.directory })
-            .get()
-            .pipe(Effect.orDie)) !== undefined
-        )
-      }),
+      create: (input: StoredInput, tx?: Transaction) =>
+        (tx ?? db)
+          .insert(WorktreeTable)
+          .values({ project_id: input.projectID, directory: input.directory, strategy: input.strategy })
+          .onConflictDoUpdate({
+            target: [WorktreeTable.project_id, WorktreeTable.directory],
+            set: { strategy: input.strategy ?? null },
+            setWhere: input.strategy
+              ? or(isNull(WorktreeTable.strategy), ne(WorktreeTable.strategy, input.strategy))
+              : isNotNull(WorktreeTable.strategy),
+          })
+          .returning({ directory: WorktreeTable.directory })
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => row !== undefined),
+          ),
+      remove: (projectID: ProjectSchema.ID, directory: AbsolutePath, tx?: Transaction) =>
+        (tx ?? db)
+          .delete(WorktreeTable)
+          .where(and(eq(WorktreeTable.project_id, projectID), eq(WorktreeTable.directory, directory)))
+          .returning({ directory: WorktreeTable.directory })
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => row !== undefined),
+          ),
     }
 
     const registry = new Map<StrategyID, Strategy>()

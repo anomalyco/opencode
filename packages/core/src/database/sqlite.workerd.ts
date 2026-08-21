@@ -1,5 +1,4 @@
-import { Context, Effect, Exit, Fiber, Layer, Scope, Semaphore, Stream } from "effect"
-import { identity } from "effect/Function"
+import { Context, Effect, Exit, Fiber, Layer, Scope, Semaphore } from "effect"
 import { Reactivity } from "effect/unstable/reactivity"
 import { SqlClient, Statement } from "effect/unstable/sql"
 import type { Connection } from "effect/unstable/sql/SqlConnection"
@@ -167,26 +166,7 @@ const make = (options: Config) =>
           }),
       })
 
-    const connection = identity<Connection>({
-      execute(query, params, transformRows) {
-        return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
-      },
-      executeRaw(query, params) {
-        return run(query, params)
-      },
-      executeValues(query, params) {
-        return runValues(query, params)
-      },
-      executeValuesUnprepared(query, params) {
-        return runValues(query, params)
-      },
-      executeUnprepared(query, params, transformRows) {
-        return this.execute(query, params, transformRows)
-      },
-      executeStream() {
-        return Stream.die("executeStream not implemented")
-      },
-    })
+    const connection = Sqlite.makeConnection(run, runValues, {})
 
     const semaphore = yield* Semaphore.make(1)
     const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
