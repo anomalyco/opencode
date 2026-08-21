@@ -239,7 +239,7 @@ const layer = Layer.effect(
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
                   Effect.map((match) => ({
                     ...match.data,
-                    path: { text: match.data.path.text.replace(/^\.[\\/]/, "") },
+                    path: { text: normalizePath(match.data.path.text) },
                     submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
                   })),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
@@ -248,11 +248,10 @@ const layer = Layer.effect(
             ),
         }).pipe(
           Effect.map((result) =>
-            result.items.map((match) => {
-              const relative = normalizePath(match.path.text)
-              return Match.make({
+            result.items.map((match) =>
+              Match.make({
                 entry: Entry.make({
-                  path: RelativePath.make(relative),
+                  path: RelativePath.make(match.path.text),
                   type: "file",
                 }),
                 line: match.line_number,
@@ -263,8 +262,8 @@ const layer = Layer.effect(
                   start: submatch.start,
                   end: submatch.end,
                 })),
-              })
-            }),
+              }),
+            ),
           ),
         ),
     })
