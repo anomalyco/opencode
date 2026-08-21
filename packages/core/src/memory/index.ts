@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect"
-import { eq } from "drizzle-orm"
+import { eq, and, desc, inArray } from "drizzle-orm"
 import { Database } from "../database/database"
 import { MemoryTable } from "./sql"
 import { Identifier } from "../id/id"
@@ -14,6 +14,7 @@ export interface Interface {
   readonly store: (content: string, source: "auto" | "manual", sessionID?: SessionSchema.ID) => Effect.Effect<MemorySchema.ID>
   readonly list: () => Effect.Effect<MemorySchema.Info[]>
   readonly delete: (id: MemorySchema.ID) => Effect.Effect<boolean>
+  readonly pruneAuto: (keepLimit: number) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Memory") {}
@@ -61,6 +62,21 @@ const layer = Layer.effect(
       delete: Effect.fn("Memory.delete")(function* (id) {
         const result = yield* db.delete(MemoryTable).where(eq(MemoryTable.id, id))
         return result.rowsAffected > 0
+      }),
+
+      // Prune old auto-extracted memories to enforce a soft cap
+      pruneAuto: Effect.fn("Memory.pruneAuto")(function* (keepLimit) {
+        const rows = yield* db
+          .select({ id: MemoryTable.id })
+          .from(MemoryTable)
+          .where(and(eq(MemoryTable.project_id, location.project.id), eq(MemoryTable.source, "auto")))
+          .orderBy(desc(MemoryTable.time_created))
+          .offset(keepLimit)
+
+        if (rows.length > 0) {
+          const idsToDelete = rows.map((r) => r.id)
+          yield* db.delete(MemoryTable).where(inArray(MemoryTable.id, idsToDelete))
+        }
       }),
     })
   }),

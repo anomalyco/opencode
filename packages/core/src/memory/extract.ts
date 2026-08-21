@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer, Stream, Schema, Option } from "effect"
 import { makeGlobalNode } from "../effect/app-node"
 import { EventV2 } from "../event"
 import { SessionStatusEvent } from "../../schema/src/session-status-event"
@@ -70,6 +70,17 @@ const layer = Layer.effectDiscard(
               return
             }
 
+            const session = yield* store.get(sessionID)
+            if (!session) return
+
+            const modelEntry = yield* SessionRunnerModel.resolve(sessionID, session.agent_id, models, providers).pipe(
+              Effect.catchAll(() => Effect.succeed(null))
+            )
+            if (!modelEntry) {
+              yield* Effect.logDebug("Skipping memory extraction: no model configured", { sessionID })
+              return
+            }
+
             // 4. Spin up a BackgroundJob.
             // Extraction uses an LLM call which takes time. We don't want to block the 
             // event loop or the user's UI while we think about what to remember.
@@ -77,14 +88,7 @@ const layer = Layer.effectDiscard(
               type: "memory-extract",
               title: "Extracting project memory",
               run: Effect.gen(function* () {
-                const session = yield* store.get(sessionID)
-                if (!session) return
-
-                // 5. Resolve the model used for this session
-                const agentId = session.agent_id
-                const modelEntry = yield* SessionRunnerModel.resolve(sessionID, agentId, models, providers)
-
-                // 6. Serialize the conversation so the LLM can read it
+                // 5. Serialize the conversation so the LLM can read it
                 const conversation = messages
                   .map((m) => {
                     if (m.type === "user") return `[User]: ${m.text}`
@@ -123,21 +127,27 @@ const layer = Layer.effectDiscard(
                 )
 
                 // 8. Parse the JSON array and store each memory
-                try {
-                  // The prompt strictly asks for a JSON array, but LLMs sometimes wrap it in markdown block quotes
-                  const cleaned = content.replace(/^```json/m, "").replace(/```$/m, "").trim()
-                  const extracted = JSON.parse(cleaned)
-                  
-                  if (Array.isArray(extracted) && extracted.length > 0) {
-                    yield* Effect.logInfo("Extracted new memories", { sessionID, count: extracted.length })
-                    for (const text of extracted) {
-                      if (typeof text === "string" && text.trim().length > 0) {
-                        yield* memory.store(text.trim(), "auto", sessionID)
-                      }
+                const cleaned = content.replace(/```(?:json)?/gi, "").trim()
+                const parseResult = yield* Effect.try({
+                  try: () => JSON.parse(cleaned),
+                  catch: (error) => error
+                }).pipe(
+                  Effect.map(Schema.decodeUnknownOption(Schema.Array(Schema.String))),
+                  Effect.catchAll(() => Effect.succeed(Option.none()))
+                )
+
+                if (Option.isSome(parseResult) && parseResult.value.length > 0) {
+                  yield* Effect.logInfo("Extracted new memories", { sessionID, count: parseResult.value.length })
+                  for (const text of parseResult.value) {
+                    if (text.trim().length > 0) {
+                      yield* memory.store(text.trim(), "auto", sessionID)
                     }
                   }
-                } catch (e) {
-                  yield* Effect.logWarning("Failed to parse extracted memories", { sessionID, error: e, content })
+                  
+                  // 9. Enforce a cap on auto-extracted memories to prevent unbounded growth
+                  yield* memory.pruneAuto(200)
+                } else if (Option.isNone(parseResult)) {
+                  yield* Effect.logWarning("Failed to parse extracted memories", { sessionID, content })
                 }
               }).pipe(Effect.catchAll((error) => Effect.logError("Memory extraction job failed", { error }))),
             })

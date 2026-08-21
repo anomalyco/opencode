@@ -22,7 +22,7 @@ const ListOutput = Schema.Struct({
 
 const deleteName = "memory_delete"
 const DeleteInput = Schema.Struct({
-  id: Schema.String.annotate({ description: "The ID of the memory to delete" }),
+  id: Memory.MemorySchema.ID.annotate({ description: "The ID of the memory to delete" }),
 })
 const DeleteOutput = Schema.Struct({
   success: Schema.Boolean,
@@ -79,7 +79,6 @@ const layer = Layer.effectDiscard(
                 agent: context.agent,
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
-              // @ts-expect-error Brand cast
               const success = yield* memory.delete(input.id)
               return { success }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: "Unable to delete memory" }))),
