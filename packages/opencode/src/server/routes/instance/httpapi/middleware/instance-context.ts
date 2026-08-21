@@ -30,6 +30,8 @@ function provideInstanceContext<E>(
   return Effect.gen(function* () {
     const route = yield* WorkspaceRouteContext
     const directory = decode(route.directory)
+    // Validate the requested directory before loading: load may return a cached context or resolve a missing child
+    // through an ancestor repository.
     if (!(yield* fs.isDir(directory))) {
       return HttpServerResponse.jsonUnsafe(notFound(`Project directory not found: ${directory}`), { status: 404 })
     }

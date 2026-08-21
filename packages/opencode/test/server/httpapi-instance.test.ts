@@ -288,4 +288,25 @@ describe("instance HttpApi", () => {
       })
     }),
   )
+
+  it.live("rejects cached instance requests after the project directory is deleted", () =>
+    Effect.gen(function* () {
+      const parent = yield* tmpdirScoped({ git: true })
+      const dir = `${parent}/deleted-project`
+      const fs = yield* FileSystem.FileSystem
+      yield* fs.makeDirectory(dir, { recursive: true })
+
+      const initial = yield* HttpClientRequest.get(InstancePaths.path).pipe(directoryHeader(dir), HttpClient.execute)
+      expect(initial.status).toBe(200)
+
+      yield* fs.remove(dir, { recursive: true })
+
+      const response = yield* HttpClientRequest.get(InstancePaths.path).pipe(directoryHeader(dir), HttpClient.execute)
+      expect(response.status).toBe(404)
+      expect(yield* response.json).toEqual({
+        name: "NotFoundError",
+        data: { message: `Project directory not found: ${dir}` },
+      })
+    }),
+  )
 })
