@@ -11,7 +11,7 @@ import {
   type JSX,
   type ParentProps,
 } from "solid-js"
-import "./menu.layer.css"
+import "./menu.css"
 
 const ChevronRight: Component = () => (
   <svg
