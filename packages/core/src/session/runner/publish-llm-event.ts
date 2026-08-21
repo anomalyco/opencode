@@ -84,17 +84,15 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  */
 export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, input: Input) => {
   const deltaBatchInterval = 100
-  const tools = new Map<
-    string,
-    {
-      readonly assistantMessageID: SessionMessage.ID
-      readonly name: string
-      called: boolean
-      settled: boolean
-      providerExecuted: boolean
-      progress?: Tool.Metadata
-    }
-  >()
+  type ToolState = {
+    readonly assistantMessageID: SessionMessage.ID
+    readonly name: string
+    called: boolean
+    settled: boolean
+    providerExecuted: boolean
+    progress?: Tool.Metadata
+  }
+  const tools = new Map<string, ToolState>()
   const failureSnapshot = (tool: { readonly progress?: Tool.Metadata }, metadata?: Tool.Metadata) => {
     if (tool.progress === undefined) return metadata === undefined ? {} : { metadata }
     if (metadata === undefined) return { metadata: tool.progress }
@@ -263,7 +261,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   }) {
     if (tools.has(event.id)) return yield* Effect.die(new Error(`Duplicate tool input start: ${event.id}`))
     const assistantMessageID = yield* startAssistant()
-    const tool: NonNullable<ReturnType<typeof tools.get>> = {
+    const tool: ToolState = {
       assistantMessageID,
       name: event.name,
       called: false,
