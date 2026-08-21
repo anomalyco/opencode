@@ -6,7 +6,7 @@ import { useMcpToggle } from "@/context/mcp"
 import { useWorkspaceLocation } from "@/context/location"
 import { useData } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
-import { pluginLabel } from "@/utils/plugin"
+import { pluginLabels } from "@/utils/plugin"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -39,7 +39,7 @@ export function StatusPopoverBody(props: { shown: boolean }) {
     () => (props.shown ? sdk().directory : undefined),
     (directory) => serverSDK.api.plugin.list({ location: { directory } }).then((result) => result.data),
   )
-  const plugins = createMemo(() => (pluginList.latest ?? []).map(pluginLabel))
+  const plugins = createMemo(() => pluginLabels(pluginList.latest ?? []))
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
 
