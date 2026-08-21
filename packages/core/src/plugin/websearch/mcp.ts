@@ -51,20 +51,18 @@ export const call = <F extends Schema.Struct.Fields, R extends Schema.Struct.Fie
         params: { name: tool, arguments: value },
       }),
     )
-    return yield* HttpClient.filterStatusOk(http)
-      .execute(request)
-      .pipe(
-        Effect.flatMap((response) =>
-          collectBoundedResponseBody(
-            response,
-            MAX_RESPONSE_BYTES,
-            () => new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`),
-          ),
-        ),
-        Effect.flatMap((body) => parseResponse(body.toString("utf8"), schema.output)),
-        Effect.timeoutOrElse({
-          duration: Duration.seconds(25),
-          orElse: () => Effect.fail(new Error(`${tool} request timed out`)),
-        }),
+    return yield* Effect.gen(function* () {
+      const response = yield* HttpClient.filterStatusOk(http).execute(request)
+      const body = yield* collectBoundedResponseBody(
+        response,
+        MAX_RESPONSE_BYTES,
+        () => new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`),
       )
+      return yield* parseResponse(body.toString("utf8"), schema.output)
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: Duration.seconds(25),
+        orElse: () => Effect.fail(new Error(`${tool} request timed out`)),
+      }),
+    )
   })
