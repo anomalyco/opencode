@@ -36,7 +36,14 @@ const palette = [
   "#c0caf5",
 ]
 
-async function mountChip(root: string) {
+let cleanup: (() => void) | undefined
+
+afterEach(() => {
+  cleanup?.()
+  cleanup = undefined
+})
+
+async function mountChip(root: string, mime = "text/plain") {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
   await Bun.write(path.join(state, "kv.json"), "{}")
@@ -73,7 +80,7 @@ async function mountChip(root: string) {
                 file={
                   {
                     type: "file",
-                    mime: "text/plain",
+                    mime,
                     filename: "/tmp/todo.md",
                     url: "file:///tmp/todo.md",
                   } as never
@@ -87,6 +94,9 @@ async function mountChip(root: string) {
   }
 
   const app = await testRender(() => <Harness />, { width: 60, height: 5 })
+  // Register teardown before the fallible theme wait: if the wait times out,
+  // afterEach still destroys the live renderer instead of leaking it.
+  cleanup = () => app.renderer.destroy()
   const start = Date.now()
   while (themeCtx?.ready !== true) {
     if (Date.now() - start > 5000) throw new Error("timed out waiting for theme provider")
@@ -95,15 +105,17 @@ async function mountChip(root: string) {
   return { app, theme: () => themeCtx }
 }
 
-function badgeSpan(app: Awaited<ReturnType<typeof testRender>>) {
+function badgeSpan(app: Awaited<ReturnType<typeof testRender>>, label: string) {
   return app
     .captureSpans()
     .lines.flatMap((line) => line.spans)
-    .find((span) => span.text.includes("File"))
+    .find((span) => span.text.includes(label))
 }
 
 // A badge is only readable if its text, composited over its own background,
-// stays distinguishable from that background.
+// stays distinguishable from that background. The metric is the Manhattan RGB
+// distance between the composited text and the background; the 0.1 threshold
+// is a small-but-perceptible floor (the pre-fix transparent label scores 0).
 function visibility(span: { fg: RGBA; bg: RGBA }) {
   const { fg, bg } = span
   const r = fg.r * fg.a + bg.r * (1 - fg.a)
@@ -112,22 +124,33 @@ function visibility(span: { fg: RGBA; bg: RGBA }) {
   return Math.abs(r - bg.r) + Math.abs(g - bg.g) + Math.abs(b - bg.b)
 }
 
-let cleanup: (() => void) | undefined
+// Mounts the chip and switches to the generated system theme, which
+// intentionally uses a fully transparent `background` (alpha 0) so terminal
+// transparency shows through. Cleanup also resets the global theme state the
+// switch mutates.
+async function mountSystemChip(root: string, mime: string) {
+  const mounted = await mountChip(root, mime)
+  cleanup = () => {
+    mounted.theme()?.set("opencode")
+    setSystemTheme(undefined)
+    mounted.app.renderer.destroy()
+  }
+  setSystemTheme(generateSystem(terminalColors("#1a1b26", palette), "dark"))
+  expect(mounted.theme()!.set("system")).toBe(true)
 
-afterEach(() => {
-  cleanup?.()
-  cleanup = undefined
-})
+  await mounted.app.renderOnce()
+  await mounted.app.renderOnce()
+  return mounted
+}
 
 test("file chip badge text is visible with the default theme", async () => {
   await using tmp = await tmpdir()
   const { app, theme } = await mountChip(tmp.path)
-  cleanup = () => app.renderer.destroy()
 
   await app.renderOnce()
   await app.renderOnce()
 
-  const span = badgeSpan(app)
+  const span = badgeSpan(app, "File")
   expect(span).toBeDefined()
   expect(visibility(span!)).toBeGreaterThan(0.1)
   expect(theme()!.selected).toBe("opencode")
@@ -135,24 +158,23 @@ test("file chip badge text is visible with the default theme", async () => {
 
 test("file chip badge text stays visible with the generated system theme", async () => {
   await using tmp = await tmpdir()
-  const { app, theme } = await mountChip(tmp.path)
-  cleanup = () => {
-    theme()?.set("opencode")
-    setSystemTheme(undefined)
-    app.renderer.destroy()
-  }
+  const { app, theme } = await mountSystemChip(tmp.path, "text/plain")
 
-  // The generated system theme intentionally uses a fully transparent
-  // `background` (alpha 0) so terminal transparency shows through.
-  setSystemTheme(generateSystem(terminalColors("#1a1b26", palette), "dark"))
-  expect(theme()!.set("system")).toBe(true)
-
-  await app.renderOnce()
-  await app.renderOnce()
-
-  const span = badgeSpan(app)
+  const span = badgeSpan(app, "File")
   expect(span).toBeDefined()
   // Regression: the badge used `fg: theme.background`, which is transparent in
   // the generated system theme, so the label blended into its own background.
+  expect(visibility(span!)).toBeGreaterThan(0.1)
+  // Negative control: the pre-fix label color must score ~invisible here,
+  // proving the visibility assertion above can actually fail.
+  expect(visibility({ fg: theme()!.theme.background, bg: span!.bg })).toBeLessThan(0.01)
+})
+
+test("directory chip badge text stays visible with the generated system theme", async () => {
+  await using tmp = await tmpdir()
+  const { app } = await mountSystemChip(tmp.path, "application/x-directory")
+
+  const span = badgeSpan(app, "Directory")
+  expect(span).toBeDefined()
   expect(visibility(span!)).toBeGreaterThan(0.1)
 })
