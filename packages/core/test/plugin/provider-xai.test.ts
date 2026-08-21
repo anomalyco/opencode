@@ -1,10 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { XAIPlugin } from "@opencode-ai/core/plugin/provider/xai"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -63,6 +66,25 @@ describe("XAIPlugin", () => {
           metadata: { account: "account" },
         }),
       })
+    }),
+  )
+
+  it.effect("marks xAI deployments as Responses WebSocket capable", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("xai")
+      yield* catalog.transform((draft) => {
+        draft.provider.update(providerID, (provider) => {
+          provider.package = Provider.aisdk("@ai-sdk/xai")
+        })
+        draft.model.update(providerID, Model.ID.make("grok-4.6"), () => {})
+      })
+
+      yield* addPlugin()
+
+      expect((yield* catalog.model.get(providerID, Model.ID.make("grok-4.6")))?.capabilities.responsesWebsockets).toBe(
+        true,
+      )
     }),
   )
 })

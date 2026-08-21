@@ -691,6 +691,40 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("builds xAI WebSocket requests without OpenAI handshake headers", () =>
+    Effect.gen(function* () {
+      const deps = Layer.succeed(
+        RequestExecutor.Service,
+        RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
+      )
+      const response = yield* LLMClient.generate(LLM.request({ model: xaiModel, prompt: "Say hello." }), {
+        webSocket: {
+          execute: (exchange) =>
+            Effect.gen(function* () {
+              expect(exchange.connect.url).toBe("wss://api.x.ai/v1/responses")
+              expect(exchange.connect.rotateAfterMs).toBe(24 * 60 * 1000)
+              expect(exchange.connect.headers.authorization).toBe("Bearer test")
+              expect(exchange.connect.headers["openai-beta"]).toBeUndefined()
+              expect(JSON.parse((yield* exchange.driver.create(undefined)).message)).toMatchObject({
+                type: "response.create",
+                model: "grok-4.5",
+                store: false,
+              })
+              return {
+                frames: Stream.make(
+                  JSON.stringify({ type: "response.created", response: { id: "resp_xai" } }),
+                  JSON.stringify({ type: "response.completed", response: { id: "resp_xai" } }),
+                ),
+                complete: Effect.void,
+              }
+            }),
+        },
+      }).pipe(Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))))
+
+      expect(response.finishReason.normalized).toBe("stop")
+    }),
+  )
+
   it.effect("uses exactly one HTTP request when no WebSocket executor is supplied", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)

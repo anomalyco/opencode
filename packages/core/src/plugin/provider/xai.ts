@@ -4,6 +4,7 @@ import { Clock, Effect, Option, Schema } from "effect"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
+import { Provider } from "../../provider.js"
 
 const clientID = "b1a00492-073a-47ea-816f-4c329264a828"
 const issuer = "https://auth.x.ai/oauth2"
@@ -12,6 +13,7 @@ const scope = "openid profile email offline_access grok-cli:access api:access"
 const pollingSafetyMargin = 3000
 const browserMethodID = Integration.MethodID.make("browser")
 const deviceMethodID = Integration.MethodID.make("device")
+const providerID = Provider.ID.make("xai")
 
 const Token = Schema.Struct({
   access_token: Schema.String,
@@ -92,6 +94,15 @@ export const XAIPlugin = define({
       })
       draft.method.update(device(ctx.app))
       draft.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
+    })
+    yield* ctx.catalog.transform((catalog) => {
+      const provider = catalog.provider.get(providerID)
+      if (!provider) return
+      for (const model of provider.models.values()) {
+        catalog.model.update(providerID, model.id, (draft) => {
+          draft.capabilities.responsesWebsockets = true
+        })
+      }
     })
   }),
 })

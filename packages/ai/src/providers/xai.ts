@@ -28,13 +28,19 @@ export interface Settings extends ProviderPackage.Settings {
 
 export type { XAIImageOptions } from "../protocols/xai-images.js"
 
+const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 24 * 60 * 1000
+
 const responsesRoute = Route.make({
   id: "openai-responses",
   provider: id,
   providerMetadataKey: "xai",
   protocol: OpenAIResponses.protocol,
   endpoint: Endpoint.path("/responses", { baseURL: OpenAICompatibleProfiles.profiles.xai.baseURL }),
-  transport: OpenAIResponses.httpTransport,
+  transport: OpenAIResponses.channelTransport({
+    id: "openai-responses",
+    name: "xAI Responses",
+    rotateAfterMs: RESPONSES_WEBSOCKET_ROTATE_AFTER_MS,
+  }),
   defaults: { providerOptions: { store: false } },
 })
 
