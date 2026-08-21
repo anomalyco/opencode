@@ -58,7 +58,7 @@ import {
   MAX_LOCAL_ATTACHMENT_BYTES,
   type LocalAttachment,
 } from "./local-attachment"
-import { useData } from "../../context/data"
+import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
@@ -308,7 +308,6 @@ export function Prompt(props: PromptProps) {
     ],
   }))
   const [cursorVersion, setCursorVersion] = createSignal(0)
-  const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const connected = useConnected()
   const hasRightContent = createMemo(() => Boolean(props.right))
 
@@ -1572,23 +1571,46 @@ export function Prompt(props: PromptProps) {
     if (!agent) return theme.border.default
     return local.agent.color(agent.id)
   })
-  const agentLabel = createMemo(() => {
-    if (store.mode === "shell") return "Shell"
-    const agent = local.agent.current()
-    return agent ? Locale.titlecase(agent.id) : undefined
-  })
+  // Keep the last resolved identity visible while destination catalogs load;
+  // availability and submission still use the live location-scoped catalog.
+  const identity = createMemo<{
+    agent: string | undefined
+    model: string
+    provider: string
+    variant: string | undefined
+  }>(
+    (previous) => {
+      const location = currentLocation.ref ?? data.location.default()
+      const sessionLocation = props.sessionID ? data.session.get(props.sessionID)?.location : location
+      if (!sessionLocation || locationKey(sessionLocation) !== locationKey(location)) return previous
 
-  const showVariant = createMemo(() => {
-    const variants = local.model.variant.list()
-    if (variants.length === 0) return false
-    const current = local.model.variant.current()
-    return !!current
-  })
+      const loading =
+        data.location.agent.list(location) === undefined || data.location.model.list(location) === undefined
+      const error = currentLocation.error
+      const failed = error && locationKey(error.location) === locationKey(location)
+      if (loading && !failed) return previous
 
-  const agentMetaAlpha = createFadeIn(() => store.mode === "shell" || !!local.agent.current(), animationsEnabled)
-  const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
+      const agent = local.agent.current()
+      const model = local.model.parsed()
+      return {
+        agent: agent ? Locale.titlecase(agent.id) : undefined,
+        model: model.model,
+        provider: model.provider,
+        variant: local.model.variant.list().length > 0 ? local.model.variant.current() : undefined,
+      }
+    },
+    {
+      agent: undefined,
+      model: "No provider selected",
+      provider: "Connect a provider",
+      variant: undefined,
+    },
+  )
+  const agentLabel = createMemo(() => (store.mode === "shell" ? "Shell" : identity().agent))
+  const agentMetaAlpha = createFadeIn(() => !!agentLabel(), animationsEnabled)
+  const modelMetaAlpha = createFadeIn(() => !!identity().agent && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
-    () => !!local.agent.current() && store.mode === "normal" && showVariant(),
+    () => !!identity().agent && store.mode === "normal" && !!identity().variant,
     animationsEnabled,
   )
   const borderHighlight = createMemo(() => tint(theme.border.default, highlight(), agentMetaAlpha()))
@@ -1851,14 +1873,14 @@ export function Prompt(props: PromptProps) {
                             truncate
                             fg={fadeColor(leader() ? theme.text.subdued : theme.text.default, modelMetaAlpha())}
                           >
-                            {local.model.parsed().model}
+                            {identity().model}
                           </text>
                           <Show when={dimensions().width >= 50}>
                             <text flexShrink={0} fg={fadeColor(theme.text.subdued, modelMetaAlpha())}>
-                              {currentProviderLabel()}
+                              {identity().provider}
                             </text>
                           </Show>
-                          <Show when={showVariant() && dimensions().width >= 70}>
+                          <Show when={identity().variant && dimensions().width >= 70}>
                             <text fg={fadeColor(theme.text.subdued, variantMetaAlpha())}>·</text>
                             <text>
                               <span
@@ -1867,7 +1889,7 @@ export function Prompt(props: PromptProps) {
                                   bold: true,
                                 }}
                               >
-                                {local.model.variant.current()}
+                                {identity().variant}
                               </span>
                             </text>
                           </Show>

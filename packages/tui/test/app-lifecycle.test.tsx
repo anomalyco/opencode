@@ -295,6 +295,107 @@ test("session startup prompt is submitted exactly once", async () => {
   }
 })
 
+test("keeps the prompt identity visible while a new location catalog loads", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const events = createEventStream()
+  const source = process.cwd()
+  const target = "/tmp/opencode-target"
+  const catalog = Promise.withResolvers<void>()
+  const providerCatalog = Promise.withResolvers<void>()
+  const modelRequested = Promise.withResolvers<void>()
+  const ready = Promise.withResolvers<void>()
+  const calls = createFetch(async (url) => {
+    const requestedDirectory = url.searchParams.get("location[directory]") ?? source
+    const location = {
+      directory: requestedDirectory,
+      project: {
+        id: requestedDirectory === target ? "target" : "source",
+        directory: requestedDirectory,
+        canonical: requestedDirectory,
+      },
+    }
+    if (url.pathname === "/api/location") return json(location)
+    if (url.pathname === "/api/agent") {
+      if (requestedDirectory === target) await catalog.promise
+      return json({
+        location,
+        data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }],
+      })
+    }
+    if (url.pathname === "/api/provider") {
+      if (requestedDirectory === target) await providerCatalog.promise
+      return json({ location, data: [{ id: "provider", name: "Provider" }] })
+    }
+    if (url.pathname === "/api/model") {
+      if (requestedDirectory === target) {
+        modelRequested.resolve()
+        await catalog.promise
+      }
+      return json({
+        location,
+        data: [
+          {
+            id: requestedDirectory === target ? "target-model" : "source-model",
+            providerID: "provider",
+            name: requestedDirectory === target ? "Target Model" : "Source Model",
+            variants: [],
+          },
+        ],
+      })
+    }
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({ animations: false }), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        args: {},
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("Build · Source Model Provider"))
+    await setup.mockInput.typeText(`/cd ${target}`)
+    await setup.renderOnce()
+    expect(setup.captureCharFrame()).toContain(`/cd ${target}`)
+    setup.mockInput.pressEscape()
+    setup.mockInput.pressEnter()
+    await Promise.race([
+      modelRequested.promise,
+      Bun.sleep(2_000).then(() => {
+        throw new Error("target model catalog was not requested")
+      }),
+    ])
+    await setup.renderOnce()
+
+    expect(setup.captureCharFrame()).toContain("Build · Source Model Provider")
+
+    catalog.resolve()
+    const resolved = await setup.waitForFrame((frame) => frame.includes("Build · Target Model provider"))
+    expect(resolved).not.toContain("Source Model")
+
+    providerCatalog.resolve()
+    await setup.waitForFrame((frame) => frame.includes("Build · Target Model Provider"))
+
+    setup.renderer.destroy()
+    await task
+  } finally {
+    catalog.resolve()
+    providerCatalog.resolve()
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
 test("configured app bindings execute settings and permission commands", async () => {
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
