@@ -66,12 +66,6 @@ const retryAfterMs = (headers: Record<string, string>) => {
   return undefined
 }
 
-const retryable = (headers: Record<string, string>) => {
-  if (headers["x-should-retry"] === "true") return true
-  if (headers["x-should-retry"] === "false") return false
-  return undefined
-}
-
 const addRateLimitValue = (target: Record<string, string>, key: string, value: string) => {
   if (key.length > 0) target[key] = value
 }
@@ -155,7 +149,6 @@ const responseHttp = (input: {
   readonly body: ReturnType<typeof responseBody>
   readonly requestId?: string | undefined
   readonly rateLimit?: HttpRateLimitDetails | undefined
-  readonly retryable?: boolean | undefined
 }) =>
   new HttpContext({
     request: requestDetails(input.request),
@@ -163,7 +156,6 @@ const responseHttp = (input: {
     ...input.body,
     requestId: input.requestId,
     rateLimit: input.rateLimit,
-    retryable: input.retryable,
   })
 
 const statusError =
@@ -189,7 +181,6 @@ const statusError =
             body: details,
             requestId: requestId(headers),
             rateLimit,
-            retryable: retryable(headers),
           }),
         }),
       })
@@ -227,7 +218,6 @@ export const classifyHttpFailure = (input: {
       ...details,
       requestId: requestId(headers),
       rateLimit,
-      retryable: retryable(headers),
     }),
   })
 }

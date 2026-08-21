@@ -349,24 +349,6 @@ describe("RequestExecutor", () => {
     ),
   )
 
-  it.effect("extracts provider retry advice", () =>
-    Effect.gen(function* () {
-      const failWith = (value: "true" | "false") =>
-        Effect.gen(function* () {
-          const executor = yield* RequestExecutor.Service
-          const error = yield* executor.execute(request).pipe(Effect.flip)
-          expectAIError(error)
-          return errorHttp(error)?.retryable
-        }).pipe(
-          Effect.provide(
-            responsesLayer([new Response("provider failure", { status: 500, headers: { "x-should-retry": value } })]),
-          ),
-        )
-
-      expect(yield* Effect.all([failWith("true"), failWith("false")])).toEqual([true, false])
-    }),
-  )
-
   it.effect("extracts OpenAI-style rate-limit diagnostics", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service

@@ -565,17 +565,6 @@ it.effect("classifies retryable AI SDK failures with retry-after details", () =>
   }),
 )
 
-it.effect("preserves provider retry advice from AI SDK response headers", () =>
-  Effect.gen(function* () {
-    const doNotRetry = yield* streamFailure(
-      apiCallError({ statusCode: 503, responseHeaders: { "x-should-retry": "false" } }),
-    )
-
-    expect(doNotRetry.reason).toMatchObject({ http: { retryable: false } })
-    expect(SessionRunnerRetry.isRetryable(doNotRetry)).toBeFalse()
-  }),
-)
-
 it.effect("classifies data-only AI SDK provider codes", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(

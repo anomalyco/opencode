@@ -31,7 +31,6 @@ export class HttpContext extends Schema.Class<HttpContext>("AI.HttpContext")({
   bodyTruncated: Schema.optional(Schema.Boolean),
   requestId: Schema.optional(Schema.String),
   rateLimit: Schema.optional(HttpRateLimitDetails),
-  retryable: Schema.optional(Schema.Boolean),
 }) {}
 
 export class InvalidRequestReason extends Schema.Class<InvalidRequestReason>("AI.Error.InvalidRequest")({
