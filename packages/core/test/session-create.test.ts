@@ -401,6 +401,56 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("does not copy a running assistant into a fork", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location })
+      yield* session.prompt({ sessionID: parent.id, text: "Run both tools", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      const assistantMessageID = SessionMessage.ID.create()
+      const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: parent.id,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model,
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_running",
+        name: "shell",
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_running",
+        text: '{"command":"sleep 10"}',
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_running",
+        input: { command: "sleep 10" },
+        executed: true,
+      })
+
+      const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+
+      expect(yield* session.context(parent.id)).toMatchObject([
+        { type: "user", text: "Run both tools" },
+        {
+          type: "assistant",
+          content: [{ type: "tool", id: "call_running", state: { status: "running" } }],
+        },
+      ])
+      expect(yield* session.context(forked.id)).toMatchObject([{ type: "user", text: "Run both tools" }])
+    }),
+  )
+
   it.effect("rejects forking an empty session", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -470,6 +520,11 @@ describe("Session.create", () => {
       expect(forked).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
       expect(yield* session.context(beforeFirst.id)).toEqual([])
       expect(beforeFirst).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
+      expect(yield* session.context(complete.id)).toMatchObject([
+        { type: "user", text: "First" },
+        { type: "user", text: "Second" },
+        { type: "assistant", finish: "stop" },
+      ])
       expect(complete).toMatchObject({
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
