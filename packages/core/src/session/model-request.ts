@@ -7,7 +7,6 @@ import { Cause, Config, Context, Effect, Layer, Result } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app.js"
 import { Model } from "../model.js"
-import { Provider } from "../provider.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
@@ -283,8 +282,7 @@ export const layer = Layer.effect(
         ...(input.webSocket === "session" &&
         webSocket &&
         webSocketEligible &&
-        resolved.ref.providerID === Provider.ID.openai &&
-        request.model.route.id === "openai-responses"
+        resolved.capabilities.responsesWebSocket === true
           ? { webSocket: transport.bind(session.id) }
           : {}),
       }

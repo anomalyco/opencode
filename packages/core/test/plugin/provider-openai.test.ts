@@ -197,6 +197,7 @@ describe("OpenAIPlugin", () => {
       expect(model.package).toBe(Provider.aisdk("@ai-sdk/openai"))
       expect(model.enabled).toBe(true)
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
+      expect(model.capabilities.responsesWebSocket).toBe(true)
       expect(direct.headers).not.toHaveProperty("originator")
       expect(direct.hasHttpHooks).toBe(false)
       expect(provider.headers).not.toHaveProperty("originator")
@@ -204,7 +205,7 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("selects WebSocket with the built-in provider hooks enabled", () =>
+  it.effect("selects WebSocket from deployment capability with built-in provider hooks enabled", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       yield* credentials.create({
@@ -221,8 +222,12 @@ describe("OpenAIPlugin", () => {
       })
       const sessionID = Session.ID.make("ses_websocket_hooks")
       const agentID = Agent.ID.make("build")
-      const model = SessionRunnerModel.resolved(OpenAIResponses.route.model({ id: "gpt-5.5" }), {
-        capabilities: { tools: true, input: ["text"], output: ["text"] },
+      const route = OpenAIResponses.route.with({
+        id: "deployment-responses",
+        provider: Provider.ID.make("deployment"),
+      })
+      const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
+        capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebSocket: true },
         cost: [],
         limit: { context: 200_000, output: 32_000 },
       })

@@ -996,7 +996,12 @@ export type ProviderInfo = {
   body?: { [x: string]: any }
 }
 
-export type ModelCapabilities = { tools: boolean; input: Array<string>; output: Array<string> }
+export type ModelCapabilities = {
+  tools: boolean
+  input: Array<string>
+  output: Array<string>
+  responsesWebSocket?: boolean
+}
 
 export type ModelCost = {
   tier?: { type: "context"; size: number }
