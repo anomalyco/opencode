@@ -325,6 +325,7 @@ const live: Layer.Layer<
           model: wrapLanguageModel({
             model: language,
             middleware: [
+              LLMAISDK.networkErrorMiddleware,
               {
                 specificationVersion: "v3" as const,
                 async transformParams(args) {
