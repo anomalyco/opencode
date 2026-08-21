@@ -410,6 +410,7 @@ export type Endpoint5_31Output =
             readonly instructions?:
               | { readonly [x: string & Brand.Brand<"Instruction.Key">]: string & Brand.Brand<"Instruction.Hash"> }
               | undefined
+            readonly instructionEntries?: InstructionEntry.Snapshot | undefined
           }
         }
       | {

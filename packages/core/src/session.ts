@@ -54,6 +54,7 @@ import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { fileURLToPath } from "url"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionHistory } from "./session/history.js"
+import { InstructionEntry } from "./session/instruction-entry.js"
 
 // get project -> project.locations
 //
@@ -437,6 +438,14 @@ const layer = Layer.effect(
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
         const sessionID = SessionSchema.ID.create()
+        const inherited = yield* db
+          .transaction(() =>
+            Effect.all({
+              instructions: InstructionState.current(db, parent.id),
+              instructionEntries: InstructionEntry.snapshot(db, parent.id),
+            }),
+          )
+          .pipe(Effect.orDie)
         // The fork adopts the parent's newest instruction values rather than the
         // values in effect at the boundary; copied history may contain frozen
         // instruction-update text the initial baseline already reflects.
@@ -444,7 +453,7 @@ const layer = Layer.effect(
           sessionID,
           parentID: parent.id,
           boundary: { ...input.boundary, messageID: boundary.id },
-          instructions: yield* InstructionState.current(db, parent.id),
+          ...inherited,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),

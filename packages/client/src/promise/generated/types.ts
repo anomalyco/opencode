@@ -263,6 +263,8 @@ export type SessionInboxCompaction = {
 
 export type InstructionEntryInfo = { key: InstructionEntryKey; value: JsonValue }
 
+export type InstructionEntrySnapshot = Array<{ key: InstructionEntryKey; value: JsonValue; removed: boolean }>
+
 export type SessionCreated = {
   id: string
   created: number
@@ -342,16 +344,6 @@ export type SessionDeleted = {
   durable: { aggregateID: string; seq: number; version: 2 }
   location?: LocationRef
   data: { sessionID: string }
-}
-
-export type SessionForked = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.forked"
-  durable: { aggregateID: string; seq: number; version: 2 }
-  location?: LocationRef
-  data: { sessionID: string; parentID: string; boundary: SessionForkBoundary; instructions?: { [x: string]: string } }
 }
 
 export type SessionInboxDelivered = {
@@ -1311,6 +1303,22 @@ export type FormWhen = {
 }
 
 export type ToolContent = ToolTextContent | ToolFileContent
+
+export type SessionForked = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.forked"
+  durable: { aggregateID: string; seq: number; version: 2 }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    parentID: string
+    boundary: SessionForkBoundary
+    instructions?: { [x: string]: string }
+    instructionEntries?: InstructionEntrySnapshot
+  }
+}
 
 export type SessionShellStarted = {
   id: string

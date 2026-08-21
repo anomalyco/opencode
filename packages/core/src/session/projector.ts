@@ -14,7 +14,8 @@ import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
 import { Workspace } from "../workspace.js"
 import { InstructionState } from "./instruction-state.js"
-import { InstructionEntryTable, SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
+import { InstructionEntry } from "./instruction-entry.js"
 import { Slug } from "../util/slug.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Money } from "@opencode-ai/schema/money"
@@ -171,23 +172,8 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .pipe(Effect.orDie)
   if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
 
-  yield* db
-    .insert(InstructionEntryTable)
-    .select(
-      db
-        .select({
-          session_id: sql<SessionSchema.ID>`${event.data.sessionID}`.as("session_id"),
-          key: InstructionEntryTable.key,
-          value: InstructionEntryTable.value,
-          removed: InstructionEntryTable.removed,
-          time_created: sql<number>`${event.created}`.as("time_created"),
-          time_updated: sql<number>`${event.created}`.as("time_updated"),
-        })
-        .from(InstructionEntryTable)
-        .where(eq(InstructionEntryTable.session_id, event.data.parentID)),
-    )
-    .run()
-    .pipe(Effect.orDie)
+  if (event.data.instructionEntries)
+    yield* InstructionEntry.initialize(db, event.data.sessionID, event.data.instructionEntries, event.created)
 
   let cursor = -1
   while (copiedSeq !== undefined) {

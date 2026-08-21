@@ -452,15 +452,45 @@ describe("Session.create", () => {
       yield* entries.put({ sessionID: parent.id, key: "deploy-target", value: "production" })
       yield* entries.put({ sessionID: parent.id, key: "retired", value: true })
       yield* entries.remove({ sessionID: parent.id, key: "retired" })
+      yield* Effect.forEach(
+        Array.from({ length: 20 }, (_, index) => index),
+        (index) => entries.put({ sessionID: parent.id, key: `entry-${String(index).padStart(2, "0")}`, value: index }),
+        { discard: true },
+      )
 
       const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
-      const inherited = yield* entries.load(forked.id)
+      const inheritedList = yield* entries.list(forked.id)
+      const inheritedValues = yield* entries.load(forked.id).pipe(Effect.flatMap(Instructions.read))
 
-      expect(yield* entries.list(forked.id)).toEqual([{ key: "deploy-target", value: "production" }])
-      expect(yield* Instructions.read(inherited)).toEqual([
-        { key: Instructions.Key.make("api/deploy-target"), value: "production" },
-        { key: Instructions.Key.make("api/retired"), value: Instructions.removed },
-      ])
+      expect(inheritedList).toHaveLength(21)
+      expect(inheritedList).toContainEqual({ key: "deploy-target", value: "production" })
+      expect(inheritedValues).toContainEqual({
+        key: Instructions.Key.make("api/retired"),
+        value: Instructions.removed,
+      })
+
+      const recorded = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, forked.id))
+        .get()
+        .pipe(Effect.orDie)
+      if (!recorded) return yield* Effect.die(new Error("Fork event not found"))
+      yield* entries.put({ sessionID: parent.id, key: "deploy-target", value: "staging" })
+      yield* entries.put({ sessionID: parent.id, key: "new-parent-entry", value: true })
+      yield* bus.remove(forked.id)
+      yield* db.delete(SessionTable).where(eq(SessionTable.id, forked.id)).run().pipe(Effect.orDie)
+      yield* bus.replay({
+        id: recorded.id,
+        created: recorded.created,
+        aggregateID: recorded.aggregate_id,
+        seq: recorded.seq,
+        type: recorded.type,
+        data: recorded.data,
+      })
+
+      expect(yield* entries.list(forked.id)).toEqual(inheritedList)
+      expect(yield* entries.load(forked.id).pipe(Effect.flatMap(Instructions.read))).toEqual(inheritedValues)
     }),
   )
 

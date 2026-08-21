@@ -15,6 +15,7 @@ import { Revert } from "./session-revert.js"
 import { Shell as ShellSchema } from "./shell.js"
 import { SessionError } from "./session-error.js"
 import { Instruction } from "./instruction.js"
+import { InstructionEntry } from "./instruction-entry.js"
 import { Agent } from "./agent.js"
 import { Skill as SkillSchema } from "./skill.js"
 import { Money } from "./money.js"
@@ -159,6 +160,7 @@ export const Forked = Event.durable({
     parentID: SessionID,
     boundary: SessionFork.Boundary,
     instructions: Instruction.Values.pipe(optional),
+    instructionEntries: InstructionEntry.Snapshot.pipe(optional),
   },
 })
 export type Forked = typeof Forked.Type
