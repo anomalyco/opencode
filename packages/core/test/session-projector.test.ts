@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { Agent } from "@opencode-ai/core/agent"
@@ -778,6 +779,59 @@ describe("SessionProjector", () => {
           time: { created },
         }),
       ])
+    }),
+  )
+  it.effect("bumps session time_updated on execution lifecycle events", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+          time_updated: 0,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const bus = yield* Bus.Service
+      const timeUpdated = () =>
+        db
+          .select({ time_updated: SessionTable.time_updated })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+
+      // Admitted without any turn yet: recency untouched.
+      expect((yield* timeUpdated())?.time_updated).toBe(0)
+
+      // A turn starts: recency should move forward immediately.
+      yield* TestClock.adjust(1_000)
+      yield* bus.publish(SessionEvent.Execution.Started, { sessionID })
+      const afterStart = yield* timeUpdated()
+      expect(afterStart!.time_updated).toBe(1_000)
+
+      // The turn ends: recency advances again, so an actively worked session
+      // never keeps a stale time_updated while the list sorts by it.
+      yield* TestClock.adjust(1_000)
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
+      const afterEnd = yield* timeUpdated()
+      expect(afterEnd!.time_updated).toBe(2_000)
+
+      // A terminal interrupt (e.g. user cancel) advances recency the same way.
+      yield* TestClock.adjust(1_000)
+      yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "user" })
+      const afterInterrupt = yield* timeUpdated()
+      expect(afterInterrupt!.time_updated).toBe(3_000)
     }),
   )
 })

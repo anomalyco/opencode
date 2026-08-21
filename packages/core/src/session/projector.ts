@@ -213,6 +213,14 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     yield* InstructionState.initialize(db, event.data.sessionID, event.durable.seq, event.data.instructions)
 })
 
+const bumpTimeUpdated = (db: DatabaseService, sessionID: SessionSchema.ID, created: number) =>
+  db
+    .update(SessionTable)
+    .set({ time_updated: created })
+    .where(eq(SessionTable.id, sessionID))
+    .run()
+    .pipe(Effect.orDie)
+
 function run(db: DatabaseService, event: MessageEvent) {
   return Effect.gen(function* () {
     const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -580,9 +588,27 @@ const layer = Layer.effectDiscard(
         delivery: event.data.delivery,
       }),
     )
-    yield* bus.project(SessionEvent.Execution.Succeeded, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Execution.Failed, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Execution.Interrupted, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Execution.Started, (event) =>
+      bumpTimeUpdated(db, event.data.sessionID, event.created),
+    )
+    yield* bus.project(SessionEvent.Execution.Succeeded, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, event)
+        yield* bumpTimeUpdated(db, event.data.sessionID, event.created)
+      }),
+    )
+    yield* bus.project(SessionEvent.Execution.Failed, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, event)
+        yield* bumpTimeUpdated(db, event.data.sessionID, event.created)
+      }),
+    )
+    yield* bus.project(SessionEvent.Execution.Interrupted, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, event)
+        yield* bumpTimeUpdated(db, event.data.sessionID, event.created)
+      }),
+    )
     yield* bus.project(SessionEvent.InstructionsUpdated, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
