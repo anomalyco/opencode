@@ -298,7 +298,7 @@ describe("SessionProjector", () => {
     }).pipe(Effect.provide(sessionsLayer)),
   )
 
-  it.effect("maps malformed persisted rows consistently from messages and context", () =>
+  it.effect("maps malformed persisted rows consistently while single-message lookup defects", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       yield* db
@@ -336,6 +336,9 @@ describe("SessionProjector", () => {
       const expected = { _tag: "Session.MessageDecodeError", sessionID, messageID }
       expect(yield* sessions.messages({ sessionID }).pipe(Effect.flip)).toMatchObject(expected)
       expect(yield* sessions.context(sessionID).pipe(Effect.flip)).toMatchObject(expected)
+      expect(yield* sessions.message({ sessionID, messageID }).pipe(Effect.catchDefect(Effect.succeed))).toMatchObject(
+        expected,
+      )
     }).pipe(Effect.provide(sessionsLayer)),
   )
 
