@@ -1,44 +1,42 @@
 import type { DatabaseMigration } from "./migration"
 
-export const migrations = (
-  await Promise.all([
-    import("./migration/20260127222353_familiar_lady_ursula"),
-    import("./migration/20260211171708_add_project_commands"),
-    import("./migration/20260213144116_wakeful_the_professor"),
-    import("./migration/20260225215848_workspace"),
-    import("./migration/20260227213759_add_session_workspace_id"),
-    import("./migration/20260228203230_blue_harpoon"),
-    import("./migration/20260303231226_add_workspace_fields"),
-    import("./migration/20260309230000_move_org_to_state"),
-    import("./migration/20260312043431_session_message_cursor"),
-    import("./migration/20260323234822_events"),
-    import("./migration/20260410174513_workspace-name"),
-    import("./migration/20260413175956_chief_energizer"),
-    import("./migration/20260423070820_add_icon_url_override"),
-    import("./migration/20260427172553_slow_nightmare"),
-    import("./migration/20260428004200_add_session_path"),
-    import("./migration/20260501142318_next_venus"),
-    import("./migration/20260504145000_add_sync_owner"),
-    import("./migration/20260507164347_add_workspace_time"),
-    import("./migration/20260510033149_session_usage"),
-    import("./migration/20260511000411_data_migration_state"),
-    import("./migration/20260511173437_session-metadata"),
-    import("./migration/20260601010001_normalize_storage_paths"),
-    import("./migration/20260601202201_amazing_prowler"),
-    import("./migration/20260602002951_lowly_union_jack"),
-    import("./migration/20260602182828_add_project_directories"),
-    import("./migration/20260603001617_session_message_projection_indexes"),
-    import("./migration/20260603040000_session_message_projection_order"),
-    import("./migration/20260603141458_session_input_inbox"),
-    import("./migration/20260603160727_jittery_ezekiel_stane"),
-    import("./migration/20260604172448_event_sourced_session_input"),
-    import("./migration/20260605003541_add_session_context_snapshot"),
-    import("./migration/20260605042240_add_context_epoch_agent"),
-    import("./migration/20260611035744_credential"),
-    import("./migration/20260611192811_lush_chimera"),
-    import("./migration/20260612174303_project_dir_strategy"),
-    import("./migration/20260622142730_simplify_session_context_epoch"),
-    import("./migration/20260622170816_reset_v2_session_state"),
-    import("./migration/20260622202450_simplify_session_input"),
-  ])
-).map((module) => module.default) satisfies DatabaseMigration.Migration[]
+import m0 from "./migration/20260127222353_familiar_lady_ursula"
+import m1 from "./migration/20260211171708_add_project_commands"
+import m2 from "./migration/20260213144116_wakeful_the_professor"
+import m3 from "./migration/20260225215848_workspace"
+import m4 from "./migration/20260227213759_add_session_workspace_id"
+import m5 from "./migration/20260228203230_blue_harpoon"
+import m6 from "./migration/20260303231226_add_workspace_fields"
+import m7 from "./migration/20260309230000_move_org_to_state"
+import m8 from "./migration/20260312043431_session_message_cursor"
+import m9 from "./migration/20260323234822_events"
+import m10 from "./migration/20260410174513_workspace-name"
+import m11 from "./migration/20260413175956_chief_energizer"
+import m12 from "./migration/20260423070820_add_icon_url_override"
+import m13 from "./migration/20260427172553_slow_nightmare"
+import m14 from "./migration/20260428004200_add_session_path"
+import m15 from "./migration/20260501142318_next_venus"
+import m16 from "./migration/20260504145000_add_sync_owner"
+import m17 from "./migration/20260507164347_add_workspace_time"
+import m18 from "./migration/20260510033149_session_usage"
+import m19 from "./migration/20260511000411_data_migration_state"
+import m20 from "./migration/20260511173437_session-metadata"
+import m21 from "./migration/20260601010001_normalize_storage_paths"
+import m22 from "./migration/20260601202201_amazing_prowler"
+import m23 from "./migration/20260602002951_lowly_union_jack"
+import m24 from "./migration/20260602182828_add_project_directories"
+import m25 from "./migration/20260603001617_session_message_projection_indexes"
+import m26 from "./migration/20260603040000_session_message_projection_order"
+import m27 from "./migration/20260603141458_session_input_inbox"
+import m28 from "./migration/20260603160727_jittery_ezekiel_stane"
+import m29 from "./migration/20260604172448_event_sourced_session_input"
+import m30 from "./migration/20260605003541_add_session_context_snapshot"
+import m31 from "./migration/20260605042240_add_context_epoch_agent"
+import m32 from "./migration/20260611035744_credential"
+import m33 from "./migration/20260611192811_lush_chimera"
+import m34 from "./migration/20260612174303_project_dir_strategy"
+import m35 from "./migration/20260622142730_simplify_session_context_epoch"
+import m36 from "./migration/20260622170816_reset_v2_session_state"
+import m37 from "./migration/20260622202450_simplify_session_input"
+
+export const migrations = [m0, m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13, m14, m15, m16, m17, m18, m19, m20, m21, m22, m23, m24, m25, m26, m27, m28, m29, m30, m31, m32, m33, m34, m35, m36, m37] satisfies DatabaseMigration.Migration[]

@@ -449,6 +449,7 @@ export const {
     const args = useArgs()
 
     async function bootstrap(input: { fatal?: boolean } = {}) {
+      process.stderr.write("[BOOTSTRAP-START]\n")
       const fatal = input.fatal ?? true
       const workspace = project.workspace.current()
       const projectPromise = project.sync()
@@ -515,6 +516,7 @@ export const {
           })
         })
         .then(() => {
+          process.stderr.write("[BOOTSTRAP-PARTIAL] sdk promises resolved\n")
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           void Promise.all([
@@ -534,7 +536,7 @@ export const {
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
             project.workspace.sync(),
           ]).then(() => {
-            setStore("status", "complete")
+                        setStore("status", "complete")
           })
         })
         .catch(async (e) => {
@@ -552,6 +554,7 @@ export const {
     }
 
     onMount(() => {
+      process.stderr.write("[SYNC-ONMOUNT]\n")
       void bootstrap()
     })
 

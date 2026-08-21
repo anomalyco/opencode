@@ -32,3 +32,9 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# loongarch64 porting artifacts
+loong/.jsx-cache/
+loong/node_modules/
+loong/package-lock.json
+dist/loong/
