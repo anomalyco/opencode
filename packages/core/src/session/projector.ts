@@ -196,7 +196,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       .insert(SessionMessageTable)
       .values(
         rows.map((row) => ({
-          id: SessionMessage.ID.create(),
+          id: SessionMessage.ID.make(`${SessionMessage.ID.fromEvent(event.id)}_${row.seq}`),
           session_id: event.data.sessionID,
           type: row.type,
           seq: row.seq,
