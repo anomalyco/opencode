@@ -209,9 +209,7 @@ export namespace Share {
       const share = await get(input.share.id)
       if (!share) throw new Errors.NotFound(input.share.id)
       if (share.secret !== input.share.secret) throw new Errors.InvalidSecret(input.share.id)
-      await Promise.all(
-        input.data.map((item) => Storage.write(["share_data", input.share.id, ...key(item).split("/")], item.data)),
-      )
+      await Promise.all(input.data.map((item) => Storage.write(["share_data", input.share.id, key(item)], item.data)))
     },
   )
 
