@@ -90,14 +90,13 @@ const layer = Layer.effect(
             list: () => Array.fromIterable(draft.providers.values()) as ProviderRecord[],
             get: (providerID) => draft.providers.get(providerID),
             update: (providerID, fn) => {
-              let current = draft.providers.get(providerID)
-              if (!current) {
-                current = {
+              const current =
+                draft.providers.get(providerID) ??
+                ({
                   provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
                   models: new Map<Model.ID, Model.MutableInfo>(),
-                }
-                draft.providers.set(providerID, current)
-              }
+                } satisfies ProviderRecord)
+              draft.providers.set(providerID, current)
               fn(current.provider)
             },
             remove: (providerID) => {
@@ -107,16 +106,15 @@ const layer = Layer.effect(
           model: {
             get: (providerID, modelID) => draft.providers.get(providerID)?.models.get(modelID),
             update: (providerID, modelID, fn) => {
-              let record = draft.providers.get(providerID)
-              if (!record) {
-                record = {
+              const record =
+                draft.providers.get(providerID) ??
+                ({
                   provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
                   models: new Map<Model.ID, Model.MutableInfo>(),
-                }
-                draft.providers.set(providerID, record)
-              }
+                } satisfies ProviderRecord)
+              draft.providers.set(providerID, record)
               const model = record.models.get(modelID) ?? (Model.Info.default(providerID, modelID) as Model.MutableInfo)
-              if (!record.models.has(modelID)) record.models.set(modelID, model)
+              record.models.set(modelID, model)
               fn(model)
               model.id = modelID
               model.providerID = providerID

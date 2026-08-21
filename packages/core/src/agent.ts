@@ -79,7 +79,7 @@ const layer = Layer.effect(
               ...defaults,
               permissions: [...defaults.permissions, ...permissions],
             } as Types.DeepMutable<Info>)
-          if (!draft.agents.has(id)) draft.agents.set(id, current)
+          draft.agents.set(id, current)
           fn(current)
           current.id = id
         },

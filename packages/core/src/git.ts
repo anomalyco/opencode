@@ -570,7 +570,7 @@ const layer = Layer.effect(
       )
     })
 
-    const entry = Effect.fnUntraced(function* (repository: Repository, tree: TreeID, file: RelativePath) {
+    const hasEntry = Effect.fnUntraced(function* (repository: Repository, tree: TreeID, file: RelativePath) {
       const text = (yield* repositoryOperation("restore", repository, [
         "ls-tree",
         "-z",
@@ -578,15 +578,14 @@ const layer = Layer.effect(
         "--",
         file,
       ])).text.replace(/\0$/, "")
-      if (!text) return
-      const match = text.match(/^(\d+)\s+\w+\s+([0-9a-f]+)\t/)
-      if (!match)
+      if (!text) return false
+      if (!/^\d+\s+\w+\s+[0-9a-f]+\t/.test(text))
         return yield* new OperationError({
           operation: "restore",
           directory: repository.worktree,
           message: `Invalid tree entry for ${file}`,
         })
-      return { mode: match[1], object: match[2] }
+      return true
     })
 
     const restore = Effect.fn("Git.tree.restore")(
@@ -597,7 +596,7 @@ const layer = Layer.effect(
             input.files,
             ([file, tree]) =>
               Effect.gen(function* () {
-                if (yield* entry(input.repository, tree, file)) {
+                if (yield* hasEntry(input.repository, tree, file)) {
                   yield* repositoryOperation("restore", input.repository, ["checkout", tree, "--", file])
                   return
                 }

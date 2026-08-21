@@ -276,7 +276,7 @@ const layer = Layer.effect(
             methods: [],
             implementations: new Map(),
           }
-          if (!draft.integrations.has(id)) draft.integrations.set(id, current)
+          draft.integrations.set(id, current)
           update(current.ref)
           current.ref.id = id
         },
@@ -292,9 +292,7 @@ const layer = Layer.effect(
               methods: [],
               implementations: new Map<MethodID, Types.DeepMutable<OAuthImplementation>>(),
             }
-            if (!draft.integrations.has(implementation.integrationID)) {
-              draft.integrations.set(implementation.integrationID, current)
-            }
+            draft.integrations.set(implementation.integrationID, current)
             const index = current.methods.findIndex((method) => {
               if (method.type !== implementation.method.type) return false
               if (method.type === "oauth" && implementation.method.type === "oauth")

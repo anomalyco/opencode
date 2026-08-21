@@ -182,10 +182,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     command: {
       list: () => response(commands.list()),
       reload: commands.reload,
-      transform: (callback) =>
-        commands.transform((draft) => {
-          callback(draft)
-        }),
+      transform: commands.transform,
     },
     event: {
       subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),

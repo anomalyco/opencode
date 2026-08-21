@@ -76,9 +76,7 @@ function oauth(http: HttpClient.HttpClient) {
           expires: Date.now() + token.expires_in * 1000,
         }
       }),
-    label: (credential) => {
-      return typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined
-    },
+    label: (credential) => (typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined),
   } satisfies IntegrationOAuthMethodRegistration
 }
 
