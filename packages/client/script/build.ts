@@ -2,6 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { compile, emitEffectImported, emitEffectShape, emitPromise, write } from "@opencode-ai/httpapi-codegen"
 import { ClientApi, effectOmitEndpoints, groupNames, promiseOmitEndpoints } from "@opencode-ai/protocol/client"
 import { Agent } from "@opencode-ai/schema/agent"
+import { Capability } from "@opencode-ai/schema/capability"
 import { Command } from "@opencode-ai/schema/command"
 import { Config } from "@opencode-ai/schema/config"
 import { Credential } from "@opencode-ai/schema/credential"
@@ -43,6 +44,7 @@ const promiseContract = compile(ClientApi, { groupNames, omitEndpoints: promiseO
 const effectContract = compile(ClientApi, { groupNames, omitEndpoints: effectOmitEndpoints })
 const effectTypeReferences = [
   ...namespaceTypes("Agent", "@opencode-ai/schema/agent", Agent),
+  ...namespaceTypes("Capability", "@opencode-ai/schema/capability", Capability),
   ...namespaceTypes("Command", "@opencode-ai/schema/command", Command),
   ...namespaceTypes("Config", "@opencode-ai/schema/config", Config),
   ...namespaceTypes("Credential", "@opencode-ai/schema/credential", Credential),

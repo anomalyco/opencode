@@ -130,6 +130,8 @@ export type SkillInfo = {
 
 export type PermissionReply = "once" | "always" | "reject"
 
+export type CapabilityRef = { kind: "skill"; key: [string, ...Array<string>] }
+
 export type Pty = {
   id: string
   title: string
@@ -1062,6 +1064,24 @@ export type PermissionReplied = {
   type: "permission.replied"
   location?: LocationRef
   data: { sessionID: string; requestID: string; reply: PermissionReply }
+}
+
+export type CapabilityUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "capability.updated"
+  location?: LocationRef
+  data: { ref: CapabilityRef }
+}
+
+export type CapabilityInfo = {
+  ref: CapabilityRef
+  name: string
+  description?: string
+  defaultState: "enabled" | "disabled"
+  state: "enabled" | "disabled"
+  preference?: "enabled" | "disabled"
 }
 
 export type PtyCreated = {
@@ -2079,6 +2099,7 @@ export type V2Event =
   | WorktreeResolved
   | CommandUpdated
   | ConfigUpdated
+  | CapabilityUpdated
   | SkillUpdated
   | PtyCreated
   | PtyUpdated
@@ -5738,3 +5759,30 @@ export type ConfigGetInput = {
 }
 
 export type ConfigGetOutput = Array<ConfigEntry>
+
+export type CapabilityListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type CapabilityListOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: Array<CapabilityInfo>
+}
+
+export type CapabilityUpdateInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly ref: {
+    readonly ref: { readonly kind: "skill"; readonly key: readonly [string, ...Array<string>] }
+    readonly state: "enabled" | "disabled" | "inherit"
+  }["ref"]
+  readonly state: {
+    readonly ref: { readonly kind: "skill"; readonly key: readonly [string, ...Array<string>] }
+    readonly state: "enabled" | "disabled" | "inherit"
+  }["state"]
+}
+
+export type CapabilityUpdateOutput = void

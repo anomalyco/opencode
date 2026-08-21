@@ -6,6 +6,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Skill } from "@opencode-ai/core/skill"
 import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
+import { Capability } from "@opencode-ai/core/capability"
 import { it } from "../lib/effect"
 import { readInitial, readUpdate } from "../lib/instructions"
 
@@ -39,9 +40,16 @@ const manual = Skill.Info.make({
   content: "Manual guidance",
 })
 
-const layer = (list: () => Skill.Info[]) =>
+const layer = (list: () => Skill.Info[], preferences = new Map<string, Capability.State>()) =>
   AppNodeBuilder.build(SkillInstructions.node, [
     [Skill.node, Layer.mock(Skill.Service, { list: () => Effect.succeed(list()) })],
+    [
+      Capability.node,
+      Layer.mock(Capability.Service, {
+        resolve: (ref, fallback = true) =>
+          Effect.succeed(preferences.get(ref.key[0]) ?? (fallback ? "enabled" : "disabled")),
+      }),
+    ],
   ])
 
 describe("SkillInstructions", () => {
@@ -115,6 +123,21 @@ describe("SkillInstructions", () => {
         .pipe(Effect.flatMap((context) => readUpdate(context, added)))
       expect(removed.text).toBe("The following skill IDs are no longer available and must not be used: effect.")
     }).pipe(Effect.provide(layer(() => skills)))
+  })
+
+  it.effect("applies capability preferences over skill autoinvoke defaults", () => {
+    const agent = Agent.Info.make(Agent.Info.default(build))
+    const preferences = new Map<string, Capability.State>([
+      ["effect", "disabled"],
+      ["manual", "enabled"],
+    ])
+    return Effect.gen(function* () {
+      const instructions = yield* SkillInstructions.Service
+      const initialized = yield* instructions.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(readInitial))
+
+      expect(initialized.text).not.toContain("<id>effect</id>")
+      expect(initialized.text).toContain("<id>manual</id>")
+    }).pipe(Effect.provide(layer(() => [effect, manual], preferences)))
   })
 
   it.effect("restates the full skill list when a description changes", () => {

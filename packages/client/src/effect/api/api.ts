@@ -38,6 +38,7 @@ import type { Vcs } from "@opencode-ai/schema/vcs"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
 import type { WebSearch } from "@opencode-ai/schema/websearch"
 import type { Config } from "@opencode-ai/schema/config"
+import type { Capability } from "@opencode-ai/schema/capability"
 
 export type Endpoint0_0Output = { readonly healthy: true; readonly version: string; readonly pid: number }
 export type HealthGetOperation<E = never> = () => Effect.Effect<Endpoint0_0Output, E>
@@ -1641,6 +1642,25 @@ export interface ConfigApi<E = never> {
   readonly get: ConfigGetOperation<E>
 }
 
+export type Endpoint29_0Input = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type Endpoint29_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Capability.Info> }
+export type CapabilityListOperation<E = never> = (input?: Endpoint29_0Input) => Effect.Effect<Endpoint29_0Output, E>
+
+export type Endpoint29_1Input = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly ref: Capability.Ref
+  readonly state: "enabled" | "disabled" | "inherit"
+}
+export type Endpoint29_1Output = void
+export type CapabilityUpdateOperation<E = never> = (input: Endpoint29_1Input) => Effect.Effect<Endpoint29_1Output, E>
+
+export interface CapabilityApi<E = never> {
+  readonly list: CapabilityListOperation<E>
+  readonly update: CapabilityUpdateOperation<E>
+}
+
 export interface AppApi<E = never> {
   readonly health: HealthApi<E>
   readonly server: ServerApi<E>
@@ -1671,4 +1691,5 @@ export interface AppApi<E = never> {
   readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
   readonly config: ConfigApi<E>
+  readonly capability: CapabilityApi<E>
 }

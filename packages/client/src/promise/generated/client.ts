@@ -222,6 +222,10 @@ import type {
   WebsearchQueryOutput,
   ConfigGetInput,
   ConfigGetOutput,
+  CapabilityListInput,
+  CapabilityListOutput,
+  CapabilityUpdateInput,
+  CapabilityUpdateOutput,
 } from "./types.js"
 import { ClientError } from "./client-error.js"
 
@@ -1853,6 +1857,33 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    capability: {
+      list: (input?: CapabilityListInput, requestOptions?: RequestOptions) =>
+        request<CapabilityListOutput>(
+          {
+            method: "GET",
+            path: `/api/capability`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      update: (input: CapabilityUpdateInput, requestOptions?: RequestOptions) =>
+        request<CapabilityUpdateOutput>(
+          {
+            method: "PUT",
+            path: `/api/capability`,
+            query: { location: input["location"] },
+            body: { ref: input["ref"], state: input["state"] },
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
           },
           requestOptions,
         ),

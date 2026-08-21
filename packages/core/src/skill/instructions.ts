@@ -5,6 +5,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { Skill } from "../skill.js"
 import { Instructions } from "../instructions/index.js"
+import { Capability } from "../capability.js"
 
 const Summary = Schema.Struct({
   id: Skill.ID,
@@ -67,18 +68,25 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skills = yield* Skill.Service
+    const capability = yield* Capability.Service
 
     return Service.of({
       load: Effect.fn("SkillInstructions.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return Instructions.empty
         const permitted = Skill.available(yield* skills.list(), agent)
-        const available = permitted
-          .flatMap((skill) =>
-            skill.description === undefined || skill.autoinvoke === false
-              ? []
-              : [{ id: skill.id, name: skill.name, description: skill.description }],
-          )
+        const available = (yield* Effect.forEach(permitted, (skill) =>
+          capability
+            .resolve(Capability.skill(skill.id), skill.autoinvoke !== false)
+            .pipe(
+              Effect.map((state) =>
+                state === "disabled" || skill.description === undefined
+                  ? undefined
+                  : { id: skill.id, name: skill.name, description: skill.description },
+              ),
+            ),
+        ))
+          .filter((skill): skill is Summary => skill !== undefined)
           .toSorted((a, b) => a.id.localeCompare(b.id))
         return Instructions.make<ReadonlyArray<Summary>>({
           key: Instructions.Key.make("core/skill-guidance"),
@@ -95,4 +103,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Skill.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Skill.node, Capability.node] })

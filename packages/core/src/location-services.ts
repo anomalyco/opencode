@@ -52,6 +52,7 @@ import { Tool } from "./tool.js"
 import { ToolOutput } from "./tool-output.js"
 import { Vcs } from "./vcs.js"
 import { AbsolutePath } from "./schema.js"
+import { Capability } from "./capability.js"
 
 export { LocationServiceMap } from "./location-service-map.js"
 
@@ -59,6 +60,7 @@ const locationServiceNodes = [
   Location.node,
   Environment.node,
   Config.node,
+  Capability.node,
   Agent.node,
   Command.node,
   Reference.node,

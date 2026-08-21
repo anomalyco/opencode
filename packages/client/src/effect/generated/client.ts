@@ -226,6 +226,10 @@ import type {
   Endpoint27_1Output,
   Endpoint28_0Input,
   Endpoint28_0Output,
+  Endpoint29_0Input,
+  Endpoint29_0Output,
+  Endpoint29_1Input,
+  Endpoint29_1Output,
 } from "../api/api.js"
 import { ClientError } from "./client-error.js"
 
@@ -1271,6 +1275,21 @@ const Endpoint28_0 = (raw: RawClient["server.config"]) => (input?: Endpoint28_0I
 
 const adaptGroup28 = (raw: RawClient["server.config"]) => ({ get: Endpoint28_0(raw) })
 
+const Endpoint29_0 = (raw: RawClient["server.capability"]) => (input?: Endpoint29_0Input) =>
+  preserveEffect<Endpoint29_0Output>()(
+    raw["capability.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const Endpoint29_1 = (raw: RawClient["server.capability"]) => (input: Endpoint29_1Input) =>
+  preserveEffect<Endpoint29_1Output>()(
+    raw["capability.update"]({
+      query: { location: input["location"] },
+      payload: { ref: input["ref"], state: input["state"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroup29 = (raw: RawClient["server.capability"]) => ({ list: Endpoint29_0(raw), update: Endpoint29_1(raw) })
+
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroup0(raw["server.health"]),
   server: adaptGroup1(raw["server.server"]),
@@ -1301,6 +1320,7 @@ const adaptClient = (raw: RawClient) => ({
   migration: adaptGroup26(raw["server.migration"]),
   websearch: adaptGroup27(raw["server.websearch"]),
   config: adaptGroup28(raw["server.config"]),
+  capability: adaptGroup29(raw["server.capability"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

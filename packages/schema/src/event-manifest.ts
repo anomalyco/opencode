@@ -2,6 +2,7 @@ export * as EventManifest from "./event-manifest.js"
 
 import { Schema } from "effect"
 import { Agent } from "./agent.js"
+import { Capability } from "./capability.js"
 import { Catalog } from "./catalog.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
@@ -52,6 +53,7 @@ const featureDefinitions = Event.inventory(
   ...Worktree.Event.Definitions,
   ...Command.Event.Definitions,
   ...Config.Event.Definitions,
+  ...Capability.Event.Definitions,
   ...Skill.Event.Definitions,
   ...Pty.Event.Definitions,
   ...Shell.Event.Definitions,
