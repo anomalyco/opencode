@@ -56,6 +56,15 @@ export class Usage extends Schema.Class<Usage>("LLM.Usage")({
   cacheWriteInputTokens: Schema.optional(Schema.Number),
   reasoningTokens: Schema.optional(Schema.Number),
   totalTokens: Schema.optional(Schema.Number),
+  /**
+   * USD cost reported by the provider on the response (`usage.cost`), as
+   * emitted by gateway routers (OpenRouter, LiteLLM, Manifest, etc.). When a
+   * provider reports this, it is authoritative for `Session.getUsage` because
+   * the actual routed model and any cache/subscription discounts are already
+   * priced into it — a static models.dev rate cannot account for those.
+   * `0` is meaningful (flat-fee subscription route) and is preserved.
+   */
+  cost: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
   /**

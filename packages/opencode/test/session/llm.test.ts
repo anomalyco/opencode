@@ -504,6 +504,102 @@ describe("session.llm.ai-sdk adapter", () => {
     expect(result.tokens.cache.read).toBe(200)
   })
 
+  test("surfaces provider-reported usage.cost from gateway raw usage and prefers it in getUsage", async () => {
+    const events = await adapt([
+      {
+        type: "finish-step",
+        response: { id: "chatcmpl-1", timestamp: new Date(0), modelId: "manifest/auto" },
+        finishReason: "stop",
+        rawFinishReason: "stop",
+        usage: {
+          inputTokens: 100,
+          outputTokens: 50,
+          totalTokens: 150,
+          inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+          outputTokenDetails: { textTokens: 50, reasoningTokens: undefined },
+          raw: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, cost: 0.0042 },
+        },
+        providerMetadata: { manifest: {} },
+      },
+    ])
+
+    expect(events).toHaveLength(1)
+    const stepFinish = events[0]
+    if (stepFinish.type !== "step-finish") throw new Error("expected step-finish")
+    expect(stepFinish.usage?.cost).toBe(0.0042)
+
+    // A non-zero catalog rate proves the reported cost wins over local pricing.
+    const result = SessionNs.getUsage({
+      model: {
+        id: "manifest/auto",
+        providerID: "manifest",
+        name: "Manifest",
+        limit: { context: 200_000, output: 8_000 },
+        cost: { input: 3, output: 15, cache: { read: 0, write: 0 } },
+        capabilities: {
+          toolcall: true,
+          attachment: false,
+          reasoning: false,
+          temperature: true,
+          input: { text: true, image: false, audio: false, video: false },
+          output: { text: true, image: false, audio: false, video: false },
+        },
+        api: { npm: "@ai-sdk/openai-compatible" },
+        options: {},
+      } as never,
+      usage: stepFinish.usage!,
+      metadata: stepFinish.providerMetadata,
+    })
+    expect(result.cost).toBe(0.0042)
+  })
+
+  test("treats a reported cost of 0 as authoritative (flat-fee subscription route)", async () => {
+    const events = await adapt([
+      {
+        type: "finish-step",
+        response: { id: "chatcmpl-1", timestamp: new Date(0), modelId: "manifest/auto" },
+        finishReason: "stop",
+        rawFinishReason: "stop",
+        usage: {
+          inputTokens: 100,
+          outputTokens: 50,
+          totalTokens: 150,
+          inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+          outputTokenDetails: { textTokens: 50, reasoningTokens: undefined },
+          raw: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, cost: 0 },
+        },
+        providerMetadata: { manifest: {} },
+      },
+    ])
+
+    expect(events).toHaveLength(1)
+    const stepFinish = events[0]
+    if (stepFinish.type !== "step-finish") throw new Error("expected step-finish")
+
+    const result = SessionNs.getUsage({
+      model: {
+        id: "manifest/auto",
+        providerID: "manifest",
+        name: "Manifest",
+        limit: { context: 200_000, output: 8_000 },
+        cost: { input: 3, output: 15, cache: { read: 0, write: 0 } },
+        capabilities: {
+          toolcall: true,
+          attachment: false,
+          reasoning: false,
+          temperature: true,
+          input: { text: true, image: false, audio: false, video: false },
+          output: { text: true, image: false, audio: false, video: false },
+        },
+        api: { npm: "@ai-sdk/openai-compatible" },
+        options: {},
+      } as never,
+      usage: stepFinish.usage!,
+      metadata: stepFinish.providerMetadata,
+    })
+    expect(result.cost).toBe(0)
+  })
+
   test("captures Copilot billed usage from raw Anthropic message deltas per step", async () => {
     const events = await adapt([
       uncheckedAdapterEvent({

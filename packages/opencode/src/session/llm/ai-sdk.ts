@@ -42,6 +42,16 @@ function copilotTotalNanoAiu(value: unknown) {
   return total
 }
 
+// Gateways (OpenRouter, LiteLLM, Manifest) report a `usage.cost` (USD) that the
+// openai-compatible provider preserves under `usage.raw` but is not part of the
+// normalized `LanguageModelUsage`. Surface it so `Session.getUsage` can prefer
+// provider-reported cost over static models.dev rates.
+function reportedCost(raw: unknown) {
+  if (!raw || typeof raw !== "object") return undefined
+  const cost = (raw as { cost?: unknown }).cost
+  return typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : undefined
+}
+
 function usage(value: unknown) {
   if (!value || typeof value !== "object") return undefined
   const item = value as {
@@ -52,6 +62,7 @@ function usage(value: unknown) {
     cachedInputTokens?: number
     inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number }
     outputTokenDetails?: { reasoningTokens?: number }
+    raw?: unknown
   }
   const entries = Object.entries({
     inputTokens: item.inputTokens,
@@ -60,6 +71,7 @@ function usage(value: unknown) {
     reasoningTokens: item.outputTokenDetails?.reasoningTokens ?? item.reasoningTokens,
     cacheReadInputTokens: item.inputTokenDetails?.cacheReadTokens ?? item.cachedInputTokens,
     cacheWriteInputTokens: item.inputTokenDetails?.cacheWriteTokens,
+    cost: reportedCost(item.raw),
   }).filter((entry) => entry[1] !== undefined)
   return entries.length === 0 ? undefined : Object.fromEntries(entries)
 }
