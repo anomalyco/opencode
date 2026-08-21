@@ -149,10 +149,9 @@ describe("shell", () => {
     })
 
     test("normalizes Git Bash shell paths from env", async () => {
-      const bash = ShellSelect.gitbash()
-      if (!bash) return
-      await withShell("NU.EXE", async () => {
-        expect(ShellSelect.name(ShellSelect.acceptable())).not.toBe("nu")
+      const shell = "/cygdrive/c/Program Files/Git/bin/bash.exe"
+      await withShell(shell, async () => {
+        expect(ShellSelect.preferred()).toBe(FSUtil.windowsPath(shell))
       })
     })
 
