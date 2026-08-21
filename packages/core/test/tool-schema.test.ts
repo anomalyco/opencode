@@ -52,6 +52,10 @@ test("Effect tool schemas use exact optional keys and flatten compatible constra
     required: ["code"],
     additionalProperties: false,
   })
+  const first = definition(tool).inputSchema as { properties: object }
+  const second = definition(tool).inputSchema as { properties: object }
+  expect(first).not.toBe(second)
+  expect(first.properties).not.toBe(second.properties)
 })
 
 test("Effect tool schemas inline named child schemas", () => {
@@ -165,6 +169,31 @@ test("portable schema failures become tool failures", async () => {
     ),
   )
   expect(error.toString()).toContain("Invalid tool input: expected a string")
+})
+
+test("portable schema definitions reflect current converter state", () => {
+  let type = "string"
+  const input = {
+    "~standard": {
+      version: 1,
+      vendor: "test",
+      validate: (value: unknown) => ({ value }),
+      jsonSchema: {
+        input: () => ({ type }),
+        output: () => ({ type }),
+      },
+    },
+  }
+  const tool: Info = {
+    name: "dynamic-portable",
+    description: "Dynamic portable schema",
+    input,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(definition(tool).inputSchema).toEqual({ type: "string" })
+  type = "number"
+  expect(definition(tool).inputSchema).toEqual({ type: "number" })
 })
 
 test("canonical results carry metadata with typed output", async () => {

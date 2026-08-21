@@ -3,6 +3,10 @@ import { Tool } from "@opencode-ai/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Effect, JsonSchema, Schema } from "effect"
 
+const inputDecoders = new WeakMap<object, (value: unknown) => Effect.Effect<unknown, Schema.SchemaError>>()
+const outputEncoders = new WeakMap<object, (value: unknown) => Effect.Effect<unknown, Schema.SchemaError>>()
+const jsonSchemas = new WeakMap<object, JsonSchema.JsonSchema>()
+
 export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
   name: effectiveName(tool),
   description: tool.description,
@@ -45,22 +49,30 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
   })
 
 const decodeInput = (schema: Tool.ValueSchema<any>, value: unknown) => {
-  if (Schema.isSchema(schema))
-    return Schema.decodeUnknownEffect(schema)(value).pipe(
+  if (Schema.isSchema(schema)) {
+    const cached = inputDecoders.get(schema)
+    const decode = cached ?? Schema.decodeUnknownEffect(schema)
+    if (!cached) inputDecoders.set(schema, decode)
+    return decode(value).pipe(
       Effect.mapError((error) => new Tool.Error({ message: `Invalid tool input: ${error.message}` })),
     )
+  }
   if (isStandardSchema(schema)) return validateStandard(schema, value, "Invalid tool input")
   return Effect.succeed(value)
 }
 
 const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {
-  if (Schema.isSchema(schema))
-    return Schema.encodeEffect(schema)(value).pipe(
+  if (Schema.isSchema(schema)) {
+    const cached = outputEncoders.get(schema)
+    const encode = cached ?? Schema.encodeEffect(schema)
+    if (!cached) outputEncoders.set(schema, encode)
+    return encode(value).pipe(
       Effect.mapError(
         (error) =>
           new Tool.Error({ message: `Tool returned an invalid value for its output schema: ${error.message}` }),
       ),
     )
+  }
   if (isStandardSchema(schema))
     return validateStandard(schema, value, "Tool returned an invalid value for its output schema")
   return Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
@@ -103,13 +115,23 @@ const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema =
   if (schema === undefined || schema === null) return {}
   if (isStandardSchema(schema))
     return schema["~standard"].jsonSchema.input({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
-  return Schema.isSchema(schema) ? toJsonSchema(schema) : (schema as JsonSchema.JsonSchema)
+  if (!Schema.isSchema(schema)) return schema as JsonSchema.JsonSchema
+  const cached = jsonSchemas.get(schema)
+  if (cached) return structuredClone(cached)
+  const compiled = toJsonSchema(schema)
+  jsonSchemas.set(schema, compiled)
+  return structuredClone(compiled)
 }
 
 const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (isStandardSchema(schema))
     return schema["~standard"].jsonSchema.output({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
-  return Schema.isSchema(schema) ? toJsonSchema(schema) : (schema as JsonSchema.JsonSchema)
+  if (!Schema.isSchema(schema)) return schema as JsonSchema.JsonSchema
+  const cached = jsonSchemas.get(schema)
+  if (cached) return structuredClone(cached)
+  const compiled = toJsonSchema(schema)
+  jsonSchemas.set(schema, compiled)
+  return structuredClone(compiled)
 }
 
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
