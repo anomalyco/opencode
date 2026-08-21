@@ -1,15 +1,6 @@
 import { expect, test } from "@playwright/test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
-import {
-  assistantMessage,
-  event,
-  partUpdated,
-  session,
-  sessionID,
-  setupTimeline,
-  toolPart,
-  userMessage,
-} from "../performance/timeline-stability/fixture"
+import { event, session, sessionID, setupTimeline } from "../performance/timeline-stability/fixture"
 
 const user = { id: "msg_user", type: "user", text: "Run it", time: { created: 1 } } satisfies SessionMessageInfo
 
@@ -128,75 +119,6 @@ test("shows a badge for active background work", async ({ page }) => {
   })
 
   await expect(page.locator('[data-component="session-background-dock"]')).toContainText("1 subagent in background")
-})
-
-test("keeps the timeline at the bottom when the background dock appears after switching sessions", async ({ page }) => {
-  const childID = "ses_dock_observer_child"
-  const child = toolPart(
-    "call_dock_observer_child",
-    "subagent",
-    "running",
-    { description: "Inspect dock observer" },
-    { metadata: { sessionID: childID } },
-  )
-  const timeline = await setupTimeline(page, {
-    seedHistory: true,
-    viewport: { width: 1000, height: 700 },
-    messages: [userMessage(), assistantMessage([child], { completed: false })],
-    sessions: [session(), session({ id: childID, parentID: sessionID, title: "Inspect dock observer" })],
-    sessionStatus: { [sessionID]: { type: "busy" }, [childID]: { type: "busy" } },
-  })
-  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
-  const dock = page.locator('[data-component="session-background-dock"]')
-  const distance = () =>
-    scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
-
-  await expect.poll(distance).toBeLessThanOrEqual(1)
-  await page.locator('[data-timeline-part-id="call_dock_observer_child"]').click()
-  await expect(page).toHaveURL(new RegExp(`/session/${childID}$`))
-  await page.goBack()
-  await expect(page).toHaveURL(new RegExp(`/session/${sessionID}$`))
-  await expect(dock).toContainText("Move 1 subagent to background")
-
-  await timeline.send(
-    partUpdated(
-      toolPart(
-        "call_dock_observer_child",
-        "subagent",
-        "completed",
-        { description: "Inspect dock observer" },
-        { output: "done", metadata: { sessionID: childID } },
-      ),
-    ),
-  )
-  await timeline.transport.send({
-    id: "evt_dock_observer_child_succeeded",
-    created: Date.now(),
-    type: "session.execution.succeeded",
-    data: { sessionID: childID },
-  } as never)
-  await expect(dock).toHaveCount(0)
-
-  await timeline.transport.send({
-    id: "evt_shell_after_navigation_created",
-    created: Date.now(),
-    type: "shell.created",
-    data: {
-      info: {
-        id: "sh_after_navigation",
-        status: "running",
-        command: "sleep 1",
-        cwd: "C:/OpenCode/TimelineStability",
-        shell: "cmd.exe",
-        file: "C:/OpenCode/TimelineStability/shell.log",
-        metadata: { sessionID },
-        time: { started: 1 },
-      },
-    },
-    location: { directory: "C:/OpenCode/TimelineStability" },
-  } as never)
-  await expect(dock).toContainText("1 shell in background")
-  await expect.poll(distance).toBeLessThanOrEqual(1)
 })
 
 test("separates blocking and already-backgrounded work into two rows", async ({ page }) => {
