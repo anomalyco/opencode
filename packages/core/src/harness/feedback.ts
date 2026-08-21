@@ -5,8 +5,9 @@ import type { LLMError } from "@opencode-ai/llm"
 import { Database } from "../database/database"
 import { SessionTodo } from "../session/todo"
 import { PartTable, SessionInputTable } from "../session/sql"
+import { SessionSchema } from "../session/schema"
 import { makeLocationNode } from "../effect/app-node"
-import { harness_subtask_feedback } from "../../../opencode/src/config/db"
+import { harness_subtask_feedback } from "./schema"
 import { asc, eq } from "drizzle-orm"
 
 export const SubtaskFeedbackItem = Schema.Struct({
@@ -50,8 +51,6 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FeedbackAgent") {}
 
-import { SessionSchema } from "../session/schema"
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -79,7 +78,6 @@ const layer = Layer.effect(
 
       const hasSteerPrompts = admittedInputs.some((row) => row.delivery === "steer")
       const totalPromptCount = admittedInputs.length
-      const isReiterated = totalPromptCount > 1 || admittedInputs.some((row) => row.promoted_seq !== null)
 
       // 2. Query PartTable for recorded tool execution steps
       const parts = yield* db
@@ -93,11 +91,9 @@ const layer = Layer.effect(
       const stepList = parts
         .map((part) => {
           const data = part.data
-          if (!isRecord(data) || data.type !== "tool") return null
-          const toolName = typeof data.tool === "string" ? data.tool : typeof data.name === "string" ? data.name : "tool"
-          const stateObj = isRecord(data.state) ? data.state : {}
-          const status = typeof stateObj.status === "string" ? stateObj.status : "completed"
-          const inputObj = isRecord(stateObj.input) ? stateObj.input : isRecord(data.input) ? data.input : {}
+          if (!data || data.type !== "tool") return null
+          const toolData = data as { type: "tool"; tool: string; state: { status: string; input: Record<string, unknown> } }
+          const inputObj = toolData.state.input
           const target = typeof inputObj.targetFile === "string"
             ? inputObj.targetFile
             : typeof inputObj.path === "string"
@@ -105,7 +101,7 @@ const layer = Layer.effect(
             : typeof inputObj.command === "string"
             ? inputObj.command
             : ""
-          return `- Step: ${toolName} ${target ? `[${target}]` : ""} (${status})`
+          return `- Step: ${toolData.tool} ${target ? `[${target}]` : ""} (${toolData.state.status})`
         })
         .filter(Boolean)
 
@@ -120,12 +116,17 @@ const layer = Layer.effect(
         const matchingInput = admittedInputs[index] ?? admittedInputs[0]
         const exactSubtaskPrompt = matchingInput?.prompt?.text ?? `Subtask Requirement: ${todo.content}`
 
+        const subtaskAdmittedCount = admittedInputs.filter(
+          (row) => (row.prompt?.text ?? "").includes(todo.content),
+        ).length
+        const subtaskIsReiterated = subtaskAdmittedCount > 1
+
         return {
           content: todo.content,
           status: todo.status,
           subtaskPrompt: exactSubtaskPrompt,
           subtaskOutputSummary: `Status: [${todo.status.toUpperCase()}]\n${stepsText}`,
-          isReiterated,
+          isReiterated: subtaskIsReiterated,
           isPromptChanged: hasSteerPrompts,
           promptIterationCount: Math.max(1, totalPromptCount),
         }
@@ -135,10 +136,22 @@ const layer = Layer.effect(
     const recordFeedback = Effect.fn("FeedbackAgent.recordFeedback")(function* (input: CollectFeedbackInput) {
       if (!input.feedbacks.length) return
 
+      const existing = yield* db
+        .select({ task_id: harness_subtask_feedback.task_id, subtask_content: harness_subtask_feedback.subtask_content })
+        .from(harness_subtask_feedback)
+        .where(eq(harness_subtask_feedback.task_id, input.taskID))
+        .all()
+        .pipe(Effect.orElseSucceed(() => []))
+
+      const existingKeys = new Set(existing.map((row) => `${row.task_id}::${row.subtask_content}`))
+
+      const newFeedbacks = input.feedbacks.filter((fb) => !existingKeys.has(`${input.taskID}::${fb.subtaskContent}`))
+      if (!newFeedbacks.length) return
+
       yield* db
         .insert(harness_subtask_feedback)
         .values(
-          input.feedbacks.map((fb) => ({
+          newFeedbacks.map((fb) => ({
             id: `feedback_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
             task_id: input.taskID,
             subtask_content: fb.subtaskContent,

@@ -493,7 +493,7 @@ export const {
             ...(sessionListResponse ? [sessionListResponse] : []),
           ]).then((responses) => {
             const providers = responses[0] ?? { providers: [], default: {} }
-            const providerList = responses[1] ?? []
+            const providerList = responses[1] ?? { all: [], default: {}, connected: [] }
             const capabilities = responses[2]
             const consoleState = responses[3]
             const agents = responses[4] ?? []

@@ -4,8 +4,9 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { LLM, LLMError } from "@opencode-ai/llm"
 import { Database } from "../database/database"
 import { HarnessVersion } from "./version"
+import { RegressionRunner } from "./regression_runner"
 import { makeLocationNode } from "../effect/app-node"
-import { harness_task, harness_subtask_feedback } from "../../../opencode/src/config/db"
+import { harness_task, harness_subtask_feedback } from "./schema"
 import { eq } from "drizzle-orm"
 
 export const EvolvedStrategy = Schema.Struct({
@@ -21,7 +22,7 @@ export const EvolvedStrategy = Schema.Struct({
 export type EvolvedStrategy = typeof EvolvedStrategy.Type
 
 export interface Interface {
-  readonly finalizeAndEvolve: (taskID: string, model: unknown) => Effect.Effect<{ strategy: EvolvedStrategy; candidateVersionID: string }, LLMError>
+  readonly finalizeAndEvolve: (taskID: string, model: unknown) => Effect.Effect<{ strategy: EvolvedStrategy; candidateVersionID: string; promoted: boolean }, LLMError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/PromptFinalizer") {}
@@ -31,6 +32,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     const versionSvc = yield* HarnessVersion.Service
+    const regressionSvc = yield* RegressionRunner.Service
 
     const finalizeAndEvolve = Effect.fn("PromptFinalizer.finalizeAndEvolve")(function* (taskID: string, model: unknown) {
       // 1. Fetch task details
@@ -100,16 +102,18 @@ ${task.task_error ?? "None"}
         toolOverrides: strategy.toolOverrides,
       })
 
-      // 5. Automatically promote version if task was satisfied without errors
-      if (task.task_sub_status === "satisfied") {
-        yield* versionSvc.promoteCandidate(candidateVersionID)
-      }
+      // 5. Gate promotion behind regression check (run for both satisfied and unsatisfied tasks)
+      const regressionResult = yield* regressionSvc
+        .runRegressionForCandidate(candidateVersionID, model)
+        .pipe(Effect.orElseSucceed(() => undefined))
 
-      return { strategy, candidateVersionID }
+      const promoted = regressionResult?.promoted ?? false
+
+      return { strategy, candidateVersionID, promoted }
     })
 
     return Service.of({ finalizeAndEvolve })
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Database.node, HarnessVersion.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Database.node, HarnessVersion.node, RegressionRunner.node] })

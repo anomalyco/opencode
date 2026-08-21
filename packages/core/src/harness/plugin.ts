@@ -3,7 +3,11 @@ export * as HarnessPlugin from "./plugin"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Context, Effect, Layer } from "effect"
 import { HarnessVersion } from "./version"
+import { PromptFinalizer } from "./improving_prompt_finalizer"
+import { Database } from "../database/database"
 import { makeLocationNode } from "../effect/app-node"
+import { harness_task, harness_subtask_feedback } from "./schema"
+import { eq, desc } from "drizzle-orm"
 
 export interface Interface {
   readonly createHooks: (domainCategory: string) => Effect.Effect<Hooks>
@@ -25,14 +29,11 @@ function parseRecord(text: string | null | undefined): Record<string, unknown> {
   }
 }
 
-import { Database } from "../database/database"
-import { harness_task, harness_subtask_feedback } from "./schema"
-import { eq } from "drizzle-orm"
-
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const versionSvc = yield* HarnessVersion.Service
+    const finalizerSvc = yield* PromptFinalizer.Service
     const { db } = yield* Database.Service
 
     const createHooks = Effect.fn("HarnessPlugin.createHooks")(function* (domainCategory: string) {
@@ -118,6 +119,81 @@ const layer = Layer.effect(
           output.env["HARNESS_VERSION_ID"] = activeVersion.versionID
         },
 
+        "chat.message": async (input, output) => {
+          const text = output.parts
+            .map((p) => {
+              if (p.type === "text" && typeof p.text === "string") return p.text
+              return ""
+            })
+            .filter(Boolean)
+            .join("\n")
+            .trim()
+
+          if (!text) return
+
+          const yesMatch = /^(?:yes|y)\b/i.test(text)
+          const noMatch = /^(?:no|n)\s*:\s*(.+)/i.test(text)
+
+          if (!yesMatch && !noMatch) return
+
+          const recentTask = await Effect.runPromise(
+            db
+              .select()
+              .from(harness_task)
+              .where(eq(harness_task.session_id, input.sessionID))
+              .orderBy(desc(harness_task.task_id))
+              .get()
+              .pipe(Effect.orElseSucceed(() => undefined)),
+          ).catch(() => undefined)
+
+          if (!recentTask) return
+
+          const feedbackID = `feedback_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+          const isYes = yesMatch
+          const explanation = noMatch ? text.replace(/^no\s*:\s*/i, "").trim() || "User reported dissatisfaction." : ""
+
+          await Effect.runPromise(
+            db
+              .insert(harness_subtask_feedback)
+              .values({
+                id: feedbackID,
+                task_id: recentTask.task_id,
+                subtask_content: "Overall task completion",
+                subtask_prompt: recentTask.task_prompt ?? "",
+                subtask_output: isYes ? "User confirmed satisfaction." : "User reported dissatisfaction.",
+                is_reiterated: false,
+                is_prompt_changed: false,
+                prompt_iteration_count: 1,
+                quality_score: isYes ? 5 : 1,
+                is_satisfied: isYes,
+                user_feedback: isYes ? "Yes" : "No",
+                changes_requested: isYes ? null : explanation,
+                created_at: Date.now(),
+              })
+              .run(),
+          ).catch(() => {})
+
+          // Update task status and satisfaction
+          await Effect.runPromise(
+            db
+              .update(harness_task)
+              .set({
+                task_status: isYes ? "completed" : "failed",
+                task_sub_status: isYes ? "satisfied" : "unsatisfied",
+              })
+              .where(eq(harness_task.task_id, recentTask.task_id))
+              .run(),
+          ).catch(() => {})
+
+          // Trigger asynchronous background evolution and regression testing
+          const targetModel = recentTask.task_model || "local-tpu/zai-org/GLM-5.2"
+          Effect.runPromise(
+            finalizerSvc.finalizeAndEvolve(recentTask.task_id, targetModel).pipe(
+              Effect.orElseSucceed(() => undefined),
+            ),
+          ).catch(() => {})
+        },
+
         "experimental.session.compacting": async (_input, output) => {
           if (!activeVersion) return
           if (activeVersion.systemPrompt) {
@@ -133,4 +209,9 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [HarnessVersion.node, Database.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [HarnessVersion.node, Database.node, PromptFinalizer.node],
+})
+

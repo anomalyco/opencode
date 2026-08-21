@@ -280,7 +280,8 @@ export default {
           \`task_status\` text,
           \`task_sub_status\` text,
           \`task_error\` text,
-          \`task_embeddings\` blob
+          \`task_embeddings\` blob,
+          \`session_id\` text
         );
       `)
       yield* tx.run(`

@@ -5,6 +5,9 @@ import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { PermissionV2 } from "../permission"
 import { SessionTodo } from "../session/todo"
+import { Database } from "../database/database"
+import { harness_task } from "../harness/schema"
+import { eq } from "drizzle-orm"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -27,6 +30,7 @@ const layer = Layer.effectDiscard(
     const tools = yield* Tools.Service
     const todos = yield* SessionTodo.Service
     const permission = yield* PermissionV2.Service
+    const { db } = yield* Database.Service
 
     yield* tools
       .register({
@@ -47,6 +51,17 @@ const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
               yield* todos.update({ sessionID: context.sessionID, todos: input.todos })
+
+              const allCompleted = input.todos.length > 0 && input.todos.every((t) => t.status === "completed")
+              if (allCompleted) {
+                yield* db
+                  .update(harness_task)
+                  .set({ task_sub_status: "todos_completed" })
+                  .where(eq(harness_task.session_id, context.sessionID))
+                  .run()
+                  .pipe(Effect.orElseSucceed(() => undefined))
+              }
+
               return { todos: input.todos }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: "Unable to update todos" }))),
         }),
@@ -58,5 +73,6 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/todowrite",
   layer,
-  deps: [ToolRegistry.node, PermissionV2.node, SessionTodo.node],
+  deps: [ToolRegistry.node, PermissionV2.node, SessionTodo.node, Database.node],
 })
+

@@ -10,7 +10,7 @@ import {
   harness_subtask_feedback,
   harness_version,
   harness_regression_result,
-} from "../../../opencode/src/config/db"
+} from "./schema"
 import { eq, and, inArray } from "drizzle-orm"
 
 // Minimum pass rate required for a candidate to be promoted
@@ -108,7 +108,7 @@ const layer = Layer.effect(
         } satisfies RegressionSummary
       }
 
-      // 3. Evaluate each task using stored trace from harness_subtask_feedback
+      // 3. Evaluate each task using stored trace from harness_subtask_feedback (concurrent)
       const taskIDs = heldTasks.map((t) => t.task_id)
 
       const allFeedback = yield* db
@@ -118,28 +118,31 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orElseSucceed(() => []))
 
-      const results: RegressionTaskResult[] = []
+      const feedbackByTask = new Map(
+        allFeedback.map((fb) => [fb.task_id, allFeedback.filter((f) => f.task_id === fb.task_id)]),
+      )
 
-      for (const task of heldTasks) {
-        const taskFeedbacks = allFeedback.filter((fb) => fb.task_id === task.task_id)
+      const results = yield* Effect.forEach(
+        heldTasks,
+        (task) =>
+          Effect.gen(function* () {
+            const taskFeedbacks = feedbackByTask.get(task.task_id) ?? []
 
-        // Build subtask summary and stored tool trace from feedback records
-        const subtaskSummary = taskFeedbacks.length
-          ? taskFeedbacks
-              .map(
-                (fb) =>
-                  `- [${fb.is_satisfied ? "SATISFIED" : "UNSATISFIED"}] ${fb.subtask_content}\n  Output: ${fb.subtask_output ?? "N/A"}\n  Score: ${fb.quality_score ?? 0}/5`,
-              )
-              .join("\n")
-          : "No explicit subtask feedback recorded."
+            const subtaskSummary = taskFeedbacks.length
+              ? taskFeedbacks
+                  .map(
+                    (fb) =>
+                      `- [${fb.is_satisfied ? "SATISFIED" : "UNSATISFIED"}] ${fb.subtask_content}\n  Output: ${fb.subtask_output ?? "N/A"}\n  Score: ${fb.quality_score ?? 0}/5`,
+                  )
+                  .join("\n")
+              : "No explicit subtask feedback recorded."
 
-        // 4. LLM dry-eval: judge whether the stored outputs meet task criteria
-        const evalRes = yield* LLM.generateObject({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-          model: model as Parameters<typeof LLM.generateObject>[0]["model"],
-          system:
-            "You are an AI Regression Evaluator. Given a task prompt and stored subtask execution outputs, assess whether the outputs meet the original task requirements. Be strict — this is a regression pass/fail gate.",
-          prompt: `
+            const evalRes = yield* LLM.generateObject({
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+              model: model as Parameters<typeof LLM.generateObject>[0]["model"],
+              system:
+                "You are an AI Regression Evaluator. Given a task prompt and stored subtask execution outputs, assess whether the outputs meet the original task requirements. Be strict — this is a regression pass/fail gate.",
+              prompt: `
 Task Prompt:
 ${task.task_prompt ?? "Unknown task"}
 
@@ -147,38 +150,39 @@ Stored Subtask Execution Results:
 ${subtaskSummary}
 
 Task Error (if any): ${task.task_error ?? "None"}
-          `.trim(),
-          schema: Schema.Struct({
-            isSatisfied: Schema.Boolean,
-            score: Schema.Number,
-            reasoning: Schema.String,
+              `.trim(),
+              schema: Schema.Struct({
+                isSatisfied: Schema.Boolean,
+                score: Schema.Number,
+                reasoning: Schema.String,
+              }),
+              generation: { temperature: 0 },
+            }).pipe(Effect.map((r) => r.object))
+
+            const resultID = `reg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+            yield* db
+              .insert(harness_regression_result)
+              .values({
+                id: resultID,
+                version_id: versionID,
+                task_id: task.task_id,
+                passed: evalRes.isSatisfied,
+                score: evalRes.score,
+                reasoning: evalRes.reasoning,
+              })
+              .run()
+              .pipe(Effect.orDie)
+
+            return {
+              taskID: task.task_id,
+              taskPrompt: task.task_prompt ?? "",
+              passed: evalRes.isSatisfied,
+              score: evalRes.score,
+              reasoning: evalRes.reasoning,
+            } satisfies RegressionTaskResult
           }),
-          generation: { temperature: 0 },
-        }).pipe(Effect.map((r) => r.object))
-
-        // 5. Record result in harness_regression_result
-        const resultID = `reg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-        yield* db
-          .insert(harness_regression_result)
-          .values({
-            id: resultID,
-            version_id: versionID,
-            task_id: task.task_id,
-            passed: evalRes.isSatisfied,
-            score: evalRes.score,
-            reasoning: evalRes.reasoning,
-          })
-          .run()
-          .pipe(Effect.orDie)
-
-        results.push({
-          taskID: task.task_id,
-          taskPrompt: task.task_prompt ?? "",
-          passed: evalRes.isSatisfied,
-          score: evalRes.score,
-          reasoning: evalRes.reasoning,
-        })
-      }
+        { concurrency: 4 },
+      )
 
       // 6. Compute pass rate and regression check
       const passedCount = results.filter((r) => r.passed).length

@@ -107,8 +107,8 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
     try: () => ConfigMarkdown.parse(match),
     catch: (err) => err,
   }).pipe(
-    Effect.catch(
-      Effect.fnUntraced(function* (err) {
+    Effect.catch((err) =>
+      Effect.gen(function* () {
         const message = FrontmatterError.isInstance(err) ? err.data.message : `Failed to parse skill ${match}`
         const { Session } = yield* Effect.promise(() => import("@/session/session"))
         yield* events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
@@ -116,6 +116,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
         return undefined
       }),
     ),
+    Effect.orElseSucceed(() => undefined),
   )
 
   if (!md) return
@@ -162,13 +163,15 @@ const scan = Effect.fnUntraced(function* (
         Effect.as([] as string[]),
       )
     }),
+    Effect.orElseSucceed(() => [] as string[]),
   )
 
   const realpath = (p: string) =>
-    Effect.tryPromise({
-      try: () => import("fs/promises").then((m) => m.realpath(p)),
-      catch: () => p,
-    })
+    Effect.promise(() =>
+      import("fs/promises")
+        .then((m) => m.realpath(p))
+        .catch(() => p),
+    )
 
   for (const match of matches) {
     const real = yield* realpath(match)
@@ -227,7 +230,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   }
 
   for (const url of cfg.skills?.urls ?? []) {
-    const pulledDirs = yield* discovery.pull(url)
+    const pulledDirs = yield* discovery.pull(url).pipe(Effect.orElseSucceed(() => []))
     for (const dir of pulledDirs) {
       yield* scan(state, dir, SKILL_PATTERN)
     }

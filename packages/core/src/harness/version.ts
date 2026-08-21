@@ -3,7 +3,7 @@ export * as HarnessVersion from "./version"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { makeLocationNode } from "../effect/app-node"
-import { harness_version } from "../../../opencode/src/config/db"
+import { harness_version } from "./schema"
 import { eq, and, desc } from "drizzle-orm"
 
 export const CandidateProposalInput = Schema.Struct({
@@ -126,8 +126,20 @@ const layer = Layer.effect(
       return yield* Effect.void
     })
 
-    // 3. Instant Rollback to previous version
+    // 3. Rollback to a previous version - only allow rolling back to an active or archived version
     const rollback = Effect.fn("HarnessVersion.rollback")(function* (targetVersionID: string) {
+      const target = yield* db
+        .select()
+        .from(harness_version)
+        .where(eq(harness_version.version_id, targetVersionID))
+        .get()
+        .pipe(Effect.orDie)
+
+      if (!target) return yield* Effect.die(`Version not found: ${targetVersionID}`)
+      if (target.status !== "active" && target.status !== "archived") {
+        return yield* Effect.die(`Cannot rollback version with status: ${target.status}`)
+      }
+
       yield* promoteCandidate(targetVersionID)
       return yield* Effect.void
     })

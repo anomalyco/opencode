@@ -4,9 +4,10 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { LLM, LLMError } from "@opencode-ai/llm"
 import { Database } from "../database/database"
 import { PartTable } from "../session/sql"
+import { SessionSchema } from "../session/schema"
 import { makeLocationNode } from "../effect/app-node"
-import { harness_subtask_feedback } from "../../../opencode/src/config/db"
-import { eq } from "drizzle-orm"
+import { harness_subtask_feedback } from "./schema"
+import { and, eq } from "drizzle-orm"
 
 export const RefinementRequest = Schema.Struct({
   taskID: Schema.String,
@@ -37,8 +38,6 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SubtaskRefinerAgent") {}
 
-import { SessionSchema } from "../session/schema"
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -64,14 +63,14 @@ const layer = Layer.effect(
         toolTrace = parts
           .map((part) => {
             const data = part.data
-            if (isRecord(data) && data.type === "tool") {
-              const toolName = typeof data.tool === "string" ? data.tool : typeof data.name === "string" ? data.name : "tool"
-              const stateObj = isRecord(data.state) ? data.state : {}
-              const status = typeof stateObj.status === "string" ? stateObj.status : "completed"
-              return `- Tool Execution Step: ${toolName} (${status})`
+            if (!data) return null
+            if (data.type === "tool") {
+              const toolData = data as { type: "tool"; tool: string; state: { status: string } }
+              return `- Tool Execution Step: ${toolData.tool} (${toolData.state.status})`
             }
-            if (isRecord(data) && data.type === "text" && typeof data.text === "string") {
-              return `- Summary Output: ${data.text.slice(0, 150)}...`
+            if (data.type === "text") {
+              const textData = data as { type: "text"; text: string }
+              return `- Summary Output: ${textData.text.slice(0, 150)}...`
             }
             return null
           })
@@ -119,7 +118,7 @@ ${input.changesRequested ?? "Improve correctness and fulfill task criteria."}
           is_prompt_changed: true,
           is_satisfied: true,
         })
-        .where(eq(harness_subtask_feedback.task_id, taskID))
+        .where(and(eq(harness_subtask_feedback.task_id, taskID), eq(harness_subtask_feedback.subtask_content, subtaskContent)))
         .run()
         .pipe(Effect.orDie)
     })

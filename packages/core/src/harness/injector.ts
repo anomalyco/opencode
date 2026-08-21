@@ -38,7 +38,6 @@ export interface Interface {
   readonly injectPrompt: (baseSystemPrompt: string, domainCategory: string) => Effect.Effect<InjectedPromptResult>
   readonly createPluginHooks: (domainCategory: string) => Effect.Effect<Hooks>
   readonly refineSubtaskPrompt: (input: RefineSubtaskInput, model: unknown) => Effect.Effect<RefinedSubtaskPromptResult, LLMError>
-  readonly runSafeCodeSnippet: <T = unknown>(codeSnippet: string, contextData: unknown) => Effect.Effect<T | null>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/HarnessInjector") {}
@@ -110,33 +109,7 @@ Requested Changes: ${input.changesRequested ?? "Improve accuracy and fulfill req
       return res.object
     })
 
-    // 3. Sandboxed Execution of Small Code Injections with Fallback
-    const runSafeCodeSnippet = Effect.fn("HarnessInjector.runSafeCodeSnippet")(function* <T = unknown>(
-      codeSnippet: string,
-      contextData: unknown,
-    ) {
-      if (!codeSnippet.trim()) return null
-
-      return yield* Effect.try({
-        try: () => {
-          // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
-          const fn = new Function("context", `
-            "use strict";
-            try {
-              ${codeSnippet}
-            } catch (err) {
-              return null;
-            }
-          `)
-          const res: unknown = fn(contextData)
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-          return (res ?? null) as T | null
-        },
-        catch: () => null,
-      }).pipe(Effect.orElseSucceed(() => null))
-    })
-
-    return Service.of({ injectPrompt, createPluginHooks, refineSubtaskPrompt, runSafeCodeSnippet })
+    return Service.of({ injectPrompt, createPluginHooks, refineSubtaskPrompt })
   }),
 )
 

@@ -1,13 +1,19 @@
 export * as JudgeAgent from "./judge"
 
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { LLM, LLMError } from "@opencode-ai/llm"
 import { Database } from "../database/database"
 import { SessionTodo } from "../session/todo"
 import { PartTable } from "../session/sql"
+import { SessionSchema } from "../session/schema"
+import { Config } from "../config"
 import { makeLocationNode } from "../effect/app-node"
-import { harness_task } from "../../../opencode/src/config/db"
+import { harness_task, harness_subtask_feedback } from "./schema"
 import { eq } from "drizzle-orm"
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
 
 export const Classification = Schema.Struct({
   isTask: Schema.Boolean,
@@ -47,6 +53,7 @@ export const RegisterTaskInput = Schema.Struct({
   taskSubTypes: Schema.optional(Schema.Array(Schema.String)),
   taskModel: Schema.optional(Schema.String),
   embedding: Schema.optional(Schema.Unknown),
+  sessionID: Schema.optional(Schema.String),
 }).annotate({ identifier: "JudgeAgent.RegisterTaskInput" })
 export type RegisterTaskInput = typeof RegisterTaskInput.Type
 
@@ -131,23 +138,12 @@ const layer = Layer.effect(
     // Job 1 sub-step: Register task into harness_task table using official vector embedding input
     const registerTask = Effect.fn("JudgeAgent.registerTask")(function* (input: RegisterTaskInput) {
       const taskID = `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-      
-      let embeddingVec = input.embedding instanceof Float32Array
+
+      const embeddingVec = input.embedding instanceof Float32Array
         ? input.embedding
         : Array.isArray(input.embedding) && input.embedding.every((v) => typeof v === "number")
         ? new Float32Array(input.embedding as number[])
-        : undefined
-
-      if (!embeddingVec) {
-        const cfg = configOption._tag === "Some" ? yield* configOption.value.get() : undefined
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-        const embedCfg = isRecord(cfg?.embedding) ? (cfg.embedding as Record<string, string>) : undefined
-        embeddingVec = yield* fetchEmbedding(input.prompt, {
-          baseURL: embedCfg?.baseURL,
-          model: embedCfg?.model,
-          apiKey: embedCfg?.apiKey,
-        })
-      }
+        : yield* fetchEmbedding(input.prompt)
 
       const subTypes = Array.isArray(input.taskSubTypes)
         ? input.taskSubTypes
@@ -159,8 +155,10 @@ const layer = Layer.effect(
 
       const taskSubTypeFormatted = JSON.stringify(subTypes)
 
-      const cfg = configOption._tag === "Some" ? yield* configOption.value.get() : undefined
-      const selectedModel = cfg?.model || "local-tpu/zai-org/GLM-5.2"
+      const configEntries = Option.isSome(configOption)
+        ? yield* configOption.value.entries().pipe(Effect.orElseSucceed(() => [] as Config.Entry[]))
+        : []
+      const selectedModel = input.taskModel || Config.latest(configEntries, "model") || "local-tpu/zai-org/GLM-5.2"
 
       yield* db
         .insert(harness_task)
@@ -168,11 +166,12 @@ const layer = Layer.effect(
           task_id: taskID,
           task_prompt: input.prompt,
           task_type: input.taskType || "general",
-          task_model: input.taskModel || selectedModel,
+          task_model: selectedModel,
           task_sub_type: taskSubTypeFormatted,
           task_status: "running",
           task_sub_status: "in_progress",
           task_embeddings: embeddingVec,
+          session_id: input.sessionID ?? null,
         })
         .run()
         .pipe(Effect.orDie)
@@ -202,13 +201,9 @@ const layer = Layer.effect(
         toolTrace = toolParts
           .map((part) => {
             const data = part.data
-            if (isRecord(data) && data.type === "tool") {
-              const toolName = typeof data.tool === "string" ? data.tool : typeof data.name === "string" ? data.name : "tool"
-              const stateObj = isRecord(data.state) ? data.state : {}
-              const status = typeof stateObj.status === "string" ? stateObj.status : "completed"
-              return `- Tool: ${toolName} | Status: ${status}`
-            }
-            return null
+            if (!data || data.type !== "tool") return null
+            const toolData = data as { type: "tool"; tool: string; state: { status: string } }
+            return `- Tool: ${toolData.tool} | Status: ${toolData.state.status}`
           })
           .filter(Boolean)
           .join("\n")
@@ -314,7 +309,7 @@ ${input.userResponse ?? "None"}
           })
           .where(eq(harness_subtask_feedback.task_id, input.taskID))
           .run()
-          .pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+          .pipe(Effect.orElseSucceed(() => undefined))
       }
 
       return evalRes
