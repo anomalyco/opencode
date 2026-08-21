@@ -36,7 +36,8 @@ export function currentContentDefaultOpen(
 ) {
   if (content.type !== "tool") return undefined
   if (content.name === "shell" || content.name === "execute") return shellExpanded
-  if (content.name !== "edit" && content.name !== "write" && content.name !== "patch") return undefined
+  if (content.name === "patch") return true
+  if (content.name !== "edit" && content.name !== "write") return undefined
   if (!editExpanded) return false
   const files = currentToolMetadata(content).files
   if (!Array.isArray(files) || files.length === 0) return true

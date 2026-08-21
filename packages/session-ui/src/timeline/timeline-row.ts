@@ -16,6 +16,11 @@ export type PartGroup =
       type: "context"
       refs: PartRef[]
     }
+  | {
+      key: string
+      type: "patch"
+      refs: PartRef[]
+    }
 
 export namespace TimelineRow {
   export class TurnGap extends Data.TaggedClass("TurnGap")<{

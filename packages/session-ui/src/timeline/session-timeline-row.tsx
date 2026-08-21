@@ -14,6 +14,7 @@ import {
   MessageDivider,
   SessionAssistantContent,
   SessionContextToolGroup,
+  SessionPatchToolGroup,
   SessionShellMessage,
   SessionUserMessage,
   currentContentDefaultOpen,
@@ -92,6 +93,24 @@ export function createSessionTimelineRowRenderer(input: {
             input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
           }
           onOpenChange={(open) => input.disclosure.set(key(), open)}
+          onSizeChange={onSizeChange}
+        />
+      )
+    }
+
+    if (row().group.type === "patch") {
+      const tools = createMemo(() => {
+        const group = row().group
+        if (group.type !== "patch") return []
+        return group.refs.flatMap((ref) => {
+          const message = input.projection.messageByID().get(ref.messageID)
+          const content = Timeline.resolveContent(message, ref.partID)
+          return message?.type === "assistant" && content?.type === "tool" ? [content] : []
+        })
+      })
+      return (
+        <SessionPatchToolGroup
+          tools={tools()}
           onSizeChange={onSizeChange}
         />
       )

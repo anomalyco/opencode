@@ -6,7 +6,7 @@ import type {
 import { Match, Switch } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
-import { CurrentContextToolGroup, ToolDisplay } from "../tools/tool-renderer"
+import { CurrentContextToolGroup, CurrentPatchToolGroup, ToolDisplay } from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 
 export type { SessionUserActions, SessionUserComment } from "../actions"
@@ -108,4 +108,11 @@ export function SessionContextToolGroup(props: {
       onSizeChange={props.onSizeChange}
     />
   )
+}
+
+export function SessionPatchToolGroup(props: {
+  tools: SessionMessageAssistantTool[]
+  onSizeChange?: () => void
+}) {
+  return <CurrentPatchToolGroup tools={props.tools} onSizeChange={props.onSizeChange} />
 }

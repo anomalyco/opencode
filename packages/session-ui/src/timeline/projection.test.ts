@@ -13,6 +13,17 @@ const context = (key: string, partIDs: string[], userMessageID = "user-1") =>
     previousAssistantPart: false,
   })
 
+const patch = (key: string, partIDs: string[], userMessageID = "user-1") =>
+  new TimelineRow.AssistantPart({
+    userMessageID,
+    group: {
+      key,
+      type: "patch",
+      refs: partIDs.map((partID) => ({ messageID: "assistant-1", partID })),
+    } satisfies PartGroup,
+    previousAssistantPart: false,
+  })
+
 const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
 
@@ -30,6 +41,13 @@ describe("reuseTimelineRows", () => {
       previous: [context("context:a", ["a"])],
       rows: [context("context:a", ["a", "b"])],
       expected: ["assistant-part:user-1:context:a"],
+      reused: [],
+    },
+    {
+      name: "preserves a patch group key when a member is appended",
+      previous: [patch("patch:a", ["a"])],
+      rows: [patch("patch:a", ["a", "b"])],
+      expected: ["assistant-part:user-1:patch:a"],
       reused: [],
     },
     {
