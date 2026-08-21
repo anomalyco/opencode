@@ -99,8 +99,12 @@ it.live("chunkTimeout ignores SSE comment heartbeats", () =>
           })
 
           const error = yield* Effect.promise(async () => {
-            for await (const part of result.fullStream) {
-              if (part.type === "error") return part.error
+            try {
+              for await (const part of result.fullStream) {
+                if (part.type === "error") return part.error
+              }
+            } catch (error) {
+              return error
             }
           })
           expect(error).toBeInstanceOf(ProviderError.ResponseStreamError)

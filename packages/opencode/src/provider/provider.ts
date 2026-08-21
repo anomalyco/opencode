@@ -53,9 +53,10 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 
   const body = new ReadableStream<Uint8Array>({
     async pull(ctrl) {
-      if (deadline === undefined) deadline = Date.now() + ms
+      const current = deadline ?? Date.now() + ms
+      deadline = current
       const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
-        const remaining = Math.max(0, deadline - Date.now())
+        const remaining = Math.max(0, current - Date.now())
         const id = setTimeout(() => {
           const err = new ProviderError.ResponseStreamError("SSE read timed out")
           ctl.abort(err)
