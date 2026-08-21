@@ -363,7 +363,10 @@ export function DialogSessionList() {
         },
         {
           command: "session.archive",
-          title: "archive/unarchive",
+          // Label reflects what ctrl+a will do to the highlighted session, which is
+          // both shorter than a static "archive/unarchive" and unambiguous.
+          title: (option) =>
+            option && sessions().find((item) => item.id === option.value)?.time?.archived ? "unarchive" : "archive",
           onTrigger: async (option) => {
             const session = sessions().find((item) => item.id === option.value)
             if (!session) return
