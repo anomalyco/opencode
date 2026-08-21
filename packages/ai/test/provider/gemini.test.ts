@@ -905,6 +905,61 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("preserves thoughtSignature on visible text parts", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [
+          {
+            content: { role: "model", parts: [{ text: "All done.", thoughtSignature: "text_sig" }] },
+            finishReason: "STOP",
+          },
+        ],
+      })
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+      const delta = response.events.find((event) => event.type === "text-delta")
+      expect(delta).toMatchObject({
+        id: "text-0",
+        text: "All done.",
+        providerMetadata: { google: { thoughtSignature: "text_sig" } },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.assistant([{ type: "text", text: "All done.", providerMetadata: delta?.providerMetadata }])],
+        }),
+      )
+      expect(prepared.body.contents).toEqual([
+        { role: "model", parts: [{ text: "All done.", thoughtSignature: "text_sig" }] },
+      ])
+    }),
+  )
+
+  it.effect("flushes a trailing empty signed text part at block close", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [{ text: "Working." }, { text: "", thoughtSignature: "tail_sig" }],
+            },
+            finishReason: "STOP",
+          },
+        ],
+      })
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+      const delta = response.events.find((event) => event.type === "text-delta")
+      const end = response.events.find((event) => event.type === "text-end")
+
+      expect(delta).toMatchObject({ id: "text-0", text: "Working.", providerMetadata: undefined })
+      expect(end).toMatchObject({
+        id: "text-0",
+        providerMetadata: { google: { thoughtSignature: "tail_sig" } },
+      })
+    }),
+  )
+
   it.effect("replays unsigned Gemini 3 tool calls with the validator bypass sentinel", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

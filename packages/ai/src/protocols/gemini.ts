@@ -217,6 +217,7 @@ interface ParserState {
   readonly usage?: Usage
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignature?: string
+  readonly textSignature?: string
 }
 
 // =============================================================================
@@ -328,7 +329,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
         if (part.type === "text") {
-          parts.push({ text: part.text })
+          parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata) })
           continue
         }
         if (part.type === "reasoning") {
@@ -540,14 +541,16 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
   if (finishReason === undefined && state.usage === undefined) return []
 
   const events: LLMEvent[] = []
-  const lifecycle = state.reasoningSignature
-    ? Lifecycle.reasoningEnd(
-        state.lifecycle,
-        events,
-        "reasoning-0",
-        googleMetadata({ thoughtSignature: state.reasoningSignature }),
-      )
-    : state.lifecycle
+  let lifecycle = state.lifecycle
+  if (state.reasoningSignature !== undefined)
+    lifecycle = Lifecycle.reasoningEnd(
+      lifecycle,
+      events,
+      "reasoning-0",
+      googleMetadata({ thoughtSignature: state.reasoningSignature }),
+    )
+  if (state.textSignature !== undefined)
+    lifecycle = Lifecycle.textEnd(lifecycle, events, "text-0", googleMetadata({ thoughtSignature: state.textSignature }))
   Lifecycle.finish(lifecycle, events, {
     reason: {
       normalized:
@@ -579,10 +582,14 @@ const step = (state: ParserState, event: GeminiEvent) => {
   let lifecycle = nextState.lifecycle
   let nextToolCallId = nextState.nextToolCallId
   let reasoningSignature = nextState.reasoningSignature
+  let textSignature = nextState.textSignature
 
   for (const part of candidate.content.parts) {
-    if ("thoughtSignature" in part && part.thoughtSignature && "thought" in part && part.thought)
-      reasoningSignature = part.thoughtSignature
+    const signature = "thoughtSignature" in part && part.thoughtSignature ? part.thoughtSignature : undefined
+    // Gemini attaches replay signatures to thought parts, visible text, or function calls;
+    // each block kind must retain the signature attached to its own parts.
+    if (signature !== undefined && "thought" in part && part.thought) reasoningSignature = signature
+    else if (signature !== undefined && "text" in part) textSignature = signature
     if ("text" in part && part.text.length > 0) {
       if (part.thought) {
         lifecycle = Lifecycle.reasoningDelta(
@@ -590,7 +597,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           events,
           "reasoning-0",
           part.text,
-          part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
+          signature ? googleMetadata({ thoughtSignature: signature }) : undefined,
         )
         continue
       }
@@ -600,7 +607,14 @@ const step = (state: ParserState, event: GeminiEvent) => {
         "reasoning-0",
         reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
       )
-      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
+      lifecycle = Lifecycle.textDelta(
+        lifecycle,
+        events,
+        "text-0",
+        part.text,
+        textSignature ? googleMetadata({ thoughtSignature: textSignature }) : undefined,
+      )
+      textSignature = undefined
       continue
     }
 
@@ -637,6 +651,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
       lifecycle,
       nextToolCallId,
       reasoningSignature,
+      textSignature,
       finishReason: candidate.finishReason ?? nextState.finishReason,
     },
     events,
