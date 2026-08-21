@@ -26,16 +26,22 @@ const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
 type Prepared = ReturnType<typeof fuzzysort.prepare>
 
 function emptyIndex() {
-  return { files: new Map<string, Prepared>(), directories: new Map<string, Prepared>() }
+  return {
+    files: new Map<string, Prepared>(),
+    directories: new Map<string, Prepared>(),
+    fileTargets: [] as Prepared[],
+    directoryTargets: [] as Prepared[],
+    combinedTargets: undefined as Prepared[] | undefined,
+  }
 }
 
 function search(index: ReturnType<typeof emptyIndex>, input: FileSystem.FindInput) {
   const items =
     input.type === "file"
-      ? Array.from(index.files.values())
+      ? index.fileTargets
       : input.type === "directory"
-        ? Array.from(index.directories.values())
-        : [...index.files.values(), ...index.directories.values()]
+        ? index.directoryTargets
+        : (index.combinedTargets ??= [...index.fileTargets, ...index.directoryTargets])
   const result = fuzzysort.go(input.query, items, { limit: input.limit ?? 50 })
   // Targets are owned by the current location index. The only global fuzzysort
   // state left is its query cache, which must not retain every query forever.
@@ -66,20 +72,28 @@ export const ripgrepLayer = Layer.effect(
       const next = emptyIndex()
       const previous = index
       if (!initialized) index = next
-      yield* ripgrep.find({
+      yield* ripgrep.scan({
         cwd: location.directory,
         pattern: "*",
         limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
         onEntry: (entry) =>
           Effect.sync(() => {
-            next.files.set(entry.path, previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path))
+            const file = previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path)
+            next.files.set(entry.path, file)
+            next.fileTargets.push(file)
+            next.combinedTargets = undefined
             const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, offset) => {
-              const directory = parts.slice(0, offset + 1).join("/") + path.sep
-              if (!next.directories.has(directory))
-                next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
-            })
+            let prefix = ""
+            for (const [offset, part] of parts.entries()) {
+              if (offset === parts.length - 1) break
+              prefix = prefix ? `${prefix}/${part}` : part
+              const directory = prefix + path.sep
+              if (next.directories.has(directory)) continue
+              const prepared = previous.directories.get(directory) ?? fuzzysort.prepare(directory)
+              next.directories.set(directory, prepared)
+              next.directoryTargets.push(prepared)
+            }
           }),
       })
       index = next

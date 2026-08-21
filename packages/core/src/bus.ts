@@ -67,6 +67,25 @@ const envelope = (aggregateID: string, seq: number, version: number) => ({
   version: Event.Version.make(version),
 })
 
+const encoders = new WeakMap<Event.Definition, (input: unknown) => unknown>()
+const decoders = new WeakMap<Event.Definition, (input: unknown) => unknown>()
+
+function encodeData(definition: Event.Definition, data: unknown) {
+  const cached = encoders.get(definition)
+  if (cached) return cached(data)
+  const encode = Schema.encodeUnknownSync(definition.data)
+  encoders.set(definition, encode)
+  return encode(data)
+}
+
+function decodeData(definition: Event.Definition, data: unknown) {
+  const cached = decoders.get(definition)
+  if (cached) return cached(data)
+  const decode = Schema.decodeUnknownSync(definition.data)
+  decoders.set(definition, decode)
+  return decode(data)
+}
+
 const decodeSerializedEvent = (event: SerializedEvent): Event.Payload => {
   const definition = Durable.get(event.type)
   if (!definition?.durable) {
@@ -77,7 +96,7 @@ const decodeSerializedEvent = (event: SerializedEvent): Event.Payload => {
     created: event.created ?? 0,
     type: definition.type,
     durable: envelope(event.aggregateID, event.seq, definition.durable.version),
-    data: Schema.decodeUnknownSync(definition.data)(event.data),
+    data: decodeData(definition, event.data),
   }
 }
 
@@ -260,10 +279,7 @@ export function configured(options?: Options) {
                               .get()
                               .pipe(Effect.orDie)
                             const latest = row?.seq ?? -1
-                            const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<
-                              string,
-                              unknown
-                            >
+                            const encoded = encodeData(definition, event.data) as Record<string, unknown>
                             if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
                               yield* Effect.die(
                                 new InvalidDurableEventError({
@@ -529,10 +545,7 @@ export function configured(options?: Options) {
                           const ids = new Set<Event.ID>()
                           for (const [index, item] of payloads.entries()) {
                             const seq = firstSeq + index
-                            const encoded = Schema.encodeUnknownSync(item.definition.data)(item.event.data) as Record<
-                              string,
-                              unknown
-                            >
+                            const encoded = encodeData(item.definition, item.event.data) as Record<string, unknown>
                             if (persist) {
                               if (ids.has(item.event.id))
                                 yield* Effect.die(
@@ -621,7 +634,7 @@ export function configured(options?: Options) {
                     id: event.id,
                     created: event.created ?? 0,
                     type: definition.type,
-                    data: Schema.decodeUnknownSync(definition.data)(event.data),
+                    data: decodeData(definition, event.data),
                   } as Event.Payload
                   const committed = yield* commitDurableEvent(definition, payload, {
                     seq: event.seq,

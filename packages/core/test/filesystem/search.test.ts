@@ -13,6 +13,15 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
 
+function ripgrep(find: Ripgrep.Interface["find"]) {
+  return Ripgrep.Service.of({
+    find,
+    scan: (input) => find(input).pipe(Effect.asVoid),
+    glob: () => Effect.succeed([]),
+    grep: () => Effect.succeed([]),
+  })
+}
+
 describe("FileSystemSearch", () => {
   test("bounds a home scan even when home is detected as a repository", async () => {
     let observed: Ripgrep.FindInput | undefined
@@ -31,17 +40,14 @@ describe("FileSystemSearch", () => {
         Ripgrep.node,
         Layer.succeed(
           Ripgrep.Service,
-          Ripgrep.Service.of({
-            find: (input) =>
+          ripgrep((input) =>
               Effect.gen(function* () {
                 observed = input
                 if (input.onEntry)
                   yield* input.onEntry(FileSystem.Entry.make({ path: RelativePath.make("src/index.ts"), type: "file" }))
                 return []
               }),
-            glob: () => Effect.succeed([]),
-            grep: () => Effect.succeed([]),
-          }),
+          ),
         ),
       ],
     ])
@@ -78,8 +84,7 @@ describe("FileSystemSearch", () => {
         Ripgrep.node,
         Layer.succeed(
           Ripgrep.Service,
-          Ripgrep.Service.of({
-            find: (input) =>
+          ripgrep((input) =>
               Effect.gen(function* () {
                 scans++
                 if (scans > 1) {
@@ -94,9 +99,7 @@ describe("FileSystemSearch", () => {
                 if (scans === 1) yield* Deferred.succeed(initial, undefined)
                 return [entry]
               }),
-            glob: () => Effect.succeed([]),
-            grep: () => Effect.succeed([]),
-          }),
+          ),
         ),
       ],
     ])
@@ -145,8 +148,7 @@ describe("FileSystemSearch", () => {
         Ripgrep.node,
         Layer.succeed(
           Ripgrep.Service,
-          Ripgrep.Service.of({
-            find: (input) =>
+          ripgrep((input) =>
               Effect.gen(function* () {
                 scans++
                 const entry = FileSystem.Entry.make({ path: RelativePath.make("src/index.ts"), type: "file" })
@@ -154,9 +156,7 @@ describe("FileSystemSearch", () => {
                 yield* Deferred.succeed(scans === 1 ? first : second, undefined)
                 return [entry]
               }),
-            glob: () => Effect.succeed([]),
-            grep: () => Effect.succeed([]),
-          }),
+          ),
         ),
       ],
     ])
@@ -177,5 +177,55 @@ describe("FileSystemSearch", () => {
     )
     prepare.mockRestore()
     cleanup.mockRestore()
+  })
+
+  test("invalidates a mixed target list while the initial scan is still running", async () => {
+    const first = Effect.runSync(Deferred.make<void>())
+    const release = Effect.runSync(Deferred.make<void>())
+    const complete = Effect.runSync(Deferred.make<void>())
+    const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+      [
+        Location.node,
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of(
+            location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-partial")) }),
+          ),
+        ),
+      ],
+      [
+        Ripgrep.node,
+        Layer.succeed(
+          Ripgrep.Service,
+          ripgrep((input) =>
+              Effect.gen(function* () {
+                if (input.onEntry)
+                  yield* input.onEntry(
+                    FileSystem.Entry.make({ path: RelativePath.make("src/first.ts"), type: "file" }),
+                  )
+                yield* Deferred.succeed(first, undefined)
+                yield* Deferred.await(release)
+                if (input.onEntry)
+                  yield* input.onEntry(
+                    FileSystem.Entry.make({ path: RelativePath.make("src/second.ts"), type: "file" }),
+                  )
+                yield* Deferred.succeed(complete, undefined)
+                return []
+              }),
+          ),
+        ),
+      ],
+    ])
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        yield* Deferred.await(first)
+        expect((yield* search.find({ query: "first" }))[0]?.path).toBe(RelativePath.make("src/first.ts"))
+        yield* Deferred.succeed(release, undefined)
+        yield* Deferred.await(complete)
+        expect((yield* search.find({ query: "second" }))[0]?.path).toBe(RelativePath.make("src/second.ts"))
+      }).pipe(Effect.provide(layer), Effect.scoped),
+    )
   })
 })

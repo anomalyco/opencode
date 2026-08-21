@@ -9,6 +9,10 @@ import { AppProcess } from "@opencode-ai/util/process"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { File } from "./file.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
+import { which } from "./util/which.js"
+
+const resolvedGit = which("git")
+const gitExecutable = resolvedGit ? path.resolve(resolvedGit) : "git"
 
 export class Repository extends Schema.Class<Repository>("Git.Repository")({
   worktree: AbsolutePath,
@@ -314,10 +318,11 @@ const layer = Layer.effect(
     ) {
       const result = yield* proc
         .run(
-          ChildProcess.make("git", repositoryArgs(repository, args), {
+          ChildProcess.make(gitExecutable, repositoryArgs(repository, args), {
             cwd: repository.worktree,
             env: options?.env,
             extendEnv: true,
+            stdin: "ignore",
           }),
           { stdin: options?.stdin },
         )
@@ -422,17 +427,20 @@ const layer = Layer.effect(
       ignores?: Repository
       maximumUntrackedFileBytes?: number
     }) {
-      const list = (args: string[]) =>
-        repositoryOperation("refresh", input.repository, args).pipe(
-          Effect.map((result) => result.text.split("\0").filter(Boolean)),
-        )
-      const [tracked, untracked] = yield* Effect.all(
-        [
-          list(["diff-files", "--name-only", "-z", "--", input.scope]),
-          list(["ls-files", "--others", "--exclude-standard", "-z", "--", input.scope]),
-        ],
-        { concurrency: 2 },
-      )
+      const entries = (yield* repositoryOperation("refresh", input.repository, [
+        "ls-files",
+        "--modified",
+        "--others",
+        "--exclude-standard",
+        "-t",
+        "-z",
+        "--",
+        input.scope,
+      ])).text
+        .split("\0")
+        .filter(Boolean)
+      const tracked = entries.filter((entry) => !entry.startsWith("? ")).map((entry) => entry.slice(2))
+      const untracked = entries.filter((entry) => entry.startsWith("? ")).map((entry) => entry.slice(2))
       const candidates = Array.from(new Set([...tracked, ...untracked]))
       if (!candidates.length) return { skipped: [] }
       const ignored = input.ignores
@@ -444,11 +452,11 @@ const layer = Layer.effect(
               .filter(Boolean),
           )
         : new Set<string>()
-      const allowed = candidates.filter((item) => !ignored.has(item))
+      const allowed = new Set(candidates.filter((item) => !ignored.has(item)))
       const maximum = input.maximumUntrackedFileBytes
       const skipped = maximum
         ? (yield* Effect.forEach(
-            untracked.filter((item) => allowed.includes(item)),
+            untracked.filter((item) => allowed.has(item)),
             (item) =>
               fs.stat(path.join(input.repository.worktree, item)).pipe(
                 Effect.map((info) =>
@@ -459,7 +467,8 @@ const layer = Layer.effect(
             { concurrency: 8 },
           )).filter((item): item is RelativePath => item !== undefined)
         : []
-      const stage = allowed.filter((item) => !skipped.includes(RelativePath.make(item)))
+      const skippedSet = new Set(skipped)
+      const stage = Array.from(allowed).filter((item) => !skippedSet.has(RelativePath.make(item)))
       const remove = [...ignored, ...skipped]
       if (remove.length)
         yield* repositoryOperation(
@@ -485,10 +494,14 @@ const layer = Layer.effect(
       if (!input.paths.length) return new Set<RelativePath>()
       const result = yield* proc
         .run(
-          ChildProcess.make("git", repositoryArgs(input.repository, ["check-ignore", "--no-index", "--stdin", "-z"]), {
-            cwd: input.repository.worktree,
-            extendEnv: true,
-          }),
+          ChildProcess.make(
+            gitExecutable,
+            repositoryArgs(input.repository, ["check-ignore", "--no-index", "--stdin", "-z"]),
+            {
+              cwd: input.repository.worktree,
+              extendEnv: true,
+            },
+          ),
           { stdin: input.paths.join("\0") + "\0" },
         )
         .pipe(
@@ -662,7 +675,7 @@ const layer = Layer.effect(
       cwd = repository.worktree,
     ) {
       const result = yield* proc
-        .run(ChildProcess.make("git", args, { cwd, extendEnv: true, stdin: "ignore" }))
+        .run(ChildProcess.make(gitExecutable, args, { cwd, extendEnv: true, stdin: "ignore" }))
         .pipe(
           Effect.mapError(
             (cause) => new WorktreeError({ operation, directory: worktreeDirectory, message: cause.message, cause }),
@@ -759,7 +772,7 @@ function execute(cwd: string, proc: AppProcess.Interface) {
   return (args: string[]) =>
     proc
       .run(
-        ChildProcess.make("git", args, {
+        ChildProcess.make(gitExecutable, args, {
           cwd,
           extendEnv: true,
           stdin: "ignore",

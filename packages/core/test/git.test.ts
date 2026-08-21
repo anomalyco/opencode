@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Git } from "@opencode-ai/core/git"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
@@ -141,6 +141,7 @@ describe("Git trees", () => {
         await initRepo(root.path)
         await fs.mkdir(path.join(root.path, "scope"))
         await fs.writeFile(path.join(root.path, "scope", "tracked.txt"), "one\n")
+        await fs.writeFile(path.join(root.path, "scope", "deleted.txt"), "delete\n")
         await fs.writeFile(path.join(root.path, "outside.txt"), "outside\n")
         await $`git add .`.cwd(root.path).quiet()
         await $`git commit -m initial`.cwd(root.path).quiet()
@@ -169,18 +170,29 @@ describe("Git trees", () => {
       yield* Effect.promise(async () => {
         await fs.writeFile(path.join(root.path, "scope", "tracked.txt"), "two\n")
         await fs.writeFile(path.join(root.path, "scope", "added.txt"), "added\n")
+        await fs.writeFile(path.join(root.path, "scope", "C leading.txt"), "leading\n")
+        await fs.rm(path.join(root.path, "scope", "deleted.txt"))
         await fs.writeFile(path.join(root.path, "outside.txt"), "changed outside\n")
       })
       yield* git.index.refresh({ repository, scope: RelativePath.make("scope") })
       const after = yield* git.tree.write(repository)
 
       expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([
+        RelativePath.make("scope/C leading.txt"),
         RelativePath.make("scope/added.txt"),
+        RelativePath.make("scope/deleted.txt"),
         RelativePath.make("scope/tracked.txt"),
       ])
+      expect(yield* git.tree.files({ repository, from: after, to: after })).toEqual([])
+      const missing = Git.TreeID.make("0000000000000000000000000000000000000000")
+      expect(
+        Exit.isFailure(yield* Effect.exit(git.tree.files({ repository, from: missing, to: missing }))),
+      ).toBeTrue()
       const diffs = yield* git.tree.diff({ repository, from: before, to: after, context: 1 })
       expect(diffs.map((item) => [item.file, item.status])).toEqual([
+        [RelativePath.make("scope/C leading.txt"), "added"],
         [RelativePath.make("scope/added.txt"), "added"],
+        [RelativePath.make("scope/deleted.txt"), "deleted"],
         [RelativePath.make("scope/tracked.txt"), "modified"],
       ])
 
@@ -189,6 +201,50 @@ describe("Git trees", () => {
       expect(yield* read(path.join(root.path, "scope", "tracked.txt"))).toBe("one\n")
       expect(yield* read(path.join(root.path, "scope", "added.txt"))).toBe("added\n")
       expect(yield* read(path.join(root.path, "outside.txt"))).toBe("changed outside\n")
+    }),
+  )
+
+  it.live("limits only untracked files during refresh", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await initRepo(root.path)
+        await fs.writeFile(path.join(root.path, "tracked.txt"), "one\n")
+        await $`git add .`.cwd(root.path).quiet()
+        await $`git commit -m initial`.cwd(root.path).quiet()
+      })
+      const git = yield* Git.Service
+      const source = yield* git.repo.discover(AbsolutePath.make(root.path))
+      if (!source) throw new Error("Repository not found")
+      const storage = AbsolutePath.make(`${root.path}-snapshot`)
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(storage, { recursive: true, force: true })))
+      const repository = yield* git.repo.create({
+        worktree: source.worktree,
+        gitDirectory: storage,
+        seed: source,
+      })
+      const before = yield* git.tree.write(repository)
+
+      yield* Effect.promise(async () => {
+        await fs.writeFile(path.join(root.path, "tracked.txt"), "tracked files are not limited\n")
+        await fs.writeFile(path.join(root.path, "small.txt"), "ok\n")
+        await fs.writeFile(path.join(root.path, "large.txt"), "too large\n")
+      })
+      const refreshed = yield* git.index.refresh({
+        repository,
+        scope: RelativePath.make("."),
+        maximumUntrackedFileBytes: 4,
+      })
+      const after = yield* git.tree.write(repository)
+
+      expect(refreshed.skipped).toEqual([RelativePath.make("large.txt")])
+      expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([
+        RelativePath.make("small.txt"),
+        RelativePath.make("tracked.txt"),
+      ])
     }),
   )
 })
