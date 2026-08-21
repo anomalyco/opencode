@@ -40,6 +40,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   pre: readonly Plugin.Versioned[],
   post: readonly Plugin.Versioned[],
   operations: readonly ConfigPluginSource.Operation[],
+  previousPackages: ReadonlyMap<string, Plugin.Versioned>,
 ) {
   const matches = (selector: string, target: string) =>
     selector === "*" || (selector.endsWith(".*") ? target.startsWith(selector.slice(0, -1)) : selector === target)
@@ -83,6 +84,11 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         error: plugin.error,
         tui: false,
       })
+      const previous = previousPackages.get(operation.target)
+      if (previous) {
+        packages.set(operation.target, previous)
+        enabled.add(previous.id)
+      }
       continue
     }
     failures.delete(operation.target)
@@ -99,6 +105,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       ...post.filter((plugin) => enabled.has(plugin.id)),
     ],
     failures: [...failures.values()],
+    packages,
   }
 })
 
@@ -138,6 +145,7 @@ export const layer = Layer.effect(
     const sources = yield* ConfigPluginSource.Service
     const bus = yield* Bus.Service
     const ready = yield* Latch.make()
+    let packages = new Map<string, Plugin.Versioned>()
     let observed = 0
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
@@ -155,9 +163,10 @@ export const layer = Layer.effect(
       }))
       const operations = yield* sources.operations()
       // Apply config operations and load enabled package plugins into one ordered generation.
-      const resolved = yield* resolve(pre, post, operations)
+      const resolved = yield* resolve(pre, post, operations, packages)
       // Replace the active generation in one scoped, batched activation.
       yield* registry.activate(resolved.plugins, resolved.failures)
+      packages = resolved.packages
     })
     const updates = Stream.merge(sources.changes(), bus.subscribe([Event.Updated, SdkPlugins.Updated])).pipe(
       // Make accepted work visible to flush before coalescing the burst.

@@ -321,13 +321,13 @@ describe("PluginSupervisor config", () => {
 
   it.live("reloads a configured plugin when its source file changes", () =>
     withLocation(
-      { plugins: ["-*", "./external/mutable.ts"] },
+      { plugins: ["-*", "./external/dist/index.ts"] },
       Effect.gen(function* () {
         yield* ready()
         const agents = yield* Agent.Service
         const bus = yield* Bus.Service
         const location = yield* Location.Service
-        const file = path.join(location.directory, "external", "mutable.ts")
+        const file = path.join(location.directory, "external", "dist", "index.ts")
 
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("first")
 
@@ -342,14 +342,31 @@ describe("PluginSupervisor config", () => {
         yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
 
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("second")
+
+        const removed = yield* bus
+          .subscribe(Plugin.Event.Updated)
+          .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        yield* Effect.promise(() => fs.rm(path.dirname(file), { recursive: true }))
+        yield* Fiber.join(removed).pipe(Effect.timeout("5 seconds"))
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("second")
+
+        const recreated = yield* bus
+          .subscribe(Plugin.Event.Updated)
+          .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.dirname(file), { recursive: true })
+          await fs.writeFile(file, mutablePlugin("third"))
+        })
+        yield* Fiber.join(recreated).pipe(Effect.timeout("5 seconds"))
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("third")
       }),
       false,
       async (directory) => {
         // Outside any {plugin,plugins} config-source directory, so only the
         // configured-entrypoint watch can observe the edit.
-        const external = path.join(directory, "external")
-        await fs.mkdir(external, { recursive: true })
-        await fs.writeFile(path.join(external, "mutable.ts"), mutablePlugin("first"))
+        const dist = path.join(directory, "external", "dist")
+        await fs.mkdir(dist, { recursive: true })
+        await fs.writeFile(path.join(dist, "index.ts"), mutablePlugin("first"))
       },
     ),
   )

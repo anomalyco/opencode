@@ -41,7 +41,8 @@ export const layer = Layer.effect(
     const watched = new Set<string>()
 
     // Configured local plugin files can live outside config roots, where the
-    // config change feed cannot see them; watch those entrypoints directly.
+    // config change feed cannot see them. A generated dist directory needs a
+    // stable parent watch because replacing dist destroys a watch inside it.
     // Watches start on first sighting and are never torn down individually:
     // a stale watch after a config edit costs one deduped fs handle and a
     // no-op activation, and every watch dies with this layer's scope.
@@ -58,8 +59,15 @@ export const layer = Layer.effect(
         // inside), so don't watch what can't trigger anything.
         if (yield* fs.isDir(operation.target)) continue
         watched.add(operation.target)
-        const updates = yield* watcher.subscribe({ path: operation.target, type: "file" })
+        const directory = path.dirname(operation.target)
+        const generated = path.basename(directory) === "dist"
+        const updates = yield* watcher.subscribe(
+          generated
+            ? { path: path.dirname(directory), type: "directory" }
+            : { path: operation.target, type: "file" },
+        )
         yield* updates.pipe(
+          Stream.filter((update) => !generated || path.resolve(update.path) === operation.target),
           Stream.runForEach(() => PubSub.publish(configuredChanges, undefined)),
           Effect.catchCause((cause) =>
             Effect.logError("configured plugin watch failed", { target: operation.target, cause }),
