@@ -53,22 +53,6 @@ function runAll(list: Array<() => Promise<unknown>>) {
   return Promise.allSettled(list.map((item) => item()))
 }
 
-function showErrors(input: {
-  errors: unknown[]
-  title: string
-  translate: (key: string, vars?: Record<string, string | number>) => string
-  formatMoreCount: (count: number) => string
-}) {
-  if (input.errors.length === 0) return
-  const message = formatServerError(input.errors[0], input.translate)
-  const more = input.errors.length > 1 ? input.formatMoreCount(input.errors.length - 1) : ""
-  showToast({
-    variant: "error",
-    title: input.title,
-    description: message + more,
-  })
-}
-
 export const loadGlobalConfigQuery = (scope: ServerScope) =>
   queryOptions({
     queryKey: [scope, "config"],
@@ -126,9 +110,6 @@ export async function bootstrapGlobal(input: {
     readonly worktree: WorktreeApi
   }
   scope: ServerScope
-  requestFailedTitle: string
-  translate: (key: string, vars?: Record<string, string | number>) => string
-  formatMoreCount: (count: number) => string
   setGlobalStore: SetStoreFunction<GlobalStore>
   queryClient: QueryClient
 }) {
@@ -141,12 +122,6 @@ export async function bootstrapGlobal(input: {
         .then((data) => input.setGlobalStore("project", data)),
   ]
   await runAll(slow)
-  // showErrors({
-  //   errors: errors(),
-  //   title: input.requestFailedTitle,
-  //   translate: input.translate,
-  //   formatMoreCount: input.formatMoreCount,
-  // })
 }
 
 function projectID(directory: string, projects: Project[]) {

@@ -89,10 +89,3 @@ export const loadShellEnv = Effect.fn("ShellEnv.load")(function* (shell: string)
   yield* Effect.logInfo(`[server] Falling back to app environment: ${shell}`)
   return null
 })
-
-export function mergeShellEnv(shell: Record<string, string> | null, env: Record<string, string>) {
-  return {
-    ...shell,
-    ...env,
-  }
-}

@@ -1,8 +1,9 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Event } from "@opencode-ai/schema/event"
 import type { Accessor } from "solid-js"
-import { clonePromptParts, type PromptHistoryComment } from "./history/entry"
+import type { PromptHistoryComment } from "./history/entry"
 import type { ImageAttachmentPart, Prompt } from "./state"
+import { clonePrompt, promptLength } from "./prompt-parts"
 import type { ComposerAdapter, ComposerSelection, ComposerSession } from "./adapter"
 import { createComposerSubmission } from "./submission-state"
 import { buildPromptRequest } from "./request"
@@ -48,7 +49,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
     const submission = createComposerSubmission({
       target: input.adapter.state,
-      prompt: clonePromptParts(input.adapter.state.current()),
+      prompt: clonePrompt(input.adapter.state.current()),
       context: input.adapter.state.context.items().map((item) => ({
         ...item,
         selection: item.selection ? { ...item.selection } : undefined,
@@ -316,8 +317,4 @@ function failSubmission(
   if (messageID && session.admitted(messageID)) return
   restore()
   input.notify.failed(kind, error)
-}
-
-function promptLength(prompt: Prompt) {
-  return prompt.reduce((length, part) => length + ("content" in part ? part.content.length : 0), 0)
 }

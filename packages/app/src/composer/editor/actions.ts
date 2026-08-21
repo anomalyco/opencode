@@ -7,6 +7,7 @@ import type {
   ComposerPersistedState,
   ComposerPrompt,
 } from "../types"
+import { promptLength } from "../prompt-parts"
 
 export type ComposerStateStore = [
   Store<ComposerPersistedState> | Accessor<Store<ComposerPersistedState>>,
@@ -133,8 +134,4 @@ function withOffsets(prompt: ComposerPrompt): ComposerPrompt {
     offset = next.end
     return next
   })
-}
-
-function promptLength(prompt: ComposerPrompt) {
-  return prompt.reduce((length, part) => length + ("content" in part ? part.content.length : 0), 0)
 }

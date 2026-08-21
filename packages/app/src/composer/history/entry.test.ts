@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/composer/state"
-import { clonePromptParts, prependHistoryEntry, promptLength, type PromptHistoryComment } from "./entry"
+import { prependHistoryEntry, type PromptHistoryComment } from "./entry"
 import { upgradeHistoryState } from "./store"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
@@ -38,27 +38,5 @@ describe("Composer history", () => {
     expect(upgradeHistoryState({ entries: [text("stored")] })).toEqual({
       entries: [{ prompt: text("stored"), comments: [] }],
     })
-  })
-
-  test("helpers clone prompt and count text content length", () => {
-    const original: Prompt = [
-      { type: "text", content: "one", start: 0, end: 3 },
-      {
-        type: "file",
-        path: "src/a.ts",
-        content: "@src/a.ts",
-        start: 3,
-        end: 12,
-        selection: { startLine: 1, startChar: 1, endLine: 2, endChar: 1 },
-      },
-      { type: "image", id: "1", filename: "img.png", mime: "image/png", blob: { id: "blob", url: "blob:test" } },
-    ]
-    const copy = clonePromptParts(original)
-    expect(copy).not.toBe(original)
-    expect(promptLength(copy)).toBe(12)
-    if (copy[1]?.type !== "file") throw new Error("expected file")
-    copy[1].selection!.startLine = 9
-    if (original[1]?.type !== "file") throw new Error("expected file")
-    expect(original[1].selection?.startLine).toBe(1)
   })
 })

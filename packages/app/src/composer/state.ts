@@ -8,6 +8,7 @@ import type { BlobReference } from "@/runtime/persistence/drafts"
 import type { Platform } from "@/runtime/platform/platform"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Skill } from "@opencode-ai/schema/skill"
+import { clonePrompt } from "./prompt-parts"
 
 interface PartBase {
   content: string
@@ -106,26 +107,6 @@ export type ComposerStore = {
 type InitialPrompt = {
   prompt?: string
   model?: PromptModel
-}
-
-function cloneSelection(selection?: FileSelection) {
-  if (!selection) return undefined
-  return { ...selection }
-}
-
-function clonePart(part: ContentPart): ContentPart {
-  if (part.type === "text") return { ...part }
-  if (part.type === "image") return { ...part }
-  if (part.type === "agent") return { ...part }
-  if (part.type === "skill") return { ...part }
-  return {
-    ...part,
-    selection: cloneSelection(part.selection),
-  }
-}
-
-function clonePrompt(prompt: Prompt): Prompt {
-  return prompt.map(clonePart)
 }
 
 function contextItemKey(item: ContextItem) {

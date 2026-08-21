@@ -97,9 +97,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
       await bootstrapGlobal({
         serverAPI: serverSDK.api,
         scope: serverSDK.scope,
-        requestFailedTitle: language.t("common.requestFailed"),
-        translate: language.t,
-        formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
         setGlobalStore: setBootStore,
         queryClient,
       })
