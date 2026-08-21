@@ -584,7 +584,7 @@ describe("SessionModelTransport", () => {
     )
   })
 
-  test("rotates when handshake affinity or connection age changes", async () => {
+  test("rotates when refreshed authorization changes handshake affinity", async () => {
     const fixture = automatic()
 
     await run(
@@ -595,11 +595,26 @@ describe("SessionModelTransport", () => {
         yield* collect(executor, exchange("first", { headers: { authorization: "one" } }))
         yield* collect(executor, exchange("second", { headers: { authorization: "one" } }))
         yield* collect(executor, exchange("third", { headers: { authorization: "two" } }))
+        expect(fixture.connections).toHaveLength(2)
+        expect(fixture.connections[0]?.closed).toBe(1)
+        expect(fixture.connections.map((item) => item.headers.authorization)).toEqual(["one", "two"])
+      }),
+    )
+  })
+
+  test("rotates when the connection exceeds its requested age limit", async () => {
+    const fixture = automatic()
+
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        yield* collect(executor, exchange("first"))
         yield* Effect.sleep("5 millis")
-        yield* collect(executor, exchange("fourth", { headers: { authorization: "two" }, rotateAfterMs: 1 }))
-        expect(fixture.connections).toHaveLength(3)
-        expect(fixture.connections.slice(0, 2).map((item) => item.closed)).toEqual([1, 1])
-        expect(fixture.connections.map((item) => item.headers.authorization)).toEqual(["one", "two", "two"])
+        yield* collect(executor, exchange("second", { rotateAfterMs: 1 }))
+        expect(fixture.connections).toHaveLength(2)
+        expect(fixture.connections[0]?.closed).toBe(1)
       }),
     )
   })

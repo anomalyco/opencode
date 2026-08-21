@@ -14,7 +14,6 @@ export const llmClient = makeGlobalNode({ service: LLMClient.Service, layer: LLM
 
 export const webSocketConstructor = makeGlobalNode({
   service: Socket.WebSocketConstructor,
-  // Leave TLS trust on the runtime default store so NODE_EXTRA_CA_CERTS remains additive.
   layer: WebSocketConstructor.layer,
   deps: [],
 })

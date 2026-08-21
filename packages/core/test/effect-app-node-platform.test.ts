@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Socket } from "effect/unstable/socket"
 
-const server = (fetch: (request: Request, server: Bun.Server<undefined>) => Response | undefined) =>
+const makeServer = (fetch: (request: Request, server: Bun.Server<undefined>) => Response | undefined) =>
   Effect.acquireRelease(
     Effect.sync(() =>
       Bun.serve({
@@ -60,12 +60,12 @@ describe("WebSocket network policy", () => {
     let destinationRequests = 0
     await Effect.runPromise(
       Effect.gen(function* () {
-        const destination = yield* server((request, server) => {
+        const destination = yield* makeServer((request, server) => {
           destinationRequests++
           if (server.upgrade(request)) return undefined
           return new Response("upgrade failed", { status: 426 })
         })
-        const redirect = yield* server(
+        const redirect = yield* makeServer(
           () =>
             new Response(null, {
               status: 302,

@@ -15,7 +15,7 @@ type Environment = Readonly<Record<string, string | undefined>>
 const environmentValue = (environment: Environment, name: string) =>
   environment[name] ?? environment[name.toLowerCase()]
 
-const noProxy = (url: URL, value: string | undefined) => {
+const bypassesProxy = (url: URL, value: string | undefined) => {
   if (!value) return false
   const port = url.port || (url.protocol === "wss:" ? "443" : "80")
   return value.split(/[\s,]+/).some((entry) => {
@@ -32,25 +32,32 @@ const noProxy = (url: URL, value: string | undefined) => {
 const proxy = (value: string, environment: Environment = process.env) => {
   const url = new URL(value)
   if (["127.0.0.1", "localhost", "::1"].includes(url.hostname)) return undefined
-  if (noProxy(url, environmentValue(environment, "NO_PROXY"))) return undefined
-  const name = url.protocol === "wss:" ? "WSS_PROXY" : "WS_PROXY"
-  const fallback = url.protocol === "wss:" ? "HTTPS_PROXY" : "HTTP_PROXY"
+  if (bypassesProxy(url, environmentValue(environment, "NO_PROXY"))) return undefined
+  const protocolProxy = url.protocol === "wss:" ? "WSS_PROXY" : "WS_PROXY"
+  const standardProxy = url.protocol === "wss:" ? "HTTPS_PROXY" : "HTTP_PROXY"
   return (
-    environmentValue(environment, name) ??
-    environmentValue(environment, fallback) ??
+    environmentValue(environment, protocolProxy) ??
+    environmentValue(environment, standardProxy) ??
     environmentValue(environment, "ALL_PROXY")
   )
 }
 
-const options = (input: string | Array<string> | undefined): WebSocketOptions => {
+const constructorOptions = (input: string | Array<string> | undefined): WebSocketOptions => {
   if (typeof input === "string" || Array.isArray(input)) return { protocols: input }
   // AI routes pass handshake options through Effect's browser-shaped constructor.
   return (input ?? {}) as WebSocketOptions
 }
 
+const proxyAgent = (url: string, selectedProxy: string | undefined) => {
+  if (!selectedProxy) return undefined
+  if (url.startsWith("wss:") || selectedProxy.startsWith("https:")) return new HttpsProxyAgent(selectedProxy)
+  return new HttpProxyAgent(selectedProxy)
+}
+
 const layer = Layer.succeed(Socket.WebSocketConstructor, (url, input) => {
-  const config = options(input)
+  const config = constructorOptions(input)
   const selectedProxy = proxy(url)
+  // Keep trust on the runtime store so NODE_EXTRA_CA_CERTS remains additive.
   if (typeof Bun !== "undefined") {
     return new globalThis.WebSocket(url, {
       headers: config.headers,
@@ -59,14 +66,9 @@ const layer = Layer.succeed(Socket.WebSocketConstructor, (url, input) => {
     })
   }
 
-  const agent = selectedProxy
-    ? url.startsWith("wss:") || selectedProxy.startsWith("https:")
-      ? new HttpsProxyAgent(selectedProxy)
-      : new HttpProxyAgent(selectedProxy)
-    : undefined
   const native = {
     headers: config.headers,
-    agent,
+    agent: proxyAgent(url, selectedProxy),
     // Reject redirects before headers can cross an origin boundary; the caller safely falls back to HTTP.
     followRedirects: false,
   }
