@@ -89,6 +89,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const focusInput = actions.focusInput
 
   const sessionCommand = withCategory(language.t("command.category.session"))
+  const projectCommand = withCategory(language.t("command.category.project"))
   const fileCommand = withCategory(language.t("command.category.file"))
   const contextCommand = withCategory(language.t("command.category.context"))
   const viewCommand = withCategory(language.t("command.category.view"))
@@ -122,6 +123,46 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         variant: "error",
         title: language.t("toast.session.export.failed.title"),
         description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
+      })
+    }
+  }
+
+  const copySessionID = async () => {
+    const sessionID = actions.session.identity.params.id
+    if (!sessionID) return
+    try {
+      await navigator.clipboard.writeText(sessionID)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("common.copied"),
+        description: sessionID,
+      })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.copyID.failed.title"),
+        description: err instanceof Error ? err.message : language.t("toast.session.copyID.failed.description"),
+      })
+    }
+  }
+
+  const copyProjectID = async () => {
+    const projectID = actions.session.data.info()?.projectID
+    if (!projectID) return
+    try {
+      await navigator.clipboard.writeText(projectID)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("common.copied"),
+        description: projectID,
+      })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.project.copyID.failed.title"),
+        description: err instanceof Error ? err.message : language.t("toast.project.copyID.failed.description"),
       })
     }
   }
@@ -271,6 +312,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       disabled: !actions.session.identity.params.id,
       onSelect: exportSession,
     }),
+    sessionCommand({
+      id: "session.copyID",
+      title: language.t("command.session.copyID"),
+      disabled: !actions.session.identity.params.id,
+      onSelect: copySessionID,
+    }),
   ]
 
   const fileCmds = () => {
@@ -293,6 +340,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         }),
     ].filter((v) => !!v)
   }
+
+  const projectCmds = () => [
+    projectCommand({
+      id: "project.copyID",
+      title: language.t("command.project.copyID"),
+      disabled: !actions.session.data.info()?.projectID,
+      onSelect: copyProjectID,
+    }),
+  ]
 
   const contextCmds = () => [
     contextCommand({
@@ -407,6 +463,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   command.register("session", () => [
     ...sessionCmds(),
+    ...projectCmds(),
     ...fileCmds(),
     ...contextCmds(),
     ...viewCmds(),

@@ -162,6 +162,7 @@ const source = {
   "ui.tool.websearch": "Web Search",
   "ui.tool.websearch.provider": "{{provider}} Web Search",
   "ui.tool.shell": "Shell",
+  "ui.tool.shell.writingCommand": "Writing command...",
   "ui.tool.execute": "Execute",
   "ui.tool.patch": "Patch",
   "ui.tool.questions": "Questions",

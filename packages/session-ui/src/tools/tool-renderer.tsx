@@ -1271,9 +1271,8 @@ ToolRegistry.register({
   name: "shell",
   render(props) {
     const i18n = useI18n()
-    const pending = () =>
-      props.status === "streaming" || props.status === "running" || props.metadata.status === "running"
-    const sawPending = pending()
+    const streaming = () => props.status === "streaming"
+    const sawStreaming = streaming()
     const command = () => {
       if (typeof props.input.command === "string") return props.input.command
       if (typeof props.metadata.command === "string") return props.metadata.command
@@ -1288,15 +1287,28 @@ ToolRegistry.register({
         {...props}
         icon="console"
         rail={false}
+        compact
         allowOpenWhilePending
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
+                <TextShimmer
+                  text={i18n.t("ui.tool.shell")}
+                  active={streaming() || props.status === "running" || props.metadata.status === "running"}
+                />
               </span>
-              <Show when={!open() && command()}>
-                <ShellSubmessage text={command()} animate={sawPending} />
+              <Show when={!open()}>
+                <Show
+                  when={command()}
+                  fallback={
+                    <Show when={streaming()}>
+                      <span data-slot="basic-tool-tool-subtitle">{i18n.t("ui.tool.shell.writingCommand")}</span>
+                    </Show>
+                  }
+                >
+                  {(command) => <ShellSubmessage text={command()} animate={sawStreaming} />}
+                </Show>
               </Show>
             </div>
           </div>

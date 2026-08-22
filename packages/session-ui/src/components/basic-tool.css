@@ -170,6 +170,31 @@
   }
 }
 
+[data-component="collapsible"].tool-collapsible[data-compact="true"] > [data-slot="collapsible-trigger"] {
+  height: 28px;
+
+  [data-component="tool-trigger"],
+  [data-slot="basic-tool-tool-info-main"] {
+    gap: 6px;
+  }
+
+  [data-slot="basic-tool-tool-title"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 530;
+    line-height: var(--v2-line-height-compact, 16px);
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="basic-tool-tool-subtitle"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--v2-line-height-compact, 16px);
+    letter-spacing: -0.04px;
+  }
+}
+
 [data-component="task-tool-card"] {
   width: 100%;
   min-width: 0;

@@ -259,6 +259,18 @@ export function event(
   return makeEvent(type, data)
 }
 
+export function toolInputStarted(data: Extract<OpenCodeEvent, { type: "session.tool.input.started" }>["data"]) {
+  return makeEvent("session.tool.input.started", data)
+}
+
+export function toolInputEnded(data: Extract<OpenCodeEvent, { type: "session.tool.input.ended" }>["data"]) {
+  return makeEvent("session.tool.input.ended", data)
+}
+
+export function toolCalled(data: Extract<OpenCodeEvent, { type: "session.tool.called" }>["data"]) {
+  return makeEvent("session.tool.called", data)
+}
+
 export function validateTimelineEvent(input: unknown): OpenCodeEvent {
   if (!input || typeof input !== "object") throw new Error("Timeline event must be an object")
   if (!("type" in input) || typeof input.type !== "string") throw new Error("Timeline event requires a type")

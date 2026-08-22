@@ -43,6 +43,7 @@ export interface BasicToolProps {
   triggerHref?: string
   triggerAsLink?: boolean
   clickable?: boolean
+  compact?: boolean
 }
 
 const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
@@ -260,6 +261,7 @@ export function BasicTool(props: BasicToolProps) {
       open={open()}
       onOpenChange={props.locked ? undefined : handleOpenChange}
       class="tool-collapsible"
+      data-compact={props.compact ? "true" : undefined}
       data-rail={props.rail === false ? "false" : undefined}
     >
       <Show

@@ -30,6 +30,7 @@ export const dict = {
   "command.project.previous": "Previous project",
   "command.project.next": "Next project",
   "command.project.index": "Switch to project {{index}}",
+  "command.project.copyID": "Copy Project ID",
   "command.provider.connect": "Connect provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
@@ -93,6 +94,7 @@ export const dict = {
   "command.session.fork.description": "Create a new session from a previous message",
   "command.session.export": "Export session",
   "command.session.export.description": "Export the full session transcript as JSON",
+  "command.session.copyID": "Copy Session ID",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.search.placeholder.home": "Search commands and sessions",
@@ -553,6 +555,10 @@ export const dict = {
   "toast.session.export.success.description": "Saved session to {{filename}}",
   "toast.session.export.failed.title": "Failed to export session",
   "toast.session.export.failed.description": "An error occurred while exporting the session",
+  "toast.session.copyID.failed.title": "Failed to copy session ID",
+  "toast.session.copyID.failed.description": "An error occurred while copying the session ID",
+  "toast.project.copyID.failed.title": "Failed to copy project ID",
+  "toast.project.copyID.failed.description": "An error occurred while copying the project ID",
 
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",

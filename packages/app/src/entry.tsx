@@ -61,7 +61,9 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   })
 }
 
-if (root instanceof HTMLElement) {
+if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
+  // Lazy chunks can import the entry chunk back under a distinct URL, so claim the root before async startup.
+  root.dataset.opencodeMounted = ""
   void loadInitialLocale().then((locale) => {
     const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
     clearAuthToken()
