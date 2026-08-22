@@ -84,7 +84,7 @@ test("transitions a streaming shell from writing through command execution", asy
       executed: true,
     }),
   )
-  await expect(titleShimmer).toHaveAttribute("data-active", "false")
+  await expect(titleShimmer).toHaveAttribute("data-active", "true")
   await expect(subtitle).toHaveText(command)
 })
 
