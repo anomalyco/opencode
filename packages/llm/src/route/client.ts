@@ -8,7 +8,7 @@ import { HttpTransport } from "./transport"
 import type { Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
-import { logEvents as logResponseEvents, logRequest as logOutgoingRequest } from "./message-logger"
+import { logRequest, responseStream } from "./message-logger"
 import type { LogLevel } from "./message-logger"
 import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
@@ -354,7 +354,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
 
   const logMessages = request.metadata?.logMessages
   if (logMessages) {
-    yield* logOutgoingRequest(request, logMessages as LogLevel, body)
+    yield* logRequest(request, logMessages as LogLevel, body)
   }
 
   return {
@@ -386,15 +386,14 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =
       const events = compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime)
       const logMessages = request.metadata?.logMessages as LogLevel | undefined
       if (!logMessages) return events
-      return events.pipe(
-        Stream.tap((event) => logResponseEvents(request, [event], logMessages)),
-      )
+      return responseStream(`${request.model.provider}/${request.model.id}`, logMessages)(events)
     }),
   )
 
 const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest) {
-    const logMessages = request.metadata?.logMessages as LogLevel | undefined
+    // The stream pipeline emits the single coalesced "LLM response" log at the
+    // terminal event, which runs before this fold completes.
     const state = yield* stream(request).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
     const response = LLMResponse.complete(state)
     if (!response) {
@@ -402,9 +401,6 @@ const generateWith = (stream: Interface["stream"]) =>
         `${request.model.provider}/${request.model.route.id}`,
         "Provider stream ended without a terminal finish event",
       )
-    }
-    if (logMessages) {
-      yield* logResponseEvents(request, response.events, logMessages)
     }
     return response
   })

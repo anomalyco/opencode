@@ -16,7 +16,7 @@ import {
   type JsonSchema,
   type LLMEvent,
 } from "@opencode-ai/llm"
-import type { LLMClientShape } from "@opencode-ai/llm/route"
+import type { LLMClientShape, LogLevel } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
 
 export type RuntimeStatus =
@@ -41,7 +41,7 @@ type StreamInput = {
   readonly providerOptions?: Record<string, any>
   readonly headers: Record<string, string>
   readonly abort: AbortSignal
-  readonly logMessages?: string
+  readonly logMessages?: LogLevel
 }
 
 export function status(input: Pick<StreamInput, "model" | "provider" | "auth">): RuntimeStatus {

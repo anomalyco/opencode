@@ -269,15 +269,28 @@ const live: Layer.Layer<
         })
       }
 
-      const logMessages = cfg.experimental?.log_messages as MessageLogger.LogLevel | undefined
+      const logMessages = cfg.experimental?.log_messages
       if (logMessages) {
+        // The AI SDK runtime has no access to the provider-native request body,
+        // so "trace" carries the same payload as "debug" on this path.
         const model = `${input.model.providerID}/${input.model.id}`
         const texts: Array<string> = []
         for (const s of prepared.system) texts.push(`system: ${s}`)
         for (const m of prepared.messages) {
-          const content = typeof m.content === "string"
-            ? m.content
-            : m.content?.map((p) => (p.type === "text" ? p.text : `[${p.type}]`)).join("\n") ?? ""
+          const content =
+            typeof m.content === "string"
+              ? m.content
+              : (m.content
+                  ?.map((p) =>
+                    p.type === "text"
+                      ? p.text
+                      : p.type === "tool-call"
+                        ? `tool-call(${p.toolName}): ${JSON.stringify(p.input)}`
+                        : p.type === "tool-result"
+                          ? `tool-result(${p.toolName}): ${JSON.stringify(p.output)}`
+                          : `[${p.type}]`,
+                  )
+                  .join("\n") ?? "")
           texts.push(`${m.role}: ${content}`)
         }
         const payload: Record<string, unknown> = { model, messages: texts.join("\n") }
@@ -286,7 +299,7 @@ const live: Layer.Layer<
             Object.entries(prepared.params).filter(([, v]) => v !== undefined) as Array<[string, unknown]>,
           )
         }
-        yield* Effect.logInfo("LLM request", payload)
+        yield* MessageLogger.log(logMessages, "LLM request", payload)
       }
 
       yield* Effect.logInfo("llm runtime selected", {
@@ -400,14 +413,7 @@ const live: Layer.Layer<
               Stream.flatMap((events) => Stream.fromIterable(events)),
             )
             if (result.logMessages) {
-              events = events.pipe(
-                Stream.tap((event) =>
-                  Effect.logInfo("LLM response", {
-                    model,
-                    response: MessageLogger.formatEvents([event]),
-                  }),
-                ),
-              )
+              events = MessageLogger.responseStream(model, result.logMessages)(events)
             }
             return events
           }),

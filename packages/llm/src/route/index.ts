@@ -11,6 +11,7 @@ export type {
 } from "./client"
 export * from "./executor"
 export { MessageLogger } from "./message-logger"
+export type { LogLevel } from "./message-logger"
 export { Auth } from "./auth"
 export { AuthOptions } from "./auth-options"
 export { Endpoint } from "./endpoint"
