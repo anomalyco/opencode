@@ -74,7 +74,9 @@ export function createTimelineVirtualizer(input: Input) {
   let prependLoading = false
   let resizePinnedIndexes: number[] = []
   let resizePinFrame: number | undefined
+  let gestureAnchorFrame: number | undefined
   let virtualContent: HTMLDivElement | undefined
+  let scrollTop = 0
 
   const clearPrependAnchor = () => {
     prependLoading = false
@@ -178,12 +180,28 @@ export function createTimelineVirtualizer(input: Input) {
   })
   const resizeItem = virtualizer.resizeItem
   let resizeAnchorScheduled = false
+  const anchorAfterGesture = () => {
+    if (gestureAnchorFrame !== undefined) return
+    const apply = () => {
+      gestureAnchorFrame = undefined
+      if (input.hasScrollGesture()) {
+        gestureAnchorFrame = requestAnimationFrame(apply)
+        return
+      }
+      if (input.shouldAnchorBottom()) virtualizer.scrollToEnd()
+    }
+    gestureAnchorFrame = requestAnimationFrame(apply)
+  }
   const anchorResizedBottom = () => {
-    if (resizeAnchorScheduled || input.hasScrollGesture()) return
+    if (resizeAnchorScheduled) return
     resizeAnchorScheduled = true
     queueMicrotask(() => {
       resizeAnchorScheduled = false
-      if (!input.shouldAnchorBottom() || input.hasScrollGesture()) return
+      if (input.hasScrollGesture()) {
+        anchorAfterGesture()
+        return
+      }
+      if (!input.shouldAnchorBottom()) return
       virtualizer.scrollToEnd()
     })
   }
@@ -244,7 +262,11 @@ export function createTimelineVirtualizer(input: Input) {
 
   const maybeAnchorBottom = () => {
     if (rows().length === 0) return
-    if (!input.shouldAnchorBottom() || input.hasScrollGesture()) return
+    if (input.hasScrollGesture()) {
+      anchorAfterGesture()
+      return
+    }
+    if (!input.shouldAnchorBottom()) return
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
@@ -265,6 +287,7 @@ export function createTimelineVirtualizer(input: Input) {
   const bindListRoot = (root: HTMLDivElement) => {
     if (root === listRoot()) return
     setListRoot(root)
+    scrollTop = root.scrollTop
     input.setScrollRef(root)
   }
 
@@ -324,13 +347,17 @@ export function createTimelineVirtualizer(input: Input) {
   }
 
   const handleListScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+    const root = event.currentTarget
+    const movedUp = root.scrollTop < scrollTop - 0.5
+    scrollTop = root.scrollTop
     if (prependLoading) updatePrependAnchor()
-    input.onScheduleScrollState(event.currentTarget)
+    input.onScheduleScrollState(root)
     input.onHistoryScroll()
     if (!input.hasScrollGesture()) return
+    if (!movedUp && root.scrollHeight - root.clientHeight - root.scrollTop >= 10) return
     input.onUserScroll()
     input.onAutoScrollHandleScroll()
-    input.onMarkScrollGesture(event.currentTarget)
+    input.onMarkScrollGesture(root)
   }
 
   function View(props: ViewProps) {
@@ -463,6 +490,7 @@ export function createTimelineVirtualizer(input: Input) {
     cache.set(ownerSessionKey, { measurements: virtualizer.takeSnapshot(), toolOpen: { ...toolOpen } })
     while (cache.size > 16) cache.delete(cache.keys().next().value!)
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
+    if (gestureAnchorFrame !== undefined) cancelAnimationFrame(gestureAnchorFrame)
     if (overscanFrame !== undefined) cancelAnimationFrame(overscanFrame)
     input.setScrollRef(undefined)
     input.setRevealMessage?.(() => {})
