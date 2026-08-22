@@ -1,7 +1,14 @@
 {
   "version": 1,
   "metadata": {
-    "tags": ["prefix:pdf", "pdf", "provider:openai", "protocol:openai-responses", "tool", "tool-result"],
+    "tags": [
+      "prefix:pdf",
+      "pdf",
+      "provider:openai",
+      "protocol:openai-responses",
+      "tool",
+      "tool-result"
+    ],
     "name": "pdf/openai-tool-result",
     "recordedAt": "2026-07-22T18:15:36.438Z"
   },
@@ -14,7 +21,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"gpt-4o-mini\",\"input\":[{\"role\":\"system\",\"content\":\"Read the PDF returned by the tool and follow the user's response format exactly.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Return only the verification code from the PDF.\"}]},{\"type\":\"function_call\",\"call_id\":\"call_pdf_1\",\"name\":\"read_pdf\",\"arguments\":\"{}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_pdf_1\",\"output\":[{\"type\":\"input_text\",\"text\":\"PDF read successfully\"},{\"type\":\"input_file\",\"filename\":\"verification.pdf\",\"file_data\":\"data:application/pdf;base64,JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA3NSA+PgpzdHJlYW0KQlQKL0YxIDE4IFRmCjcyIDcyMCBUZAooUERGIGNhc3NldHRlIHZlcmlmaWNhdGlvbiBjb2RlOiBPUkNISUQtNzM5MSkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzNjUgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0MzUKJSVFT0YK\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"read_pdf\",\"description\":\"Read the attached PDF.\",\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false},\"strict\":false}],\"store\":false,\"max_output_tokens\":40,\"temperature\":0,\"stream\":true}"
+        "body": "{\"model\":\"gpt-4o-mini\",\"input\":[{\"role\":\"system\",\"content\":\"Read the PDF returned by the tool and follow the user's response format exactly.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Return only the verification code from the PDF.\"}]},{\"type\":\"function_call\",\"call_id\":\"call_pdf_1\",\"name\":\"read_pdf\",\"arguments\":\"{}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_pdf_1\",\"output\":[{\"type\":\"input_text\",\"text\":\"PDF read successfully\"},{\"type\":\"input_file\",\"filename\":\"verification.pdf\",\"file_data\":\"JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA3NSA+PgpzdHJlYW0KQlQKL0YxIDE4IFRmCjcyIDcyMCBUZAooUERGIGNhc3NldHRlIHZlcmlmaWNhdGlvbiBjb2RlOiBPUkNISUQtNzM5MSkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzNjUgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0MzUKJSVFT0YK\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"read_pdf\",\"description\":\"Read the attached PDF.\",\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false},\"strict\":false}],\"store\":false,\"max_output_tokens\":40,\"temperature\":0,\"stream\":true}"
       },
       "response": {
         "status": 200,

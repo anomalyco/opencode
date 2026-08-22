@@ -1273,7 +1273,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "input_file",
           filename: "report.pdf",
-          file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
+          file_data: "JVBERi0xLjQ=",
         },
       ])
     }),
@@ -1300,12 +1300,12 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(expectToolOutput(prepared.body).output).toEqual([
-        { type: "input_file", filename: "report.pdf", file_data: dataUrl },
+        { type: "input_file", filename: "report.pdf", file_data: base64 },
       ])
     }),
   )
 
-  it.effect("uses xAI inline file encoding for PDF tool results", () =>
+  it.effect("uses standard inline file encoding for xAI PDF tool results", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -1334,7 +1334,6 @@ describe("OpenAI Responses route", () => {
           type: "input_file",
           filename: "report.pdf",
           file_data: "JVBERi0xLjQ=",
-          mime_type: "application/pdf",
         },
       ])
     }),
@@ -1359,7 +1358,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(expectToolOutput(prepared.body).output).toEqual([
-        { type: "input_file", filename: "file", file_data: "data:audio/mpeg;base64,AAECAw==" },
+        { type: "input_file", filename: "file", file_data: "AAECAw==" },
       ])
     }),
   )
@@ -2712,7 +2711,7 @@ describe("OpenAI Responses route", () => {
             {
               type: "input_file",
               filename: "report.pdf",
-              file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
+              file_data: "JVBERi0xLjQ=",
             },
           ],
         },
@@ -2720,7 +2719,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("uses xAI inline file encoding for user PDFs", () =>
+  it.effect("uses standard inline file encoding for xAI user PDFs", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -2744,7 +2743,6 @@ describe("OpenAI Responses route", () => {
               type: "input_file",
               filename: "report.pdf",
               file_data: "JVBERi0xLjQ=",
-              mime_type: "application/pdf",
             },
           ],
         },
@@ -2769,7 +2767,7 @@ describe("OpenAI Responses route", () => {
             {
               type: "input_file",
               filename: "file",
-              file_data: "data:application/x-tar;base64,AAECAw==",
+              file_data: "AAECAw==",
             },
           ],
         },

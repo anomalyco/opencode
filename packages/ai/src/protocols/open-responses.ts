@@ -43,7 +43,6 @@ const OpenResponsesInputFile = Schema.Struct({
   type: Schema.tag("input_file"),
   filename: Schema.String,
   file_data: Schema.String,
-  mime_type: Schema.optional(Schema.String),
 })
 const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile])
 export type MediaInput = Schema.Schema.Type<typeof MediaInput>
@@ -430,7 +429,7 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
     return {
       type: "input_file" as const,
       filename: part.filename ?? (media.mime === "application/pdf" ? "document.pdf" : "file"),
-      file_data: media.dataUrl,
+      file_data: media.base64,
     }
   }
   return { type: "input_image" as const, image_url: media.dataUrl }

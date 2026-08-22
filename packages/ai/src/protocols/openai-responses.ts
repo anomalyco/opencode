@@ -68,15 +68,6 @@ const extension = {
   id: ADAPTER,
   name: NAME,
   messagePhase: (value: unknown) => (value === null ? null : undefined),
-  lowerMedia: ({ part, media, request }) => {
-    if (request.model.provider !== "xai" || media.mime !== "application/pdf") return undefined
-    return {
-      type: "input_file",
-      filename: part.filename ?? "document.pdf",
-      file_data: media.base64,
-      mime_type: media.mime,
-    }
-  },
 } satisfies OpenResponses.Extension
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
