@@ -3,6 +3,10 @@ import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
 
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
+  // Azure DeepSeek deployments need the DeepSeek-specific adapter for reasoning
+  // effort and reasoning_content across agentic turns; it is chat-completions
+  // based, so it also applies when useCompletionUrls is set.
+  if (modelID.toLowerCase().includes("deepseek") && sdk.deepseek) return sdk.deepseek(modelID)
   if (useChat && sdk.chat) return sdk.chat(modelID)
   if (sdk.responses) return sdk.responses(modelID)
   if (sdk.messages) return sdk.messages(modelID)

@@ -55,6 +55,7 @@ function fakeSelectorSdk(calls: string[]) {
     responses: make("responses"),
     messages: make("messages"),
     chat: make("chat"),
+    deepseek: make("deepseek"),
     languageModel: make("languageModel"),
   }
 }
@@ -258,6 +259,64 @@ describe("AzurePlugin", () => {
       })
       expect(calls).toEqual(["responses:deployment"])
       expect(ignored.language).toBeUndefined()
+    }),
+  )
+
+  it.effect("selects deepseek adapter for DeepSeek deployments", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
+      const calls: string[] = []
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deepseek-v4-pro")),
+          api: { id: ModelV2.ID.make("deepseek-v4-pro"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      expect(calls).toEqual(["deepseek:deepseek-v4-pro"])
+    }),
+  )
+
+  it.effect("keeps the deepseek adapter when useCompletionUrls is set", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
+      const calls: string[] = []
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deepseek-v4-pro")),
+          api: { id: ModelV2.ID.make("deepseek-v4-pro"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: { useCompletionUrls: true },
+      })
+      expect(calls).toEqual(["deepseek:deepseek-v4-pro"])
+    }),
+  )
+
+  it.effect("falls back to responses when the sdk has no deepseek adapter", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
+      const calls: string[] = []
+      const make = (method: string) => (id: string) => {
+        calls.push(`${method}:${id}`)
+        return { modelId: id, provider: method, specificationVersion: "v3" }
+      }
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deepseek-v4-pro")),
+          api: { id: ModelV2.ID.make("deepseek-v4-pro"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { responses: make("responses"), chat: make("chat"), languageModel: make("languageModel") },
+        options: {},
+      })
+      expect(calls).toEqual(["responses:deepseek-v4-pro"])
     }),
   )
 

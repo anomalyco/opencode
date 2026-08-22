@@ -941,8 +941,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "@ai-sdk/azure":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
       if (id === "o1-mini") return {}
+      const azureEfforts = [...openaiReasoningEfforts(id, model.release_date)]
+      if (model.api.id.toLowerCase().includes("deepseek-v4")) azureEfforts.push("max")
       return Object.fromEntries(
-        openaiReasoningEfforts(id, model.release_date).map((effort) => [
+        azureEfforts.map((effort) => [
           effort,
           {
             reasoningEffort: effort,
