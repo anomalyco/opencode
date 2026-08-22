@@ -1253,7 +1253,7 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer
                   text={i18n.t("ui.tool.shell")}
-                  active={streaming() || props.status === "running" || props.metadata.status === "running"}
+                  active={streaming()}
                 />
               </span>
               <Show when={!open()}>
