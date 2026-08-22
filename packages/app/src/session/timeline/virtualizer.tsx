@@ -267,6 +267,7 @@ export function createTimelineVirtualizer(input: Input) {
       const item = createMemo(() => virtualItemByKey().get(rowProps.rowKey) ?? initialItem)
       const row = createMemo(() => rowByKey().get(rowProps.rowKey) ?? rows()[item().index] ?? initialRow)
       const [ready, setReady] = createSignal(initialItem.size <= fallbackItemSize || !props.deferred(initialRow))
+      let contentMeasureFrame: number | undefined
 
       onMount(() => virtualizer.measureElement(element))
       createEffect(
@@ -278,7 +279,10 @@ export function createTimelineVirtualizer(input: Input) {
           { defer: true },
         ),
       )
-      onCleanup(() => virtualizer.measureElement(null))
+      onCleanup(() => {
+        if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
+        queueMicrotask(() => virtualizer.measureElement(null))
+      })
 
       return (
         <div
@@ -302,6 +306,11 @@ export function createTimelineVirtualizer(input: Input) {
           >
             {props.renderRow(row, () => {
               setReady(true)
+              if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
+              contentMeasureFrame = requestAnimationFrame(() => {
+                contentMeasureFrame = undefined
+                if (element.isConnected) virtualizer.measureElement(element)
+              })
             })}
           </div>
         </div>
