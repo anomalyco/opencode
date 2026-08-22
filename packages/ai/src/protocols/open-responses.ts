@@ -42,7 +42,12 @@ const OpenResponsesInputImage = Schema.Struct({
 const OpenResponsesInputFile = Schema.Struct({
   type: Schema.tag("input_file"),
   filename: Schema.String,
-  file_data: Schema.String,
+  file_data: Schema.optional(Schema.String),
+  file_url: Schema.optional(Schema.String),
+})
+const OpenResponsesInputVideo = Schema.Struct({
+  type: Schema.tag("input_video"),
+  video_url: Schema.String,
 })
 const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile])
 export type MediaInput = Schema.Schema.Type<typeof MediaInput>
@@ -80,6 +85,7 @@ const OpenResponsesFunctionCallOutputContent = Schema.Union([
   OpenResponsesInputText,
   OpenResponsesInputImage,
   OpenResponsesInputFile,
+  OpenResponsesInputVideo,
 ])
 
 const OpenResponsesFunctionCallOutput = Schema.Union([
@@ -420,18 +426,25 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   part: MediaPart,
   request: LLMRequest,
   extension: Extension,
+  target: "message" | "tool-result",
 ) {
   const media = ProviderShared.normalizeMedia(part)
   const extended = extension.lowerMedia?.({ part, media, request })
   if (extended) return extended
+  const url =
+    typeof part.data === "string" && (part.data.startsWith("https://") || part.data.startsWith("http://"))
+      ? part.data
+      : undefined
   if (!media.mime.startsWith("image/")) {
+    if (target === "tool-result" && media.mime.startsWith("video/"))
+      return { type: "input_video" as const, video_url: url ?? media.dataUrl }
     return {
       type: "input_file" as const,
       filename: part.filename ?? (media.mime === "application/pdf" ? "document.pdf" : "file"),
-      file_data: media.base64,
+      ...(url ? { file_url: url } : { file_data: media.base64 }),
     }
   }
-  return { type: "input_image" as const, image_url: media.dataUrl }
+  return { type: "input_image" as const, image_url: url ?? media.dataUrl }
 })
 
 const lowerUserContent = Effect.fnUntraced(function* (
@@ -440,8 +453,15 @@ const lowerUserContent = Effect.fnUntraced(function* (
   extension: Extension,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media") return yield* lowerMedia(part, request, extension)
+  if (part.type === "media") return yield* lowerMessageMedia(part, request, extension)
   return yield* ProviderShared.unsupportedContent(extension.name, "user", ["text", "media"])
+})
+
+const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, extension: Extension) {
+  const lowered = yield* lowerMedia(part, request, extension, "message")
+  if (lowered.type === "input_video")
+    return yield* ProviderShared.invalidRequest(`${extension.name} user messages do not support input_video`)
+  return lowered
 })
 
 // Tool results may carry structured text, images, and files. Keep media as provider-native
@@ -453,6 +473,20 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMedia(
+    { type: "media", mediaType: item.mime, data: item.uri, filename: item.name },
+    request,
+    extension,
+    "tool-result",
+  )
+})
+
+const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
+  item: Content,
+  request: LLMRequest,
+  extension: Extension,
+) {
+  if (item.type === "text") return { type: "input_text" as const, text: item.text }
+  return yield* lowerMessageMedia(
     { type: "media", mediaType: item.mime, data: item.uri, filename: item.name },
     request,
     extension,
@@ -565,7 +599,9 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
             const content: ReadonlyArray<Content> = part.result.value
             input.push({
               role: "user",
-              content: yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, extension)),
+              content: yield* Effect.forEach(content, (item) =>
+                lowerHostedToolResultContentItem(item, request, extension),
+              ),
             })
           }
           if (itemID) hostedToolReferences.add(itemID)
