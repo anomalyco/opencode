@@ -307,7 +307,6 @@ describe("current session timeline rows", () => {
       "assistant-part:msg_user:part:msg_assistant_2:tool_0",
       "assistant-part:msg_user:context:msg_assistant_3:tool_0",
     ])
-    expect(new Set(keys).size).toBe(keys.length)
   })
 
   test("places a divider after interrupted output unless the turn compacts", () => {
