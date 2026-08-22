@@ -81,6 +81,7 @@ function init() {
     let dispose: (() => void) | undefined
     let setClosing: ((closing: boolean) => void) | undefined
 
+    // Stacked dialogs render as sibling portals, so only the top layer may own the focus trap.
     const node = runWithOwner(owner, () =>
       createRoot((d: () => void) => {
         dispose = d
@@ -88,7 +89,7 @@ function init() {
         setClosing = setClosingSignal
         return (
           <Kobalte
-            modal
+            modal={stack().length <= layer + 1}
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (open) return
