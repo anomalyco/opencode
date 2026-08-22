@@ -7,10 +7,14 @@ import { createStore } from "solid-js/store"
 import { useGlobal } from "@/context/global"
 import { type LocalProject } from "@/context/layout"
 import { ServerConnection } from "@/context/server"
+import { useLanguage } from "@/context/language"
+import { showToast } from "@/utils/toast"
+import { formatServerError } from "@/utils/server-errors"
 
 export function createEditProjectModel(props: { project: LocalProject; server: ServerConnection.Any }) {
   const dialog = useDialog()
   const global = useGlobal()
+  const language = useLanguage()
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
   const folderName = createMemo(() => getFilename(props.project.worktree))
   const defaultName = createMemo(() => props.project.name || folderName())
@@ -71,23 +75,25 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
       const start = store.startup.trim()
 
       if (props.project.id && props.project.id !== "global") {
-        if ((await serverCtx().sdk.protocol) !== "v1") return
+        if ((await serverCtx().sdk.protocol) === "v1") {
+          serverCtx().sync.project.meta(props.project.worktree, {
+            name,
+            icon: { color: store.color || undefined, override: store.iconOverride || undefined },
+            commands: { start: start || undefined },
+          })
+          dialog.close()
+          return
+        }
         const project = await serverCtx()
           .sdk.client.project.update({
             projectID: props.project.id,
             directory: props.project.worktree,
             name,
-            icon: { color: store.color || "", override: store.iconOverride || "" },
-            commands: { start },
+            icon: { color: store.color || undefined, override: store.iconOverride || undefined },
+            commands: { start: start || undefined },
           })
           .then((result) => result.data)
-        if (!project) return
-        // const project = await serverCtx().sdk.api.project.update({
-        //   projectID: props.project.id,
-        //   name,
-        //   icon: { color: store.color || "", override: store.iconOverride || "" },
-        //   commands: { start },
-        // })
+        if (!project) throw new Error(`Project not found: ${props.project.id}`)
         serverCtx().sync.set("project", (items) =>
           items.map((item) => (item.id === project.id ? normalizeProjectInfo(project) : item)),
         )
@@ -102,6 +108,13 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
         commands: { start: start || undefined },
       })
       dialog.close()
+    },
+    onError: (error) => {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: formatServerError(error, language.t, language.t("common.requestFailed")),
+        variant: "error",
+      })
     },
   }))
 

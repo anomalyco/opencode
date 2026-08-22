@@ -573,7 +573,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const projectID = project.id
         void (async () => {
           const sdk = serverSdk()
-          if ((await sdk.protocol) !== "v1") return
+          if ((await sdk.protocol) === "v1") {
+            serverSync().project.meta(worktree, { icon: { color } })
+            return
+          }
           return sdk.client.project
             .update({ projectID, directory: worktree, icon: { color } })
             .then((response) => response.data)
