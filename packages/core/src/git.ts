@@ -181,7 +181,17 @@ const layer = Layer.effect(
     const locked = <A, E, R>(repository: Repository, effect: Effect.Effect<A, E, R>) =>
       locks.withLock(repository.gitDirectory)(effect)
 
+    // PERF: repo discovery spawns 3 git processes per call and runs 2-3x per
+    // instance boot (project resolution + watcher init). Repository topology is
+    // stable, so memoize positive results (negative results stay uncached so a
+    // later `git init` is picked up).
+    const discovered = new Map<string, { at: number; value: Repository }>()
+    const DISCOVER_TTL_MS = 600_000
+
     const discover = Effect.fn("Git.repo.discover")(function* (input: AbsolutePath) {
+      const hit = discovered.get(input)
+      if (hit && Date.now() - hit.at < DISCOVER_TTL_MS) return hit.value
+
       const dotgit = yield* fs.up({ targets: [".git"], start: input }).pipe(
         Effect.map((matches) => matches[0]),
         Effect.catch(() => Effect.succeed(undefined)),
@@ -195,11 +205,14 @@ const layer = Layer.effect(
       const commonDir = yield* git(["rev-parse", "--git-common-dir"])
       if (gitDir.exitCode !== 0 || commonDir.exitCode !== 0) return undefined
 
-      return new Repository({
+      const value = new Repository({
         worktree: AbsolutePath.make(topLevel.exitCode === 0 ? resolvePath(cwd, topLevel.text) : cwd),
         gitDirectory: AbsolutePath.make(resolvePath(cwd, gitDir.text)),
         commonDirectory: AbsolutePath.make(resolvePath(cwd, commonDir.text)),
       })
+      if (discovered.size > 1024) discovered.clear()
+      discovered.set(input, { at: Date.now(), value })
+      return value
     })
 
     const remote = Effect.fn("Git.remote.get")(function* (repository: Repository, name = "origin") {

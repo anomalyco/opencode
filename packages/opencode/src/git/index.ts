@@ -1,6 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppProcess } from "@opencode-ai/core/process"
-import { Effect, Layer, Context, Stream } from "effect"
+import { Effect, Layer, Context, Stream, Deferred, Exit } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 
 const cfg = [
@@ -107,28 +107,54 @@ const layer = Layer.effect(
     const encoder = new TextEncoder()
     const stdin = (text: string) => Stream.make(encoder.encode(text))
 
+    // PERF: single-flight — concurrent identical git spawns (web-UI bursts
+    // fire the same status/branch queries simultaneously) coalesce into one
+    // process. Each git.exe spawn costs 100-500ms on Windows and blocks the
+    // single-threaded scheduler, so bursts amplify badly without this.
+    const inflight = new Map<string, Deferred.Deferred<Result, never>>()
+
     const run = Effect.fn("Git.run")(
       function* (args: string[], opts: Options) {
-        const result = yield* appProcess.run(
-          ChildProcess.make("git", [...cfg, ...args], {
-            cwd: opts.cwd,
-            env: opts.env,
-            extendEnv: true,
-            stdin: opts.stdin ?? "ignore",
-            stdout: "pipe",
-            stderr: "pipe",
-          }),
-          { maxOutputBytes: opts.maxOutputBytes },
+        const exec = appProcess
+          .run(
+            ChildProcess.make("git", [...cfg, ...args], {
+              cwd: opts.cwd,
+              env: opts.env,
+              extendEnv: true,
+              stdin: opts.stdin ?? "ignore",
+              stdout: "pipe",
+              stderr: "pipe",
+            }),
+            { maxOutputBytes: opts.maxOutputBytes },
+          )
+          .pipe(
+            Effect.map(
+              (result) =>
+                ({
+                  exitCode: result.exitCode,
+                  text: () => result.stdout.toString("utf8"),
+                  stdout: result.stdout,
+                  stderr: result.stderr,
+                  truncated: result.stdoutTruncated || result.stderrTruncated,
+                }) satisfies Result,
+            ),
+            Effect.catch((err) => Effect.succeed(fail(err))),
+          )
+
+        // stdin is a single-consumption stream; never share those runs
+        if (opts.stdin !== undefined) return yield* exec
+
+        const key = `${opts.cwd}\0${args.join(" ")}`
+        const existing = inflight.get(key)
+        if (existing) return yield* Deferred.await(existing)
+
+        const deferred = Deferred.makeUnsafe<Result>()
+        inflight.set(key, deferred)
+        return yield* exec.pipe(
+          Effect.onExit((exit) => Deferred.done(deferred, exit as Exit.Exit<Result, never>)),
+          Effect.ensuring(Effect.sync(() => inflight.delete(key))),
         )
-        return {
-          exitCode: result.exitCode,
-          text: () => result.stdout.toString("utf8"),
-          stdout: result.stdout,
-          stderr: result.stderr,
-          truncated: result.stdoutTruncated || result.stderrTruncated,
-        } satisfies Result
       },
-      Effect.catch((err) => Effect.succeed(fail(err))),
     )
 
     const text = Effect.fn("Git.text")(function* (args: string[], opts: Options) {

@@ -11,6 +11,14 @@ import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 const PATCH_CONTEXT_LINES = 2_147_483_647
 const MAX_PATCH_BYTES = 10_000_000
 const MAX_TOTAL_PATCH_BYTES = 10_000_000
+
+// PERF: Vcs.status spawns 3+ git.exe processes per call (100-500ms spawn cost
+// each on Windows) and the web UI polls it. Serve a short-lived cached result.
+// Freshness: watcher events drop the cache instantly (HEAD moves cover
+// commit/checkout/rebase; worktree edits too when the experimental filewatcher
+// is enabled), so only edits made with watching disabled wait out the TTL.
+// Set OPENCODE_VCS_STATUS_TTL_MS=0 to disable caching entirely.
+const STATUS_TTL_MS = Number(process.env.OPENCODE_VCS_STATUS_TTL_MS ?? 2000)
 type DiffOptions = {
   readonly context?: number
 }
@@ -291,6 +299,7 @@ export interface Interface {
 interface State {
   current: string | undefined
   root: Git.Base | undefined
+  status?: { value: FileStatus[]; at: number }
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
@@ -320,6 +329,8 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
           if (event.type !== Watcher.Event.Updated.type || event.location?.directory !== ctx.directory)
             return Effect.void
           const data = event.data as EventV2.Data<typeof Watcher.Event.Updated>
+          // PERF: any observed change may alter status output; drop the cache immediately
+          value.status = undefined
           if (!data.file.endsWith("HEAD")) return Effect.void
           return Effect.gen(function* () {
             const next = yield* get()
@@ -348,13 +359,15 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
       status: Effect.fn("Vcs.status")(function* () {
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return []
+        const holder = yield* InstanceState.get(state)
+        if (holder.status && Date.now() - holder.status.at < STATUS_TTL_MS) return holder.status.value
         const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
         const [list, stats] = yield* Effect.all(
           [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
           { concurrency: 2 },
         )
         const map = nums(stats)
-        return yield* Effect.forEach(
+        const value = yield* Effect.forEach(
           list.toSorted((a, b) => a.file.localeCompare(b.file)),
           (item) =>
             Effect.gen(function* () {
@@ -369,6 +382,8 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
               } satisfies FileStatus
             }),
         )
+        holder.status = { value, at: Date.now() }
+        return value
       }),
       diff: Effect.fn("Vcs.diff")(function* (mode: Mode, options?: DiffOptions) {
         const value = yield* InstanceState.get(state)
@@ -412,6 +427,7 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
             reason: "not-clean",
           })
         }
+        ;(yield* InstanceState.get(state)).status = undefined
         return { applied: true }
       }),
     })
