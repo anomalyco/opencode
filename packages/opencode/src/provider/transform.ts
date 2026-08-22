@@ -528,7 +528,10 @@ const GEMINI_MODELS_WITH_SAMPLING_DEFAULTS = [
 
 // Tier sampling defaults for small local models; matches the llama.cpp launch
 // tuning so engine and server agree. Minimal tier pins these ahead of the
-// substring ladders; default tier uses them only when the ladder has no entry.
+// substring ladders. Default tier pins them only when the tier was declared in
+// config: a size heuristic alone must not override sampling for models whose
+// defaults were deliberately left to the serving stack (#43310 removed the
+// Qwen ladder entries for exactly that reason).
 const TIER_SAMPLING = { temperature: 0.1, topP: 0.95, topK: 20 }
 
 // Sampling only honors a tier backed by positive evidence — explicit config or
@@ -536,14 +539,14 @@ const TIER_SAMPLING = { temperature: 0.1, topP: 0.95, topK: 20 }
 // deepseek-v4-flash) keep the upstream ladder outputs untouched.
 function tierForSampling(model: Provider.Model) {
   const detected = SessionTier.detect(model)
-  if (detected.source === "config" || detected.source === "heuristic") return detected.tier
+  if (detected.source === "config" || detected.source === "heuristic") return detected
   return undefined
 }
 
 export function temperature(model: Provider.Model) {
   if (model.sampling?.temperature !== undefined) return model.sampling.temperature
   const tier = tierForSampling(model)
-  if (tier === "minimal") return TIER_SAMPLING.temperature
+  if (tier?.tier === "minimal") return TIER_SAMPLING.temperature
   const id = model.api.id.toLowerCase()
   if (id.includes("north-mini-code")) return 1.0
   if (id.includes("claude")) return undefined
@@ -559,14 +562,14 @@ export function temperature(model: Provider.Model) {
     }
     return 0.6
   }
-  if (tier === "default") return TIER_SAMPLING.temperature
+  if (tier?.tier === "default" && tier.source === "config") return TIER_SAMPLING.temperature
   return undefined
 }
 
 export function topP(model: Provider.Model) {
   if (model.sampling?.topP !== undefined) return model.sampling.topP
   const tier = tierForSampling(model)
-  if (tier === "minimal") return TIER_SAMPLING.topP
+  if (tier?.tier === "minimal") return TIER_SAMPLING.topP
   const id = model.api.id.toLowerCase()
   if (id.includes("gemini"))
     return GEMINI_MODELS_WITH_SAMPLING_DEFAULTS.some((model) => model.test(id)) ? 0.95 : undefined
@@ -579,14 +582,14 @@ export function topP(model: Provider.Model) {
   ) {
     return 0.95
   }
-  if (tier === "default") return TIER_SAMPLING.topP
+  if (tier?.tier === "default" && tier.source === "config") return TIER_SAMPLING.topP
   return undefined
 }
 
 export function topK(model: Provider.Model) {
   if (model.sampling?.topK !== undefined) return model.sampling.topK
   const tier = tierForSampling(model)
-  if (tier === "minimal") return TIER_SAMPLING.topK
+  if (tier?.tier === "minimal") return TIER_SAMPLING.topK
   const id = model.api.id.toLowerCase()
   if (id.includes("minimax-m2")) {
     if (["m2.", "m25", "m21"].some((s) => id.includes(s))) return 40
@@ -594,7 +597,7 @@ export function topK(model: Provider.Model) {
   }
   if (id.includes("gemini"))
     return GEMINI_MODELS_WITH_SAMPLING_DEFAULTS.some((model) => model.test(id)) ? 64 : undefined
-  if (tier === "default") return TIER_SAMPLING.topK
+  if (tier?.tier === "default" && tier.source === "config") return TIER_SAMPLING.topK
   return undefined
 }
 

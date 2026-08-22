@@ -41,39 +41,6 @@ afterEach(async () => {
 
 describe("provider.getSmallModel", () => {
   it.instance(
-    "falls back to substring matching when no exact family matches",
-    () =>
-      Effect.gen(function* () {
-        const small = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test"))
-        expect(small?.id).toBe(ModelV2.ID.make("local-mini-3b"))
-      }),
-    {
-      config: () =>
-        config({
-          "big-model": { ...modelBase, id: "big-model" },
-          // family is empty, so it is invisible to the exact-family ladder.
-          "local-mini-3b": { ...modelBase, id: "local-mini-3b", family: "" },
-        }),
-    },
-  )
-
-  it.instance(
-    "prefers the exact family ladder over the substring fallback",
-    () =>
-      Effect.gen(function* () {
-        const small = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test"))
-        expect(small?.id).toBe(ModelV2.ID.make("family-small"))
-      }),
-    {
-      config: () =>
-        config({
-          "local-mini-3b": { ...modelBase, id: "local-mini-3b", family: "" },
-          "family-small": { ...modelBase, id: "family-small", family: "gemini-flash" },
-        }),
-    },
-  )
-
-  it.instance(
     "returns undefined when nothing matches",
     () =>
       Effect.gen(function* () {

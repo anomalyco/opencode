@@ -2025,17 +2025,6 @@ const layer = Layer.effect(
         if (candidates[0]) return candidates[0]
       }
 
-      // E4: config-defined models (local endpoints especially) often carry an
-      // empty family and never match the exact-family ladder. Fall back to a
-      // substring scan over family and id before giving up.
-      for (const needle of ["flash", "nano", "haiku", "mini"]) {
-        const match = models.find(
-          (model) =>
-            (model.family ?? "").toLowerCase().includes(needle) || model.id.toLowerCase().includes(needle),
-        )
-        if (match) return match
-      }
-
       return undefined
     })
 
