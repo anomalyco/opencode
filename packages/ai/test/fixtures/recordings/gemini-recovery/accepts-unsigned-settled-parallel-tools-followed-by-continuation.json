@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:gemini-recovery",
+      "provider:google",
+      "protocol:gemini",
+      "tool",
+      "parallel",
+      "recovery"
+    ],
+    "name": "gemini-recovery/accepts-unsigned-settled-parallel-tools-followed-by-continuation",
+    "recordedAt": "2026-08-22T02:18:17.994Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Look up the weather and local time in Paris.\"}]},{\"role\":\"model\",\"parts\":[{\"text\":\"I should use both lookup tools.\"},{\"functionCall\":{\"name\":\"lookup_weather\",\"args\":{\"city\":\"Paris\"}},\"thoughtSignature\":\"skip_thought_signature_validator\"},{\"functionCall\":{\"name\":\"lookup_time\",\"args\":{\"city\":\"Paris\"}},\"thoughtSignature\":\"skip_thought_signature_validator\"}]},{\"role\":\"user\",\"parts\":[{\"functionResponse\":{\"name\":\"lookup_weather\",\"response\":{\"name\":\"lookup_weather\",\"content\":\"sunny\"}}},{\"functionResponse\":{\"name\":\"lookup_time\",\"response\":{\"name\":\"lookup_time\",\"content\":\"12:00\"}}}]},{\"role\":\"user\",\"parts\":[{\"text\":\"The previous response was interrupted. Continue from where you left off without repeating completed content.\"}]}],\"tools\":[{\"functionDeclarations\":[{\"name\":\"lookup_weather\",\"description\":\"Return benign weather data for a city.\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}},{\"name\":\"lookup_time\",\"description\":\"Return the benign local time for a city.\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}]}],\"toolConfig\":{\"functionCallingConfig\":{\"mode\":\"NONE\"}},\"generationConfig\":{\"maxOutputTokens\":256,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"In Paris, the weather is currently sunny, and the local time is 12:00.\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 205,\"candidatesTokenCount\": 21,\"totalTokenCount\": 420,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 205}],\"thoughtsTokenCount\": 194,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"6AaJaoOsJrbI-8YPpqnz0Qg\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\",\"thoughtSignature\": \"Eq0ICqoIARFNMg8GCNXth8PULrLVoOm0IMGKXbEMpyUD0xr35HHiDNk+Hzd0ZcnORGZeHhr2X4aUfGEBNHLfiPZB58GEozrIKnaij2tY39bV2kwdmauBdATebzhry32Tg0eo8byo1pMdIUQyY8lNoXo5X3zGWjzwiODhG4vOMHAYczSBpj0wuWgQk4GtT9dLi10jNSML4Sjh4ObUSDZYCoLjT7gk8iOcE9imM7O0b6MmHX0oi9gN4n/MF6JZQsmbtHA81zISYq6ADroKmyBdr36pETBj0Z36vRkJYcw+UqMgmTUQ4X0qwCYT+rPd2m6OSgI1mk1ApGr3DKV7ovQGztfbSg1r8mrNIkfbgmptl0vrdWSNonXugIdftdkWA5DvN5HBJlQzutJ9ggYDN8n6Jila1vOwwIPojTKfqOLOrR9gYFSNMe8lVBMuVIsy/ogmVYOkMLb0yUAIQvR5+99ZVmSTiys2GMgf6Q7VYckZIaXXemdHBM/LPXAc6TeYKLODEbjfoyxmmX8VUEnjv1fRJPb9tf7ii7/Js6rsndgQu2UZIC+b/ui8ayCHs+8KCMw4QGijxrdhRM1yo6RRbsEkQxnm0HPyC3I5l1VmZO8WFnn4nBBJ0O6UWBsvy5/KvkgbKj612f6TG7RveK3QNHHGKC2Gd1ztIBOwzB32/x/zvK8X1T950OtiF8a0ExrEI8D9UCbMyFJBDiK8EI5SadKNUTCvdx7P1zwAqjKhOQ8SWF3Fs5xDH1Ea4qRWlUXKzddrj0e9BLDFuUUQ9BSuekbpgTCdm/ArllXKJt2mVrPi1iLFFhDf1rnHSbTamN6aBrT8mjzdu3w5/KI62marHZmHwgQKm89Pw/1ZzZYUjISEAX3SyrMVUW4K4I1goPEjdrY+VcOlRNuz8geZAasM9TkgjxZuHdFQoGMmulLjoBhwFii5jWq4DrC10mfXhGFYS0SNncOj3ZUmwfkEQ5KslsKoNNicHb9TTElKwUcpcAFSLQ2WFG60qd/kXR4EBriIaD5B8cAG/oVjjd0+PRNRrdSV+FMz/N2fZrP+MH7XiH5i+jjhk0/YDgwuAINYrUdLmmMP+IT4MALPhH1SlubyUxE1uUO4+ayutIWMWX5a9zGwSWWK9ehb3cdMUtZwACqlwlCnUIOoVMGcgEFZNcWQv7nhey51U2713L4Ud53s797TeUQF6GG0FssnaBP8ekF0Xo94H4jHUaLmgW2n6OQfOeut/6h1qqRNEocVVFPAKdv0RO3DyC0Ng0rCV98+v6Qp4fK+tIynZobBzoK3h/Bw3/kWAXAgbu4m71/yIe5rQRT9Y3aaJrsJU0TbtSORagcxUYZ4Shpap8RBLGnnN0ozriEsU5ySXyZUK7IwJdO33gfE1bBFhDXITqD8JE32pb+KhaFJ84gjsicsamJBMSVkl+RjPw==\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 205,\"candidatesTokenCount\": 21,\"totalTokenCount\": 420,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 205}],\"thoughtsTokenCount\": 194,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"6AaJaoOsJrbI-8YPpqnz0Qg\"}\r\n\r\n"
+      }
+    }
+  ]
+}

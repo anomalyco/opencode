@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:openai-recovery",
+      "provider:openai",
+      "protocol:openai-responses",
+      "tool",
+      "parallel",
+      "recovery",
+      "sad-path"
+    ],
+    "name": "openai-recovery/rejects-continuation-with-a-missing-parallel-tool-result",
+    "recordedAt": "2026-08-22T02:20:25.412Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Look up the weather and local time in Paris.\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"I should use both lookup tools.\"}]},{\"type\":\"function_call\",\"call_id\":\"call_weather\",\"name\":\"lookup_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"},{\"type\":\"function_call\",\"call_id\":\"call_time\",\"name\":\"lookup_time\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_weather\",\"output\":\"sunny\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"The previous response was interrupted. Continue from where you left off without repeating completed content.\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"lookup_weather\",\"description\":\"Return benign weather data for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]},\"strict\":false},{\"type\":\"function\",\"name\":\"lookup_time\",\"description\":\"Return the benign local time for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]},\"strict\":false}],\"tool_choice\":\"none\",\"store\":false,\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"text\":{\"verbosity\":\"low\"},\"max_output_tokens\":32,\"stream\":true}"
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\n  \"error\": {\n    \"message\": \"No tool output found for function call call_time.\",\n    \"type\": \"invalid_request_error\",\n    \"param\": \"input\",\n    \"code\": null\n  }\n}"
+      }
+    }
+  ]
+}

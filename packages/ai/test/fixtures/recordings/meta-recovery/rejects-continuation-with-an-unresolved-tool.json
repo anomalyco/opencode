@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:meta-recovery",
+      "provider:meta",
+      "protocol:openai-responses",
+      "tool",
+      "recovery",
+      "sad-path"
+    ],
+    "name": "meta-recovery/rejects-continuation-with-an-unresolved-tool",
+    "recordedAt": "2026-08-22T02:20:24.441Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.meta.ai/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"muse-spark-1.2\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Look up the weather in Paris.\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"I should use the weather tool.\"}]},{\"type\":\"function_call\",\"call_id\":\"call_weather\",\"name\":\"lookup_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"The previous response was interrupted. Continue from where you left off without repeating completed content.\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"lookup_weather\",\"description\":\"Return benign weather data for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]},\"strict\":false}],\"store\":false,\"max_output_tokens\":32,\"stream\":true}"
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"error\":{\"code\":null,\"message\":\"No tool output found for function call call_weather.\",\"param\":\"input\",\"type\":\"invalid_request_error\"}}"
+      }
+    }
+  ]
+}

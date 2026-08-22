@@ -61,11 +61,16 @@ const isDecline = (
 ): error is Permission.DeclinedError | QuestionTool.CancelledError =>
   error._tag === "Permission.DeclinedError" || error._tag === "QuestionTool.CancelledError"
 
-const isInterruptedStream = (failure: AIError) => {
-  if (failure.reason._tag === "InvalidProviderOutput")
-    return failure.reason.classification === "incomplete-stream"
-  if (failure.reason._tag === "Transport") return failure.reason.operation === "read"
-  return false
+const shouldContinueAfterFailure = (failure: AIError, record: StepRecord) => {
+  const interrupted =
+    (failure.reason._tag === "InvalidProviderOutput" && failure.reason.classification === "incomplete-stream") ||
+    (failure.reason._tag === "Transport" && failure.reason.operation === "read")
+  const providerRetry =
+    (failure.reason._tag === "RateLimit" || failure.reason._tag === "ProviderInternal") &&
+    SessionRunnerRetry.isRetryable(failure)
+  // Settlement gives eager local executions durable outcomes. Hosted activity remains
+  // provider-side and is not uniformly replayable, so it cannot cross this boundary.
+  return (interrupted || providerRetry) && record.calls.every((call) => call.settled && !call.providerExecuted)
 }
 
 /**
@@ -120,7 +125,7 @@ const classifyToolExits = (
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
 const STEP_INTERRUPTED = { type: "aborted", message: "Step interrupted" } as const
 const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not return a tool result" } as const
-const CONTINUE_AFTER_INCOMPLETE_STREAM =
+const CONTINUE_AFTER_PARTIAL_FAILURE =
   "The previous response was interrupted. Continue from where you left off without repeating completed content."
 
 const layer = Layer.effect(
@@ -302,7 +307,7 @@ const layer = Layer.effect(
           ).pipe(Pull.catchDone(() => Effect.fail(outcome.cause)))
           yield* bus.publish(SessionEvent.Synthetic, {
             sessionID,
-            text: CONTINUE_AFTER_INCOMPLETE_STREAM,
+            text: CONTINUE_AFTER_PARTIAL_FAILURE,
           })
           assistantMessageID = SessionMessage.ID.create()
         }
@@ -597,7 +602,7 @@ const layer = Layer.effect(
           if (
             llmFailure &&
             llmError &&
-            isInterruptedStream(llmFailure) &&
+            shouldContinueAfterFailure(llmFailure, record) &&
             record.outputStarted &&
             tools.declines.length === 0 &&
             !tools.interrupted

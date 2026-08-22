@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:bedrock-recovery",
+      "provider:amazon-bedrock",
+      "protocol:bedrock-converse",
+      "tool",
+      "parallel",
+      "recovery",
+      "bearer",
+      "sad-path"
+    ],
+    "name": "bedrock-recovery/rejects-continuation-with-a-missing-parallel-tool-result",
+    "recordedAt": "2026-08-22T02:23:15.290Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://bedrock-runtime.us-east-2.amazonaws.com/model/us.anthropic.claude-sonnet-4-6/converse-stream",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"modelId\":\"us.anthropic.claude-sonnet-4-6\",\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"Look up the weather and local time in Paris.\"}]},{\"role\":\"assistant\",\"content\":[{\"text\":\"I should use both lookup tools.\"},{\"toolUse\":{\"toolUseId\":\"call_weather\",\"name\":\"lookup_weather\",\"input\":{\"city\":\"Paris\"}}},{\"toolUse\":{\"toolUseId\":\"call_time\",\"name\":\"lookup_time\",\"input\":{\"city\":\"Paris\"}}}]},{\"role\":\"user\",\"content\":[{\"toolResult\":{\"toolUseId\":\"call_weather\",\"content\":[{\"text\":\"sunny\"}],\"status\":\"success\"}},{\"text\":\"The previous response was interrupted. Continue from where you left off without repeating completed content.\"},{\"cachePoint\":{\"type\":\"default\"}}]}],\"inferenceConfig\":{\"maxTokens\":32,\"temperature\":0},\"toolConfig\":{\"tools\":[{\"toolSpec\":{\"name\":\"lookup_weather\",\"description\":\"Return benign weather data for a city.\",\"inputSchema\":{\"json\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}}},{\"toolSpec\":{\"name\":\"lookup_time\",\"description\":\"Return the benign local time for a city.\",\"inputSchema\":{\"json\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}}},{\"cachePoint\":{\"type\":\"default\"}}]}}"
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"message\":\"Expected toolResult blocks at messages.2.content for the following Ids: call_time\"}"
+      }
+    }
+  ]
+}

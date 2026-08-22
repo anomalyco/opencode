@@ -167,6 +167,22 @@ type HostedToolItem = HostedToolData & { readonly type: HostedToolType }
 const isHostedToolItem = (item: OpenResponses.StreamItem): item is HostedToolItem =>
   item.type in HOSTED_TOOLS && typeof item.id === "string" && item.id.length > 0
 
+const onHostedToolAdded = (state: OpenResponses.ParserState, item: HostedToolItem) => {
+  const events: LLMEvent[] = []
+  const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+  return [
+    { ...state, lifecycle },
+    [
+      ...events,
+      LLMEvent.toolInputStart({
+        id: item.id,
+        name: HOSTED_TOOLS[item.type].name,
+        providerExecuted: true,
+      }),
+    ],
+  ] satisfies OpenResponses.StepResult
+}
+
 const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function* (item: HostedToolItem) {
   const isError = item.error !== undefined && item.error !== null
   if (item.type === "image_generation_call" && item.result) {
@@ -224,6 +240,8 @@ const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
     return event.item_id
       ? Effect.succeed(OpenResponses.onReasoningDone(state, event))
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
+  if (event.type === "response.output_item.added" && event.item && isHostedToolItem(event.item))
+    return Effect.succeed(onHostedToolAdded(state, event.item))
   if (event.type === "response.output_item.done" && event.item && isHostedToolItem(event.item))
     return onHostedToolDone(state, event.item)
   return OpenResponses.step(state, event)

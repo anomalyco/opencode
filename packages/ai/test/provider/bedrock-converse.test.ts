@@ -255,7 +255,7 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("merges parallel tool results into one user message", () =>
+  it.effect("merges parallel tool results and recovery continuation into one user message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -269,6 +269,7 @@ describe("Bedrock Converse route", () => {
             ]),
             Message.tool({ id: "tool_paris", name: "lookup", result: { forecast: "sunny" } }),
             Message.tool({ id: "tool_london", name: "lookup", result: { forecast: "rainy" } }),
+            Message.user("Continue without repeating completed calls."),
           ],
           cache: "none",
         }),
@@ -300,6 +301,7 @@ describe("Bedrock Converse route", () => {
                 status: "success",
               },
             },
+            { text: "Continue without repeating completed calls." },
           ],
         },
       ])

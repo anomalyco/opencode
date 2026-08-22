@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:anthropic-recovery",
+      "provider:anthropic",
+      "protocol:anthropic-messages",
+      "tool",
+      "recovery"
+    ],
+    "name": "anthropic-recovery/accepts-a-synthetic-settled-tool-call-followed-by-continuation",
+    "recordedAt": "2026-08-22T01:52:23.916Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://opencode.ai/zen/v1/messages",
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"claude-sonnet-4-6\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Look up the weather in Paris.\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"I should use the weather tool.\"},{\"type\":\"tool_use\",\"id\":\"call_weather\",\"name\":\"lookup_weather\",\"input\":{\"city\":\"Paris\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_weather\",\"content\":\"sunny\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"The previous response was interrupted. Continue from where you left off without repeating completed content.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"tools\":[{\"name\":\"lookup_weather\",\"description\":\"Return benign weather data for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]},\"cache_control\":{\"type\":\"ephemeral\"}}],\"tool_choice\":{\"type\":\"none\"},\"stream\":true,\"max_tokens\":128,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CeGx6WkAQP5ULyRRbRwRw\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":664,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\"}}               }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}  }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The\"}              }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" weather in Paris is currently **sunny**! It looks like a great day to enjoy the city. ☀️\"}    }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0       }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"input_tokens\":664,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":28}       }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"    }\n\nevent: ping\ndata: {\"type\":\"ping\",\"cost\":\"0\"}\n\n"
+      }
+    }
+  ]
+}

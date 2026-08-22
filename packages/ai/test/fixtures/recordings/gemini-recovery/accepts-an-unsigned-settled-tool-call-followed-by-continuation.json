@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:gemini-recovery",
+      "provider:google",
+      "protocol:gemini",
+      "tool",
+      "recovery"
+    ],
+    "name": "gemini-recovery/accepts-an-unsigned-settled-tool-call-followed-by-continuation",
+    "recordedAt": "2026-08-22T01:23:18.801Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Look up the weather in Paris.\"}]},{\"role\":\"model\",\"parts\":[{\"text\":\"I should use the weather tool.\"},{\"functionCall\":{\"name\":\"lookup_weather\",\"args\":{\"city\":\"Paris\"}},\"thoughtSignature\":\"skip_thought_signature_validator\"}]},{\"role\":\"user\",\"parts\":[{\"functionResponse\":{\"name\":\"lookup_weather\",\"response\":{\"name\":\"lookup_weather\",\"content\":\"sunny\"}}}]},{\"role\":\"user\",\"parts\":[{\"text\":\"The previous response was interrupted. Continue from where you left off without repeating completed content.\"}]}],\"tools\":[{\"functionDeclarations\":[{\"name\":\"lookup_weather\",\"description\":\"Return benign weather data for a city.\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}]}],\"toolConfig\":{\"functionCallingConfig\":{\"mode\":\"NONE\"}},\"generationConfig\":{\"maxOutputTokens\":256,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"The weather in Paris is currently sunny\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 116,\"candidatesTokenCount\": 7,\"totalTokenCount\": 368,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 116}],\"thoughtsTokenCount\": 245,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"BfqIaun_Gbau39IP49TwKA\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\",\"thoughtSignature\": \"EuEKCt4KARFNMg+TrcXumi0KeXb7iZG/dBk9QjybBSM9V7hTN2a0lEXMuWh38tNhXrQCwNFDZ2gKEpa2c1lj/+wwzJAvjceCFoRenOGfBEUGRavc6oQXLKiWZPGaHV0G4gIo2uosx8SNZc4E5Dko2IYPymcUzDgsqZK2eToDoepaM8cekix+6c/z2MZiRnJ0QbS3f/7r+UYLOIi7eWbW0G6v+gwPYae4kRuifL6iKEV5eG+R4AGlGfOI0dgamDfEFfGiwg+rkvjKw7DDmYvQVreUcjvFt2OOhKfFWmnvOQrIKkSYpSyvdlylRhKZMU5gwUsKii8xwI5eJVoUoYDoOjr1x8DR3ePkCj/n3b0OMUWunPkdpgE/bUcFMQ+Gzqs7F3sBYDgUiT3F9r5joKZp6dm0I64/gh15J0NCamlr+CRLP+a8tJbEcWZbgELhbFE+2ikJMtoApojvlUbIUsn7sXHQ6042A/MjWgV97DWcG6V1dtLOOrS2Ez2F58TWDW67dTD3o+Ixz82+xDfG4VW0pOiOPOo9n2YCGk9xlSwPG9qDwU6bpi0AFrJVSz2gc8OFXk5uwCooPAN0EmnfljWS5+spS7AmKA2k3S7IZKe0aAw90+Jp4JxklOsfL4XIlQJLLXKmtcnTEdZLYp/JxSL9YRNnoHZJaeBpIWEObE+aX+CuI3OqZZPpldalNeCPM1nCYu26rfBzAaP85zzyi4SFzlXc++E9OPei8BgPoD8XuTb1yK1nTtPqjR8bYvaDm9ef8NaWrYdM+ivVQ/Q/9YAQ8AXuC71dQZExcTQAC5oOnrRP1byo2lHMuytnVk8QrnZBhiJc/TneDFzCYK9nFkhc6s0aaQrBip6YEKPtGmuMmUxJ1dQYFQlgtjEvANB2/jnPtE6u1p039reevLAHMxtijgCqNE0hrVaciI1ZTLTYtO1UquoSXNoHqqZzYuEnLMUKxTbWzIOcVBC4XwP8rkYLwCp9e1oMMBV7FIT6Kv2El7tWrpBt2w+2GgQMt2bAr2PJQf1oj5O/vOXEbcTVumOv29rUJQ65pFpr8K6Q8W6lIbIxOGWLKb/akVl9FJq5lPVp+m3eEYurQcQJ1mB3OEuPrpK4COdiVElarAnaxaMpioa8yCh22kA4eqS+bChUDIZIfCUNRDGI0eO8YMkRo626VLp9IJnexYNBBwBKk5oL7TmrlzRz/YyUEApVNMUjHiRd24i2jq4pQyOdkbYMVi3YFZNQbRuo0EN9dM8vAG4VrAGPj892T2ne5B69Qmhgs8Ow4QrubWd+d6ohdsSyOucVruw1Mr+x79BqiQs+SQ5M/GJCPBYO3QIV3CMGnHNrtvg5YdYE5blCs0MCf+u5mHPPk2TlBuXMJtLUN/YmGhE4u1/ZT9WTIueekSSubPv1eqPwLRHLiwVfKdA/FNqu5YDifgzKMjyIQpXiEIW3OnI4A1ps8K4pMynZ6XXyZuvq74eHnX1vQDdDA27MiWJPrDWqzg5SQnOl026Mcpj0pIex1lN+7av8xAc9PVszdn9qq8WwO7yUOPM10HnE2hY4pDGa3LXo/2VMAbknQOwhEA6vEgGwFVXN2EXYS9fohRgrXbo7hCroJlekcuROXX7sq2JEK751xXWZlaIpujUpNt8uUGRjSIIFKhuYYvrmU7FEN/PgB0eyQ6KQp1iQm7ywzqMF0Ns2XbM6iAlMibLu48G6VplgUWpsNMtbJLLs3QuFeligNdARJ8aMfJarHlRFV/oQXWggnSyTO5wKCOif8IJUWuHR43JStLvFZsOzVvCDduPSdWKs/9vkri3iVbRFCmeTyuJB+xQuz3rbU+iVI9VOe2BIAhKY\"}],\"role\": \"model\"},\"finishReason\": \"MAX_TOKENS\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 116,\"candidatesTokenCount\": 7,\"totalTokenCount\": 368,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 116}],\"thoughtsTokenCount\": 245,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"BfqIaun_Gbau39IP49TwKA\"}\r\n\r\n"
+      }
+    }
+  ]
+}

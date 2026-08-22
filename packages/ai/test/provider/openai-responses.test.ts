@@ -2578,6 +2578,11 @@ describe("OpenAI Responses route", () => {
       const callsAndResults = response.events.filter(
         (event) => event.type === "tool-call" || event.type === "tool-result",
       )
+      expect(response.events.find(LLMEvent.is.toolInputStart)).toMatchObject({
+        id: "ws_1",
+        name: "web_search",
+        providerExecuted: true,
+      })
       expect(callsAndResults).toEqual([
         {
           type: "tool-call",
