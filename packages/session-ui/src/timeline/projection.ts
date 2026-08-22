@@ -222,11 +222,17 @@ export namespace Timeline {
         .filter((entry) => renderable(entry.content, showReasoning))
         .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
     )
-    const delegating = assistantPartRefs.some(
-      (entry) =>
-        entry.content.type === "tool" &&
-        entry.content.name === "subagent" &&
-        (entry.content.state.status === "streaming" || entry.content.state.status === "running"),
+    const activeToolActivity = assistantMessages.some((message) =>
+      message.content.some((content) => {
+        if (content.type !== "tool") return false
+        if (
+          content.name === "shell" &&
+          content.state.status !== "streaming" &&
+          content.state.metadata?.status === "running"
+        )
+          return true
+        return content.state.status === "streaming" || content.state.status === "running"
+      }),
     )
 
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: turnID }))
@@ -279,8 +285,7 @@ export namespace Timeline {
       status.type === "busy" &&
       !error &&
       !retry &&
-      !delegating &&
-      (showReasoning ? assistantPartRefs.length === 0 : true)
+      !activeToolActivity
     ) {
       const heading = assistantMessages
         .flatMap((message) => message.content)
@@ -291,8 +296,7 @@ export namespace Timeline {
     }
 
     if (isActive && retry) rows.push(new TimelineRow.Retry({ userMessageID: turnID }))
-
-    if (error && !interrupted) {
+    else if (error && !interrupted) {
       rows.push(new TimelineRow.Error({ userMessageID: turnID, text: unwrapErrorMessage(error.message) }))
     }
 

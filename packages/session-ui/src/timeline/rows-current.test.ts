@@ -33,6 +33,7 @@ describe("current session timeline rows", () => {
       "turn-gap:msg_3",
       "user-message:msg_3",
       "assistant-part:msg_3:part:msg_4:msg_4:reasoning:0",
+      "thinking:msg_3",
     ])
   })
 
@@ -217,6 +218,144 @@ describe("current session timeline rows", () => {
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
   })
 
+  test("does not render the retry error twice", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [],
+        error: { type: "ProviderError", message: "The provider response ended unexpectedly." },
+        retry: {
+          attempt: 2,
+          at: 10,
+          error: { type: "ProviderError", message: "The provider response ended unexpectedly." },
+        },
+        time: { created: 2 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = Timeline.constructSessionMessageRows(source, true, {
+      type: "retry",
+      attempt: 2,
+      next: 10,
+      message: "The provider response ended unexpectedly.",
+    })
+
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
+  })
+
+  test("does not render thinking while active tool work is visible", () => {
+    const tools: SessionMessageAssistantTool[] = [
+      {
+        type: "tool",
+        id: "tool_read",
+        name: "read",
+        state: { status: "running", input: {}, metadata: {} },
+        time: { created: 2, ran: 3 },
+      },
+      {
+        type: "tool",
+        id: "tool_shell",
+        name: "shell",
+        state: {
+          status: "completed",
+          input: {},
+          content: [{ type: "text", text: "started" }],
+          metadata: { status: "running" },
+        },
+        time: { created: 2, ran: 3, completed: 4 },
+      },
+      {
+        type: "tool",
+        id: "tool_execute",
+        name: "execute",
+        state: { status: "running", input: {}, metadata: {} },
+        time: { created: 2, ran: 3 },
+      },
+      {
+        type: "tool",
+        id: "tool_edit",
+        name: "edit",
+        state: { status: "streaming", input: "" },
+        time: { created: 2 },
+      },
+      {
+        type: "tool",
+        id: "tool_write",
+        name: "write",
+        state: { status: "running", input: {}, metadata: {} },
+        time: { created: 2, ran: 3 },
+      },
+      {
+        type: "tool",
+        id: "tool_patch",
+        name: "patch",
+        state: { status: "running", input: {}, metadata: {} },
+        time: { created: 2, ran: 3 },
+      },
+    ]
+
+    tools.forEach((tool) => {
+      const source = [
+        { id: `msg_user_${tool.id}`, type: "user", text: "work", time: { created: 1 } },
+        {
+          id: `msg_assistant_${tool.id}`,
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [tool],
+          time: { created: 2 },
+        },
+      ] satisfies SessionMessageInfo[]
+
+      expect(Timeline.constructSessionMessageRows(source, false, { type: "busy" }).rows.map((row) => row._tag)).not
+        .toContain("Thinking")
+    })
+  })
+
+  test("renders thinking after tools finish", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "work", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "tool_read",
+            name: "read",
+            state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }], metadata: {} },
+            time: { created: 2, ran: 3, completed: 4 },
+          },
+          {
+            type: "tool",
+            id: "tool_execute",
+            name: "execute",
+            state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }], metadata: {} },
+            time: { created: 5, ran: 6, completed: 7 },
+          },
+          {
+            type: "tool",
+            id: "tool_edit",
+            name: "edit",
+            state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }], metadata: {} },
+            time: { created: 8, ran: 9, completed: 10 },
+          },
+        ],
+        time: { created: 2 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(Timeline.constructSessionMessageRows(source, false, { type: "busy" }).rows.map((row) => row._tag)).toContain(
+      "Thinking",
+    )
+  })
+
   test("removes a failed assistant error when the turn continues streaming", () => {
     const source = [
       { id: "msg_user", type: "user", text: "recover", time: { created: 1 } },
@@ -240,7 +379,7 @@ describe("current session timeline rows", () => {
     ] satisfies SessionMessageInfo[]
     const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
-    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart", "Thinking"])
   })
 
   test("keeps content IDs and groups adjacent context tools", () => {
