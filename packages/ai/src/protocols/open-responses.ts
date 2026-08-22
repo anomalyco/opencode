@@ -1109,7 +1109,7 @@ export const providerFailure = (id: string, event: Event, fallback: string) => {
     module: id,
     method: "stream",
     body,
-    reason: classifyProviderFailure({ message, code, status }),
+    reason: classifyProviderFailure({ message, code, status, rawBody: body }),
   })
 }
 

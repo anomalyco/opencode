@@ -106,3 +106,20 @@ describe("provider error classification", () => {
     expect(classifyProviderFailure({ message: "not-json" })._tag).toBe("UnknownProvider")
   })
 })
+
+describe("provider error rawBody classification", () => {
+  test("classifies overflow signals buried in the raw payload when the summary is vague", () => {
+    const reason = classifyProviderFailure({
+      message: "Request failed",
+      rawBody: '{"error":{"message":"This model\'s maximum context length is 40960 tokens"}}',
+    })
+    expect(reason._tag).toBe("InvalidRequest")
+    expect(reason).toMatchObject({ classification: "context-overflow" })
+  })
+
+  test("extracts nested codes from the raw payload", () => {
+    expect(
+      classifyProviderFailure({ message: "Request failed", rawBody: '{"error":{"code":"insufficient_quota"}}' })._tag,
+    ).toBe("QuotaExceeded")
+  })
+})
