@@ -31,6 +31,20 @@ describe("NpmConfig.load", () => {
     expect(config.registry).toBe("https://project.example.test/")
   })
 
+  test("prefers the requested directory over ancestor node_modules anchors", async () => {
+    await using tmp = await tmpdir()
+    await mkdir(path.join(tmp.path, "node_modules"))
+    await Bun.write(path.join(tmp.path, ".npmrc"), "registry=https://ancestor.example.test/\n")
+
+    const dir = path.join(tmp.path, "project")
+    await mkdir(dir)
+    await Bun.write(path.join(dir, ".npmrc"), "registry=https://project.example.test/\n")
+
+    const config = await Effect.runPromise(NpmConfig.load(dir))
+
+    expect(config.registry).toBe("https://project.example.test/")
+  })
+
   test("reads scoped registries from project .npmrc", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, ".npmrc"), "@acme:registry=https://npm.acme.test/\n")

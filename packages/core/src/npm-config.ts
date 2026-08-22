@@ -21,6 +21,8 @@ export const load = (dir: string) =>
         // package.json/node_modules, and when an ancestor contains either
         // (commonly the user's home directory on Windows), `dir/.npmrc` is
         // silently ignored and installs fall back to the default registry.
+        // This intentionally deviates from npm's nearest-anchor walk: callers
+        // pass opencode-managed cache directories, not user project roots.
         argv: [process.execPath, process.execPath, `--prefix=${dir}`],
         execPath: process.execPath,
         platform: process.platform,
