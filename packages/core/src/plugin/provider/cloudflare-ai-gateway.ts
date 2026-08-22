@@ -33,7 +33,11 @@ export const CloudflareAIGatewayPlugin = define({
             // gateway's stored/BYOK keys instead.
             const isWorkersAi = modelID.startsWith("workers-ai/") || modelID.startsWith("@cf/")
             const unified = createUnified(isWorkersAi ? { apiKey: config.apiKey } : {})
-            return gateway(unified(modelID))
+            // models.dev lists Anthropic ids with dotted versions (claude-haiku-4.5) but Anthropic's
+            // real slugs use dashes (claude-haiku-4-5). The Unified API forwards the id straight to
+            // the upstream provider, so a dotted Anthropic id 404s. Other providers use dots natively.
+            const upstreamID = modelID.startsWith("anthropic/") ? modelID.replaceAll(".", "-") : modelID
+            return gateway(unified(upstreamID))
           },
         }
       }),
