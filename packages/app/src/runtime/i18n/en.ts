@@ -30,6 +30,7 @@ export const dict = {
   "command.project.previous": "Previous project",
   "command.project.next": "Next project",
   "command.project.index": "Switch to project {{index}}",
+  "command.project.copyID": "Copy Project ID",
   "command.provider.connect": "Connect provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
@@ -556,6 +557,8 @@ export const dict = {
   "toast.session.export.failed.description": "An error occurred while exporting the session",
   "toast.session.copyID.failed.title": "Failed to copy session ID",
   "toast.session.copyID.failed.description": "An error occurred while copying the session ID",
+  "toast.project.copyID.failed.title": "Failed to copy project ID",
+  "toast.project.copyID.failed.description": "An error occurred while copying the project ID",
 
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
