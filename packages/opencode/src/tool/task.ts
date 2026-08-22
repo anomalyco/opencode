@@ -217,6 +217,10 @@ export const TaskTool = Tool.define(
               : result.info.error.name
           return yield* Effect.fail(new Error(`Subagent failed (task_id: ${nextSession.id}): ${message}`))
         }
+        const failed = result.parts.findLast((item) => item.type === "tool" && item.state.status === "error")
+        if (failed?.type === "tool" && failed.state.status === "error") {
+          return yield* Effect.fail(new Error(`Subagent failed (task_id: ${nextSession.id}): ${failed.state.error}`))
+        }
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
 

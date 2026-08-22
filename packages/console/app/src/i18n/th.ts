@@ -253,7 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "ข้อยกเว้นดังนี้",
 
   "go.title": "OpenCode Go | โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
-  "go.banner.text": "Hy3 เพิ่มโควตาการใช้งานเป็น 8 เท่าในช่วงเวลาจำกัด",
+  "go.banner.text": "Ox Alpha Free พร้อมใช้งานบน Go ในช่วงเวลาจำกัด",
   "go.meta.description":
     "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดการใช้งานที่เอื้อเฟื้อและการเข้าถึงโมเดลเขียนโค้ดชั้นนำอย่างเชื่อถือได้",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
@@ -271,6 +271,7 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "คำขอต่อ 5 ชั่วโมง",
   "go.graph.limitedRegions": "เฉพาะบางภูมิภาค",
+  "go.graph.limitedTime": "ช่วงเวลาจำกัด",
   "go.graph.usageLimits": "ขีดจำกัดการใช้งาน",
   "go.graph.aria": "คำขอต่อ 5 ชม.: {{free}} vs {{go}}",
 

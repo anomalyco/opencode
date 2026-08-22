@@ -252,7 +252,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "الاستثناءات التالية",
 
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
-  "go.banner.text": "يحصل Hy3 على حدود استخدام أكبر 8 أضعاف لفترة محدودة",
+  "go.banner.text": "Ox Alpha Free متاح على Go لفترة محدودة",
   "go.meta.description":
     "يبدأ Go بسعر $5 للشهر الأول، ثم $10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
@@ -271,6 +271,7 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "الطلبات كل 5 ساعات",
   "go.graph.limitedRegions": "مناطق محدودة",
+  "go.graph.limitedTime": "لفترة محدودة",
   "go.graph.usageLimits": "حدود الاستخدام",
   "go.graph.aria": "الطلبات كل 5 ساعات: {{free}} مقابل {{go}}",
 
