@@ -1,0 +1,9 @@
+---
+interface Props {
+  cols?: number
+}
+---
+
+<div class="docs-card-group" style={`--card-columns: ${Astro.props.cols ?? 2}`}>
+  <slot />
+</div>

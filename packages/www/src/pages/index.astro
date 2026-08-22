@@ -1,0 +1,27 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro"
+
+export const prerender = true
+---
+
+<SiteLayout>
+  <header class="site-header">
+    <a href={import.meta.env.BASE_URL} aria-label="OpenCode home">
+      <img src={`${import.meta.env.BASE_URL}assets/logo-dark.svg`} alt="OpenCode" />
+    </a>
+    <nav aria-label="Primary">
+      <a href={`${import.meta.env.BASE_URL}docs/`}>Docs</a>
+      <a href="https://github.com/anomalyco/opencode">GitHub</a>
+    </nav>
+  </header>
+  <main>
+    <p class="eyebrow">OpenCode 2</p>
+    <h1>The open source AI coding agent.</h1>
+    <p class="lede">Build with it in your terminal, connect over the API, or embed the complete agent stack.</p>
+    <div class="actions">
+      <a class="primary" href={`${import.meta.env.BASE_URL}docs/`}>Read the docs</a>
+      <a href="https://github.com/anomalyco/opencode">View on GitHub</a>
+    </div>
+    <pre><code>curl -fsSL https://opencode.ai{import.meta.env.BASE_URL}install | bash</code></pre>
+  </main>
+</SiteLayout>
