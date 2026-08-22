@@ -100,6 +100,9 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   function selectTab(index: number) {
     setStore("tab", index)
     setStore("selected", 0)
+    // Mouse handlers switch tabs while the custom-answer editor is open; stale editing
+    // state would keep Return bound to the editor on the new tab.
+    setStore("editing", false)
   }
 
   function selectOption() {
@@ -118,6 +121,9 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     }
     const opt = options()[store.selected]
     if (!opt) return
+    // Mouse handlers reach this while the custom-answer editor is open; leaving it enabled
+    // keeps Return bound to the editor instead of submit/confirm.
+    setStore("editing", false)
     if (multi()) {
       toggle(opt.label)
       return
