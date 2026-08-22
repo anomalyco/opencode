@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js"
+import createPresence from "solid-presence"
 import { createStore } from "solid-js/store"
 import type { SessionUserActions } from "@opencode-ai/session-ui/actions"
 import { Badge } from "@opencode-ai/ui/badge"
@@ -62,6 +63,32 @@ export function BackgroundMoveHint(props: { keybind?: string[] }) {
       <Keybind keys={keys()} variant="neutral" />
       <span class="min-w-0 truncate">{parts()[1].trim()}</span>
     </div>
+  )
+}
+
+function BackgroundMoveHintRow(props: { show: boolean; centered: boolean; padding: string }) {
+  const [ref, setRef] = createSignal<HTMLDivElement>()
+  const presence = createPresence({ show: () => props.show, element: () => ref() ?? null })
+  return (
+    <Show when={presence.present()}>
+      <div
+        classList={{
+          "min-w-0 w-full max-w-full": true,
+          "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": props.centered,
+        }}
+      >
+        {/* both directions are gated on data-visible because animate-in and animate-out both write the
+            animation shorthand, and presence only detects the exit when the animation name changes */}
+        <div
+          ref={setRef}
+          data-visible={props.show}
+          class="duration-150 data-[visible=true]:animate-in data-[visible=true]:fade-in data-[visible=false]:animate-out data-[visible=false]:fade-out data-[visible=false]:fill-mode-forwards motion-reduce:animate-none"
+          classList={{ [`flex h-10 items-start pt-4 ${props.padding}`]: true }}
+        >
+          <BackgroundMoveHint />
+        </div>
+      </div>
+    </Show>
   )
 }
 
@@ -474,18 +501,7 @@ function MessageTimelineView(
       renderRow={(row, onSizeChange) => (
         <>
           <rowRenderer.Row row={row} onSizeChange={onSizeChange} />
-          <Show when={backgroundHint(row())}>
-            <div
-              classList={{
-                "min-w-0 w-full max-w-full": true,
-                "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": props.centered,
-              }}
-            >
-              <div class={`flex h-10 items-start pt-4 ${turnPadding()}`}>
-                <BackgroundMoveHint />
-              </div>
-            </div>
-          </Show>
+          <BackgroundMoveHintRow show={backgroundHint(row())} centered={props.centered} padding={turnPadding()} />
         </>
       )}
       header={
