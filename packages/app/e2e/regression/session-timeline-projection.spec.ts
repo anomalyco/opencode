@@ -77,6 +77,9 @@ test.describe("session timeline projection", () => {
     await expect(patch.locator('[data-scope="apply-patch"] button[aria-expanded="false"]')).toHaveCount(1)
     await expect(patch.locator('[data-slot="message-part-title-filename"]')).toHaveCount(0)
     await expect(patch.locator('[data-slot="message-part-actions"]')).toHaveCount(0)
+    const edit = page.locator('[data-timeline-part-id="prt_edit"]')
+    await expect(edit.locator('[data-component="apply-patch-tool"]')).toBeVisible()
+    await expect(edit.locator('[data-slot="basic-tool-tool-title"]')).toContainText("Edit")
     await expect(page.locator('[data-timeline-part-id="prt_todo"]')).toHaveCount(0)
   })
 

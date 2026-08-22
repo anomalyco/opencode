@@ -576,14 +576,17 @@ export function CurrentFileToolGroup(props: {
     })
     const updates = new Map(next.map((entry) => [entry.key, entry.value]))
     const existing = new Set(previous.map((entry) => entry.key))
-    return [
+    const result = [
       ...previous.map((entry) => {
         if (!updates.has(entry.key)) return entry
         const value = updates.get(entry.key)
-        return value === entry.value ? entry : { key: entry.key, value }
+        return samePatchFile(value, entry.value) ? entry : { key: entry.key, value }
       }),
       ...next.filter((entry) => !existing.has(entry.key)),
     ]
+    return result.length === previous.length && result.every((entry, index) => entry === previous[index])
+      ? previous
+      : result
   }, [])
   const metadata = createMemo(() => ({
     files: files().map((entry) => entry.value),
@@ -613,6 +616,18 @@ export function CurrentFileToolGroup(props: {
         onContentRendered={props.onSizeChange}
       />
     </div>
+  )
+}
+
+function samePatchFile(a: unknown, b: unknown) {
+  if (a === b) return true
+  if (!record(a) || !record(b)) return false
+  return (
+    a.file === b.file &&
+    a.patch === b.patch &&
+    a.additions === b.additions &&
+    a.deletions === b.deletions &&
+    a.status === b.status
   )
 }
 
