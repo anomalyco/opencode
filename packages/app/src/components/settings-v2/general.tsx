@@ -271,6 +271,33 @@ const LanguageSetting = () => {
   )
 }
 
+const FollowupSetting = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo(() => [
+    { value: "queue" as const, label: language.t("settings.general.row.followup.option.queue") },
+    { value: "steer" as const, label: language.t("settings.general.row.followup.option.steer") },
+  ])
+  return (
+    <SettingsRowV2
+      title={language.t("settings.general.row.followup.title")}
+      description={language.t("settings.general.row.followup.description")}
+    >
+      <SelectV2
+        appearance="inline"
+        data-action="settings-followup"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.followup())}
+        placement="bottom-end"
+        gutter={6}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        onSelect={(option) => option && settings.general.setFollowup(option.value)}
+      />
+    </SettingsRowV2>
+  )
+}
+
 export const SettingsGeneralV2: Component<{
   sessionID?: string
 }> = (props) => {
@@ -328,6 +355,8 @@ export const SettingsGeneralV2: Component<{
     <div class="settings-v2-section">
       <SettingsListV2>
         <LanguageSetting />
+
+        <FollowupSetting />
 
         <PermissionScopeSetting controller={permissionScope} />
 
