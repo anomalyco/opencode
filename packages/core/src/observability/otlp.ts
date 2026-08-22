@@ -65,8 +65,16 @@ export async function tracingLayer() {
   manager.enable()
   context.setGlobalContextManager(manager)
 
+  // PERF/observability: optional head sampling via OPENCODE_TRACE_RATIO (default 1 = all traces)
+  const ratio = Number(process.env.OPENCODE_TRACE_RATIO ?? "1")
+  const sampler =
+    Number.isFinite(ratio) && ratio < 1
+      ? new SdkBase.ParentBasedSampler({ root: new SdkBase.TraceIdRatioBasedSampler(ratio) })
+      : undefined
+
   return NodeSdk.layer(() => ({
     resource: resource(),
+    ...(sampler ? { sampler } : {}),
     spanProcessor: new SdkBase.BatchSpanProcessor(
       new OTLP.OTLPTraceExporter({
         url: `${endpoint}/v1/traces`,
