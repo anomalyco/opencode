@@ -16,7 +16,12 @@ export const load = (dir: string) =>
         npmPath,
         cwd: dir,
         env: { ...process.env },
-        argv: [process.execPath, process.execPath],
+        // Pin the project prefix so `dir/.npmrc` is always read as the project
+        // config. Without this, @npmcli/config walks up looking for the nearest
+        // package.json/node_modules, and when an ancestor contains either
+        // (commonly the user's home directory on Windows), `dir/.npmrc` is
+        // silently ignored and installs fall back to the default registry.
+        argv: [process.execPath, process.execPath, `--prefix=${dir}`],
         execPath: process.execPath,
         platform: process.platform,
         definitions,
