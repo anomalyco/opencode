@@ -63,4 +63,38 @@ describe("PluginHooks", () => {
       expect(event.command).toBe("echo changed")
     }),
   )
+
+  it.effect("prepares provider models sequentially with provider filtering", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register(
+        "provider",
+        "model.prepare",
+        (event) =>
+          Effect.sync(() => {
+            event.modelID = `prepared-${event.modelID}`
+            event.settings.first = true
+          }),
+        { providerID: Provider.ID.make("test") },
+      )
+      yield* hooks.register("provider", "model.prepare", (event) =>
+        Effect.sync(() => {
+          event.settings.seen = event.modelID
+        }),
+      )
+      const model = Model.Info.default(Provider.ID.make("test"), Model.ID.make("model"))
+      const event = {
+        model,
+        package: "test-provider",
+        modelID: String(model.modelID),
+        settings: {},
+      }
+
+      expect(yield* hooks.trigger("provider", "model.prepare", event)).toBe(event)
+      expect(event).toMatchObject({
+        modelID: "prepared-model",
+        settings: { first: true, seen: "prepared-model" },
+      })
+    }),
+  )
 })

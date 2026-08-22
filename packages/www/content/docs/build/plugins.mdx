@@ -201,6 +201,7 @@ and plugin options.
 | `ctx.command`          | `list`, `transform`, `reload`                                                                |
 | `ctx.integration`      | `list`, `get`, `connect`, `attempt`, `transform`, `reload`, and connection lookup/resolution |
 | `ctx.plugin`           | `list` currently active plugin IDs                                                           |
+| `ctx.provider`         | `hook`                                                                                       |
 | `ctx.reference`        | `list`, `transform`, `reload`                                                                |
 | `ctx.session`          | `create`, `get`, `prompt`, `command`, `rename`, `synthetic`, `interrupt`, `wait`, and `hook` |
 | `ctx.skill`            | `list`, `transform`, `reload`                                                                |
@@ -266,15 +267,26 @@ without restarting OpenCode.
 
 Runtime hooks intercept live operations:
 
-| Hook                                          | Mutable fields                                                                 |
-| --------------------------------------------- | ------------------------------------------------------------------------------ |
-| `ctx.aisdk.hook("sdk", callback)`             | `sdk`, after inspecting `model`, `package`, and `options`                      |
-| `ctx.aisdk.hook("language", callback)`        | `language`, after inspecting `model`, `sdk`, and `options`                     |
-| `ctx.session.hook("context", callback)`       | `system`, `messages`, and the `tools` record immediately before model dispatch |
-| `ctx.session.hook("http.request", callback)`  | `request`, immediately before provider dispatch                                |
-| `ctx.session.hook("http.response", callback)` | `response`, immediately after the provider responds                            |
-| `ctx.tool.hook("execute.before", callback)`   | `input`, before the selected tool executes                                     |
-| `ctx.tool.hook("execute.after", callback)`    | Terminal `result` on success or `error` on failure                             |
+| Hook                                           | Mutable fields                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------ |
+| `ctx.aisdk.hook("sdk", callback)`              | `sdk`, after inspecting `model`, `package`, and `options`                      |
+| `ctx.aisdk.hook("language", callback)`         | `language`, after inspecting `model`, `sdk`, and `options`                     |
+| `ctx.provider.hook("available", callback)`     | `available` for providers using automatic activation                           |
+| `ctx.provider.hook("model.prepare", callback)` | `modelID` and `settings` immediately before provider model construction        |
+| `ctx.session.hook("context", callback)`        | `system`, `messages`, and the `tools` record immediately before model dispatch |
+| `ctx.session.hook("http.request", callback)`   | `request`, immediately before provider dispatch                                |
+| `ctx.session.hook("http.response", callback)`  | `response`, immediately after the provider responds                            |
+| `ctx.tool.hook("execute.before", callback)`    | `input`, before the selected tool executes                                     |
+| `ctx.tool.hook("execute.after", callback)`     | Terminal `result` on success or `error` on failure                             |
+
+Provider availability hooks run only for providers whose activation is `auto`;
+explicitly enabled or disabled providers keep their configured state. Provider
+preparation hooks run after catalog, variant, and credential settings
+are merged and after native package mapping. They run for both native and AI SDK
+models before URL variables are validated or the provider model is constructed.
+The `package` and catalog `model` fields are readonly; mutate only the runtime
+`modelID` and `settings`. Resolved secrets should remain in these transient
+settings rather than being written through `catalog.transform`.
 
 HTTP hooks can modify requests and responses. They apply to native models; AI
 SDK models do not currently pass through these hooks. Request and response

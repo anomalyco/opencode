@@ -13,6 +13,8 @@ import { Integration } from "./integration.js"
 import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
 import { Npm } from "@opencode-ai/util/npm"
 import { Provider } from "./provider.js"
+import type { ProviderHooks } from "@opencode-ai/plugin/effect/provider"
+import { PluginHooks } from "./plugin/hooks.js"
 
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
@@ -107,6 +109,7 @@ export const withVariant = (
 export interface Dependencies {
   readonly loadPackage?: (specifier: string) => Effect.Effect<Provider.ProviderPackage, Provider.LoadError>
   readonly loadAISDK?: (model: Info) => Effect.Effect<LanguageModel, AISDK.InitError>
+  readonly prepareProvider?: (event: ProviderHooks["model.prepare"]) => Effect.Effect<ProviderHooks["model.prepare"]>
 }
 
 export const fromCatalogModel = (
@@ -139,15 +142,23 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   if (Provider.isAISDK(resolved.package) && !mapping) {
     const loadAISDK = dependencies?.loadAISDK
     if (!loadAISDK) return yield* unsupported(resolved)
-    const settings = yield* prepareProviderSettings(
-      resolved,
-      Provider.mergeOverlay(resolved.settings, {
-        ...nativeCredentialSettings(resolved.package ?? "", credential),
-        ...credential?.metadata,
-        ...configuration,
-      }) ?? {},
+    const prepared = yield* prepareProvider(
+      {
+        model: resolved,
+        package: Provider.packageName(resolved.package),
+        modelID: resolved.modelID ?? resolved.id,
+        settings:
+          Provider.mergeOverlay(resolved.settings, {
+            ...nativeCredentialSettings(resolved.package ?? "", credential),
+            ...credential?.metadata,
+            ...configuration,
+          }) ?? {},
+      },
+      dependencies,
     )
+    const settings = yield* prepareProviderSettings(resolved, prepared.settings)
     const runtime = produce(resolved, (draft) => {
+      draft.modelID = ID.make(prepared.modelID)
       draft.settings = settings
     })
     return yield* loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
@@ -155,19 +166,28 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   if (!native) return yield* unsupported(resolved)
 
   const specifier = native
-  const mapped = yield* prepareProviderSettings(resolved, mapping?.settings ?? configured)
+  const mapped = mapping?.settings ?? configured
+  const prepared = yield* prepareProvider(
+    {
+      model: resolved,
+      package: specifier,
+      modelID: resolved.modelID ?? resolved.id,
+      settings: {
+        ...(credential ? withoutNativeAuthSettings(mapped) : mapped),
+        ...nativeCredentialSettings(specifier, credential),
+        headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
+        body: Provider.mergeOverlay(mapping?.body, resolved.body),
+      },
+    },
+    dependencies,
+  )
+  const settings = yield* prepareProviderSettings(resolved, prepared.settings)
   const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
     Effect.mapError(() => unsupported(resolved)),
   )
-  const settings = {
-    ...(credential ? withoutNativeAuthSettings(mapped) : mapped),
-    ...nativeCredentialSettings(specifier, credential),
-    headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
-    body: Provider.mergeOverlay(mapping?.body, resolved.body),
-  }
   return yield* Effect.try({
     try: () => {
-      const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+      const runtime = module.model(prepared.modelID, settings)
       return LanguageModel.update(runtime, {
         provider: resolved.providerID,
         compatibility: resolved.compatibility
@@ -178,6 +198,9 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     catch: () => unsupported(resolved),
   })
 })
+
+const prepareProvider = (event: ProviderHooks["model.prepare"], dependencies: Dependencies | undefined) =>
+  dependencies?.prepareProvider?.(event) ?? Effect.succeed(event)
 
 function prepareRuntimeModel(model: Info, credential: Credential.Value | undefined) {
   if (model.settings?.apiKey !== "" && (credential?.type !== "key" || credential.metadata === undefined)) return model
@@ -271,6 +294,7 @@ export const layer = Layer.effect(
     const integrations = yield* Integration.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
+    const hooks = yield* PluginHooks.Service
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
       const provider = yield* catalog.provider.get(selected.providerID)
       const connection = yield* integrations.connection.active(
@@ -281,6 +305,7 @@ export const layer = Layer.effect(
       const model = yield* fromCatalogModel(runtimeInfo, credential, {
         loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
         loadAISDK: (model) => aisdk.model(model),
+        prepareProvider: (event) => hooks.trigger("provider", "model.prepare", event),
       })
       const runtime =
         provider?.activation === "enabled" &&
@@ -354,5 +379,5 @@ function usesAPIKeyAuth(packageName: string | undefined) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Catalog.node, Integration.node, Npm.node, AISDK.node],
+  deps: [Catalog.node, Integration.node, Npm.node, AISDK.node, PluginHooks.node],
 })

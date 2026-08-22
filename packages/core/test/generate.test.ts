@@ -10,6 +10,7 @@ import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { ID, Info, Ref } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { Npm } from "@opencode-ai/util/npm"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Effect, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -64,9 +65,10 @@ const aisdk = Layer.mock(AISDK.Service, {
   },
   model: () => Effect.succeed(runtime),
 })
+const pluginHooks = PluginHooks.node.implementation as Layer.Layer<PluginHooks.Service>
 const client = TestLLM.clientLayer.pipe(Layer.provide(TestLLM.layer({ fallback: TestLLM.text("OK", "generate") })))
 
-const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
+const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk, pluginHooks)))
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))
 const resolverIt = testEffect(resolver)
 

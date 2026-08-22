@@ -5,12 +5,14 @@ import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import type { ShellHooks } from "@opencode-ai/plugin/effect/shell"
 import type { ToolFailures, ToolHooks } from "@opencode-ai/plugin/effect/tool"
 import type { ModelHookOptions } from "@opencode-ai/plugin/effect/registration"
+import type { ProviderHooks } from "@opencode-ai/plugin/effect/provider"
 import { Context, Effect, Layer, Scope } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { State } from "../state.js"
 
 export interface Domains {
   readonly aisdk: AISDKHooks
+  readonly provider: ProviderHooks
   readonly session: SessionHooks
   readonly shell: ShellHooks
   readonly tool: ToolHooks
@@ -21,6 +23,7 @@ type NoFailures<Spec> = { readonly [Name in keyof Spec]: never }
 // Failure channel for each hook event. Only tool execute.before may fail: a Tool.Error rejects the call before it runs.
 interface Failures extends Record<keyof Domains, unknown> {
   readonly aisdk: NoFailures<AISDKHooks>
+  readonly provider: NoFailures<ProviderHooks>
   readonly session: NoFailures<SessionHooks>
   readonly shell: NoFailures<ShellHooks>
   readonly tool: ToolFailures
@@ -30,10 +33,16 @@ type Callback<Event, Error> = (event: Event) => Effect.Effect<void, Error>
 type Entry = { readonly callback: Function; readonly options?: ModelHookOptions }
 
 const eventProviderID = (event: unknown) => {
-  if (typeof event !== "object" || event === null || !("model" in event)) return undefined
-  const model = event.model
-  if (typeof model !== "object" || model === null || !("providerID" in model)) return undefined
-  return typeof model.providerID === "string" ? model.providerID : undefined
+  if (typeof event !== "object" || event === null) return undefined
+  if ("model" in event) {
+    const model = event.model
+    if (typeof model === "object" && model !== null && "providerID" in model)
+      return typeof model.providerID === "string" ? model.providerID : undefined
+  }
+  if (!("provider" in event)) return undefined
+  const provider = event.provider
+  if (typeof provider !== "object" || provider === null || !("id" in provider)) return undefined
+  return typeof provider.id === "string" ? provider.id : undefined
 }
 
 export interface Interface {

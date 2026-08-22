@@ -11,6 +11,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Npm } from "@opencode-ai/util/npm"
 import { it } from "./lib/effect"
 
@@ -338,7 +339,10 @@ describe("ModelResolver", () => {
       },
       model: () => Effect.die("unused"),
     })
-    const layer = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
+    const pluginHooks = PluginHooks.node.implementation as Layer.Layer<PluginHooks.Service>
+    const layer = ModelResolver.layer.pipe(
+      Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk, pluginHooks)),
+    )
 
     return withConfigEnv({}, () =>
       Effect.gen(function* () {
@@ -883,12 +887,7 @@ describe("ModelResolver", () => {
           { reasoning: { effort: "high" } },
           { reasoning: { effort: "high" } },
         ],
-        [
-          "@ai-sdk/xai",
-          "@opencode-ai/ai/providers/xai",
-          { reasoningEffort: "high" },
-          { reasoningEffort: "high" },
-        ],
+        ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", { reasoningEffort: "high" }, { reasoningEffort: "high" }],
       ] as const
 
       yield* Effect.forEach(packages, ([catalogPackage, nativePackage, sourceOptions, providerOptions]) =>
@@ -937,11 +936,7 @@ describe("ModelResolver", () => {
         ["@ai-sdk/azure", "@opencode-ai/ai/providers/azure/responses", "api-model"],
         ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "api-model"],
         ["@ai-sdk/google-vertex", "@opencode-ai/ai/providers/google-vertex", "api-model"],
-        [
-          "@ai-sdk/google-vertex/anthropic",
-          "@opencode-ai/ai/providers/google-vertex/messages",
-          "claude-sonnet-4-6",
-        ],
+        ["@ai-sdk/google-vertex/anthropic", "@opencode-ai/ai/providers/google-vertex/messages", "claude-sonnet-4-6"],
         ["@ai-sdk/openai", "@opencode-ai/ai/providers/openai", "api-model"],
         ["@ai-sdk/openai-compatible", "@opencode-ai/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "api-model"],
@@ -1129,6 +1124,54 @@ describe("ModelResolver", () => {
       )
 
       expect(resolved).toMatchObject({ id: "mistral-api-model", provider: "test-provider" })
+    }),
+  )
+
+  it.effect("prepares native and AI SDK provider models before construction", () =>
+    Effect.gen(function* () {
+      const seen: string[] = []
+      const prepareProvider: NonNullable<ModelResolver.Dependencies["prepareProvider"]> = (event) =>
+        Effect.sync(() => {
+          seen.push(event.package)
+          event.modelID = `prepared-${event.modelID}`
+          event.settings.prepared = true
+          return event
+        })
+      const native = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/openai")))
+
+      const direct = yield* ModelResolver.fromCatalogModel(
+        model("custom-provider", { modelID: "native-model" }),
+        undefined,
+        {
+          prepareProvider,
+          loadPackage: (specifier) => {
+            expect(specifier).toBe("custom-provider")
+            return Effect.succeed({
+              model: (modelID, settings) => {
+                expect(settings.prepared).toBe(true)
+                return LanguageModel.make({ id: modelID, provider: "custom", route: native.route })
+              },
+            })
+          },
+        },
+      )
+      const aisdk = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/mistral"), { modelID: "aisdk-model" }),
+        undefined,
+        {
+          prepareProvider,
+          loadAISDK: (runtime) => {
+            expect(runtime.settings?.prepared).toBe(true)
+            return Effect.succeed(
+              LanguageModel.make({ id: runtime.modelID ?? runtime.id, provider: "mistral", route: native.route }),
+            )
+          },
+        },
+      )
+
+      expect(String(direct.id)).toBe("prepared-native-model")
+      expect(String(aisdk.id)).toBe("prepared-aisdk-model")
+      expect(seen).toEqual(["custom-provider", "@ai-sdk/mistral"])
     }),
   )
 
