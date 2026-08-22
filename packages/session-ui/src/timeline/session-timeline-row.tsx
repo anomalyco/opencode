@@ -112,6 +112,8 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <SessionPatchToolGroup
           tools={tools()}
+          fileOpen={(path) => input.disclosure.value(`${row().group.key}:file:${path}`)}
+          onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
           onSizeChange={onSizeChange}
         />
       )
@@ -173,7 +175,11 @@ export function createSessionTimelineRowRenderer(input: {
     if (message.type === "system") {
       const prefix = "Instructions updated: "
       if (message.description?.startsWith(prefix)) {
-        const keys = message.description.slice(prefix.length).split(",").map((s) => s.trim()).filter(Boolean)
+        const keys = message.description
+          .slice(prefix.length)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
         return {
           label: i18n.t("ui.sessionTimeline.notice.instructionsUpdated"),
           items: keys,

@@ -404,7 +404,12 @@ describe("current session timeline rows", () => {
             type: "tool",
             id: "tool_patch_1",
             name: "patch",
-            state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }], metadata: { files: [] } },
+            state: {
+              status: "completed",
+              input: {},
+              content: [{ type: "text", text: "done" }],
+              metadata: { files: [] },
+            },
             time: { created: 2, completed: 3 },
           },
           {
@@ -430,7 +435,12 @@ describe("current session timeline rows", () => {
             type: "tool",
             id: "tool_patch_3",
             name: "patch",
-            state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }], metadata: { files: [] } },
+            state: {
+              status: "completed",
+              input: {},
+              content: [{ type: "text", text: "done" }],
+              metadata: { files: [] },
+            },
             time: { created: 7, completed: 8 },
           },
         ],
@@ -456,9 +466,9 @@ describe("current session timeline rows", () => {
         ref: { messageID: "msg_assistant", partID: "tool_patch_failed" },
       },
       {
-        type: "part",
+        type: "patch",
         key: "part:msg_assistant:tool_patch_3",
-        ref: { messageID: "msg_assistant", partID: "tool_patch_3" },
+        refs: [{ messageID: "msg_assistant", partID: "tool_patch_3" }],
       },
     ])
   })

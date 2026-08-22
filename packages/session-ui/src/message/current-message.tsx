@@ -112,7 +112,16 @@ export function SessionContextToolGroup(props: {
 
 export function SessionPatchToolGroup(props: {
   tools: SessionMessageAssistantTool[]
+  fileOpen: (path: string) => boolean | undefined
+  onFileOpenChange: (path: string, open: boolean) => void
   onSizeChange?: () => void
 }) {
-  return <CurrentPatchToolGroup tools={props.tools} onSizeChange={props.onSizeChange} />
+  return (
+    <CurrentPatchToolGroup
+      tools={props.tools}
+      fileOpen={props.fileOpen}
+      onFileOpenChange={props.onFileOpenChange}
+      onSizeChange={props.onSizeChange}
+    />
+  )
 }

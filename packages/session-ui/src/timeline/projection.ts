@@ -452,11 +452,6 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
     const current = adjacent
     const first = current?.refs[0]
     if (!first) return
-    if (current.type === "patch" && current.refs.length === 1) {
-      groups.push({ type: "part", key: `part:${first.messageID}:${first.partID}`, ref: first })
-      adjacent = undefined
-      return
-    }
     groups.push({
       type: current.type,
       key:

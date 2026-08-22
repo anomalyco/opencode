@@ -564,13 +564,29 @@ export function CurrentContextToolGroup(props: {
 
 export function CurrentPatchToolGroup(props: {
   tools: SessionMessageAssistantTool[]
+  fileOpen: (path: string) => boolean | undefined
+  onFileOpenChange: (path: string, open: boolean) => void
   onSizeChange?: () => void
 }) {
-  const metadata = createMemo(() => ({
-    files: props.tools.flatMap((tool) => {
+  const files = createMemo((previous: { key: string; value: unknown }[]) => {
+    const next = props.tools.flatMap((tool) => {
       const files = currentToolMetadata(tool).files
-      return Array.isArray(files) ? files : []
-    }),
+      if (!Array.isArray(files)) return []
+      return files.map((value, index) => ({ key: `${tool.id}:${index}`, value }))
+    })
+    const updates = new Map(next.map((entry) => [entry.key, entry.value]))
+    const existing = new Set(previous.map((entry) => entry.key))
+    return [
+      ...previous.map((entry) => {
+        if (!updates.has(entry.key)) return entry
+        const value = updates.get(entry.key)
+        return value === entry.value ? entry : { key: entry.key, value }
+      }),
+      ...next.filter((entry) => !existing.has(entry.key)),
+    ]
+  }, [])
+  const metadata = createMemo(() => ({
+    files: files().map((entry) => entry.value),
   }))
   const pending = createMemo(() =>
     props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
@@ -580,6 +596,7 @@ export function CurrentPatchToolGroup(props: {
   return (
     <div
       data-component="tool-part-wrapper"
+      data-timeline-part-id={props.tools.length === 1 ? props.tools[0]?.id : undefined}
       data-timeline-part-ids={props.tools.map((tool) => tool.id).join(",")}
     >
       <Dynamic
@@ -588,6 +605,8 @@ export function CurrentPatchToolGroup(props: {
         input={{}}
         metadata={metadata()}
         status={pending() ? "running" : "completed"}
+        fileOpen={props.fileOpen}
+        onFileOpenChange={props.onFileOpenChange}
         deferContent
         virtualizeDiff={false}
         onContentRendered={props.onSizeChange}
@@ -643,6 +662,8 @@ export interface ToolProps {
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  fileOpen?: (path: string) => boolean | undefined
+  onFileOpenChange?: (path: string, open: boolean) => void
   deferContent?: boolean
   virtualizeDiff?: boolean
   onContentRendered?: () => void
@@ -674,7 +695,12 @@ export const ToolRegistry = {
   render: getTool,
 }
 
-function ToolFileAccordion(props: { path: string; actions?: JSX.Element; children: JSX.Element; defaultOpen?: boolean }) {
+function ToolFileAccordion(props: {
+  path: string
+  actions?: JSX.Element
+  children: JSX.Element
+  defaultOpen?: boolean
+}) {
   const value = createMemo(() => props.path || "tool-file")
 
   return (
@@ -1484,12 +1510,19 @@ ToolRegistry.register({
     const i18n = useI18n()
     const fileComponent = useFileComponent()
     const files = createMemo(() => patchFileGroups(props.metadata.files))
-    const single = createMemo(() => {
-      const list = files()
-      if (list.length !== 1) return undefined
-      return list[0]
-    })
     const [expanded, setExpanded] = createSignal<string[]>([])
+    const open = createMemo(() => {
+      if (!props.fileOpen) return expanded()
+      return files().flatMap((file) => (props.fileOpen?.(file.path) === true ? [file.path] : []))
+    })
+    const change = (value: string | string[]) => {
+      const next = Array.isArray(value) ? value : value ? [value] : []
+      if (!props.onFileOpenChange) {
+        setExpanded(next)
+        return
+      }
+      files().forEach((file) => props.onFileOpenChange?.(file.path, next.includes(file.path)))
+    }
 
     const subtitle = createMemo(() => {
       const count = files().length
@@ -1498,167 +1531,110 @@ ToolRegistry.register({
     })
 
     return (
-      <Show
-        when={single()}
-        fallback={
-          <div data-component="apply-patch-tool">
-            <BasicTool
-              {...props}
-              open
-              onOpenChange={undefined}
-              locked
-              icon="code-lines"
-              defer={false}
-              rail={false}
-              trigger={{
-                title: i18n.t("ui.tool.patch"),
-                subtitle: subtitle(),
-              }}
+      <div data-component="apply-patch-tool">
+        <BasicTool
+          {...props}
+          open
+          onOpenChange={undefined}
+          locked
+          icon="code-lines"
+          defer={false}
+          rail={false}
+          trigger={{
+            title: i18n.t("ui.tool.patch"),
+            subtitle: subtitle(),
+          }}
+        >
+          <Show when={files().length > 0}>
+            <Accordion
+              multiple
+              data-scope="apply-patch"
+              style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
+              value={open()}
+              onChange={change}
             >
-              <Show when={files().length > 0}>
-                <Accordion
-                  multiple
-                  data-scope="apply-patch"
-                  style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
-                  value={expanded()}
-                  onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
-                >
-                  <For each={files()}>
-                    {(file, index) => {
-                      const value = () => `${index()}:${file.path}`
-                      const active = createMemo(() => expanded().includes(value()))
-                      const [visible, setVisible] = createSignal(false)
+              <Index each={files()}>
+                {(file) => {
+                  const value = () => file().path
+                  const active = createMemo(() => open().includes(value()))
+                  const [visible, setVisible] = createSignal(false)
 
-                      createEffect(() => {
-                        if (!active()) {
-                          setVisible(false)
-                          return
-                        }
+                  createEffect(() => {
+                    if (!active()) {
+                      setVisible(false)
+                      return
+                    }
 
-                        requestAnimationFrame(() => {
-                          if (!active()) return
-                          setVisible(true)
-                        })
-                      })
+                    requestAnimationFrame(() => {
+                      if (!active()) return
+                      setVisible(true)
+                    })
+                  })
 
-                      return (
-                        <Accordion.Item value={value()} data-type={file.type}>
-                          <StickyAccordionHeader>
-                            <Accordion.Trigger>
-                              <div data-slot="apply-patch-trigger-content">
-                                <div data-slot="apply-patch-file-info">
-                                  <FileIcon node={{ path: file.path, type: "file" }} />
-                                  <div data-slot="apply-patch-file-name-container">
-                                    <Show when={file.path.includes("/")}>
-                                      <span data-slot="apply-patch-directory">{`\u202A${displayDirectory(file.path)}\u202C`}</span>
-                                    </Show>
-                                    <span data-slot="apply-patch-filename">{getFilename(file.path)}</span>
-                                  </div>
-                                </div>
-                                <div data-slot="apply-patch-trigger-actions">
-                                  <Switch>
-                                    <Match when={file.type === "add"}>
-                                      <span data-slot="apply-patch-change" data-type="added">
-                                        {i18n.t("ui.patch.action.created")}
-                                      </span>
-                                    </Match>
-                                    <Match when={file.type === "delete"}>
-                                      <span data-slot="apply-patch-change" data-type="removed">
-                                        {i18n.t("ui.patch.action.deleted")}
-                                      </span>
-                                    </Match>
-                                    <Match when={true}>
-                                      <DiffChanges
-                                        appearance="standard"
-                                        changes={{ additions: file.additions, deletions: file.deletions }}
-                                      />
-                                    </Match>
-                                  </Switch>
-                                  <Icon name="chevron-grabber-vertical" size="small" />
-                                </div>
+                  return (
+                    <Accordion.Item value={value()} data-type={file().type}>
+                      <StickyAccordionHeader>
+                        <Accordion.Trigger>
+                          <div data-slot="apply-patch-trigger-content">
+                            <div data-slot="apply-patch-file-info">
+                              <FileIcon node={{ path: file().path, type: "file" }} />
+                              <div data-slot="apply-patch-file-name-container">
+                                <Show when={file().path.includes("/")}>
+                                  <span data-slot="apply-patch-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
+                                </Show>
+                                <span data-slot="apply-patch-filename">{getFilename(file().path)}</span>
                               </div>
-                            </Accordion.Trigger>
-                          </StickyAccordionHeader>
-                          <Accordion.Content>
-                            <Show when={props.deferContent === false || visible()}>
-                              <For each={file.views}>
-                                {(view) => (
-                                  <div data-component="apply-patch-file-diff">
-                                    <Dynamic
-                                      component={fileComponent}
-                                      mode="diff"
-                                      virtualize={props.virtualizeDiff}
-                                      fileDiff={view.fileDiff}
-                                      hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
-                                      onRendered={props.onContentRendered}
-                                    />
-                                  </div>
-                                )}
-                              </For>
-                            </Show>
-                          </Accordion.Content>
-                        </Accordion.Item>
-                      )
-                    }}
-                  </For>
-                </Accordion>
-              </Show>
-            </BasicTool>
-          </div>
-        }
-      >
-        <div data-component="apply-patch-tool">
-          <BasicTool
-            {...props}
-            open
-            onOpenChange={undefined}
-            locked
-            icon="code-lines"
-            defer={false}
-            trigger={{ title: i18n.t("ui.tool.patch"), subtitle: subtitle() }}
-            rail={false}
-          >
-            <ToolFileAccordion
-              path={single()!.path}
-              defaultOpen={false}
-              actions={
-                <Switch>
-                  <Match when={single()!.type === "add"}>
-                    <span data-slot="apply-patch-change" data-type="added">
-                      {i18n.t("ui.patch.action.created")}
-                    </span>
-                  </Match>
-                  <Match when={single()!.type === "delete"}>
-                    <span data-slot="apply-patch-change" data-type="removed">
-                      {i18n.t("ui.patch.action.deleted")}
-                    </span>
-                  </Match>
-                  <Match when={true}>
-                    <DiffChanges
-                      appearance="standard"
-                      changes={{ additions: single()!.additions, deletions: single()!.deletions }}
-                    />
-                  </Match>
-                </Switch>
-              }
-            >
-              <For each={single()!.views}>
-                {(view) => (
-                  <div data-component="apply-patch-file-diff">
-                    <Dynamic
-                      component={fileComponent}
-                      mode="diff"
-                      virtualize={props.virtualizeDiff}
-                      fileDiff={view.fileDiff}
-                      onRendered={props.onContentRendered}
-                    />
-                  </div>
-                )}
-              </For>
-            </ToolFileAccordion>
-          </BasicTool>
-        </div>
-      </Show>
+                            </div>
+                            <div data-slot="apply-patch-trigger-actions">
+                              <Switch>
+                                <Match when={file().type === "add"}>
+                                  <span data-slot="apply-patch-change" data-type="added">
+                                    {i18n.t("ui.patch.action.created")}
+                                  </span>
+                                </Match>
+                                <Match when={file().type === "delete"}>
+                                  <span data-slot="apply-patch-change" data-type="removed">
+                                    {i18n.t("ui.patch.action.deleted")}
+                                  </span>
+                                </Match>
+                                <Match when={true}>
+                                  <DiffChanges
+                                    appearance="standard"
+                                    changes={{ additions: file().additions, deletions: file().deletions }}
+                                  />
+                                </Match>
+                              </Switch>
+                              <Icon name="chevron-grabber-vertical" size="small" />
+                            </div>
+                          </div>
+                        </Accordion.Trigger>
+                      </StickyAccordionHeader>
+                      <Accordion.Content>
+                        <Show when={props.deferContent === false || visible()}>
+                          <For each={file().views}>
+                            {(view) => (
+                              <div data-component="apply-patch-file-diff">
+                                <Dynamic
+                                  component={fileComponent}
+                                  mode="diff"
+                                  virtualize={props.virtualizeDiff}
+                                  fileDiff={view.fileDiff}
+                                  hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
+                                  onRendered={props.onContentRendered}
+                                />
+                              </div>
+                            )}
+                          </For>
+                        </Show>
+                      </Accordion.Content>
+                    </Accordion.Item>
+                  )
+                }}
+              </Index>
+            </Accordion>
+          </Show>
+        </BasicTool>
+      </div>
     )
   },
 })
