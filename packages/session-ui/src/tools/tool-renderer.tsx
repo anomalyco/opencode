@@ -498,7 +498,7 @@ export function CurrentContextToolGroup(props: {
         <div data-component="context-tool-group-trigger">
           <span
             data-slot="context-tool-group-title"
-            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
+            class="min-w-0 flex items-center gap-2 text-text-strong"
           >
             <span data-slot="context-tool-group-label" class="shrink-0">
               <ToolStatusTitle
@@ -510,7 +510,7 @@ export function CurrentContextToolGroup(props: {
             </span>
             <span
               data-slot="context-tool-group-summary"
-              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
+              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-text-base"
             >
               <AnimatedCountList
                 items={[
@@ -723,7 +723,7 @@ function ToolFileAccordion(props: {
     <Accordion
       multiple
       data-scope="apply-patch"
-      style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
+      style={{ "--sticky-accordion-offset": "calc(28px + var(--tool-content-gap))" }}
       defaultValue={props.defaultOpen === false ? [] : [value()]}
     >
       <Accordion.Item value={value()}>
@@ -1288,7 +1288,6 @@ ToolRegistry.register({
         {...props}
         icon="console"
         rail={false}
-        compact
         allowOpenWhilePending
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
@@ -1581,7 +1580,7 @@ ToolRegistry.register({
             <Accordion
               multiple
               data-scope="apply-patch"
-              style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
+              style={{ "--sticky-accordion-offset": "calc(28px + var(--tool-content-gap))" }}
               value={open()}
               onChange={change}
             >

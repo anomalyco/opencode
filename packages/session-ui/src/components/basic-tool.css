@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   align-self: stretch;
-  gap: 0px;
+  gap: 6px;
   justify-content: flex-start;
 
   &[data-clickable="true"] {
@@ -19,7 +19,7 @@
     display: flex;
     align-items: center;
     align-self: stretch;
-    gap: 8px;
+    gap: 6px;
   }
 
   [data-slot="basic-tool-tool-indicator"] {
@@ -59,7 +59,7 @@
     flex: 0 1 auto;
     min-width: 0;
     max-width: 100%;
-    font-size: 14px;
+    font-size: 13px;
   }
 
   [data-slot="basic-tool-tool-info-structured"] {
@@ -69,26 +69,26 @@
     min-width: 0;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     justify-content: flex-start;
   }
 
   [data-slot="basic-tool-tool-info-main"] {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
     overflow: hidden;
   }
 
   [data-slot="basic-tool-tool-title"] {
     flex-shrink: 0;
-    font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
     font-style: normal;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
+    font-weight: 530;
+    line-height: var(--v2-line-height-compact, 16px);
+    letter-spacing: -0.04px;
     color: var(--v2-text-text-base);
 
     &.capitalize {
@@ -107,13 +107,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: var(--font-family-sans);
+    font-family: var(--v2-font-family-sans);
     font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
-    font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
+    font-weight: 440;
+    line-height: var(--v2-line-height-compact, 16px);
+    letter-spacing: -0.04px;
     color: var(--v2-text-text-muted);
 
     &.clickable:not(.webfetch-link) {
@@ -153,13 +153,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: var(--font-family-sans);
+    font-family: var(--v2-font-family-sans);
     font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
-    font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
+    font-weight: 440;
+    line-height: var(--v2-line-height-compact, 16px);
+    letter-spacing: -0.04px;
     color: var(--v2-text-text-muted);
   }
 
@@ -170,29 +170,13 @@
   }
 }
 
-[data-component="collapsible"].tool-collapsible[data-compact="true"] > [data-slot="collapsible-trigger"] {
+[data-component="collapsible"].tool-collapsible > [data-slot="collapsible-trigger"] {
   height: 28px;
+}
 
-  [data-component="tool-trigger"],
-  [data-slot="basic-tool-tool-info-main"] {
-    gap: 6px;
-  }
-
-  [data-slot="basic-tool-tool-title"] {
-    font-family: var(--v2-font-family-sans);
-    font-size: 13px;
-    font-weight: 530;
-    line-height: var(--v2-line-height-compact, 16px);
-    letter-spacing: -0.04px;
-  }
-
-  [data-slot="basic-tool-tool-subtitle"] {
-    font-family: var(--v2-font-family-sans);
-    font-size: 13px;
-    font-weight: 440;
-    line-height: var(--v2-line-height-compact, 16px);
-    letter-spacing: -0.04px;
-  }
+[data-component="collapsible"].tool-collapsible
+  > [data-slot="collapsible-trigger"]:has([data-component="task-tool-card"]) {
+  height: auto;
 }
 
 [data-component="task-tool-card"] {
