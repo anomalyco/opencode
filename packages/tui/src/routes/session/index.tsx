@@ -21,6 +21,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
+import { followSessions } from "../../context/followed-sessions"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
@@ -192,6 +193,13 @@ export function Session(props: { verticalTabsWidth: number }) {
   const descendantSessionIDs = createMemo(() => {
     if (session()?.parentID) return []
     return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
+  })
+  // Interest rule wiring (#37792): the open root and its hydrated family are
+  // this route's followed sessions; their events project, everything else in
+  // the global stream is dropped before it can allocate state.
+  createEffect(() => {
+    followSessions(route.sessionID)
+    for (const id of descendantSessionIDs()) followSessions(id)
   })
   const permissions = createMemo(() => {
     if (session()?.parentID) return []

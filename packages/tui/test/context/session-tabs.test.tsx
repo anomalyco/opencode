@@ -17,6 +17,7 @@ import { createApi, createEventStream, createFetch, directory, json } from "../f
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { tmpdir } from "../fixture/fixture"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
+import { followSessions } from "../../src/context/followed-sessions"
 
 async function wait(fn: () => boolean | Promise<boolean>, timeout = 2_000, label = "condition") {
   const start = Date.now()
@@ -184,7 +185,13 @@ async function renderSessionTabs(
     setSessionTime(sessionID: string, time: { idle?: number; viewed?: number }) {
       sessionTimes[sessionID] = time
     },
-    emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
+    emit: (event: OpenCodeEvent) => {
+      // Follow emitted sessions: these tests assert projection semantics, not
+      // the #37792 interest rule (which filters unfollowed sessions).
+      const sid = (event as { data?: { sessionID?: string } }).data?.sessionID
+      if (sid) followSessions(sid)
+      events.emit({ ...event, location: { directory } })
+    },
     focus: () => app.renderer.emit("focus"),
     blur: () => app.renderer.emit("blur"),
     flush: () => storage.flush(),

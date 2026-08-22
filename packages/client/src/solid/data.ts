@@ -57,6 +57,10 @@ export type CreateDataInput = {
   readonly connection?: {
     readonly status: () => "connected" | "connecting" | "reconnecting"
   }
+  readonly follows?: {
+    /** Return true to project session-scoped events for this session (#37792). */
+    readonly isFollowed: (sessionID: string) => boolean
+  }
 }
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
@@ -455,6 +459,26 @@ export function createData(config: CreateDataInput) {
   }
 
   function handleEvent(event: OpenCodeEvent) {
+    // Interest rule (#37792): with a follow predicate supplied, drop
+    // high-volume session-scoped events for unfollowed sessions before they
+    // can allocate transcript/index state. Low-volume intent events that may
+    // require user action (permissions, forms), deletions (prune-if-present
+    // is a safe no-op) and the "global" pseudo-session always pass.
+    const follows = config.follows
+    if (follows) {
+      const payload = event.data as { sessionID?: string } | undefined
+      const sessionID = typeof payload?.sessionID === "string" ? payload.sessionID : undefined
+      if (
+        sessionID !== undefined &&
+        sessionID !== "global" &&
+        event.type !== "session.deleted" &&
+        event.type !== "permission.asked" &&
+        event.type !== "permission.replied" &&
+        event.type !== "form.created" &&
+        !follows.isFollowed(sessionID)
+      )
+        return
+    }
     switch (event.type) {
       case "server.connected":
         void api()
