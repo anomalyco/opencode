@@ -6,6 +6,7 @@ import * as OpenAICompatibleProfiles from "./openai-compatible-profile.js"
 import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
+import { OpenResponsesContinuation } from "../protocols/open-responses-continuation.js"
 import { XAIImages } from "../protocols/xai-images.js"
 import type { OpenAIOptionsInput } from "./openai-options.js"
 import type { ProviderPackage } from "../provider-package.js"
@@ -36,7 +37,7 @@ const responsesRoute = Route.make({
   providerMetadataKey: "xai",
   protocol: OpenAIResponses.protocol,
   endpoint: Endpoint.path("/responses", { baseURL: OpenAICompatibleProfiles.profiles.xai.baseURL }),
-  transport: OpenAIResponses.channelTransport({
+  transport: OpenResponsesContinuation.transport({
     id: "openai-responses",
     name: "xAI Responses",
     rotateAfterMs: RESPONSES_WEBSOCKET_ROTATE_AFTER_MS,

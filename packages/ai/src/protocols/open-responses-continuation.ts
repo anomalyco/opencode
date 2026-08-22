@@ -3,8 +3,9 @@ import type { ChannelCheckpoint, ChannelObservation, WebSocketChannelDriver } fr
 import { Effect, Option, Schema } from "effect"
 import * as ProviderShared from "./shared.js"
 import { OpenResponses } from "./open-responses.js"
+import { OpenResponsesChannel, type Options } from "./open-responses-channel.js"
 
-const PROTOCOL = "openai-responses.websocket.v1"
+const PROTOCOL = "open-responses.websocket.v1"
 const VERSION = 1
 const decodeEvent = Schema.decodeUnknownEffect(OpenResponses.protocol.stream.event)
 
@@ -161,4 +162,10 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
   }
 }
 
-export const OpenAIResponsesChannel = { driver } as const
+export const transport = <Body>(options: Omit<Options, "driver">) =>
+  OpenResponsesChannel.transport<Body>({
+    ...options,
+    driver: (input) => driver({ id: options.id, name: options.name, ...input }),
+  })
+
+export const OpenResponsesContinuation = { driver, transport } as const
