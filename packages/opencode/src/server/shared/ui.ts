@@ -41,6 +41,11 @@ export function upstreamURL(path: string) {
   return new URL(path, UI_UPSTREAM).toString()
 }
 
+// PERF: embedded assets are immutable for the process lifetime; cache the
+// constructed response so repeat fetches (the web UI re-requests sprites/fonts
+// per view) serve from memory instead of re-reading from disk each time.
+const embeddedUICache = new Map<string, ReturnType<typeof embeddedUIResponse>>()
+
 export function embeddedUI(disableEmbeddedWebUi: boolean) {
   if (disableEmbeddedWebUi) return Promise.resolve(null)
   return (embeddedUIPromise ??=
@@ -69,8 +74,15 @@ export function serveEmbeddedUIEffect(
   const file = embeddedWebUI[requestPath.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
   if (!file) return Effect.succeed(notFound())
 
+  const cached = embeddedUICache.get(requestPath)
+  if (cached) return Effect.succeed(cached)
+
   return fs.readFile(file).pipe(
-    Effect.map((body) => embeddedUIResponse(file, body)),
+    Effect.map((body) => {
+      const response = embeddedUIResponse(file, body)
+      if (embeddedUICache.size < 512) embeddedUICache.set(requestPath, response)
+      return response
+    }),
     Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(notFound())),
   )
 }
