@@ -205,7 +205,9 @@ export function CurrentUserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
   const [state, setState] = createStore({ copied: false, reverting: false })
-  const attachments = createMemo(() => (props.message.files ?? []).filter((file) => !file.mention))
+  const attachments = createMemo(() =>
+    (props.message.files ?? []).filter((file) => !file.mention || file.mime.startsWith("image/")),
+  )
   const inlineFiles = createMemo(() => (props.message.files ?? []).filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])

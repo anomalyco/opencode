@@ -218,6 +218,7 @@ const source = {
 
   "ui.patch.action.deleted": "Deleted",
   "ui.patch.action.created": "Created",
+  "ui.patch.action.removed": "Removed",
   "ui.patch.action.moved": "Moved",
   "ui.patch.action.patched": "Patched",
 

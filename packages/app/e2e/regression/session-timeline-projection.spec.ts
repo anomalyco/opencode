@@ -133,7 +133,7 @@ test.describe("session timeline projection", () => {
   })
 
   test("renders user image, file attachment, file reference, and agent reference", async ({ page }) => {
-    const text = "Use @explore with @src/a.ts and inspect the attachments"
+    const text = "[Image 1] Use @explore with @src/a.ts and inspect the attachments"
     const parts: PartSeed<"user">[] = [
       userText(text, { id: "prt_user_rich" }),
       {
@@ -142,6 +142,7 @@ test.describe("session timeline projection", () => {
         mime: "image/png",
         filename: "pixel.png",
         url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        source: { type: "file", path: "pixel.png", text: { value: "[Image 1]", start: 0, end: 9 } },
       },
       {
         id: "prt_user_attachment",
@@ -156,18 +157,19 @@ test.describe("session timeline projection", () => {
         mime: "text/plain",
         filename: "a.ts",
         url: "src/a.ts",
-        source: { type: "file", path: "src/a.ts", text: { value: "@src/a.ts", start: 18, end: 27 } },
+        source: { type: "file", path: "src/a.ts", text: { value: "@src/a.ts", start: 28, end: 37 } },
       },
       {
         id: "prt_user_agent",
         type: "agent",
         name: "explore",
-        source: { value: "@explore", start: 4, end: 12 },
+        source: { value: "@explore", start: 14, end: 22 },
       },
     ]
     await setupTimeline(page, { messages: [userMessage(parts), assistantMessage()] })
 
     await expect(page.getByAltText("pixel.png")).toBeVisible()
+    await expect(page.getByText("[Image 1]", { exact: true })).toBeVisible()
     await expect(page.getByText("tsconfig.json")).toBeVisible()
     await expect(page.getByText("@src/a.ts", { exact: true })).toBeVisible()
     await expect(page.getByText("@explore", { exact: true })).toBeVisible()

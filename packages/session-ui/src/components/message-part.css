@@ -438,20 +438,20 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-style: normal;
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
   }
 
   [data-slot="message-part-title"] {
     flex: 1 1 auto;
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 8px;
     min-width: 0;
-    font-family: var(--font-family-sans);
-    font-size: 14px;
-    font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
   }
 
