@@ -3016,36 +3016,42 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("falls back to a stable default when error is null", () =>
+  it.effect("falls back to the raw payload when error is null", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error", error: null }))),
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "OpenAI Responses stream error" })
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
+      expect(error.reason.message).toContain('"error":null')
+      expect(error.body).toBe(error.reason.message)
     }),
   )
 
-  it.effect("falls back to a stable default when both error and response are absent", () =>
+  it.effect("falls back to the raw payload when both error and response are absent", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "OpenAI Responses stream error" })
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
+      expect(error.reason.message).toContain('"type":"error"')
+      expect(error.body).toBe(error.reason.message)
     }),
   )
 
-  it.effect("falls back to a stable default when response.failed has no error payload", () =>
+  it.effect("keeps the raw response payload when response.failed has no error payload", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "response.failed", response: { id: "resp_failed_3" } }))),
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "OpenAI Responses response failed" })
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
+      expect(error.reason.message).toContain('"resp_failed_3"')
+      expect(error.body).toBe(error.reason.message)
     }),
   )
 

@@ -61,6 +61,11 @@ const OpenResponsesOutputText = Schema.Struct({
 export const MessagePhase = Schema.NullOr(Schema.Literals(["commentary", "final_answer"]))
 type MessagePhase = Schema.Schema.Type<typeof MessagePhase>
 
+const messagePhase = (value: unknown): MessagePhase | undefined => {
+  if (value === null || value === "commentary" || value === "final_answer") return value
+  return undefined
+}
+
 const OpenResponsesReasoningSummaryText = Schema.Struct({
   type: Schema.tag("summary_text"),
   text: Schema.String,
@@ -242,6 +247,7 @@ const OpenResponsesErrorPayload = Schema.Struct({
   message: optionalNull(Schema.String),
   param: optionalNull(Schema.String),
 })
+type OpenResponsesErrorPayload = Schema.Schema.Type<typeof OpenResponsesErrorPayload>
 
 const WebSocketErrorHeader = Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
 export const WebSocketErrorEvent = Schema.StructWithRest(
@@ -306,20 +312,6 @@ export const Event = Schema.StructWithRest(
 )
 export type Event = Schema.Schema.Type<typeof Event>
 
-const RefusalEvent = Schema.Union([
-  Schema.Struct({
-    type: Schema.tag("response.refusal.delta"),
-    item_id: Schema.String,
-    delta: Schema.String,
-  }),
-  Schema.Struct({
-    type: Schema.tag("response.refusal.done"),
-    item_id: Schema.String,
-    refusal: Schema.String,
-  }),
-])
-const isRefusalEvent = Schema.is(RefusalEvent)
-
 export interface Extension {
   readonly id: string
   readonly name: string
@@ -340,7 +332,6 @@ export interface ParserState {
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
   readonly messageItems: ReadonlySet<string>
-  readonly messagePhase: (value: unknown) => MessagePhase | null | undefined
   readonly messagePhases: Readonly<Record<string, MessagePhase | null>>
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
   readonly store: boolean | undefined
@@ -416,10 +407,6 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
     encrypted_content: encryptedContent,
   }
-}
-
-const hostedToolItemID = (part: ToolResultPart, providerMetadataKey: string) => {
-  return itemID(part.providerMetadata, providerMetadataKey)
 }
 
 const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
@@ -592,9 +579,9 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
           flushText()
-          const itemID = hostedToolItemID(part, providerMetadataKey)
-          if (store !== false && itemID && !hostedToolReferences.has(itemID))
-            input.push({ type: "item_reference", id: itemID })
+          const id = itemID(part.providerMetadata, providerMetadataKey)
+          if (store !== false && id && !hostedToolReferences.has(id))
+            input.push({ type: "item_reference", id })
           if (store === false && part.result.type === "content") {
             const content: ReadonlyArray<Content> = part.result.value
             input.push({
@@ -604,7 +591,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
               ),
             })
           }
-          if (itemID) hostedToolReferences.add(itemID)
+          if (id) hostedToolReferences.add(id)
           continue
         }
         return yield* ProviderShared.unsupportedContent(extension.name, "assistant", [
@@ -816,18 +803,17 @@ const reasoningMetadata = (state: ParserState, item: StreamItem & { id: string }
 // best-effort, not guaranteed.
 const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
   const item = event.item
-  if (item?.type === "message" && item.id)
+  if (item?.type === "message" && item.id) {
+    const phase = messagePhase(item.phase)
     return [
       {
         ...state,
         messageItems: new Set([...state.messageItems, item.id]),
-        messagePhases: (() => {
-          const phase = state.messagePhase(item.phase)
-          return phase === undefined ? state.messagePhases : { ...state.messagePhases, [item.id]: phase }
-        })(),
+        messagePhases: phase === undefined ? state.messagePhases : { ...state.messagePhases, [item.id]: phase },
       },
       NO_EVENTS,
     ]
+  }
   if (item && isReasoningItem(item)) {
     const events: LLMEvent[] = []
     return [
@@ -985,7 +971,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
   if (item.type === "message" && item.id) {
-    const itemPhase = state.messagePhase(item.phase)
+    const itemPhase = messagePhase(item.phase)
     const phase = itemPhase === undefined ? state.messagePhases[item.id] : itemPhase
     const events: LLMEvent[] = []
     const messageItems = new Set(state.messageItems)
@@ -1093,22 +1079,26 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
   return [{ ...state, lifecycle, hasFunctionCall, tools: pending.tools }, events] satisfies StepResult
 })
 
-// Build a single human-readable message from whatever the provider supplied.
+// Build the prettiest summary available from whatever the provider supplied.
 // When both code and message are present, prefix the code so consumers see
 // the failure mode (e.g. `rate_limit_exceeded: Slow down`) instead of just
 // the bare message — production rate limits and context-length failures used
-// to be indistinguishable from generic stream drops.
-const providerErrorMessage = (event: Event, fallback: string): string => {
-  const nested = event.error ?? event.response?.error ?? undefined
+// to be indistinguishable from generic stream drops. Returns undefined when
+// the payload carries no usable summary.
+const providerErrorMessage = (event: Event, nested: OpenResponsesErrorPayload | undefined): string | undefined => {
   const message = event.message || nested?.message || undefined
   const code = event.code || nested?.code || undefined
   if (message && code) return `${code}: ${message}`
-  return message || code || fallback
+  return message || code
 }
 
 export const providerFailure = (id: string, event: Event, fallback: string) => {
-  const code = event.code || event.error?.code || event.response?.error?.code || undefined
-  const message = providerErrorMessage(event, fallback)
+  const nested = event.error ?? event.response?.error ?? undefined
+  const code = event.code || nested?.code || undefined
+  // Keep the full raw payload on the error even when the message is a summary.
+  const body = JSON.stringify(nested ?? event) ?? ""
+  const summary = providerErrorMessage(event, nested)
+  const message = summary ?? (body === "{}" ? fallback : body)
   const status =
     typeof event.status === "number"
       ? event.status
@@ -1118,6 +1108,7 @@ export const providerFailure = (id: string, event: Event, fallback: string) => {
   return new AIError({
     module: id,
     method: "stream",
+    body,
     reason: classifyProviderFailure({ message, code, status }),
   })
 }
@@ -1134,20 +1125,17 @@ export const step = (state: ParserState, event: Event) => {
     )
   }
   if (event.type === "response.refusal.delta" || event.type === "response.refusal.done") {
-    if (!isRefusalEvent(event)) return ProviderShared.eventError(state.id, `${event.type} is malformed`)
+    const value = event.type === "response.refusal.delta" ? event.delta : event.refusal
+    if (!event.item_id || typeof value !== "string") return ProviderShared.eventError(state.id, `${event.type} is malformed`)
     return Effect.succeed(
       event.type === "response.refusal.delta"
         ? onOutputTextDelta(state, event, event.item_id)
-        : onOutputTextDone(state, { ...event, text: event.refusal }, event.item_id),
+        : onOutputTextDone(state, { ...event, text: value }, event.item_id),
     )
   }
   if (event.type === "response.reasoning.delta" || event.type === "response.reasoning_summary_text.delta") {
     if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(onReasoningDelta(state, event, event.item_id))
-  }
-  if (event.type === "response.reasoning.done" || event.type === "response.reasoning_summary_text.done") {
-    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
-    return Effect.succeed(onReasoningDone(state, event))
   }
   if (event.type === "response.reasoning_summary_part.added")
     return event.item_id
@@ -1193,16 +1181,10 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   tools: ToolStream.empty<string>(),
   lifecycle: Lifecycle.initial(),
   messageItems: new Set<string>(),
-  messagePhase,
   messagePhases: {},
   reasoningItems: {},
   store: OpenResponsesOptions.resolve(request).store,
 })
-
-const messagePhase = (value: unknown): MessagePhase | undefined => {
-  if (value === null || value === "commentary" || value === "final_answer") return value
-  return undefined
-}
 
 export const protocol = Protocol.make({
   id: ADAPTER,
