@@ -73,7 +73,7 @@
   strong,
   b {
     color: var(--v2-text-text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: 700;
   }
 
   /* Paragraphs */
@@ -346,6 +346,7 @@ body:not([data-new-layout]) [data-component="markdown"] {
   strong,
   b {
     color: var(--text-strong);
+    font-weight: 700;
   }
 
   li::marker {
