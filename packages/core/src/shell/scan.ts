@@ -319,9 +319,7 @@ function bashConditionalCommands(commands: Array<{ resource: string; words: stri
     const offset = command.resource.indexOf(keyword!) + keyword!.length
     const trailing = command.resource.slice(offset).trim()
     const inline =
-      command.words.length > 1
-        ? { resource: command.resource.slice(offset).trim(), words: command.words.slice(1) }
-        : undefined
+      command.words.length > 1 ? { resource: trailing, words: command.words.slice(1) } : undefined
     if (!inline && trailing) return
     if (index === 0) {
       if (inline) normalized.push(inline)

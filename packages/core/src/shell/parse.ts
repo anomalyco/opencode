@@ -212,16 +212,18 @@ async function scanPortable(
   cwd: string,
   env: Record<string, string | undefined>,
 ): Promise<Result> {
-  const { ShellScan } = await import("./scan.js")
   const powershell = ShellSelect.ps(shell)
   const shellName = ShellSelect.name(shell)
-  const supported = powershell || PORTABLE_BASH_SHELLS.has(shellName)
-  const result =
-    supported && !shellStartupUnknown(shellName, env)
-      ? powershell
-        ? ShellScan.scanPowerShell(command)
-        : ShellScan.scan(command)
-      : ({ kind: "opaque", reason: "invalid-structure" } as const)
+  if ((!powershell && !PORTABLE_BASH_SHELLS.has(shellName)) || shellStartupUnknown(shellName, env))
+    return {
+      commands: [{ resource: command, save: command }],
+      directories: [],
+      analysis: "opaque" as const,
+      directoryUnknown: true,
+    }
+
+  const { ShellScan } = await import("./scan.js")
+  const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
   if (result.kind === "opaque")
     return {
       commands: [{ resource: command, save: command }],
@@ -465,24 +467,31 @@ function directoryCommand(words: string[], powershell: boolean) {
 }
 
 function mutatesDirectoryEnvironment(words: string[], powershell: boolean): boolean {
-  const name = powershell ? powerShellCommandName(words[0]) : words[0]
+  const powerShellName = powershell ? powerShellCommandName(words[0]) : undefined
   if (powershell)
     return (
-      ["clear-item", "move-item", "new-item", "remove-item", "rename-item", "set-item"].includes(name ?? "") &&
+      ["clear-item", "move-item", "new-item", "remove-item", "rename-item", "set-item"].includes(
+        powerShellName ?? "",
+      ) &&
       words.slice(1).some((word) => /^env:/i.test(word))
     )
 
-  if (["builtin", "command"].includes(name ?? "")) {
-    const start = words.findIndex((word, index) => index > 0 && !word.startsWith("-"))
-    if (name === "command" && words.slice(1, start < 0 ? undefined : start).some((option) => /[vV]/.test(option)))
+  let index = 0
+  while (["builtin", "command"].includes(words[index] ?? "")) {
+    const name = words[index]
+    const start = words.findIndex((word, offset) => offset > index && !word.startsWith("-"))
+    if (name === "command" && words.some((option, offset) => offset > index && offset < start && /[vV]/.test(option)))
       return false
-    return start >= 0 && mutatesDirectoryEnvironment(words.slice(start), false)
+    if (start < 0) return false
+    index = start
   }
 
+  const name = words[index]
   const variable = (word: string | undefined) => /^(?:CDPATH|HOME)(?:\+?=|$)/.test(word ?? "")
   if (["declare", "export", "local", "read", "readonly", "typeset", "unset"].includes(name ?? ""))
-    return words.slice(1).some(variable)
-  const target = name === "printf" ? words[words.findIndex((word) => word === "-v") + 1] : undefined
+    return words.some((word, offset) => offset > index && variable(word))
+  const target =
+    name === "printf" ? words[words.findIndex((word, offset) => offset > index && word === "-v") + 1] : undefined
   return variable(target)
 }
 

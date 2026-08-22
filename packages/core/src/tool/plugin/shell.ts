@@ -202,17 +202,6 @@ export const Plugin = {
                       portable,
                       env: invocation.env,
                     })
-                    const directories = parsed.directoryUnknown
-                      ? []
-                      : yield* Effect.forEach(parsed.directories, (directory) =>
-                          mutation.resolve({ path: path.resolve(target.absolute, directory), kind: "directory" }),
-                        )
-                    const external = [target, ...directories]
-                      .map((item) => item.externalDirectory)
-                      .filter((item) => item !== undefined)
-                      .filter(
-                        (item, index, items) => items.findIndex((other) => other.resource === item.resource) === index,
-                      )
                     if (parsed.directoryUnknown)
                       yield* permission.assert({
                         action: "external_directory",
@@ -223,15 +212,27 @@ export const Plugin = {
                         resourceMode: "exact",
                         source,
                       })
-                    else if (external.length > 0)
-                      yield* permission.assert({
-                        action: "external_directory",
-                        resources: external.map((item) => item.resource),
-                        save: external.map((item) => item.save),
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      })
+                    if (!parsed.directoryUnknown) {
+                      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
+                        mutation.resolve({ path: path.resolve(target.absolute, directory), kind: "directory" }),
+                      )
+                      const external = [target, ...directories]
+                        .map((item) => item.externalDirectory)
+                        .filter((item) => item !== undefined)
+                        .filter(
+                          (item, index, items) =>
+                            items.findIndex((other) => other.resource === item.resource) === index,
+                        )
+                      if (external.length > 0)
+                        yield* permission.assert({
+                          action: "external_directory",
+                          resources: external.map((item) => item.resource),
+                          save: external.map((item) => item.save),
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
+                    }
                     if (parsed.commands.length > 0)
                       yield* permission.assert({
                         action: name,
