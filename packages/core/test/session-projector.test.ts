@@ -832,6 +832,15 @@ describe("SessionProjector", () => {
       yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "user" })
       const afterInterrupt = yield* timeUpdated()
       expect(afterInterrupt!.time_updated).toBe(3_000)
+
+      // A terminal failure advances recency the same way as the other two terminal handlers.
+      yield* TestClock.adjust(1_000)
+      yield* bus.publish(SessionEvent.Execution.Failed, {
+        sessionID,
+        error: { type: "execution.failed", message: "boom" },
+      })
+      const afterFailed = yield* timeUpdated()
+      expect(afterFailed!.time_updated).toBe(4_000)
     }),
   )
 })
