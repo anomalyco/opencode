@@ -523,6 +523,7 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.reasoningEffort).toBe("medium")
     expect(result.reasoningSummary).toBeUndefined()
     expect(result.include).toBeUndefined()
+    expect(result.textVerbosity).toBeUndefined()
   })
 
   test("azure chat completions omit Responses-only reasoning options after variants merge", async () => {
@@ -3243,6 +3244,19 @@ describe("ProviderTransform.temperature - Cohere North", () => {
         api: { id: "North-Mini-Code-1-0-latest" },
       } as any),
     ).toBe(1.0)
+  })
+})
+
+describe("ProviderTransform sampling defaults - Qwen", () => {
+  test.each(["Qwen3.8-27B", "qwen3-coder-30b-a3b-instruct"])('leaves sampling unset for "%s"', (id) => {
+    const model = {
+      id: `custom/${id}`,
+      api: { id },
+    } as any
+
+    expect(ProviderTransform.temperature(model)).toBeUndefined()
+    expect(ProviderTransform.topP(model)).toBeUndefined()
+    expect(ProviderTransform.topK(model)).toBeUndefined()
   })
 })
 

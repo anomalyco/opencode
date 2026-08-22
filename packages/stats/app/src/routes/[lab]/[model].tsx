@@ -350,7 +350,7 @@ function ModelHero(props: {
               <ModelHeroSparkline data={data()} />
             </span>
             <span>across last week's</span>
-            <span data-slot="model-hero-pill">OpenCode Go</span>
+            <span data-slot="model-hero-pill">OpenCode</span>
             <span>usage with</span>
             <span data-slot="model-hero-pill">{formatPercent(data().tokenShare)}</span>
             <span>of observed</span>
@@ -812,7 +812,8 @@ function ModelTrendSection(props: {
                   <div data-slot="tooltip-divider" />
                   <p>
                     <span data-slot="tooltip-label">
-                      <i data-kind={props.lineTone === "active" ? "users" : "tokens"} /> {props.rowLabel}
+                      <i data-kind={props.lineTone === "active" ? "users" : "tokens"} />
+                      <span data-slot="tooltip-name">{props.rowLabel}</span>
                     </span>
                     <b>{props.formatValue(props.value(active.point))}</b>
                   </p>

@@ -39,6 +39,7 @@ export const queryLiteSubscription = query(async (workspaceID: string) => {
           timeCreated: LiteTable.timeCreated,
           lite: BillingTable.lite,
           region: WorkspaceTable.region,
+          allowTraining: WorkspaceTable.allow_training,
         })
         .from(BillingTable)
         .innerJoin(LiteTable, eq(LiteTable.workspaceID, BillingTable.workspaceID))
@@ -54,6 +55,7 @@ export const queryLiteSubscription = query(async (workspaceID: string) => {
     return {
       mine,
       useBalance: row.lite?.useBalance ?? false,
+      allowTraining: row.allowTraining ?? false,
       region:
         row.region ?? (await Workspace.setDefaultRegion({ country: countryFromRequest(getRequestEvent()?.request) })),
       rollingUsage: Subscription.analyzeRollingUsage({
@@ -154,6 +156,24 @@ const setGoProviderRouting = action(async (form: FormData) => {
   )
 }, "go.providerRouting.set")
 
+const setGoAllowTraining = action(async (form: FormData) => {
+  "use server"
+  const workspaceID = form.get("workspaceID") as string | null
+  if (!workspaceID) return { error: formError.workspaceRequired }
+  const allowTraining = (form.get("allowTraining") as string | null) === "true"
+
+  return json(
+    await withActor(
+      () =>
+        Workspace.update({ allow_training: allowTraining })
+          .then(() => ({ error: undefined }))
+          .catch((e) => ({ error: e.message as string })),
+      workspaceID,
+    ),
+    { revalidate: queryLiteSubscription.key },
+  )
+}, "go.allowTraining.set")
+
 function LiteUsageItem(props: { label: string; usage: { usagePercent: number; resetInSec: number } }) {
   const i18n = useI18n()
 
@@ -186,6 +206,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
   const checkoutSubmission = useSubmission(createLiteCheckoutUrl)
   const useBalanceSubmission = useSubmission(setLiteUseBalance)
   const providerRoutingSubmission = useSubmission(setGoProviderRouting)
+  const allowTrainingSubmission = useSubmission(setGoAllowTraining)
   const [store, setStore] = createStore({
     loading: undefined as undefined | "session" | "checkout" | "alipay" | "upi",
     showModal: false,
@@ -264,6 +285,20 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
                 <h3>{i18n.t("workspace.lite.providers.title")}</h3>
                 <p>{i18n.t("workspace.lite.providers.description")}</p>
               </div>
+              <form action={setGoAllowTraining} method="post" data-slot="setting-row">
+                <p>{i18n.t("workspace.lite.providers.allowTraining")}</p>
+                <input type="hidden" name="workspaceID" value={params.id} />
+                <input type="hidden" name="allowTraining" value={sub().allowTraining ? "false" : "true"} />
+                <label data-slot="toggle-label">
+                  <input
+                    type="checkbox"
+                    checked={sub().allowTraining}
+                    disabled={allowTrainingSubmission.pending}
+                    onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                  />
+                  <span></span>
+                </label>
+              </form>
               <form action={setGoProviderRouting} method="post" data-slot="setting-row">
                 <p>{i18n.t("workspace.lite.providers.useChina")}</p>
                 <input type="hidden" name="workspaceID" value={params.id} />
@@ -314,15 +349,18 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>Kimi K2.6</li>
             <li>MiniMax M3</li>
             <li>MiniMax M2.7</li>
+            <li>Muse Spark 1.2 Contributor</li>
             <li>Qwen3.8 Max</li>
             <li>Qwen3.7 Max</li>
             <li>Qwen3.7 Plus</li>
             <li>Qwen3.6 Plus</li>
             <li>DeepSeek V4 Pro</li>
             <li>DeepSeek V4 Flash</li>
+            <li>DeepSeek V4 Flash Vision Exp</li>
             <li>MiMo-V2.5</li>
             <li>MiMo-V2.5-Pro</li>
             <li>Hy3</li>
+            <li>Ox Alpha Free</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
           <div data-slot="subscribe-actions">
