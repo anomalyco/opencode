@@ -11,8 +11,7 @@ import { optionalArray, ProviderShared } from "./shared.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { OpenAIImage } from "./utils/openai-image.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
-import { OpenResponsesChannel, type Options } from "./open-responses-channel.js"
-import { OpenAIResponsesChannel } from "./openai-responses-channel.js"
+import { OpenResponsesContinuation } from "./open-responses-continuation.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
@@ -225,11 +224,7 @@ const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BAS
 const auth = Auth.none
 
 export const httpTransport = HttpTransport.sseJson.with<OpenAIResponsesBody>()
-export const channelTransport = (options: Omit<Options, "driver">) =>
-  OpenResponsesChannel.transport<OpenAIResponsesBody>({
-    ...options,
-    driver: (input) => OpenAIResponsesChannel.driver({ id: options.id, name: options.name, ...input }),
-  })
+export const channelTransport = OpenResponsesContinuation.transport<OpenAIResponsesBody>
 export const transport = channelTransport({
   id: ADAPTER,
   name: NAME,
