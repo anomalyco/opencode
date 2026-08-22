@@ -81,8 +81,13 @@ export function decodeFilePath(input: string) {
 }
 
 export function parseFileURL(input: string) {
-  if (!URL.canParse(input)) return undefined
-  const url = new URL(input)
+  if (typeof URL.canParse === "function" && !URL.canParse(input)) return undefined
+  let url: URL
+  try {
+    url = new URL(input)
+  } catch {
+    return undefined
+  }
   if (url.protocol !== "file:") return undefined
   const pathname = decodeFilePath(url.pathname)
   const path = !url.hostname || url.hostname === "localhost" ? pathname : `//${url.hostname}${pathname}`

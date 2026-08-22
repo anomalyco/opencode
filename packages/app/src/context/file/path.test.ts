@@ -76,6 +76,21 @@ describe("parseFileURL", () => {
     expect(parseFileURL("https://example.com/file.txt")).toBeUndefined()
     expect(parseFileURL("not a URL")).toBeUndefined()
   })
+
+  test("falls back when URL.canParse is unavailable", () => {
+    const original = Object.getOwnPropertyDescriptor(URL, "canParse")
+    Object.defineProperty(URL, "canParse", { configurable: true, value: undefined })
+    try {
+      expect(parseFileURL("file:///home/carole/Bureau/%3F%3F%3F.png")).toEqual({
+        path: "/home/carole/Bureau/???.png",
+        url: "file:///home/carole/Bureau/%3F%3F%3F.png",
+      })
+      expect(parseFileURL("not a URL")).toBeUndefined()
+    } finally {
+      if (original) Object.defineProperty(URL, "canParse", original)
+      if (!original) Reflect.deleteProperty(URL, "canParse")
+    }
+  })
 })
 
 describe("encodeFilePath", () => {
