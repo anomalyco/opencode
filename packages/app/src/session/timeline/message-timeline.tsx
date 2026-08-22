@@ -68,7 +68,11 @@ export function BackgroundMoveHint(props: { keybind?: string[] }) {
 
 function BackgroundMoveHintRow(props: { show: boolean; centered: boolean; padding: string }) {
   const [ref, setRef] = createSignal<HTMLDivElement>()
-  const presence = createPresence({ show: () => props.show, element: () => ref() ?? null })
+  const visibility = createMemo<{ show: boolean; animate: boolean }>(
+    (previous) => ({ show: props.show, animate: previous.animate || previous.show !== props.show }),
+    { show: props.show, animate: false },
+  )
+  const presence = createPresence({ show: () => visibility().show, element: () => ref() ?? null })
   return (
     <Show when={presence.present()}>
       <div
@@ -77,13 +81,14 @@ function BackgroundMoveHintRow(props: { show: boolean; centered: boolean; paddin
           "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": props.centered,
         }}
       >
-        {/* both directions are gated on data-visible because animate-in and animate-out both write the
-            animation shorthand, and presence only detects the exit when the animation name changes */}
         <div
           ref={setRef}
-          data-visible={props.show}
-          class="duration-150 data-[visible=true]:animate-in data-[visible=true]:fade-in data-[visible=false]:animate-out data-[visible=false]:fade-out data-[visible=false]:fill-mode-forwards motion-reduce:animate-none"
-          classList={{ [`flex h-10 items-start pt-4 ${props.padding}`]: true }}
+          class="duration-150 motion-reduce:animate-none"
+          classList={{
+            [`flex h-10 items-start pt-4 ${props.padding}`]: true,
+            "animate-in fade-in": visibility().animate && visibility().show,
+            "animate-out fade-out fill-mode-forwards": visibility().animate && !visibility().show,
+          }}
         >
           <BackgroundMoveHint />
         </div>
