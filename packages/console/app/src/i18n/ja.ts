@@ -253,6 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下の例外",
 
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
+  "go.banner.text": "Ox Alpha Freeは期間限定でGoで利用できます",
   "go.meta.description":
     "Goは最初の月$5、その後$10/月で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
@@ -270,6 +271,8 @@ export const dict = {
   "go.graph.freePill": "Big Pickleと無料モデル",
   "go.graph.go": "Go",
   "go.graph.label": "5時間あたりのリクエスト数",
+  "go.graph.limitedRegions": "一部の地域に限定",
+  "go.graph.limitedTime": "期間限定",
   "go.graph.usageLimits": "利用制限",
   "go.graph.aria": "5時間あたりのリクエスト数: {{free}} 対 {{go}}",
 
@@ -344,9 +347,12 @@ export const dict = {
   "go.faq.a5.used": "使用あり",
   "go.faq.a5.notUsed": "使用なし",
   "go.faq.a5.noAgreement": "契約なし",
+  "go.faq.a5.notZdr": "ZDRではない",
   "go.faq.a5.grokRetention":
     "ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。",
   "go.faq.a5.gptRetention": "不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。",
+  "go.faq.a5.museRetention":
+    "将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。",
   "go.faq.a5.learnMore": "詳しく見る",
   "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年8月31日まで有効です。",
   "go.faq.a5.beforeExceptions":
@@ -389,6 +395,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "モデルが無効です",
   "zen.api.error.regionNotAllowed":
     "このモデルの最新バージョンは中国でのみホスト提供されており、利用するには明示的なオプトインが必要です: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "このモデルはお住まいの国では利用できません。",
+  "zen.api.error.trainingNotAllowed":
+    "このモデルは品質向上のためのデータを収集します。利用するには明示的な同意が必要です: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "{{model}} の無料プロモーションは終了しました。OpenCode Go を購読するとモデルを引き続き使用できます - {{link}}",
 
@@ -671,6 +680,7 @@ export const dict = {
     "Go モデルを使用するには、opencode の設定で「OpenCode Go」をプロバイダーとして選択してください。",
   "workspace.lite.providers.title": "プロバイダー",
   "workspace.lite.providers.description": "ルーティングに使用するプロバイダーを管理します。",
+  "workspace.lite.providers.allowTraining": "リクエストデータを学習に使用するモデルを許可",
   "workspace.lite.providers.useChina": "中国でホストされているモデルを有効にする",
   "workspace.lite.black.message":
     "現在 OpenCode Black を購読中、またはウェイティングリストに登録されています。Go に切り替える場合は、先に登録を解除してください。",

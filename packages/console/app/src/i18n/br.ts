@@ -256,6 +256,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "seguintes exceções",
 
   "go.title": "OpenCode Go | Modelos de codificação de baixo custo para todos",
+  "go.banner.text": "Ox Alpha Free está disponível no Go por tempo limitado",
   "go.meta.description":
     "O Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos de uso e acesso confiável aos principais modelos de codificação.",
   "go.hero.title": "Modelos de codificação de baixo custo para todos",
@@ -273,6 +274,8 @@ export const dict = {
   "go.graph.freePill": "Big Pickle e modelos gratuitos",
   "go.graph.go": "Go",
   "go.graph.label": "Requisições por 5 horas",
+  "go.graph.limitedRegions": "regiões limitadas",
+  "go.graph.limitedTime": "tempo limitado",
   "go.graph.usageLimits": "Limites de uso",
   "go.graph.aria": "Requisições por 5h: {{free}} vs {{go}}",
 
@@ -348,10 +351,13 @@ export const dict = {
   "go.faq.a5.used": "Usado",
   "go.faq.a5.notUsed": "Não usado",
   "go.faq.a5.noAgreement": "Sem acordo",
+  "go.faq.a5.notZdr": "Não é ZDR",
   "go.faq.a5.grokRetention":
     "O ZDR desativa recursos importantes da API que dependem de dados armazenados, incluindo a Responses API com estado, Files and Collections e a Batch API.",
   "go.faq.a5.gptRetention":
     "Logs de monitoramento de abuso são gerados para todo uso de recursos da API e retidos por até 30 dias.",
+  "go.faq.a5.museRetention":
+    "Preços de tokens com grandes descontos em troca da permissão para usar seus prompts e respostas geradas para treinar futuros modelos da Meta.",
   "go.faq.a5.learnMore": "Saiba mais",
   "go.faq.a5.deepseekRetention":
     "O acordo de ZDR é renovado mensalmente. O acordo atual é válido até 31 de agosto de 2026.",
@@ -394,6 +400,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "O modelo está desabilitado",
   "zen.api.error.regionNotAllowed":
     "A versão mais recente deste modelo está disponível apenas com hospedagem na China e requer adesão explícita: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Este modelo não está disponível no seu país.",
+  "zen.api.error.trainingNotAllowed":
+    "Este modelo coleta dados usados para melhorar sua qualidade e exige seu consentimento explícito: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "A promoção gratuita do {{model}} terminou. Você pode continuar usando o modelo assinando o OpenCode Go - {{link}}",
 
@@ -675,6 +684,7 @@ export const dict = {
     'Selecione "OpenCode Go" como provedor na sua configuração do opencode para usar os modelos Go.',
   "workspace.lite.providers.title": "Provedores",
   "workspace.lite.providers.description": "Controle quais provedores são usados para roteamento.",
+  "workspace.lite.providers.allowTraining": "Permitir modelos que usam dados de solicitações para treinamento",
   "workspace.lite.providers.useChina": "Ativar modelos hospedados na China",
   "workspace.lite.black.message":
     "Você está atualmente inscrito no OpenCode Black ou na lista de espera. Por favor, cancele a assinatura primeiro se desejar mudar para o Go.",

@@ -244,6 +244,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情況",
 
   "go.title": "OpenCode Go | 低成本全民編碼模型",
+  "go.banner.text": "Ox Alpha Free 限時加入 Go",
   "go.meta.description": "Go 首月 $5，之後 $10/月，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",
   "go.hero.body":
@@ -259,6 +260,8 @@ export const dict = {
   "go.graph.freePill": "Big Pickle 與免費模型",
   "go.graph.go": "Go",
   "go.graph.label": "每 5 小時請求數",
+  "go.graph.limitedRegions": "僅限部分地區",
+  "go.graph.limitedTime": "限時",
   "go.graph.usageLimits": "使用限制",
   "go.graph.aria": "每 5 小時請求數：{{free}} vs {{go}}",
 
@@ -328,9 +331,11 @@ export const dict = {
   "go.faq.a5.used": "使用",
   "go.faq.a5.notUsed": "不使用",
   "go.faq.a5.noAgreement": "無協議",
+  "go.faq.a5.notZdr": "非 ZDR",
   "go.faq.a5.grokRetention":
     "ZDR 會停用依賴儲存資料的重要 API 功能，包括具狀態的 Responses API、Files and Collections 與 Batch API。",
   "go.faq.a5.gptRetention": "所有 API 功能的使用都會產生濫用監控日誌，並保留最多 30 天。",
+  "go.faq.a5.museRetention": "以允許使用您的提示詞和生成結果來訓練未來的 Meta 模型為交換，token 價格可享大幅折扣。",
   "go.faq.a5.learnMore": "了解更多",
   "go.faq.a5.deepseekRetention": "ZDR 協議每月續簽。目前的協議有效至 2026 年 8 月 31 日。",
   "go.faq.a5.beforeExceptions": "Go 模型託管在美國。供應商遵循零留存政策，不會將你的資料用於模型訓練，但有",
@@ -368,6 +373,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached": "你已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{membersUrl}}",
   "zen.api.error.modelDisabled": "模型已停用",
   "zen.api.error.regionNotAllowed": "此模型的最新版本僅於中國託管，且需明確選擇啟用：{{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "此模型無法在你所在的國家或地區使用。",
+  "zen.api.error.trainingNotAllowed": "此模型會收集用於提升其品質的資料，使用前須經你明確同意：{{consoleGoUrl}}",
   "zen.api.error.trialEnded": "{{model}} 的限免活动已結束。您可以訂閱 OpenCode Go 繼續使用該模型 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 存取全球最佳編碼模型",
@@ -645,6 +652,7 @@ export const dict = {
     "在您的 opencode 設定中選擇「OpenCode Go」作為提供商，即可使用 Go 模型。",
   "workspace.lite.providers.title": "提供商",
   "workspace.lite.providers.description": "控制用於路由的提供商。",
+  "workspace.lite.providers.allowTraining": "允許使用請求資料進行訓練的模型",
   "workspace.lite.providers.useChina": "啟用部署在中國的模型",
   "workspace.lite.black.message": "您目前已訂閱 OpenCode Black 或在候補名單中。若要切換至 Go，請先取消訂閱。",
   "workspace.lite.other.message": "此工作區中的另一位成員已訂閱 OpenCode Go。每個工作區只能有一位成員訂閱。",
