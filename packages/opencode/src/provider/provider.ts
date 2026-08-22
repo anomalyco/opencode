@@ -1249,7 +1249,9 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
       npm:
         cloudflareGatewayNpm(provider.id, model.id) ??
         model.provider?.npm ??
-        provider.npm ??
+        (provider.id === "github-copilot"
+          ? "@ai-sdk/github-copilot"
+          : provider.npm) ??
         "@ai-sdk/openai-compatible",
     },
     status: model.status ?? "active",
@@ -1470,7 +1472,9 @@ const layer = Layer.effect(
             const apiID = model.id ?? existingModel?.api.id ?? modelID
             const apiNpm =
               model.provider?.npm ??
-              provider.npm ??
+              (providerID === "github-copilot"
+                ? "@ai-sdk/github-copilot"
+                : provider.npm) ??
               existingModel?.api.npm ??
               // Config-defined gateway models bypass fromModelsDevModel, so resolve the
               // native passthrough npm here before falling back to the catalog default.

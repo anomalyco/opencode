@@ -153,7 +153,11 @@ export const fromCatalogModel = (
         .model({ id: resolved.api.id }),
     )
   }
-  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai-compatible" && resolved.api.url) {
+  if (
+    resolved.api.type === "aisdk" &&
+    (resolved.api.package === "@ai-sdk/openai-compatible" || resolved.api.package === "@ai-sdk/github-copilot") &&
+    resolved.api.url
+  ) {
     return Effect.succeed(
       withDefaults(resolved, OpenAICompatibleChat.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
@@ -176,7 +180,8 @@ export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
   (model.api.package === "@ai-sdk/openai" ||
     model.api.package === "@ai-sdk/anthropic" ||
-    (model.api.package === "@ai-sdk/openai-compatible" && model.api.url !== undefined))
+    ((model.api.package === "@ai-sdk/openai-compatible" || model.api.package === "@ai-sdk/github-copilot") &&
+      model.api.url !== undefined))
 
 /** Resolves models from the catalog belonging to the current Location runtime. */
 export const locationLayer = Layer.effect(
