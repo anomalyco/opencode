@@ -239,14 +239,20 @@ export const errorText = (error: unknown) => {
  * implement client-driven retries) so the public error channel stays
  * `LLMError`.
  */
-export const sseFraming = (bytes: Stream.Stream<Uint8Array, LLMError>): Stream.Stream<string, LLMError> =>
-  bytes.pipe(
-    Stream.decodeText(),
-    Stream.pipeThroughChannel(Sse.decode()),
-    Stream.catchTag("Retry", () => Stream.empty),
-    Stream.filter((event) => event.data.length > 0 && event.data !== "[DONE]"),
-    Stream.map((event) => event.data),
-  )
+const sseFramingWith =
+  (accept: (event: Sse.Event) => boolean) =>
+  (bytes: Stream.Stream<Uint8Array, LLMError>): Stream.Stream<string, LLMError> =>
+    bytes.pipe(
+      Stream.decodeText(),
+      Stream.pipeThroughChannel(Sse.decode()),
+      Stream.catchTag("Retry", () => Stream.empty),
+      Stream.filter((event) => event.data.length > 0 && event.data !== "[DONE]" && accept(event)),
+      Stream.map((event) => event.data),
+    )
+
+export const sseFraming = sseFramingWith(() => true)
+
+export const sseFramingByEventName = (names: ReadonlySet<string>) => sseFramingWith((event) => names.has(event.event))
 
 /**
  * Canonical invalid-request constructor. Lift one-line `const invalid =
