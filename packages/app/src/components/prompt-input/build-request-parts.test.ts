@@ -283,6 +283,40 @@ describe("buildRequestParts", () => {
     })
   })
 
+  test("resolves relative paths from sidebar file-tree drags against sessionDirectory", () => {
+    const attachment = filePartFromFileURL("file:packages/app/src/foo.ts")
+    if (!attachment) throw new Error("Expected a file attachment")
+
+    const result = buildRequestParts({
+      prompt: [attachment],
+      context: [],
+      images: [],
+      text: attachment.content,
+      messageID: "msg_drop_2",
+      sessionID: "ses_drop_2",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.requestParts.find((part) => part.type === "file")).toMatchObject({
+      url: "file:///repo/packages/app/src/foo.ts",
+      source: {
+        type: "file",
+        path: "/repo/packages/app/src/foo.ts",
+        text: { value: "@packages/app/src/foo.ts" },
+      },
+    })
+  })
+
+  test("keeps reserved characters in relative file-tree drag paths", () => {
+    expect(filePartFromFileURL("file:packages/app/??.ts")).toEqual({
+      type: "file",
+      path: "packages/app/??.ts",
+      content: "@packages/app/??.ts",
+      start: 0,
+      end: 0,
+    })
+  })
+
   test("handles macOS paths correctly", () => {
     const prompt: Prompt = [{ type: "file", path: "README.md", content: "@README.md", start: 0, end: 9 }]
 

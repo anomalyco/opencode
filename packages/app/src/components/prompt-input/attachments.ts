@@ -37,9 +37,14 @@ export type PromptAttachmentsInput = {
 }
 
 export function filePartFromFileURL(input: string): FileAttachmentPart | undefined {
-  const file = parseFileURL(input)
-  if (!file) return undefined
-  return { type: "file", path: file.path, url: file.url, content: "@" + file.path, start: 0, end: 0 }
+  if (!input.startsWith("file:")) return undefined
+  if (input.startsWith("file://")) {
+    const file = parseFileURL(input)
+    if (!file) return undefined
+    return { type: "file", path: file.path, url: file.url, content: "@" + file.path, start: 0, end: 0 }
+  }
+  const filePath = input.slice("file:".length)
+  return { type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 }
 }
 
 export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
