@@ -10,6 +10,7 @@ import {
 } from "../route/transport/index.js"
 import * as ProviderShared from "./shared.js"
 import { OpenResponses } from "./open-responses.js"
+import { OpenResponsesContinuation } from "./open-responses-continuation.js"
 
 const WebSocketResponseCreate = Schema.StructWithRest(Schema.Struct({ type: Schema.tag("response.create") }), [
   Schema.Record(Schema.String, Schema.Unknown),
@@ -25,11 +26,6 @@ export interface Options {
   readonly enabled?: (url: string) => boolean
   readonly url?: (url: string) => string
   readonly headers?: (headers: Headers.Headers) => Headers.Headers
-  readonly driver?: (input: {
-    readonly request: Readonly<Record<string, unknown>>
-    readonly message: string
-    readonly base: WebSocketChannelDriver
-  }) => WebSocketChannelDriver
 }
 
 export interface Prepared {
@@ -158,7 +154,13 @@ export const transport = <Body>(options: Options): Transport<Body, Prepared, str
                   url: yield* WebSocketTransport.toWebSocketUrl(options.url?.(parts.url) ?? parts.url),
                   headers,
                   rotateAfterMs: options.rotateAfterMs,
-                  driver: options.driver?.({ request: create.request, message: create.message, base }) ?? base,
+                  driver: OpenResponsesContinuation.driver({
+                    id: options.id,
+                    name: options.name,
+                    request: create.request,
+                    message: create.message,
+                    base,
+                  }),
                 }
               })
             : undefined
