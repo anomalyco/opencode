@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'" />
+  <title>OpenCode ARM</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">
+      <span class="logo">⌘</span>
+      <span class="name">OpenCode <em>ARM</em></span>
+    </div>
+    <button id="workspace-chip" class="chip" title="Change workspace folder">
+      <span class="chip-icon">📁</span>
+      <span id="workspace-label">…</span>
+    </button>
+    <div class="spacer"></div>
+    <span id="arch-badge" class="badge"></span>
+    <button id="new-chat-btn" class="btn ghost" title="Start a new session">＋ New</button>
+    <button id="settings-btn" class="btn ghost" title="Settings">⚙</button>
+  </header>
+
+  <main id="transcript">
+    <section id="welcome" class="welcome">
+      <h1>Native coding agent for Windows on ARM64</h1>
+      <p>
+        Configure your model provider in <b>⚙ Settings</b>, then ask anything about
+        the workspace folder shown above.
+      </p>
+      <ul class="hints">
+        <li><code>read_file</code>, <code>grep</code>, <code>glob</code> run without approval</li>
+        <li><code>write_file</code>, <code>edit_file</code>, <code>run_command</code> ask first</li>
+        <li>Sessions are saved locally under your user profile</li>
+      </ul>
+    </section>
+    <div id="messages"></div>
+  </main>
+
+  <footer id="statusbar">
+    <span id="status-left">Ready.</span>
+    <div class="spacer"></div>
+    <button id="stop-btn" class="btn danger hidden">■ Stop</button>
+  </footer>
+
+  <form id="composer">
+    <textarea id="input" rows="1"
+      placeholder="Describe a task… (Enter to send, Shift+Enter for newline)"></textarea>
+    <button id="send-btn" class="btn primary" type="submit">Send ▸</button>
+  </form>
+
+  <!-- settings modal -->
+  <dialog id="settings-modal">
+    <form method="dialog" id="settings-form">
+      <h2>Settings</h2>
+      <label>Protocol
+        <select id="f-protocol">
+          <option value="openai">OpenAI-compatible</option>
+          <option value="anthropic">Anthropic-compatible</option>
+        </select>
+      </label>
+      <label>Base URL
+        <input id="f-baseurl" type="text" spellcheck="false" />
+      </label>
+      <label>Model
+        <input id="f-model" type="text" spellcheck="false" />
+      </label>
+      <label>API key <span id="f-keyhint" class="muted"></span>
+        <input id="f-apikey" type="password" placeholder="(unchanged)" autocomplete="off" />
+      </label>
+      <div class="row">
+        <label class="check"><input id="f-yolo" type="checkbox" /> Auto-approve file edits &amp; commands (yolo)</label>
+        <label class="grow">Max tool turns
+          <input id="f-maxturns" type="number" min="1" max="100" />
+        </label>
+      </div>
+      <p class="muted small">
+        Config is stored in <code>%USERPROFILE%\.config\opencode-arm\config.json</code>.
+        Env vars (OPENCODE_ARM_*) and per-project .opencode-arm.json override it.
+      </p>
+      <div class="actions">
+        <button value="cancel" class="btn ghost" type="submit">Cancel</button>
+        <button value="save" id="settings-save" class="btn primary" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- approval modal -->
+  <dialog id="approval-modal">
+    <div>
+      <h2 id="approval-title">Approval required</h2>
+      <pre id="approval-detail" class="approval-detail"></pre>
+      <p class="muted small">This action modifies your workspace or runs a command.</p>
+      <div class="actions">
+        <button id="approval-deny" class="btn ghost">Deny</button>
+        <button id="approval-allow" class="btn primary">Allow once</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
