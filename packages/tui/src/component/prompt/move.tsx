@@ -34,8 +34,10 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       const directory = result.directory
       if (!directory) throw new Error("No worktree directory returned")
 
-      // Call a location-based route to initialize it before moving on.
-      await client.api.location.get({ location: { directory } })
+      // Seed the location store before optimistic session creation mounts the
+      // destination. A raw read initializes the server location but leaves the
+      // optimistic session without its project until the create request echoes.
+      await data.location.syncInfo({ directory })
 
       setProgress("Creating session")
       return directory
