@@ -66,37 +66,6 @@ export function BackgroundMoveHint(props: { keybind?: string[] }) {
   )
 }
 
-function BackgroundMoveHintRow(props: { show: boolean; centered: boolean; padding: string }) {
-  const [ref, setRef] = createSignal<HTMLDivElement>()
-  const visibility = createMemo<{ show: boolean; animate: boolean }>(
-    (previous) => ({ show: props.show, animate: previous.animate || previous.show !== props.show }),
-    { show: props.show, animate: false },
-  )
-  const presence = createPresence({ show: () => visibility().show, element: () => ref() ?? null })
-  return (
-    <Show when={presence.present()}>
-      <div
-        classList={{
-          "min-w-0 w-full max-w-full": true,
-          "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": props.centered,
-        }}
-      >
-        <div
-          ref={setRef}
-          class="duration-150 motion-reduce:animate-none"
-          classList={{
-            [`flex h-10 items-start pt-4 ${props.padding}`]: true,
-            "animate-in fade-in": visibility().animate && visibility().show,
-            "animate-out fade-out fill-mode-forwards": visibility().animate && !visibility().show,
-          }}
-        >
-          <BackgroundMoveHint />
-        </div>
-      </div>
-    </Show>
-  )
-}
-
 export function BackgroundWorkSummary(props: { tasks: BackgroundTask[] }) {
   const language = useLanguage()
   const [open, setOpen] = createSignal(false)
@@ -487,23 +456,51 @@ function MessageTimelineView(
     if (row?._tag !== "AssistantPart" || row.group.type !== "part") return
     return row.group.ref.partID
   })
-  const backgroundHint = (row: TimelineRow.TimelineRow) =>
-    row._tag === "AssistantPart" && row.group.type === "part" && row.group.ref.partID === backgroundHintPartID()
-
+  const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
+  const backgroundHintVisibility = createMemo<{ show: boolean; animate: boolean }>(
+    (previous) => {
+      const show = backgroundHintPartID() !== undefined
+      return { show, animate: previous.animate || previous.show !== show }
+    },
+    { show: backgroundHintPartID() !== undefined, animate: false },
+  )
+  const backgroundHintPresence = createPresence({
+    show: () => backgroundHintVisibility().show,
+    element: () => backgroundHintRef() ?? null,
+  })
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
+      bottomSpacer={
+        <Show when={backgroundHintPresence.present()}>
+          <div
+            data-component="session-background-hint-row"
+            classList={{
+              "min-w-0 w-full max-w-full": true,
+              "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": props.centered,
+            }}
+          >
+            <div
+              ref={setBackgroundHintRef}
+              class="duration-150 motion-reduce:animate-none"
+              classList={{
+                [`flex h-8 items-start pt-2 ${turnPadding()}`]: true,
+                "animate-in fade-in": backgroundHintVisibility().animate && backgroundHintVisibility().show,
+                "animate-out fade-out fill-mode-forwards":
+                  backgroundHintVisibility().animate && !backgroundHintVisibility().show,
+              }}
+            >
+              <BackgroundMoveHint />
+            </div>
+          </div>
+        </Show>
+      }
       deferred={(row) => {
         if (row._tag !== "AssistantPart" || row.group.type !== "part") return false
         const content = Timeline.resolveContent(messageByID().get(row.group.ref.messageID), row.group.ref.partID)
         return content?.type === "tool" && ["edit", "write"].includes(content.name)
       }}
-      renderRow={(row, onSizeChange) => (
-        <>
-          <rowRenderer.Row row={row} onSizeChange={onSizeChange} />
-          <BackgroundMoveHintRow show={backgroundHint(row())} centered={props.centered} padding={turnPadding()} />
-        </>
-      )}
+      renderRow={(row, onSizeChange) => <rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
       header={
         <div
           data-session-title
