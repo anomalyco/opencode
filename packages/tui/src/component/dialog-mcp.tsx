@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount, Show } from "solid-js"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
@@ -16,6 +16,10 @@ function statusError(status: McpServer["status"]) {
   if (status.status === "failed") return status.error
   return undefined
 }
+
+// Synthetic select row shown when the MCP list failed to load and nothing is
+// cached — gives keyboard users an actionable retry inside the dialog.
+const RETRY_OPTION = "__mcp.retry__"
 
 function Status(props: { status: McpServer["status"]; loading: boolean }) {
   if (props.loading || props.status.status === "pending") {
@@ -45,6 +49,27 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
       sortBy((server) => server.name),
     ),
   )
+  // The provider preloads the list fire-and-forget: when the request fails,
+  // the store simply stays empty and this dialog renders "No MCP Servers",
+  // indistinguishable from a genuinely server-less setup (#36582/#36580).
+  // Re-run the sync here so failures surface as an explicit, retryable state.
+  const [syncError, setSyncError] = createSignal<string>()
+  const refresh = () => {
+    setSyncError(undefined)
+    data.location.mcp.server
+      .sync()
+      .then(() => {
+        if (!servers().length) return
+        setSyncError(undefined)
+      })
+      .catch((error: unknown) => setSyncError(error instanceof Error ? error.message : String(error)))
+  }
+  onMount(refresh)
+
+  const retrySync = () => {
+    data.location.mcp.server.invalidate()
+    refresh()
+  }
   const initial = props.initialServer ? servers().find((server) => server.name === props.initialServer) : undefined
   const [focused, setFocused] = createSignal<string | undefined>(props.initialServer)
   const [detail, setDetail] = createSignal<McpServer | undefined>(
@@ -128,10 +153,28 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
         fallback={
           <DialogSelect
             title="MCP servers"
-            options={options()}
+            options={[
+              ...options(),
+              ...(syncError() && servers().length === 0
+                ? [
+                    {
+                      value: RETRY_OPTION,
+                      title: "Retry",
+                      footer: <text fg={theme.text.feedback.error.default}>load failed: {syncError()}</text>,
+                      footerColor: theme.text.feedback.error.default,
+                    },
+                  ]
+                : []),
+            ]}
             preserveSelection
             onMove={(option) => setFocused(option.value as string)}
-            onSelect={(option) => select(option.value as string)}
+            onSelect={(option) => {
+              if (option.value === RETRY_OPTION) {
+                retrySync()
+                return
+              }
+              select(option.value as string)
+            }}
             actions={[
               {
                 title: toggleTitle(),
