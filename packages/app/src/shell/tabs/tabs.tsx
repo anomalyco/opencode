@@ -229,12 +229,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           )
         })
       },
-      promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
+      async promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
         // Keep the replacement and navigation atomic so /new-session never renders
         // after its backing draft tab has been removed from the store.
         const active = location.pathname === "/new-session" && location.query.draftId === draftID
         const next = { type: "session" as const, ...session }
-        void startTransition(() => {
+        await startTransition(() => {
           setStore(
             produce((tabs) => {
               const index = tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)

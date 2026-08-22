@@ -1,4 +1,4 @@
-import { Route, useParams } from "@solidjs/router"
+import { Navigate, Route, useParams } from "@solidjs/router"
 import { createMemo, lazy, Show, type ParentProps } from "solid-js"
 import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
@@ -6,7 +6,7 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import { LayoutProvider } from "@/shell/state/layout"
 import Shell from "@/shell/shell"
-import { requireServerKey } from "./session"
+import { parseServerKey } from "./session"
 
 export const File = lazy(() => import("@opencode-ai/session-ui/file").then((module) => ({ default: module.File })))
 const loadDraftRoute = () => Promise.all([import("@/new-session/route"), File.preload()]).then(([module]) => module)
@@ -44,12 +44,14 @@ export function AppRoutes() {
 function TargetServerRoute(props: ParentProps) {
   const params = useParams<{ serverKey: string }>()
   const global = useGlobal()
-  const connection = createMemo(() =>
-    global.servers.list().find((item) => ServerConnection.key(item) === requireServerKey(params.serverKey)),
-  )
+  const connection = createMemo(() => {
+    const key = parseServerKey(params.serverKey)
+    if (!key) return
+    return global.servers.list().find((item) => ServerConnection.key(item) === key)
+  })
 
   return (
-    <Show when={connection()} keyed>
+    <Show when={connection()} keyed fallback={<Navigate href="/" />}>
       {(connection) => <ServerProvider conn={connection}>{props.children}</ServerProvider>}
     </Show>
   )

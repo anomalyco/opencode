@@ -1,6 +1,5 @@
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getDirectory } from "@opencode-ai/util/path"
-import { startTransition } from "solid-js"
 import type { NewSessionComposerAdapter } from "@/composer/adapter"
 import { useComposerState } from "@/composer/persistence"
 import { createComposerControls, createComposerModelSelection } from "@/composer/selection"
@@ -72,24 +71,21 @@ export function createNewSessionComposerAdapter(props: {
       if (!created) return
 
       data.session.remember(created)
-      await startTransition(() => {
-        tabs.updateDraft(props.draftID, { worktree: undefined })
-        if (permission.isAutoAcceptingDirectory(projectDirectory)) {
-          permission.enableAutoAccept(created.id, sessionDirectory)
-        }
-        local.session.promote(sessionDirectory, created.id, {
-          agent: selection.agent,
-          model: selection.model,
-          variant: selection.variant ?? null,
-        })
-        tabs.promoteDraft(props.draftID, { server: server.key, sessionId: created.id })
-        submission.retarget(
-          prompt.capture(
-            { dir: base64Encode(sessionDirectory), id: created.id },
-            { server: server.key, scope: serverSDK.scope },
-          ),
-        )
+      if (permission.isAutoAcceptingDirectory(projectDirectory)) {
+        permission.enableAutoAccept(created.id, sessionDirectory)
+      }
+      local.session.promote(sessionDirectory, created.id, {
+        agent: selection.agent,
+        model: selection.model,
+        variant: selection.variant ?? null,
       })
+      await tabs.promoteDraft(props.draftID, { server: server.key, sessionId: created.id })
+      submission.retarget(
+        prompt.capture(
+          { dir: base64Encode(sessionDirectory), id: created.id },
+          { server: server.key, scope: serverSDK.scope },
+        ),
+      )
 
       return {
         id: created.id,
