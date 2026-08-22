@@ -25,13 +25,13 @@ export default defineConfig({
     desktopPlugin,
     VitePWA({
       strategies: "generateSW",
-      registerType: "autoUpdate",
       manifest: false,
       workbox: {
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         inlineWorkboxRuntime: true,
         navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/api(?:\/|$)/],
         globPatterns: [
           "index.html",
           "site.webmanifest",
@@ -39,8 +39,6 @@ export default defineConfig({
           "apple-touch-icon*",
           "web-app-manifest*",
           "assets/index-*.{js,css}",
-          "assets/home-*.js",
-          "assets/new-session-*.js",
           "assets/session-*.js",
           "assets/Inter.ttf",
           "assets/JetBrainsMonoNerdFontMono-Regular.woff2",
