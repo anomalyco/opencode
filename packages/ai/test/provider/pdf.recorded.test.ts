@@ -64,7 +64,7 @@ const targets: ReadonlyArray<{
     id: "xai",
     name: "xAI Grok 4.5",
     provider: "xai",
-    protocol: "openai-responses",
+    protocol: "xai-responses",
     requires: "XAI_API_KEY",
     filename: "verification.pdf",
     maxTokens: 40,

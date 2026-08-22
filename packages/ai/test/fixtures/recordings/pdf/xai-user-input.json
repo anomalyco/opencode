@@ -5,11 +5,12 @@
       "prefix:pdf",
       "pdf",
       "provider:xai",
-      "protocol:openai-responses",
+      "protocol:xai-responses",
       "user-input"
     ],
     "name": "pdf/xai-user-input",
-    "recordedAt": "2026-07-22T18:15:42.429Z"
+    "recordedAt": "2026-07-22T18:15:42.429Z",
+    "protocol": "xai-responses"
   },
   "interactions": [
     {
