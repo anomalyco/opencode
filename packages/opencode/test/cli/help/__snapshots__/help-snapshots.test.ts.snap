@@ -28,6 +28,7 @@ manage MCP (Model Context Protocol) servers
 
 Commands:
   opencode mcp add [name]     add an MCP server
+  opencode mcp remove [name]  remove an MCP server from config                         [aliases: rm]
   opencode mcp list           list MCP servers and their status                        [aliases: ls]
   opencode mcp auth [name]    authenticate with an OAuth-enabled MCP server
   opencode mcp logout [name]  remove OAuth credentials for an MCP server
