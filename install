@@ -65,7 +65,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-INSTALL_DIR=$HOME/.opencode/bin
+if [ -n "${OPENCODE_INSTALL_DIR:-}" ]; then
+    INSTALL_DIR=$OPENCODE_INSTALL_DIR
+elif [ -n "${XDG_BIN_DIR:-}" ]; then
+    INSTALL_DIR=$XDG_BIN_DIR
+elif mkdir -p "$HOME/bin" 2>/dev/null; then
+    INSTALL_DIR=$HOME/bin
+else
+    INSTALL_DIR=$HOME/.opencode/bin
+fi
 mkdir -p "$INSTALL_DIR"
 
 # If --binary is provided, skip all download/detection logic
