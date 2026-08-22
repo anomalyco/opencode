@@ -4,6 +4,7 @@ import { useLayout } from "@/shell/state/layout"
 import { useSettings } from "@/settings/model"
 import { createSizing, shouldShowFileTree } from "./helpers"
 import type { SessionModel } from "./model"
+import { sessionPanelLayout } from "./session-panel-layout"
 import { clampSessionPanelWidth, sessionPanelWidthMax } from "./session-panel-width"
 
 export function createSessionScreenLayout(session: SessionModel, serverScope: string) {
@@ -13,6 +14,11 @@ export function createSessionScreenLayout(session: SessionModel, serverScope: st
   const reviewOpen = createMemo(() => session.isDesktop() && session.layout.view().reviewPanel.opened())
   const reviewPanelOpen = createMemo(() => reviewOpen() && !!session.identity.params.id)
   const terminalOpen = createMemo(() => session.layout.view().terminal.opened())
+  const desktopTerminalOpen = createMemo(() => session.isDesktop() && terminalOpen())
+  const sideTerminalOpen = createMemo(() => desktopTerminalOpen() && settings.general.terminalPlacement() === "side")
+  const bottomTerminalOpen = createMemo(
+    () => desktopTerminalOpen() && settings.general.terminalPlacement() === "bottom",
+  )
   const fileTreeOpen = createMemo(
     () =>
       session.isDesktop() &&
@@ -21,8 +27,8 @@ export function createSessionScreenLayout(session: SessionModel, serverScope: st
         opened: layout.fileTree.opened(),
       }),
   )
-  const resizable = reviewPanelOpen
-  const sidePanelOpen = createMemo(() => reviewPanelOpen() || fileTreeOpen())
+  const resizable = createMemo(() => reviewPanelOpen() || sideTerminalOpen())
+  const sidePanelOpen = createMemo(() => resizable() || fileTreeOpen())
   const [rowWidth, setRowWidth] = createSignal<number>()
   let row: HTMLDivElement | undefined
   createResizeObserver(
@@ -52,6 +58,13 @@ export function createSessionScreenLayout(session: SessionModel, serverScope: st
     if (width === undefined) return 1000
     return sessionPanelWidthMax({ available: width, split: splitReview() })
   })
+  const panelLayout = createMemo(() =>
+    sessionPanelLayout({
+      review: reviewPanelOpen(),
+      terminal: sideTerminalOpen(),
+      files: fileTreeOpen(),
+    }),
+  )
   const [reviewSnap, setReviewSnap] = createSignal(false)
   let reviewFrame: number | undefined
   createComputed((previous) => {
@@ -88,9 +101,11 @@ export function createSessionScreenLayout(session: SessionModel, serverScope: st
       panelOpen: reviewPanelOpen,
       snap: reviewSnap,
     },
-    side: { open: sidePanelOpen },
+    side: { layout: panelLayout },
     size,
     terminal: {
+      bottomOpen: bottomTerminalOpen,
+      inlineOnlyOpen: createMemo(() => sideTerminalOpen() && !reviewPanelOpen()),
       open: terminalOpen,
     },
   }

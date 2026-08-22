@@ -125,7 +125,7 @@ export function SessionScreen(props: { session: SessionModel }) {
             classList={{
               "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
               "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-                !screen.size.active() && !screen.review.snap(),
+                !screen.size.active() && !screen.review.snap() && !screen.terminal.inlineOnlyOpen(),
             }}
             style={{
               width: screen.panel.width(),
@@ -156,32 +156,66 @@ export function SessionScreen(props: { session: SessionModel }) {
             </Show>
           </div>
 
-          <Show when={isDesktop() && screen.side.open()}>
-            <div class="min-w-0 h-full flex-1">
-              <SessionDesktopReview review={review} />
+          <Show when={isDesktop() && screen.side.layout().visible}>
+            <div class="min-w-0 h-full flex flex-1 flex-col">
+              <Show when={screen.review.panelOpen() || screen.files.open()}>
+                <div class="min-h-0 flex-1">
+                  <SessionDesktopReview review={review} />
+                </div>
+              </Show>
+              <Show when={screen.side.layout().stacked}>
+                <div class="relative h-2 shrink-0" onPointerDown={() => screen.size.start()}>
+                  <ResizeHandle
+                    class="!relative !inset-auto !h-full !w-full !transform-none"
+                    direction="vertical"
+                    size={layout.terminal.height()}
+                    min={100}
+                    max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
+                    collapseThreshold={50}
+                    onResize={(height) => {
+                      screen.size.touch()
+                      layout.terminal.resize(height)
+                    }}
+                    onCollapse={() => session.layout.view().terminal.close()}
+                  />
+                </div>
+              </Show>
+              <Show when={screen.terminal.open() && !screen.terminal.bottomOpen()}>
+                <div
+                  classList={{
+                    "min-h-0 shrink-0": screen.side.layout().stacked,
+                    "min-h-0 flex-1": !screen.side.layout().stacked,
+                  }}
+                >
+                  <TerminalPanel stacked={screen.side.layout().stacked} />
+                </div>
+              </Show>
             </div>
           </Show>
         </div>
 
-        <Show when={screen.terminal.open()}>
-          <Show when={isDesktop()}>
-            <div class="relative h-2 shrink-0" onPointerDown={() => screen.size.start()}>
-              <ResizeHandle
-                class="!relative !inset-auto !h-full !w-full !transform-none"
-                direction="vertical"
-                size={layout.terminal.height()}
-                min={100}
-                max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
-                collapseThreshold={50}
-                onResize={(height) => {
-                  screen.size.touch()
-                  layout.terminal.resize(height)
-                }}
-                onCollapse={() => session.layout.view().terminal.close()}
-              />
-            </div>
-          </Show>
-          <div classList={{ "min-h-0 shrink-0": isDesktop() }}>
+        <Show when={screen.terminal.open() && (!isDesktop() || screen.terminal.bottomOpen())}>
+          <div classList={{ "relative min-h-0 shrink-0": isDesktop() }}>
+            <Show when={isDesktop()}>
+              <div
+                class="absolute z-10 -top-1 left-0 right-0 h-2"
+                onPointerDown={() => screen.size.start()}
+              >
+                <ResizeHandle
+                  class="!relative !inset-auto !h-full !w-full !transform-none"
+                  direction="vertical"
+                  size={layout.terminal.height()}
+                  min={100}
+                  max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
+                  collapseThreshold={50}
+                  onResize={(height) => {
+                    screen.size.touch()
+                    layout.terminal.resize(height)
+                  }}
+                  onCollapse={() => session.layout.view().terminal.close()}
+                />
+              </div>
+            </Show>
             <TerminalPanel stacked={isDesktop()} />
           </div>
         </Show>

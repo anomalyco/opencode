@@ -7,7 +7,7 @@ import { TextInput } from "@opencode-ai/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useUpdaterAction } from "@/shell/updates/action"
-import { type WorkspaceDefaultDestination, useSettings } from "@/settings/model"
+import { type TerminalPlacement, type WorkspaceDefaultDestination, useSettings } from "@/settings/model"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
@@ -118,6 +118,33 @@ const ShellSetting: Component<{ controller: ShellSettingsController }> = (props)
           return `${option.name} (${language.t("settings.general.row.shell.terminalOnly")})`
         }}
         onSelect={(option) => option && props.controller.select(option.value)}
+      />
+    </SettingsRow>
+  )
+}
+
+const TerminalPlacementSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo((): { value: TerminalPlacement; label: string }[] => [
+    { value: "side", label: language.t("settings.general.row.terminalPlacement.side") },
+    { value: "bottom", label: language.t("settings.general.row.terminalPlacement.bottom") },
+  ])
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.terminalPlacement.title")}
+      description={language.t("settings.general.row.terminalPlacement.description")}
+    >
+      <Select
+        data-action="settings-terminal-placement"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.terminalPlacement())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.general.setTerminalPlacement(option.value)}
       />
     </SettingsRow>
   )
@@ -273,6 +300,7 @@ export const SettingsGeneral: Component<{
         <PermissionScopeSetting controller={permissionScope} />
 
         <ShellSetting controller={shell} />
+        <TerminalPlacementSetting />
 
         <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}

@@ -6,6 +6,7 @@ import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
 export type WorkspaceDefaultDestination = "last-used" | "local" | "new"
 export type WorkspaceLastUsed = "local" | "workspace"
+export type TerminalPlacement = "side" | "bottom"
 
 export interface NotificationSettings {
   agent: boolean
@@ -36,6 +37,7 @@ export interface Settings {
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
+    terminalPlacement: TerminalPlacement
   }
   appearance: {
     fontSize: number
@@ -121,6 +123,7 @@ const defaultSettings: Settings = {
     editToolPartsExpanded: false,
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
+    terminalPlacement: "side",
   },
   appearance: {
     fontSize: 14,
@@ -239,6 +242,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setMobileTitlebarPosition(value: "top" | "bottom") {
           setStore("general", "mobileTitlebarPosition", value)
+        },
+        terminalPlacement: withFallback(
+          () => store.general?.terminalPlacement,
+          defaultSettings.general.terminalPlacement,
+        ),
+        setTerminalPlacement(value: TerminalPlacement) {
+          setStore("general", "terminalPlacement", value)
         },
       },
       visibility: {

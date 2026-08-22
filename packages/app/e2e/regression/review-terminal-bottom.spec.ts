@@ -18,7 +18,7 @@ const branchDiffs = [
   ),
 ]
 
-test("keeps the review tree sized with the terminal across the bottom", async ({ page }) => {
+test("uses side placement by default and supports the terminal across the bottom", async ({ page }) => {
   test.setTimeout(120_000)
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
@@ -138,6 +138,21 @@ test("keeps the review tree sized with the terminal across the bottom", async ({
   await page.keyboard.press("Control+Backquote")
   await expect(page.locator("#terminal-panel")).toBeVisible()
   await expectTree(page, 2_773, "action.yml")
+  await expectSideGeometry(page)
+
+  await page.evaluate(() => {
+    const settings = JSON.parse(localStorage.getItem("settings.v3") ?? "{}")
+    localStorage.setItem(
+      "settings.v3",
+      JSON.stringify({ ...settings, general: { ...settings.general, terminalPlacement: "bottom" } }),
+    )
+  })
+  await page.reload()
+  await expectSessionReady(page, { server, sessionID, title })
+  await expect(page.locator("#review-panel")).toBeVisible()
+  await page.keyboard.press("Control+Backquote")
+  await expect(page.locator("#terminal-panel")).toBeVisible()
+  await expectTree(page, 2_773, "action.yml")
   await expectBottomGeometry(page)
 })
 
@@ -163,6 +178,24 @@ async function expectMountedTree(page: Page, total: number) {
   expect(state.rows).toBeLessThanOrEqual(60)
 }
 
+async function expectSideGeometry(page: Page) {
+  const geometry = await page.evaluate(() => {
+    const review = document.querySelector<HTMLElement>("#review-panel")!.getBoundingClientRect()
+    const terminal = document.querySelector<HTMLElement>("#terminal-panel")!.getBoundingClientRect()
+    return {
+      reviewLeft: review.left,
+      reviewRight: review.right,
+      terminalLeft: terminal.left,
+      terminalRight: terminal.right,
+      terminalTop: terminal.top,
+      reviewTop: review.top,
+    }
+  })
+  expect(Math.abs(geometry.terminalLeft - geometry.reviewLeft)).toBeLessThanOrEqual(1)
+  expect(Math.abs(geometry.terminalRight - geometry.reviewRight)).toBeLessThanOrEqual(1)
+  expect(geometry.terminalTop).toBeGreaterThan(geometry.reviewTop)
+}
+
 async function expectBottomGeometry(page: Page) {
   const geometry = await page.evaluate(() => {
     const review = document.querySelector<HTMLElement>("#review-panel")!
@@ -186,7 +219,8 @@ async function expectBottomGeometry(page: Page) {
   })
   expect(Math.abs(geometry.review - geometry.reviewParent)).toBeLessThanOrEqual(1)
   expect(Math.abs(geometry.terminal - geometry.terminalParent)).toBeLessThanOrEqual(1)
-  expect(geometry.terminalTop).toBeGreaterThanOrEqual(geometry.reviewBottom)
+  expect(geometry.terminalTop - geometry.reviewBottom).toBeGreaterThanOrEqual(7)
+  expect(geometry.terminalTop - geometry.reviewBottom).toBeLessThanOrEqual(9)
   expect(geometry.terminalLeft).toBeLessThanOrEqual(9)
   expect(geometry.terminalRight).toBeGreaterThanOrEqual(geometry.viewport - 9)
   expect(geometry.sidebar).toBeGreaterThanOrEqual(240)
