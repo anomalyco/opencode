@@ -29,6 +29,22 @@ describe("current content default open", () => {
     expect(currentContentDefaultOpen(tool("patch"), false, false)).toBe(true)
   })
 
+  test("collapses failed patches", () => {
+    const patch: SessionMessageAssistantTool = {
+      type: "tool",
+      id: "tool_patch",
+      name: "patch",
+      state: {
+        status: "error",
+        input: {},
+        error: { type: "ToolError", message: "Verification failed" },
+        metadata: {},
+      },
+      time: { created: 1, completed: 2 },
+    }
+    expect(currentContentDefaultOpen(patch, false, false)).toBe(false)
+  })
+
   test("opens deletion-only patches", () => {
     expect(
       currentContentDefaultOpen(
