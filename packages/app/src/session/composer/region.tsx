@@ -133,7 +133,7 @@ export function createActiveSessionRegion(input: {
       const scroller = input.timeline.scroller()
       if (!scroller || !isScrollKeyTarget(target ?? null, key)) return
       if (scrollKeyOwner(scroller, target ?? null, key) !== scroller) return
-      input.timeline.view.markGesture(scroller)
+      input.timeline.view.markUserScroll(scroller)
       return
     }
     if (event.key.length !== 1 || event.key === "Unidentified" || event.ctrlKey || event.metaKey) return

@@ -1,8 +1,26 @@
 diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
-index 52ae6ca12f8d1c650ee7f1bd55573ee7d4f8b65f..830f646f5bd80f4e00f442291ad6e4c6c508630d 100644
+index e470032a9572b3ced764ca02238a8c6be435a9d4..65cd7ba4159d47d4c0cfb1adea69281ee30ba28a 100644
 --- a/dist/cjs/index.cjs
 +++ b/dist/cjs/index.cjs
-@@ -716,17 +716,20 @@ class Virtualizer {
+@@ -289,7 +289,7 @@ class Virtualizer {
+       let anchor = null;
+       let followOnAppend = null;
+       let edgeKeysChanged = false;
+-      if (prevOptions !== void 0 && prevOptions.enabled && merged.enabled && merged.anchorTo === "end" && this.scrollElement !== null) {
++      if (prevOptions !== void 0 && prevOptions.enabled && merged.enabled && this.scrollElement !== null) {
+         const prevCount = prevOptions.count;
+         const nextCount = merged.count;
+         const measurements = this.getMeasurements();
+@@ -303,7 +303,7 @@ class Virtualizer {
+           if (item) {
+             anchor = [item.key, this.getScrollOffset() - item.start];
+           }
+-          const behavior = merged.followOnAppend === true ? "auto" : merged.followOnAppend || null;
++          const behavior = merged.anchorTo === "end" ? merged.followOnAppend === true ? "auto" : merged.followOnAppend || null : null;
+           if (behavior && nextCount > prevCount && this.isAtEnd(prevOptions.scrollEndThreshold) && (prevCount === 0 || merged.getItemKey(nextCount - 1) !== prevLastKey)) {
+             followOnAppend = behavior;
+           }
+@@ -725,17 +725,20 @@ class Virtualizer {
          this.getMeasurements(),
          this.getSize(),
          this.getScrollOffset(),
@@ -27,7 +45,7 @@ index 52ae6ca12f8d1c650ee7f1bd55573ee7d4f8b65f..830f646f5bd80f4e00f442291ad6e4c6
            // Pass the typed array so binary search + forward-walk can read
            // start/end directly from Float64Array, skipping the Proxy traps.
 diff --git a/dist/cjs/index.d.cts b/dist/cjs/index.d.cts
-index c61ee17752565253f795c7fc7d57e86237ecbb52..430c622a18c69407df9f1ca82ee9440e9be287b7 100644
+index cc1001b8a14d06aa73a3a9e8f59870557ee9e7d6..70b202ed436ce1f3283a8465a81faf2e6e2e7983 100644
 --- a/dist/cjs/index.d.cts
 +++ b/dist/cjs/index.d.cts
 @@ -144,7 +144,7 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
@@ -40,7 +58,7 @@ index c61ee17752565253f795c7fc7d57e86237ecbb52..430c622a18c69407df9f1ca82ee9440e
      getVirtualIndexes: {
          (): number[];
 diff --git a/dist/esm/index.d.ts b/dist/esm/index.d.ts
-index b03abab604eb6578f6f56ff92c489259cfaf8f19..940310f9215ba5bf666c5b71e92dddbbbc85635d 100644
+index 6b43c0aea7ed9eeef75cbfb1351fcbd243913bdd..7be2680967934ddfbc4583a210a3d11ee2cddc94 100644
 --- a/dist/esm/index.d.ts
 +++ b/dist/esm/index.d.ts
 @@ -144,7 +144,7 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
@@ -53,10 +71,28 @@ index b03abab604eb6578f6f56ff92c489259cfaf8f19..940310f9215ba5bf666c5b71e92dddbb
      getVirtualIndexes: {
          (): number[];
 diff --git a/dist/esm/index.js b/dist/esm/index.js
-index 3032c0ca457582be3f47923cba1f7d92c848745c..6e52124048fb3bc7b7ee37e763354b33593a6285 100644
+index 2495b26cf2c3589213546b3958eaadf2eb6b751d..01373d68c540e022bd7be59d307a3e39a5b0b899 100644
 --- a/dist/esm/index.js
 +++ b/dist/esm/index.js
-@@ -714,17 +714,20 @@ class Virtualizer {
+@@ -287,7 +287,7 @@ class Virtualizer {
+       let anchor = null;
+       let followOnAppend = null;
+       let edgeKeysChanged = false;
+-      if (prevOptions !== void 0 && prevOptions.enabled && merged.enabled && merged.anchorTo === "end" && this.scrollElement !== null) {
++      if (prevOptions !== void 0 && prevOptions.enabled && merged.enabled && this.scrollElement !== null) {
+         const prevCount = prevOptions.count;
+         const nextCount = merged.count;
+         const measurements = this.getMeasurements();
+@@ -301,7 +301,7 @@ class Virtualizer {
+           if (item) {
+             anchor = [item.key, this.getScrollOffset() - item.start];
+           }
+-          const behavior = merged.followOnAppend === true ? "auto" : merged.followOnAppend || null;
++          const behavior = merged.anchorTo === "end" ? merged.followOnAppend === true ? "auto" : merged.followOnAppend || null : null;
+           if (behavior && nextCount > prevCount && this.isAtEnd(prevOptions.scrollEndThreshold) && (prevCount === 0 || merged.getItemKey(nextCount - 1) !== prevLastKey)) {
+             followOnAppend = behavior;
+           }
+@@ -723,17 +723,20 @@ class Virtualizer {
          this.getMeasurements(),
          this.getSize(),
          this.getScrollOffset(),
@@ -81,10 +117,33 @@ index 3032c0ca457582be3f47923cba1f7d92c848745c..6e52124048fb3bc7b7ee37e763354b33
            // Pass the typed array so binary search + forward-walk can read
            // start/end directly from Float64Array, skipping the Proxy traps.
 diff --git a/src/index.ts b/src/index.ts
-index 7ad79aacd591c3a4f7855c91b2727a59a9579bca..201406779ee85d2f2e5b01a8ea284aa9a5f694e2 100644
+index dc6f1010c4d4758de9c46fb8d69209e582e47171..6988f58f7406ee64789ad9ad44f519ed4cf9a00f 100644
 --- a/src/index.ts
 +++ b/src/index.ts
-@@ -1367,16 +1367,19 @@ export class Virtualizer<
+@@ -575,7 +575,6 @@ export class Virtualizer<
+       prevOptions !== undefined &&
+       prevOptions.enabled &&
+       merged.enabled &&
+-      merged.anchorTo === 'end' &&
+       this.scrollElement !== null
+     ) {
+       const prevCount = prevOptions.count
+@@ -611,9 +610,11 @@ export class Virtualizer<
+         }
+
+         const behavior =
+-          merged.followOnAppend === true
+-            ? 'auto'
+-            : merged.followOnAppend || null
++          merged.anchorTo === 'end'
++            ? merged.followOnAppend === true
++              ? 'auto'
++              : merged.followOnAppend || null
++            : null
+
+         if (
+           behavior &&
+@@ -1410,16 +1411,25 @@ export class Virtualizer<
        this.getSize(),
        this.getScrollOffset(),
        this.options.lanes,
@@ -96,8 +155,14 @@ index 7ad79aacd591c3a4f7855c91b2727a59a9579bca..201406779ee85d2f2e5b01a8ea284aa9
          this.range = null
          return null
        }
-+      const maxScrollOffset = Math.max(this.options.scrollMargin + this.getTotalSize() - outerSize, 0)
-+      const effectiveScrollOffset = Math.min(Math.max(scrollOffset, 0), maxScrollOffset)
++      const maxScrollOffset = Math.max(
++        this.options.scrollMargin + this.getTotalSize() - outerSize,
++        0,
++      )
++      const effectiveScrollOffset = Math.min(
++        Math.max(scrollOffset, 0),
++        maxScrollOffset,
++      )
        this.range = calculateRangeImpl(
          measurements,
          outerSize,

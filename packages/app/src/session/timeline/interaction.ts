@@ -1,8 +1,7 @@
 import type { SessionMessageUser } from "@opencode-ai/client/promise"
-import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
-import { createEffect, on, onCleanup } from "solid-js"
+import { createEffect, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLayout } from "@/shell/state/layout"
 import type { SessionModel } from "../model"
@@ -16,7 +15,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   const [state, setState] = createStore({
     messageID: undefined as string | undefined,
     pendingMessage: undefined as string | undefined,
-    gestureAt: 0,
     scroll: {
       overflow: false,
       jump: false,
@@ -26,13 +24,18 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       dock: undefined as HTMLDivElement | undefined,
     },
   })
-  const autoScroll = createAutoScroll({ working: () => true, overflowAnchor: "none" })
+  // The single source of truth for "follow the newest content". The virtualizer pins and unpins
+  // it from scroll geometry; everything else only expresses explicit intent.
+  const [pinned, setPinned] = createSignal(true)
+  const pin = () => setPinned(true)
+  const unpin = () => {
+    if (!scroller || scroller.scrollHeight - scroller.clientHeight <= 1) return
+    setPinned(false)
+  }
   let scroller: HTMLDivElement | undefined
   let dockHeight = 0
   let revealMessage = (_id: string) => {}
   let scrollToEnd = () => {}
-  let captureHistoryAnchor = () => {}
-  let restoreHistoryAnchor = (_done: boolean) => {}
   let scrollMark = 0
   let messageMark = 0
   let scrollStateFrame: number | undefined
@@ -102,10 +105,10 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     pendingMessage: () => state.pendingMessage,
     setPendingMessage: (value) => setState("pendingMessage", value),
     setActiveMessage,
-    autoScroll: {
-      pause: autoScroll.pause,
-      forceScrollToBottom: () => {
-        autoScroll.resume()
+    follow: {
+      unpin,
+      toBottom: () => {
+        pin()
         scrollToEnd()
       },
     },
@@ -117,7 +120,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   })
   const resume = () => {
     setState("messageID", undefined)
-    autoScroll.resume()
+    pin()
     scrollToEnd()
     clearMessageHash()
     if (scroller) scheduleScrollState(scroller)
@@ -133,21 +136,23 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       resume()
       return
     }
-    autoScroll.pause()
+    unpin()
     scrollToMessage(messages[target], "auto")
   }
-  const shouldAnchorBottom = () =>
-    !location.hash && !state.messageID && !state.pendingMessage && !autoScroll.userScrolled()
-  const markGesture = (target?: EventTarget | null) => {
+  // A gesture inside a nested scrollable region scrolls that region, not the timeline.
+  const markUserScroll = (target?: EventTarget | null) => {
     if (!scroller) return
     const element = target instanceof Element ? target : undefined
     const nested = element?.closest("[data-scrollable]")
     if (nested && nested !== scroller) return
-    setState("gestureAt", Date.now())
+    scrollMark += 1
+  }
+  const selectionInteraction = () => {
+    const selection = window.getSelection()
+    if (selection && selection.toString().length > 0) unpin()
   }
   const setScrollRef = (element: HTMLDivElement | undefined) => {
     scroller = element
-    autoScroll.scrollRef(element)
     if (!element) return
     scheduleScrollState(element)
     fill()
@@ -158,15 +163,12 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     historyRequests.add(owner.key)
     const before = timeline.messages().length
     try {
-      await timeline.history.loadOlder({
-        before: () => owner.run(captureHistoryAnchor),
-        after: (done) => owner.run(() => restoreHistoryAnchor(done)),
-      })
+      await timeline.history.loadOlder()
     } finally {
       historyRequests.delete(owner.key)
     }
     if (!owner.current() || timeline.messages().length <= before) return
-    if (!autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200 || !timeline.history.more()) return
+    if (pinned() || !scroller || scroller.scrollTop >= 200 || !timeline.history.more()) return
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
     historyContinuationFrame = requestAnimationFrame(() => {
       historyContinuationFrame = undefined
@@ -177,7 +179,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     if (
       historyRequests.has(session.ownership.key()) ||
       timeline.history.loading() ||
-      !autoScroll.userScrolled() ||
+      pinned() ||
       !scroller ||
       scroller.scrollTop >= 200
     )
@@ -189,7 +191,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     fillFrame = requestAnimationFrame(() => {
       fillFrame = undefined
       if (!session.identity.params.id || !timeline.ready()) return
-      if (autoScroll.userScrolled() || timeline.history.loading() || !scroller) return
+      if (!pinned() || timeline.history.loading() || !scroller) return
       if (scroller.scrollHeight > scroller.clientHeight + 1 || !timeline.history.more()) return
       void loadOlder()
     })
@@ -218,15 +220,16 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       () => session.identity.params.id,
       (id, previous) => {
         if (!id || !previous || id === previous || state.messageID || state.pendingMessage || location.hash) return
-        autoScroll.resume()
+        pin()
+        scrollToEnd()
       },
     ),
   )
   createEffect(
     on(
-      autoScroll.userScrolled,
-      (scrolled) => {
-        if (scrolled) return
+      pinned,
+      (value) => {
+        if (!value) return
         setState("messageID", undefined)
         clearMessageHash()
       },
@@ -241,11 +244,11 @@ export function createSessionTimelineInteraction(session: SessionModel) {
           timeline.ready(),
           timeline.history.more(),
           timeline.history.loading(),
-          autoScroll.userScrolled(),
+          pinned(),
           visibleUserMessages().length,
         ] as const,
-      ([id, ready, more, loading, scrolled]) => {
-        if (id && ready && more && !loading && !scrolled) fill()
+      ([id, ready, more, loading, following]) => {
+        if (id && ready && more && !loading && following) fill()
       },
       { defer: true },
     ),
@@ -264,8 +267,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       if (next === dockHeight) return
       const delta = next - dockHeight
       const stick = scroller
-        ? !autoScroll.userScrolled() ||
-          scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 10 + Math.max(0, delta)
+        ? pinned() || scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 10 + Math.max(0, delta)
         : false
       dockHeight = next
       if (stick) scrollToEnd()
@@ -285,7 +287,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       resume,
       setActiveMessage,
     },
-    autoScroll,
     lastUserMessage: timeline.lastUserMessage,
     resource: timeline.resource,
     ready: timeline.ready,
@@ -293,24 +294,18 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     scroller: () => scroller,
     view: {
       anchor,
-      hasGesture: () => Date.now() - state.gestureAt < 250,
-      markGesture,
-      markUserScroll: () => {
-        scrollMark += 1
-      },
+      markUserScroll,
       onHistoryScroll,
+      pin,
+      pinned,
+      selectionInteraction,
       scheduleScrollState,
       setContentRef: (element: HTMLDivElement | undefined) => {
         setState("refs", "content", element)
-        autoScroll.contentRef(element)
         if (scroller) scheduleScrollState(scroller)
       },
       setDockRef: (element: HTMLDivElement | undefined) => {
         setState("refs", "dock", element)
-      },
-      setHistoryAnchor: (handlers: { capture: () => void; restore: (done: boolean) => void }) => {
-        captureHistoryAnchor = handlers.capture
-        restoreHistoryAnchor = handlers.restore
       },
       setRevealMessage: (reveal: (id: string) => void) => {
         revealMessage = reveal
@@ -319,7 +314,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       setScrollToEnd: (scroll: () => void) => {
         scrollToEnd = scroll
       },
-      shouldAnchorBottom,
+      unpin,
     },
   }
 }

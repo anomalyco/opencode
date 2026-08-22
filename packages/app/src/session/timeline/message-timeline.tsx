@@ -323,13 +323,12 @@ type MessageTimelineProps = {
   onResumeScroll: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
-  onAutoScrollHandleScroll: () => void
-  onMarkScrollGesture: (target?: EventTarget | null) => void
-  hasScrollGesture: boolean
-  onUserScroll: () => void
+  onPin: () => void
+  onUnpin: () => void
+  onUserScroll: (target?: EventTarget | null) => void
   onHistoryScroll: () => void
-  onAutoScrollInteraction: (event: MouseEvent) => void
-  shouldAnchorBottom: boolean
+  onSelectionInteraction: (event: MouseEvent) => void
+  pinned: boolean
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   diffs: Accessor<{ additions: number; deletions: number }[] | undefined>
@@ -339,7 +338,6 @@ type MessageTimelineProps = {
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
-  setHistoryAnchor?: (handlers: { capture: () => void; restore: (done: boolean) => void }) => void
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
@@ -396,28 +394,25 @@ function MessageTimelineView(
   )
   const turnPadding = () => "px-4 md:px-5"
   const showHeader = createMemo(() => props.data.showHeader() || workspaceSession())
-  const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
-  const hasScrollGesture = createMemo(() => props.hasScrollGesture)
+  const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
     sessionKey: props.data.sessionKey,
     projection,
     showHeader,
-    shouldAnchorBottom,
-    hasScrollGesture,
+    pinned,
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
     setScrollRef: props.setScrollRef,
     setContentRef: props.setContentRef,
     onScheduleScrollState: props.onScheduleScrollState,
-    onAutoScrollHandleScroll: props.onAutoScrollHandleScroll,
-    onAutoScrollInteraction: props.onAutoScrollInteraction,
-    onMarkScrollGesture: props.onMarkScrollGesture,
+    onPin: props.onPin,
+    onUnpin: props.onUnpin,
+    onSelectionInteraction: props.onSelectionInteraction,
     onUserScroll: props.onUserScroll,
     onHistoryScroll: props.onHistoryScroll,
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
-    setHistoryAnchor: props.setHistoryAnchor,
   })
   const VirtualizedTimeline = virtualized.View
   const [title, setTitle] = createStore({

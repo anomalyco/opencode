@@ -52,7 +52,7 @@
       "@opentui/core": "0.5.6",
       "@opentui/keymap": "0.5.6",
       "@opentui/solid": "0.5.6",
-      "@tanstack/solid-virtual": "3.13.32",
+      "@tanstack/solid-virtual": "3.13.37",
       "@shikijs/stream": "4.2.0",
       "@standard-schema/spec": "1.1.0",
       "ulid": "3.0.1",
@@ -174,7 +174,7 @@
     "@ai-sdk/google@3.0.73": "patches/@ai-sdk%2Fgoogle@3.0.73.patch",
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
     "@modelcontextprotocol/sdk@1.29.0": "patches/@modelcontextprotocol%2Fsdk@1.29.0.patch",
-    "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch",
+    "@tanstack/virtual-core@3.17.8": "patches/@tanstack%2Fvirtual-core@3.17.8.patch",
     "@ff-labs/fff-bun@0.10.5": "patches/@ff-labs%2Ffff-bun@0.10.5.patch"
   }
 }
