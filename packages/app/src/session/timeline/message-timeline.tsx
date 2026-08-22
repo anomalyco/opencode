@@ -54,7 +54,7 @@ export function BackgroundMoveHint(props: { keybind?: string[] }) {
   return (
     <div
       data-component="session-background-hint"
-      class="flex h-6 max-w-full items-center justify-center gap-[3px] overflow-hidden text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+      class="flex h-6 max-w-full items-center justify-center gap-[3px] overflow-hidden text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
       aria-label={language.t("session.background.moveInline", { keybind: keybind() })}
     >
       <span data-slot="session-background-hint-prefix" class="shrink-0">
