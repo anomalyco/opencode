@@ -291,8 +291,7 @@ export namespace Timeline {
     }
 
     if (isActive && retry) rows.push(new TimelineRow.Retry({ userMessageID: turnID }))
-
-    if (error && !interrupted) {
+    else if (error && !interrupted) {
       rows.push(new TimelineRow.Error({ userMessageID: turnID, text: unwrapErrorMessage(error.message) }))
     }
 

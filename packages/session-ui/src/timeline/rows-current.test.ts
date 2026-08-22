@@ -217,6 +217,35 @@ describe("current session timeline rows", () => {
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
   })
 
+  test("does not render the retry error twice", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [],
+        error: { type: "ProviderError", message: "The provider response ended unexpectedly." },
+        retry: {
+          attempt: 2,
+          at: 10,
+          error: { type: "ProviderError", message: "The provider response ended unexpectedly." },
+        },
+        time: { created: 2 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = Timeline.constructSessionMessageRows(source, true, {
+      type: "retry",
+      attempt: 2,
+      next: 10,
+      message: "The provider response ended unexpectedly.",
+    })
+
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
+  })
+
   test("removes a failed assistant error when the turn continues streaming", () => {
     const source = [
       { id: "msg_user", type: "user", text: "recover", time: { created: 1 } },
