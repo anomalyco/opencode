@@ -2,11 +2,18 @@ import { deflateSync, gzipSync } from "node:zlib"
 import { Effect } from "effect"
 import { HttpBody, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 
+// PERF: responses repeat with identical payloads (e.g. cached /provider list),
+// so compressed output is memoized by body identity — each unique payload is
+// compressed exactly once instead of on every request.
+
 // Keep the server's compressible content-type set stable across HTTP backend changes.
 const COMPRESSIBLE_CONTENT_TYPE_REGEX =
   /^\s*(?:text\/(?!event-stream(?:[;\s]|$))[^;\s]+|application\/(?:javascript|json|xml|xml-dtd|ecmascript|dart|postscript|rtf|tar|toml|vnd\.dart|vnd\.ms-fontobject|vnd\.ms-opentype|wasm|x-httpd-php|x-javascript|x-ns-proxy-autoconfig|x-sh|x-tar|x-www-form-urlencoded)|font\/(?:otf|ttf)|image\/(?:bmp|vnd\.adobe\.photoshop|vnd\.microsoft\.icon|vnd\.ms-dds|x-icon|x-ms-bmp)|message\/rfc822|model\/gltf-binary|x-shader\/x-fragment|x-shader\/x-vertex|[^;\s]+?\+(?:json|text|xml|yaml))(?:[;\s]|$)/i
 
 const NO_TRANSFORM_REGEX = /(?:^|,)\s*?no-transform\s*?(?:,|$)/i
+
+// PERF: see compression note above.
+const compressedCache = new WeakMap<object, Partial<Record<Encoding, Uint8Array>>>()
 
 const STREAMING_PATHS = new Set(["/event", "/global/event"])
 const STREAMING_POST_REGEX = /^\/session\/[^/]+\/(?:message|prompt_async)$/
@@ -54,7 +61,14 @@ export const compressionLayer = HttpRouter.middleware<{ handles: unknown }>()((e
     const encoding = pickEncoding(request.headers["accept-encoding"])
     if (!encoding) return response
 
-    const compressed = encoding === "gzip" ? gzipSync(body.body) : deflateSync(body.body)
+    const entry = compressedCache.get(body.body)
+    const memoized = entry?.[encoding]
+    const compressed = memoized ?? (encoding === "gzip" ? gzipSync(body.body) : deflateSync(body.body))
+    if (memoized === undefined) {
+      const e = compressedCache.get(body.body) ?? {}
+      e[encoding] = compressed
+      compressedCache.set(body.body, e)
+    }
     return HttpServerResponse.setHeader(
       HttpServerResponse.setBody(response, HttpBody.uint8Array(compressed, contentType)),
       "content-encoding",
