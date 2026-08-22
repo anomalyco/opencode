@@ -69,6 +69,8 @@ export function createTimelineVirtualizer(input: Input) {
   const [renderOverscan, setRenderOverscan] = createSignal(initialMeasurements?.length || coldBottomMount ? 6 : 20)
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
+  const knownKeys = new Set(rows().map(TimelineRow.key))
+  const addedKeys = new Set<string>()
   let touchStart: number | undefined
   let pointerHeld = false
   let maxScroll = 0
@@ -94,6 +96,13 @@ export function createTimelineVirtualizer(input: Input) {
     },
     get getItemKey() {
       const items = rows()
+      items
+        .map(TimelineRow.key)
+        .filter((key) => !knownKeys.has(key))
+        .forEach((key) => {
+          knownKeys.add(key)
+          addedKeys.add(key)
+        })
       return (index: number) => {
         const row = items[index]
         if (!row) return `removed:${index}`
@@ -139,7 +148,7 @@ export function createTimelineVirtualizer(input: Input) {
     if (listRoot() && input.pinned()) anchorResizedBottom()
   }
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
-    if (!instance.itemSizeCache.has(item.key)) {
+    if (!instance.itemSizeCache.has(item.key) && addedKeys.delete(String(item.key))) {
       return item.start < (instance.scrollOffset ?? 0) + instance.scrollAdjustments
     }
     const first = instance.range?.startIndex
