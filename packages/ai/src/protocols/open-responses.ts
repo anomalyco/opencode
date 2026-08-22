@@ -53,7 +53,7 @@ const OpenResponsesOutputText = Schema.Struct({
   text: Schema.String,
 })
 
-export const MessagePhase = Schema.Literals(["commentary", "final_answer"])
+export const MessagePhase = Schema.NullOr(Schema.Literals(["commentary", "final_answer"]))
 type MessagePhase = Schema.Schema.Type<typeof MessagePhase>
 
 const OpenResponsesReasoningSummaryText = Schema.Struct({
@@ -322,7 +322,6 @@ export interface Extension {
     readonly media: ProviderShared.NormalizedMedia
     readonly request: LLMRequest
   }) => MediaInput | undefined
-  readonly messagePhase?: (value: unknown) => MessagePhase | null | undefined
 }
 
 const BASE: Extension = { id: ADAPTER, name: NAME }
@@ -509,7 +508,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         >((groups, part) => {
           const metadata = part.providerMetadata?.[providerMetadataKey]
           const id = itemID(part.providerMetadata, providerMetadataKey)
-          const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase, extension) : undefined
+          const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase) : undefined
           const group = groups.at(-1)
           if (group && group.id === id && group.phase === phase) group.parts.push(part)
           else groups.push({ id, phase, parts: [part] })
@@ -1158,15 +1157,15 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   tools: ToolStream.empty<string>(),
   lifecycle: Lifecycle.initial(),
   messageItems: new Set<string>(),
-  messagePhase: (value) => messagePhase(value, extension),
+  messagePhase,
   messagePhases: {},
   reasoningItems: {},
   store: OpenResponsesOptions.resolve(request).store,
 })
 
-const messagePhase = (value: unknown, extension: Extension): MessagePhase | null | undefined => {
-  if (value === "commentary" || value === "final_answer") return value
-  return extension.messagePhase?.(value)
+const messagePhase = (value: unknown): MessagePhase | undefined => {
+  if (value === null || value === "commentary" || value === "final_answer") return value
+  return undefined
 }
 
 export const protocol = Protocol.make({
