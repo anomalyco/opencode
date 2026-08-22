@@ -1,15 +1,4 @@
-import {
-  createEffect,
-  createMemo,
-  createResource,
-  createSignal,
-  Match,
-  on,
-  onMount,
-  Show,
-  Switch,
-  untrack,
-} from "solid-js"
+import { createEffect, createMemo, createResource, Match, createSignal, Show, Switch, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -34,6 +23,7 @@ import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
+import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
 
 const titlebarHeight = 36
 const minTitlebarZoom = 0.25
@@ -44,15 +34,6 @@ export type TitlebarUpdate = {
   version: string | undefined
   installing: boolean
   install: () => void
-}
-
-export function useTitlebarRightMount() {
-  const language = useLanguage()
-  const [mount, setMount] = createSignal<HTMLElement | null>(null)
-  const sync = () => setMount(document.getElementById("opencode-titlebar-right"))
-  onMount(sync)
-  createEffect(on(language.direction, sync, { defer: true }))
-  return mount
 }
 
 export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visible: boolean; toggle: () => void } }) {
@@ -421,7 +402,7 @@ function TitlebarRight(props: { state: TitlebarRightState }) {
       <Show when={props.state.update.visible}>
         <TitlebarUpdateIconButton state={props.state.update} />
       </Show>
-      <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
+      <TitlebarRightMount />
     </div>
   )
 }

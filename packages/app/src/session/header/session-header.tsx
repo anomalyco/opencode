@@ -1,13 +1,12 @@
-import { createMemo, Show } from "solid-js"
+import { createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
-import { Portal } from "solid-js/web"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { useSessionLayout } from "@/session/session-layout"
 import { reviewTooltipKeybind } from "@/shell/commands/tooltip-keybind"
 import { StatusPopover } from "@/shell/status/status-popover"
-import { useTitlebarRightMount } from "@/shell/titlebar/titlebar"
+import { TitlebarRight } from "@/shell/titlebar/right-slot"
 import { SessionHeaderActions, type SessionHeaderActionsState } from "./session-header-actions"
 
 export function SessionHeader() {
@@ -28,15 +27,9 @@ export function SessionHeader() {
     onReviewToggle: () => view().reviewPanel.toggle(),
   }))
 
-  const rightMount = useTitlebarRightMount()
-
   return (
-    <Show when={rightMount()} keyed>
-      {(mount) => (
-        <Portal mount={mount}>
-          <SessionHeaderActions state={actions()} />
-        </Portal>
-      )}
-    </Show>
+    <TitlebarRight>
+      <SessionHeaderActions state={actions()} />
+    </TitlebarRight>
   )
 }

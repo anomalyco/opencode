@@ -4,7 +4,6 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Wordmark } from "@opencode-ai/ui/wordmark"
 import { Show, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Portal } from "solid-js/web"
 import createPresence from "solid-presence"
 import { Composer } from "@/composer/composer"
 import type { ComposerModel } from "@/composer/model"
@@ -15,6 +14,7 @@ import {
   type PromptProjectController,
 } from "@/new-session/project/selector"
 import { StatusPopover } from "@/shell/status/status-popover"
+import { TitlebarRight } from "@/shell/titlebar/right-slot"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useProviders } from "@/providers/catalog/providers"
@@ -87,21 +87,16 @@ export function NewSessionView(props: {
   )
 }
 
-export function NewSessionStatus(props: { mount: HTMLElement | null; visible: boolean }) {
+export function NewSessionStatus(props: { visible: boolean }) {
   const language = useLanguage()
-
   return (
-    <Show when={props.mount} keyed>
-      {(mount) => (
-        <Portal mount={mount}>
-          <Show when={props.visible}>
-            <Tooltip appearance="standard" placement="bottom" value={language.t("status.popover.trigger")}>
-              <StatusPopover />
-            </Tooltip>
-          </Show>
-        </Portal>
-      )}
-    </Show>
+    <TitlebarRight>
+      <Show when={props.visible}>
+        <Tooltip appearance="standard" placement="bottom" value={language.t("status.popover.trigger")}>
+          <StatusPopover />
+        </Tooltip>
+      </Show>
+    </TitlebarRight>
   )
 }
 
