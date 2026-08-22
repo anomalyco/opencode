@@ -40,20 +40,8 @@ const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.tag("image_generation") }),
 ])
 
-const OpenAIResponsesInputItem = Schema.Union([
-  Schema.Struct({
-    type: Schema.tag("message"),
-    id: Schema.optionalKey(Schema.String),
-    role: Schema.tag("assistant"),
-    content: Schema.Array(Schema.Struct({ type: Schema.tag("output_text"), text: Schema.String })),
-    phase: Schema.optionalKey(Schema.NullOr(OpenResponses.MessagePhase)),
-  }),
-  OpenResponses.InputItem,
-])
-
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
-  input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
 }
@@ -67,7 +55,6 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 const extension = {
   id: ADAPTER,
   name: NAME,
-  messagePhase: (value: unknown) => (value === null ? null : undefined),
 } satisfies OpenResponses.Extension
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
