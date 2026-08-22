@@ -15,8 +15,8 @@ export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
 type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" }>
 type Entry = { type: "assistant"; message: SessionMessageAssistant } | { type: "notice"; message: Notice }
 type Content = SessionMessageAssistant["content"][number]
-type ContextRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
-type PriorContext = { index: number; row: ContextRow }
+type GroupRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
+type PriorGroup = { index: number; row: GroupRow }
 
 const contextTools = new Set(["read", "glob", "grep", "list"])
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
@@ -309,20 +309,20 @@ export namespace Timeline {
 export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
   if (!previous?.length) return rows
   const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
-  const contextByPart = new Map<string, PriorContext>()
+  const groupByPart = new Map<string, PriorGroup>()
   previous.forEach((row, index) => {
-    if (row._tag !== "AssistantPart" || row.group.type !== "context") return
-    row.group.refs.forEach((ref) => contextByPart.set(contextPartKey(row.userMessageID, ref), { index, row }))
+    if (row._tag !== "AssistantPart" || row.group.type === "part") return
+    row.group.refs.forEach((ref) => groupByPart.set(groupPartKey(row.userMessageID, ref), { index, row }))
   })
   const reserved = new Map<string, number>()
   rows.forEach((row, index) => {
-    if (row._tag !== "AssistantPart" || row.group.type !== "context") return
+    if (row._tag !== "AssistantPart" || row.group.type === "part") return
     const key = TimelineRow.key(row)
     if (byKey.has(key) && !reserved.has(key)) reserved.set(key, index)
   })
   const claimed = new Set<string>()
   const next = rows.map((input, index) => {
-    const row = stabilizeContextKey(contextByPart, reserved, input, index, claimed)
+    const row = stabilizeGroupKey(groupByPart, reserved, input, index, claimed)
     const existing = byKey.get(TimelineRow.key(row))
     if (!existing) return row
     return TimelineRow.equals(existing, row) ? existing : row
@@ -398,16 +398,16 @@ function indexAssistantMessages(messages: SessionMessageInfo[]) {
   return result
 }
 
-function stabilizeContextKey(
-  contextByPart: Map<string, PriorContext>,
+function stabilizeGroupKey(
+  groupByPart: Map<string, PriorGroup>,
   reserved: Map<string, number>,
   row: TimelineRow.TimelineRow,
   rowIndex: number,
   claimed: Set<string>,
 ) {
-  if (row._tag !== "AssistantPart" || row.group.type !== "context") return row
-  const existing = row.group.refs.reduce<PriorContext | undefined>((result, ref) => {
-    const candidate = contextByPart.get(contextPartKey(row.userMessageID, ref))
+  if (row._tag !== "AssistantPart" || row.group.type === "part") return row
+  const existing = row.group.refs.reduce<PriorGroup | undefined>((result, ref) => {
+    const candidate = groupByPart.get(groupPartKey(row.userMessageID, ref))
     if (!candidate) return result
     const key = TimelineRow.key(candidate.row)
     if (claimed.has(key)) return result
@@ -426,7 +426,7 @@ function stabilizeContextKey(
   })
 }
 
-function contextPartKey(userMessageID: string, ref: PartRef) {
+function groupPartKey(userMessageID: string, ref: PartRef) {
   return `${userMessageID}:${ref.messageID}:${ref.partID}`
 }
 
@@ -440,17 +440,38 @@ function renderable(content: Content, showReasoning: boolean) {
 
 function groupContent(items: { messageID: string; partID: string; content: Content }[]): PartGroup[] {
   const groups: PartGroup[] = []
-  let context: PartRef[] = []
+  let adjacent: { type: "context" | "patch"; refs: PartRef[] } | undefined
   const flush = () => {
-    const first = context[0]
+    const current = adjacent
+    const first = current?.refs[0]
     if (!first) return
-    groups.push({ type: "context", key: `context:${first.messageID}:${first.partID}`, refs: context })
-    context = []
+    if (current.type === "patch" && current.refs.length === 1) {
+      groups.push({ type: "part", key: `part:${first.messageID}:${first.partID}`, ref: first })
+      adjacent = undefined
+      return
+    }
+    groups.push({
+      type: current.type,
+      key:
+        current.type === "patch"
+          ? `part:${first.messageID}:${first.partID}`
+          : `context:${first.messageID}:${first.partID}`,
+      refs: current.refs,
+    })
+    adjacent = undefined
   }
 
   items.forEach((item) => {
-    if (item.content.type === "tool" && contextTools.has(item.content.name) && !hasLoadedFiles(item.content)) {
-      context.push({ messageID: item.messageID, partID: item.partID })
+    const type =
+      item.content.type === "tool" && contextTools.has(item.content.name) && !hasLoadedFiles(item.content)
+        ? "context"
+        : item.content.type === "tool" && item.content.name === "patch" && item.content.state.status !== "error"
+          ? "patch"
+          : undefined
+    if (type) {
+      if (adjacent?.type !== type) flush()
+      adjacent ??= { type, refs: [] }
+      adjacent.refs.push({ messageID: item.messageID, partID: item.partID })
       return
     }
     flush()

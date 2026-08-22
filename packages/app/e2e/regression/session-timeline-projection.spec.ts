@@ -69,7 +69,41 @@ test.describe("session timeline projection", () => {
     ]) {
       await expect(page.locator(`[data-timeline-part-id="${id}"]`).first(), id).toBeVisible()
     }
+    const patch = page.locator('[data-timeline-part-id="prt_patch"]')
+    await expect(patch.getByText("1 file", { exact: true })).toBeVisible()
+    await expect(patch.getByRole("button", { name: "Patch 1 file", exact: true })).toHaveCount(0)
+    await expect(patch.getByRole("button")).toHaveCount(1)
+    await expect(patch.locator('[data-scope="apply-patch"] button[aria-expanded="false"]')).toHaveCount(1)
+    await expect(patch.locator('[data-slot="message-part-title-filename"]')).toHaveCount(0)
+    await expect(patch.locator('[data-slot="message-part-actions"]')).toHaveCount(0)
     await expect(page.locator('[data-timeline-part-id="prt_todo"]')).toHaveCount(0)
+  })
+
+  test("combines adjacent patch calls into one file group", async ({ page }) => {
+    const first = "prt_patch_first"
+    const second = "prt_patch_second"
+    await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage([
+          toolPart(first, "patch", "completed", { patchText: "Update src/first.ts" }, {
+            metadata: { files: [patchFile("src/first.ts", "modified")] },
+          }),
+          toolPart(second, "patch", "completed", { patchText: "Update src/second.ts" }, {
+            metadata: { files: [patchFile("src/second.ts", "added")] },
+          }),
+        ]),
+      ],
+    })
+
+    const group = page.locator(`[data-timeline-part-ids="${first},${second}"]`)
+    await expect(group).toBeVisible()
+    await expect(group.locator('[data-component="apply-patch-tool"]')).toHaveCount(1)
+    await expect(group.getByRole("button", { name: "Patch 2 files" })).toHaveCount(0)
+    await expect(group.getByRole("button")).toHaveCount(2)
+    await expect(group.locator('[data-scope="apply-patch"] button[aria-expanded="false"]')).toHaveCount(2)
+    await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["first.ts", "second.ts"])
+    await expect(page.locator(`[data-timeline-part-id="${first}"], [data-timeline-part-id="${second}"]`)).toHaveCount(0)
   })
 
   test("projects gaps, dividers, assistant parts, and errors together", async ({ page }) => {
@@ -196,11 +230,7 @@ function patchPart(id: string) {
     { patchText: "Update the projected files" },
     {
       metadata: {
-        files: [
-          patchFile("src/a.ts", "modified"),
-          patchFile("src/b.ts", "added"),
-          patchFile("src/old.ts", "deleted"),
-        ],
+        files: [patchFile("src/a.ts", "modified")],
       },
     },
   )

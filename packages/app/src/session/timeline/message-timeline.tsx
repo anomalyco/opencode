@@ -469,7 +469,7 @@ function MessageTimelineView(
       deferred={(row) => {
         if (row._tag !== "AssistantPart" || row.group.type !== "part") return false
         const content = Timeline.resolveContent(messageByID().get(row.group.ref.messageID), row.group.ref.partID)
-        return content?.type === "tool" && ["edit", "write", "patch"].includes(content.name)
+        return content?.type === "tool" && ["edit", "write"].includes(content.name)
       }}
       renderRow={(row, onSizeChange) => (
         <>

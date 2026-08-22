@@ -1237,7 +1237,8 @@
     }
   }
 
-  > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+  > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"],
+  > [data-component="collapsible"] > [data-slot="collapsible-trigger"][data-locked] {
     position: sticky;
     top: var(--sticky-accordion-top, 0px);
     z-index: 20;

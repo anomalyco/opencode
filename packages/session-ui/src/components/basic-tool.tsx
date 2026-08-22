@@ -258,19 +258,32 @@ export function BasicTool(props: BasicToolProps) {
   return (
     <Collapsible
       open={open()}
-      onOpenChange={handleOpenChange}
+      onOpenChange={props.locked ? undefined : handleOpenChange}
       class="tool-collapsible"
       data-rail={props.rail === false ? "false" : undefined}
     >
       <Show
-        when={props.triggerAsLink || props.triggerHref}
+        when={!props.locked && (props.triggerAsLink || props.triggerHref)}
         fallback={
-          <Collapsible.Trigger
-            data-hide-details={props.hideDetails ? "true" : undefined}
-            onClick={props.onTriggerClick}
+          <Show
+            when={!props.locked}
+            fallback={
+              <div
+                data-slot="collapsible-trigger"
+                data-locked
+                data-hide-details={props.hideDetails ? "true" : undefined}
+              >
+                {trigger()}
+              </div>
+            }
           >
-            {trigger()}
-          </Collapsible.Trigger>
+            <Collapsible.Trigger
+              data-hide-details={props.hideDetails ? "true" : undefined}
+              onClick={props.onTriggerClick}
+            >
+              {trigger()}
+            </Collapsible.Trigger>
+          </Show>
         }
       >
         <Collapsible.Trigger

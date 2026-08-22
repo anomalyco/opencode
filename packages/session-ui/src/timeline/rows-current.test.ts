@@ -359,6 +359,78 @@ describe("current session timeline rows", () => {
     ])
   })
 
+  test("groups adjacent successful patches and leaves failed patches separate", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "edit", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "tool_patch_1",
+            name: "patch",
+            state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }], metadata: { files: [] } },
+            time: { created: 2, completed: 3 },
+          },
+          {
+            type: "tool",
+            id: "tool_patch_2",
+            name: "patch",
+            state: { status: "running", input: {}, metadata: { files: [] } },
+            time: { created: 4 },
+          },
+          {
+            type: "tool",
+            id: "tool_patch_failed",
+            name: "patch",
+            state: {
+              status: "error",
+              input: {},
+              error: { type: "ToolError", message: "failed" },
+              metadata: { files: [] },
+            },
+            time: { created: 5, completed: 6 },
+          },
+          {
+            type: "tool",
+            id: "tool_patch_3",
+            name: "patch",
+            state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }], metadata: { files: [] } },
+            time: { created: 7, completed: 8 },
+          },
+        ],
+        time: { created: 2, completed: 8 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = Timeline.constructSessionMessageRows(source, false, { type: "idle" })
+    const groups = result.rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group] : []))
+
+    expect(groups).toEqual([
+      {
+        type: "patch",
+        key: "part:msg_assistant:tool_patch_1",
+        refs: [
+          { messageID: "msg_assistant", partID: "tool_patch_1" },
+          { messageID: "msg_assistant", partID: "tool_patch_2" },
+        ],
+      },
+      {
+        type: "part",
+        key: "part:msg_assistant:tool_patch_failed",
+        ref: { messageID: "msg_assistant", partID: "tool_patch_failed" },
+      },
+      {
+        type: "part",
+        key: "part:msg_assistant:tool_patch_3",
+        ref: { messageID: "msg_assistant", partID: "tool_patch_3" },
+      },
+    ])
+  })
+
   test("places a divider after interrupted output unless the turn compacts", () => {
     const messages = [
       { id: "msg_user", type: "user", text: "continue", time: { created: 1 } },
