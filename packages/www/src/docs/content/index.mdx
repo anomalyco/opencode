@@ -16,14 +16,16 @@ versions installed and run them side by side.
 $ bun install -g --trust @opencode-ai/cli@beta
 $ pnpm add -g --allow-build=@opencode-ai/cli @opencode-ai/cli@beta
 $ yarn global add @opencode-ai/cli@beta
+$ brew install anomalyco/tap/opencode@2
 $ curl -fsSL https://opencode.ai/v2/install | bash`}
   />
 </div>
 
-The package uses a trusted postinstall script to select the native `opencode2` binary for your platform. The Bun and pnpm
-commands above explicitly allow that script to run.
+The npm package uses a trusted postinstall script to select the native `opencode2` binary for your platform. The Bun and
+pnpm commands above explicitly allow that script to run. The Homebrew formula installs the same native executable and can
+be installed alongside OpenCode 1's `opencode` formula.
 
-Homebrew, Arch Linux, Windows package managers, Docker, and standalone binaries are not supported during the beta.
+Arch Linux, Windows package managers, Docker, and standalone binaries are not supported during the beta.
 
 ---
 
