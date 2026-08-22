@@ -621,15 +621,10 @@ const layer = Layer.effect(
       for (const [name, item] of entries) {
         const tools: string[] = []
         for (const tool of s.defs[name] ?? []) {
-          const built = McpCatalog.buildToolName(name, tool.name)
-          if (built.truncated) {
-            yield* Effect.logWarning("MCP tool name exceeds 64 chars, truncating with hash suffix", {
-              server: name,
-              tool: tool.name,
-              truncated: built.name,
-            })
-          }
-          tools.push(built.name)
+          // Names must match what tools() registers. tools() owns the
+          // truncation warning; warning here too would double a line that
+          // repeats on every system-prompt build.
+          tools.push(McpCatalog.buildToolName(name, tool.name).name)
         }
         result.push({ name, instructions: item, tools })
       }
@@ -699,6 +694,15 @@ const layer = Layer.effect(
               server: clientName,
               tool: def.name,
               truncated: built.name,
+            })
+          }
+          const collision = result[built.name]
+          if (collision) {
+            yield* Effect.logWarning("MCP tool name collides with an already-registered tool, replacing it", {
+              key: built.name,
+              replaced: collision.def.name,
+              tool: def.name,
+              server: clientName,
             })
           }
           result[built.name] = { def, client, timeout }
