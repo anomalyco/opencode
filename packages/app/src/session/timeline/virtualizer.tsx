@@ -78,7 +78,6 @@ export function createTimelineVirtualizer(input: Input) {
   let maxScroll = 0
   let prependAnchor: { key: string; offset: number } | undefined
   let prependAnchorFrame: number | undefined
-  let prependDone = false
   let virtualContent: HTMLDivElement | undefined
   let scrollTop = 0
 
@@ -94,34 +93,22 @@ export function createTimelineVirtualizer(input: Input) {
     if (key) prependAnchor = { key, offset: anchor.rect.top - view.top }
   }
 
-  const applyPrependAnchor = () => {
-    const root = listRoot()
-    const anchor = prependAnchor
-    if (!root || !anchor) return
-    const element = root.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(anchor.key)}"]`)
-    if (!element) return
-    const delta = element.getBoundingClientRect().top - root.getBoundingClientRect().top - anchor.offset
-    if (Math.abs(delta) > endEpsilon) root.scrollTop += delta
-  }
-
-  const schedulePrependAnchor = () => {
+  const finishPrepend = () => {
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
     prependAnchorFrame = requestAnimationFrame(() => {
-      prependAnchorFrame = undefined
-      applyPrependAnchor()
-      if (!prependDone) return
       prependAnchorFrame = requestAnimationFrame(() => {
         prependAnchorFrame = undefined
-        applyPrependAnchor()
+        const root = listRoot()
+        const anchor = prependAnchor
         prependAnchor = undefined
         setPrepending(false)
+        if (!root || !anchor) return
+        const element = root.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(anchor.key)}"]`)
+        if (!element) return
+        const delta = element.getBoundingClientRect().top - root.getBoundingClientRect().top - anchor.offset
+        if (Math.abs(delta) > endEpsilon) root.scrollTop += delta
       })
     })
-  }
-
-  const finishPrepend = () => {
-    prependDone = true
-    schedulePrependAnchor()
   }
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
@@ -150,7 +137,7 @@ export function createTimelineVirtualizer(input: Input) {
       }
     },
     get anchorTo() {
-      return input.pinned() ? "end" : "start"
+      return input.pinned() || prepending() ? "end" : "start"
     },
     get followOnAppend() {
       return input.pinned()
@@ -185,12 +172,12 @@ export function createTimelineVirtualizer(input: Input) {
   }
   virtualizer.resizeItem = (index, size) => {
     resizeItem(index, size)
-    if (prepending()) schedulePrependAnchor()
     if (listRoot() && input.pinned()) anchorResizedBottom()
   }
   // TanStack's default compensates any row starting above the scroll offset, which includes the
   // row being looked at. Compensating a visible collapse would move the viewport the wrong way.
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
+    if (prepending()) return false
     const first = virtualizer.range?.startIndex
     return first !== undefined && item.index < first
   }
@@ -211,7 +198,6 @@ export function createTimelineVirtualizer(input: Input) {
     })
     input.setHistoryAnchor?.({
       capture: () => {
-        prependDone = false
         setPrepending(true)
         updatePrependAnchor()
       },
