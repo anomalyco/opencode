@@ -601,7 +601,7 @@ export function CurrentFileToolGroup(props: {
     <div
       data-component="tool-part-wrapper"
       data-timeline-part-id={props.tools.length === 1 ? props.tools[0]?.id : undefined}
-      data-timeline-part-ids={props.tools.map((tool) => tool.id).join(",")}
+      data-timeline-part-ids={props.tools.length > 1 ? props.tools.map((tool) => tool.id).join(",") : undefined}
     >
       <Dynamic
         component={render}

@@ -103,7 +103,7 @@ test.describe("session timeline projection", () => {
       ],
     })
 
-    const initial = page.locator(`[data-timeline-part-ids="${first}"]`)
+    const initial = page.locator(`[data-timeline-part-id="${first}"]`)
     const initialFile = initial.locator('[data-scope="apply-patch"] [data-type="update"]')
     await expect(initialFile).toBeVisible()
     await initialFile.getByRole("button").click()
