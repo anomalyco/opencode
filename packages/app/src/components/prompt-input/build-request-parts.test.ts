@@ -317,6 +317,17 @@ describe("buildRequestParts", () => {
     })
   })
 
+  test("parses single-slash file URLs with case-insensitive schemes", () => {
+    expect(filePartFromFileURL("FILE:/tmp/file%3F.txt")).toEqual({
+      type: "file",
+      path: "/tmp/file?.txt",
+      url: "file:///tmp/file%3F.txt",
+      content: "@/tmp/file?.txt",
+      start: 0,
+      end: 0,
+    })
+  })
+
   test("handles macOS paths correctly", () => {
     const prompt: Prompt = [{ type: "file", path: "README.md", content: "@README.md", start: 0, end: 9 }]
 

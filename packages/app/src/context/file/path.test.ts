@@ -77,6 +77,17 @@ describe("parseFileURL", () => {
     expect(parseFileURL("not a URL")).toBeUndefined()
   })
 
+  test("normalizes single-slash URLs and preserves malformed escapes", () => {
+    expect(parseFileURL("file:/tmp/file%3F.txt")).toEqual({
+      path: "/tmp/file?.txt",
+      url: "file:///tmp/file%3F.txt",
+    })
+    expect(parseFileURL("file:///tmp/%zz.png")).toEqual({
+      path: "/tmp/%zz.png",
+      url: "file:///tmp/%zz.png",
+    })
+  })
+
   test("falls back when URL.canParse is unavailable", () => {
     const original = Object.getOwnPropertyDescriptor(URL, "canParse")
     Object.defineProperty(URL, "canParse", { configurable: true, value: undefined })
