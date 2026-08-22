@@ -118,7 +118,13 @@ function getCopyMethod() {
   })())
 }
 
-export async function write(text: string) {
+export function withoutNul(text: string) {
+  // Host clipboard backends reject NUL bytes (e.g. spawn refuses argv containing them), so they must be dropped first.
+  return text.replace(/\0/g, "")
+}
+
+export async function write(input: string) {
+  const text = withoutNul(input)
   writeOsc52(text)
   const method = await getCopyMethod()
   await method(text)

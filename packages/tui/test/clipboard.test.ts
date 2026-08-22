@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { copyCommand } from "../src/clipboard"
+import { copyCommand, withoutNul } from "../src/clipboard"
 
 test("prefers Wayland clipboard when available", () => {
   expect(copyCommand("linux", true, (name) => name === "wl-copy")).toEqual(["wl-copy"])
@@ -16,4 +16,9 @@ test("falls back through X11 clipboard commands", () => {
 
 test("returns undefined when native clipboard is unavailable", () => {
   expect(copyCommand("linux", false, () => false)).toBeUndefined()
+})
+
+test("drops NUL characters before writing", () => {
+  expect(withoutNul("before\0after")).toBe("beforeafter")
+  expect(withoutNul("clean")).toBe("clean")
 })
