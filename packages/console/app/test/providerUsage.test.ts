@@ -73,12 +73,34 @@ describe("provider usage extraction", () => {
     )
 
     expect(providers.openai.normalizeUsage(usageParser.retrieve())).toEqual({
-      inputTokens: 6,
+      inputTokens: 3,
       outputTokens: 2,
       reasoningTokens: undefined,
       cacheReadTokens: 4,
       cacheWrite5mTokens: 3,
       cacheWrite1hTokens: undefined,
     })
+  })
+
+  test("OpenAI cache buckets are subsets of input_tokens, not addends", () => {
+    // The sample from OpenAI's prompt-caching guide: 2600 input tokens made up of
+    // 2000 read from cache, 400 newly written, and 200 that were neither.
+    const normalized = providers.openai.normalizeUsage({
+      input_tokens: 2600,
+      input_tokens_details: { cached_tokens: 2000, cache_write_tokens: 400 },
+      output_tokens: 10,
+    })
+
+    expect(normalized.inputTokens).toBe(200)
+
+    // The four buckets must partition the prompt exactly -- handler.ts adds them
+    // up to pick the long-context tier, and double-counting the written tokens
+    // trips that threshold early.
+    const promptTokens =
+      normalized.inputTokens +
+      (normalized.cacheReadTokens ?? 0) +
+      (normalized.cacheWrite5mTokens ?? 0) +
+      (normalized.cacheWrite1hTokens ?? 0)
+    expect(promptTokens).toBe(2600)
   })
 })
