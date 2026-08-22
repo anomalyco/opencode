@@ -315,6 +315,13 @@ describe("session.message-v2.toModelMessage", () => {
         ],
       },
     ])
+
+    // explicit position check: placeholder sits between the text parts
+    const result = await MessageV2.toModelMessages(input, model)
+    const parts = result[0].content
+    expect(parts[0]).toEqual({ type: "text", text: "hello" })
+    expect(parts[1].text).toContain("(message: m-user, part: prt_p3)")
+    expect(parts[2]).toEqual({ type: "text", text: "What did we do so far?" })
   })
 
   test("keeps file parts when the model supports the media modality", async () => {

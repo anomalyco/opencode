@@ -218,7 +218,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             })
           } else {
             const modality = mimeToModality(part.mime)
-            if (modality && !model.capabilities.input[modality]) {
+            if (modality && !model.capabilities?.input?.[modality] !== false) {
               userMessage.parts.push({
                 type: "text",
                 text: `[Attached ${part.mime}: ${part.filename ?? "file"}] (message: ${msg.info.id}, part: ${part.id})`,
