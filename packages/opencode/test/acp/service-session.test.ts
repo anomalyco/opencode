@@ -10,7 +10,7 @@ import type {
   SessionConfigSelectOption,
   SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk"
-import type { AssistantMessage, OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Event, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Effect } from "effect"
@@ -23,6 +23,54 @@ const providerID = ProviderV2.ID.make("test")
 const modelID = ModelV2.ID.make("test-model")
 const configuredModelID = ModelV2.ID.make("configured-model")
 const secondModelID = ModelV2.ID.make("second-model")
+
+function createEventStream() {
+  const queue: Event[] = []
+  const waiters: Array<(event: Event | undefined) => void> = []
+  const push = (event: Event) => {
+    const waiter = waiters.shift()
+    if (waiter) return waiter(event)
+    queue.push(event)
+  }
+  const stream = async function* (signal?: AbortSignal) {
+    while (!signal?.aborted) {
+      const event = queue.shift()
+      if (event) {
+        yield { payload: event }
+        continue
+      }
+      const next = await new Promise<Event | undefined>((resolve) => {
+        waiters.push(resolve)
+        signal?.addEventListener("abort", () => resolve(undefined), { once: true })
+      })
+      if (!next) return
+      yield { payload: next }
+    }
+  }
+  return { push, stream }
+}
+
+function idleEvent(sessionID: string): Event {
+  return {
+    id: `evt_idle_${sessionID}`,
+    type: "session.status",
+    properties: {
+      sessionID,
+      status: { type: "idle" },
+    },
+  }
+}
+
+function deferred<A>() {
+  const state: { resolve?: (value: A) => void } = {}
+  const promise = new Promise<A>((resolve) => {
+    state.resolve = resolve
+  })
+  return {
+    promise,
+    resolve: (value: A) => state.resolve?.(value),
+  }
+}
 
 const provider: Provider.Info = {
   id: providerID,
@@ -147,6 +195,7 @@ describe("ACP service sessions", () => {
     options?: {
       abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
+      sessionUpdate?: (update: SessionNotification) => Promise<void>
     },
   ) => {
     const updates: SessionNotification[] = []
@@ -157,6 +206,7 @@ describe("ACP service sessions", () => {
     const commands: unknown[] = []
     const summarizes: unknown[] = []
     const usageUpdates: string[] = []
+    const events = createEventStream()
     const sessions = Array.from({ length: 102 }, (_, index) => ({
       id: `ses_${index + 1}`,
       directory: index % 2 === 0 ? "/workspace" : "/other",
@@ -164,6 +214,9 @@ describe("ACP service sessions", () => {
       time: { created: index + 1, updated: index + 1 },
     }))
     const sdk = {
+      global: {
+        event: (input?: { signal?: AbortSignal }) => Promise.resolve({ stream: events.stream(input?.signal) }),
+      },
       config: {
         providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
         get: () => Promise.resolve({ data: {} }),
@@ -196,11 +249,9 @@ describe("ACP service sessions", () => {
             data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
           }),
         messages: () => Promise.resolve({ data: messages }),
-        prompt:
-          options?.prompt ??
-          ((input: unknown) => {
-            prompts.push(input)
-            return Promise.resolve({
+        prompt: async (input: { sessionID: string }) => {
+          const response = await (options?.prompt?.(input) ??
+            Promise.resolve({
               data: {
                 info: assistantInfo({
                   input: 100,
@@ -209,10 +260,14 @@ describe("ACP service sessions", () => {
                   cache: { read: 11, write: 13 },
                 }),
               },
-            })
-          }),
-        command: (input: unknown) => {
+            }))
+          prompts.push(input)
+          events.push(idleEvent(input.sessionID))
+          return response
+        },
+        command: (input: { sessionID: string }) => {
           commands.push(input)
+          events.push(idleEvent(input.sessionID))
           return Promise.resolve({
             data: {
               info: assistantInfo({
@@ -224,8 +279,9 @@ describe("ACP service sessions", () => {
             },
           })
         },
-        summarize: (input: unknown) => {
+        summarize: (input: { sessionID: string }) => {
           summarizes.push(input)
+          events.push(idleEvent(input.sessionID))
           return Promise.resolve({ data: true })
         },
         abort:
@@ -249,7 +305,7 @@ describe("ACP service sessions", () => {
     const connection = {
       sessionUpdate: (update: SessionNotification) => {
         updates.push(update)
-        return Promise.resolve()
+        return options?.sessionUpdate?.(update) ?? Promise.resolve()
       },
     } as Pick<AgentSideConnection, "sessionUpdate">
     const usage = UsageService.Service.of({
@@ -273,6 +329,7 @@ describe("ACP service sessions", () => {
       commands,
       summarizes,
       usageUpdates,
+      events,
     }
   }
 
@@ -1016,6 +1073,75 @@ describe("ACP service sessions", () => {
       _meta: {},
     })
     expect(usageUpdates).toEqual([session.sessionId])
+  })
+
+  it("waits for queued session updates before returning end_turn", async () => {
+    const called = deferred<void>()
+    const response = deferred<{ data: { info: ReturnType<typeof assistantInfo> } }>()
+    const update = deferred<void>()
+    const release = deferred<void>()
+    const order: string[] = []
+    const fixture = makeService([], {
+      prompt: () => {
+        called.resolve(undefined)
+        return response.promise
+      },
+      sessionUpdate: (notification) => {
+        if (notification.update.sessionUpdate !== "agent_thought_chunk") return Promise.resolve()
+        update.resolve(undefined)
+        return release.promise.then(() => {
+          order.push("update")
+        })
+      },
+    })
+    const session = await Effect.runPromise(fixture.service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const result = Effect.runPromise(
+      fixture.service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] }),
+    ).then((value) => {
+      order.push("response")
+      return value
+    })
+
+    await called.promise
+    fixture.events.push({
+      id: "evt_part",
+      type: "message.part.updated",
+      properties: {
+        sessionID: session.sessionId,
+        time: Date.now(),
+        part: {
+          id: "part_reasoning",
+          sessionID: session.sessionId,
+          messageID: "msg_assistant",
+          type: "reasoning",
+          text: "",
+          time: { start: Date.now() },
+        },
+      },
+    })
+    fixture.events.push({
+      id: "evt_delta",
+      type: "message.part.delta",
+      properties: {
+        sessionID: session.sessionId,
+        messageID: "msg_assistant",
+        partID: "part_reasoning",
+        field: "text",
+        delta: "thinking",
+      },
+    })
+    response.resolve({
+      data: {
+        info: assistantInfo({ input: 1, output: 1, reasoning: 1, cache: { read: 0, write: 0 } }),
+      },
+    })
+
+    await update.promise
+    expect(order).toEqual([])
+
+    release.resolve(undefined)
+    expect((await result).stopReason).toBe("end_turn")
+    expect(order).toEqual(["update", "response"])
   })
 
   it("maps assistant prompt errors to request errors instead of end turn", async () => {

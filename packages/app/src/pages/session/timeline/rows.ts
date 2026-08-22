@@ -4,6 +4,7 @@ import { AssistantMessage, Part, SessionStatus, UserMessage } from "@opencode-ai
 import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/message-part"
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
 import { uniqueSummaryDiffs } from "./summary-diffs"
+import { compareMessages } from "@/utils/session-message"
 
 export { TimelineRow, type SummaryDiff } from "./timeline-row"
 
@@ -71,12 +72,12 @@ export namespace Timeline {
       turns.push(turn)
       turnByUserID.set(user.id, turn)
     })
-    const latestUserMessageID = turns.at(-1)?.user.id
     projectedUserMessages.forEach((user) => {
       if (turnByUserID.has(user.id)) return
-      if (latestUserMessageID && user.id < latestUserMessageID) return
       const turn = { user, assistants: [] }
-      turns.push(turn)
+      const index = turns.findIndex((item) => compareMessages(user, item.user) < 0)
+      if (index < 0) turns.push(turn)
+      if (index >= 0) turns.splice(index, 0, turn)
       turnByUserID.set(user.id, turn)
     })
     const activeMessageID = turns.at(-1)?.user.id

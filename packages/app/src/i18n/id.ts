@@ -193,6 +193,9 @@ export const dict = {
   "command.session.unshare": "Hentikan berbagi",
   "command.session.unshare.description": "Hentikan berbagi sesi ini",
 
+  "command.session.export": "Ekspor sesi",
+  "command.session.export.description": "Ekspor transkrip sesi lengkap sebagai JSON",
+
   "palette.search.placeholder": "Cari berkas, perintah, dan sesi",
   "palette.search.placeholder.home": "Cari perintah dan sesi",
   "palette.empty": "Hasil tidak ditemukan",
@@ -576,6 +579,8 @@ export const dict = {
   "dialog.releaseNotes.action.hideFuture": "Jangan tampilkan ini di masa depan",
   "dialog.releaseNotes.media.alt": "Pratinjau rilis",
 
+  "dialog.usageExceeded.dontShowAgain": "Jangan tampilkan lagi",
+
   "context.breakdown.title": "Rincian Konteks",
   "context.breakdown.note": 'Perkiraan rincian token masukan. "Lainnya" mencakup definisi alat dan beban tambahan.',
   "context.breakdown.system": "Sistem",
@@ -586,6 +591,8 @@ export const dict = {
 
   "context.systemPrompt.title": "Prompt Sistem",
   "context.rawMessages.title": "Pesan mentah",
+
+  "context.export.session": "Ekspor sesi",
 
   "context.stats.session": "Sesi",
   "context.stats.messages": "Pesan",
@@ -663,6 +670,11 @@ export const dict = {
   "toast.session.unshare.success.description": "Berbagi sesi berhasil dihentikan!",
   "toast.session.unshare.failed.title": "Gagal menghentikan berbagi sesi",
   "toast.session.unshare.failed.description": "Terjadi kesalahan saat menghentikan berbagi sesi",
+
+  "toast.session.export.success.title": "Sesi diekspor",
+  "toast.session.export.success.description": "Sesi disimpan ke {{filename}}",
+  "toast.session.export.failed.title": "Gagal mengekspor sesi",
+  "toast.session.export.failed.description": "Terjadi kesalahan saat mengekspor sesi",
 
   "toast.session.listFailed.title": "Gagal memuat sesi untuk {{project}}",
   "toast.project.reloadFailed.title": "Gagal memuat ulang {{project}}",
@@ -897,6 +909,7 @@ export const dict = {
   "common.moreOptions": "Opsi lainnya",
   "common.learnMore": "Pelajari lebih lanjut",
   "common.rename": "Ganti nama",
+  "common.export": "Ekspor",
   "common.reset": "Atur ulang",
   "common.archive": "Arsipkan",
   "common.delete": "Hapus",

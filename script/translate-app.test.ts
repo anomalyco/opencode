@@ -65,7 +65,16 @@ describe("translate app", () => {
       "packages/ui/src/i18n/fr.ts",
       "packages/desktop/src/renderer/i18n/fr.ts",
     ])
-    expect(targetFiles("tr")).toEqual(["packages/app/src/i18n/tr.ts", "packages/ui/src/i18n/tr.ts"])
+    expect(targetFiles("tr")).toEqual([
+      "packages/app/src/i18n/tr.ts",
+      "packages/ui/src/i18n/tr.ts",
+      "packages/desktop/src/renderer/i18n/tr.ts",
+    ])
+    expect(targetFiles("dv")).toEqual([
+      "packages/app/src/i18n/dv.ts",
+      "packages/ui/src/i18n/dv.ts",
+      "packages/desktop/src/renderer/i18n/dv.ts",
+    ])
   })
 
   test("maps product locale codes to their glossaries", () => {
@@ -81,6 +90,48 @@ describe("translate app", () => {
         { keep: "Bonjour {{name}}", extra: "Extra", changed: "{{one}}" },
       ),
     ).toEqual({ missing: ["missing"], extra: ["extra"], placeholders: ["changed"] })
+  })
+
+  test("accepts locale-specific CLDR plural variants", () => {
+    expect(
+      findDrift(
+        { "files.one": "{{count}} file", "files.other": "{{count}} files" },
+        {
+          "files.one": "{{count}} ملف",
+          "files.two": "ملفان: {{count}}",
+          "files.few": "{{count}} ملفات",
+          "files.many": "{{count}} ملفًا",
+          "files.zero": "{{count}} ملف",
+          "files.other": "{{count}} ملف",
+        },
+        "ar",
+      ),
+    ).toEqual({ missing: [], extra: [], placeholders: [] })
+  })
+
+  test("reports missing locale-specific CLDR plural variants", () => {
+    const drift = findDrift(
+      { "files.one": "{{count}} file", "files.other": "{{count}} files" },
+      { "files.one": "{{count}} ملف", "files.other": "{{count}} ملف" },
+      "ar",
+    )
+    expect(drift.missing).toContain("files.few")
+  })
+
+  test("reports placeholder drift in locale-specific CLDR plural variants", () => {
+    const drift = findDrift(
+      { "files.one": "{{count}} file", "files.other": "{{count}} files" },
+      {
+        "files.one": "{{count}} ملف",
+        "files.two": "ملفان: {{count}}",
+        "files.few": "{{count}} ملفات",
+        "files.many": "ملفات كثيرة",
+        "files.zero": "{{count}} ملف",
+        "files.other": "{{count}} ملف",
+      },
+      "ar",
+    )
+    expect(drift.placeholders).toContain("files.many")
   })
 
   test("runs work with the requested maximum concurrency", async () => {
@@ -143,6 +194,8 @@ opencode/next
     expect(config.share).toBe("disabled")
     expect(config.formatter).toBe(false)
     expect(config.lsp).toBe(false)
+    expect(config.agent["translate-app-fr"].permission.webfetch).toBe("allow")
+    expect(config.agent["translate-app-fr"].permission.websearch).toBe("allow")
     expect(config.agent["translate-app-fr"].permission.edit).toEqual({
       "*": "deny",
       "packages/app/src/i18n/fr.ts": "allow",

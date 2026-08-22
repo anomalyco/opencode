@@ -8,8 +8,11 @@ import { dict as en } from "@/i18n/en"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import {
   createDesktopNativeBundle,
+  detectDesktopNativeLocale,
   DESKTOP_NATIVE_ENGLISH,
+  DESKTOP_NATIVE_LABELS,
   DESKTOP_NATIVE_LOCALES,
+  DESKTOP_NATIVE_LOCALE_TAGS,
   type DesktopNativeBundle,
   type DesktopNativeLocale,
 } from "@/i18n/desktop-native"
@@ -17,7 +20,7 @@ import {
 export type Locale = DesktopNativeLocale
 export type Direction = "ltr" | "rtl"
 
-const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "ur", "pa"])
+const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "ur", "pa", "fa", "dv"])
 
 function localeDirection(locale: Locale): Direction {
   return RTL_LOCALES.has(locale) ? "rtl" : "ltr"
@@ -38,70 +41,7 @@ function cookie(locale: Locale) {
 
 const LOCALES: readonly Locale[] = DESKTOP_NATIVE_LOCALES
 
-const INTL: Record<Locale, string> = {
-  en: "en",
-  zh: "zh-Hans",
-  zht: "zh-Hant",
-  ko: "ko",
-  de: "de",
-  es: "es",
-  fr: "fr",
-  da: "da",
-  ja: "ja",
-  pl: "pl",
-  ru: "ru",
-  uk: "uk",
-  ar: "ar",
-  no: "nb-NO",
-  br: "pt-BR",
-  th: "th",
-  bs: "bs",
-  tr: "tr",
-  hi: "hi-IN",
-  nl: "nl-NL",
-  id: "id-ID",
-  vi: "vi-VN",
-  it: "it-IT",
-  ur: "ur-PK",
-  pa: "pa-Arab-PK",
-  az: "az-Latn-AZ",
-  fi: "fi-FI",
-  sv: "sv-SE",
-}
-
-const LABEL_KEY: Partial<Record<Locale, keyof Dictionary>> = {
-  en: "language.en",
-  zh: "language.zh",
-  zht: "language.zht",
-  ko: "language.ko",
-  de: "language.de",
-  es: "language.es",
-  fr: "language.fr",
-  da: "language.da",
-  ja: "language.ja",
-  pl: "language.pl",
-  ru: "language.ru",
-  uk: "language.uk",
-  ar: "language.ar",
-  no: "language.no",
-  br: "language.br",
-  th: "language.th",
-  bs: "language.bs",
-  tr: "language.tr",
-}
-
-const LABEL: Partial<Record<Locale, string>> = {
-  hi: "हिन्दी",
-  nl: "Nederlands",
-  id: "Bahasa Indonesia",
-  vi: "Tiếng Việt",
-  it: "Italiano",
-  ur: "اردو",
-  pa: "پنجابی",
-  az: "Azərbaycanca",
-  fi: "Suomi",
-  sv: "Svenska",
-}
+const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 
 const base = i18n.flatten({ ...en, ...uiEn })
 const dicts = new Map<Locale, Dictionary>([["en", base]])
@@ -137,6 +77,40 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   az: () => merge(import("@/i18n/az"), import("@opencode-ai/ui/i18n/az")),
   fi: () => merge(import("@/i18n/fi"), import("@opencode-ai/ui/i18n/fi")),
   sv: () => merge(import("@/i18n/sv"), import("@opencode-ai/ui/i18n/sv")),
+  am: () => merge(import("@/i18n/am"), import("@opencode-ai/ui/i18n/am")),
+  bg: () => merge(import("@/i18n/bg"), import("@opencode-ai/ui/i18n/bg")),
+  bn: () => merge(import("@/i18n/bn"), import("@opencode-ai/ui/i18n/bn")),
+  ca: () => merge(import("@/i18n/ca"), import("@opencode-ai/ui/i18n/ca")),
+  cs: () => merge(import("@/i18n/cs"), import("@opencode-ai/ui/i18n/cs")),
+  dv: () => merge(import("@/i18n/dv"), import("@opencode-ai/ui/i18n/dv")),
+  dz: () => merge(import("@/i18n/dz"), import("@opencode-ai/ui/i18n/dz")),
+  el: () => merge(import("@/i18n/el"), import("@opencode-ai/ui/i18n/el")),
+  et: () => merge(import("@/i18n/et"), import("@opencode-ai/ui/i18n/et")),
+  fa: () => merge(import("@/i18n/fa"), import("@opencode-ai/ui/i18n/fa")),
+  fo: () => merge(import("@/i18n/fo"), import("@opencode-ai/ui/i18n/fo")),
+  hr: () => merge(import("@/i18n/hr"), import("@opencode-ai/ui/i18n/hr")),
+  hu: () => merge(import("@/i18n/hu"), import("@opencode-ai/ui/i18n/hu")),
+  hy: () => merge(import("@/i18n/hy"), import("@opencode-ai/ui/i18n/hy")),
+  is: () => merge(import("@/i18n/is"), import("@opencode-ai/ui/i18n/is")),
+  ka: () => merge(import("@/i18n/ka"), import("@opencode-ai/ui/i18n/ka")),
+  km: () => merge(import("@/i18n/km"), import("@opencode-ai/ui/i18n/km")),
+  lo: () => merge(import("@/i18n/lo"), import("@opencode-ai/ui/i18n/lo")),
+  lt: () => merge(import("@/i18n/lt"), import("@opencode-ai/ui/i18n/lt")),
+  lv: () => merge(import("@/i18n/lv"), import("@opencode-ai/ui/i18n/lv")),
+  mk: () => merge(import("@/i18n/mk"), import("@opencode-ai/ui/i18n/mk")),
+  mn: () => merge(import("@/i18n/mn"), import("@opencode-ai/ui/i18n/mn")),
+  ms: () => merge(import("@/i18n/ms"), import("@opencode-ai/ui/i18n/ms")),
+  my: () => merge(import("@/i18n/my"), import("@opencode-ai/ui/i18n/my")),
+  ne: () => merge(import("@/i18n/ne"), import("@opencode-ai/ui/i18n/ne")),
+  ro: () => merge(import("@/i18n/ro"), import("@opencode-ai/ui/i18n/ro")),
+  si: () => merge(import("@/i18n/si"), import("@opencode-ai/ui/i18n/si")),
+  sk: () => merge(import("@/i18n/sk"), import("@opencode-ai/ui/i18n/sk")),
+  sl: () => merge(import("@/i18n/sl"), import("@opencode-ai/ui/i18n/sl")),
+  sq: () => merge(import("@/i18n/sq"), import("@opencode-ai/ui/i18n/sq")),
+  sr: () => merge(import("@/i18n/sr"), import("@opencode-ai/ui/i18n/sr")),
+  tg: () => merge(import("@/i18n/tg"), import("@opencode-ai/ui/i18n/tg")),
+  tk: () => merge(import("@/i18n/tk"), import("@opencode-ai/ui/i18n/tk")),
+  uz: () => merge(import("@/i18n/uz"), import("@opencode-ai/ui/i18n/uz")),
 }
 
 function loadDict(locale: Locale) {
@@ -154,63 +128,9 @@ export function loadLocaleDict(locale: Locale) {
   return loadDict(locale).then(() => undefined)
 }
 
-const localeMatchers: Array<{ locale: Locale; match: (language: string) => boolean }> = [
-  { locale: "en", match: (language) => language.startsWith("en") },
-  {
-    locale: "zht",
-    match: (language) =>
-      language.startsWith("zh") &&
-      (language.includes("hant") || language.includes("-tw") || language.includes("-hk") || language.includes("-mo")),
-  },
-  { locale: "zh", match: (language) => language.startsWith("zh") },
-  { locale: "ko", match: (language) => language.startsWith("ko") },
-  { locale: "de", match: (language) => language.startsWith("de") },
-  { locale: "es", match: (language) => language.startsWith("es") },
-  { locale: "fr", match: (language) => language.startsWith("fr") },
-  { locale: "da", match: (language) => language.startsWith("da") },
-  { locale: "ja", match: (language) => language.startsWith("ja") },
-  { locale: "pl", match: (language) => language.startsWith("pl") },
-  { locale: "ru", match: (language) => language.startsWith("ru") },
-  { locale: "uk", match: (language) => language.startsWith("uk") },
-  { locale: "ar", match: (language) => language.startsWith("ar") },
-  {
-    locale: "no",
-    match: (language) => language.startsWith("no") || language.startsWith("nb") || language.startsWith("nn"),
-  },
-  { locale: "br", match: (language) => language.startsWith("pt") },
-  { locale: "th", match: (language) => language.startsWith("th") },
-  { locale: "bs", match: (language) => language.startsWith("bs") },
-  { locale: "tr", match: (language) => language.startsWith("tr") },
-  { locale: "hi", match: (language) => language.startsWith("hi") },
-  { locale: "nl", match: (language) => language.startsWith("nl") },
-  { locale: "id", match: (language) => language.startsWith("id") },
-  { locale: "vi", match: (language) => language.startsWith("vi") },
-  { locale: "it", match: (language) => language.startsWith("it") },
-  { locale: "ur", match: (language) => language.startsWith("ur") },
-  {
-    locale: "pa",
-    match: (language) => language.startsWith("pa") && (language.includes("arab") || language.includes("-pk")),
-  },
-  {
-    locale: "az",
-    match: (language) => language.startsWith("az") && !language.includes("arab") && !language.includes("cyrl"),
-  },
-  { locale: "fi", match: (language) => language.startsWith("fi") },
-  { locale: "sv", match: (language) => language.startsWith("sv") },
-]
-
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
-
-  const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
-  for (const language of languages) {
-    if (!language) continue
-    const normalized = language.toLowerCase()
-    const match = localeMatchers.find((entry) => entry.match(normalized))
-    if (match) return match.locale
-  }
-
-  return "en"
+  return detectDesktopNativeLocale(navigator.languages?.length ? navigator.languages : [navigator.language])
 }
 
 export function normalizeLocale(value: string): Locale {
@@ -231,7 +151,17 @@ function readStoredLocale() {
 }
 
 const warm = readStoredLocale() ?? detectLocale()
-if (warm !== "en") void loadDict(warm)
+const initialLocale =
+  warm === "en"
+    ? Promise.resolve(warm)
+    : loadDict(warm).then(
+        () => warm,
+        () => "en" as const,
+      )
+
+export function loadInitialLocale() {
+  return initialLocale
+}
 
 export const { use: useLanguage, provider: LanguageProvider } = createSimpleContext({
   name: "Language",
@@ -272,16 +202,12 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       return i18n.resolveTemplate(current[candidate] ?? current[fallback] ?? fallback, { ...params, count })
     }
 
-    const label = (value: Locale) => {
-      const key = LABEL_KEY[value]
-      if (key) return t(key)
-      return LABEL[value] ?? value
-    }
+    const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
     createEffect(() => {
       if (typeof document !== "object") return
       const value = locale()
-      document.documentElement.lang = value
+      document.documentElement.lang = intl()
       document.documentElement.dir = direction()
       document.cookie = cookie(value)
     })

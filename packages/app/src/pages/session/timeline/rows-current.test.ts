@@ -137,11 +137,11 @@ describe("current session timeline rows", () => {
 
   test("renders an optimistic user turn and thinking before the protocol message arrives", () => {
     const source = [
-      { id: "msg_1", type: "user", text: "existing", time: { created: 1 } },
+      { id: "msg_z", type: "user", text: "existing", time: { created: 1 } },
     ] satisfies SessionMessageInfo[]
     const normalized = normalizeSessionMessages("ses_1", source)
     const optimistic = {
-      id: "msg_2",
+      id: "msg_a",
       sessionID: "ses_1",
       role: "user" as const,
       time: { created: 2 },
@@ -161,10 +161,10 @@ describe("current session timeline rows", () => {
 
     expect(result.activeMessageID).toBe(optimistic.id)
     expect(result.rows.map(TimelineRow.key)).toEqual([
-      "user-message:msg_1",
-      "turn-gap:msg_2",
-      "user-message:msg_2",
-      "thinking:msg_2",
+      "user-message:msg_z",
+      "turn-gap:msg_a",
+      "user-message:msg_a",
+      "thinking:msg_a",
     ])
   })
 
