@@ -178,12 +178,12 @@ export interface Interface {
     sessionID: SessionID
     auto: boolean
     overflow?: boolean
-    capture?: { request: LLM.StreamInput; messageIDs: ReadonlySet<MessageID> }
+    capture?: { request: LLM.InternalStreamInput; messageIDs: ReadonlySet<MessageID> }
     rebuild?: (input: {
       messages: SessionV1.WithParts[]
       processor: SessionProcessor.Handle
       model: Provider.Model
-    }) => Effect.Effect<LLM.StreamInput>
+    }) => Effect.Effect<LLM.InternalStreamInput>
   }) => Effect.Effect<"continue" | "stop">
   readonly create: (input: {
     sessionID: SessionID
@@ -332,12 +332,12 @@ const layer = Layer.effect(
       sessionID: SessionID
       auto: boolean
       overflow?: boolean
-      capture?: { request: LLM.StreamInput; messageIDs: ReadonlySet<MessageID> }
+      capture?: { request: LLM.InternalStreamInput; messageIDs: ReadonlySet<MessageID> }
       rebuild?: (input: {
         messages: SessionV1.WithParts[]
         processor: SessionProcessor.Handle
         model: Provider.Model
-      }) => Effect.Effect<LLM.StreamInput>
+      }) => Effect.Effect<LLM.InternalStreamInput>
     }) {
       const started = Date.now()
       const parent = input.messages.findLast((m) => m.info.id === input.parentID)
@@ -416,9 +416,10 @@ const layer = Layer.effect(
         : undefined
       const suffixPrompt = SessionCompactionSuffix.buildPrompt({ anchor, pluginContext: compacting.context })
       let activeProcessor: SessionProcessor.Handle | undefined
-      let activeSuffix = false
+      let activeMode: SessionCompaction.Mode | undefined
       let failedSuffixUsage: ReturnType<SessionProcessor.Handle["latestUsage"]>
-      const suffixUnavailable = (request: LLM.StreamInput): SessionCompaction.FallbackReason | undefined => {
+      let persistedDiagnostics: SessionCompaction.Diagnostics | undefined
+      const suffixUnavailable = (request: LLM.InternalStreamInput): SessionCompaction.FallbackReason | undefined => {
         if (request.toolChoice !== undefined && request.toolChoice !== "auto" && request.toolChoice !== "none") {
           return "tool_choice"
         }
@@ -427,7 +428,7 @@ const layer = Layer.effect(
         }
         return undefined
       }
-      const fitsSuffix = (request: LLM.StreamInput) =>
+      const fitsSuffix = (request: LLM.InternalStreamInput) =>
         Token.estimate(
           JSON.stringify({
             system: request.system,
@@ -474,27 +475,41 @@ const layer = Layer.effect(
         yield* session.updateMessage(msg)
         const processor = yield* processors.create({ assistantMessage: msg, sessionID: input.sessionID, model })
         activeProcessor = processor
-        activeSuffix = attempt?.suffix === true
         const rebuilt =
           !capture && attempt?.suffix && suffixRebuild
             ? yield* suffixRebuild({ messages: history, processor, model })
             : undefined
-        const request = capture?.request ?? rebuilt
+        const rawRequest = capture?.request ?? rebuilt
+        const request = capture
+          ? (() => {
+              const { prepareSystem: _prepareSystem, onSystemPrepared: _onSystemPrepared, ...prepared } = capture.request
+              return { ...prepared, systemPrepared: true }
+            })()
+          : rawRequest?.prepareSystem
+          ? yield* rawRequest.prepareSystem().pipe(
+              Effect.map((system) => {
+                const { prepareSystem: _prepareSystem, onSystemPrepared: _onSystemPrepared, ...prepared } = rawRequest
+                return { ...prepared, system, systemPrepared: true }
+              }),
+            )
+          : rawRequest
         const unavailable = request ? suffixUnavailable(request) : undefined
         if (request && !unavailable) {
           const additions = capture
-            ? yield* MessageV2.toModelMessagesEffect(
+            ? structuredClone(
                 history.filter(
                   (item) =>
                     !capture.messageIDs.has(item.info.id) && !item.parts.some((part) => part.type === "compaction"),
                 ),
-                model,
               )
             : []
+          if (additions.length)
+            yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: additions })
+          const additionMessages = capture ? yield* MessageV2.toModelMessagesEffect(additions, model) : []
           const suffixRequest = {
             ...request,
             maxOutputTokens: SUMMARY_OUTPUT_TOKENS,
-            messages: [...request.messages, ...additions, { role: "user" as const, content: suffixPrompt }],
+            messages: [...request.messages, ...additionMessages, { role: "user" as const, content: suffixPrompt }],
           }
           if (fitsSuffix(suffixRequest)) {
             const tools: Record<string, Tool> = {}
@@ -504,6 +519,7 @@ const layer = Layer.effect(
                 execute: () => Promise.reject(new Error("Tools cannot execute during compaction")),
               }
             }
+            activeMode = "suffix"
             const result = yield* processor.process({
               ...suffixRequest,
               agent: request.agent,
@@ -526,6 +542,7 @@ const layer = Layer.effect(
           [buildPrompt({ previousSummary, context: [conversation] }), ...compacting.context]
             .filter(Boolean)
             .join("\n\n")
+        activeMode = "prepend"
         const result = yield* processor.process({
           user: userMessage,
           agent,
@@ -556,8 +573,9 @@ const layer = Layer.effect(
         result?: "continue" | "compact" | "stop"
         interrupted?: boolean
       }) {
+        if (persistedDiagnostics) return persistedDiagnostics
         const processor = activeProcessor
-        if (!processor) return
+        if (!processor) return undefined
         const rawUsage = failedSuffixUsage ?? processor.latestUsage()
         const tokenUsage = rawUsage
           ? {
@@ -568,7 +586,7 @@ const layer = Layer.effect(
           : undefined
         const diagnostics: SessionCompaction.Diagnostics = {
           requested,
-          used: activeSuffix ? "suffix" : "prepend",
+          ...(activeMode ? { used: activeMode } : {}),
           fallback: input?.interrupted
             ? fallback
             : (fallback ??
@@ -578,17 +596,22 @@ const layer = Layer.effect(
         }
         yield* Effect.logInfo("compacted", {
           requested,
-          used: diagnostics.used,
+          used: activeMode,
           fallback: diagnostics.fallback,
           tokens: diagnostics.tokens,
         })
-        if (compactionPart) {
-          yield* session.updatePart({
-            ...compactionPart,
-            tail_start_id: selected.tail_start_id ?? compactionPart.tail_start_id,
-            diagnostics,
-          })
-        }
+        yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            if (compactionPart) {
+              yield* session.updatePart({
+                ...compactionPart,
+                tail_start_id: selected.tail_start_id ?? compactionPart.tail_start_id,
+                diagnostics,
+              })
+            }
+            persistedDiagnostics = diagnostics
+          }),
+        )
         return diagnostics
       })
       const runProcessor = Effect.fnUntraced(function* (attempt?: { capture?: typeof suffix; suffix?: boolean }) {
@@ -620,20 +643,24 @@ const layer = Layer.effect(
           !SessionCompactionSuffix.validateSummary(suffixText) ||
           suffixToolCall)
       if (suffixFailed) {
-        const suffixUsage = run.processor.latestUsage()
-        fallback =
-          run.result === "compact"
-            ? "context"
-            : suffixToolCall
-              ? "tool_call"
-              : run.processor.message.error
-                ? "provider_error"
-                : suffixText
-                  ? "invalid_summary"
-                  : "empty_summary"
-        yield* session.removeMessage({ sessionID: input.sessionID, messageID: run.processor.message.id })
-        failedSuffixUsage = suffixUsage
-        run = yield* runWithDiagnostics()
+        yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const suffixUsage = run.processor.latestUsage()
+            fallback =
+              run.result === "compact"
+                ? "context"
+                : suffixToolCall
+                  ? "tool_call"
+                  : run.processor.message.error
+                    ? "provider_error"
+                    : suffixText
+                      ? "invalid_summary"
+                      : "empty_summary"
+            yield* session.removeMessage({ sessionID: input.sessionID, messageID: run.processor.message.id })
+            failedSuffixUsage = suffixUsage
+            run = yield* restore(runWithDiagnostics())
+          }),
+        ).pipe(Effect.onInterrupt(() => Effect.uninterruptible(persistDiagnostics({ interrupted: true }))))
       }
       const processor = run.processor
       const result = run.result

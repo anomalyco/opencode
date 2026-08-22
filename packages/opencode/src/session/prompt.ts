@@ -35,6 +35,7 @@ import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
+import { LLMRequestPrep } from "./llm/request"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "@/tool/shell/id"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -1083,7 +1084,7 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
-        let latestRequest: { request: LLM.StreamInput; messageIDs: ReadonlySet<MessageID> } | undefined
+        let latestRequest: { request: LLM.InternalStreamInput; messageIDs: ReadonlySet<MessageID> } | undefined
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1214,7 +1215,7 @@ const layer = Layer.effect(
               tools,
               model: input.model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
-            } satisfies LLM.StreamInput
+            } satisfies LLM.InternalStreamInput
           })
 
           if (task?.type === "subtask") {
@@ -1236,12 +1237,21 @@ const layer = Layer.effect(
                   if (!user || user.role !== "user") {
                     throw new Error("No live user message available for suffix compaction")
                   }
-                  return yield* assembleRequest({
+                  const request = yield* assembleRequest({
                     messages: input.messages,
                     user,
                     model: input.model,
                     processor: input.processor,
                   })
+                  const system = yield* LLMRequestPrep.prepareSystem({
+                    user: request.user,
+                    sessionID: request.sessionID,
+                    model: request.model,
+                    agent: request.agent,
+                    system: request.system,
+                    plugin,
+                  })
+                  return { ...request, system, systemPrepared: true }
                 }),
             })
             if (result === "stop") break
@@ -1305,8 +1315,30 @@ const layer = Layer.effect(
             if (step === 1)
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
             const request = yield* assembleRequest({ messages: msgs, user: lastUser, model, processor: handle })
-            latestRequest = { request, messageIDs: new Set(msgs.map((item) => item.info.id)) }
-            const result = yield* handle.process(request)
+            const messageIDs = new Set(msgs.map((item) => item.info.id))
+            let preparedSystem: string[] | undefined
+            const prepareSystem = () => {
+              if (preparedSystem) return Effect.succeed(preparedSystem)
+              return LLMRequestPrep.prepareSystem({
+                user: request.user,
+                sessionID: request.sessionID,
+                model: request.model,
+                agent: request.agent,
+                system: request.system,
+                plugin,
+              }).pipe(Effect.tap((system) => Effect.sync(() => (preparedSystem = system))))
+            }
+            const preparedRequest: LLM.InternalStreamInput = {
+              ...request,
+              prepareSystem,
+              onSystemPrepared: (system) => {
+                latestRequest = {
+                  request: { ...request, system, systemPrepared: true },
+                  messageIDs,
+                }
+              },
+            }
+            const result = yield* handle.process(preparedRequest)
 
             if (structured !== undefined) {
               handle.message.structured = structured

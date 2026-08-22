@@ -52,6 +52,12 @@ export type StreamRequest = StreamInput & {
   abort: AbortSignal
 }
 
+export type InternalStreamInput = StreamInput & {
+  readonly systemPrepared?: boolean
+  readonly prepareSystem?: () => Effect.Effect<string[]>
+  readonly onSystemPrepared?: (system: string[]) => void
+}
+
 export interface Interface {
   readonly stream: (input: StreamInput) => Stream.Stream<LLMEvent, unknown>
 }
@@ -104,14 +110,19 @@ const live: Layer.Layer<
       )
 
       const isWorkflow = language instanceof GitLabWorkflowLanguageModel
+      const internal = isInternalStreamInput(input) ? input : undefined
+      const system = internal?.prepareSystem ? yield* internal.prepareSystem() : input.system
       const prepared = yield* LLMRequestPrep.prepare({
         ...input,
+        system,
+        systemPrepared: internal?.prepareSystem !== undefined || internal?.systemPrepared,
         provider: item,
         auth: info,
         plugin,
         flags,
         isWorkflow,
       })
+      internal?.onSystemPrepared?.(prepared.system)
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
@@ -386,6 +397,10 @@ const live: Layer.Layer<
 )
 
 export const hasToolCalls = LLMRequestPrep.hasToolCalls
+
+function isInternalStreamInput<T extends StreamInput>(input: T): input is T & InternalStreamInput {
+  return "prepareSystem" in input || "systemPrepared" in input || "onSystemPrepared" in input
+}
 
 export const node = LayerNode.make({
   service: Service,
