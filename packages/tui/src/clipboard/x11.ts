@@ -9,6 +9,7 @@
 // alive for the lifetime of the TUI so paste requests can be served. Reuse a
 // single instance across copies.
 
+/// <reference path="./x11-types.d.ts" />
 import x11 from "x11"
 import type { X11Client, X11Display, X11Event } from "x11"
 
