@@ -1,6 +1,15 @@
 export * as SessionCompaction from "./compaction"
 
-import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model, type Usage } from "@opencode-ai/llm"
+import {
+  LLM,
+  LLMError,
+  LLMEvent,
+  Message,
+  mergeGenerationOptions,
+  type LLMRequest,
+  type Model,
+  type Usage,
+} from "@opencode-ai/llm"
 import { SessionCompaction } from "@opencode-ai/schema/session-compaction"
 import { DateTime, Effect, Stream } from "effect"
 import type { Config } from "../config"
@@ -197,13 +206,34 @@ export const make = (dependencies: Dependencies) => {
       reason: "auto",
       requested,
     })
+    let attempted: SessionCompaction.Mode | undefined
+    let attemptedUsage: Usage | undefined
+    let terminal = false
+    const diagnostics = (
+      input: { readonly fallback?: SessionCompaction.FallbackReason; readonly usage?: Usage } = {},
+    ) =>
+      Effect.gen(function* () {
+        const diagnosticTokens = tokens(input.usage ?? attemptedUsage)
+        return {
+          requested,
+          ...(attempted ? { used: attempted } : {}),
+          ...(input.fallback ? { fallback: input.fallback } : {}),
+          durationMs: Math.max(
+            0,
+            Math.round(DateTime.toEpochMillis(yield* DateTime.now) - DateTime.toEpochMillis(started)),
+          ),
+          ...(diagnosticTokens ? { tokens: diagnosticTokens } : {}),
+        }
+      })
     const run = (
       request: LLMRequest,
-      validate: boolean,
+      mode: SessionCompaction.Mode,
     ): Effect.Effect<
       { summary: string; usage: Usage | undefined } | { failure: SessionCompaction.FallbackReason; usage?: Usage }
     > =>
       Effect.gen(function* () {
+        attempted = mode
+        attemptedUsage = undefined
         const chunks: string[] = []
         let failure: SessionCompaction.FallbackReason | undefined
         let usage: Usage | undefined
@@ -212,37 +242,19 @@ export const make = (dependencies: Dependencies) => {
             if (LLMEvent.is.providerError(event)) failure = "provider_error"
             if (LLMEvent.is.toolCall(event)) failure = "tool_call"
             if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
-            if (LLMEvent.is.stepFinish(event) || LLMEvent.is.finish(event)) usage = event.usage
+            if (LLMEvent.is.stepFinish(event) || LLMEvent.is.finish(event)) {
+              usage = event.usage
+              attemptedUsage = usage
+            }
             return Effect.void
           }),
           Effect.as(true),
           Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
-          Effect.onInterrupt(() =>
-            Effect.gen(function* () {
-              const diagnosticTokens = tokens(usage)
-              yield* dependencies.events.publish(SessionEvent.Compaction.Failed, {
-                sessionID: input.sessionID,
-                messageID,
-                timestamp: yield* DateTime.now,
-                reason: "auto",
-                failure: "interrupted",
-                diagnostics: {
-                  requested,
-                  used: validate ? "suffix" : "prepend",
-                  durationMs: Math.max(
-                    0,
-                    Math.round(DateTime.toEpochMillis(yield* DateTime.now) - DateTime.toEpochMillis(started)),
-                  ),
-                  ...(diagnosticTokens ? { tokens: diagnosticTokens } : {}),
-                },
-              })
-            }),
-          ),
         )
         const summary = chunks.join("")
         if (!streamed || failure) return { failure: failure ?? "provider_error", usage }
         if (!summary.trim()) return { failure: "empty_summary" as const, usage }
-        if (validate && !SessionCompactionSuffix.validateSummary(summary))
+        if (mode === "suffix" && !SessionCompactionSuffix.validateSummary(summary))
           return { failure: "invalid_summary" as const, usage }
         return { summary, usage }
       })
@@ -256,7 +268,7 @@ export const make = (dependencies: Dependencies) => {
               tools: [],
               generation: { maxTokens: summaryOutput },
             }),
-            false,
+            "prepend",
           )
         : Effect.succeed({ failure: "context" as const })
     const suffixPrompt = SessionCompactionSuffix.buildPrompt({
@@ -271,7 +283,7 @@ export const make = (dependencies: Dependencies) => {
     })
     const suffixRequest = LLM.updateRequest(input.request, {
       messages: [...input.request.messages, Message.user(suffixPrompt)],
-      generation: { ...input.request.generation, maxTokens: summaryOutput },
+      generation: mergeGenerationOptions(input.request.generation, { maxTokens: summaryOutput }),
     })
     const suffixUnavailable =
       input.request.toolChoice && !["auto", "none"].includes(input.request.toolChoice.type)
@@ -287,49 +299,65 @@ export const make = (dependencies: Dependencies) => {
         toolChoice: suffixRequest.toolChoice,
       }) <=
       context - summaryOutput
-    const suffix =
-      requested === "suffix" && !suffixUnavailable && suffixFits ? yield* run(suffixRequest, true) : undefined
-    const suffixSuccess = suffix && "summary" in suffix
-    const final = suffixSuccess ? suffix : yield* prepend()
-    const fallback =
-      (suffix && "failure" in suffix ? suffix.failure : undefined) ??
-      (requested === "suffix" ? (suffixUnavailable ?? (!suffixFits ? "context" : undefined)) : undefined)
-    const suffixUsage = suffix && "usage" in suffix ? suffix.usage : undefined
-    const finalUsage = "usage" in final ? final.usage : undefined
-    const diagnosticTokens = tokens(suffixUsage ?? finalUsage)
-    const diagnostics = {
-      requested,
-      used: suffixSuccess ? ("suffix" as const) : ("prepend" as const),
-      ...(fallback ? { fallback } : {}),
-      durationMs: Math.max(
-        0,
-        Math.round(DateTime.toEpochMillis(yield* DateTime.now) - DateTime.toEpochMillis(started)),
-      ),
-      ...(diagnosticTokens ? { tokens: diagnosticTokens } : {}),
-    }
-    if (!("summary" in final)) {
-      yield* Effect.logWarning("session compaction failed", { failure: final.failure, ...diagnostics })
-      yield* dependencies.events.publish(SessionEvent.Compaction.Failed, {
-        sessionID: input.sessionID,
-        messageID,
-        timestamp: yield* DateTime.now,
-        reason: "auto",
-        failure: final.failure,
-        diagnostics,
-      })
-      return false
-    }
-    yield* Effect.logInfo("session compaction completed", diagnostics)
-    yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
-      sessionID: input.sessionID,
-      messageID,
-      timestamp: yield* DateTime.now,
-      reason: "auto",
-      text: final.summary,
-      recent: selected.recent,
-      diagnostics,
+    const execute = Effect.gen(function* () {
+      const suffix =
+        requested === "suffix" && !suffixUnavailable && suffixFits ? yield* run(suffixRequest, "suffix") : undefined
+      const suffixSuccess = suffix && "summary" in suffix
+      const final = suffixSuccess ? suffix : yield* prepend()
+      const fallback =
+        (suffix && "failure" in suffix ? suffix.failure : undefined) ??
+        (requested === "suffix" ? (suffixUnavailable ?? (!suffixFits ? "context" : undefined)) : undefined)
+      const suffixUsage = suffix && "usage" in suffix ? suffix.usage : undefined
+      const finalUsage = "usage" in final ? final.usage : undefined
+      const completedDiagnostics = yield* diagnostics({ fallback, usage: suffixUsage ?? finalUsage })
+      if (!("summary" in final)) {
+        yield* Effect.logWarning("session compaction failed", { failure: final.failure, ...completedDiagnostics })
+        terminal = true
+        yield* Effect.uninterruptible(
+          dependencies.events.publish(SessionEvent.Compaction.Failed, {
+            sessionID: input.sessionID,
+            messageID,
+            timestamp: yield* DateTime.now,
+            reason: "auto",
+            failure: final.failure,
+            diagnostics: completedDiagnostics,
+          }),
+        )
+        return false
+      }
+      yield* Effect.logInfo("session compaction completed", completedDiagnostics)
+      terminal = true
+      yield* Effect.uninterruptible(
+        dependencies.events.publish(SessionEvent.Compaction.Ended, {
+          sessionID: input.sessionID,
+          messageID,
+          timestamp: yield* DateTime.now,
+          reason: "auto",
+          text: final.summary,
+          recent: selected.recent,
+          diagnostics: completedDiagnostics,
+        }),
+      )
+      return true
     })
-    return true
+    return yield* execute.pipe(
+      Effect.onInterrupt(() =>
+        terminal
+          ? Effect.void
+          : Effect.uninterruptible(
+              Effect.gen(function* () {
+                yield* dependencies.events.publish(SessionEvent.Compaction.Failed, {
+                  sessionID: input.sessionID,
+                  messageID,
+                  timestamp: yield* DateTime.now,
+                  reason: "auto",
+                  failure: "interrupted",
+                  diagnostics: yield* diagnostics(),
+                })
+              }),
+            ),
+      ),
+    )
   })
   const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
     if (!config.auto) return false

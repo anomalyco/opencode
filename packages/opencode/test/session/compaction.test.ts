@@ -76,6 +76,10 @@ const suffixSummary = `## Objective
 ## Relevant Files
 - none`
 
+function hasMessages(output: unknown): output is { messages: SessionV1.WithParts[] } {
+  return typeof output === "object" && output !== null && "messages" in output && Array.isArray(output.messages)
+}
+
 afterEach(() => {
   mock.restore()
 })
@@ -1259,7 +1263,7 @@ describe("session.compaction.process", () => {
         const events = yield* EventV2Bridge.Service
         const ready = yield* Deferred.make<void>()
         const session = yield* ssn.create({})
-        const msg = yield* createUserMessage(session.id, "hello")
+        yield* createUserMessage(session.id, "hello")
         yield* createCompactionMarker(session.id)
         const msgs = yield* ssn.messages({ sessionID: session.id })
         const marker = msgs.at(-1)!.info
@@ -1694,7 +1698,14 @@ describe("session.compaction.process", () => {
     let transforms = 0
     const plugins = Layer.mock(Plugin.Service)({
       trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
-        if (name === "experimental.chat.messages.transform") transforms++
+        if (name === "experimental.chat.messages.transform" && hasMessages(output)) {
+          transforms++
+          for (const message of output.messages) {
+            for (const part of message.parts) {
+              if (part.type === "text" && part.text === "new history") part.text = "redacted history"
+            }
+          }
+        }
         return Effect.succeed(output)
       },
       list: () => Effect.succeed([]),
@@ -1709,7 +1720,7 @@ describe("session.compaction.process", () => {
       yield* createCompactionMarker(session.id)
       const messages = yield* ssn.messages({ sessionID: session.id })
       const marker = messages.at(-1)!.info
-      const captured: LLM.StreamInput = {
+      const captured: LLM.InternalStreamInput = {
         user: original,
         agent: { name: "build" } as LLM.StreamInput["agent"],
         sessionID: session.id,
@@ -1726,6 +1737,11 @@ describe("session.compaction.process", () => {
         retries: 3,
         small: true,
         model: createModel({ context: 100_000, output: 32_000 }),
+        systemPrepared: true,
+        prepareSystem: () => Effect.die("captured system must not be prepared again"),
+        onSystemPrepared: () => {
+          throw new Error("captured callbacks must not run")
+        },
       }
       yield* SessionCompaction.use.process({
         parentID: marker.id,
@@ -1745,8 +1761,9 @@ describe("session.compaction.process", () => {
       expect(request?.small).toEqual(captured.small)
       expect(request?.maxOutputTokens).toBe(4096)
       expect(JSON.stringify(request?.messages.at(-1))).toContain("Summarize the older portion")
-      expect(JSON.stringify(request?.messages)).toContain("new history")
-      expect(transforms).toBe(0)
+      expect(JSON.stringify(request?.messages)).toContain("redacted history")
+      expect(JSON.stringify(request?.messages)).not.toContain("new history")
+      expect(transforms).toBe(1)
     }).pipe(withCompaction({ llm: stub.llmLayer, plugin: plugins, config: cfg({ mode: "suffix" }) }))
   })
 
@@ -1836,7 +1853,8 @@ describe("session.compaction.process", () => {
       yield* createCompactionMarker(session.id)
       const messages = yield* ssn.messages({ sessionID: session.id })
       const marker = messages.at(-1)!.info
-      const rebuilt: LLM.StreamInput = {
+      let systemTransforms = 0
+      const rebuilt: LLM.InternalStreamInput = {
         user: original,
         agent: { name: "build" } as LLM.StreamInput["agent"],
         sessionID: session.id,
@@ -1844,6 +1862,11 @@ describe("session.compaction.process", () => {
         messages: [{ role: "user", content: [{ type: "text", text: "rebuilt prefix" }] }],
         tools: {},
         model: createModel({ context: 100_000, output: 32_000 }),
+        prepareSystem: () =>
+          Effect.sync(() => {
+            systemTransforms++
+            return ["transformed system"]
+          }),
       }
 
       yield* SessionCompaction.use.process({
@@ -1858,7 +1881,8 @@ describe("session.compaction.process", () => {
           }),
       })
 
-      expect(request?.system).toEqual(rebuilt.system)
+      expect(request?.system).toEqual(["transformed system"])
+      expect(systemTransforms).toBe(1)
       expect(rebuildModel).toBe(request?.model)
       expect(request?.messages.slice(0, rebuilt.messages.length)).toEqual(rebuilt.messages)
       expect(JSON.stringify(request?.messages.at(-1))).toContain("Summarize the older portion")
