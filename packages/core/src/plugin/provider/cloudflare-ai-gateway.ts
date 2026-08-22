@@ -33,7 +33,7 @@ export const CloudflareAIGatewayPlugin = define({
             // gateway's stored/BYOK keys instead.
             const isWorkersAi = modelID.startsWith("workers-ai/") || modelID.startsWith("@cf/")
             const unified = createUnified(isWorkersAi ? { apiKey: config.apiKey } : {})
-            return gateway(unified(modelID))
+            return gateway(unified(nativeModelId(modelID)))
           },
         }
       }),
@@ -84,4 +84,16 @@ function gatewayOptions(options: Record<string, unknown>, metadata: unknown) {
 
 function stringOption(options: Record<string, unknown>, key: string) {
   return typeof options[key] === "string" ? options[key] : undefined
+}
+
+// models.dev publishes Anthropic ids with dot-separated version numbers (e.g.
+// "claude-haiku-4.5") to match its site-wide display convention, but Anthropic's
+// real API model slugs use dashes ("claude-haiku-4-5"). The gateway's Unified API
+// forwards the model id straight through to the upstream provider, so an
+// unmodified dotted id 404s against Anthropic with a "model not found" error.
+// Every other proxied provider in the catalog (OpenAI, xAI, Google, ...) already
+// uses dots natively, so this translation is scoped to the "anthropic/" prefix.
+function nativeModelId(modelID: string): string {
+  if (!modelID.startsWith("anthropic/")) return modelID
+  return modelID.replaceAll(".", "-")
 }

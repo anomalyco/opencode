@@ -401,6 +401,61 @@ describe("CloudflareAIGatewayPlugin", () => {
     ),
   )
 
+  it.effect("translates models.dev's dotted Anthropic ids to Anthropic's native dashed slugs", () =>
+    withEnv(cloudflareEnv(), () =>
+      Effect.gen(function* () {
+        resetCalls()
+        const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(
+              ProviderV2.ID.make("cloudflare-ai-gateway"),
+              ModelV2.ID.make("anthropic/claude-haiku-4.5"),
+            ),
+            api: {
+              id: ModelV2.ID.make("anthropic/claude-haiku-4.5"),
+              type: "aisdk",
+              package: "test-provider",
+            },
+          }),
+          package: "ai-gateway-provider",
+          options: { name: "cloudflare-ai-gateway" },
+        })
+
+        result.sdk.languageModel("anthropic/claude-haiku-4.5")
+
+        expect(unifiedCalls).toEqual(["anthropic/claude-haiku-4-5"])
+      }),
+    ),
+  )
+
+  it.effect("leaves non-Anthropic ids with dots untouched (e.g. OpenAI's gpt-4.1)", () =>
+    withEnv(cloudflareEnv(), () =>
+      Effect.gen(function* () {
+        resetCalls()
+        const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-4.1")),
+            api: { id: ModelV2.ID.make("openai/gpt-4.1"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "ai-gateway-provider",
+          options: { name: "cloudflare-ai-gateway" },
+        })
+
+        result.sdk.languageModel("openai/gpt-4.1")
+
+        expect(unifiedCalls).toEqual(["openai/gpt-4.1"])
+      }),
+    ),
+  )
+
   it.effect("ignores non Cloudflare AI Gateway packages", () =>
     withEnv(cloudflareEnv(), () =>
       Effect.gen(function* () {
