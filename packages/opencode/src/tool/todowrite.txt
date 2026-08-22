@@ -6,7 +6,7 @@ Use proactively when:
 - The work is non-trivial and benefits from planning
 - The user provides multiple tasks (numbered or comma-separated) or explicitly asks for a todo list
 - New instructions arrive - capture them as todos
-- You start a task - mark it `in_progress` (only one at a time) before working
+- You start work on a task - mark it `in_progress` before working; do this for every task actually running, including concurrent or delegated work
 - You finish a task - mark it `completed` and add any follow-ups discovered during the work
 
 ## When NOT to use
@@ -17,14 +17,14 @@ Skip when:
 
 ## States
 - `pending` - not started
-- `in_progress` - actively working (exactly ONE at a time)
+- `in_progress` - actively working
 - `completed` - finished successfully
 - `cancelled` - no longer needed
 
 ## Rules
 - Update status in real time; don't batch completions
 - Mark `completed` only after the required work is actually done, including any required verification. Never based on intent.
-- Keep exactly one `in_progress` while work remains
+- Keep at least one `in_progress` while work remains
 - If blocked or partial, keep it `in_progress` and add a follow-up todo describing the blocker
 - Preserve user-provided commands verbatim (flags, args, order)
 - Items should be specific and actionable; break large work into smaller steps
