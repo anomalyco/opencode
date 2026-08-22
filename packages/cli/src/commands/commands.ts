@@ -1,5 +1,9 @@
-import { Argument, Flag } from "effect/unstable/cli"
+import { Argument, Flag, GlobalFlag } from "effect/unstable/cli"
 import { Spec } from "../framework/spec"
+
+export const PrintLogs = GlobalFlag.setting("print-logs")({
+  flag: Flag.boolean("print-logs").pipe(Flag.withDescription("Print logs to stderr"), Flag.withDefault(false)),
+})
 
 declare const OPENCODE_CLI_NAME: string | undefined
 
