@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { DateTime, Effect, Fiber, Stream } from "effect"
-import { Finish, LLM, Message, Model, TextDelta, ToolDefinition, Usage } from "@opencode-ai/llm"
+import { Finish, LLM, mergeGenerationOptions, Message, Model, TextDelta, ToolDefinition, Usage } from "@opencode-ai/llm"
 import { route } from "@opencode-ai/llm/protocols/openai-chat"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigCompaction } from "@opencode-ai/core/config/compaction"
@@ -265,17 +265,74 @@ test("suffix compaction preserves the request prefix and reports failed suffix u
     ),
   ).toBe(true)
   expect(requests).toHaveLength(2)
-  expect([...requests[0]!.messages.slice(0, -1)]).toEqual([...request.messages])
+  expect(requests[0].messages.slice(0, -1)).toEqual([...request.messages])
   expect(requests[0]?.messages).toHaveLength(request.messages.length + 1)
   expect(requests[0]?.system).toEqual(request.system)
   expect(requests[0]?.tools).toEqual(request.tools)
   expect(requests[0]?.toolChoice).toEqual(request.toolChoice)
   expect(requests[0]?.http).toEqual(request.http)
   expect(requests[0]?.providerOptions).toEqual(request.providerOptions)
-  expect(requests[0]?.generation).toEqual({ ...request.generation, maxTokens: 4_096 })
+  expect(requests[0]?.generation).toEqual(mergeGenerationOptions(request.generation, { maxTokens: 4_096 }))
   expect(published.at(-1)).toMatchObject({
     type: "session.next.compaction.ended",
     data: { diagnostics: { requested: "suffix", used: "prepend", fallback: "invalid_summary", tokens: { input: 7 } } },
+  })
+})
+
+test("valid suffix compaction streams once and retains the request prefix", async () => {
+  const requests: Array<ReturnType<typeof LLM.request>> = []
+  const published: Array<{ type: string; data: unknown }> = []
+  const compaction = SessionCompaction.make({
+    config: [
+      new Config.Document({
+        type: "document",
+        info: new Config.Info({
+          compaction: new ConfigCompaction.Info({ mode: "suffix", keep: new ConfigCompaction.Keep({ tokens: 0 }) }),
+        }),
+      }),
+    ],
+    events: {
+      publish: (definition, data) =>
+        Effect.sync(() => published.push({ type: definition.type, data })).pipe(Effect.as(data as never)),
+    },
+    llm: {
+      stream(request) {
+        requests.push(request)
+        return Stream.fromIterable([
+          TextDelta.make({ type: "text-delta", id: "txt_1", text: validSummary }),
+          Finish.make({ type: "finish", reason: "stop" }),
+        ])
+      },
+    },
+  })
+  const model = Model.make({ id: "model", provider: "provider", route: route.with({ limits: { context: 100_000 } }) })
+  const request = LLM.request({ model, messages: [Message.user("old context")], generation: { maxTokens: 8_192 } })
+
+  expect(
+    await Effect.runPromise(
+      compaction.compactAfterOverflow({
+        sessionID: SessionSchema.ID.make("ses_compaction"),
+        model,
+        request,
+        entries: [
+          {
+            seq: 1,
+            message: SessionMessage.User.make({
+              id: SessionMessage.ID.make("msg_old"),
+              type: "user",
+              text: "old context",
+              time: { created: DateTime.makeUnsafe(0) },
+            }),
+          },
+        ],
+      }),
+    ),
+  ).toBe(true)
+  expect(requests).toHaveLength(1)
+  expect([...(requests[0]?.messages.slice(0, -1) ?? [])]).toEqual([...request.messages])
+  expect(published.at(-1)).toMatchObject({
+    type: "session.next.compaction.ended",
+    data: { text: validSummary, diagnostics: { requested: "suffix", used: "suffix" } },
   })
 })
 
@@ -322,7 +379,8 @@ test("both strategies failing after started emits one durable compaction failure
     "session.next.compaction.started",
     "session.next.compaction.failed",
   ])
-  expect(published.at(-1)).toMatchObject({ data: { diagnostics: { requested: "suffix", used: "prepend" } } })
+  expect(published.at(-1)).toMatchObject({ data: { diagnostics: { requested: "suffix", fallback: "context" } } })
+  expect(published.at(-1)).not.toMatchObject({ data: { diagnostics: { used: expect.anything() } } })
 })
 
 test("forced tool choice skips suffix and reports prepend fallback", async () => {
@@ -418,4 +476,44 @@ test("interruption publishes a terminal compaction failure", async () => {
     ),
   )
   expect(published).toEqual(["session.next.compaction.started", "session.next.compaction.failed"])
+})
+
+test("interruption during terminal publication does not publish a second terminal outcome", async () => {
+  const published: string[] = []
+  const compaction = SessionCompaction.make({
+    config: [],
+    events: {
+      publish: (definition, data) =>
+        Effect.sync(() => published.push(definition.type)).pipe(
+          Effect.andThen(definition.type === "session.next.compaction.ended" ? Effect.interrupt : Effect.void),
+          Effect.as(data as never),
+        ),
+    },
+    llm: {
+      stream: () => Stream.fromIterable([TextDelta.make({ type: "text-delta", id: "txt_1", text: "summary" })]),
+    },
+  })
+  const model = Model.make({ id: "model", provider: "provider", route: route.with({ limits: { context: 100_000 } }) })
+
+  await Effect.runPromise(
+    Effect.exit(
+      compaction.compactAfterOverflow({
+        sessionID: SessionSchema.ID.make("ses_compaction"),
+        model,
+        request: LLM.request({ model, prompt: "old context" }),
+        entries: [
+          {
+            seq: 1,
+            message: SessionMessage.User.make({
+              id: SessionMessage.ID.make("msg_old"),
+              type: "user",
+              text: "old ".repeat(10_000),
+              time: { created: DateTime.makeUnsafe(0) },
+            }),
+          },
+        ],
+      }),
+    ),
+  )
+  expect(published).toEqual(["session.next.compaction.started", "session.next.compaction.ended"])
 })
