@@ -121,76 +121,70 @@ export function SessionScreen(props: { session: SessionModel }) {
   return (
     <SessionRouteFrame>
       <SessionHeader />
-      <div ref={screen.panel.ref} class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 p-2">
-        <div
-          classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
-            "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-              !screen.size.active() && !screen.review.snap() && !screen.terminal.inlineOnlyOpen(),
-          }}
-          style={{
-            width: screen.panel.width(),
-          }}
-        >
-          <Show when={screen.panel.key()} keyed>
-            {(_) => (
-              <SessionPanelFrame raised={!!session.identity.params.id}>
-                <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
-              </SessionPanelFrame>
-            )}
-          </Show>
+      <div class="flex-1 min-h-0 flex flex-col gap-2 p-2">
+        <div ref={screen.panel.ref} class="flex-1 min-h-0 flex flex-col md:flex-row gap-2">
+          <div
+            classList={{
+              "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
+              "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
+                !screen.size.active() && !screen.review.snap(),
+            }}
+            style={{
+              width: screen.panel.width(),
+            }}
+          >
+            <Show when={screen.panel.key()} keyed>
+              {(_) => (
+                <SessionPanelFrame raised={!!session.identity.params.id}>
+                  <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
+                </SessionPanelFrame>
+              )}
+            </Show>
 
-          <Show when={screen.panel.resizable()}>
-            <div onPointerDown={() => screen.size.start()}>
-              <ResizeHandle
-                class="-end-1"
-                direction="horizontal"
-                size={screen.panel.resizedWidth()}
-                min={SESSION_PANEL_WIDTH_MIN}
-                max={screen.panel.max()}
-                onResize={(width) => {
-                  screen.size.touch()
-                  layout.session.resize(width)
-                }}
-              />
+            <Show when={screen.panel.resizable()}>
+              <div onPointerDown={() => screen.size.start()}>
+                <ResizeHandle
+                  class="-end-1"
+                  direction="horizontal"
+                  size={screen.panel.resizedWidth()}
+                  min={SESSION_PANEL_WIDTH_MIN}
+                  max={screen.panel.max()}
+                  onResize={(width) => {
+                    screen.size.touch()
+                    layout.session.resize(width)
+                  }}
+                />
+              </div>
+            </Show>
+          </div>
+
+          <Show when={isDesktop() && screen.side.open()}>
+            <div class="min-w-0 h-full flex-1">
+              <SessionDesktopReview review={review} />
             </div>
           </Show>
         </div>
 
-        <Show when={isDesktop() ? screen.side.layout().visible : screen.terminal.open()}>
-          <div class="min-w-0 h-full flex flex-1 flex-col">
-            <Show when={isDesktop() && (screen.review.panelOpen() || screen.files.open())}>
-              <div class="min-h-0 flex-1">
-                <SessionDesktopReview review={review} />
-              </div>
-            </Show>
-            <Show when={screen.side.layout().stacked}>
-              <div class="relative h-2 shrink-0" onPointerDown={() => screen.size.start()}>
-                <ResizeHandle
-                  class="!relative !inset-auto !h-full !w-full !transform-none"
-                  direction="vertical"
-                  size={layout.terminal.height()}
-                  min={100}
-                  max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
-                  collapseThreshold={50}
-                  onResize={(height) => {
-                    screen.size.touch()
-                    layout.terminal.resize(height)
-                  }}
-                  onCollapse={() => session.layout.view().terminal.close()}
-                />
-              </div>
-            </Show>
-            <Show when={screen.terminal.open()}>
-              <div
-                classList={{
-                  "min-h-0 shrink-0": screen.side.layout().stacked,
-                  "min-h-0 flex-1": !screen.side.layout().stacked,
+        <Show when={screen.terminal.open()}>
+          <Show when={isDesktop()}>
+            <div class="relative h-2 shrink-0" onPointerDown={() => screen.size.start()}>
+              <ResizeHandle
+                class="!relative !inset-auto !h-full !w-full !transform-none"
+                direction="vertical"
+                size={layout.terminal.height()}
+                min={100}
+                max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
+                collapseThreshold={50}
+                onResize={(height) => {
+                  screen.size.touch()
+                  layout.terminal.resize(height)
                 }}
-              >
-                <TerminalPanel stacked={screen.side.layout().stacked} />
-              </div>
-            </Show>
+                onCollapse={() => session.layout.view().terminal.close()}
+              />
+            </div>
+          </Show>
+          <div classList={{ "min-h-0 shrink-0": isDesktop() }}>
+            <TerminalPanel stacked={isDesktop()} />
           </div>
         </Show>
       </div>

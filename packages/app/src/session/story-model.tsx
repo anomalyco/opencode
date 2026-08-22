@@ -226,38 +226,40 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
               onReset={props.onReset}
             />
             <CurrentSessionProviders document={props.document}>
-              <div class="flex min-h-0 flex-1">
-                <section
-                  classList={{
-                    "min-w-0 flex-1 flex-col bg-background-base": true,
-                    flex: !state.reviewOpened,
-                    "hidden md:flex": state.reviewOpened,
-                  }}
-                >
-                  <div class="min-h-0 flex-1 overflow-y-auto py-6">
-                    <SessionTimeline
-                      document={props.document}
-                      editToolDefaultOpen
-                      shellToolDefaultOpen
-                      class="mx-auto w-full max-w-[840px]"
-                    />
-                  </div>
-                  <SessionComposerRegion
-                    controller={region}
-                    composer={<Composer model={prompt.controller} borderUnderlay />}
-                  />
-                </section>
-                <Show when={state.reviewOpened}>
-                  <aside
-                    id="review-panel"
-                    class="min-w-0 flex-1 flex flex-col gap-2 border-l border-border-weak-base md:max-w-[52%]"
+              <div class="flex min-h-0 flex-1 flex-col gap-2">
+                <div class="flex min-h-0 flex-1">
+                  <section
+                    classList={{
+                      "min-w-0 flex-1 flex-col bg-background-base": true,
+                      flex: !state.reviewOpened,
+                      "hidden md:flex": state.reviewOpened,
+                    }}
                   >
-                    <div class="min-h-0 flex-1">
-                      <SessionReviewPane diffs={props.document.diffs} />
+                    <div class="min-h-0 flex-1 overflow-y-auto py-6">
+                      <SessionTimeline
+                        document={props.document}
+                        editToolDefaultOpen
+                        shellToolDefaultOpen
+                        class="mx-auto w-full max-w-[840px]"
+                      />
                     </div>
-                    <Show when={props.terminal}>{(terminal) => <SessionTerminalPreview terminal={terminal()} />}</Show>
-                  </aside>
-                </Show>
+                    <SessionComposerRegion
+                      controller={region}
+                      composer={<Composer model={prompt.controller} borderUnderlay />}
+                    />
+                  </section>
+                  <Show when={state.reviewOpened}>
+                    <aside
+                      id="review-panel"
+                      class="min-w-0 flex-1 flex flex-col border-l border-border-weak-base md:max-w-[52%]"
+                    >
+                      <div class="min-h-0 flex-1">
+                        <SessionReviewPane diffs={props.document.diffs} />
+                      </div>
+                    </aside>
+                  </Show>
+                </div>
+                <Show when={props.terminal}>{(terminal) => <SessionTerminalPreview terminal={terminal()} />}</Show>
               </div>
             </CurrentSessionProviders>
             <output class="sr-only" aria-live="polite">

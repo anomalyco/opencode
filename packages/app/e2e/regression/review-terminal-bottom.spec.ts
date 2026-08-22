@@ -18,7 +18,7 @@ const branchDiffs = [
   ),
 ]
 
-test("keeps the review tree and terminal sized when both panels are open", async ({ page }) => {
+test("keeps the review tree sized with the terminal across the bottom", async ({ page }) => {
   test.setTimeout(120_000)
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
@@ -27,7 +27,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
       id: projectID,
       worktree: directory,
       vcs: "git",
-      name: "review-terminal-stacked",
+      name: "review-terminal-bottom",
       time: { created: 1700000000000, updated: 1700000000000 },
       sandboxes: [],
     },
@@ -45,7 +45,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
     sessions: [
       {
         id: sessionID,
-        slug: "review-terminal-stacked",
+        slug: "review-terminal-bottom",
         projectID,
         directory,
         title,
@@ -138,7 +138,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   await page.keyboard.press("Control+Backquote")
   await expect(page.locator("#terminal-panel")).toBeVisible()
   await expectTree(page, 2_773, "action.yml")
-  await expectStackGeometry(page)
+  await expectBottomGeometry(page)
 })
 
 async function expectTree(page: Page, total: number, file: string) {
@@ -163,23 +163,32 @@ async function expectMountedTree(page: Page, total: number) {
   expect(state.rows).toBeLessThanOrEqual(60)
 }
 
-async function expectStackGeometry(page: Page) {
+async function expectBottomGeometry(page: Page) {
   const geometry = await page.evaluate(() => {
     const review = document.querySelector<HTMLElement>("#review-panel")!
     const terminal = document.querySelector<HTMLElement>("#terminal-panel")!
+    const terminalRect = terminal.getBoundingClientRect()
     const reviewParent = review.parentElement!.getBoundingClientRect()
     const terminalParent = terminal.parentElement!.getBoundingClientRect()
     const sidebar = review.querySelector<HTMLElement>('[data-slot="session-review-v2-sidebar"]')!
     return {
       review: review.getBoundingClientRect().height,
+      reviewBottom: review.getBoundingClientRect().bottom,
       reviewParent: reviewParent.height,
-      terminal: terminal.getBoundingClientRect().height,
+      terminal: terminalRect.height,
+      terminalLeft: terminalRect.left,
+      terminalRight: terminalRect.right,
+      terminalTop: terminalRect.top,
       terminalParent: terminalParent.height,
       sidebar: sidebar.getBoundingClientRect().width,
+      viewport: window.innerWidth,
     }
   })
   expect(Math.abs(geometry.review - geometry.reviewParent)).toBeLessThanOrEqual(1)
   expect(Math.abs(geometry.terminal - geometry.terminalParent)).toBeLessThanOrEqual(1)
+  expect(geometry.terminalTop).toBeGreaterThanOrEqual(geometry.reviewBottom)
+  expect(geometry.terminalLeft).toBeLessThanOrEqual(9)
+  expect(geometry.terminalRight).toBeGreaterThanOrEqual(geometry.viewport - 9)
   expect(geometry.sidebar).toBeGreaterThanOrEqual(240)
 }
 

@@ -81,7 +81,6 @@ export function SessionDesktopReview(props: { review: SessionReviewModel }) {
         focusReviewDiff={props.review.focusFile}
         reviewSnap={props.review.screen.review.snap()}
         size={props.review.screen.size}
-        stacked={props.review.screen.side.layout().stacked}
       />
     </Suspense>
   )
