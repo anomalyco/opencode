@@ -28,7 +28,7 @@ import * as Azure from "../../src/providers/azure.js"
 import * as OpenAI from "../../src/providers/openai.js"
 import * as XAI from "../../src/providers/xai.js"
 import * as OpenAIResponses from "../../src/protocols/openai-responses.js"
-import { OpenAIResponsesChannel } from "../../src/protocols/openai-responses-channel.js"
+import { OpenResponsesContinuation } from "../../src/protocols/open-responses-continuation.js"
 import * as ProviderShared from "../../src/protocols/shared.js"
 import { continuationRequest, nativeOpenAIResponsesContinuation } from "../continuation-scenarios.js"
 import { it } from "../lib/effect.js"
@@ -68,7 +68,7 @@ const baseChannelDriver = (message: string): WebSocketChannelDriver => ({
 
 const continuationDriver = (request: Readonly<Record<string, unknown>>) => {
   const message = ProviderShared.encodeJson(request)
-  return OpenAIResponsesChannel.driver({
+  return OpenResponsesContinuation.driver({
     id: "openai-responses",
     name: "OpenAI Responses",
     request,
