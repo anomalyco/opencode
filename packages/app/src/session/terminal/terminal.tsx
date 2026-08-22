@@ -15,6 +15,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { terminalFontFamily, useSettings } from "@/settings/model"
 import type { LocalPTY } from "@/session/terminal/context"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/session/terminal/runtime-adapters"
+import { terminalKeyInput } from "@/session/terminal/terminal-key-event"
 import { terminalWriter } from "@/session/terminal/writer"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
@@ -407,6 +408,12 @@ export const Terminal = (props: TerminalProps) => {
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
+
+        const input = terminalKeyInput(event)
+        if (input) {
+          t.input(input, true)
+          return true
+        }
 
         if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
           document.execCommand("copy")
