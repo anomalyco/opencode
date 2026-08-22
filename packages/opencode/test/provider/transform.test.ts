@@ -3334,10 +3334,7 @@ describe("ProviderTransform.reasoningVariants", () => {
 
   test("converts openai-compatible toggle options", () => {
     expect(
-      ProviderTransform.reasoningVariants(
-        model([{ type: "toggle" }]),
-        target("@ai-sdk/openai-compatible", "glm-4.7"),
-      ),
+      ProviderTransform.reasoningVariants(model([{ type: "toggle" }]), target("@ai-sdk/openai-compatible", "glm-4.7")),
     ).toEqual({
       none: { thinking: { type: "disabled" } },
       high: { thinking: { type: "enabled" } },
