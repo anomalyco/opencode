@@ -1443,6 +1443,16 @@ function UserMessage(props: {
 }) {
   const ctx = use()
   const local = useLocal()
+  // Agent-message markers (✉ lines injected on a user message by the message
+  // tool / task tool's awaiting-reply path) are non-synthetic so they remain
+  // visible, but they aren't user prose — tag them via metadata.message at
+  // write-time and split them off here so they render as a distinct system-
+  // event line below the user text rather than masquerading as user input.
+  const isMessage = (
+    x: Part,
+  ): x is TextPart & {
+    metadata: { message: { peer: "parent" | "subagent"; expectReply?: boolean } }
+  } => x.type === "text" && !!(x.metadata as { message?: unknown } | undefined)?.message
   // Interrupt markers (steer/cancel/abort lines injected on a user message) are
   // non-synthetic so they remain visible, but they aren't user prose — tag them
   // via metadata.interrupt at write-time and split them off here so they render
@@ -1455,7 +1465,7 @@ function UserMessage(props: {
   const text = createMemo(() => {
     const texts = props.parts
       .map((x) => {
-        if (x.type === "text" && !x.synthetic && !isInterrupt(x)) {
+        if (x.type === "text" && !x.synthetic && !isMessage(x) && !isInterrupt(x)) {
           return x.text
         }
         return null
@@ -1463,6 +1473,7 @@ function UserMessage(props: {
       .filter(Boolean)
     return texts.join("\n\n")
   })
+  const messages = createMemo(() => props.parts.filter(isMessage))
   const interrupts = createMemo(() => props.parts.filter(isInterrupt))
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const { theme } = useTheme()
@@ -1536,6 +1547,16 @@ function UserMessage(props: {
           </box>
         </box>
       </Show>
+      <For each={messages()}>
+        {(part) => (
+          <box marginTop={1} paddingLeft={3}>
+            <text fg={theme.textMuted}>
+              <span style={{ fg: theme.textMuted, bold: true }}>Message</span>
+              <span style={{ fg: theme.textMuted }}> · {part.text}</span>
+            </text>
+          </box>
+        )}
+      </For>
       <For each={interrupts()}>
         {(part) => (
           <box marginTop={1} paddingLeft={3}>

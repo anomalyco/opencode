@@ -42,6 +42,7 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalReferences: enabledByExperimental("OPENCODE_EXPERIMENTAL_REFERENCES"),
   experimentalBackgroundSubagents: enabledByExperimental("OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS"),
   experimentalSubagentInterrupt: enabledByExperimental("OPENCODE_EXPERIMENTAL_SUBAGENT_INTERRUPT"),
+  experimentalAgentMessaging: enabledByExperimental("OPENCODE_EXPERIMENTAL_AGENT_MESSAGING"),
   experimentalLspTy: bool("OPENCODE_EXPERIMENTAL_LSP_TY"),
   experimentalLspTool: enabledByExperimental("OPENCODE_EXPERIMENTAL_LSP_TOOL"),
   experimentalOxfmt: enabledByExperimental("OPENCODE_EXPERIMENTAL_OXFMT"),

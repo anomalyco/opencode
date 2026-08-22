@@ -4,6 +4,7 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
+import { MessageTool } from "./message"
 import { ShellTool } from "./shell"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
@@ -40,6 +41,7 @@ import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
 import { Question } from "../question"
+import { Messaging } from "../messaging"
 import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
@@ -107,6 +109,7 @@ const layer = Layer.effect(
     const taskAbort = yield* TaskAbortTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
+    const message = yield* MessageTool
     const todo = yield* TodoWriteTool
     const lsptool = yield* LspTool
     const plan = yield* PlanExitTool
@@ -229,6 +232,7 @@ const layer = Layer.effect(
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
+          message: Tool.init(message),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
           ...(codeModeTool ? { execute: Tool.init(codeModeTool) } : {}),
@@ -239,6 +243,7 @@ const layer = Layer.effect(
           builtin: [
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
+            ...(flags.experimentalAgentMessaging ? [tool.message] : []),
             tool.shell,
             tool.read,
             tool.glob,
@@ -440,6 +445,7 @@ export const node = LayerNode.make({
     Config.node,
     Plugin.node,
     Question.node,
+    Messaging.node,
     Permission.node,
     Todo.node,
     Agent.node,
