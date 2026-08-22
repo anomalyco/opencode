@@ -126,6 +126,26 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }
   }
 
+  const copySessionID = async () => {
+    const sessionID = actions.session.identity.params.id
+    if (!sessionID) return
+    try {
+      await navigator.clipboard.writeText(sessionID)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("common.copied"),
+        description: sessionID,
+      })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.copyID.failed.title"),
+        description: err instanceof Error ? err.message : language.t("toast.session.copyID.failed.description"),
+      })
+    }
+  }
+
   const openFile = () => {
     void openDialog(
       () => import("@/shell/commands/dialog"),
@@ -270,6 +290,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "export",
       disabled: !actions.session.identity.params.id,
       onSelect: exportSession,
+    }),
+    sessionCommand({
+      id: "session.copyID",
+      title: language.t("command.session.copyID"),
+      disabled: !actions.session.identity.params.id,
+      onSelect: copySessionID,
     }),
   ]
 
