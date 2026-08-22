@@ -440,7 +440,7 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
   const flush = () => {
     const first = context[0]
     if (!first) return
-    groups.push({ type: "context", key: `context:${first.partID}`, refs: context })
+    groups.push({ type: "context", key: `context:${first.messageID}:${first.partID}`, refs: context })
     context = []
   }
 
