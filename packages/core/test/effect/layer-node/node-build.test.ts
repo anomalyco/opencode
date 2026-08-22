@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { Context, Effect, Layer, LayerMap, Option } from "effect"
+import { Context, Effect, Layer, Option } from "effect"
 import { Node } from "@opencode-ai/util/effect/app-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import type { LocationError, LocationServices } from "@opencode-ai/core/location-services"
+import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../../fixture/tmpdir"
@@ -48,20 +48,21 @@ describe("node build", () => {
     const mapLayer = Layer.effect(
       LocationServiceMap.Service,
       Effect.gen(function* () {
-        const service = yield* CycleB
-        return yield* LayerMap.make(
-          (ref: Location.Ref) =>
-            Layer.succeed(
+          const service = yield* CycleB
+          return yield* LocationServiceMap.make(
+            (ref: Location.Ref) =>
+              // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+              Layer.succeed(
               Location.Service,
               Location.Service.of({
                 directory: ref.directory,
                 workspaceID: ref.workspaceID,
                 project: { id: Project.ID.global, directory: service.directory, canonical: service.directory },
               }),
-            ),
-          { idleTimeToLive: "1 minute" },
+            ) as unknown as Layer.Layer<LocationServices>,
+          { activityTimeToLive: "1 minute" },
         )
-      }) as unknown as Effect.Effect<LayerMap.LayerMap<Location.Ref, LocationServices, LocationError>, never, CycleB>,
+      }),
     )
     const map = Node.makeGlobalNode({ service: LocationServiceMap.Service, layer: mapLayer, deps: [b] })
     expect(() => AppNodeBuilder.build(LayerNode.group([a]), [[LocationServiceMap.node, map]])).toThrow(

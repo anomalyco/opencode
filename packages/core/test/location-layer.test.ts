@@ -3,14 +3,16 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
-import { DateTime, Deferred, Effect, Equal, Fiber, Hash, RcMap, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Equal, Fiber, Hash, Layer, RcMap, Schema, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { LocationServiceMap, type LocationServices } from "@opencode-ai/core/location-services"
+import { LocationActivity } from "@opencode-ai/core/location-activity"
 import { Location } from "@opencode-ai/core/location"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
@@ -21,7 +23,9 @@ import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
@@ -41,8 +45,102 @@ const itWithSdk = testEffect(
     [Global.node, tempGlobalLayer],
   ]),
 )
+const activityLocations = Layer.effect(
+  LocationServiceMap.Service,
+  LocationServiceMap.make(
+    (ref) =>
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      Layer.succeed(
+        Location.Service,
+        Location.Service.of({
+          directory: ref.directory,
+          workspaceID: ref.workspaceID,
+          project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
+        }),
+      ) as unknown as Layer.Layer<LocationServices>,
+  ),
+)
+const itWithActivity = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, SessionStore.node, LocationServiceMap.node, LocationActivity.node]),
+    [[LocationServiceMap.node, activityLocations]],
+  ),
+)
 
 describe("LocationServiceMap", () => {
+  it.effect("expires from Session activity instead of Location reads", () =>
+    Effect.gen(function* () {
+      const lifecycle = { acquired: 0, released: 0 }
+      const ref = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      const layer = Layer.effect(
+        Location.Service,
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            lifecycle.acquired++
+            return Location.Service.of({
+              directory: ref.directory,
+              project: { id: Project.ID.global, directory: AbsolutePath.make("/"), canonical: AbsolutePath.make("/") },
+            })
+          }),
+          () =>
+            Effect.sync(() => {
+              lifecycle.released++
+            }),
+        ),
+      ) as unknown as Layer.Layer<LocationServices>
+      const locations = yield* LocationServiceMap.make(() => layer, {
+        activityTimeToLive: "60 minutes",
+        sweepInterval: "1 minute",
+      })
+      const read = Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
+
+      yield* read
+      yield* TestClock.adjust("59 minutes")
+      yield* read
+      yield* TestClock.adjust("1 minute")
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(lifecycle).toEqual({ acquired: 1, released: 1 })
+
+      yield* read
+      yield* locations.activity(ref, { type: "start", id: "session" })
+      yield* TestClock.adjust("60 minutes")
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([ref])
+      yield* locations.activity(ref, { type: "stop", id: "session" })
+      yield* TestClock.adjust("59 minutes")
+      yield* locations.activity(ref, { type: "touch" })
+      yield* TestClock.adjust("1 minute")
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([ref])
+      yield* TestClock.adjust("59 minutes")
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(lifecycle).toEqual({ acquired: 2, released: 2 })
+    }),
+  )
+
+  itWithActivity.effect("refreshes lifetime from Session events only", () =>
+    Effect.gen(function* () {
+      const locations = yield* LocationServiceMap.Service
+      const bus = yield* Bus.Service
+      const ref = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+      const sessionID = Session.ID.make("ses_location_activity")
+      const read = Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
+
+      yield* read
+      yield* TestClock.adjust("59 minutes")
+      yield* bus.publish(Catalog.Event.Updated, {}, { location: ref })
+      yield* TestClock.adjust("1 minute")
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+
+      yield* read
+      yield* bus.publish(SessionEvent.Execution.Started, { sessionID }, { location: ref })
+      yield* TestClock.adjust("60 minutes")
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([ref])
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, { location: ref })
+      yield* TestClock.adjust("60 minutes")
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+    }),
+  )
+
   it.live("retries a location after its missing directory is recreated", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

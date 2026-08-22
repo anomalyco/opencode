@@ -1,6 +1,6 @@
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, LayerMap } from "effect"
+import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -37,7 +37,7 @@ const skills = Layer.mock(Skill.Service, {
 })
 const locations = Layer.effect(
   LocationServiceMap.Service,
-  LayerMap.make(
+  LocationServiceMap.make(
     () =>
       // The skill endpoint only needs the location-scoped Skill service.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion

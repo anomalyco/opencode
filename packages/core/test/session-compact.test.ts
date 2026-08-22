@@ -6,7 +6,6 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
-import { Job } from "@opencode-ai/core/job"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
@@ -20,7 +19,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { DateTime, Effect, Layer, LayerMap, Stream } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 import { globalProjectLayer } from "./lib/project"
 
@@ -51,7 +50,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
 })
 const locations = Layer.effect(
   LocationServiceMap.Service,
-  LayerMap.make(
+  LocationServiceMap.make(
     () =>
       // The test only needs the compaction location service used by Session.compact.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion

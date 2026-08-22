@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { mkdir, rm } from "fs/promises"
-import { Effect, Layer, LayerMap } from "effect"
+import { Effect, Layer } from "effect"
 import { Worktree } from "@opencode-ai/schema/worktree"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
@@ -32,7 +32,8 @@ const it = testEffect(
 )
 const unavailableLocations = Layer.effect(
   LocationServiceMap.Service,
-  LayerMap.make(
+  LocationServiceMap.make(
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
     () => Layer.effectDiscard(Effect.fail(new Error("broken location"))) as unknown as Layer.Layer<LocationServices>,
   ),
 )
