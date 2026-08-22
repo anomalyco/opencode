@@ -99,6 +99,10 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
+function hasAssistantText(parts: SessionV1.Part[] | undefined) {
+  return parts?.some((part) => part.type === "text" && part.text.trim().length > 0) ?? false
+}
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
@@ -1103,17 +1107,22 @@ const layer = Layer.effect(
           // Some providers return "stop" even when the assistant message contains
           // tool calls. Keep the loop running so tool results can be sent back to
           // the model, but ignore cleanup-marked interrupted orphans.
+          //
+          // `unknown` means the stream ended without a recognized stop reason.
+          // Empty unknown turns are still open so a later call can recover
+          // (#43892). Unknown turns that already produced assistant text are
+          // complete; continuing them requests redundant generations forever
+          // (#43939). Reasoning-only unknown stays open so a text turn can still
+          // arrive.
           const hasToolCalls =
             lastAssistantMsg?.parts.some(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
+          const unfinished =
+            lastAssistant?.finish === "tool-calls" ||
+            (lastAssistant?.finish === "unknown" && !hasAssistantText(lastAssistantMsg?.parts))
 
-          if (
-            lastAssistant?.finish &&
-            !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-            !hasToolCalls &&
-            lastAssistant.parentID === lastUser.id
-          ) {
+          if (lastAssistant?.finish && !unfinished && !hasToolCalls && lastAssistant.parentID === lastUser.id) {
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
             )

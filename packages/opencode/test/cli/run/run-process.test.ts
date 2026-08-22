@@ -248,6 +248,22 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
+  // Regression for #43939: a complete text turn that the provider labels
+  // `unknown` must not start another generation. Empty unknown still continues
+  // (covered above); this is the output-bearing case.
+  cliIt.concurrent(
+    "unknown finish with complete text does not continue",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(reply().text("complete answer"))
+        yield* llm.text("redundant")
+        const result = yield* opencode.run("return one object", { timeoutMs: 30_000 })
+        expect(result.exitCode).toBe(0)
+        expect(result.stdout).toBe("complete answer\n")
+      }),
+    60_000,
+  )
+
   cliIt.concurrent(
     "rejects requested permissions by default and allows them with the dangerous flag",
     ({ home, llm, opencode }) =>
