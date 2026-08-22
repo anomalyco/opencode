@@ -167,7 +167,7 @@ const layer = Layer.effect(
       const binDir = path.join(dir, "node_modules", ".bin")
 
       const pick = Effect.fnUntraced(function* () {
-        const files = yield* fs.readDirectory(binDir).pipe(Effect.catch(() => Effect.succeed([] as string[])))
+        const files = yield* fs.readDirectory(binDir).pipe(Effect.orElseSucceed(() => [] as string[]))
 
         if (files.length === 0) return Option.none<string>()
         // Caller picked a specific bin (e.g. pyright exposes both `pyright` and

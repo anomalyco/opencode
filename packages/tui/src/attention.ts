@@ -1,15 +1,13 @@
 /// <reference path="./audio.d.ts" />
 import type {
-  TuiAttention,
-  TuiAttentionNotifyInput,
-  TuiAttentionNotifyResult,
-  TuiAttentionNotifySkipReason,
-  TuiAttentionWhen,
-  TuiAttentionSoundName,
-  TuiAttentionSoundPack,
-  TuiAttentionSoundPackInfo,
-} from "@opencode-ai/plugin/v1/tui"
-import { AttentionSoundName, type Config } from "./config"
+  Attention,
+  AttentionNotifyOptions,
+  AttentionNotifyResult,
+  AttentionNotifySkipReason,
+  AttentionWhen,
+  AttentionSoundName,
+} from "@opencode-ai/plugin/tui/context"
+import { Config } from "./config"
 import { Schema } from "effect"
 import stripAnsi from "strip-ansi"
 import * as TuiAudio from "./audio"
@@ -30,33 +28,23 @@ type AttentionRenderer = {
   triggerNotification(message: string, title?: string): boolean
 }
 
-type RegisteredSoundPack = TuiAttentionSoundPack & {
-  builtin: boolean
-}
-
-type TuiAttentionHost = TuiAttention & {
+type AttentionHost = Attention & {
   dispose(): void
 }
 
 const DEFAULT_TITLE = "OpenCode"
-const DEFAULT_PACK_ID = "opencode.default"
 const TITLE_LIMIT = 80
 const MESSAGE_LIMIT = 240
-const BUILTIN_PACK: RegisteredSoundPack = {
-  id: DEFAULT_PACK_ID,
-  name: "OpenCode Default",
-  builtin: true,
-  sounds: {
-    default: defaultSoundPath,
-    question: questionSoundPath,
-    permission: permissionSoundPath,
-    error: errorSoundPath,
-    done: defaultSoundPath,
-    subagent_done: subagentDoneSoundPath,
-  },
+const BUILTIN_SOUNDS: Record<AttentionSoundName, string> = {
+  default: defaultSoundPath,
+  question: questionSoundPath,
+  permission: permissionSoundPath,
+  error: errorSoundPath,
+  done: defaultSoundPath,
+  subagent_done: subagentDoneSoundPath,
 }
 
-function skipped(reason: TuiAttentionNotifySkipReason): TuiAttentionNotifyResult {
+function skipped(reason: AttentionNotifySkipReason): AttentionNotifyResult {
   return {
     ok: false,
     notification: false,
@@ -79,7 +67,7 @@ function clampVolume(volume: number) {
   return Math.min(1, Math.max(0, volume))
 }
 
-function soundVolume(input: TuiAttentionNotifyInput, config: Pick<Config.Resolved, "attention">) {
+function soundVolume(input: AttentionNotifyOptions, config: Pick<Config.Resolved, "attention">) {
   if (!config.attention.sound) return
   if (input.sound === false) return
   if (input.sound === undefined) return clampVolume(config.attention.volume)
@@ -87,23 +75,7 @@ function soundVolume(input: TuiAttentionNotifyInput, config: Pick<Config.Resolve
   return clampVolume(input.sound.volume ?? config.attention.volume)
 }
 
-function normalizePack(pack: TuiAttentionSoundPack): RegisteredSoundPack | undefined {
-  const id = pack.id.trim()
-  if (!id) return
-  return {
-    id,
-    name: pack.name?.trim() || undefined,
-    builtin: false,
-    sounds: Object.fromEntries(
-      Object.entries(pack.sounds).filter(
-        (item): item is [TuiAttentionSoundName, string] =>
-          Schema.is(AttentionSoundName)(item[0]) && typeof item[1] === "string" && item[1].trim().length > 0,
-      ),
-    ),
-  }
-}
-
-function focusSkip(when: TuiAttentionWhen, focus: FocusState) {
+function focusSkip(when: AttentionWhen, focus: FocusState) {
   if (when === "always") return
   if (focus === "unknown") return "focus_unknown"
   if (when === "blurred" && focus === "focused") return "focused"
@@ -113,13 +85,10 @@ function focusSkip(when: TuiAttentionWhen, focus: FocusState) {
 export function createTuiAttention(input: {
   renderer: AttentionRenderer
   config: Pick<Config.Resolved, "attention">
-  update?: Config.Interface["update"]
   audio?: Pick<typeof TuiAudio, "loadSoundFile" | "play">
-}): TuiAttentionHost {
+}): AttentionHost {
   let focus: FocusState = "unknown"
   let disposed = false
-  let activePackID: string | undefined
-  const packs = new Map<string, RegisteredSoundPack>([[BUILTIN_PACK.id, BUILTIN_PACK]])
   const audio = input.audio ?? TuiAudio
 
   const onFocus = () => {
@@ -132,21 +101,13 @@ export function createTuiAttention(input: {
   input.renderer.on("focus", onFocus)
   input.renderer.on("blur", onBlur)
 
-  function configuredPackID() {
-    return activePackID ?? input.config.attention.sound_pack
-  }
-
-  function currentPack() {
-    return packs.get(configuredPackID()) ?? BUILTIN_PACK
-  }
-
-  function soundCandidates(name: TuiAttentionSoundName) {
-    return [input.config.attention.sounds[name], currentPack().sounds[name], BUILTIN_PACK.sounds[name]].filter(
+  function soundCandidates(name: AttentionSoundName) {
+    return [input.config.attention.sounds[name], BUILTIN_SOUNDS[name]].filter(
       (item, index, list): item is string => typeof item === "string" && list.indexOf(item) === index,
     )
   }
 
-  async function playSound(name: TuiAttentionSoundName, volume: number) {
+  async function playSound(name: AttentionSoundName, volume: number) {
     try {
       for (const file of soundCandidates(name)) {
         const current = await audio.loadSoundFile(file).catch((error) => {
@@ -194,7 +155,9 @@ export function createTuiAttention(input: {
         const requestedSound = typeof request.sound === "object" ? request.sound : undefined
         const soundSkip = volume === undefined ? undefined : focusSkip(requestedSound?.when ?? "always", focus)
         const soundName =
-          requestedSound?.name && Schema.is(AttentionSoundName)(requestedSound.name) ? requestedSound.name : "default"
+          requestedSound?.name && Schema.is(Config.AttentionSoundName)(requestedSound.name)
+            ? requestedSound.name
+            : "default"
         const sound = volume === undefined || soundSkip ? false : await playSound(soundName, volume)
 
         if (!notification && !sound) {
@@ -215,43 +178,6 @@ export function createTuiAttention(input: {
           sound: false,
         }
       }
-    },
-    soundboard: {
-      registerPack(pack) {
-        const next = normalizePack(pack)
-        if (!next) return () => {}
-        packs.set(next.id, next)
-        let disposed = false
-        return () => {
-          if (disposed) return
-          disposed = true
-          if (packs.get(next.id) === next) packs.delete(next.id)
-        }
-      },
-      activate(id, options) {
-        const pack = packs.get(id)
-        if (!pack) return false
-        activePackID = pack.id
-        if (options?.persist)
-          void input
-            .update?.((draft) => {
-              draft.attention = { ...draft.attention, sound_pack: pack.id }
-            })
-            .catch(() => {})
-        return true
-      },
-      current() {
-        return currentPack().id
-      },
-      list(): TuiAttentionSoundPackInfo[] {
-        const current = currentPack().id
-        return Array.from(packs.values()).map((pack) => ({
-          id: pack.id,
-          name: pack.name,
-          active: pack.id === current,
-          builtin: pack.builtin,
-        }))
-      },
     },
     dispose() {
       if (disposed) return

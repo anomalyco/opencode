@@ -23,13 +23,13 @@ const environmentValue = (environment: Environment, name: string) =>
 const bypassesProxy = (url: URL, value: string | undefined) => {
   if (!value) return false
   const port = url.port || (url.protocol === "wss:" ? "443" : "80")
+  const hostname = url.hostname.toLowerCase()
   return value.split(/[\s,]+/).some((entry) => {
     if (!entry) return false
     if (entry === "*") return true
     const match = entry.match(/^(.+?):(\d+)$/)
     if (match?.[2] && match[2] !== port) return false
     const host = (match?.[1] ?? entry).toLowerCase().replace(/^\*/, "")
-    const hostname = url.hostname.toLowerCase()
     return host.startsWith(".") ? hostname.endsWith(host) : hostname === host
   })
 }

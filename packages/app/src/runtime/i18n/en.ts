@@ -544,7 +544,6 @@ export const dict = {
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
 
-
   "toast.session.unshare.success.title": "Session unshared",
   "toast.session.unshare.success.description": "Session unshared successfully!",
   "toast.session.unshare.failed.title": "Failed to unshare session",
@@ -657,6 +656,10 @@ export const dict = {
     "{{server}} is running OpenCode {{version}}, which isn't compatible with this app. Upgrade the server to OpenCode V2 to continue.",
   "session.background.moveTasks": "Move {{tasks}} to background",
   "session.background.inBackground": "Running {{tasks}} in background",
+  "session.background.moveInline": "Press {{keybind}} to move running work to the background",
+  "session.background.running": "Running work in background",
+  "session.background.runningCount.one": "{{count}} item running in background",
+  "session.background.runningCount.other": "{{count}} items running in background",
   "session.background.combine": "{{first}} and {{second}}",
   "session.background.shell.one": "{{count}} shell",
   "session.background.shell.other": "{{count}} shells",

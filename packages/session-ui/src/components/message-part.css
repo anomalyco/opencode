@@ -326,7 +326,7 @@
 [data-component="tool-output"] {
   white-space: pre;
   padding: 0;
-  margin-bottom: 24px;
+  margin-bottom: 0px;
   height: fit-content;
   display: flex;
   flex-direction: column;
@@ -569,12 +569,13 @@
 }
 
 [data-component="exa-tool-output"] {
-  width: 100%;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  width: 100%;
   font-family: var(--font-family-sans);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-large);
+  font-size: 13px;
+  line-height: 16px;
   color: var(--v2-text-text-muted);
 }
 
@@ -589,27 +590,39 @@
 [data-slot="exa-tool-links"] {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 0 0;
 }
 
 [data-slot="exa-tool-link"] {
-  display: block;
+  width: fit-content;
   max-width: 100%;
-  font: inherit;
-  line-height: inherit;
-  color: var(--v2-text-text-accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  align-self: flex-start;
+}
+
+[data-slot="exa-tool-more"] {
+  all: unset;
+  cursor: pointer;
+  width: fit-content;
+  font-family: var(--font-family-sans);
+  font-size: 13px;
+  font-weight: var(--font-weight-regular, 440);
+  line-height: 13px;
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-faint, #808080);
+  user-select: none;
 
   &:hover {
-    color: var(--v2-text-text-accent);
+    color: var(--v2-text-text-muted);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
-  &:visited {
-    color: var(--v2-text-text-accent);
+  &:focus-visible {
+    outline: 1px solid var(--v2-text-text-accent);
+    outline-offset: 2px;
   }
 }
 
@@ -655,10 +668,7 @@
 }
 
 [data-component="context-tool-group-list"] {
-  padding-top: 0;
-  padding-right: 0;
-  padding-bottom: 0;
-  padding-left: 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1216,7 +1226,15 @@
 
   > [data-component="collapsible"] > [data-slot="collapsible-content"] {
     border: none;
+    border-inline-start: none;
+    margin-inline-start: 0;
+    padding-inline-start: 0;
+    padding-bottom: 0;
     background: transparent;
+
+    &::before {
+      display: none;
+    }
   }
 
   > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"],
@@ -1321,20 +1339,36 @@
   }
 }
 
-[data-component="tool-loaded-file"] {
+[data-component="tool-loaded-item"] {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0 4px 28px;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
   font-family: var(--font-family-sans);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-large);
-  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: 13px;
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-base);
 
-  [data-slot="icon-svg"] {
+  [data-slot="tool-loaded-label"] {
     flex-shrink: 0;
-    color: var(--icon-weak);
+    font-weight: 530;
+  }
+
+  [data-slot="tool-loaded-value"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 440;
+  }
+
+  [data-slot="tool-loaded-kind"] {
+    flex-shrink: 0;
+    margin-inline-start: -2px;
+    font-weight: 440;
+    color: var(--v2-text-text-muted);
   }
 }
 

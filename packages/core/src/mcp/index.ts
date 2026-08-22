@@ -424,7 +424,7 @@ export const layer = (options?: Options) =>
 
       const refreshPrompts = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
         connection.prompts().pipe(
-          Effect.catch(() => Effect.succeed([])),
+          Effect.orElseSucceed(() => []),
           Effect.map((defs) => {
             entry.prompts = defs.map((def) => toPrompt(name, def))
           }),
@@ -777,7 +777,7 @@ export const layer = (options?: Options) =>
           if (!target.entry.client) return undefined
           const result = yield* target.entry.client
             .prompt({ name: input.name, args: input.args })
-            .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            .pipe(Effect.orElseSucceed(() => undefined))
           if (!result) return undefined
           return new PromptResult({
             server: target.name,
@@ -795,8 +795,8 @@ export const layer = (options?: Options) =>
               if (!entry.client) return Effect.succeed({ resources: [], templates: [] })
               return Effect.all(
                 {
-                  resources: entry.client.resources().pipe(Effect.catch(() => Effect.succeed([]))),
-                  templates: entry.client.resourceTemplates().pipe(Effect.catch(() => Effect.succeed([]))),
+                  resources: entry.client.resources().pipe(Effect.orElseSucceed(() => [])),
+                  templates: entry.client.resourceTemplates().pipe(Effect.orElseSucceed(() => [])),
                 },
                 { concurrency: "unbounded" },
               ).pipe(
@@ -831,7 +831,7 @@ export const layer = (options?: Options) =>
           if (!target.entry.client) return undefined
           const result = yield* target.entry.client
             .readResource({ uri: input.uri })
-            .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            .pipe(Effect.orElseSucceed(() => undefined))
           if (!result) return undefined
           return ResourceContent.make({
             server: target.name,

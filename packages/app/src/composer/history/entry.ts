@@ -1,5 +1,6 @@
 import type { Prompt } from "@/composer/state"
 import type { SelectedLineRange } from "@/workspaces/files/model"
+import { clonePrompt } from "../prompt-parts"
 
 export const MAX_HISTORY = 100
 
@@ -20,19 +21,6 @@ export type PromptHistoryEntry = {
 
 export type PromptHistoryStoredEntry = PromptHistoryEntry
 
-export function clonePromptParts(prompt: Prompt): Prompt {
-  return prompt.map((part) => {
-    if (part.type === "text") return { ...part }
-    if (part.type === "image") return { ...part }
-    if (part.type === "agent") return { ...part }
-    if (part.type === "skill") return { ...part }
-    return {
-      ...part,
-      selection: part.selection ? { ...part.selection } : undefined,
-    }
-  })
-}
-
 function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
   return {
     start: selection.start,
@@ -47,17 +35,6 @@ export function clonePromptHistoryComments(comments: PromptHistoryComment[]) {
     ...comment,
     selection: cloneSelection(comment.selection),
   }))
-}
-
-export function normalizePromptHistoryEntry(entry: PromptHistoryStoredEntry): PromptHistoryEntry {
-  return {
-    prompt: clonePromptParts(entry.prompt),
-    comments: clonePromptHistoryComments(entry.comments),
-  }
-}
-
-export function promptLength(prompt: Prompt) {
-  return prompt.reduce((len, part) => len + ("content" in part ? part.content.length : 0), 0)
 }
 
 export function prependHistoryEntry(
@@ -75,7 +52,7 @@ export function prependHistoryEntry(
   if (!text && !hasImages && !hasComments) return entries
 
   const entry = {
-    prompt: clonePromptParts(prompt),
+    prompt: clonePrompt(prompt),
     comments: clonePromptHistoryComments(comments),
   } satisfies PromptHistoryEntry
   const last = entries[0]
@@ -96,9 +73,7 @@ function isCommentEqual(commentA: PromptHistoryComment, commentB: PromptHistoryC
   )
 }
 
-function isPromptEqual(promptA: PromptHistoryStoredEntry, promptB: PromptHistoryStoredEntry) {
-  const entryA = normalizePromptHistoryEntry(promptA)
-  const entryB = normalizePromptHistoryEntry(promptB)
+function isPromptEqual(entryA: PromptHistoryStoredEntry, entryB: PromptHistoryStoredEntry) {
   if (entryA.prompt.length !== entryB.prompt.length) return false
   for (let i = 0; i < entryA.prompt.length; i++) {
     const partA = entryA.prompt[i]

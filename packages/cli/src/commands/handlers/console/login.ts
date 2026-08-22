@@ -6,6 +6,7 @@ import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { ServiceConfig } from "../../../services/service-config"
 import { createTimelineHost, type TimelineHost } from "../../../ui/timeline"
+import { errorMessage } from "../../../util/error"
 
 const integrationID = "opencode"
 const location = { directory: process.cwd() }
@@ -24,9 +25,9 @@ export default Runtime.handler(
     if (Exit.isSuccess(exit)) return
 
     const cancelled = timeline.signal.aborted
-    yield* request(() => timeline.failure(cancelled ? "Authorization cancelled" : errorMessage(exit.cause))).pipe(
-      Effect.ignore,
-    )
+    yield* request(() =>
+      timeline.failure(cancelled ? "Authorization cancelled" : errorMessage(Cause.squash(exit.cause))),
+    ).pipe(Effect.ignore)
     process.exitCode = cancelled ? 130 : 1
   }),
 )
@@ -106,13 +107,4 @@ function request<A>(task: (signal: AbortSignal) => Promise<A>) {
 
 function required<A>(value: A | null | undefined, message: string) {
   return value === null || value === undefined ? Effect.fail(new Error(message)) : Effect.succeed(value)
-}
-
-function errorMessage(cause: Cause.Cause<unknown>) {
-  const error = Cause.squash(cause)
-  if (error instanceof Error) return error.message
-  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
-    return error.message
-  }
-  return String(error)
 }

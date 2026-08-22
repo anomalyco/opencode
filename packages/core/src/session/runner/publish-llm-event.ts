@@ -84,17 +84,15 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  */
 export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, input: Input) => {
   const deltaBatchInterval = 100
-  const tools = new Map<
-    string,
-    {
-      readonly assistantMessageID: SessionMessage.ID
-      readonly name: string
-      called: boolean
-      settled: boolean
-      providerExecuted: boolean
-      progress?: Tool.Metadata
-    }
-  >()
+  type ToolState = {
+    readonly assistantMessageID: SessionMessage.ID
+    readonly name: string
+    called: boolean
+    settled: boolean
+    providerExecuted: boolean
+    progress?: Tool.Metadata
+  }
+  const tools = new Map<string, ToolState>()
   const failureSnapshot = (tool: { readonly progress?: Tool.Metadata }, metadata?: Tool.Metadata) => {
     if (tool.progress === undefined) return metadata === undefined ? {} : { metadata }
     if (metadata === undefined) return { metadata: tool.progress }
@@ -263,13 +261,14 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   }) {
     if (tools.has(event.id)) return yield* Effect.die(new Error(`Duplicate tool input start: ${event.id}`))
     const assistantMessageID = yield* startAssistant()
-    tools.set(event.id, {
+    const tool: ToolState = {
       assistantMessageID,
       name: event.name,
       called: false,
       settled: false,
       providerExecuted: event.providerExecuted === true,
-    })
+    }
+    tools.set(event.id, tool)
     yield* toolInput.start(event.id)
     yield* bus.publish(SessionEvent.Tool.Input.Started, {
       sessionID: input.sessionID,
@@ -277,6 +276,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       id: event.id,
       name: event.name,
     })
+    return tool
   })
 
   const endToolInput = Effect.fnUntraced(function* (
@@ -296,9 +296,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     readonly name: string
     readonly raw: string
   }) {
-    if (!tools.has(event.id)) yield* startToolInput(event)
-    const tool = tools.get(event.id)
-    if (!tool || tool.called || tool.settled)
+    const tool = tools.get(event.id) ?? (yield* startToolInput(event))
+    if (tool.called || tool.settled)
       return yield* Effect.die(new Error(`Malformed tool input after call settlement: ${event.id}`))
     if (tool.name !== event.name)
       return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
@@ -317,9 +316,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     })
   })
 
-  const flush = Effect.fn("SessionRunner.flush")(function* () {
-    yield* flushFragments()
-  })
+  const flush = Effect.fn("SessionRunner.flush")(flushFragments)
 
   const failTool = Effect.fnUntraced(function* (id: string, error: SessionError.Error, metadata?: Tool.Metadata) {
     const tool = tools.get(id)
@@ -373,12 +370,9 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     })
   })
 
-  const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(function* (
-    error: SessionError.Error,
-    scope: "hosted" | "all" = "all",
-  ) {
-    return yield* failTools(error, scope)
-  })
+  const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(
+    (error: SessionError.Error, scope: "hosted" | "all" = "all") => failTools(error, scope),
+  )
 
   const assistantMessageIDForTool = (id: string) => {
     const tool = tools.get(id)
@@ -443,8 +437,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         return
       case "tool-call": {
         outputStarted = true
-        if (!tools.has(event.id)) yield* startToolInput(event)
-        const tool = tools.get(event.id)!
+        const tool = tools.get(event.id) ?? (yield* startToolInput(event))
         if (toolInput.has(event.id)) yield* endToolInput(event)
         if (tool.name !== event.name)
           return yield* Effect.die(new Error(`Tool call name changed for ${event.id}: ${tool.name} -> ${event.name}`))

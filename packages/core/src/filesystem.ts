@@ -70,7 +70,7 @@ const baseLayer = Layer.effect(
         return yield* Effect.die(new Error("Path escapes the location"))
       const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
       if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
-      return { absolute, real, directory: location.directory, root }
+      return { absolute, real, directory: location.directory }
     })
     return Service.of({
       find: search.find,

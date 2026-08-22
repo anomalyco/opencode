@@ -116,7 +116,7 @@
     letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
 
-    &.clickable {
+    &.clickable:not(.webfetch-link) {
       cursor: pointer;
       text-decoration: underline;
       transition: color 0.15s ease;
@@ -256,6 +256,24 @@
   }
 }
 
+[data-component="collapsible"].tool-collapsible:not([data-rail="false"]) {
+  > [data-slot="collapsible-content"] {
+    position: relative;
+    margin-inline-start: 12px;
+    padding-inline-start: 16px;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset-inline-start: 0;
+      top: 0;
+      bottom: 12px;
+      width: 0.5px;
+      background-color: var(--v2-border-border-muted, rgba(0, 0, 0, 0.08));
+    }
+  }
+}
+
 :root body {
   [data-component="task-tool-card"] {
     gap: 8px;
@@ -322,6 +340,75 @@
       [data-component="task-tool-surface"] {
         background: var(--v2-background-bg-layer-01);
       }
+    }
+  }
+}
+
+.webfetch-link,
+[data-slot="basic-tool-tool-subtitle"].webfetch-link,
+[data-slot="exa-tool-link"].webfetch-link,
+[data-component="tool-trigger"] [data-slot="basic-tool-tool-subtitle"].webfetch-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--v2-text-text-accent);
+  text-decoration: none;
+  overflow: visible;
+  max-width: 100%;
+  font-family: var(--font-family-sans);
+  font-variant-numeric: tabular-nums;
+  font-size: inherit;
+  font-style: normal;
+  font-weight: var(--font-weight-regular, 440);
+  line-height: inherit;
+  letter-spacing: var(--letter-spacing-normal);
+
+  &:visited,
+  &:active {
+    color: var(--v2-text-text-accent);
+  }
+
+  [data-slot="webfetch-link-text"] {
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: inherit;
+  }
+
+  .webfetch-link-icon {
+    display: none;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--v2-icon-icon-accent, var(--v2-text-text-accent));
+  }
+
+  &:hover {
+    color: var(--v2-text-text-accent);
+    text-decoration: none;
+
+    [data-slot="webfetch-link-text"] {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .webfetch-link-icon {
+      display: inline-flex;
+    }
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--v2-text-text-accent);
+    outline-offset: 2px;
+
+    [data-slot="webfetch-link-text"] {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .webfetch-link-icon {
+      display: inline-flex;
     }
   }
 }

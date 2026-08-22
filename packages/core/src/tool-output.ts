@@ -36,7 +36,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/To
 const cleanup = Effect.fn("ToolOutput.cleanup")(function* (fs: FSUtil.Interface, directory: string) {
   const entries = yield* fs.readDirectory(directory).pipe(
     Effect.map((entries) => entries.filter((entry) => /^tool_[0-9a-f]{12}/.test(entry))),
-    Effect.catch(() => Effect.succeed([])),
+    Effect.orElseSucceed(() => []),
   )
   yield* FileRetention.cleanup(
     fs,

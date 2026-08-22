@@ -152,6 +152,8 @@ const source = {
 
   "ui.tool.read": "Read",
   "ui.tool.loaded": "Loaded",
+  "ui.tool.loadedFile": "Loaded {{path}}",
+  "ui.tool.loadedSkill": "Loaded {{name}} skill",
   "ui.tool.list": "List",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
@@ -188,6 +190,8 @@ const source = {
   "ui.common.next": "Next",
   "ui.common.submit": "Submit",
   "ui.common.showMore": "Show more",
+  "ui.common.moreCount.one": "+{{count}} more",
+  "ui.common.moreCount.other": "+{{count}} more",
 
   "ui.permission.deny": "Deny",
   "ui.permission.allowAlways": "Allow always",
@@ -208,6 +212,7 @@ const source = {
   "ui.sessionTimeline.notice.failed": "{{actor}} failed",
   "ui.sessionTimeline.notice.cancelled": "{{actor}} cancelled",
   "ui.sessionTimeline.notice.finished": "{{actor}} finished",
+  "ui.sessionTimeline.notice.instructionsUpdated": "Instructions updated",
   "ui.message.queued": "Queued",
   "ui.message.attachment.alt": "attachment",
 

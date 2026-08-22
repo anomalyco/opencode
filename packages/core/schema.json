@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "dcde8e6b-4bf4-4f6b-b2be-4030c2c3e936",
-  "prevIds": ["5c1aa56b-c3ee-4283-9a84-c0bf626dc604"],
+  "id": "3fb67508-0196-4bae-b2bd-c08ece7583fd",
+  "prevIds": ["dcde8e6b-4bf4-4f6b-b2be-4030c2c3e936"],
   "ddl": [
     {
       "name": "account_state",
@@ -1347,6 +1347,36 @@
       "default": null,
       "generated": null,
       "name": "time_updated",
+      "entityType": "columns",
+      "table": "session_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_idle",
+      "entityType": "columns",
+      "table": "session_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_viewed",
+      "entityType": "columns",
+      "table": "session_v2"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "idle_outcome",
       "entityType": "columns",
       "table": "session_v2"
     },

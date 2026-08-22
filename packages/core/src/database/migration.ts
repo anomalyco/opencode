@@ -90,31 +90,20 @@ export function applyOnly(db: Database, input: Migration[]) {
           )
         }),
       )
-      if (migration.foreignKeys !== false) {
-        yield* apply.pipe(
-          Effect.tapError((error) =>
-            Effect.logError("database migration failed", {
-              migration: migration.id,
-              durationMs: Date.now() - started,
-              error,
-            }),
-          ),
-        )
-        yield* Effect.logInfo("database migration completed", {
-          migration: migration.id,
-          durationMs: Date.now() - started,
-        })
-        continue
-      }
-      // Durable Object SQLite rejects the foreign_keys toggle; the closest
-      // allowlisted relaxation is deferring enforcement to transaction commit.
-      const relaxForeignKeys = supportsForeignKeyToggle
-        ? db.run(sql`PRAGMA foreign_keys = OFF`)
-        : db.run(sql`PRAGMA defer_foreign_keys = ON`)
-      const restoreForeignKeys = supportsForeignKeyToggle ? db.run(sql`PRAGMA foreign_keys = ON`) : Effect.void
-      yield* relaxForeignKeys
-      yield* apply.pipe(
-        Effect.ensuring(restoreForeignKeys.pipe(Effect.orDie)),
+      const run =
+        migration.foreignKeys !== false
+          ? apply
+          : Effect.gen(function* () {
+              // Durable Object SQLite rejects the foreign_keys toggle; the closest
+              // allowlisted relaxation is deferring enforcement to transaction commit.
+              const relaxForeignKeys = supportsForeignKeyToggle
+                ? db.run(sql`PRAGMA foreign_keys = OFF`)
+                : db.run(sql`PRAGMA defer_foreign_keys = ON`)
+              const restoreForeignKeys = supportsForeignKeyToggle ? db.run(sql`PRAGMA foreign_keys = ON`) : Effect.void
+              yield* relaxForeignKeys
+              yield* apply.pipe(Effect.ensuring(restoreForeignKeys.pipe(Effect.orDie)))
+            })
+      yield* run.pipe(
         Effect.tapError((error) =>
           Effect.logError("database migration failed", {
             migration: migration.id,

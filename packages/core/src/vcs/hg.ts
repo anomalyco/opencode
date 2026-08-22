@@ -39,7 +39,7 @@ export function make(
     if (item.code === "?") {
       const content = yield* fs
         .readFileString(path.join(input.worktree, item.file))
-        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        .pipe(Effect.orElseSucceed(() => undefined))
       if (content === undefined || Buffer.byteLength(content) > MAX_PATCH_BYTES) return emptyPatch(item.file)
       return addPatch(item.file, content)
     }
@@ -142,7 +142,7 @@ function makeHg(proc: AppProcess.Interface, worktree: string) {
         truncated: result.stdoutTruncated || result.stderrTruncated,
       }
     },
-    Effect.catch(() => Effect.succeed({ exitCode: 1, text: () => "", truncated: false })),
+    Effect.orElseSucceed(() => ({ exitCode: 1, text: () => "", truncated: false })),
   )
 
   const status = Effect.fn("VcsHg.statusNames")(function* (rev: string | undefined, scope: string) {

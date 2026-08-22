@@ -142,7 +142,7 @@ export const Plugin = {
             .map((entry) => join(dirname(input), entry))
             .slice(0, 3),
         ),
-        Effect.catch(() => Effect.succeed([] as string[])),
+        Effect.orElseSucceed(() => [] as string[]),
       )
       const message =
         suggestions.length === 0

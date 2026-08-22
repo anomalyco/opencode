@@ -127,7 +127,7 @@ function prepareOptions(model: Info, pkg: string) {
       options.timeout !== undefined && options.timeout !== null && options.timeout !== false
         ? AbortSignal.timeout(options.timeout)
         : undefined,
-    ].filter((item): item is AbortSignal | AbortController => Boolean(item))
+    ].filter((item): item is AbortSignal | AbortController => item !== undefined && item !== null)
     const chunkAbortCtl = signals.find((item): item is AbortController => item instanceof AbortController)
     const abortSignals = signals.map((item) => (item instanceof AbortController ? item.signal : item))
     if (abortSignals.length === 1) opts.signal = abortSignals[0]
@@ -346,8 +346,7 @@ function gatewayProviderOptions(modelID: ID, settings: Readonly<Record<string, u
   const prefix = separator > 0 ? modelID.slice(0, separator) : undefined
   if (prefix)
     return { ...(gateway === undefined ? {} : { gateway }), [prefix === "amazon" ? "bedrock" : prefix]: model }
-  if (typeof gateway === "object" && gateway !== null && !Array.isArray(gateway))
-    return { gateway: { ...gateway, ...model } }
+  if (gateway !== undefined) return { gateway: { ...gateway, ...model } }
   return { gateway: model }
 }
 

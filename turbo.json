@@ -7,7 +7,7 @@
     "@opencode-ai/enterprise#typecheck": {
       "dependsOn": ["@opencode-ai/core#typecheck"]
     },
-    "@opencode-ai/sdk-next#typecheck": {
+    "@opencode-ai/sdk#typecheck": {
       "dependsOn": ["@opencode-ai/core#typecheck"]
     },
     "@opencode-ai/server#typecheck": {

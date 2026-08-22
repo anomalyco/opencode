@@ -412,25 +412,52 @@ function taskSession(
 }
 
 function ExaOutput(props: { output?: string }) {
+  const i18n = useI18n()
+  const [showAll, setShowAll] = createSignal(false)
+  let firstRevealedRef: HTMLAnchorElement | undefined
   const links = createMemo(() => urls(props.output))
+  const visibleLinks = createMemo(() => {
+    const all = links()
+    if (showAll() || all.length <= 10) return all
+    return all.slice(0, 10)
+  })
+  const remaining = createMemo(() => Math.max(0, links().length - 10))
+
+  const expand = (event: MouseEvent) => {
+    event.stopPropagation()
+    setShowAll(true)
+    requestAnimationFrame(() => {
+      firstRevealedRef?.focus()
+    })
+  }
 
   return (
     <Show when={links().length > 0}>
       <div data-component="exa-tool-output">
         <div data-slot="exa-tool-links">
-          <For each={links()}>
-            {(url) => (
+          <For each={visibleLinks()}>
+            {(url, index) => (
               <a
+                ref={(el) => {
+                  if (index() === 10) firstRevealedRef = el
+                }}
                 data-slot="exa-tool-link"
+                class="webfetch-link"
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(event) => event.stopPropagation()}
               >
-                {url}
+                <span data-slot="webfetch-link-text">{url}</span>
+                <Icon name="outline-square-arrow" class="webfetch-link-icon" />
               </a>
             )}
           </For>
+          <Show when={!showAll() && remaining() > 0}>
+            <button type="button" data-slot="exa-tool-more" onClick={expand}>
+              {i18n.plural("ui.common.moreCount", remaining())}
+            </button>
+          </Show>
         </div>
       </div>
     </Show>
@@ -802,14 +829,29 @@ ToolRegistry.register({
           }}
         />
         <For each={loaded()}>
-          {(filepath) => (
-            <div data-component="tool-loaded-file">
-              <Icon name="enter" size="small" />
-              <span>
-                {i18n.t("ui.tool.loaded")} {relativizeProjectPath(filepath, data.directory)}
-              </span>
-            </div>
-          )}
+          {(filepath) => {
+            const relative = relativizeProjectPath(filepath, data.directory)
+            const path = relative === filepath ? relative : relative.replace(/^[/\\]/, "")
+            const marker = "__OPENCODE_LOADED_PATH__"
+            const parts = i18n.t("ui.tool.loadedFile", { path: marker }).split(marker)
+            return (
+              <div data-component="tool-loaded-item" aria-label={i18n.t("ui.tool.loadedFile", { path })}>
+                <span data-slot="tool-loaded-label" aria-hidden="true">
+                  {parts[0].trim()}
+                </span>
+                <span data-slot="tool-loaded-value" aria-hidden="true">
+                  {path}
+                </span>
+                <Show when={parts[1]?.trim()}>
+                  {(suffix) => (
+                    <span data-slot="tool-loaded-kind" aria-hidden="true">
+                      {suffix()}
+                    </span>
+                  )}
+                </Show>
+              </div>
+            )
+          }}
         </For>
       </>
     )
@@ -932,21 +974,17 @@ ToolRegistry.register({
               <Show when={!pending() && url()}>
                 <a
                   data-slot="basic-tool-tool-subtitle"
-                  class="clickable subagent-link"
+                  class="webfetch-link"
                   href={url()}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  {url()}
+                  <span data-slot="webfetch-link-text">{url()}</span>
+                  <Icon name="outline-square-arrow" class="webfetch-link-icon" />
                 </a>
               </Show>
             </div>
-            <Show when={!pending() && url()}>
-              <div data-component="tool-action">
-                <Icon name="square-arrow-top-right" size="small" />
-              </div>
-            </Show>
           </div>
         }
       />
@@ -1146,6 +1184,7 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="console"
+        rail={false}
         allowOpenWhilePending
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
@@ -1189,6 +1228,7 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="console"
+        rail={false}
         allowOpenWhilePending
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
@@ -1305,6 +1345,7 @@ ToolRegistry.register({
         <BasicTool
           {...props}
           icon="code-lines"
+          rail={false}
           defer={props.deferContent !== false}
           trigger={
             <div data-component="edit-trigger">
@@ -1373,6 +1414,7 @@ ToolRegistry.register({
         <BasicTool
           {...props}
           icon="code-lines"
+          rail={false}
           defer={props.deferContent !== false}
           trigger={
             <div data-component="write-trigger">
@@ -1450,6 +1492,7 @@ ToolRegistry.register({
               locked
               icon="code-lines"
               defer={false}
+              rail={false}
               trigger={{
                 title: i18n.t("ui.tool.patch"),
                 subtitle: subtitle(),
@@ -1552,6 +1595,7 @@ ToolRegistry.register({
             icon="code-lines"
             defer={false}
             trigger={{ title: i18n.t("ui.tool.patch"), subtitle: subtitle() }}
+            rail={false}
           >
             <ToolFileAccordion
               path={single()!.path}
@@ -1649,34 +1693,29 @@ ToolRegistry.register({
     const i18n = useI18n()
     const name = createMemo(() => skillToolName(props.input, props.metadata))
     const running = createMemo(() => props.status === "streaming" || props.status === "running")
+    const marker = "__OPENCODE_LOADED_SKILL__"
+    const parts = createMemo(() => i18n.t("ui.tool.loadedSkill", { name: marker }).split(marker))
 
-    const trigger = () => (
-      <div data-slot="skill-tool-trigger" class="flex min-w-0 items-center gap-1.5">
-        <Icon name="post-skill" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-        <span
-          data-slot="skill-tool-label"
-          class="shrink-0 text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
-        >
-          {i18n.t("ui.tool.skill")}
-        </span>
-        <Show when={name()}>
-          {(name) => (
-            <>
-              <span data-slot="skill-tool-separator" aria-hidden="true" class="shrink-0 text-v2-text-text-muted">
-                ·
-              </span>
-              <TextShimmer
-                as="bdi"
-                text={name()}
-                active={running()}
-                class="min-w-0 truncate text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
-              />
-            </>
-          )}
-        </Show>
-      </div>
+    return (
+      <Show when={name()} fallback={<TextShimmer text={i18n.t("ui.tool.skill")} active={running()} />}>
+        {(name) => (
+          <div data-component="tool-loaded-item" aria-label={i18n.t("ui.tool.loadedSkill", { name: name() })}>
+            <span data-slot="tool-loaded-label" aria-hidden="true">
+              {parts()[0].trim()}
+            </span>
+            <span data-slot="tool-loaded-value" aria-hidden="true">
+              <TextShimmer as="span" text={name()} active={running()} />
+            </span>
+            <Show when={parts()[1]?.trim()}>
+              {(suffix) => (
+                <span data-slot="tool-loaded-kind" aria-hidden="true">
+                  {suffix()}
+                </span>
+              )}
+            </Show>
+          </div>
+        )}
+      </Show>
     )
-
-    return <BasicTool icon="post-skill" status={props.status} trigger={trigger()} hideDetails />
   },
 })

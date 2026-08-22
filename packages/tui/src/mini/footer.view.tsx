@@ -272,19 +272,21 @@ export function RunFooterView(props: RunFooterViewProps) {
     return current.type === "composer" ? "prompt" : current.type
   })
 
-  const openCommand = () => {
-    setRoute({ type: "command" })
+  const openRoute = (next: FooterPromptRoute) => {
+    setRoute(next)
     props.onSubagentSelect?.(undefined)
+  }
+
+  const openCommand = () => {
+    openRoute({ type: "command" })
   }
 
   const openModel = () => {
-    setRoute({ type: "model" })
-    props.onSubagentSelect?.(undefined)
+    openRoute({ type: "model" })
   }
 
   const openAgent = () => {
-    setRoute({ type: "agent" })
-    props.onSubagentSelect?.(undefined)
+    openRoute({ type: "agent" })
   }
 
   const openSkillMenu = () => {
@@ -292,18 +294,15 @@ export function RunFooterView(props: RunFooterViewProps) {
       return
     }
 
-    setRoute({ type: "skill" })
-    props.onSubagentSelect?.(undefined)
+    openRoute({ type: "skill" })
   }
 
   const openVariant = () => {
-    setRoute({ type: "variant" })
-    props.onSubagentSelect?.(undefined)
+    openRoute({ type: "variant" })
   }
 
   const openSettings = () => {
-    setRoute({ type: "settings" })
-    props.onSubagentSelect?.(undefined)
+    openRoute({ type: "settings" })
   }
 
   const openSubagentMenu = () => {
@@ -311,14 +310,12 @@ export function RunFooterView(props: RunFooterViewProps) {
       return
     }
 
-    setRoute({ type: "subagent-menu" })
-    props.onSubagentSelect?.(undefined)
+    openRoute({ type: "subagent-menu" })
   }
 
   const openQueuedMenu = () => {
     if (queue().length === 0) return
-    setRoute({ type: "queued-menu" })
-    props.onSubagentSelect?.(undefined)
+    openRoute({ type: "queued-menu" })
   }
 
   const closePanel = () => {
@@ -347,8 +344,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   }
 
   const closeTab = () => {
-    setRoute({ type: "composer" })
-    props.onSubagentSelect?.(undefined)
+    openRoute({ type: "composer" })
   }
 
   const cycleTab = (dir: -1 | 1) => {

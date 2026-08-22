@@ -22,14 +22,10 @@ export * from "../service.js"
 
 /** Discover a healthy, compatible local service without starting one. */
 export async function discover(options: DiscoverOptions = {}) {
-  return (await discoverLocal(options))?.endpoint
-}
-
-async function discoverLocal(options: DiscoverOptions) {
   const found = (await registered(options.file)).service
   if (found?.state !== "ready") return undefined
   if (!matchesVersion(found.version, options)) return undefined
-  return found
+  return found.endpoint
 }
 
 /** Ensure a healthy, compatible local service is running. */
@@ -142,10 +138,6 @@ type LocalService = {
   readonly version?: string
   readonly state: "ready" | "waiting" | "failed"
   readonly legacy: boolean
-}
-
-async function probe(info: Info, allowLegacy = false): Promise<LocalService | undefined> {
-  return (await probeResult(info, allowLegacy)).service
 }
 
 async function probeResult(info: Info, allowLegacy = false, timeout = defaultEnsureTiming.requestTimeout) {

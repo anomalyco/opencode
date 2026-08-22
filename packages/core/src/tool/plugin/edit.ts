@@ -87,7 +87,7 @@ const findLineOccurrences = (content: string, search: string) => {
     if (
       !actual.every(
         (item, lineIndex) =>
-          normalizeForMatch(item.text.trimEnd()) === normalizeForMatch(expected[lineIndex]!.trimEnd()),
+          normalizeForMatch(item.text.trimEnd()) === normalizeForMatch(expected[lineIndex].trimEnd()),
       )
     )
       return []

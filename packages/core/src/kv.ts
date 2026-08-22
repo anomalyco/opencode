@@ -36,7 +36,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/KV
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const { db } = yield* Database.Service
+    const db = (yield* Database.Service).db
     return Service.of({
       get: Effect.fn("KV.get")(function* (key) {
         return (yield* db

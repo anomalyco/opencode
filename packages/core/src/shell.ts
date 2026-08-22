@@ -77,7 +77,7 @@ export const cleanup = Effect.fn("Shell.cleanup")(function* () {
   const directory = path.join(global.data, DIRECTORY)
   const projects = yield* fs.readDirectoryEntries(directory).pipe(
     Effect.map((entries) => entries.filter((entry) => entry.type === "directory")),
-    Effect.catch(() => Effect.succeed([])),
+    Effect.orElseSucceed(() => []),
   )
   const files = yield* Effect.forEach(
     projects,
@@ -90,7 +90,7 @@ export const cleanup = Effect.fn("Shell.cleanup")(function* () {
               : [],
           ),
         ),
-        Effect.catch(() => Effect.succeed([])),
+        Effect.orElseSucceed(() => []),
       ),
     { concurrency: 8 },
   )

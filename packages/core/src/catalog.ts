@@ -134,7 +134,7 @@ const layer = Layer.effect(
         }
         return result
       },
-      finalize: Effect.fn("Catalog.finalize")(function* (catalog) {
+      finalize: Effect.fn("Catalog.finalize")(function* () {
         yield* bus.publish(Catalog.Event.Updated, {})
       }),
     })

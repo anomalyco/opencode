@@ -63,6 +63,7 @@ export function createSessionRequestModel() {
       return [
         {
           type: part.name as "shell" | "subagent",
+          partID: part.id,
           id: typeof value === "string" ? value : undefined,
           label: typeof label === "string" ? label : undefined,
         },
@@ -93,11 +94,13 @@ export function createSessionRequestModel() {
         const sessionID = part.state.metadata.sessionID
         if (typeof sessionID !== "string" || completed.has(sessionID)) return []
         const description = part.state.input.description
+        const agent = part.state.input.agent
         return [
           {
             id: sessionID,
             type: "subagent" as const,
             label: typeof description === "string" ? description : sessionID,
+            agent: typeof agent === "string" ? agent : undefined,
           },
         ]
       })

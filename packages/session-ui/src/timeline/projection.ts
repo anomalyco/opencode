@@ -312,7 +312,7 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
   const groupByPart = new Map<string, PriorGroup>()
   previous.forEach((row, index) => {
     if (row._tag !== "AssistantPart" || row.group.type === "part") return
-    row.group.refs.forEach((ref) => groupByPart.set(`${row.userMessageID}:${ref.partID}`, { index, row }))
+    row.group.refs.forEach((ref) => groupByPart.set(groupPartKey(row.userMessageID, ref), { index, row }))
   })
   const reserved = new Map<string, number>()
   rows.forEach((row, index) => {
@@ -407,7 +407,7 @@ function stabilizeGroupKey(
 ) {
   if (row._tag !== "AssistantPart" || row.group.type === "part") return row
   const existing = row.group.refs.reduce<PriorGroup | undefined>((result, ref) => {
-    const candidate = groupByPart.get(`${row.userMessageID}:${ref.partID}`)
+    const candidate = groupByPart.get(groupPartKey(row.userMessageID, ref))
     if (!candidate) return result
     const key = TimelineRow.key(candidate.row)
     if (claimed.has(key)) return result
@@ -424,6 +424,10 @@ function stabilizeGroupKey(
     previousAssistantPart: row.previousAssistantPart,
     group: { ...row.group, key: existing.row.group.key },
   })
+}
+
+function groupPartKey(userMessageID: string, ref: PartRef) {
+  return `${userMessageID}:${ref.messageID}:${ref.partID}`
 }
 
 function renderable(content: Content, showReasoning: boolean) {
@@ -448,7 +452,10 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
     }
     groups.push({
       type: current.type,
-      key: current.type === "patch" ? `part:${first.messageID}:${first.partID}` : `context:${first.partID}`,
+      key:
+        current.type === "patch"
+          ? `part:${first.messageID}:${first.partID}`
+          : `context:${first.messageID}:${first.partID}`,
       refs: current.refs,
     })
     adjacent = undefined
@@ -456,7 +463,7 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
 
   items.forEach((item) => {
     const type =
-      item.content.type === "tool" && contextTools.has(item.content.name)
+      item.content.type === "tool" && contextTools.has(item.content.name) && !hasLoadedFiles(item.content)
         ? "context"
         : item.content.type === "tool" && item.content.name === "patch" && item.content.state.status !== "error"
           ? "patch"
@@ -476,6 +483,12 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
   })
   flush()
   return groups
+}
+
+function hasLoadedFiles(content: Extract<Content, { type: "tool" }>) {
+  if (content.name !== "read" || content.state.status !== "completed") return false
+  const loaded = content.state.metadata?.loaded
+  return Array.isArray(loaded) && loaded.some((path) => typeof path === "string")
 }
 
 function reasoningHeading(text: string): string | undefined {

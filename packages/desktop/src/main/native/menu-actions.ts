@@ -4,6 +4,7 @@ import { updateTitlebar } from "../windows"
 
 export type DesktopMenuActionHandlers = Partial<{
   checkForUpdates: () => void
+  installCli: () => void
   createWindow: () => void
   relaunch: () => void
 }>
@@ -16,6 +17,9 @@ export function runDesktopMenuAction(
   switch (action) {
     case "app.checkForUpdates":
       handlers.checkForUpdates?.()
+      return
+    case "app.installCli":
+      handlers.installCli?.()
       return
     case "app.relaunch":
       handlers.relaunch?.()

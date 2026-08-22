@@ -2,7 +2,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
-import { Config, Effect, Layer } from "effect"
+import { Config, Effect, FileSystem, Layer } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { DriveManifest } from "../manifest"
 import { SimulationNetwork } from "./network"
@@ -21,7 +21,9 @@ import { SimulatedProvider } from "./simulated-provider"
  *
  */
 
-export const simulationReplacements = Effect.fn("Simulation.replacements")(function* (app: {
+export const simulationReplacements: (app: {
+  readonly version: string
+}) => Effect.Effect<LayerNode.Replacements, Error, FileSystem.FileSystem> = Effect.fn("Simulation.replacements")(function* (app: {
   readonly version: string
 }) {
   // ModelsDev dies when its catalog fetch fails, so simulation answers it with

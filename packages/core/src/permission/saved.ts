@@ -37,7 +37,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pe
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const { db } = yield* Database.Service
+    const db = (yield* Database.Service).db
 
     const list = Effect.fnUntraced(function* (input?: ListInput) {
       const rows = yield* db

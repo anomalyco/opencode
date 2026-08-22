@@ -9,8 +9,53 @@ import { tmpdir } from "../fixture/fixture"
 
 test("down rejects at the newest history item with an empty prompt", async () => {
   await using tmp = await tmpdir()
-  const state = path.join(tmp.path, "state")
+  const setup = await renderHistory(tmp.path)
+  try {
+    setup.history.append("session-a", { text: "previous", files: [], agents: [], pasted: [] })
+
+    expect(setup.history.move("session-a", 1, "")).toBeUndefined()
+    expect(setup.history.move("session-a", -1, "")?.text).toBe("previous")
+    expect(setup.history.move("session-a", 1, "previous")?.text).toBe("")
+  } finally {
+    setup.app.renderer.destroy()
+  }
+})
+
+test("keeps independent prompt history and cursors for each session", async () => {
+  await using tmp = await tmpdir()
+  const setup = await renderHistory(tmp.path)
+  try {
+    setup.history.append("session-a", { text: "a-one", files: [], agents: [], pasted: [] })
+    setup.history.append("session-b", { text: "b-one", files: [], agents: [], pasted: [] })
+    setup.history.append("session-a", { text: "a-two", files: [], agents: [], pasted: [] })
+
+    expect(setup.history.move("session-a", -1, "")?.text).toBe("a-two")
+    expect(setup.history.move("session-b", -1, "")?.text).toBe("b-one")
+    expect(setup.history.move("session-a", -1, "a-two")?.text).toBe("a-one")
+    expect(setup.history.move("session-b", 1, "b-one")?.text).toBe("")
+  } finally {
+    setup.app.renderer.destroy()
+  }
+})
+
+test("keeps legacy unscoped history on the home composer", async () => {
+  await using tmp = await tmpdir()
+  const legacy = JSON.stringify({ text: "legacy", files: [], agents: [], pasted: [] }) + "\n"
+  const setup = await renderHistory(tmp.path, legacy)
+  try {
+    expect((await waitForHistory(setup.history))?.text).toBe("legacy")
+
+    expect(setup.history.move("session-a", -1, "")).toBeUndefined()
+    expect(setup.history.move(undefined, 1, "legacy")?.text).toBe("")
+  } finally {
+    setup.app.renderer.destroy()
+  }
+})
+
+async function renderHistory(root: string, persisted?: string) {
+  const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
+  if (persisted) await Bun.write(path.join(state, "prompt-history.jsonl"), persisted)
   let history: ReturnType<typeof usePromptHistory>
 
   function Consumer() {
@@ -19,20 +64,20 @@ test("down rejects at the newest history item with an empty prompt", async () =>
   }
 
   const app = await testRender(() => (
-    <TuiPathsProvider value={{ cwd: tmp.path, home: tmp.path, state, worktree: tmp.path }}>
+    <TuiPathsProvider value={{ cwd: root, home: root, state, worktree: root }}>
       <PromptHistoryProvider>
         <Consumer />
       </PromptHistoryProvider>
     </TuiPathsProvider>
   ))
-  try {
-    await app.renderOnce()
-    history!.append({ text: "previous", files: [], agents: [], pasted: [] })
+  await app.renderOnce()
+  return { app, history: history! }
+}
 
-    expect(history!.move(1, "")).toBeUndefined()
-    expect(history!.move(-1, "")?.text).toBe("previous")
-    expect(history!.move(1, "previous")?.text).toBe("")
-  } finally {
-    app.renderer.destroy()
+async function waitForHistory(history: ReturnType<typeof usePromptHistory>) {
+  for (const _ of Array.from({ length: 100 })) {
+    const item = history.move(undefined, -1, "")
+    if (item) return item
+    await Bun.sleep(1)
   }
-})
+}

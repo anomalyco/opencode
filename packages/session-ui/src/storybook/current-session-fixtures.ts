@@ -702,15 +702,32 @@ export const webResearchDocument = document([
         id: "tool_web_search",
         name: "websearch",
         offset: 73_100,
-        args: { query: "WAI ARIA live region status message guidance" },
-        output: "WAI-ARIA Authoring Practices and MDN live region guidance",
-        metadata: { provider: "exa" },
+        args: { query: "figma mcp setup" },
+        output: [
+          "https://www.figma.com/community/file/1606560040358762787/figma-mcp-console-setup-guide",
+          "https://designagentlab.com",
+          "https://www.figma.com/community/whiteboarding?resource_type=widgets",
+          "https://figma-console-mcp.southleft.com/mcp",
+          "https://designagentlab.com/figma-console-mcp",
+          "https://designagentlab.com/figma-tutorials",
+          "https://github.com/southleft/figma-console-mcp/issues",
+          "https://designagentlab.com/ui-kits",
+          "https://designagentlab.com/prototyping-tools",
+          "https://www.inthepocket.design/guidelines/figma-mcp/setup-figma-mcp",
+          "https://www.figma.com/community/plugins",
+          "https://figma-console-mcp.southleft.com/docs",
+          "https://designagentlab.com/resources",
+          "https://github.com/southleft/figma-console-mcp/releases",
+          "https://www.inthepocket.design/blog/figma-mcp",
+          "https://designagentlab.com/community",
+        ].join("\n"),
+        metadata: { provider: "firecrawl" },
       }),
       completedTool({
         id: "tool_web_fetch",
         name: "webfetch",
         offset: 74_000,
-        args: { url: "https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html" },
+        args: { url: "https://www.figma.com" },
         output: "Status messages should be programmatically determinable without receiving focus.",
       }),
     ],
@@ -728,33 +745,25 @@ export const webResearchDocument = document([
   }),
 ] satisfies SessionMessageInfo[])
 
-export const skillWorkflowDocument = document([
-  {
-    id: "msg_agent_switched_review",
-    type: "agent-switched",
-    agent: "review",
-    previous: "build",
-    time: { created: STORY_TIME + 78_000 },
-  },
-  {
-    id: "msg_skill_loaded_rtl",
-    type: "skill",
-    skill: "rtl-aware-development",
-    name: "RTL-aware development",
-    text: "Verify direction independently from language.",
-    time: { created: STORY_TIME + 78_500 },
-  },
-  user("msg_user_skill", "Review the mixed-direction file row before I merge it.", 79_000),
+export const loadedResourcesDocument = document([
+  user("msg_user_skill", "Read the project instructions, load the RTL-aware skill, and review the file row.", 79_000),
   assistant({
     id: "msg_assistant_skill",
     offset: 80_000,
     completed: 82_000,
-    agent: "review",
     content: [
+      completedTool({
+        id: "tool_loaded_file",
+        name: "read",
+        offset: 80_100,
+        args: { path: "C:/workspaces/opencode/packages/cli/AGENTS.md" },
+        output: "Project instructions loaded.",
+        metadata: { loaded: ["C:/workspaces/opencode/packages/cli/AGENTS.md"] },
+      }),
       completedTool({
         id: "tool_skill_rtl",
         name: "skill",
-        offset: 80_100,
+        offset: 80_200,
         args: { name: "rtl-aware-development" },
         output: "Loaded RTL-aware development guidance",
         metadata: { name: "rtl-aware-development" },
@@ -765,6 +774,50 @@ export const skillWorkflowDocument = document([
       },
     ],
   }),
+] satisfies SessionMessageInfo[])
+
+export const instructionsUpdatedSingleDocument = document([
+  user("msg_user_instructions_single", "Check if beta service reports the shared session as running.", 85_000),
+  assistant({
+    id: "msg_assistant_instructions_single",
+    offset: 86_000,
+    completed: 88_000,
+    content: [
+      {
+        type: "text",
+        text: "The beta service is healthy and already reports this shared session as running. I found unrelated desktop changes in the worktree and will leave them untouched; next I'm narrowing the beta-only capabilities to features that can be demonstrated safely in this session rather than invoking every administrative API.",
+      },
+    ],
+  }),
+  {
+    id: "msg_instructions_updated_single",
+    type: "system",
+    text: "Updated instructions for api/v2-demo",
+    description: "Instructions updated: api/v2-demo",
+    time: { created: STORY_TIME + 89_000 },
+  },
+] satisfies SessionMessageInfo[])
+
+export const instructionsUpdatedMultipleDocument = document([
+  user("msg_user_instructions_multi", "Check if beta service reports the shared session as running.", 85_000),
+  assistant({
+    id: "msg_assistant_instructions_multi",
+    offset: 86_000,
+    completed: 88_000,
+    content: [
+      {
+        type: "text",
+        text: "The beta service is healthy and already reports this shared session as running. I found unrelated desktop changes in the worktree and will leave them untouched; next I'm narrowing the beta-only capabilities to features that can be demonstrated safely in this session rather than invoking every administrative API.",
+      },
+    ],
+  }),
+  {
+    id: "msg_instructions_updated_multi",
+    type: "system",
+    text: "Updated instructions for api/v2-demo and api/session",
+    description: "Instructions updated: api/v2-demo, api/session",
+    time: { created: STORY_TIME + 89_000 },
+  },
 ] satisfies SessionMessageInfo[])
 
 export const permissionPendingDocument = document(

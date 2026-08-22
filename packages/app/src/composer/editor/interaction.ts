@@ -18,6 +18,7 @@ import {
   type ComposerInteractionCommand,
   type ComposerInteractionEvent,
 } from "../suggestions/machine"
+import { clonePrompt, promptLength } from "../prompt-parts"
 
 export type ComposerSelectControl = {
   options: Accessor<ComposerOption[]>
@@ -432,16 +433,6 @@ function canNavigateHistory(direction: "up" | "down", text: string, cursor: numb
   if (inHistory) return position === 0 || position === text.length
   if (direction === "up") return position === 0 && text.length === 0
   return position === text.length
-}
-
-function clonePrompt(prompt: ComposerPersistedState["prompt"]): ComposerPersistedState["prompt"] {
-  return prompt.map((part) =>
-    part.type === "file" ? { ...part, selection: part.selection ? { ...part.selection } : undefined } : { ...part },
-  )
-}
-
-function promptLength(prompt: ComposerPersistedState["prompt"]) {
-  return prompt.reduce((length, part) => length + ("content" in part ? part.content.length : 0), 0)
 }
 
 function editorCursor(editor: HTMLElement) {

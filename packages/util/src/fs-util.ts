@@ -70,8 +70,8 @@ export namespace FSUtil {
 
       const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
         return yield* fs.readFileString(path).pipe(
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
-          Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(undefined)),
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
+          Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.undefined),
         )
       })
 
@@ -188,7 +188,7 @@ export namespace FSUtil {
         let current = start
         while (true) {
           const matches = yield* scan(pattern, { cwd: current, absolute: true, include: "file", dot: true }).pipe(
-            Effect.catch(() => Effect.succeed([] as string[])),
+            Effect.orElseSucceed(() => [] as string[]),
           )
           result.push(...matches)
           if (stop === current) break

@@ -3,6 +3,7 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc"
 
 const DesktopMenuAction = Schema.Literals([
   "app.checkForUpdates",
+  "app.installCli",
   "app.relaunch",
   "edit.undo",
   "edit.redo",

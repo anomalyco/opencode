@@ -84,7 +84,6 @@ export type SessionPreviewProps = {
   draft?: string
   request?: { type: "permission"; value: PermissionRequest } | { type: "question"; value: FormInfo }
   reviewOpened?: boolean
-  backgroundTasks?: { id: string; type: "shell" | "subagent"; label: string }[]
   child?: { parentID: string }
   terminal?: { title: string; lines: string[] }
 }
@@ -195,13 +194,6 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
       decide: (response) => {
         setState("request", undefined)
         setState("activity", `Permission response: ${response}`)
-      },
-      background: {
-        blocking: () => [],
-        tasks: () => props.backgroundTasks ?? [],
-        move: async () => {
-          setState("activity", "Requested background execution")
-        },
       },
       blocked: () => state.request !== undefined,
     },

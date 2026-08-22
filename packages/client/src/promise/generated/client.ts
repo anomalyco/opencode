@@ -80,6 +80,8 @@ import type {
   SessionMessageOutput,
   SessionEnvironmentInput,
   SessionEnvironmentOutput,
+  SessionViewInput,
+  SessionViewOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -892,6 +894,18 @@ export function make(options: ClientOptions) {
             method: "PUT",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/environment`,
             body: { variables: input["variables"] },
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      view: (input: SessionViewInput, requestOptions?: RequestOptions) =>
+        request<SessionViewOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/view`,
+            body: { idle: input["idle"] },
             successStatus: 204,
             declaredStatuses: [404, 401, 400],
             empty: true,

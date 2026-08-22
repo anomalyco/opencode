@@ -3,7 +3,7 @@ import { Effect, Option } from "effect"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { createClient, loadIntegrations } from "./shared"
-import { errorMessage } from "../../../ui/prompt"
+import { errorMessage } from "../../../util/error"
 
 export default Runtime.handler(Commands.commands.auth.commands.list, (input) =>
   list(input).pipe(

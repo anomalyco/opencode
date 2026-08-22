@@ -3,7 +3,8 @@ import { Session } from "@opencode-ai/core/session"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { InvalidCursorError, SessionNotFoundError, UnknownError } from "@opencode-ai/protocol/errors"
+import { InvalidCursorError } from "@opencode-ai/protocol/errors"
+import { failedMessageDecode, missingSession } from "./session-error"
 
 const DefaultMessagesLimit = 50
 
@@ -46,25 +47,8 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
             cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
           })
           .pipe(
-            Effect.catchTag("Session.NotFoundError", (error) =>
-              Effect.fail(
-                new SessionNotFoundError({
-                  sessionID: error.sessionID,
-                  message: `Session not found: ${error.sessionID}`,
-                }),
-              ),
-            ),
-            Effect.catchTag("Session.MessageDecodeError", (error) => {
-              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
-              return Effect.logError("failed to decode session message").pipe(
-                Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
-                Effect.andThen(
-                  Effect.fail(
-                    new UnknownError({ message: "Unexpected server error. Check server logs for details.", ref }),
-                  ),
-                ),
-              )
-            }),
+            Effect.catchTag("Session.NotFoundError", missingSession),
+            Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
           )
         const first = messages[0]
         const last = messages.at(-1)

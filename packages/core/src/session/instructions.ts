@@ -37,15 +37,17 @@ const layer = Layer.effect(
     // root so opening a subdirectory still describes paths from the project root.
     const root = yield* fs.resolve(location.project.directory)
     // Same-step parallel reads settle concurrently, so an in-memory claim guards each
-    // Session/path pair before any filesystem work. The durable history check below covers
-    // paths injected in earlier steps after this Location layer was reopened.
-    const injected = yield* Ref.make<Map<SessionSchema.ID, Set<string>>>(new Map())
+    // Session/path pair while a load is in flight. The claim is released once the load
+    // settles: the synthetic message metadata scanned below is the only lasting ledger,
+    // so paths whose synthetics drop out of model-visible history (compaction, revert)
+    // are re-discovered and re-injected instead of staying silently lost.
+    const inFlight = yield* Ref.make<Map<SessionSchema.ID, Set<string>>>(new Map())
 
     const load = Effect.fn("SessionInstructions.load")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly paths: ReadonlyArray<string>
     }) {
-      const claimed = yield* Ref.modify(injected, (map) => {
+      const claimed = yield* Ref.modify(inFlight, (map) => {
         const existing = map.get(input.sessionID) ?? new Set<string>()
         const newlyClaimed = input.paths.filter((path) => !existing.has(path))
         if (newlyClaimed.length === 0) return [newlyClaimed, map]
@@ -54,30 +56,43 @@ const layer = Layer.effect(
         return [newlyClaimed, next]
       })
       if (claimed.length === 0) return
-      const alreadyInjected = yield* previouslyInjected(store, input.sessionID)
-      const toInject = claimed.filter((path) => !alreadyInjected.has(path))
-      if (toInject.length === 0) return
-      const files = yield* Effect.forEach(
-        toInject,
-        (path) =>
-          fs
-            .readFileStringSafe(path)
-            .pipe(Effect.map((content) => (content === undefined ? undefined : { path, content }))),
-        { concurrency: "unbounded" },
+      yield* Effect.gen(function* () {
+        const alreadyInjected = yield* previouslyInjected(store, input.sessionID)
+        const toInject = claimed.filter((path) => !alreadyInjected.has(path))
+        if (toInject.length === 0) return
+        const files = yield* Effect.forEach(
+          toInject,
+          (path) =>
+            fs
+              .readFileStringSafe(path)
+              .pipe(Effect.map((content) => (content === undefined ? undefined : { path, content }))),
+          { concurrency: "unbounded" },
+        )
+        const readable = files.filter((file): file is { path: string; content: string } => file !== undefined)
+        if (readable.length === 0) return
+        // Publish directly rather than through Session.synthetic: a Location-scoped layer
+        // cannot depend on Session (it routes through LocationServiceMap, forming a type
+        // cycle with this node). The durable publish commits the synthetic and its metadata
+        // ledger atomically, so releasing the claim afterwards cannot readmit the paths.
+        yield* bus.publish(SessionEvent.Synthetic, {
+          sessionID: input.sessionID,
+          text: readable.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n"),
+          description: `Loaded ${readable.map((file) => describePath(root, file.path)).join(", ")}`,
+          metadata: { instruction: { paths: readable.map((file) => file.path) } },
+        })
+      }).pipe(
+        Effect.ensuring(
+          Ref.update(inFlight, (map) => {
+            const existing = map.get(input.sessionID)
+            if (!existing) return map
+            const remaining = new Set([...existing].filter((path) => !claimed.includes(path)))
+            const next = new Map(map)
+            if (remaining.size === 0) next.delete(input.sessionID)
+            else next.set(input.sessionID, remaining)
+            return next
+          }),
+        ),
       )
-      const readable = files.filter((file): file is { path: string; content: string } => file !== undefined)
-      if (readable.length === 0) return
-      // Publish directly rather than through Session.synthetic: a Location-scoped layer
-      // cannot depend on Session (it routes through LocationServiceMap, forming a type
-      // cycle with this node). The durable publish is what makes the synthetic visible on
-      // the next projected history reload. The dedup ledger lives on the synthetic message
-      // metadata so it survives across Location layer restarts.
-      yield* bus.publish(SessionEvent.Synthetic, {
-        sessionID: input.sessionID,
-        text: readable.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n"),
-        description: `Loaded ${readable.map((file) => describePath(root, file.path)).join(", ")}`,
-        metadata: { instruction: { paths: readable.map((file) => file.path) } },
-      })
     })
 
     return Service.of({ load })

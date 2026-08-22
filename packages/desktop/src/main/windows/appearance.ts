@@ -24,12 +24,10 @@ let backgroundColor: string | undefined
 
 export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) {
   const mode = tone()
-  const storedBackground = getStore().get(BACKGROUND_COLOR_KEY)
   return {
     title: "OpenCode",
     icon: iconPath(path, paths),
-    backgroundColor:
-      backgroundColor ?? (typeof storedBackground === "string" ? storedBackground : undefined) ?? oc2Background[mode],
+    backgroundColor: getBackgroundColor() ?? oc2Background[mode],
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hidden" as const,
@@ -124,9 +122,7 @@ export function wireFullscreen(win: BrowserWindow) {
 }
 
 function iconsDir(path: Path.Path, paths: DesktopPaths.Resolved) {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, "icons")
-    : path.join(paths.developmentResourcesRoot, "icons")
+  return app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(paths.developmentResourcesRoot, "icons")
 }
 
 function iconPath(path: Path.Path, paths: DesktopPaths.Resolved) {

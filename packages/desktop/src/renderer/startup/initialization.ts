@@ -8,9 +8,3 @@ function markLocalServerStartup(error: unknown) {
   Object.defineProperty(failure, "localServerStartup", { value: true })
   return failure
 }
-
-export function initializationReady<A>(state: (() => A | undefined) & { error: unknown; loading: boolean }) {
-  if (state.loading) return false
-  initializationData(state)
-  return true
-}

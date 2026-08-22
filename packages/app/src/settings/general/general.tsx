@@ -16,12 +16,9 @@ import {
   createPermissionScopeController,
   createShellOptions,
   createShellSettingsController,
-  createSoundSettingsController,
-  soundOptions,
   type AppearanceSettingsController,
   type PermissionScopeController,
   type ShellSettingsController,
-  type SoundSettingsController,
 } from "./controllers"
 import "@/settings/settings.css"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -50,24 +47,6 @@ const fontSettings = {
     input: "setTerminal",
   },
 } as const
-const soundSettings = {
-  agent: {
-    action: "settings-sounds-agent",
-    title: "settings.general.sounds.agent.title",
-    description: "settings.general.sounds.agent.description",
-  },
-  permissions: {
-    action: "settings-sounds-permissions",
-    title: "settings.general.sounds.permissions.title",
-    description: "settings.general.sounds.permissions.description",
-  },
-  errors: {
-    action: "settings-sounds-errors",
-    title: "settings.general.sounds.errors.title",
-    description: "settings.general.sounds.errors.description",
-  },
-} as const
-
 const PermissionScopeSetting: Component<{ controller: PermissionScopeController }> = (props) => {
   const language = useLanguage()
   return (
@@ -224,43 +203,6 @@ const FontSetting: Component<{
           style={{ "font-family": props.fonts[config().font]().family }}
         />
       </div>
-    </SettingsRow>
-  )
-}
-
-const SoundsSection: Component<{ controller: SoundSettingsController }> = (props) => {
-  const language = useLanguage()
-  return (
-    <div class="settings-section">
-      <h3 class="settings-section-title">{language.t("settings.general.section.sounds")}</h3>
-      <SettingsList>
-        <SoundSetting kind="agent" channel={props.controller.agent} />
-        <SoundSetting kind="permissions" channel={props.controller.permissions} />
-        <SoundSetting kind="errors" channel={props.controller.errors} />
-      </SettingsList>
-    </div>
-  )
-}
-
-const SoundSetting: Component<{
-  kind: "agent" | "permissions" | "errors"
-  channel: SoundSettingsController["agent"]
-}> = (props) => {
-  const language = useLanguage()
-  const config = () => soundSettings[props.kind]
-  return (
-    <SettingsRow title={language.t(config().title)} description={language.t(config().description)}>
-      <Select
-        data-action={config().action}
-        options={soundOptions}
-        current={props.channel.current()}
-        value={(option) => option.id}
-        label={(option) => language.t(option.label)}
-        onHighlight={props.channel.highlight}
-        onSelect={props.channel.select}
-        placement="bottom-end"
-        gutter={6}
-      />
     </SettingsRow>
   )
 }

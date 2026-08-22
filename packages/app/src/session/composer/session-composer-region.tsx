@@ -2,15 +2,12 @@ import { Show, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
-import { SessionBackgroundDock } from "@/session/requests/session-background-dock"
 import type { SessionComposerRegionController } from "./session-composer-region-controller"
 
 type SessionComposerRegionState = Pick<
   SessionComposerRegionController["state"],
   "questionRequest" | "permissionRequest" | "permissionResponding" | "decide" | "blocked"
-> & {
-  background: Pick<SessionComposerRegionController["state"]["background"], "blocking" | "tasks" | "move">
-}
+>
 
 export type SessionComposerRegionViewController = Pick<
   SessionComposerRegionController,
@@ -32,9 +29,6 @@ export function SessionComposerRegion(props: {
 }) {
   const language = useLanguage()
   const controller = props.controller
-  const background = () =>
-    controller.state.background.blocking().length > 0 || controller.state.background.tasks().length > 0
-
   return (
     <div
       ref={controller.setDockRef}
@@ -81,21 +75,9 @@ export function SessionComposerRegion(props: {
               </>
             }
           >
-            <Show when={background()}>
-              <div>
-                <SessionBackgroundDock
-                  blocking={controller.state.background.blocking()}
-                  tasks={controller.state.background.tasks()}
-                  onBackground={() => void controller.state.background.move()}
-                />
-              </div>
-            </Show>
             <div
               classList={{
                 "relative z-[70]": true,
-              }}
-              style={{
-                "margin-top": `${background() ? -36 : 0}px`,
               }}
             >
               <Show

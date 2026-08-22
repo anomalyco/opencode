@@ -36,6 +36,7 @@ export interface BasicToolProps {
   defer?: boolean
   locked?: boolean
   animated?: boolean
+  rail?: boolean
   onSubtitleClick?: () => void
   onTriggerClick?: JSX.EventHandlerUnion<HTMLElement, MouseEvent>
   onTriggerKeyDown?: JSX.EventHandlerUnion<HTMLElement, KeyboardEvent>
@@ -255,7 +256,12 @@ export function BasicTool(props: BasicToolProps) {
   )
 
   return (
-    <Collapsible open={open()} onOpenChange={props.locked ? undefined : handleOpenChange} class="tool-collapsible">
+    <Collapsible
+      open={open()}
+      onOpenChange={props.locked ? undefined : handleOpenChange}
+      class="tool-collapsible"
+      data-rail={props.rail === false ? "false" : undefined}
+    >
       <Show
         when={!props.locked && (props.triggerAsLink || props.triggerHref)}
         fallback={

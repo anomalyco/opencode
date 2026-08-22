@@ -5,137 +5,141 @@ import { HttpClientError } from "effect/unstable/http"
 import { HttpApiClient, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { ClientError } from "./client-error.js"
 
-const Endpoint0Success = Schema.String
+const EndpointHealthSuccess = Schema.String
 
-const Endpoint1Query = Schema.Struct({ archived: Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Undefined])) })
+const EndpointListQuery = Schema.Struct({
+  archived: Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Undefined])),
+})
 
-const Endpoint1Success = Schema.Array(Schema.String)
+const EndpointListSuccess = Schema.Array(Schema.String)
 
-const Endpoint2Params = Schema.Struct({ sessionID: Schema.String })
+const EndpointGetParams = Schema.Struct({ sessionID: Schema.String })
 
-const Endpoint2Success = Schema.Struct({ data: Schema.String })
+const EndpointGetSuccess = Schema.Struct({ data: Schema.String })
 
-class Endpoint2Error0Class extends Schema.TaggedError<Endpoint2Error0Class>("Missing")("Missing", {
+class EndpointGetError0Class extends Schema.TaggedError<EndpointGetError0Class>("Missing")("Missing", {
   message: Schema.String,
 }) {}
-const Endpoint2Error0 = Endpoint2Error0Class.annotate({ httpApiStatus: 404 })
+const EndpointGetError0 = EndpointGetError0Class.annotate({ httpApiStatus: 404 })
 
-const Endpoint3Params = Schema.Struct({ sessionID: Schema.String })
+const EndpointInterruptParams = Schema.Struct({ sessionID: Schema.String })
 
-const Endpoint3Success = Schema.Void.annotate({ httpApiStatus: 204 })
+const EndpointInterruptSuccess = Schema.Void.annotate({ httpApiStatus: 204 })
 
-const Endpoint4Params = Schema.Struct({ sessionID: Schema.String })
+const EndpointConfigureParams = Schema.Struct({ sessionID: Schema.String })
 
-const Endpoint4Query = Schema.Struct({ dryRun: Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Undefined])) })
+const EndpointConfigureQuery = Schema.Struct({
+  dryRun: Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Undefined])),
+})
 
-const Endpoint4Headers = Schema.Struct({ traceID: Schema.String })
+const EndpointConfigureHeaders = Schema.Struct({ traceID: Schema.String })
 
-const Endpoint4Payload0 = Schema.Union([
+const EndpointConfigurePayload0 = Schema.Union([
   Schema.Struct({ type: Schema.Literal("local"), command: Schema.Array(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("remote"), url: Schema.String }),
 ])
 
-const Endpoint4Success = Schema.String
+const EndpointConfigureSuccess = Schema.String
 
-export const Group0 = HttpApiGroup.make("session", { topLevel: false })
-  .add(HttpApiEndpoint.make("GET")("health", "/session/health", { success: Endpoint0Success }))
-  .add(HttpApiEndpoint.make("GET")("list", "/session", { query: Endpoint1Query, success: Endpoint1Success }))
+export const GroupSession = HttpApiGroup.make("session", { topLevel: false })
+  .add(HttpApiEndpoint.make("GET")("health", "/session/health", { success: EndpointHealthSuccess }))
+  .add(HttpApiEndpoint.make("GET")("list", "/session", { query: EndpointListQuery, success: EndpointListSuccess }))
   .add(
     HttpApiEndpoint.make("GET")("get", "/session/:sessionID", {
-      params: Endpoint2Params,
-      success: Endpoint2Success,
-      error: Endpoint2Error0,
+      params: EndpointGetParams,
+      success: EndpointGetSuccess,
+      error: EndpointGetError0,
     }),
   )
   .add(
     HttpApiEndpoint.make("POST")("interrupt", "/session/:sessionID/interrupt", {
-      params: Endpoint3Params,
-      success: Endpoint3Success,
+      params: EndpointInterruptParams,
+      success: EndpointInterruptSuccess,
     }),
   )
   .add(
     HttpApiEndpoint.make("POST")("configure", "/session/:sessionID/configure", {
-      params: Endpoint4Params,
-      query: Endpoint4Query,
-      headers: Endpoint4Headers,
-      payload: Endpoint4Payload0,
-      success: Endpoint4Success,
+      params: EndpointConfigureParams,
+      query: EndpointConfigureQuery,
+      headers: EndpointConfigureHeaders,
+      payload: EndpointConfigurePayload0,
+      success: EndpointConfigureSuccess,
     }),
   )
 
-type RawGroup = HttpApiClient.Client.Group<typeof Group0, never, never>
+type RawGroup = HttpApiClient.Client.Group<typeof GroupSession, never, never>
 
-const Endpoint0DeclaredError = Schema.Never
-const mapEndpoint0Error = (error: unknown) =>
+const EndpointHealthDeclaredError = Schema.Never
+const mapEndpointHealthError = (error: unknown) =>
   HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error)
     ? new ClientError({ cause: error })
-    : Schema.is(Endpoint0DeclaredError)(error)
+    : Schema.is(EndpointHealthDeclaredError)(error)
       ? error
       : new ClientError({ cause: error })
-const Endpoint0 = (raw: RawGroup) => () => raw["health"]({}).pipe(Effect.mapError(mapEndpoint0Error))
+const EndpointHealth = (raw: RawGroup) => () => raw["health"]({}).pipe(Effect.mapError(mapEndpointHealthError))
 
-type Endpoint1Input = { readonly archived?: (typeof Endpoint1Query.Type)["archived"] }
-const Endpoint1DeclaredError = Schema.Never
-const mapEndpoint1Error = (error: unknown) =>
+type EndpointListInput = { readonly archived?: (typeof EndpointListQuery.Type)["archived"] }
+const EndpointListDeclaredError = Schema.Never
+const mapEndpointListError = (error: unknown) =>
   HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error)
     ? new ClientError({ cause: error })
-    : Schema.is(Endpoint1DeclaredError)(error)
+    : Schema.is(EndpointListDeclaredError)(error)
       ? error
       : new ClientError({ cause: error })
-const Endpoint1 = (raw: RawGroup) => (input?: Endpoint1Input) =>
-  raw["list"]({ query: { archived: input?.["archived"] } }).pipe(Effect.mapError(mapEndpoint1Error))
+const EndpointList = (raw: RawGroup) => (input?: EndpointListInput) =>
+  raw["list"]({ query: { archived: input?.["archived"] } }).pipe(Effect.mapError(mapEndpointListError))
 
-type Endpoint2Input = { readonly sessionID: (typeof Endpoint2Params.Type)["sessionID"] }
-const Endpoint2DeclaredError = Schema.Union([Endpoint2Error0])
-const mapEndpoint2Error = (error: unknown) =>
+type EndpointGetInput = { readonly sessionID: (typeof EndpointGetParams.Type)["sessionID"] }
+const EndpointGetDeclaredError = Schema.Union([EndpointGetError0])
+const mapEndpointGetError = (error: unknown) =>
   HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error)
     ? new ClientError({ cause: error })
-    : Schema.is(Endpoint2DeclaredError)(error)
+    : Schema.is(EndpointGetDeclaredError)(error)
       ? error
       : new ClientError({ cause: error })
-const Endpoint2 = (raw: RawGroup) => (input: Endpoint2Input) =>
+const EndpointGet = (raw: RawGroup) => (input: EndpointGetInput) =>
   raw["get"]({ params: { sessionID: input["sessionID"] } }).pipe(
-    Effect.mapError(mapEndpoint2Error),
+    Effect.mapError(mapEndpointGetError),
     Effect.map((value) => value.data),
   )
 
-type Endpoint3Input = { readonly sessionID: (typeof Endpoint3Params.Type)["sessionID"] }
-const Endpoint3DeclaredError = Schema.Never
-const mapEndpoint3Error = (error: unknown) =>
+type EndpointInterruptInput = { readonly sessionID: (typeof EndpointInterruptParams.Type)["sessionID"] }
+const EndpointInterruptDeclaredError = Schema.Never
+const mapEndpointInterruptError = (error: unknown) =>
   HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error)
     ? new ClientError({ cause: error })
-    : Schema.is(Endpoint3DeclaredError)(error)
+    : Schema.is(EndpointInterruptDeclaredError)(error)
       ? error
       : new ClientError({ cause: error })
-const Endpoint3 = (raw: RawGroup) => (input: Endpoint3Input) =>
-  raw["interrupt"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapEndpoint3Error))
+const EndpointInterrupt = (raw: RawGroup) => (input: EndpointInterruptInput) =>
+  raw["interrupt"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapEndpointInterruptError))
 
-type Endpoint4Request = Parameters<RawGroup["configure"]>[0]
-type Endpoint4Input = {
-  readonly sessionID: (typeof Endpoint4Params.Type)["sessionID"]
-  readonly dryRun?: (typeof Endpoint4Query.Type)["dryRun"]
-  readonly traceID: (typeof Endpoint4Headers.Type)["traceID"]
-  readonly payload: typeof Endpoint4Payload0.Type
+type EndpointConfigureRequest = Parameters<RawGroup["configure"]>[0]
+type EndpointConfigureInput = {
+  readonly sessionID: (typeof EndpointConfigureParams.Type)["sessionID"]
+  readonly dryRun?: (typeof EndpointConfigureQuery.Type)["dryRun"]
+  readonly traceID: (typeof EndpointConfigureHeaders.Type)["traceID"]
+  readonly payload: typeof EndpointConfigurePayload0.Type
 }
-const Endpoint4DeclaredError = Schema.Never
-const mapEndpoint4Error = (error: unknown) =>
+const EndpointConfigureDeclaredError = Schema.Never
+const mapEndpointConfigureError = (error: unknown) =>
   HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error)
     ? new ClientError({ cause: error })
-    : Schema.is(Endpoint4DeclaredError)(error)
+    : Schema.is(EndpointConfigureDeclaredError)(error)
       ? error
       : new ClientError({ cause: error })
-const Endpoint4 = (raw: RawGroup) => (input: Endpoint4Input) =>
+const EndpointConfigure = (raw: RawGroup) => (input: EndpointConfigureInput) =>
   raw["configure"]({
     params: { sessionID: input["sessionID"] },
     query: { dryRun: input["dryRun"] },
     headers: { traceID: input["traceID"] },
     payload: input["payload"],
-  } as Endpoint4Request).pipe(Effect.mapError(mapEndpoint4Error))
+  } as EndpointConfigureRequest).pipe(Effect.mapError(mapEndpointConfigureError))
 
-export const adaptGroup0 = (raw: RawGroup) => ({
-  health: Endpoint0(raw),
-  list: Endpoint1(raw),
-  get: Endpoint2(raw),
-  interrupt: Endpoint3(raw),
-  configure: Endpoint4(raw),
+export const adaptGroupSession = (raw: RawGroup) => ({
+  health: EndpointHealth(raw),
+  list: EndpointList(raw),
+  get: EndpointGet(raw),
+  interrupt: EndpointInterrupt(raw),
+  configure: EndpointConfigure(raw),
 })

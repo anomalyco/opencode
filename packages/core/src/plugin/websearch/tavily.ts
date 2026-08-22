@@ -63,15 +63,15 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
                 max_results: 8,
               }),
             )
-            const response = yield* Effect.gen(function* () {
-              const httpResponse = yield* HttpClient.filterStatusOk(http).execute(request)
-              return yield* HttpClientResponse.schemaBodyJson(SearchResponse)(httpResponse)
-            }).pipe(
-              Effect.timeoutOrElse({
-                duration: Duration.seconds(25),
-                orElse: () => Effect.fail(new Error("Tavily web search request timed out")),
-              }),
-            )
+            const response = yield* HttpClient.filterStatusOk(http)
+              .execute(request)
+              .pipe(
+                Effect.flatMap(HttpClientResponse.schemaBodyJson(SearchResponse)),
+                Effect.timeoutOrElse({
+                  duration: Duration.seconds(25),
+                  orElse: () => Effect.fail(new Error("Tavily web search request timed out")),
+                }),
+              )
             return response.results.map((item) => ({
               url: item.url,
               title: item.title,

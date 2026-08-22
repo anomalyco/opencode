@@ -85,10 +85,7 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
       )
     }),
     revealPath: Effect.fn("DesktopFiles.revealPath")(function* (target: string) {
-      const exists = yield* fs.stat(target).pipe(
-        Effect.as(true),
-        Effect.catch(() => Effect.succeed(false)),
-      )
+      const exists = yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
       if (!exists) return false
       shell.showItemInFolder(target)
       return true

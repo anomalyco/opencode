@@ -21,9 +21,15 @@ export const textStart = (state: State, events: LLMEvent[], id: string, provider
   return { ...stepped, text: new Set([...stepped.text, id]) }
 }
 
-export const textDelta = (state: State, events: LLMEvent[], id: string, text: string): State => {
+export const textDelta = (
+  state: State,
+  events: LLMEvent[],
+  id: string,
+  text: string,
+  providerMetadata?: ProviderMetadata,
+): State => {
   const started = textStart(state, events, id)
-  events.push(LLMEvent.textDelta({ id, text }))
+  events.push(LLMEvent.textDelta({ id, text, providerMetadata }))
   return started
 }
 

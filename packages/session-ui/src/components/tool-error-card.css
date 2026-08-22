@@ -17,6 +17,17 @@
 
   > [data-component="collapsible"].tool-collapsible {
     gap: 0px;
+
+    > [data-slot="collapsible-content"] {
+      border-inline-start: none;
+      margin-inline-start: 0;
+      padding-inline-start: 0;
+      padding-bottom: 0;
+
+      &::before {
+        display: none;
+      }
+    }
   }
 
   > [data-component="collapsible"].tool-collapsible[data-open="true"] {

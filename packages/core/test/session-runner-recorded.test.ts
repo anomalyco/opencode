@@ -88,16 +88,16 @@ const config = Config.testLayer()
 const pluginSupervisor = Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void }))
 const promptCatalog = Layer.mock(Catalog.Service, {
   provider: {
-    get: () => Effect.succeed(undefined),
+    get: () => Effect.undefined,
     all: () => Effect.succeed([]),
     available: () => Effect.succeed([]),
   },
   model: {
-    get: () => Effect.succeed(undefined),
+    get: () => Effect.undefined,
     all: () => Effect.succeed([]),
     available: () => Effect.succeed([]),
-    default: () => Effect.succeed(undefined),
-    small: () => Effect.succeed(undefined),
+    default: () => Effect.undefined,
+    small: () => Effect.undefined,
   },
 })
 const runnerLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>

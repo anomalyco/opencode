@@ -2,13 +2,17 @@ import { describe, expect, test } from "bun:test"
 import type { ModelRef, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { createTimelineProjection, reuseTimelineRows, TimelineRow, type PartGroup } from "./projection"
 
-const context = (key: string, partIDs: string[], userMessageID = "user-1") =>
+const context = (
+  key: string,
+  partIDs: string[],
+  identity: { userMessageID?: string; messageID?: string } = {},
+) =>
   new TimelineRow.AssistantPart({
-    userMessageID,
+    userMessageID: identity.userMessageID ?? "user-1",
     group: {
       key,
       type: "context",
-      refs: partIDs.map((partID) => ({ messageID: "assistant-1", partID })),
+      refs: partIDs.map((partID) => ({ messageID: identity.messageID ?? "assistant-1", partID })),
     } satisfies PartGroup,
     previousAssistantPart: false,
   })
@@ -80,9 +84,16 @@ describe("reuseTimelineRows", () => {
     },
     {
       name: "does not reuse context identity across user messages",
-      previous: [context("context:a", ["a", "b"], "user-1")],
-      rows: [context("context:b", ["b"], "user-2")],
+      previous: [context("context:a", ["a", "b"], { userMessageID: "user-1" })],
+      rows: [context("context:b", ["b"], { userMessageID: "user-2" })],
       expected: ["assistant-part:user-2:context:b"],
+      reused: [],
+    },
+    {
+      name: "does not reuse context identity across assistant messages",
+      previous: [context("context:assistant-1:a", ["a"], { messageID: "assistant-1" })],
+      rows: [context("context:assistant-2:a", ["a"], { messageID: "assistant-2" })],
+      expected: ["assistant-part:user-1:context:assistant-2:a"],
       reused: [],
     },
     {

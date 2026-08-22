@@ -786,22 +786,8 @@ export class RunFooter implements FooterApi {
       return
     }
 
-    const patch: FooterPatch = {}
-
-    if ("variants" in result) {
-      this.setVariants(result.variants ?? [])
-    }
-
-    if ("variant" in result) {
-      this.setCurrentVariant(result.variant)
-    }
-
-    if (result.modelLabel) {
-      patch.model = result.modelLabel
-    }
-
-    this.patch(patch)
-    this.setNotice(result.status ?? "variant updated")
+    this.applySelectionResult(result)
+    if (result.status === undefined) this.setNotice("variant updated")
   }
 
   private handleModelSelect = (model: NonNullable<RunInput["model"]>): void => {
@@ -827,26 +813,7 @@ export class RunFooter implements FooterApi {
         ) {
           return
         }
-
-        if ("variants" in result) {
-          this.setVariants(result.variants ?? [])
-        }
-
-        if ("variant" in result) {
-          this.setCurrentVariant(result.variant)
-        }
-
-        const patch: FooterPatch = {}
-        if (result.modelLabel) {
-          patch.model = result.modelLabel
-        }
-
-        if (patch.model) {
-          this.patch(patch)
-        }
-        if (result.status) {
-          this.setNotice(result.status)
-        }
+        this.applySelectionResult(result)
       })
       .catch(() => {})
   }
@@ -875,28 +842,16 @@ export class RunFooter implements FooterApi {
         ) {
           return
         }
-
-        if ("variants" in result) {
-          this.setVariants(result.variants ?? [])
-        }
-
-        if ("variant" in result) {
-          this.setCurrentVariant(result.variant)
-        }
-
-        const patch: FooterPatch = {}
-        if (result.modelLabel) {
-          patch.model = result.modelLabel
-        }
-
-        if (patch.model) {
-          this.patch(patch)
-        }
-        if (result.status) {
-          this.setNotice(result.status)
-        }
+        this.applySelectionResult(result)
       })
       .catch(() => {})
+  }
+
+  private applySelectionResult(result: CycleResult): void {
+    if ("variants" in result) this.setVariants(result.variants ?? [])
+    if ("variant" in result) this.setCurrentVariant(result.variant)
+    if (result.modelLabel) this.patch({ model: result.modelLabel })
+    if (result.status) this.setNotice(result.status)
   }
 
   private handleMiniSettingChange = async (change: MiniSettingChange): Promise<void> => {

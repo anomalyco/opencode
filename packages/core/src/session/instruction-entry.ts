@@ -13,8 +13,58 @@ export const Key = InstructionEntry.Key
 export type Key = typeof Key.Type
 export const Info = InstructionEntry.Info
 export type Info = typeof Info.Type
+export const Snapshot = InstructionEntry.Snapshot
+export type Snapshot = typeof Snapshot.Type
 export const MaxValueBytes = InstructionEntry.MaxValueBytes
 export const ValueTooLargeError = InstructionEntry.ValueTooLargeError
+
+type DatabaseService = Database.Interface["db"]
+const InsertBatchSize = 10
+
+export const snapshot = Effect.fn("InstructionEntry.snapshot")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  return yield* db
+    .select({
+      key: InstructionEntryTable.key,
+      value: InstructionEntryTable.value,
+      removed: InstructionEntryTable.removed,
+    })
+    .from(InstructionEntryTable)
+    .where(eq(InstructionEntryTable.session_id, sessionID))
+    .orderBy(asc(InstructionEntryTable.key))
+    .all()
+    .pipe(Effect.orDie)
+})
+
+export const initialize = Effect.fn("InstructionEntry.initialize")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  entries: Snapshot,
+  created: number,
+) {
+  const batches = Array.from({ length: Math.ceil(entries.length / InsertBatchSize) }, (_, index) =>
+    entries.slice(index * InsertBatchSize, (index + 1) * InsertBatchSize),
+  )
+  yield* Effect.forEach(
+    batches,
+    (batch) =>
+      db
+        .insert(InstructionEntryTable)
+        .values(
+          batch.map((entry) => ({
+            ...entry,
+            session_id: sessionID,
+            time_created: created,
+            time_updated: created,
+          })),
+        )
+        .run()
+        .pipe(Effect.orDie),
+    { discard: true },
+  )
+})
 
 export interface Interface {
   readonly list: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Info>>

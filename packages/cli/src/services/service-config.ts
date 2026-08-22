@@ -119,7 +119,7 @@ export const read = Effect.fn("cli.service-config.read")(function* () {
   if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
   return yield* fs.readFileString(configFile).pipe(
     Effect.flatMap(decodeInfo),
-    Effect.catch(() => Effect.succeed({} as Info)),
+    Effect.orElseSucceed(() => ({}) as Info),
   )
 })
 

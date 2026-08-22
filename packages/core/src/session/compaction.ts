@@ -217,13 +217,14 @@ const planContent = (messages: readonly SessionMessage.Info[], tokens: number) =
   const selected = select(messages, tokens)
   if (!selected) return
   const previousSummary = messages.findLast(
-    (message) => message.type === "compaction" && message.status === "completed",
+    (message): message is SessionMessage.CompactionCompleted =>
+      message.type === "compaction" && message.status === "completed",
   )
-  const previousRecent = previousSummary?.type === "compaction" ? previousSummary.recent : ""
+  const previousRecent = previousSummary?.recent ?? ""
   const summarizeRecent = !previousRecent && !selected.head
   return {
     prompt: buildPrompt({
-      previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
+      previousSummary: previousSummary?.summary,
       context: summarizeRecent ? [selected.recent] : [previousRecent, selected.head].filter(Boolean),
     }),
     recent: summarizeRecent ? "" : selected.recent,
@@ -345,11 +346,10 @@ const make = (dependencies: Dependencies) => {
         reason: "auto",
         ...content,
       })
-    const error = { type: "compaction.unavailable" as const, message: "Nothing to compact yet" }
     return yield* failed({
       sessionID: input.session.id,
       reason: "auto",
-      error,
+      error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
     })
   })
   const required = (input: RequiredInput) => {

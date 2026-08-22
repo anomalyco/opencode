@@ -12,9 +12,7 @@ import { discoverTuiPlugins, tuiPluginDirectories } from "@opencode-ai/tui/plugi
 export default Runtime.handler(
   Commands.commands.plugin.commands.list,
   Effect.fn("cli.plugin.list")(function* (input) {
-    const options = yield* ServiceConfig.options()
-    const found = yield* Service.discover(options)
-    const endpoint = found ?? (yield* Service.ensure(options))
+    const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const response = yield* Effect.promise(() => client.plugin.list({ location: { directory: process.cwd() } }))
     const config = yield* Config.Service

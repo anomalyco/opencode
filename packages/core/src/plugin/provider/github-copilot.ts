@@ -108,7 +108,7 @@ const oauth = (app: App.Info) =>
                   },
                 ).pipe(
                   Effect.map((user) => Option.getOrUndefined(decodeUser(user))?.endpoints?.api?.replace(/\/+$/, "")),
-                  Effect.catch(() => Effect.succeed(undefined)),
+                  Effect.orElseSucceed(() => undefined),
                   Effect.map((apiEndpoint) =>
                     Credential.OAuth.make({
                       type: "oauth",
@@ -159,7 +159,7 @@ export const GithubCopilotPlugin = define({
     const load = Effect.fn("GithubCopilotPlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("github-copilot")
       const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
       if (credential?.type !== "oauth") {
         loaded.baseURL = undefined

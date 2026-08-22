@@ -78,7 +78,7 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
     },
     contextHooks: false,
   })
-  const streamed = yield* dependencies.llm.stream(prepared.request, prepared.options).pipe(
+  yield* dependencies.llm.stream(prepared.request, prepared.options).pipe(
     Stream.runForEach((event) => {
       if (LLMEvent.is.providerError(event)) failed = true
       if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
@@ -88,12 +88,15 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
       }
       return Effect.void
     }),
-    Effect.as(true),
-    Effect.catchTag("AI.Error", () => Effect.succeed(false)),
+    Effect.catchTag("AI.Error", () =>
+      Effect.sync(() => {
+        failed = true
+      }),
+    ),
     Effect.onInterrupt(() => recordUsage.pipe(Effect.asVoid)),
   )
   yield* recordUsage
-  if (!streamed || failed) return
+  if (failed) return
   return chunks
     .join("")
     .split("\n")
@@ -117,7 +120,7 @@ const make = (dependencies: Dependencies) => {
     if (!firstUser) return
     const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
     if (!agent) return
-    const primary = yield* dependencies.models.resolve(session).pipe(Effect.catch(() => Effect.succeed(undefined)))
+    const primary = yield* dependencies.models.resolve(session).pipe(Effect.orElseSucceed(() => undefined))
     const info = yield* Effect.gen(function* () {
       if (agent.model) return yield* dependencies.catalog.model.get(agent.model.providerID, agent.model.id)
       if (!primary) return
@@ -136,7 +139,7 @@ const make = (dependencies: Dependencies) => {
             ...(variant ? { variant } : {}),
           }),
         })
-        .pipe(Effect.catch(() => Effect.succeed(undefined))))
+        .pipe(Effect.orElseSucceed(() => undefined)))
     const selected = preferred ?? primary
     if (!selected) return
     const title =

@@ -35,7 +35,7 @@ function CollapsibleArrow(props?: ComponentProps<"div">) {
   return (
     <div data-slot="collapsible-arrow" {...(props || {})}>
       <span data-slot="collapsible-arrow-icon">
-        <Icon name="chevron-down" size="small" />
+        <Icon name="fill-triangle-down" size="small" />
       </span>
     </div>
   )

@@ -23,7 +23,7 @@ export {
   retryDocument,
   revertDocument,
   reviewDiffs,
-  skillWorkflowDocument,
+  loadedResourcesDocument,
   standaloneShellCompletedDocument,
   standaloneShellRunningDocument,
   streamingDocument,

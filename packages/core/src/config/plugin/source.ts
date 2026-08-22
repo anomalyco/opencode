@@ -148,7 +148,7 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
         ...operation,
         mtime: Option.getOrElse(info.mtime, () => new Date(0)).getTime(),
       })),
-      Effect.catch(() => Effect.succeed(operation)),
+      Effect.orElseSucceed(() => operation),
     )
   })
 })

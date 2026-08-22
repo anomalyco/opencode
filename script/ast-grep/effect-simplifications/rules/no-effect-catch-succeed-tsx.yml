@@ -1,0 +1,61 @@
+id: no-effect-catch-succeed-tsx
+language: Tsx
+message: Use Effect.orElseSucceed for constant failure recovery.
+severity: error
+rule:
+  all:
+    - any:
+        - pattern: Effect.catch($$$SELF, () => Effect.succeed($VALUE))
+        - pattern: Effect.catch($$$SELF, () => { return Effect.succeed($VALUE) })
+        - pattern: Effect.catch($$$SELF, ($IGNORED) => Effect.succeed($IGNORED_VALUE))
+        - pattern: Effect.catch($$$SELF, ($IGNORED) => { return Effect.succeed($IGNORED_VALUE) })
+        - pattern: Effect.catch($$$SELF, $IGNORED => Effect.succeed($IGNORED_VALUE))
+        - pattern: Effect.catch($$$SELF, $IGNORED => { return Effect.succeed($IGNORED_VALUE) })
+        - pattern: "Effect.catch($$$SELF, ($IGNORED: $_TYPE) => Effect.succeed($IGNORED_VALUE))"
+        - pattern: "Effect.catch($$$SELF, ($IGNORED: $_TYPE) => { return Effect.succeed($IGNORED_VALUE) })"
+        - pattern: Effect.catch($$$SELF, function () { return Effect.succeed($FUNCTION_VALUE) })
+        - pattern: Effect.catch($$$SELF, function ($FUNCTION_IGNORED) { return Effect.succeed($FUNCTION_IGNORED_VALUE) })
+        - pattern: "Effect.catch($$$SELF, function ($FUNCTION_IGNORED: $_TYPE) { return Effect.succeed($FUNCTION_IGNORED_VALUE) })"
+    - not:
+        pattern: Effect.catch($_FIRST, $_SECOND, $$$REST)
+constraints:
+  IGNORED:
+    regex: ^_[A-Za-z0-9_$]*(?:\s*:\s*.+)?$
+  IGNORED_VALUE:
+    all:
+      - not:
+          regex: ^_[A-Za-z0-9_$]*$
+      - not:
+          has:
+            regex: ^_[A-Za-z0-9_$]*$
+            stopBy: end
+  FUNCTION_VALUE:
+    all:
+      - not:
+          any:
+            - regex: ^arguments$
+            - kind: this
+            - kind: meta_property
+      - not:
+          has:
+            any:
+              - regex: ^arguments$
+              - kind: this
+              - kind: meta_property
+            stopBy: end
+  FUNCTION_IGNORED:
+    regex: ^_[A-Za-z0-9_$]*(?:\s*:\s*.+)?$
+  FUNCTION_IGNORED_VALUE:
+    all:
+      - not:
+          any:
+            - regex: ^(_[A-Za-z0-9_$]*|arguments)$
+            - kind: this
+            - kind: meta_property
+      - not:
+          has:
+            any:
+              - regex: ^(_[A-Za-z0-9_$]*|arguments)$
+              - kind: this
+              - kind: meta_property
+            stopBy: end

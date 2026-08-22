@@ -105,7 +105,7 @@ describe("OpencodePlugin", () => {
               return Response.json({
                 device_code: "device",
                 user_code: "user",
-                verification_uri_complete: `${url.origin}/verify`,
+                verification_uri_complete: "/console/device?user_code=user&client_id=opencode-cli",
                 expires_in: 60,
                 interval: 0,
               })
@@ -130,7 +130,7 @@ describe("OpencodePlugin", () => {
             methodID: Integration.MethodID.make("device"),
             answer: { server: `${server.url.origin}/console///?ignored=true#ignored` },
           })
-          expect(attempt.url).toBe(`${server.url.origin}/verify`)
+          expect(attempt.url).toBe(`${server.url.origin}/console/device?user_code=user&client_id=opencode-cli`)
           yield* eventually(
             integrations.oauth.status({ integrationID, attemptID: attempt.attemptID }),
             (status) => status.status === "complete",
@@ -145,6 +145,38 @@ describe("OpencodePlugin", () => {
           })
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("rejects malformed device verification URLs", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: () =>
+            Response.json({
+              device_code: "device",
+              user_code: "user",
+              verification_uri_complete: "http://[::1",
+              expires_in: 60,
+              interval: 0,
+            }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          yield* addPlugin()
+          const error = yield* (yield* Integration.Service).oauth
+            .connect({
+              integrationID: Integration.ID.make("opencode"),
+              methodID: Integration.MethodID.make("device"),
+              answer: { server: server.url.origin },
+            })
+            .pipe(Effect.flip)
+          expect(error).toBeInstanceOf(Integration.AuthorizationError)
+          expect(String(error.cause)).toContain("Invalid device verification URL")
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
     ),
   )
 

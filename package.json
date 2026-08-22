@@ -18,13 +18,16 @@
     "bench:devex": "bun run --cwd packages/app test:bench:devex",
     "lint": "oxlint",
     "lint:effect-patterns": "ast-grep scan -c script/ast-grep/sgconfig.yml packages/util/src packages/core/src packages/server/src packages/protocol/src packages/cli/src",
+    "lint:effect-simplifications": "ast-grep scan -c script/ast-grep/effect-simplifications/sgconfig.yml --off=unused-suppression packages",
     "test:lint-rules": "ast-grep test -c script/ast-grep/sgconfig.yml",
+    "test:effect-simplification-rules": "ast-grep test -c script/ast-grep/effect-simplifications/sgconfig.yml",
     "typecheck": "bun turbo typecheck --concurrency=3",
     "typecheck:profile": "bun script/profile-typecheck.ts",
     "typecheck:profile:packages": "bun script/profile-typecheck-packages.ts",
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
     "prepare": "husky",
+    "reserve-packages": "bun script/reserve-package-names.ts",
     "random": "echo 'Random script'",
     "sso": "aws sso login --sso-session=opencode --no-browser",
     "test": "echo 'do not run tests from root' && exit 1"
@@ -33,8 +36,7 @@
     "packages": [
       "packages/*",
       "packages/console/*",
-      "packages/stats/*",
-      "packages/slack"
+      "packages/stats/*"
     ],
     "catalog": {
       "@effect/opentelemetry": "4.0.0-rc.110",
@@ -127,7 +129,6 @@
     "@aws-sdk/client-s3": "3.933.0",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "1.18.5",
     "heap-snapshot-toolkit": "1.1.3",
     "typescript": "catalog:"
   },
@@ -174,6 +175,6 @@
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
     "@modelcontextprotocol/sdk@1.29.0": "patches/@modelcontextprotocol%2Fsdk@1.29.0.patch",
     "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch",
-    "@ff-labs/fff-bun@0.10.1": "patches/@ff-labs%2Ffff-bun@0.10.1.patch"
+    "@ff-labs/fff-bun@0.10.5": "patches/@ff-labs%2Ffff-bun@0.10.5.patch"
   }
 }

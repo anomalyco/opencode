@@ -2,7 +2,6 @@ import { Duration, Effect, Schema, Semaphore, Stream } from "effect"
 import type { Scope } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import type { CredentialValue } from "@opencode-ai/sdk/v2/types"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
@@ -47,15 +46,18 @@ function oauth(http: HttpClient.HttpClient) {
       Effect.gen(function* () {
         const server = yield* normalizeServer(answer.server ?? defaultServer)
         const device = yield* post(http, `${server}/auth/device/code`, { client_id: clientID }, Device)
-        const verification = URL.canParse(device.verification_uri_complete)
-          ? new URL(device.verification_uri_complete)
-          : undefined
-        if (verification && verification.protocol !== "http:" && verification.protocol !== "https:") {
-          return yield* Effect.fail(new Error("Invalid device verification URL: expected HTTP(S)"))
-        }
+        const verification = yield* Effect.try({
+          try: () => {
+            const url = new URL(device.verification_uri_complete, `${server}/`)
+            if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("expected HTTP(S)")
+            return url
+          },
+          catch: (cause) =>
+            new Error(`Invalid device verification URL: ${cause instanceof Error ? cause.message : String(cause)}`),
+        })
         return {
           mode: "auto" as const,
-          url: verification?.href ?? `${server}/${device.verification_uri_complete.replace(/^\/+/, "")}`,
+          url: verification.href,
           instructions: `Enter code: ${device.user_code}`,
           callback: poll(http, server, device.device_code, Duration.seconds(device.interval)),
         }
@@ -76,9 +78,7 @@ function oauth(http: HttpClient.HttpClient) {
           expires: Date.now() + token.expires_in * 1000,
         }
       }),
-    label: (credential) => {
-      return typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined
-    },
+    label: (credential) => (typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined),
   } satisfies IntegrationOAuthMethodRegistration
 }
 
@@ -94,7 +94,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("opencode")
       const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
       connected = connection !== undefined
       providers = credential
@@ -201,7 +201,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
   }),
 })
 
-function fetchProviders(http: HttpClient.HttpClient, value: CredentialValue) {
+function fetchProviders(http: HttpClient.HttpClient, value: Credential.Value) {
   const metadata = value.metadata
   const server = typeof metadata?.server === "string" ? metadata.server : defaultServer
   const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
@@ -216,7 +216,7 @@ function fetchProviders(http: HttpClient.HttpClient, value: CredentialValue) {
     )
     .pipe(
       Effect.flatMap((response) => {
-        if (response.status === 404) return Effect.succeed(undefined)
+        if (response.status === 404) return Effect.undefined
         return HttpClientResponse.filterStatusOk(response).pipe(
           Effect.flatMap(HttpClientResponse.schemaBodyJson(RemoteResponse)),
           Effect.map((remote) => remote.config.provider),

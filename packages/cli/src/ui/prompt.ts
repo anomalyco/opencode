@@ -1,5 +1,6 @@
 import { cancel, isCancel, log, outro } from "@clack/prompts"
 import { Effect } from "effect"
+import { errorMessage } from "../util/error"
 
 const cancelled = Symbol("cancelled")
 
@@ -37,12 +38,4 @@ export function handlePromptErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
       }),
     ),
   )
-}
-
-export function errorMessage(error: unknown) {
-  if (error instanceof Error) return error.message
-  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
-    return error.message
-  }
-  return String(error)
 }

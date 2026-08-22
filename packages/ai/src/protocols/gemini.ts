@@ -37,6 +37,10 @@ const requiresThoughtSignatureFallback = (modelID: string) => {
   return !/(^|\/)gemini-robotics-er-1\.5(?:[.-]|$)/i.test(modelID)
 }
 
+// Gemini 3 accepts media nested inside function responses; matched Gemini 2.5 variants reject it,
+// so their tool-result attachments lower as a separate user turn instead.
+const routesLegacyToolMedia = (modelID: string) => /gemini-2[.-]5(?:[.-]|$)/i.test(modelID)
+
 export interface OptionsInput {
   readonly [key: string]: unknown
   readonly cachedContent?: string
@@ -208,11 +212,11 @@ type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 interface ParserState {
   readonly finishReason?: string
   readonly hasToolCalls: boolean
-  readonly nextToolCallId: number
   readonly promptFeedback?: GeminiPromptFeedback
   readonly usage?: Usage
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignature?: string
+  readonly textSignature?: string
 }
 
 // =============================================================================
@@ -284,8 +288,16 @@ const lowerToolCall = (part: ToolCallPart) => ({
 
 const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
+  const legacyToolMedia = routesLegacyToolMedia(request.model.id)
+  let pendingMedia: GeminiInlineDataPart[] | undefined
+  const flushMedia = () => {
+    if (!pendingMedia) return
+    contents.push({ role: "user", parts: [{ text: "Attached media from tool result:" }, ...pendingMedia] })
+    pendingMedia = undefined
+  }
 
   for (const message of request.messages) {
+    if (message.role !== "tool") flushMedia()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Gemini", message)
       const previous = contents.at(-1)
@@ -316,7 +328,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
         if (part.type === "text") {
-          parts.push({ text: part.text })
+          parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata) })
           continue
         }
         if (part.type === "reasoning") {
@@ -367,6 +379,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         const value = ProviderShared.normalizeToolFile(item)
         media.push({ inlineData: { mimeType: value.mime, data: value.base64 } })
       }
+      if (legacyToolMedia && media.length > 0) (pendingMedia ??= []).push(...media)
       parts.push({
         functionResponse: {
           id: functionCallId(part.providerMetadata),
@@ -375,7 +388,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
             name: part.name,
             content: text.join("\n"),
           },
-          parts: media.length > 0 ? media : undefined,
+          parts: legacyToolMedia || media.length === 0 ? undefined : media,
         },
       })
     }
@@ -387,6 +400,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     else contents.push({ role: "user", parts })
   }
 
+  flushMedia()
   return contents
 })
 
@@ -526,14 +540,16 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
   if (finishReason === undefined && state.usage === undefined) return []
 
   const events: LLMEvent[] = []
-  const lifecycle = state.reasoningSignature
-    ? Lifecycle.reasoningEnd(
-        state.lifecycle,
-        events,
-        "reasoning-0",
-        googleMetadata({ thoughtSignature: state.reasoningSignature }),
-      )
-    : state.lifecycle
+  let lifecycle = state.lifecycle
+  if (state.reasoningSignature !== undefined)
+    lifecycle = Lifecycle.reasoningEnd(
+      lifecycle,
+      events,
+      "reasoning-0",
+      googleMetadata({ thoughtSignature: state.reasoningSignature }),
+    )
+  if (state.textSignature !== undefined)
+    lifecycle = Lifecycle.textEnd(lifecycle, events, "text-0", googleMetadata({ thoughtSignature: state.textSignature }))
   Lifecycle.finish(lifecycle, events, {
     reason: {
       normalized:
@@ -563,12 +579,15 @@ const step = (state: ParserState, event: GeminiEvent) => {
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls
   let lifecycle = nextState.lifecycle
-  let nextToolCallId = nextState.nextToolCallId
   let reasoningSignature = nextState.reasoningSignature
+  let textSignature = nextState.textSignature
 
   for (const part of candidate.content.parts) {
-    if ("thoughtSignature" in part && part.thoughtSignature && "thought" in part && part.thought)
-      reasoningSignature = part.thoughtSignature
+    const signature = "thoughtSignature" in part && part.thoughtSignature ? part.thoughtSignature : undefined
+    // Gemini attaches replay signatures to thought parts, visible text, or function calls;
+    // each block kind must retain the signature attached to its own parts.
+    if (signature !== undefined && "thought" in part && part.thought) reasoningSignature = signature
+    else if (signature !== undefined && "text" in part) textSignature = signature
     if ("text" in part && part.text.length > 0) {
       if (part.thought) {
         lifecycle = Lifecycle.reasoningDelta(
@@ -576,7 +595,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           events,
           "reasoning-0",
           part.text,
-          part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
+          signature ? googleMetadata({ thoughtSignature: signature }) : undefined,
         )
         continue
       }
@@ -586,13 +605,22 @@ const step = (state: ParserState, event: GeminiEvent) => {
         "reasoning-0",
         reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
       )
-      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
+      lifecycle = Lifecycle.textDelta(
+        lifecycle,
+        events,
+        "text-0",
+        part.text,
+        textSignature ? googleMetadata({ thoughtSignature: textSignature }) : undefined,
+      )
+      textSignature = undefined
       continue
     }
 
     if ("functionCall" in part) {
       const input = part.functionCall.args === undefined ? {} : part.functionCall.args
-      const id = `tool_${nextToolCallId++}`
+      // Gemini 2.0+ and Vertex supply a unique function call ID on the part; when omitted (e.g. Gemini 1.5),
+      // generate a globally unique ID rather than a per-request counter to prevent cross-request collisions in downstream registries.
+      const id = part.functionCall.id ?? `tool_${crypto.randomUUID().replaceAll("-", "")}`
       const metadata = {
         ...(part.functionCall.id === undefined ? {} : { functionCallId: part.functionCall.id }),
         ...(part.thoughtSignature === undefined ? {} : { thoughtSignature: part.thoughtSignature }),
@@ -621,8 +649,8 @@ const step = (state: ParserState, event: GeminiEvent) => {
       ...nextState,
       hasToolCalls,
       lifecycle,
-      nextToolCallId,
       reasoningSignature,
+      textSignature,
       finishReason: candidate.finishReason ?? nextState.finishReason,
     },
     events,
@@ -644,7 +672,7 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(GeminiEvent),
-    initial: () => ({ hasToolCalls: false, nextToolCallId: 0, lifecycle: Lifecycle.initial() }),
+    initial: () => ({ hasToolCalls: false, lifecycle: Lifecycle.initial() }),
     step,
     onHalt: finish,
   },

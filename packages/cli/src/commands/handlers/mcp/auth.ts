@@ -17,9 +17,7 @@ const location = { directory: process.cwd() }
 export default Runtime.handler(
   Commands.commands.mcp.commands.auth,
   Effect.fn("cli.mcp.auth")(function* (input) {
-    const options = yield* ServiceConfig.options()
-    const found = yield* Service.discover(options)
-    const endpoint = found ?? (yield* Service.ensure(options))
+    const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
 
     const integration = yield* resolveIntegration(client, input.name, location)

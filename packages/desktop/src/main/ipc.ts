@@ -16,7 +16,9 @@ import { windowHandlers } from "./ipc-handlers/window"
 import { wslHandlers } from "./ipc-handlers/wsl"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
+import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
+import { DesktopCli } from "./service/desktop-cli"
 import { DesktopStorage } from "./storage"
 import { Updater } from "./updater"
 import { getLastFocusedWindow } from "./windows"
@@ -42,6 +44,7 @@ export const layer = RpcServer.layer(DesktopRpcs, { disableFatalDefects: true })
 export const registerIpcHandlers = Effect.gen(function* () {
   const handoff = yield* IpcPortHandoff
   const lifecycle = yield* ApplicationLifecycle.Service
+  const desktopCli = yield* DesktopCli.Service
   const updater = yield* Updater.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const menu = {
@@ -50,6 +53,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
       if (win) sendMenuCommand(win, id)
     },
     checkForUpdates: () => runFork(updater.show),
+    installCli: () => runFork(showCliInstaller(desktopCli)),
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),
     relaunch: lifecycle.relaunch,

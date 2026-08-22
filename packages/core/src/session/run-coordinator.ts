@@ -71,7 +71,7 @@ export const make = <Key, E, Reason = never>(options: {
 
     const loop = (key: Key, execution: Execution<E, Reason>, force: boolean): Effect.Effect<void, E> =>
       Effect.suspend(() => options.drain(key, force, execution.scope)).pipe(
-        Effect.flatMap(() =>
+        Effect.andThen(
           Effect.suspend(() => {
             if (execution.stopping || execution.pendingWake === undefined) return Effect.void
             execution.scope = execution.pendingWake

@@ -51,7 +51,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Cr
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const { db } = yield* Database.Service
+    const db = (yield* Database.Service).db
     const decode = Schema.decodeUnknownSync(Value)
     const stored = (row: typeof CredentialTable.$inferSelect) => {
       if (!row.integration_id) return
@@ -62,31 +62,30 @@ const layer = Layer.effect(
         value: decode(row.value),
       })
     }
+    const storedRows = (rows: ReadonlyArray<typeof CredentialTable.$inferSelect>) =>
+      rows.flatMap((row) => {
+        const credential = stored(row)
+        return credential ? [credential] : []
+      })
 
     return Service.of({
-      all: Effect.fn("Credential.all")(function* () {
-        return (yield* db
+      all: Effect.fn("Credential.all")(() =>
+        db
           .select()
           .from(CredentialTable)
           .orderBy(asc(CredentialTable.time_created))
           .all()
-          .pipe(Effect.orDie)).flatMap((row) => {
-          const credential = stored(row)
-          return credential ? [credential] : []
-        })
-      }),
-      list: Effect.fn("Credential.list")(function* (integrationID) {
-        return (yield* db
+          .pipe(Effect.orDie, Effect.map(storedRows)),
+      ),
+      list: Effect.fn("Credential.list")((integrationID) =>
+        db
           .select()
           .from(CredentialTable)
           .where(eq(CredentialTable.integration_id, integrationID))
           .orderBy(asc(CredentialTable.time_created))
           .all()
-          .pipe(Effect.orDie)).flatMap((row) => {
-          const credential = stored(row)
-          return credential ? [credential] : []
-        })
-      }),
+          .pipe(Effect.orDie, Effect.map(storedRows)),
+      ),
       get: Effect.fn("Credential.get")(function* (id) {
         const row = yield* db.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get().pipe(Effect.orDie)
         return row ? stored(row) : undefined

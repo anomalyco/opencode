@@ -180,33 +180,33 @@ const layer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
       }),
-      create: Effect.fnUntraced(function* (input: StoredInput, tx?: Transaction) {
-        return (
-          (yield* (tx ?? db)
-            .insert(WorktreeTable)
-            .values({ project_id: input.projectID, directory: input.directory, strategy: input.strategy })
-            .onConflictDoUpdate({
-              target: [WorktreeTable.project_id, WorktreeTable.directory],
-              set: { strategy: input.strategy ?? null },
-              setWhere: input.strategy
-                ? or(isNull(WorktreeTable.strategy), ne(WorktreeTable.strategy, input.strategy))
-                : isNotNull(WorktreeTable.strategy),
-            })
-            .returning({ directory: WorktreeTable.directory })
-            .get()
-            .pipe(Effect.orDie)) !== undefined
-        )
-      }),
-      remove: Effect.fnUntraced(function* (projectID: ProjectSchema.ID, directory: AbsolutePath, tx?: Transaction) {
-        return (
-          (yield* (tx ?? db)
-            .delete(WorktreeTable)
-            .where(and(eq(WorktreeTable.project_id, projectID), eq(WorktreeTable.directory, directory)))
-            .returning({ directory: WorktreeTable.directory })
-            .get()
-            .pipe(Effect.orDie)) !== undefined
-        )
-      }),
+      create: (input: StoredInput, tx?: Transaction) =>
+        (tx ?? db)
+          .insert(WorktreeTable)
+          .values({ project_id: input.projectID, directory: input.directory, strategy: input.strategy })
+          .onConflictDoUpdate({
+            target: [WorktreeTable.project_id, WorktreeTable.directory],
+            set: { strategy: input.strategy ?? null },
+            setWhere: input.strategy
+              ? or(isNull(WorktreeTable.strategy), ne(WorktreeTable.strategy, input.strategy))
+              : isNotNull(WorktreeTable.strategy),
+          })
+          .returning({ directory: WorktreeTable.directory })
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => row !== undefined),
+          ),
+      remove: (projectID: ProjectSchema.ID, directory: AbsolutePath, tx?: Transaction) =>
+        (tx ?? db)
+          .delete(WorktreeTable)
+          .where(and(eq(WorktreeTable.project_id, projectID), eq(WorktreeTable.directory, directory)))
+          .returning({ directory: WorktreeTable.directory })
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => row !== undefined),
+          ),
     }
 
     const registry = new Map<StrategyID, Strategy>()
@@ -219,8 +219,6 @@ const layer = Layer.effect(
     // Register default strategies
     const gitStrategy = yield* WorktreeGit.make
     yield* register(gitStrategy).pipe(Effect.orDie)
-
-    const strategies = () => Array.from(registry.values())
 
     const source = Effect.fnUntraced(function* (input: AbsolutePath | undefined, projectID: ProjectSchema.ID) {
       const sourceDirectory = input ?? (yield* ops.primary(projectID))?.directory
@@ -269,7 +267,8 @@ const layer = Layer.effect(
       const worktreeDirectory = yield* canonical(fs, input.directory)
       const stored = yield* ops.find(input.projectID, worktreeDirectory)
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: worktreeDirectory })
-      yield* (yield* getStrategy(StrategyID.make(stored.strategy))).remove({
+      const strategy = yield* getStrategy(StrategyID.make(stored.strategy))
+      yield* strategy.remove({
         directory: worktreeDirectory,
         force: input.force,
       })
@@ -289,7 +288,7 @@ const layer = Layer.effect(
       const discovered = yield* Effect.forEach(
         sourceDirectories,
         (sourceDirectory) =>
-          Effect.forEach(strategies(), (strategy) =>
+          Effect.forEach(Array.from(registry.values()), (strategy) =>
             strategy.list(sourceDirectory).pipe(
               Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.succeed([])),
               Effect.map((items) =>

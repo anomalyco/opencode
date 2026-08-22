@@ -4,10 +4,11 @@ import {
   attachmentsAndCommentsDocument,
   attachmentsAndCommentsPresentation,
   compactionDocument,
+  instructionsUpdatedMultipleDocument,
+  instructionsUpdatedSingleDocument,
   requestHistoryDocument,
   retryDocument,
   revertDocument,
-  skillWorkflowDocument,
   streamingDocument,
   thinkingDocument,
 } from "../storybook/current-session-fixtures"
@@ -71,17 +72,6 @@ export const CompactionAndContinuation = {
   ),
 }
 
-export const AgentAndSkillContext = {
-  render: () => (
-    <CurrentSessionTimelineStory
-      title="Agent and skill context"
-      description="A review agent and its loaded skill appear chronologically before the response."
-      document={skillWorkflowDocument}
-      width="600px"
-    />
-  ),
-}
-
 export const AnsweredQuestionAndDeclinedCommand = {
   render: () => (
     <CurrentSessionTimelineStory
@@ -126,6 +116,28 @@ export const MixedDirectionRtl = {
       document={attachmentsAndCommentsDocument}
       presentation={attachmentsAndCommentsPresentation}
       width="480px"
+    />
+  ),
+}
+
+export const InstructionsUpdatedSingle = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Instructions updated (single)"
+      description="A system notice in the timeline showing a single updated instruction source."
+      document={instructionsUpdatedSingleDocument}
+      width="600px"
+    />
+  ),
+}
+
+export const InstructionsUpdatedMultiple = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Instructions updated (multiple)"
+      description="A system notice in the timeline showing multiple updated instruction sources."
+      document={instructionsUpdatedMultipleDocument}
+      width="600px"
     />
   ),
 }

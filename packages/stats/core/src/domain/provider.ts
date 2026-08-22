@@ -8,13 +8,13 @@ import {
   chunks,
   collapseRows,
   inserted,
-  isMissingUniqueUsersColumn,
   omitUniqueUsers,
   rankRowsWithMarketShare,
   statRowScope,
   synthesizeAllTierRows,
   toStatBaseRow,
   UPSERT_CHUNK_SIZE,
+  withUniqueUsersFallback,
   type StatBaseAggregate,
 } from "./stat"
 
@@ -109,14 +109,8 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
           chunks(rows, UPSERT_CHUNK_SIZE),
           (chunk) =>
             Effect.tryPromise({
-              try: async () => {
-                try {
-                  return await upsertProviderChunk(chunk, true)
-                } catch (cause) {
-                  if (!isMissingUniqueUsersColumn(cause)) throw cause
-                  return upsertProviderChunk(chunk, false)
-                }
-              },
+              try: () =>
+                withUniqueUsersFallback((includeUniqueUsers) => upsertProviderChunk(chunk, includeUniqueUsers)),
               catch: (cause) => DatabaseError.make({ cause }),
             }),
           { discard: true },

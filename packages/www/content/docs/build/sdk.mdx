@@ -11,14 +11,14 @@ server and use the [TypeScript client](/build/client) in the meantime.
 
 ## Effect
 
-`@opencode-ai/sdk-next` hosts OpenCode in-process. Unlike the
+`@opencode-ai/sdk` hosts OpenCode in-process. Unlike the
 [network client](/build/client), it assembles the OpenCode server and routes API
 calls through its HTTP router in memory. It opens no HTTP listener and adds no
 network hop between the client and server.
 
 <Callout type="warning">
-  The V2 SDK is beta and currently private to the OpenCode workspace. It is not published for external installation yet,
-  and its package name and API may change before release.
+  The V2 SDK is beta. Install the current preview with `bun add @opencode-ai/sdk@dev`; its API may change before a
+  stable release.
 </Callout>
 
 ## Create a host
@@ -27,7 +27,7 @@ network hop between the client and server.
 the router, location services, fibers, and scoped plugin registrations.
 
 ```ts
-import { AbsolutePath, Location, OpenCode } from "@opencode-ai/sdk-next"
+import { AbsolutePath, Location, OpenCode } from "@opencode-ai/sdk"
 import { Effect } from "effect"
 
 const program = Effect.scoped(
@@ -57,7 +57,7 @@ Use `OpenCode.layer` when the host should be provided through Effect dependency
 injection:
 
 ```ts
-import { OpenCode } from "@opencode-ai/sdk-next"
+import { OpenCode } from "@opencode-ai/sdk"
 import { Effect } from "effect"
 
 const program = Effect.gen(function* () {

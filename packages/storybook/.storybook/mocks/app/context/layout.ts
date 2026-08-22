@@ -25,6 +25,10 @@ const [all, setAll] = createSignal<string[]>([])
 const [active, setActive] = createSignal<string | undefined>(undefined)
 const [reviewOpen, setReviewOpen] = createSignal(false)
 
+export function useCurrentRoute() {
+  return () => ({ type: "home" as const })
+}
+
 const tabs = {
   all,
   active,

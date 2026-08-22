@@ -13,6 +13,16 @@ function missingRequest(id: Permission.ID) {
 
 export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", (handlers) =>
   Effect.gen(function* () {
+    const requireOwnedRequest = Effect.fnUntraced(function* (
+      sessionID: Permission.Request["sessionID"],
+      requestID: Permission.ID,
+    ) {
+      const permission = yield* Permission.Service
+      const request = yield* permission.get(requestID)
+      if (!request || request.sessionID !== sessionID) return yield* missingRequest(requestID)
+      return { permission, request }
+    })
+
     return handlers
       .handle(
         "permission.request.list",
@@ -60,19 +70,15 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
       .handle(
         "session.permission.get",
         Effect.fn(function* (ctx) {
-          const permission = yield* Permission.Service
-          const request = yield* permission.get(ctx.params.requestID)
-          if (!request || request.sessionID !== ctx.params.sessionID) return yield* missingRequest(ctx.params.requestID)
-          return { data: request }
+          const owned = yield* requireOwnedRequest(ctx.params.sessionID, ctx.params.requestID)
+          return { data: owned.request }
         }),
       )
       .handle(
         "session.permission.reply",
         Effect.fn(function* (ctx) {
-          const permission = yield* Permission.Service
-          const request = yield* permission.get(ctx.params.requestID)
-          if (!request || request.sessionID !== ctx.params.sessionID) return yield* missingRequest(ctx.params.requestID)
-          yield* permission
+          const owned = yield* requireOwnedRequest(ctx.params.sessionID, ctx.params.requestID)
+          yield* owned.permission
             .reply({ requestID: ctx.params.requestID, reply: ctx.payload.reply, message: ctx.payload.message })
             .pipe(Effect.catchTag("Permission.NotFoundError", () => missingRequest(ctx.params.requestID)))
           return HttpApiSchema.NoContent.make()

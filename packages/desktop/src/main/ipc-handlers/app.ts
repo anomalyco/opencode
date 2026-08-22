@@ -5,6 +5,7 @@ import { AppRpcs } from "../../shared/ipc-rpc"
 import { openExternalURL } from "../files"
 import { checkAppExists, resolveAppPath } from "../files/apps"
 import { setForceFocus } from "../native/debug"
+import { showCliInstaller } from "../native/install-cli"
 import { DesktopLogging, scoped } from "../native/logging"
 import { createMenu, sendMenuCommand } from "../native/menu"
 import { setNativeTranslations } from "../native/translations"
@@ -12,6 +13,7 @@ import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../lifecycle/onboarding"
 import { BackgroundService } from "../service/background-service"
+import { DesktopCli } from "../service/desktop-cli"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
 import { Updater } from "../updater"
 import { getLastFocusedWindow, setBackgroundColor } from "../windows"
@@ -22,6 +24,7 @@ export const appHandlers = AppRpcs.toLayer(
     const handoff = yield* IpcPortHandoff
     const lifecycle = yield* ApplicationLifecycle.Service
     const background = yield* BackgroundService.Service
+    const desktopCli = yield* DesktopCli.Service
     const updater = yield* Updater.Service
     const logging = yield* DesktopLogging.Service
     const runFork = Effect.runForkWith(yield* Effect.context())
@@ -56,6 +59,7 @@ export const appHandlers = AppRpcs.toLayer(
               if (win) sendMenuCommand(win, id)
             },
             checkForUpdates: () => runFork(updater.show),
+            installCli: () => runFork(showCliInstaller(desktopCli)),
             createWindow: lifecycle.createWindow,
             openExternal: (url) => runFork(openExternalURL(url)),
             relaunch: lifecycle.relaunch,

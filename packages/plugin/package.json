@@ -13,7 +13,6 @@
     ".": "./src/promise/index.ts",
     "./effect": "./src/effect/index.ts",
     "./tui": "./src/tui/index.ts",
-    "./v1": "./src/v1/index.ts",
     "./*": "./src/*.ts"
   },
   "files": [
@@ -25,7 +24,6 @@
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/sdk": "1.18.5",
     "@standard-schema/spec": "catalog:",
     "effect": "catalog:",
     "zod": "catalog:"
@@ -33,7 +31,6 @@
   "peerDependencies": {
     "@opencode-ai/theme": "workspace:*",
     "@opentui/core": ">=0.5.6",
-    "@opentui/keymap": ">=0.5.6",
     "@opentui/solid": ">=0.5.6",
     "solid-js": ">=1.9.0"
   },
@@ -42,9 +39,6 @@
       "optional": true
     },
     "@opentui/core": {
-      "optional": true
-    },
-    "@opentui/keymap": {
       "optional": true
     },
     "@opentui/solid": {
@@ -57,7 +51,6 @@
   "devDependencies": {
     "@opencode-ai/theme": "workspace:*",
     "@opentui/core": "catalog:",
-    "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
     "@tsconfig/bun": "catalog:",
     "@tsconfig/node22": "catalog:",

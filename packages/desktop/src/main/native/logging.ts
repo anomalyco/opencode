@@ -163,7 +163,7 @@ export const tail = Effect.fn("DesktopLogging.tail")(function* () {
     const contents = yield* fs.readFileString(path)
     const lines = contents.split("\n")
     return lines.slice(Math.max(0, lines.length - TAIL_LINES)).join("\n")
-  }).pipe(Effect.catch(() => Effect.succeed("")))
+  }).pipe(Effect.orElseSucceed(() => ""))
 })
 
 function initRunDirectory(fs: FileSystem.FileSystem, path: Path.Path) {

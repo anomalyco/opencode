@@ -1,7 +1,7 @@
 // Client data layer: apply server events and cache API reads into a Solid store.
-// Prefer straightforward projection. Do not add generation counters, stale-response
-// merges, live/history overlays, or other race machinery here—last write wins.
-// Reconnect invalidates cached reads; active UI owners decide what to sync again.
+// Prefer straightforward projection. Invalidated reads revalidate serially so an older
+// response cannot commit after its replacement. Reconnect invalidates cached reads;
+// active UI owners decide what to sync again.
 
 import type {
   AgentInfo,
@@ -13,6 +13,7 @@ import type {
   McpResource,
   McpServer,
   ModelInfo,
+  ModelRef,
   PermissionSavedInfo,
   PermissionRequest,
   PermissionReplyInput,
@@ -34,6 +35,7 @@ import type {
   WebSearchProvider,
 } from "../promise"
 import { Worktree } from "@opencode-ai/schema/worktree"
+import { SessionID } from "@opencode-ai/schema/session-id"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { isPermissionNotFoundError, type SessionPromptInput } from "../promise"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -118,32 +120,46 @@ function locationQuery(ref?: LocationRef) {
 }
 
 function createSync() {
-  const state = new Map<string, true | Promise<void>>()
+  type Pending = { promise: Promise<void>; invalidated: boolean }
+  const state = new Map<string, true | Pending>()
+  const start = (key: string, load: () => Promise<void>, wait?: Promise<void>) => {
+    const entry: Pending = { promise: Promise.resolve(), invalidated: false }
+    state.set(key, entry)
+    entry.promise = (wait ? wait.catch(() => undefined).then(load) : load())
+      .then(() => {
+        if (state.get(key) === entry) state.set(key, true)
+      })
+      .finally(() => {
+        if (state.get(key) === entry) state.delete(key)
+      })
+    return entry.promise
+  }
   return {
     run(key: string, load: () => Promise<void>) {
       const active = state.get(key)
       if (active === true) return Promise.resolve()
-      if (active) return active
-      const pending = load()
-        .then(() => {
-          if (state.get(key) === pending) state.set(key, true)
-        })
-        .finally(() => {
-          if (state.get(key) === pending) state.delete(key)
-        })
-      state.set(key, pending)
-      return pending
+      if (!active) return start(key, load)
+      if (!active.invalidated) return active.promise
+      return start(key, load, active.promise)
     },
     complete(key: string) {
       if (state.has(key)) return
       state.set(key, true)
     },
+    has(key: string) {
+      return state.has(key)
+    },
     invalidate(key?: string) {
       if (key) {
-        state.delete(key)
+        const active = state.get(key)
+        if (active === true) state.delete(key)
+        if (active !== undefined && active !== true) active.invalidated = true
         return
       }
-      state.clear()
+      state.forEach((active, current) => {
+        if (active === true) state.delete(current)
+        if (active !== true) active.invalidated = true
+      })
     },
   }
 }
@@ -225,6 +241,33 @@ export function createData(config: CreateDataInput) {
   // server does not know about yet. Entries clear on the enqueued echo or on
   // rollback — not on POST success, which typically precedes the echo.
   const outbox = new Set<string>()
+
+  // Session IDs of optimistic create admissions still awaiting acknowledgement
+  // (the session.created echo or the create response itself). A failed create
+  // only rolls back a session the server never acknowledged. Unlike
+  // `creating`, this clears on the echo rather than request settlement.
+  const sessionOutbox = new Set<string>()
+
+  // In-flight optimistic creates by session ID. prompt() gates its POST on
+  // this so a prompt sent to a still-creating session waits for the session
+  // to exist server-side instead of failing with "not found".
+  const creating = new Map<string, Promise<unknown>>()
+
+  // Per-session send chain: prompts must be admitted in submission order,
+  // and HTTP gives no ordering across concurrent POSTs. Each prompt waits
+  // for the previous prompt's POST (settled, so one failure does not block
+  // the next) before sending its own.
+  const sending = new Map<string, Promise<unknown>>()
+
+  // Register `promise` under `key` until it settles. A later registration
+  // replaces an earlier one; settlement only clears its own entry.
+  function track(map: Map<string, Promise<unknown>>, key: string, promise: Promise<unknown>) {
+    map.set(key, promise)
+    const settle = () => {
+      if (map.get(key) === promise) map.delete(key)
+    }
+    void promise.then(settle, settle)
+  }
 
   // Upsert an admitted inbox item into pending, input, and (for user and
   // synthetic items) the visible transcript. Used by the inbox.enqueued
@@ -385,6 +428,7 @@ export function createData(config: CreateDataInput) {
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
+    sync.invalidate(`session.family:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     sync.invalidate(`session.permission:${sessionID}`)
@@ -434,6 +478,7 @@ export function createData(config: CreateDataInput) {
         void result.project.sync().catch((error) => console.error("Failed to preload projects", error))
         return
       case "session.created":
+        sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)
         void result.session.sync(event.data.sessionID)
         // Band-aid: a newly created session starts empty, so live events can be its source of truth.
@@ -851,6 +896,16 @@ export function createData(config: CreateDataInput) {
           const currentAssistant = message.activeAssistant(draft)
           if (currentAssistant) currentAssistant.retry = undefined
         })
+        if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
+        // An event can overtake the first read; queue a revalidation when that read is still active.
+        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
+        result.session.invalidate(event.data.sessionID)
+        void result.session.sync(event.data.sessionID)
+        return
+      case "session.viewed":
+        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
+        result.session.invalidate(event.data.sessionID)
+        void result.session.sync(event.data.sessionID)
         return
       case "session.revert.staged":
         if (store.session.info[event.data.sessionID])
@@ -1110,46 +1165,117 @@ export function createData(config: CreateDataInput) {
           sync.invalidate(`session.pending:${sessionID}`)
         },
       },
+      // Optimistic session creation: admit a local record under a
+      // client-minted ID so a session view can mount immediately, then create
+      // the session on the server. The session.created echo re-syncs the
+      // record by ID, so the durable payload replaces the client's guess.
+      // Returns the ID synchronously along with the in-flight request:
+      // callers gate session-dependent sends on the request (prompt() gates
+      // itself on any in-flight create of its session automatically).
+      create(input: {
+        id?: string
+        title?: string
+        agent?: string
+        model?: ModelRef
+        location?: LocationRef
+        projectID?: string
+      }) {
+        const { projectID, ...payload } = input
+        const id = payload.id ?? SessionID.create()
+        const location = payload.location ?? defaultLocation()
+        const fresh = !store.session.info[id]
+        if (fresh) {
+          const now = Date.now()
+          sessionOutbox.add(id)
+          result.session.remember({
+            id,
+            projectID: projectID ?? store.location[locationKey(location)]?.info?.project.id ?? "",
+            agent: payload.agent,
+            model: payload.model,
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: now, updated: now },
+            title: payload.title,
+            location,
+          })
+          // A mounted optimistic session must not fetch its empty collections
+          // before creation settles. The session.created echo re-syncs info.
+          sync.complete(`session.family:${id}`)
+          sync.complete(`session.pending:${id}`)
+          sync.complete(`session.message:${id}`)
+        }
+        // Wrapped so even a synchronous client failure reaches the rollback.
+        const request = Promise.resolve()
+          .then(() => api().session.create({ ...payload, id, location }))
+          .then((info) => {
+            sessionOutbox.delete(id)
+            result.session.remember(info)
+            return info
+          })
+          .catch((error) => {
+            // Roll back only a record this call admitted and neither the echo
+            // nor the response has acknowledged: anything else is server state.
+            if (fresh && sessionOutbox.delete(id)) removeSession(id)
+            throw error
+          })
+        if (fresh) track(creating, id, request)
+        return { id, request }
+      },
       // Optimistic prompt admission: render the prompt immediately under a
       // client-minted ID, send it, and let the durable inbox.enqueued echo
       // upsert that same ID with the server's payload. Server admission is
       // idempotent per ID, so retrying with the identical payload cannot
       // double-admit.
-      prompt(input: SessionPromptInput) {
-        const id = input.id ?? SessionMessage.ID.create()
+      prompt(input: SessionPromptInput & { gate?: Promise<unknown> }) {
+        const { gate, ...request } = input
+        const id = request.id ?? SessionMessage.ID.create()
         // A retry may reuse an ID that is already rendered — and possibly
         // already durable. Admit optimistically only for new IDs so a failed
         // retry cannot roll back acknowledged state.
         const fresh =
-          !messageIndex.get(input.sessionID)?.has(id) &&
-          !store.session.pending[input.sessionID]?.some((item) => item.id === id)
+          !messageIndex.get(request.sessionID)?.has(id) &&
+          !store.session.pending[request.sessionID]?.some((item) => item.id === id)
         if (fresh) {
           outbox.add(id)
           admitLocal({
             id,
-            sessionID: input.sessionID,
+            sessionID: request.sessionID,
             timeCreated: Date.now(),
             type: "user",
-            delivery: input.delivery ?? "steer",
+            delivery: request.delivery ?? "steer",
             // Files and skills stay off the optimistic row: their durable
             // forms are server-loaded (content, mime, resolution), so they
             // fill in when the echo upserts the row.
             payload: {
-              text: input.text,
-              agents: input.agents?.map((agent) => ({ ...agent })),
-              metadata: input.metadata,
+              text: request.text,
+              agents: request.agents?.map((agent) => ({ ...agent })),
+              metadata: request.metadata,
             },
           })
         }
         // Wrapped so even a synchronous client failure reaches the rollback.
-        return Promise.resolve()
-          .then(() => api().session.prompt({ ...input, id }))
-          .catch((error) => {
-            // Roll back only rows this call admitted and the echo has not
-            // acknowledged: anything else is server state.
-            if (fresh && outbox.delete(id)) retractLocal(input.sessionID, id)
-            throw error
-          })
+        // The POST additionally waits for the caller's gate, for any
+        // in-flight optimistic create of this session, and for the previous
+        // prompt's POST: the row renders now, the send happens once the
+        // session exists server-side and earlier prompts are admitted.
+        const previous = sending.get(request.sessionID)
+        const send = Promise.resolve()
+          .then(() => Promise.all([gate, creating.get(request.sessionID), previous]))
+          .then(() => api().session.prompt({ ...request, id }))
+        track(
+          sending,
+          request.sessionID,
+          send.then(
+            () => undefined,
+            () => undefined,
+          ),
+        )
+        return send.catch((error) => {
+          // Roll back only rows this call admitted and the echo has not
+          // acknowledged: anything else is server state.
+          if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
+          throw error
+        })
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {

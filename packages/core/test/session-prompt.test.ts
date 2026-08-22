@@ -74,7 +74,7 @@ const locations = Layer.effect(
             }),
             Layer.mock(Snapshot.Service, {
               capture: () =>
-                ready ? Effect.succeed(undefined) : Effect.die(new Error("Snapshot used before plugins were ready")),
+                ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
               restore: () =>
                 ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
             }),

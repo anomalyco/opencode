@@ -1,5 +1,5 @@
 import { Root } from "@kobalte/core/button"
-import { type ComponentProps, Show, createMemo, splitProps } from "solid-js"
+import { type ComponentProps, Show, splitProps } from "solid-js"
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import "./button.css"
 
@@ -13,22 +13,19 @@ export interface ButtonProps
 
 export function Button(props: ButtonProps) {
   const [split, rest] = splitProps(props, ["variant", "size", "icon", "class", "classList"])
-  const resolvedIcon = createMemo(() => split.icon)
   return (
     <Root
       {...rest}
       data-component="button-v2"
       data-size={split.size || "normal"}
       data-variant={split.variant || "neutral"}
-      data-icon={resolvedIcon()}
+      data-icon={split.icon}
       classList={{
         ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
-      <Show when={resolvedIcon()}>
-        <Icon name={resolvedIcon()!} />
-      </Show>
+      <Show when={split.icon}>{(icon) => <Icon name={icon()} />}</Show>
       {props.children}
     </Root>
   )

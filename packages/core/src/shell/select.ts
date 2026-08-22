@@ -158,8 +158,6 @@ function info(file: string, options?: Options, bin?: string): Item {
 
 export function args(file: string, command: string) {
   const n = name(file)
-  if (n === "nu" || n === "fish") return ["-c", command]
-  if (n === "zsh" || n === "bash") return ["-c", command]
   if (n === "cmd") return ["/c", command]
   if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
   return ["-c", command]

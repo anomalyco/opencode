@@ -26,6 +26,7 @@ import {
   webSearchProviderLabel,
 } from "../util/tool-display"
 import { formatPath } from "../util/path-format"
+import { isRecord } from "../util/record"
 import type { RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
 
 export { canonicalToolName } from "../util/tool-display"
@@ -138,11 +139,7 @@ type ToolRegistry = Record<ToolName, ToolRule>
 type AnyToolRule = ToolRule
 
 function dict(v: unknown): ToolDict {
-  if (!v || typeof v !== "object" || Array.isArray(v)) {
-    return {}
-  }
-
-  return { ...v }
+  return isRecord(v) ? { ...v } : {}
 }
 
 function props(frame: ToolFrame): ToolProps {

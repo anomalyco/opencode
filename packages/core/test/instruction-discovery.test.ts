@@ -405,7 +405,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           FSUtil.Service.of({
             ...fs,
             up: () => Effect.succeed([discovered]),
-            readFileStringSafe: () => Effect.succeed(undefined),
+            readFileStringSafe: () => Effect.undefined,
           }),
         ),
       ),

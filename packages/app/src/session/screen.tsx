@@ -72,6 +72,7 @@ export function SessionScreen(props: { session: SessionModel }) {
               {(_id) => (
                 <MessageTimeline
                   session={session}
+                  background={composer.region.state.background}
                   actions={composer.actions.timeline}
                   scroll={timeline.scroll}
                   onResumeScroll={timeline.actions.resume}

@@ -8,9 +8,9 @@ export type CountItem = {
 }
 
 export function AnimatedCountList(props: { items: CountItem[]; fallback?: string; class?: string }) {
-  const visible = createMemo(() => props.items.filter((item) => item.count > 0))
+  const firstPositive = createMemo(() => props.items.findIndex((item) => item.count > 0))
   const fallback = createMemo(() => props.fallback ?? "")
-  const showEmpty = createMemo(() => visible().length === 0 && fallback().length > 0)
+  const showEmpty = createMemo(() => firstPositive() === -1 && fallback().length > 0)
 
   return (
     <span data-component="tool-count-summary" class={props.class}>
@@ -21,16 +21,12 @@ export function AnimatedCountList(props: { items: CountItem[]; fallback?: string
       <Index each={props.items}>
         {(item, index) => {
           const active = createMemo(() => item().count > 0)
-          const hasPrev = createMemo(() => {
-            for (let i = index - 1; i >= 0; i--) {
-              if (props.items[i].count > 0) return true
-            }
-            return false
-          })
-
           return (
             <>
-              <span data-slot="tool-count-summary-prefix" data-active={active() && hasPrev() ? "true" : "false"}>
+              <span
+                data-slot="tool-count-summary-prefix"
+                data-active={active() && firstPositive() !== index ? "true" : "false"}
+              >
                 ,
               </span>
               <span data-slot="tool-count-summary-item" data-active={active() ? "true" : "false"}>

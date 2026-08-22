@@ -116,7 +116,16 @@ export function createMarquee(animations: () => boolean) {
     interval = undefined
   }
   const scroll = () => {
-    interval = setInterval(() => setOffset((value) => (value + 1) % cycleWidth), MARQUEE_INTERVAL)
+    interval = setInterval(
+      () =>
+        setOffset((value) => {
+          if (value + 1 < cycleWidth) return value + 1
+          clear()
+          leading.animate({ opacity: 0 })
+          return 0
+        }),
+      MARQUEE_INTERVAL,
+    )
   }
   const enter = (sessionID: string, title: string, width: number) => {
     if (!marqueeOverflows(title, width)) {

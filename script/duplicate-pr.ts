@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+/* TODO: Migrate this script to the new in-process @opencode-ai/sdk.
 import path from "path"
 import { pathToFileURL } from "bun"
 import { createOpencode } from "@opencode-ai/sdk"
@@ -77,3 +78,4 @@ Examples:
 }
 
 void main()
+*/

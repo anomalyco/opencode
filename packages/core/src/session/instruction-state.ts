@@ -248,19 +248,23 @@ const loadBlobs = Effect.fnUntraced(function* (db: DatabaseService, values: Read
   return blobs
 })
 
-function dereference(values: Instructions.Values, blobs: ReadonlyMap<Instructions.Hash, Schema.Json>) {
-  return Object.fromEntries(Object.entries(values).map(([key, hash]) => [key, requireBlob(blobs, hash)])) as Readonly<
-    Record<string, Schema.Json>
-  >
+function dereference(
+  values: Instructions.Values,
+  blobs: ReadonlyMap<Instructions.Hash, Schema.Json>,
+): Readonly<Record<string, Schema.Json>> {
+  return Object.fromEntries(Object.entries(values).map(([key, hash]) => [key, requireBlob(blobs, hash)]))
 }
 
-function dereferenceDelta(delta: Instructions.Delta, blobs: ReadonlyMap<Instructions.Hash, Schema.Json>) {
+function dereferenceDelta(
+  delta: Instructions.Delta,
+  blobs: ReadonlyMap<Instructions.Hash, Schema.Json>,
+): Readonly<Record<string, Option.Option<Schema.Json>>> {
   return Object.fromEntries(
     Object.entries(delta).map(([key, hash]) => [
       key,
       hash === "removed" ? Option.none() : Option.some(requireBlob(blobs, hash)),
     ]),
-  ) as Readonly<Record<string, Option.Option<Schema.Json>>>
+  )
 }
 
 function requireBlob(blobs: ReadonlyMap<Instructions.Hash, Schema.Json>, hash: Instructions.Hash) {

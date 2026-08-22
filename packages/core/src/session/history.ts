@@ -29,11 +29,19 @@ export const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService
     .pipe(Effect.orDie)
 })
 
-const messageRows = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  compaction: { readonly seq: number } | undefined,
-) {
+export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
+  decode({ ...row.data, id: row.id, type: row.type }).pipe(
+    Effect.mapError(
+      () =>
+        new MessageDecodeError({
+          sessionID: SessionSchema.ID.make(row.session_id),
+          messageID: SessionMessage.ID.make(row.id),
+        }),
+    ),
+  )
+
+const messageEntries = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+  const compaction = yield* latestCompaction(db, sessionID)
   const rows = yield* db
     .select()
     .from(SessionMessageTable)
@@ -46,22 +54,6 @@ const messageRows = Effect.fnUntraced(function* (
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  return rows
-})
-
-const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
-  decode({ ...row.data, id: row.id, type: row.type }).pipe(
-    Effect.mapError(
-      () =>
-        new MessageDecodeError({
-          sessionID: SessionSchema.ID.make(row.session_id),
-          messageID: SessionMessage.ID.make(row.id),
-        }),
-    ),
-  )
-
-const messageEntries = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID))
   return yield* Effect.forEach(rows, (row) =>
     decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
   )
@@ -128,7 +120,7 @@ export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(fun
     .get()
     .pipe(Effect.orDie)
   if (!row) return undefined
-  const message = yield* decodeMessageRow(row).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  const message = yield* decodeMessageRow(row).pipe(Effect.orElseSucceed(() => undefined))
   return message?.type === "user" ? message : undefined
 })
 

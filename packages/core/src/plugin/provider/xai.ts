@@ -144,7 +144,7 @@ function poll(device: typeof Device.Type, app: App.Info): Effect.Effect<Token, u
         if (response.ok) return yield* decode(response, Token)
         const error = yield* Effect.promise(() => response.text()).pipe(
           Effect.map((body) => Option.getOrUndefined(decodeDeviceError(body))),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         )
         if (error?.error === "authorization_pending") {
           return yield* Effect.sleep(interval + pollingSafetyMargin).pipe(Effect.andThen(loop(interval)))

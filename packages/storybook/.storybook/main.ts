@@ -22,6 +22,7 @@ export default defineMain({
     "@storybook/addon-a11y",
     "@storybook/addon-vitest",
   ],
+  staticDirs: [path.resolve(here, "../../app/public")],
   stories: [
     "../../ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
     "../../session-ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",

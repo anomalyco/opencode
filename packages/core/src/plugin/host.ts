@@ -2,7 +2,6 @@ export * as PluginHost from "./host.js"
 
 import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import type { CredentialOAuth } from "@opencode-ai/sdk/v2/types"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { App } from "../app.js"
@@ -27,12 +26,10 @@ import { Tool } from "../tool.js"
 import { Workspace } from "../workspace.js"
 import { WebSearch } from "../websearch.js"
 import { PluginHooks } from "./hooks.js"
+import type { Interface } from "../plugin.js"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
-export const make = Effect.fn("PluginHost.make")(function* (
-  plugin: import("../plugin.js").Interface,
-  pluginID: string = "test",
-) {
+export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, pluginID: string = "test") {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
   const aisdk = yield* AISDK.Service
@@ -184,10 +181,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
     command: {
       list: () => response(commands.list()),
       reload: commands.reload,
-      transform: (callback) =>
-        commands.transform((draft) => {
-          callback(draft)
-        }),
+      transform: commands.transform,
     },
     event: {
       subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
@@ -486,6 +480,6 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
   }
 }
 
-function credential(value: CredentialOAuth) {
+function credential(value: Credential.OAuth) {
   return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }

@@ -1,5 +1,6 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, For, Match, Show, Switch, createSignal } from "solid-js"
+import { DialogMcp } from "../../component/dialog-mcp"
 
 function View(props: { context: Plugin.Context; sessionID: string }) {
   const [open, setOpen] = createSignal(true)
@@ -39,7 +40,16 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
         <Show when={list().length <= 2 || open()}>
           <For each={list()}>
             {(item) => (
-              <box flexDirection="row" gap={1}>
+              <box
+                flexDirection="row"
+                gap={1}
+                minWidth={0}
+                onMouseUp={() =>
+                  props.context.ui.dialog.show(() => (
+                    <DialogMcp initialServer={item.name} details={item.status.status === "failed"} />
+                  ))
+                }
+              >
                 <text
                   flexShrink={0}
                   style={{
@@ -48,18 +58,21 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
                 >
                   •
                 </text>
-                <text fg={theme.text.default} wrapMode="word">
-                  {item.name}{" "}
-                  <span style={{ fg: theme.text.subdued }}>
-                    <Switch fallback={item.status.status}>
-                      <Match when={item.status.status === "connected"}>Connected</Match>
-                      <Match when={item.status.status === "failed"}>
-                        <i>{item.status.status === "failed" ? item.status.error : undefined}</i>
-                      </Match>
-                      <Match when={item.status.status === "disabled"}>Disabled</Match>
-                      <Match when={item.status.status === "needs_auth"}>Needs auth</Match>
-                    </Switch>
-                  </span>
+                <text fg={theme.text.default} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
+                  <b>{item.name}</b>
+                </text>
+                <text
+                  fg={item.status.status === "failed" ? theme.text.feedback.error.default : theme.text.subdued}
+                  wrapMode="none"
+                  flexShrink={0}
+                >
+                  <Switch fallback={item.status.status}>
+                    <Match when={item.status.status === "connected"}>Connected</Match>
+                    <Match when={item.status.status === "pending"}>Connecting</Match>
+                    <Match when={item.status.status === "failed"}>Error</Match>
+                    <Match when={item.status.status === "disabled"}>Disabled</Match>
+                    <Match when={item.status.status === "needs_auth"}>Sign in</Match>
+                  </Switch>
                 </text>
               </box>
             )}

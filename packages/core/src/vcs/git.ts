@@ -141,7 +141,7 @@ function makeGit(proc: AppProcess.Interface) {
         truncated: result.stdoutTruncated || result.stderrTruncated,
       }
     },
-    Effect.catch(() => Effect.succeed({ exitCode: 1, text: () => "", truncated: false })),
+    Effect.orElseSucceed(() => ({ exitCode: 1, text: () => "", truncated: false })),
   )
 
   const text = Effect.fnUntraced(function* (args: string[], opts: { cwd: string }) {
