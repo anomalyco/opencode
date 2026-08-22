@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
+import { filePartFromFileURL } from "./attachments"
 import { buildRequestParts } from "./build-request-parts"
 
 describe("buildRequestParts", () => {
@@ -256,6 +257,30 @@ describe("buildRequestParts", () => {
       // Should be a normal Unix path
       expect(filePart.url).toBe("file:///home/user/project/src/app.ts")
     }
+  })
+
+  test("preserves decoded paths and canonical URLs from desktop file drops", () => {
+    const attachment = filePartFromFileURL("file:///home/carole/Bureau/%3F%3F%3F.png")
+    if (!attachment) throw new Error("Expected a file attachment")
+
+    const result = buildRequestParts({
+      prompt: [attachment],
+      context: [],
+      images: [],
+      text: attachment.content,
+      messageID: "msg_drop_1",
+      sessionID: "ses_drop_1",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.requestParts.find((part) => part.type === "file")).toMatchObject({
+      url: "file:///home/carole/Bureau/%3F%3F%3F.png",
+      source: {
+        type: "file",
+        path: "/home/carole/Bureau/???.png",
+        text: { value: "@/home/carole/Bureau/???.png" },
+      },
+    })
   })
 
   test("handles macOS paths correctly", () => {
