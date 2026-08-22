@@ -32,6 +32,7 @@ export const DialogServer: Component<{
     onSelect: () => dialog.close(),
   })
   const [opened, setOpened] = createSignal(false)
+  let urlInput: HTMLInputElement | undefined
 
   onMount(() => {
     if (props.mode === "add") form.start.add()
@@ -47,6 +48,19 @@ export const DialogServer: Component<{
     if (!opened()) return
     if (form.state.open()) return
     dialog.close()
+  })
+
+  // Submitting disables every field including the focused URL input, which
+  // drops activeElement to <body>. After a failed health check nothing
+  // restores it — combined with a missed focus-scope anchor this leaves
+  // keyboard focus stuck outside the dialog, so username/password become
+  // unreachable. Re-anchor focus on the URL field once inputs re-enable.
+  createEffect(() => {
+    if (!opened()) return
+    if (form.state.busy() || !form.state.error()) return
+    const active = document.activeElement
+    if (active && active !== document.body) return
+    urlInput?.focus({ preventScroll: true })
   })
 
   const keyDown = (event: KeyboardEvent) => {
@@ -75,6 +89,7 @@ export const DialogServer: Component<{
           <div class="flex w-full min-w-0 flex-col gap-2">
             <label class="settings-server-dialog-label">{language.t("dialog.server.add.url")}</label>
             <TextInput
+              ref={(el) => (urlInput = el)}
               type="text"
               appearance="large"
               class="!w-full self-stretch"
