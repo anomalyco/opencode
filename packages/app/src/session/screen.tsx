@@ -78,12 +78,13 @@ export function SessionScreen(props: { session: SessionModel }) {
                   onResumeScroll={timeline.actions.resume}
                   setScrollRef={timeline.view.setScrollRef}
                   onScheduleScrollState={timeline.view.scheduleScrollState}
-                  onPin={timeline.view.pin}
-                  onUnpin={timeline.view.unpin}
+                  onAutoScrollHandleScroll={timeline.autoScroll.handleScroll}
+                  onMarkScrollGesture={timeline.view.markGesture}
+                  hasScrollGesture={timeline.view.hasGesture()}
                   onUserScroll={timeline.view.markUserScroll}
                   onHistoryScroll={timeline.view.onHistoryScroll}
-                  onSelectionInteraction={timeline.view.selectionInteraction}
-                  pinned={timeline.view.pinned()}
+                  onAutoScrollInteraction={timeline.autoScroll.handleInteraction}
+                  shouldAnchorBottom={timeline.view.shouldAnchorBottom()}
                   centered={screen.centered()}
                   setContentRef={timeline.view.setContentRef}
                   diffs={review.details.diffs}

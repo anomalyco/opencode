@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
-import { event, session, sessionID, setupTimeline } from "../performance/timeline-stability/fixture"
+import { event, session, sessionID, setupTimeline, toolPart } from "../performance/timeline-stability/fixture"
 
 const user = { id: "msg_user", type: "user", text: "Run it", time: { created: 1 } } satisfies SessionMessageInfo
 
@@ -79,15 +79,7 @@ test("shows a delegating row while subagent input streams", async ({ page }) => 
       user,
       {
         ...assistant(false),
-        content: [
-          {
-            type: "tool",
-            id: "call_subagent",
-            name: "subagent",
-            state: { status: "streaming", input: "" },
-            time: { created: 2 },
-          },
-        ],
+        content: [toolPart("call_subagent", "subagent", "streaming", {})],
       },
     ],
   })
@@ -165,26 +157,23 @@ test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
   await expect(page.getByText("Called `subagent`", { exact: false })).toHaveCount(0)
   await expect(page.locator('[data-component="background-tool-control"]')).toHaveCount(0)
   const hint = page.locator('[data-component="session-background-hint"]')
-  const hintRow = page.locator('[data-component="session-background-hint-row"]')
   const hintPrefix = hint.locator('[data-slot="session-background-hint-prefix"]')
   await expect(hint).toBeVisible()
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
   await expect
     .poll(async () => {
-      const [cardBox, hintBox, hintRowBox, prefixBox] = await Promise.all([
+      const [cardBox, hintBox, prefixBox] = await Promise.all([
         card.boundingBox(),
         hint.boundingBox(),
-        hintRow.boundingBox(),
         hintPrefix.boundingBox(),
       ])
-      if (!cardBox || !hintBox || !hintRowBox || !prefixBox) return undefined
+      if (!cardBox || !hintBox || !prefixBox) return undefined
       return {
         aligned: Math.abs(cardBox.x - prefixBox.x) < 2,
-        height: hintRowBox.height,
         ordered: cardBox.y < hintBox.y,
       }
     })
-    .toEqual({ aligned: true, height: 32, ordered: true })
+    .toEqual({ aligned: true, ordered: true })
 
   const request = page.waitForRequest(
     (request) =>

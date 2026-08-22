@@ -91,8 +91,7 @@ export function createSessionTimelineRowRenderer(input: {
           open={input.disclosure.value(key()) === true}
           busy={
             workingTurn(row().userMessageID) &&
-            input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key &&
-            tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running")
+            input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
           }
           onOpenChange={(open) => input.disclosure.set(key(), open)}
           onSizeChange={onSizeChange}
