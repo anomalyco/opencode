@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test"
 import type { ModelRef, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { createTimelineProjection, reuseTimelineRows, TimelineRow, type PartGroup } from "./projection"
 
-const context = (key: string, partIDs: string[], userMessageID = "user-1") =>
+const context = (key: string, partIDs: string[], userMessageID = "user-1", messageID = "assistant-1") =>
   new TimelineRow.AssistantPart({
     userMessageID,
     group: {
       key,
       type: "context",
-      refs: partIDs.map((partID) => ({ messageID: "assistant-1", partID })),
+      refs: partIDs.map((partID) => ({ messageID, partID })),
     } satisfies PartGroup,
     previousAssistantPart: false,
   })
@@ -65,6 +65,13 @@ describe("reuseTimelineRows", () => {
       previous: [context("context:a", ["a", "b"], "user-1")],
       rows: [context("context:b", ["b"], "user-2")],
       expected: ["assistant-part:user-2:context:b"],
+      reused: [],
+    },
+    {
+      name: "does not reuse context identity across assistant messages",
+      previous: [context("context:assistant-1:a", ["a"], "user-1", "assistant-1")],
+      rows: [context("context:assistant-2:a", ["a"], "user-1", "assistant-2")],
+      expected: ["assistant-part:user-1:context:assistant-2:a"],
       reused: [],
     },
     {
