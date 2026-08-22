@@ -353,7 +353,11 @@ export function createTimelineVirtualizer(input: Input) {
     if (prependLoading) updatePrependAnchor()
     input.onScheduleScrollState(root)
     input.onHistoryScroll()
-    if (!input.hasScrollGesture()) return
+    // Prepend-anchor restoration moves scrollTop upward programmatically;
+    // never classify those frames as the user scrolling away from the bottom.
+    // Genuine wheel-up is still caught by createAutoScroll's wheel listener,
+    // which bypasses this path entirely.
+    if (!input.hasScrollGesture() || prependLoading) return
     if (!movedUp && root.scrollHeight - root.clientHeight - root.scrollTop >= 10) return
     input.onUserScroll()
     input.onAutoScrollHandleScroll()

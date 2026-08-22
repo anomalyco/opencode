@@ -111,7 +111,9 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const handleWheel = (e: WheelEvent) => {
-    if (e.deltaY >= 0) return
+    // Ignore trackpad/momentum noise: tiny negative deltas fire constantly
+    // during streaming and would otherwise flap follow mode.
+    if (e.deltaY > -2) return
     // If the user is scrolling within a nested scrollable region (tool output,
     // code block, etc), don't treat it as leaving the "follow bottom" mode.
     // Those regions opt in via `data-scrollable`.
@@ -148,7 +150,13 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const handleInteraction = () => {
     if (!active()) return
     const selection = window.getSelection()
-    if (selection && selection.toString().length > 0) {
+    if (!selection || selection.isCollapsed || selection.toString().length === 0) return
+    // Only pause following when the selected text actually lives inside this
+    // transcript: window.getSelection() is document-global, so a click that
+    // merely clears/holds a selection in another pane (review diff, editor,
+    // tool accordion) must not stop auto-follow here.
+    const el = store.scrollRef
+    if (el && el.contains(selection.anchorNode)) {
       stop()
     }
   }

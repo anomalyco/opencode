@@ -397,7 +397,10 @@ function MessageTimelineView(
   const turnPadding = () => "px-4 md:px-5"
   const showHeader = createMemo(() => props.data.showHeader() || workspaceSession())
   const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
-  const hasScrollGesture = createMemo(() => props.hasScrollGesture)
+  // Time-based predicate must be evaluated live: a memo only invalidates when
+  // its tracked deps change, and Date.now() is untracked — memoizing this
+  // latches the gesture flag indefinitely after any single scroll gesture.
+  const hasScrollGesture = () => props.hasScrollGesture
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
     sessionKey: props.data.sessionKey,

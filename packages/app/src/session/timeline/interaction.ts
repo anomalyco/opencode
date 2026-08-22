@@ -6,6 +6,7 @@ import { createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLayout } from "@/shell/state/layout"
 import type { SessionModel } from "../model"
+import { isGestureFresh } from "../message-gesture"
 import { useSessionHashScroll } from "../use-session-hash-scroll"
 import { createTimelineModel } from "./model"
 
@@ -293,7 +294,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     scroller: () => scroller,
     view: {
       anchor,
-      hasGesture: () => Date.now() - state.gestureAt < 250,
+      hasGesture: () => isGestureFresh(state.gestureAt, Date.now()),
       markGesture,
       markUserScroll: () => {
         scrollMark += 1

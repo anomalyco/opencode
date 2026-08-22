@@ -19,3 +19,5 @@ export const shouldMarkBoundaryGesture = (input: {
   const remaining = max - input.scrollTop
   return input.delta > remaining
 }
+
+export const isGestureFresh = (gestureAt: number, now: number) => now - gestureAt < 250
