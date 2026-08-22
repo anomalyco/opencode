@@ -88,7 +88,7 @@ test("transitions a streaming shell from writing through command execution", asy
   await expect(subtitle).toHaveText(command)
 })
 
-test("shows and expands a running shell command without shimmering it", async ({ page }) => {
+test("shimmers and expands a running shell command", async ({ page }) => {
   const id = "prt_shell_running_command"
   const command = "sleep 10 && echo done"
   await setupTimeline(page, {
@@ -97,7 +97,7 @@ test("shows and expands a running shell command without shimmering it", async ({
   })
 
   const tool = page.locator(`[data-timeline-part-id="${id}"]`)
-  await expect(tool.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "false")
+  await expect(tool.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
   await expect(tool).not.toContainText("Writing command...")
   await expect(tool.locator('[data-component="shell-submessage"]')).toHaveText(command)
   await expect(tool.locator('[data-component="shell-submessage"] [data-component="text-shimmer"]')).toHaveCount(0)

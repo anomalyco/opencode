@@ -1272,6 +1272,7 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const streaming = () => props.status === "streaming"
+    const pending = () => streaming() || props.status === "running" || props.metadata.status === "running"
     const sawStreaming = streaming()
     const command = () => {
       if (typeof props.input.command === "string") return props.input.command
@@ -1295,7 +1296,7 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer
                   text={i18n.t("ui.tool.shell")}
-                  active={streaming()}
+                  active={pending()}
                 />
               </span>
               <Show when={!open()}>
