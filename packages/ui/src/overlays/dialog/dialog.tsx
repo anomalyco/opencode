@@ -103,7 +103,15 @@ export function Dialog(props: DialogProps) {
             const autofocusEl = target?.querySelector("[autofocus]") as HTMLElement | null
             if (autofocusEl) {
               e.preventDefault()
-              autofocusEl.focus({ preventScroll: true })
+              // Defer to a task: Kobalte's focus-scope listeners attach in the
+              // effect AFTER this event dispatch. Focusing synchronously means
+              // the trap never records the anchor element, and every later
+              // outside-focus "restore" becomes focus(null) = no-op, leaving
+              // keyboard focus stuck outside the dialog.
+              setTimeout(() => {
+                if (!autofocusEl.isConnected) return
+                autofocusEl.focus({ preventScroll: true })
+              }, 0)
             }
           }}
         >
