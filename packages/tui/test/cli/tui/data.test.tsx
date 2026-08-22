@@ -9,6 +9,7 @@ import { createEffect, onMount, type ParentProps } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
 import { ClientProvider, useClient } from "../../../src/context/client"
 import { DataProvider as DataProviderBase, useData } from "../../../src/context/data"
+import { followSessions } from "../../../src/context/followed-sessions"
 import { Keymap } from "../../../src/context/keymap"
 import { LocationProvider, useLocation } from "../../../src/context/location"
 import { RouteProvider } from "../../../src/context/route"
@@ -37,13 +38,16 @@ async function wait(fn: () => boolean, timeout = 2000) {
 }
 
 function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCodeEvent) {
+  // These tests assert store projection for their fixture sessions; follow
+  // each emitted session so the #37792 interest rule doesn't filter them.
+  const sid = (event as { data?: { sessionID?: string } }).data?.sessionID
+  if (sid) followSessions(sid)
   events.emit({ ...event, location: { directory } })
 }
 
 const config = createTuiResolvedConfig()
 
-function DataProvider(props: ParentProps) {
-  return (
+function DataProvider(props: ParentProps) {  return (
     <ConfigProvider config={config}>
       <DataProviderBase>
         <LocationProvider>
