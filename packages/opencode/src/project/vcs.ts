@@ -7,6 +7,9 @@ import { Git } from "@/git"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
+import { Global } from "@opencode-ai/core/global"
+import Path from "node:path"
+import Fs from "node:fs"
 
 const PATCH_CONTEXT_LINES = 2_147_483_647
 const MAX_PATCH_BYTES = 10_000_000
@@ -19,6 +22,29 @@ const MAX_TOTAL_PATCH_BYTES = 10_000_000
 // is enabled), so only edits made with watching disabled wait out the TTL.
 // Set OPENCODE_VCS_STATUS_TTL_MS=0 to disable caching entirely.
 const STATUS_TTL_MS = Number(process.env.OPENCODE_VCS_STATUS_TTL_MS ?? 2000)
+// Repos whose status lists exceed this many entries switch to directory-level
+// untracked scanning; per-file stat computation is capped at STAT_CAP entries.
+const UNTRACKED_DEGRADE_AT = Number(process.env.OPENCODE_VCS_DEGRADE_AT ?? 5000)
+const STAT_CAP = Number(process.env.OPENCODE_VCS_STAT_CAP ?? 500)
+
+// PERF: remember degraded (pathological) repos across restarts so the first
+// status call after a reboot skips the ~50s --untracked-files=all discovery scan.
+const degradedReposFile = () => Path.join(Global.Path.data, "vcs-degraded.json")
+const loadDegradedRepos = () => {
+  try {
+    const list = JSON.parse(Fs.readFileSync(degradedReposFile(), "utf8"))
+    return list instanceof Array ? new Set(list.map(String)) : new Set<string>()
+  } catch {
+    return new Set<string>()
+  }
+}
+const saveDegradedRepos = (set: Set<string>) => {
+  try {
+    Fs.writeFileSync(degradedReposFile(), JSON.stringify([...set].slice(-1000)))
+  } catch {
+    // best-effort persistence only
+  }
+}
 type DiffOptions = {
   readonly context?: number
 }
@@ -183,9 +209,12 @@ const files = Effect.fnUntraced(function* (
   const next: FileDiff[] = []
   let total = 0
   let capped = false
+  let statBudget = STAT_CAP
 
   for (const item of list.toSorted((a, b) => a.file.localeCompare(b.file))) {
-    const stat = map.get(item.file) ?? (item.status === "added" ? yield* git.statUntracked(cwd, item.file) : undefined)
+    const stat =
+      map.get(item.file) ??
+      (item.status === "added" && statBudget-- > 0 ? yield* git.statUntracked(cwd, item.file) : undefined)
     const patch = yield* patchForItem(git, cwd, ref, item, batch, capped, options)
     const result: { patch: string; capped: boolean } = capped
       ? { patch, capped: true }
@@ -300,6 +329,7 @@ interface State {
   current: string | undefined
   root: Git.Base | undefined
   status?: { value: FileStatus[]; at: number }
+  degradedUntracked?: boolean
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
@@ -323,7 +353,7 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
         const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
           concurrency: 2,
         })
-        const value = { current, root }
+        const value: State = { current, root }
 
         const unsubscribe = yield* events.listen((event) => {
           if (event.type !== Watcher.Event.Updated.type || event.location?.directory !== ctx.directory)
@@ -361,27 +391,49 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
         if (ctx.project.vcs !== "git") return []
         const holder = yield* InstanceState.get(state)
         if (holder.status && Date.now() - holder.status.at < STATUS_TTL_MS) return holder.status.value
-        const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
-        const [list, stats] = yield* Effect.all(
-          [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
-          { concurrency: 2 },
-        )
-        const map = nums(stats)
-        const value = yield* Effect.forEach(
-          list.toSorted((a, b) => a.file.localeCompare(b.file)),
-          (item) =>
-            Effect.gen(function* () {
-              const stat =
-                map.get(item.file) ??
-                (item.status === "added" ? yield* git.statUntracked(ctx.worktree, item.file) : undefined)
-              return {
-                file: item.file,
-                additions: stat?.additions ?? 0,
-                deletions: stat?.deletions ?? 0,
-                status: item.status,
-              } satisfies FileStatus
-            }),
-        )
+        const knownDegraded = holder.degradedUntracked ?? loadDegradedRepos().has(ctx.directory)
+
+        // PERF: pathological repos (e.g. a home dir that is itself a git repo
+        // with hundreds of thousands of untracked files) make
+        // --untracked-files=all scans take ~50s. Degrade adaptively: once a
+        // scan exceeds UNTRACKED_DEGRADE_AT entries, this instance switches to
+        // directory-level scanning (~470x faster) and per-file stat computation
+        // is capped. Normal repos never hit these limits.
+        const compute = Effect.fnUntraced(function* (untracked: "all" | "normal") {
+          const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
+          const [list, stats] = yield* Effect.all(
+            [git.status(ctx.directory, { untracked }), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
+            { concurrency: 2 },
+          )
+          const map = nums(stats)
+          let statBudget = STAT_CAP
+          return yield* Effect.forEach(
+            list.toSorted((a, b) => a.file.localeCompare(b.file)),
+            (item) =>
+              Effect.gen(function* () {
+                const stat =
+                  map.get(item.file) ??
+                  (item.status === "added" && statBudget-- > 0
+                    ? yield* git.statUntracked(ctx.worktree, item.file)
+                    : undefined)
+                return {
+                  file: item.file,
+                  additions: stat?.additions ?? 0,
+                  deletions: stat?.deletions ?? 0,
+                  status: item.status,
+                } satisfies FileStatus
+              }),
+          )
+        })
+
+        let value = yield* compute(knownDegraded ? "normal" : "all")
+        if (!knownDegraded && value.length > UNTRACKED_DEGRADE_AT) {
+          const set = loadDegradedRepos()
+          set.add(ctx.directory)
+          saveDegradedRepos(set)
+          holder.degradedUntracked = true
+          value = yield* compute("normal")
+        }
         holder.status = { value, at: Date.now() }
         return value
       }),
