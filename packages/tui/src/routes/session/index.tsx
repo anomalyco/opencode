@@ -1202,7 +1202,6 @@ export function Session(props: { verticalTabsWidth: number }) {
                     />
                   )}
                 </For>
-                <BackgroundToolHint messages={messages()} />
                 <Show when={session()?.revert?.messageID}>
                   <RevertMessage
                     count={messagesFromRevert().filter((message) => message.type === "user").length}
@@ -1214,7 +1213,8 @@ export function Session(props: { verticalTabsWidth: number }) {
                 </Show>
               </scrollbox>
             </box>
-            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+            <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between">
+              <BackgroundToolHint messages={messages()} />
               <Show when={awayFromBottom()}>
                 <box
                   id="session-jump-to-latest"
@@ -1558,7 +1558,7 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
   return (
     <Show when={visible() && shortcut()}>
       {(value) => (
-        <box marginTop={1} paddingLeft={3} flexShrink={0}>
+        <box paddingLeft={3} flexShrink={0}>
           <text fg={theme.text.subdued}>
             Press <span style={{ fg: theme.text.default }}>{value()}</span> to move running work to the background
           </text>
