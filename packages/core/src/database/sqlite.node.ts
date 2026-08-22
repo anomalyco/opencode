@@ -3,6 +3,7 @@ import { Context, Effect, Layer } from "effect"
 import { Reactivity } from "effect/unstable/reactivity"
 import { SqlClient } from "effect/unstable/sql"
 import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
+import { isNetworkFilesystem } from "./network-filesystem.js"
 import { Sqlite } from "./sqlite.js"
 
 const TypeId = "~@opencode-ai/core/database/SqliteNode" as const
@@ -17,7 +18,7 @@ interface Config extends Sqlite.ClientConfig {
   readonly readonly?: boolean
   readonly create?: boolean
   readonly readwrite?: boolean
-  readonly disableWAL?: boolean
+  readonly wal?: boolean
   readonly timeout?: number
   readonly allowExtension?: boolean
 }
@@ -87,7 +88,13 @@ const nativeLayer = (config: Config) =>
         open: true,
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
-      if (config.disableWAL !== true && config.readonly !== true) native.exec("PRAGMA journal_mode = WAL;")
+      const wal = config.filename !== ":memory:" && (config.wal ?? !isNetworkFilesystem(config.filename))
+      if (wal && config.readonly !== true) {
+        native.exec("PRAGMA journal_mode = WAL;")
+        native.exec("PRAGMA wal_checkpoint(PASSIVE);")
+      }
+      if (!wal && config.filename !== ":memory:" && config.readonly !== true)
+        native.exec("PRAGMA journal_mode = DELETE;")
       return native
     }),
   )

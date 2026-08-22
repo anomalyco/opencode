@@ -18,6 +18,7 @@ export interface Interface {
 
 export const Options = Schema.Struct({
   path: Schema.optional(Schema.String),
+  wal: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
@@ -29,11 +30,9 @@ const databaseLayer = Layer.effect(
     const db = yield* makeDatabase
 
     if (supportsTuningPragmas) {
-      yield* db.run("PRAGMA journal_mode = WAL")
       yield* db.run("PRAGMA synchronous = NORMAL")
       yield* db.run("PRAGMA busy_timeout = 5000")
       yield* db.run("PRAGMA cache_size = -64000")
-      yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
     }
     // Durable Object SQLite always enforces foreign keys and rejects the pragma.
     if (supportsForeignKeyToggle) yield* db.run("PRAGMA foreign_keys = ON")
@@ -46,7 +45,8 @@ const databaseLayer = Layer.effect(
 export function layer(options: Options = { path: ":memory:" }) {
   return Layer.unwrap(
     Effect.gen(function* () {
-      const provide = (filename: string) => layerFromClient.pipe(Layer.provide(sqliteLayer({ filename })))
+      const provide = (filename: string) =>
+        layerFromClient.pipe(Layer.provide(sqliteLayer({ filename, wal: options.wal })))
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:" || isAbsolute(filename)) return provide(filename)
       const global = yield* Global.Service
