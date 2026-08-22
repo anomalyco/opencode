@@ -8,6 +8,7 @@ export const WorkspaceTable = mysqlTable(
     slug: varchar("slug", { length: 255 }),
     name: varchar("name", { length: 255 }).notNull(),
     region: json("region").$type<("us" | "eu" | "sg" | "cn")[]>(),
+    allow_training: boolean(),
     is_blocked: boolean(),
     is_flagged_by_anthropic: boolean(),
     is_flagged_by_openai: boolean(),
