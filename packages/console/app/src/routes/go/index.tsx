@@ -80,6 +80,7 @@ function LimitsGraph(props: { href: string }) {
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
     { id: "hy3", name: "Hy3", req: 34400, baseReq: 4300, d: "320ms" },
     { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", req: 45300, edge: true, d: "360ms" },
+    { id: "ox-alpha-free", name: "Ox Alpha Free", req: Infinity, infinite: true, edge: true, d: "400ms" },
   ]
 
   const w = 1040
@@ -89,9 +90,10 @@ function LimitsGraph(props: { href: string }) {
   const top = 18
   const bottom = 44
   const plot = chartW - left - right
+  const infiniteX = w - 180
 
   const ratio = (n: number) => n / baseline
-  const rmax = Math.max(1, ...graph.map((m) => ratio(m.req)))
+  const rmax = Math.max(1, ...graph.filter((m) => !("infinite" in m)).map((m) => ratio(m.req)))
   const log = (n: number) => Math.log10(Math.max(n, 1))
   const base = 24
   const p = 2.2
@@ -153,10 +155,10 @@ function LimitsGraph(props: { href: string }) {
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
-                    width={Math.max(0, x(ratio(m.baseReq ?? m.req)) - left)}
+                    width={Math.max(0, ("infinite" in m ? infiniteX : x(ratio(m.baseReq ?? m.req))) - left)}
                     height={bh}
                     data-bar
-                    data-kind="go"
+                    data-kind={"infinite" in m ? "infinite" : "go"}
                     data-model={m.id}
                   />
                   {m.baseReq && (
@@ -200,9 +202,12 @@ function LimitsGraph(props: { href: string }) {
                 data-kind="go"
                 data-model={m.id}
                 data-edge={"edge" in m ? "" : undefined}
-                style={{ "--x": px(x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any}
+                data-infinite={"infinite" in m ? "" : undefined}
+                style={
+                  { "--x": px("infinite" in m ? infiniteX : x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any
+                }
               >
-                <span data-value>{m.req.toLocaleString()}</span>
+                <span data-value>{"infinite" in m ? "∞" : m.req.toLocaleString()}</span>
                 <span data-name>{m.name}</span>
                 {m.id === "muse-spark-1.2-contributor" && (
                   <span data-regions>
@@ -213,6 +218,7 @@ function LimitsGraph(props: { href: string }) {
                     )
                   </span>
                 )}
+                {"infinite" in m && <span data-limited>({i18n.t("go.graph.limitedTime")})</span>}
                 {m.baseReq && <span data-bonus>8x usage</span>}
               </span>
             )}
