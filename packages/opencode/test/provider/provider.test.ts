@@ -121,6 +121,39 @@ it.instance("provider loaded from env variable", () =>
   }),
 )
 
+it.instance("github-copilot is not loaded from GITHUB_TOKEN", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("OPENCODE_AUTH_CONTENT", "{}")
+    yield* setProcessEnv("GITHUB_TOKEN", "test-github-token")
+    const providers = yield* list
+    expect(providers[ProviderV2.ID.githubCopilot]).toBeUndefined()
+  }),
+)
+
+it.instance("github-copilot OAuth remains loaded with GITHUB_TOKEN", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("GITHUB_TOKEN", "test-github-token")
+    yield* setProcessEnv(
+      "OPENCODE_AUTH_CONTENT",
+      JSON.stringify({
+        "github-copilot": {
+          type: "oauth",
+          refresh: "test-refresh-token",
+          access: "test-access-token",
+          expires: 0,
+          enterpriseUrl: "invalid",
+        },
+      }),
+    )
+    const providers = yield* list
+    const copilot = providers[ProviderV2.ID.githubCopilot]
+    expect(copilot).toBeDefined()
+    expect(copilot.source).toBe("custom")
+    expect(copilot.key).toBeUndefined()
+    expect(copilot.options.fetch).toBeFunction()
+  }),
+)
+
 it.instance(
   "provider loaded from config with apiKey option",
   Effect.gen(function* () {
