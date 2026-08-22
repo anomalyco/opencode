@@ -18,7 +18,7 @@ export type PartGroup =
     }
   | {
       key: string
-      type: "patch"
+      type: "file"
       refs: PartRef[]
     }
 

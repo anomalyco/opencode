@@ -446,20 +446,15 @@ function renderable(content: Content, showReasoning: boolean) {
 
 function groupContent(items: { messageID: string; partID: string; content: Content }[]): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "patch"; refs: PartRef[] } | undefined
+  let adjacent: { type: "context" | "patch" | "edit"; refs: PartRef[] } | undefined
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
     if (!first) return
-    if (current.type === "patch" && current.refs.length === 1) {
-      groups.push({ type: "part", key: `part:${first.messageID}:${first.partID}`, ref: first })
-      adjacent = undefined
-      return
-    }
     groups.push({
-      type: current.type,
+      type: current.type === "context" ? "context" : "file",
       key:
-        current.type === "patch"
+        current.type !== "context"
           ? `part:${first.messageID}:${first.partID}`
           : `context:${first.messageID}:${first.partID}`,
       refs: current.refs,
@@ -473,7 +468,9 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
         ? "context"
         : item.content.type === "tool" && item.content.name === "patch" && item.content.state.status !== "error"
           ? "patch"
-          : undefined
+          : item.content.type === "tool" && item.content.name === "edit" && item.content.state.status !== "error"
+            ? "edit"
+            : undefined
     if (type) {
       if (adjacent?.type !== type) flush()
       adjacent ??= { type, refs: [] }
