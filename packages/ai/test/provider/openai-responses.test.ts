@@ -1363,6 +1363,60 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("lowers remote tool-result media URLs without base64 wrapping", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "fetch", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "fetch",
+              resultType: "content",
+              result: [
+                { type: "file", uri: "https://example.com/image.png", mime: "image/png" },
+                { type: "file", uri: "https://example.com/report.pdf", mime: "application/pdf", name: "report.pdf" },
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_image", image_url: "https://example.com/image.png" },
+        { type: "input_file", filename: "report.pdf", file_url: "https://example.com/report.pdf" },
+      ])
+    }),
+  )
+
+  it.effect("lowers tool-result videos as input_video", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "record", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "record",
+              resultType: "content",
+              result: [
+                { type: "file", uri: "data:video/mp4;base64,AAECAw==", mime: "video/mp4" },
+                { type: "file", uri: "https://example.com/demo.mp4", mime: "video/mp4" },
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_video", video_url: "data:video/mp4;base64,AAECAw==" },
+        { type: "input_video", video_url: "https://example.com/demo.mp4" },
+      ])
+    }),
+  )
+
   it.effect("prepares the composed native continuation request", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -2769,6 +2823,37 @@ describe("OpenAI Responses route", () => {
               filename: "file",
               file_data: "AAECAw==",
             },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("lowers remote user media URLs without base64 wrapping", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "media", mediaType: "image/png", data: "https://example.com/image.png" },
+              {
+                type: "media",
+                mediaType: "application/pdf",
+                data: "https://example.com/report.pdf",
+                filename: "report.pdf",
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "input_image", image_url: "https://example.com/image.png" },
+            { type: "input_file", filename: "report.pdf", file_url: "https://example.com/report.pdf" },
           ],
         },
       ])
