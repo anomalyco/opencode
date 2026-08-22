@@ -93,7 +93,7 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
-  it.effect("omits OpenAI-only nullable phases from the Open Responses baseline", () =>
+  it.effect("preserves nullable phases in the forgiving Open Responses baseline", () =>
     Effect.gen(function* () {
       const model = configure({
         apiKey: "test-key",
@@ -113,7 +113,9 @@ describe("Open Responses-compatible route", () => {
       )
 
       expect(prepared.body).toMatchObject({
-        input: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Unclassified." }] }],
+        input: [
+          { type: "message", role: "assistant", content: [{ type: "output_text", text: "Unclassified." }], phase: null },
+        ],
       })
     }),
   )
