@@ -33,7 +33,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "../components/tool-count-summary"
 import { ToolStatusTitle } from "../components/tool-status-title"
-import { patchFiles } from "../components/apply-patch-file"
+import { patchFileGroups } from "../components/apply-patch-file"
 import { animate } from "motion"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 import type { SessionMessageAssistantTool, SessionMessageShell } from "@opencode-ai/client/promise"
@@ -1483,7 +1483,7 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const fileComponent = useFileComponent()
-    const files = createMemo(() => patchFiles(props.metadata.files))
+    const files = createMemo(() => patchFileGroups(props.metadata.files))
     const single = createMemo(() => {
       const list = files()
       if (list.length !== 1) return undefined
@@ -1581,16 +1581,20 @@ ToolRegistry.register({
                           </StickyAccordionHeader>
                           <Accordion.Content>
                             <Show when={props.deferContent === false || visible()}>
-                              <div data-component="apply-patch-file-diff">
-                                <Dynamic
-                                  component={fileComponent}
-                                  mode="diff"
-                                  virtualize={props.virtualizeDiff}
-                                  fileDiff={file.view.fileDiff}
-                                  hunkSeparators={file.view.fileDiff.isPartial ? "simple" : "line-info-basic"}
-                                  onRendered={props.onContentRendered}
-                                />
-                              </div>
+                              <For each={file.views}>
+                                {(view) => (
+                                  <div data-component="apply-patch-file-diff">
+                                    <Dynamic
+                                      component={fileComponent}
+                                      mode="diff"
+                                      virtualize={props.virtualizeDiff}
+                                      fileDiff={view.fileDiff}
+                                      hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
+                                      onRendered={props.onContentRendered}
+                                    />
+                                  </div>
+                                )}
+                              </For>
                             </Show>
                           </Accordion.Content>
                         </Accordion.Item>
@@ -1638,15 +1642,19 @@ ToolRegistry.register({
                 </Switch>
               }
             >
-              <div data-component="apply-patch-file-diff">
-                <Dynamic
-                  component={fileComponent}
-                  mode="diff"
-                  virtualize={props.virtualizeDiff}
-                  fileDiff={single()!.view.fileDiff}
-                  onRendered={props.onContentRendered}
-                />
-              </div>
+              <For each={single()!.views}>
+                {(view) => (
+                  <div data-component="apply-patch-file-diff">
+                    <Dynamic
+                      component={fileComponent}
+                      mode="diff"
+                      virtualize={props.virtualizeDiff}
+                      fileDiff={view.fileDiff}
+                      onRendered={props.onContentRendered}
+                    />
+                  </div>
+                )}
+              </For>
             </ToolFileAccordion>
           </BasicTool>
         </div>

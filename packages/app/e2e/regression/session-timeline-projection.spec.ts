@@ -79,7 +79,7 @@ test.describe("session timeline projection", () => {
     await expect(page.locator('[data-timeline-part-id="prt_todo"]')).toHaveCount(0)
   })
 
-  test("combines adjacent patch calls into one file group", async ({ page }) => {
+  test("combines adjacent patch calls and repeated files into one group", async ({ page }) => {
     const first = "prt_patch_first"
     const second = "prt_patch_second"
     await setupTimeline(page, {
@@ -89,8 +89,8 @@ test.describe("session timeline projection", () => {
           toolPart(first, "patch", "completed", { patchText: "Update src/first.ts" }, {
             metadata: { files: [patchFile("src/first.ts", "modified")] },
           }),
-          toolPart(second, "patch", "completed", { patchText: "Update src/second.ts" }, {
-            metadata: { files: [patchFile("src/second.ts", "added")] },
+          toolPart(second, "patch", "completed", { patchText: "Update src/first.ts again" }, {
+            metadata: { files: [patchFile("src/first.ts", "modified")] },
           }),
         ]),
       ],
@@ -99,10 +99,10 @@ test.describe("session timeline projection", () => {
     const group = page.locator(`[data-timeline-part-ids="${first},${second}"]`)
     await expect(group).toBeVisible()
     await expect(group.locator('[data-component="apply-patch-tool"]')).toHaveCount(1)
-    await expect(group.getByRole("button", { name: "Patch 2 files" })).toHaveCount(0)
-    await expect(group.getByRole("button")).toHaveCount(2)
-    await expect(group.locator('[data-scope="apply-patch"] button[aria-expanded="false"]')).toHaveCount(2)
-    await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["first.ts", "second.ts"])
+    await expect(group.getByText("1 file", { exact: true })).toBeVisible()
+    await expect(group.getByRole("button")).toHaveCount(1)
+    await expect(group.locator('[data-scope="apply-patch"] button[aria-expanded="false"]')).toHaveCount(1)
+    await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["first.ts"])
     await expect(page.locator(`[data-timeline-part-id="${first}"], [data-timeline-part-id="${second}"]`)).toHaveCount(0)
   })
 
