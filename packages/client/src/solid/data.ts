@@ -1101,6 +1101,9 @@ export function createData(config: CreateDataInput) {
       get(sessionID: string) {
         return store.session.info[sessionID]
       },
+      creating(sessionID: string) {
+        return creating.has(sessionID)
+      },
       remember(info: SessionInfo) {
         setStore("session", "info", info.id, reconcile(info))
         sync.complete(`session:${info.id}`)

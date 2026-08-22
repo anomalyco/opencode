@@ -1,4 +1,4 @@
-import { test } from "bun:test"
+import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type OpenCodeEvent, type SessionInfo } from "../src/promise"
@@ -67,6 +67,37 @@ test("revalidates after an event overtakes an active session read", async () => 
     await initial
 
     await wait(() => requests === 2 && setup.data.session.get("ses_refresh")?.time.viewed === 2)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("reports optimistic sessions as creating until the request settles", async () => {
+  const release = Promise.withResolvers<void>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (!request.url.endsWith("/api/session")) throw new Error(`Unexpected request: ${request.url}`)
+      await release.promise
+      return Response.json({ data: session(0) })
+    },
+  })
+  const event: CreateDataInput["event"] = {
+    on: () => () => {},
+    listen: () => () => {},
+  }
+  const setup = createRoot((dispose) => ({
+    data: createData({ api: () => api, directory: "/project", event, connection: { status: () => "connected" } }),
+    dispose,
+  }))
+
+  try {
+    const created = setup.data.session.create({ id: "ses_refresh", location: { directory: "/project" } })
+    expect(setup.data.session.creating(created.id)).toBe(true)
+    release.resolve()
+    await created.request
+    expect(setup.data.session.creating(created.id)).toBe(false)
   } finally {
     setup.dispose()
   }
