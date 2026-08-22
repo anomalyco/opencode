@@ -562,7 +562,7 @@ export function CurrentContextToolGroup(props: {
   )
 }
 
-export function CurrentPatchToolGroup(props: {
+export function CurrentFileToolGroup(props: {
   tools: SessionMessageAssistantTool[]
   fileOpen: (path: string) => boolean | undefined
   onFileOpenChange: (path: string, open: boolean) => void
@@ -592,6 +592,7 @@ export function CurrentPatchToolGroup(props: {
     props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
   const render = ToolRegistry.render("patch") ?? GenericTool
+  const tool = createMemo(() => (props.tools[0]?.name === "edit" ? "edit" : "patch"))
 
   return (
     <div
@@ -601,7 +602,7 @@ export function CurrentPatchToolGroup(props: {
     >
       <Dynamic
         component={render}
-        tool="patch"
+        tool={tool()}
         input={{}}
         metadata={metadata()}
         status={pending() ? "running" : "completed"}
@@ -1511,6 +1512,9 @@ ToolRegistry.register({
     const fileComponent = useFileComponent()
     const files = createMemo(() => patchFileGroups(props.metadata.files))
     const [expanded, setExpanded] = createSignal<string[]>([])
+    const title = createMemo(() =>
+      props.tool === "edit" ? i18n.t("ui.messagePart.title.edit") : i18n.t("ui.tool.patch"),
+    )
     const open = createMemo(() => {
       if (!props.fileOpen) return expanded()
       return files().flatMap((file) => (props.fileOpen?.(file.path) === true ? [file.path] : []))
@@ -1541,7 +1545,7 @@ ToolRegistry.register({
           defer={false}
           rail={false}
           trigger={{
-            title: i18n.t("ui.tool.patch"),
+            title: title(),
             subtitle: subtitle(),
           }}
         >

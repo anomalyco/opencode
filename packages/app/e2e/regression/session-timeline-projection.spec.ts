@@ -150,6 +150,43 @@ test.describe("session timeline projection", () => {
     await expect(page.locator(`[data-timeline-part-id="${first}"], [data-timeline-part-id="${second}"]`)).toHaveCount(0)
   })
 
+  test("combines adjacent edit calls and repeated files into one group", async ({ page }) => {
+    const first = "prt_edit_first"
+    const second = "prt_edit_second"
+    await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage([
+          toolPart(
+            first,
+            "edit",
+            "completed",
+            { path: "src/first.ts", oldString: "one", newString: "two" },
+            {
+              metadata: { files: [patchFile("src/first.ts", "modified")] },
+            },
+          ),
+          toolPart(
+            second,
+            "edit",
+            "completed",
+            { path: "src/first.ts", oldString: "two", newString: "three" },
+            {
+              metadata: { files: [patchFile("src/first.ts", "modified")] },
+            },
+          ),
+        ]),
+      ],
+      settings: { editToolPartsExpanded: true },
+    })
+
+    const group = page.locator(`[data-timeline-part-ids="${first},${second}"]`)
+    await expect(group.locator('[data-slot="basic-tool-tool-title"]')).toContainText("Edit")
+    await expect(group.getByText("1 file", { exact: true })).toBeVisible()
+    await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["first.ts"])
+    await expect(group.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "true")
+  })
+
   test("projects gaps, dividers, assistant parts, and errors together", async ({ page }) => {
     const firstUser = userMessage(
       [

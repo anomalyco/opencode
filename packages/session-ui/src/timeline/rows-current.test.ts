@@ -443,6 +443,20 @@ describe("current session timeline rows", () => {
             },
             time: { created: 7, completed: 8 },
           },
+          {
+            type: "tool",
+            id: "tool_edit_1",
+            name: "edit",
+            state: { status: "running", input: {}, metadata: { files: [] } },
+            time: { created: 9 },
+          },
+          {
+            type: "tool",
+            id: "tool_edit_2",
+            name: "edit",
+            state: { status: "running", input: {}, metadata: { files: [] } },
+            time: { created: 10 },
+          },
         ],
         time: { created: 2, completed: 8 },
       },
@@ -453,7 +467,7 @@ describe("current session timeline rows", () => {
 
     expect(groups).toEqual([
       {
-        type: "patch",
+        type: "file",
         key: "part:msg_assistant:tool_patch_1",
         refs: [
           { messageID: "msg_assistant", partID: "tool_patch_1" },
@@ -466,9 +480,17 @@ describe("current session timeline rows", () => {
         ref: { messageID: "msg_assistant", partID: "tool_patch_failed" },
       },
       {
-        type: "patch",
+        type: "file",
         key: "part:msg_assistant:tool_patch_3",
         refs: [{ messageID: "msg_assistant", partID: "tool_patch_3" }],
+      },
+      {
+        type: "file",
+        key: "part:msg_assistant:tool_edit_1",
+        refs: [
+          { messageID: "msg_assistant", partID: "tool_edit_1" },
+          { messageID: "msg_assistant", partID: "tool_edit_2" },
+        ],
       },
     ])
   })

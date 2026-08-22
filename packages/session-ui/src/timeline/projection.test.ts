@@ -2,11 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { ModelRef, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { createTimelineProjection, reuseTimelineRows, TimelineRow, type PartGroup } from "./projection"
 
-const context = (
-  key: string,
-  partIDs: string[],
-  identity: { userMessageID?: string; messageID?: string } = {},
-) =>
+const context = (key: string, partIDs: string[], identity: { userMessageID?: string; messageID?: string } = {}) =>
   new TimelineRow.AssistantPart({
     userMessageID: identity.userMessageID ?? "user-1",
     group: {
@@ -22,7 +18,7 @@ const patch = (key: string, partIDs: string[], userMessageID = "user-1") =>
     userMessageID,
     group: {
       key,
-      type: "patch",
+      type: "file",
       refs: partIDs.map((partID) => ({ messageID: "assistant-1", partID })),
     } satisfies PartGroup,
     previousAssistantPart: false,
