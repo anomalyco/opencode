@@ -99,6 +99,9 @@ The database normally lives at:
 
 `OPENCODE_DB` can override the database location.
 
+Set `OPENCODE_EVENTS_PERSIST=1` before starting a server to retain durable event payloads for historical reads. Existing
+events are not backfilled; restart a managed service after enabling it.
+
 <Callout type="warning">
   Do not delete or edit service files or the database while troubleshooting. Use the service commands to manage the
   daemon, and make a backup before inspecting persistent data with external tools.
