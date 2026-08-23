@@ -201,7 +201,6 @@ export async function handler(
           providerInfo.model.startsWith("global.anthropic.") ||
           providerInfo.model.startsWith("databricks-claude-"))
       if (providerInfo.format !== opts.format) throw new Error("Zen provider format must match request format")
-      if (providerInfo.payloadModifier) throw new Error("Zen provider payload modifiers are incompatible with streaming")
       if (specialAnthropic) throw new Error("Anthropic provider body modifiers are incompatible with streaming")
       const prepared = requestBody
 
