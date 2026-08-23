@@ -11,6 +11,7 @@ export const dict = {
   "desktop.menu.window": "Pencere",
   "desktop.menu.help": "Yardım",
   "desktop.menu.checkForUpdates": "Güncellemeleri kontrol et…",
+  "desktop.menu.installCli": "CLI'yi yükle...",
   "desktop.menu.settings": "Ayarlar",
   "desktop.menu.reloadWebview": "Web görünümünü yeniden yükle",
   "desktop.menu.restart": "Yeniden başlat",
@@ -57,6 +58,12 @@ export const dict = {
   "desktop.updater.dialog.ready.title": "Güncelleme hazır",
   "desktop.updater.dialog.restart": "Yeniden başlat",
   "desktop.updater.dialog.later": "Daha sonra",
+
+  "desktop.cli.installed.title": "CLI yüklendi",
+  "desktop.cli.installed.message":
+    "CLI, {{path}} konumuna yüklendi.\n\n'opencode2' komutunu kullanmak için terminalinizi yeniden başlatın.",
+  "desktop.cli.failed.title": "Yükleme başarısız oldu",
+  "desktop.cli.failed.message": "CLI yüklenemedi: {{error}}",
 
   "desktop.recovery.action.relaunch": "Uygulamayı yeniden başlat",
   "desktop.recovery.action.exportLogs": "Günlükleri dışa aktar",
@@ -634,7 +641,6 @@ export const dict = {
   "toast.context.noLineSelection.title": "Satır seçimi yok",
   "toast.context.noLineSelection.description": "Önce bir dosya sekmesinde satır aralığı seçin.",
 
-
   "toast.session.unshare.success.title": "Oturum paylaşımı kaldırıldı",
   "toast.session.unshare.success.description": "Oturum paylaşımı başarıyla kaldırıldı!",
   "toast.session.unshare.failed.title": "Oturum paylaşımı kaldırılamadı",
@@ -1201,20 +1207,36 @@ export const dict = {
   "provider.disconnect.toast.failed.description": "{{provider}} bağlantısı kesilemedi.",
   "toast.migration.failed.title": "Veri geçişi başarısız oldu",
 
-  "session.background.moveTasks": "{{tasks}} arka plana taşı",
-  "session.background.inBackground": "{{tasks}} arka planda çalışıyor",
-  "session.background.combine": "{{first}} ve {{second}}",
-  "session.background.shell.one": "{{count}} kabuk",
-  "session.background.shell.other": "{{count}} kabuk",
-  "session.background.subagent.one": "{{count}} alt ajan",
-  "session.background.subagent.other": "{{count}} alt ajan",
+  "command.project.copyID": "Proje kimliğini kopyala",
+  "command.session.copyID": "Oturum kimliğini kopyala",
+  "server.row.incompatible":
+    "Bu sunucu, bu uygulamayla uyumlu olmayan OpenCode {{version}} sürümünü çalıştırıyor. Devam etmek için OpenCode V2'ye yükseltin.",
+  "toast.session.copyID.failed.title": "Oturum kimliği kopyalanamadı",
+  "toast.session.copyID.failed.description": "Oturum kimliği kopyalanırken bir hata oluştu",
+  "toast.project.copyID.failed.title": "Proje kimliği kopyalanamadı",
+  "toast.project.copyID.failed.description": "Proje kimliği kopyalanırken bir hata oluştu",
+  "error.page.title.status": "Sunucu isteği başarısız oldu",
+  "error.page.description.status": "Sunucu bir HTTP {{status}} yanıtı döndürdü.",
+  "error.page.action.reload": "Yeniden yükle",
+  "session.error.incompatible": "Bu sunucu sürümü desteklenmiyor",
+  "session.error.incompatible.description":
+    "{{server}}, bu uygulamayla uyumlu olmayan OpenCode {{version}} sürümünü çalıştırıyor. Devam etmek için sunucuyu OpenCode V2'ye yükseltin.",
+  "session.background.moveInline": "Çalışan işi arka plana taşımak için {{keybind}} tuşuna basın",
+  "session.background.running": "İş arka planda çalışıyor",
+  "session.background.runningCount.one": "Arka planda {{count}} öğe çalışıyor",
+  "session.background.runningCount.other": "Arka planda {{count}} öğe çalışıyor",
+  "settings.general.row.terminalPlacement.title": "Terminal yerleşimi",
+  "settings.general.row.terminalPlacement.description": "Oturumlarda terminalin nerede açılacağını seçin",
+  "settings.general.row.terminalPlacement.side": "Yan",
+  "settings.general.row.terminalPlacement.bottom": "Alt",
+  "settings.general.row.showProjectIcon.title": "Proje simgesi",
+  "settings.general.row.showProjectIcon.description": "Oturum başlığında proje simgesini göster",
+
   "command.session.background": "Arka plana taşı",
 
   "session.timeline.notice.finished": "{{actor}} tamamlandı",
   "session.timeline.notice.failed": "{{actor}} başarısız oldu",
   "session.timeline.notice.cancelled": "{{actor}} iptal edildi",
-  "session.timeline.notice.instructionsUpdated": "Yönergeler güncellendi: {{sources}}",
-  "session.timeline.notice.restart": "Yeniden başlatmanın ardından devam ediliyor",
 
   "settings.tab.preferences": "Tercihler",
   "settings.tab.notifications": "Bildirimler",

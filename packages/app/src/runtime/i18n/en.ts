@@ -704,8 +704,6 @@ export const dict = {
   "session.timeline.notice.finished": "{{actor}} finished",
   "session.timeline.notice.failed": "{{actor}} failed",
   "session.timeline.notice.cancelled": "{{actor}} cancelled",
-  "session.timeline.notice.instructionsUpdated": "Instructions updated: {{sources}}",
-  "session.timeline.notice.restart": "Continuing after restart",
   "session.error.serverConnection": "Can't connect to this server",
   "session.review.filesChanged": "Files Changed {{count}}",
   "session.review.change.one": "Change",
