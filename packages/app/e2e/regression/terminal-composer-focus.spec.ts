@@ -10,11 +10,13 @@ const ptyID = "pty_terminal_composer_focus"
 const newPtyID = "pty_terminal_composer_focus_new"
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const ptyInput: string[] = []
+let sendPtyOutput: ((data: string) => void) | undefined
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
 test.beforeEach(async ({ page }) => {
   ptyInput.length = 0
+  sendPtyOutput = undefined
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -74,6 +76,7 @@ test.beforeEach(async ({ page }) => {
   )
   await page.routeWebSocket(new RegExp(`/api/pty/${ptyID}/connect`), (ws) => {
     ws.onMessage((message) => ptyInput.push(message.toString()))
+    sendPtyOutput = (data) => ws.send(data)
   })
 })
 
@@ -88,6 +91,33 @@ test("clears the terminal line with Command+Delete", async ({ page }) => {
   await page.keyboard.press("Meta+Backspace")
 
   await expect.poll(() => ptyInput.join("")).toBe("\x15")
+})
+
+test("hides the native contenteditable caret", async ({ page }) => {
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await expectSessionTitle(page, "Terminal composer focus")
+
+  await page.keyboard.press("Control+Backquote")
+  const terminal = page.locator('[data-component="terminal"]')
+  await expect(terminal).toHaveAttribute("contenteditable", "true")
+  await expect(terminal).toHaveCSS("caret-color", "rgba(0, 0, 0, 0)")
+})
+
+test("reveals the terminal after its first server output renders", async ({ page }) => {
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await expectSessionTitle(page, "Terminal composer focus")
+
+  await page.keyboard.press("Control+Backquote")
+  const terminal = page.locator('[data-component="terminal"]')
+  await expect(terminal).toHaveAttribute("contenteditable", "true")
+  await expect(terminal).toHaveCSS("opacity", "0")
+  await expect.poll(() => sendPtyOutput).toBeDefined()
+
+  sendPtyOutput?.("\x1b[?25h")
+  await expect(terminal).toHaveCSS("opacity", "0")
+
+  sendPtyOutput?.("ready")
+  await expect(terminal).toHaveCSS("opacity", "1")
 })
 
 test("routes typing to the composer unless the open terminal is focused", async ({ page }) => {
