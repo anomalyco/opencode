@@ -70,6 +70,8 @@
   }
 
   /* Emphasis & Strong: Neutral strong color */
+  /* Literal weight: theme.css defines no bold/semibold token today, only
+     --font-weight-regular (400) and --font-weight-medium (500). */
   strong,
   b {
     color: var(--v2-text-text-base);
@@ -343,6 +345,7 @@ body:not([data-new-layout]) [data-component="markdown"] {
     font-weight: var(--font-weight-medium);
   }
 
+  /* Literal weight: no bold/semibold token exists yet (see above). */
   strong,
   b {
     color: var(--text-strong);
