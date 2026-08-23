@@ -1,5 +1,6 @@
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getDirectory } from "@opencode-ai/util/path"
+import type { SessionMessageUser } from "@opencode-ai/client/promise"
 import { startTransition } from "solid-js"
 import type { NewSessionComposerAdapter } from "@/composer/adapter"
 import { useComposerState } from "@/composer/persistence"
@@ -9,7 +10,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useLocal } from "@/providers/models/selection"
 import { usePermission } from "@/session/requests/permission"
 import { useData, useServer } from "@/runtime/server/current"
-import { useServerSDK } from "@/runtime/server/client"
+import { type ServerSDK, useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useSessionKey } from "@/session/session-layout"
@@ -107,10 +108,7 @@ export function createNewSessionComposerAdapter(props: {
         session: {
           id: created.id,
           directory: sessionDirectory,
-          handoff: {
-            set: (message) => setSessionMessageHandoff(sessionKey, message),
-            clear: (messageID) => clearSessionMessageHandoff(sessionKey, messageID),
-          },
+          handoff: createMessageHandoff(sessionKey, created.id, serverSDK.event),
           api: {
             command: (input) => afterCreation(() => serverSDK.api.session.command(input)),
             shell: (input) => afterCreation(() => serverSDK.api.session.shell(input)),
@@ -141,6 +139,27 @@ export function createNewSessionComposerAdapter(props: {
     project: createComposerProjectControls({ draftId: props.draftID }),
     model,
     ready: prompt.ready,
+  }
+}
+
+function createMessageHandoff(key: string, sessionID: string, event: ServerSDK["event"]) {
+  let unsubscribe: VoidFunction | undefined
+  return {
+    set(message: SessionMessageUser) {
+      unsubscribe?.()
+      setSessionMessageHandoff(key, message)
+      unsubscribe = event.on("session.inbox.enqueued", (item) => {
+        if (item.data.sessionID !== sessionID || item.data.inboxID !== message.id) return
+        unsubscribe?.()
+        unsubscribe = undefined
+        clearSessionMessageHandoff(key, message.id)
+      })
+    },
+    clear(messageID: string) {
+      unsubscribe?.()
+      unsubscribe = undefined
+      clearSessionMessageHandoff(key, messageID)
+    },
   }
 }
 

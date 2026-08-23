@@ -24,7 +24,7 @@ import {
 } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
-import { clearSessionMessageHandoff, getSessionMessageHandoff } from "@/session/handoff"
+import { getSessionMessageHandoff } from "@/session/handoff"
 
 const emptyMessages: SessionMessageInfo[] = []
 const taskDescription = (message: SessionMessageInfo, sessionID: string): string | undefined => {
@@ -71,14 +71,6 @@ export function createTimelineController(input: { session: TimelineSessionSource
       id ? data.session.pending.list(id) : [],
       input.session.data.info()?.revert?.messageID,
     )
-  })
-  createEffect(() => {
-    const key = input.session.identity.sessionKey()
-    const message = getSessionMessageHandoff(key)
-    if (!message) return
-    const current = input.session.history.messages().find((item) => item.id === message.id)
-    if (current?.type !== "user" || !current.files?.length) return
-    clearSessionMessageHandoff(key, message.id)
   })
   const titleValue = createMemo(() => input.session.data.info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("command.session.new"))
