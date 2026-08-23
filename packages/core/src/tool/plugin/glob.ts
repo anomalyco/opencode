@@ -73,10 +73,12 @@ export const Plugin = {
                 action: name,
                 resources: [input.pattern],
                 save: ["*"],
+                // Absent optional fields must stay absent: explicit undefined
+                // values break schema encoding when the permission is listed.
                 metadata: {
                   root: searchPath ?? ".",
-                  path: searchPath,
-                  limit: input.limit,
+                  ...(searchPath === undefined ? {} : { path: searchPath }),
+                  ...(input.limit === undefined ? {} : { limit: input.limit }),
                 },
                 sessionID: context.sessionID,
                 agent: context.agent,

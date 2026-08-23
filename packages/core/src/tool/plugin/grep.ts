@@ -90,9 +90,9 @@ export const Plugin = {
                 save: ["*"],
                 metadata: {
                   root: ".",
-                  path: input.path,
-                  include: input.include,
-                  limit: input.limit,
+                  ...(input.path === undefined ? {} : { path: input.path }),
+                  ...(input.include === undefined ? {} : { include: input.include }),
+                  ...(input.limit === undefined ? {} : { limit: input.limit }),
                 },
                 sessionID: context.sessionID,
                 agent: context.agent,
