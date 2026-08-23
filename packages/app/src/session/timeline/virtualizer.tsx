@@ -179,8 +179,18 @@ export function createTimelineVirtualizer(input: Input) {
   let overscanFrame: number | undefined
   onMount(() => {
     overscanFrame = requestAnimationFrame(() => {
-      overscanFrame = undefined
       if (renderOverscan() < 20) setRenderOverscan(20)
+      if (!coldBottomMount) {
+        overscanFrame = undefined
+        return
+      }
+      if (input.pinned()) virtualizer.scrollToEnd()
+      // Let newly overscanned rows measure before exposing the estimated cold viewport.
+      overscanFrame = requestAnimationFrame(() => {
+        overscanFrame = undefined
+        if (input.pinned()) virtualizer.scrollToEnd()
+        virtualContent?.style.removeProperty("visibility")
+      })
     })
   })
 
@@ -371,7 +381,12 @@ export function createTimelineVirtualizer(input: Input) {
               virtualContent = element
               input.setContentRef(element)
             }}
-            style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              position: "relative",
+              width: "100%",
+              visibility: coldBottomMount ? "hidden" : undefined,
+            }}
           >
             <For each={virtualRowKeys()}>{(rowKey) => <VirtualRow rowKey={rowKey} />}</For>
             <Show when={rows().length > 0}>
