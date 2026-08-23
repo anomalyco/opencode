@@ -150,8 +150,19 @@ export function fromOpenaiRequest(body: any): CommonRequest {
 
     if ((m as any).role === "assistant") {
       const c = (m as any).content
+      // Responses-style array content (output_text parts) must survive as text,
+      // otherwise the assistant message reaches upstream with neither content
+      // nor tool_calls and gets rejected.
+      const text = Array.isArray(c)
+        ? c
+            .filter(
+              (p: any) => p && typeof p.text === "string" && (p.type === "output_text" || p.type === "text"),
+            )
+            .map((p: any) => p.text)
+            .join("")
+        : c
       const out: any = { role: "assistant" }
-      if (typeof c === "string" && c.length > 0) out.content = c
+      if (typeof text === "string" && text.length > 0) out.content = text
       if (Array.isArray((m as any).tool_calls)) out.tool_calls = (m as any).tool_calls
       msgs.push(out)
       continue
