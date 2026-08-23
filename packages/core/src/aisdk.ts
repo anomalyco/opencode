@@ -23,6 +23,25 @@ export interface LanguageEvent {
   language?: LanguageModelV3
 }
 
+// Cold-started local models can legitimately take minutes to return headers.
+export const DEFAULT_HEADER_TIMEOUT = 300_000
+
+// Long reasoning models can have quiet periods, so the chunk idle timeout is deliberately generous.
+export const DEFAULT_CHUNK_TIMEOUT = 300_000
+
+export function resolveStreamWatchdogs(options: Record<string, any>) {
+  return {
+    headerTimeout: watchdogTimeout(options.headerTimeout, DEFAULT_HEADER_TIMEOUT),
+    chunkTimeout: watchdogTimeout(options.chunkTimeout, DEFAULT_CHUNK_TIMEOUT),
+  }
+}
+
+function watchdogTimeout(value: unknown, fallback: number) {
+  if (value === undefined) return fallback
+  if (typeof value === "number" && value > 0) return value
+  return undefined
+}
+
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
@@ -80,13 +99,13 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
   if (model.api.type === "aisdk" && model.api.url) options.baseURL = model.api.url
 
   const customFetch = options.fetch
-  const chunkTimeout = options.chunkTimeout
+  const { chunkTimeout } = resolveStreamWatchdogs(options)
   delete options.chunkTimeout
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
     const signals = [
       opts.signal,
-      typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined,
+      chunkTimeout !== undefined ? new AbortController() : undefined,
       options.timeout !== undefined && options.timeout !== null && options.timeout !== false
         ? AbortSignal.timeout(options.timeout)
         : undefined,
@@ -114,7 +133,7 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
       ...opts,
       timeout: false,
     })
-    if (!chunkAbortCtl || typeof chunkTimeout !== "number") return res
+    if (!chunkAbortCtl || chunkTimeout === undefined) return res
     return wrapSSE(res, chunkTimeout, chunkAbortCtl)
   }
 

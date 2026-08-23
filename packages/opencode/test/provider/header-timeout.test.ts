@@ -1,6 +1,7 @@
-import { afterEach, expect } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 import { createServer, type Server } from "node:http"
 import { streamText } from "ai"
+import { DEFAULT_CHUNK_TIMEOUT, DEFAULT_HEADER_TIMEOUT, resolveStreamWatchdogs } from "@opencode-ai/core/aisdk"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Effect } from "effect"
@@ -112,7 +113,7 @@ it.live("headerTimeout aborts when response headers do not arrive", () =>
   }),
 )
 
-it.live("headerTimeout is opt-in for non-OpenAI providers", () =>
+it.live("default header timeout does not abort bounded header delays", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
       Effect.promise(() => delayedHeaderServer(100)),
@@ -132,6 +133,82 @@ it.live("headerTimeout is opt-in for non-OpenAI providers", () =>
           expect(yield* Effect.promise(() => result.text)).toBe("ok")
         }),
       { config: providerConfig(server.url) },
+    )
+  }),
+)
+
+test("resolveStreamWatchdogs applies defaults when no options are configured", () => {
+  const resolved = resolveStreamWatchdogs({})
+  expect(resolved.headerTimeout).toBe(DEFAULT_HEADER_TIMEOUT)
+  expect(resolved.chunkTimeout).toBe(DEFAULT_CHUNK_TIMEOUT)
+  expect(DEFAULT_HEADER_TIMEOUT).toBe(300_000)
+  expect(DEFAULT_CHUNK_TIMEOUT).toBe(300_000)
+})
+
+test("resolveStreamWatchdogs keeps explicit numeric values", () => {
+  const resolved = resolveStreamWatchdogs({ headerTimeout: 10000, chunkTimeout: 15000 })
+  expect(resolved.headerTimeout).toBe(10000)
+  expect(resolved.chunkTimeout).toBe(15000)
+})
+
+test("resolveStreamWatchdogs disables watchdogs set to false", () => {
+  const resolved = resolveStreamWatchdogs({ headerTimeout: false, chunkTimeout: false })
+  expect(resolved.headerTimeout).toBeUndefined()
+  expect(resolved.chunkTimeout).toBeUndefined()
+})
+
+test("resolveStreamWatchdogs disables non-positive and non-numeric values", () => {
+  for (const value of [0, -1, "5000", null]) {
+    const resolved = resolveStreamWatchdogs({ headerTimeout: value, chunkTimeout: value })
+    expect(resolved.headerTimeout).toBeUndefined()
+    expect(resolved.chunkTimeout).toBeUndefined()
+  }
+})
+
+it.live("chunkTimeout false disables the stream watchdog", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.promise(() => delayedBodyServer(250)),
+      (server) => Effect.sync(() => server.server.close()),
+    )
+
+    yield* provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const provider = yield* Provider.Service
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
+          const result = streamText({
+            model: yield* provider.getLanguage(model),
+            messages: [{ role: "user", content: "hello" }],
+          })
+
+          expect(yield* Effect.promise(() => result.text)).toBe("late")
+        }),
+      { config: providerConfig(server.url, { chunkTimeout: false }) },
+    )
+  }),
+)
+
+it.live("headerTimeout false disables the header watchdog", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.promise(() => delayedHeaderServer(250)),
+      (server) => Effect.sync(() => server.server.close()),
+    )
+
+    yield* provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const provider = yield* Provider.Service
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
+          const result = streamText({
+            model: yield* provider.getLanguage(model),
+            messages: [{ role: "user", content: "hello" }],
+          })
+
+          expect(yield* Effect.promise(() => result.text)).toBe("ok")
+        }),
+      { config: providerConfig(server.url, { headerTimeout: false }) },
     )
   }),
 )

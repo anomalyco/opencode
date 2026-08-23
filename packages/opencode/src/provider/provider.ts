@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { resolveStreamWatchdogs } from "@opencode-ai/core/aisdk"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -1771,17 +1772,15 @@ const layer = Layer.effect(
         if (existing) return existing
 
         const customFetch = options["fetch"]
-        const chunkTimeout = options["chunkTimeout"]
-        const headerTimeout = options["headerTimeout"]
+        const { headerTimeout, chunkTimeout } = resolveStreamWatchdogs(options)
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
-          const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
-          const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
-          const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
+          const chunkAbortCtl = chunkTimeout !== undefined ? new AbortController() : undefined
+          const headerTimeoutCtl = headerTimeout !== undefined ? timeoutController(headerTimeout) : undefined
           const signals: AbortSignal[] = []
 
           if (opts.signal) signals.push(opts.signal)
@@ -1799,7 +1798,7 @@ const layer = Layer.effect(
             timeout: false,
           }).finally(() => headerTimeoutCtl?.clear())
 
-          if (!chunkAbortCtl) return res
+          if (!chunkAbortCtl || chunkTimeout === undefined) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
         }
 
