@@ -56,38 +56,50 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
 
-  const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
-    sessionID: input.session.id,
-    abort: options.abortSignal!,
-    messageID: input.processor.message.id,
-    callID: options.toolCallId,
-    extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
-    agent: input.agent.name,
-    messages: input.messages,
-    metadata: (val) =>
-      input.processor.updateToolCall(options.toolCallId, (match) => {
-        if (!["running", "pending"].includes(match.state.status)) return match
-        return {
-          ...match,
-          state: {
-            title: val.title,
-            metadata: val.metadata,
-            status: "running",
-            input: args,
-            time: { start: Date.now() },
-          },
-        }
-      }),
-    ask: (req) =>
-      permission
-        .ask({
-          ...req,
-          sessionID: input.session.id,
-          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-        })
-        .pipe(Effect.orDie),
-  })
+  const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => {
+    const extra: { [key: string]: unknown } = {
+      model: input.model,
+      bypassAgentCheck: input.bypassAgentCheck,
+      promptOps: input.promptOps,
+    }
+    return {
+      sessionID: input.session.id,
+      abort: options.abortSignal!,
+      messageID: input.processor.message.id,
+      callID: options.toolCallId,
+      extra,
+      agent: input.agent.name,
+      messages: input.messages,
+      metadata: (val) =>
+        input.processor.updateToolCall(options.toolCallId, (match) => {
+          if (!["running", "pending"].includes(match.state.status)) return match
+          return {
+            ...match,
+            state: {
+              title: val.title,
+              metadata: val.metadata,
+              status: "running",
+              input: args,
+              time: { start: Date.now() },
+            },
+          }
+        }),
+      ask: (req) =>
+        permission
+          .ask({
+            ...req,
+            sessionID: input.session.id,
+            tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+            ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+          })
+          .pipe(
+            Effect.map((content) => {
+              if (content !== undefined) extra[Tool.EditedContentKey] = content
+            }),
+            Effect.orDie,
+          ),
+    }
+  }
 
   for (const item of yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),

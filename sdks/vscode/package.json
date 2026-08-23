@@ -20,7 +20,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -43,12 +45,32 @@
       {
         "command": "opencode.addFilepathToTerminal",
         "title": "Add Filepath to Terminal"
+      },
+      {
+        "command": "opencode.diff.accept",
+        "title": "Accept Diff",
+        "icon": "$(check)"
+      },
+      {
+        "command": "opencode.diff.reject",
+        "title": "Reject Diff",
+        "icon": "$(x)"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "opencode.openNewTerminal",
+          "group": "navigation"
+        },
+        {
+          "command": "opencode.diff.accept",
+          "when": "resourceScheme == opencode-diff",
+          "group": "navigation"
+        },
+        {
+          "command": "opencode.diff.reject",
+          "when": "resourceScheme == opencode-diff",
           "group": "navigation"
         }
       ]

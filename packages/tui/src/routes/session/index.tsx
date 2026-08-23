@@ -2104,14 +2104,29 @@ function Shell(props: ToolProps) {
 }
 
 function Write(props: ToolProps) {
+  const ctx = use()
   const { theme, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
   const code = createMemo(() => {
     return stringValue(props.input.content) ?? ""
   })
 
+  const diff = createMemo(() => stringValue(props.metadata.diff))
+
+  const view = createMemo(() => {
+    const diffStyle = ctx.tui.diff_style
+    if (diffStyle === "stacked") return "unified"
+    return ctx.width > 120 ? "split" : "unified"
+  })
+
   return (
     <Switch>
+      <Match when={diff() !== undefined}>
+        <BlockTool title={"# Wrote " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
+          <DiffView diff={diff() ?? ""} filePath={stringValue(props.input.filePath) ?? ""} view={view()} />
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.filePath) ?? ""} />
+        </BlockTool>
+      </Match>
       <Match when={props.metadata.diagnostics !== undefined}>
         <BlockTool title={"# Wrote " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
@@ -2393,9 +2408,36 @@ function Execute(props: ToolProps) {
   )
 }
 
+function DiffView(p: { diff: string; filePath: string; view: "unified" | "split" }) {
+  const { theme, syntax } = useTheme()
+  const ctx = use()
+  return (
+    <box paddingLeft={1}>
+      <diff
+        diff={p.diff}
+        view={p.view}
+        filetype={filetype(p.filePath)}
+        syntaxStyle={syntax()}
+        showLineNumbers={true}
+        width="100%"
+        wrapMode={ctx.diffWrapMode()}
+        fg={theme.text}
+        addedBg={theme.diffAddedBg}
+        removedBg={theme.diffRemovedBg}
+        contextBg={theme.diffContextBg}
+        addedSignColor={theme.diffHighlightAdded}
+        removedSignColor={theme.diffHighlightRemoved}
+        lineNumberFg={theme.diffLineNumber}
+        lineNumberBg={theme.diffContextBg}
+        addedLineNumberBg={theme.diffAddedLineNumberBg}
+        removedLineNumberBg={theme.diffRemovedLineNumberBg}
+      />
+    </box>
+  )
+}
+
 function Edit(props: ToolProps) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
 
   const view = createMemo(() => {
@@ -2405,35 +2447,13 @@ function Edit(props: ToolProps) {
     return ctx.width > 120 ? "split" : "unified"
   })
 
-  const ft = createMemo(() => filetype(stringValue(props.input.filePath)))
-
   const diffContent = createMemo(() => stringValue(props.metadata.diff) ?? "")
 
   return (
     <Switch>
       <Match when={stringValue(props.metadata.diff) !== undefined}>
         <BlockTool title={"← Edit " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
-          <box paddingLeft={1}>
-            <diff
-              diff={diffContent()}
-              view={view()}
-              filetype={ft()}
-              syntaxStyle={syntax()}
-              showLineNumbers={true}
-              width="100%"
-              wrapMode={ctx.diffWrapMode()}
-              fg={theme.text}
-              addedBg={theme.diffAddedBg}
-              removedBg={theme.diffRemovedBg}
-              contextBg={theme.diffContextBg}
-              addedSignColor={theme.diffHighlightAdded}
-              removedSignColor={theme.diffHighlightRemoved}
-              lineNumberFg={theme.diffLineNumber}
-              lineNumberBg={theme.diffContextBg}
-              addedLineNumberBg={theme.diffAddedLineNumberBg}
-              removedLineNumberBg={theme.diffRemovedLineNumberBg}
-            />
-          </box>
+          <DiffView diff={diffContent()} filePath={stringValue(props.input.filePath) ?? ""} view={view()} />
           <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.filePath) ?? ""} />
         </BlockTool>
       </Match>
@@ -2448,7 +2468,7 @@ function Edit(props: ToolProps) {
 
 function ApplyPatch(props: ToolProps) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
 
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
@@ -2460,29 +2480,7 @@ function ApplyPatch(props: ToolProps) {
   })
 
   function Diff(p: { diff: string; filePath: string }) {
-    return (
-      <box paddingLeft={1}>
-        <diff
-          diff={p.diff}
-          view={view()}
-          filetype={filetype(p.filePath)}
-          syntaxStyle={syntax()}
-          showLineNumbers={true}
-          width="100%"
-          wrapMode={ctx.diffWrapMode()}
-          fg={theme.text}
-          addedBg={theme.diffAddedBg}
-          removedBg={theme.diffRemovedBg}
-          contextBg={theme.diffContextBg}
-          addedSignColor={theme.diffHighlightAdded}
-          removedSignColor={theme.diffHighlightRemoved}
-          lineNumberFg={theme.diffLineNumber}
-          lineNumberBg={theme.diffContextBg}
-          addedLineNumberBg={theme.diffAddedLineNumberBg}
-          removedLineNumberBg={theme.diffRemovedLineNumberBg}
-        />
-      </box>
-    )
+    return <DiffView diff={p.diff} filePath={p.filePath} view={view()} />
   }
 
   function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {

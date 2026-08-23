@@ -9,10 +9,7 @@ import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware
 import { described } from "./metadata"
 
 const root = "/permission"
-const ReplyPayload = Schema.Struct({
-  reply: PermissionV1.Reply,
-  message: Schema.optional(Schema.String),
-})
+const ReplyPayload = PermissionV1.ReplyBody
 
 export const PermissionApi = HttpApi.make("permission")
   .add(
