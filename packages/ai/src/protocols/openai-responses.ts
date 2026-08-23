@@ -5,12 +5,13 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import { LLMRequest, type JsonSchema, type ToolDefinition } from "../schema/index.js"
+import { LLMEvent, LLMRequest, type JsonSchema, type ToolDefinition } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { optionalArray, ProviderShared } from "./shared.js"
 import { OpenAIImage } from "./utils/openai-image.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
+import { Lifecycle } from "./utils/lifecycle.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
 
 const ADAPTER = "openai-responses"
@@ -32,15 +33,51 @@ const OpenAIResponsesImageGenerationTool = Schema.Struct({
   size: Schema.optional(OpenAIImage.Size),
 })
 
-const OpenAIResponsesTools = Schema.Union([OpenResponses.Tool, OpenAIResponsesImageGenerationTool])
+const OpenAIResponsesLocalShellTool = Schema.Struct({ type: Schema.tag("local_shell") })
+
+const OpenAIResponsesTools = Schema.Union([
+  OpenResponses.Tool,
+  OpenAIResponsesImageGenerationTool,
+  OpenAIResponsesLocalShellTool,
+])
 
 const OpenAIResponsesToolChoice = Schema.Union([
   OpenResponses.ToolChoice,
   Schema.Struct({ type: Schema.tag("image_generation") }),
 ])
 
+const OpenAIResponsesLocalShellAction = Schema.Struct({
+  type: Schema.tag("exec"),
+  command: Schema.Array(Schema.String),
+  timeout_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+  user: Schema.optional(Schema.NullOr(Schema.String)),
+  working_directory: Schema.optional(Schema.NullOr(Schema.String)),
+  env: Schema.Record(Schema.String, Schema.String),
+})
+
+const OpenAIResponsesLocalShellCall = Schema.Struct({
+  type: Schema.tag("local_shell_call"),
+  id: Schema.optionalKey(Schema.String),
+  call_id: Schema.String,
+  action: OpenAIResponsesLocalShellAction,
+  status: Schema.Literals(["in_progress", "completed", "incomplete"]),
+})
+
+const OpenAIResponsesLocalShellCallOutput = Schema.Struct({
+  type: Schema.tag("local_shell_call_output"),
+  id: Schema.String,
+  output: Schema.String,
+})
+
+const OpenAIResponsesInputItem = Schema.Union([
+  OpenResponses.InputItem,
+  OpenAIResponsesLocalShellCall,
+  OpenAIResponsesLocalShellCallOutput,
+])
+
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
+  input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
 }
@@ -66,17 +103,35 @@ const nativeImageTool = (tool: ToolDefinition) => {
   return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
 }
 
+const nativeLocalShellToolInput = (tool: ToolDefinition) => {
+  const native = tool.native?.openai
+  return ProviderShared.isRecord(native) && native.type === "local_shell" ? native : undefined
+}
+
 const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDefinition, inputSchema: JsonSchema) {
   const native = nativeImageToolInput(tool)
   if (native !== undefined) {
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
     return yield* ProviderShared.invalidRequest("OpenAI Responses image generation tool options are invalid")
   }
+  const localShell = nativeLocalShellToolInput(tool)
+  if (localShell !== undefined) {
+    if (Schema.is(OpenAIResponsesLocalShellTool)(localShell)) return localShell
+    return yield* ProviderShared.invalidRequest("OpenAI Responses local shell tool options are invalid")
+  }
   return yield* OpenResponses.lowerTool(NAME, tool, inputSchema)
 })
 
-const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolDefinition>) =>
-  ProviderShared.matchToolChoice(NAME, toolChoice, {
+const lowerToolChoice = Effect.fn("OpenAIResponses.lowerToolChoice")(function* (
+  toolChoice: NonNullable<LLMRequest["toolChoice"]>,
+  tools: ReadonlyArray<ToolDefinition>,
+) {
+  if (
+    toolChoice.type === "tool" &&
+    tools.some((tool) => tool.name === toolChoice.name && nativeLocalShellToolInput(tool) !== undefined)
+  )
+    return yield* ProviderShared.invalidRequest("OpenAI Responses cannot select the local shell tool by name")
+  return yield* ProviderShared.matchToolChoice(NAME, toolChoice, {
     auto: () => "auto" as const,
     none: () => "none" as const,
     required: () => "required" as const,
@@ -85,6 +140,40 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
         ? ({ type: "image_generation" } as const)
         : { type: "function" as const, name },
   })
+})
+
+const localShellCalls = (request: LLMRequest) =>
+  new Map(
+    request.messages.flatMap((message) =>
+      message.role !== "assistant"
+        ? []
+        : message.content.flatMap((part) => {
+            if (part.type !== "tool-call") return []
+            const metadata = part.providerMetadata?.[request.model.route.providerMetadataKey ?? "openai"]
+            if (!ProviderShared.isRecord(metadata) || metadata.itemType !== "local_shell_call") return []
+            return [[part.id, part] as const]
+          }),
+    ),
+  )
+
+const lowerLocalShellHistory = (request: LLMRequest, input: OpenAIResponsesBody["input"]) => {
+  const calls = localShellCalls(request)
+  return input.map((item) => {
+    if (!("type" in item) || (item.type !== "function_call" && item.type !== "function_call_output")) return item
+    const call = calls.get(item.call_id)
+    if (!call) return item
+    if (item.type === "function_call") {
+      const input = ProviderShared.isRecord(call.input) ? call.input.action : undefined
+      const metadata = call.providerMetadata?.[request.model.route.providerMetadataKey ?? "openai"]
+      const status = ProviderShared.isRecord(metadata) ? metadata.status : undefined
+      return { type: "local_shell_call" as const, id: item.id, call_id: item.call_id, action: input, status }
+    }
+    return { type: "local_shell_call_output" as const, id: item.call_id, output: item.output }
+  })
+}
+
+const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesBody))
+const decodeLocalShellCall = Schema.decodeUnknownEffect(OpenAIResponsesLocalShellCall)
 
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
   const body = yield* OpenResponses.fromRequestWithExtension(
@@ -92,8 +181,20 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     extension,
   )
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
-  return {
+  const allowedTools =
+    typeof body.tool_choice === "object" && body.tool_choice.type === "allowed_tools" ? body.tool_choice : undefined
+  if (
+    allowedTools &&
+    request.tools.some(
+      (tool) =>
+        nativeLocalShellToolInput(tool) !== undefined &&
+        allowedTools.tools.some((choice) => choice.name === tool.name),
+    )
+  )
+    return yield* ProviderShared.invalidRequest("OpenAI Responses allowed tools cannot include the local shell tool")
+  return yield* decodeBody({
     ...body,
+    input: lowerLocalShellHistory(request, body.input),
     tools:
       request.tools.length === 0
         ? undefined
@@ -102,7 +203,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
           ),
     tool_choice:
       body.tool_choice ?? (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
-  } satisfies OpenAIResponsesBody
+  })
 })
 
 const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function* (item: ResponsesHostedTools.Item) {
@@ -140,8 +241,32 @@ const HOSTED_TOOLS = {
     name: "mcp",
     input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
   },
-  local_shell_call: { name: "local_shell", input: (item) => item.action ?? {} },
 } as const satisfies ResponsesHostedTools.Definitions
+
+const onLocalShellCallDone = Effect.fn("OpenAIResponses.onLocalShellCallDone")(function* (
+  state: OpenResponses.ParserState,
+  item: OpenResponses.StreamItem,
+) {
+  const call = yield* decodeLocalShellCall(item).pipe(
+    Effect.mapError(() => ProviderShared.eventError(ADAPTER, "OpenAI Responses local_shell_call is malformed")),
+  )
+  if (!call.id) return yield* ProviderShared.eventError(ADAPTER, "OpenAI Responses local_shell_call is missing id")
+  const events: LLMEvent[] = []
+  const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+  events.push(
+    LLMEvent.toolCall({
+      id: call.call_id,
+      name: "local_shell",
+      input: { action: call.action },
+      providerMetadata: OpenResponses.providerMetadata(state, {
+        itemId: call.id,
+        itemType: "local_shell_call",
+        status: call.status,
+      }),
+    }),
+  )
+  return [{ ...state, lifecycle, hasFunctionCall: true }, events] satisfies OpenResponses.StepResult
+})
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
   if (event.type === "response.reasoning_text.delta" || event.type === "response.reasoning_summary.delta")
@@ -152,6 +277,8 @@ const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
     return event.item_id
       ? Effect.succeed(OpenResponses.onReasoningDone(state, event))
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
+  if (event.type === "response.output_item.done" && event.item?.type === "local_shell_call")
+    return onLocalShellCallDone(state, event.item)
   if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
     return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
   return OpenResponses.step(state, event)

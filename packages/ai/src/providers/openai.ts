@@ -57,6 +57,33 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
     },
   })
 
+export const localShell = () =>
+  ToolDefinition.make({
+    name: "local_shell",
+    description: "Execute shell commands in the caller's local environment.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["exec"] },
+            command: { type: "array", items: { type: "string" } },
+            timeout_ms: { type: ["number", "null"] },
+            user: { type: ["string", "null"] },
+            working_directory: { type: ["string", "null"] },
+            env: { type: "object", additionalProperties: { type: "string" } },
+          },
+          required: ["type", "command", "env"],
+          additionalProperties: false,
+        },
+      },
+      required: ["action"],
+      additionalProperties: false,
+    },
+    native: { openai: { type: "local_shell" } },
+  })
+
 export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
   readonly baseURL?: string
