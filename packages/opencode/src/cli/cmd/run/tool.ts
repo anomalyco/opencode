@@ -763,9 +763,8 @@ function scrollTaskStart(_: ToolProps<typeof TaskTool>): string {
  * result rather than keeping a format of its own. A completed Task is `task_result`; the other two
  * arms carry the same position when the child stopped without a normal answer or failed.
  *
- * Anchored to the end of the envelope, and scoped past any `task_prior_output`, because that
- * section quotes an earlier lifetime's terminal output verbatim and can contain these very tags.
- * An unanchored search would return the quoted history instead of the current outcome.
+ * Anchored to the end of the envelope, because a notice can precede the body: an unanchored
+ * search would return that leading section instead of the envelope's own outcome.
  */
 function taskBody(output: string): string | undefined {
   if (!output.trim()) {

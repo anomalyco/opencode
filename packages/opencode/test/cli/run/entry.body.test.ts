@@ -428,7 +428,7 @@ describe("run entry body", () => {
     })
   })
 
-  test("preserves synchronous prior output in the existing Task error presentation", () => {
+  test("presents a multi-line Task failure reason verbatim", () => {
     expect(
       entryBody(
         toolCommit({
@@ -440,7 +440,7 @@ describe("run entry body", () => {
               description: "Inspect reducer",
               subagent_type: "explore",
             },
-            error: ["<task_prior_output>", "Earlier useful finding", "</task_prior_output>", "Task failed"].join("\n"),
+            error: ["Child stopped early", "No final answer"].join("\n"),
             metadata: {
               sessionId: "child-1",
             },
@@ -450,7 +450,7 @@ describe("run entry body", () => {
       ),
     ).toEqual({
       type: "text",
-      content: "✖ task failed: <task_prior_output>\nEarlier useful finding\n</task_prior_output>\nTask failed",
+      content: "✖ task failed: Child stopped early\nNo final answer",
     })
   })
 

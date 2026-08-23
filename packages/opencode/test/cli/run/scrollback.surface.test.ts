@@ -1138,7 +1138,7 @@ test("renders running task status without a raw wrapper or leading blank row", a
   }
 })
 
-test("renders Task non-success with prior output and no leading blank row", async () => {
+test("renders Task non-success with a multi-line reason and no leading blank row", async () => {
   const out = await setup()
 
   try {
@@ -1153,7 +1153,7 @@ test("renders Task non-success with prior output and no leading blank row", asyn
             description: "Explore run.ts",
             subagent_type: "explore",
           },
-          error: ["<task_prior_output>", "Earlier useful finding", "</task_prior_output>", "Task failed"].join("\n"),
+          error: ["Child stopped early", "No final answer"].join("\n"),
           metadata: {
             sessionId: "child-1",
           },
@@ -1167,9 +1167,8 @@ test("renders Task non-success with prior output and no leading blank row", asyn
       const output = render(commits)
       expect(output.startsWith("\n")).toBe(false)
       expect(output).toContain("task failed")
-      expect(output).toContain("<task_prior_output>")
-      expect(output).toContain("Earlier useful finding")
-      expect(output).toContain("Task failed")
+      expect(output).toContain("Child stopped early")
+      expect(output).toContain("No final answer")
     } finally {
       destroy(commits)
     }
