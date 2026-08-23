@@ -14,7 +14,7 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
-import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS } from "@opencode-ai/tui/startup-shared"
+import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS, buildProgressBar } from "@opencode-ai/tui/startup-shared"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -158,9 +158,10 @@ export const TuiThreadCommand = cmd({
     const fs = await import("node:fs")
     const termWidth = process.stdout.columns ?? process.stderr.columns ?? 80
     const termHeight = process.stdout.rows ?? process.stderr.rows ?? 24
+    globalThis.__opencodeStartupStartTime = Date.now()
+    const startTime = globalThis.__opencodeStartupStartTime
     const centerRow = Math.max(2, Math.floor(termHeight / 2))
     const barRow = centerRow + 2
-    const startTime = Date.now()
 
     const writeRaw = (out: string) => {
       try {
@@ -174,14 +175,14 @@ export const TuiThreadCommand = cmd({
       try {
         process.stderr.write(out)
       } catch {}
-      try {
-        process.stdout.write(out)
-      } catch {}
     }
 
-    writeRaw("\x1b[?1049h\x1b[2J\x1b[?25l\x1b[H")
+    // Clear the screen (including any shell echo like "$ bun run ...")
+    // and hide the cursor. No alt screen — the renderer takes over directly.
+    writeRaw("\x1b[3J\x1b[2J\x1b[?25l\x1b[H")
 
     let frame = 0
+    let phase = 0
     let messageIndex = 0
     let lastMessageChange = Date.now()
     let stopped = false
@@ -192,18 +193,17 @@ export const TuiThreadCommand = cmd({
       const textCol = Math.max(1, Math.floor((termWidth - text.length) / 2) + 1)
 
       const elapsed = Date.now() - startTime
-      const progress = Math.min(1, elapsed / STARTUP_EXPECTED_DURATION_MS)
-      const filled = Math.round(progress * STARTUP_PROGRESS_BAR_WIDTH)
-      const bar = "█".repeat(filled) + "░".repeat(STARTUP_PROGRESS_BAR_WIDTH - filled)
-      const pct = `${Math.round(progress * 100)}%`
+      const progress = elapsed / STARTUP_EXPECTED_DURATION_MS
+      const { bar, pct } = buildProgressBar(elapsed, phase)
       const barVisualWidth = STARTUP_PROGRESS_BAR_WIDTH + 1 + pct.length
       const barCol = Math.max(1, Math.floor((termWidth - barVisualWidth) / 2) + 1)
+      const barColor = progress >= 1 ? "\x1b[38;5;252m" : "\x1b[38;5;240m"
 
       writeRaw(
         `\x1b[${centerRow};1H\x1b[2K\x1b[${centerRow};${textCol}H` +
         `\x1b[1m\x1b[38;5;252m${text}\x1b[0m` +
         `\x1b[${barRow};1H\x1b[2K\x1b[${barRow};${barCol}H` +
-        `\x1b[38;5;240m${bar}\x1b[0m\x1b[38;5;252m ${pct}\x1b[0m`
+        `${barColor}${bar}\x1b[0m\x1b[38;5;252m ${pct}\x1b[0m`
       )
     }
 
@@ -212,6 +212,7 @@ export const TuiThreadCommand = cmd({
     const preSplashTimer = setInterval(() => {
       if (stopped) return
       frame = (frame + 1) % STARTUP_FRAMES.length
+      phase++
       const now = Date.now()
       if (now - lastMessageChange > STARTUP_MESSAGE_INTERVAL_MS) {
         messageIndex = (messageIndex + 1) % STARTUP_MESSAGES.length
@@ -224,7 +225,7 @@ export const TuiThreadCommand = cmd({
       if (stopped) return
       stopped = true
       clearInterval(preSplashTimer)
-      writeRaw("\x1b[?25h\x1b[?1049l")
+      writeRaw("\x1b[?25h\x1b[2J\x1b[H")
     }
 
     globalThis.__opencodeStopPreSplash = stopPreSplash

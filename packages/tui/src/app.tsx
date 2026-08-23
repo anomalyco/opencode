@@ -2,6 +2,7 @@ import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@op
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
+import * as fs from "node:fs"
 import { openSync, writeSync, closeSync } from "node:fs"
 import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -86,7 +87,7 @@ import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
-import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS } from "./startup-shared"
+import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS, buildProgressBar } from "./startup-shared"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
 registerOpencodeSpinner()
@@ -157,13 +158,53 @@ export type TuiInput = {
   events?: EventSource
   pluginHost: TuiPluginHost
 }
+function clearTerminal() {
+  const seq = "\x1b[?25h\x1b[3J\x1b[2J\x1b[H"
+  try {
+    const tty = openSync("/dev/tty", "w")
+    try {
+      writeSync(tty, seq)
+    } finally {
+      closeSync(tty)
+    }
+  } catch {}
+  try {
+    fs.writeSync(1, seq)
+  } catch {}
+  try {
+    process.stderr.write(seq)
+  } catch {}
+}
+
+let terminalCleanupRegistered = false
+function registerTerminalCleanup() {
+  if (terminalCleanupRegistered) return
+  terminalCleanupRegistered = true
+  try {
+    process.on("exit", clearTerminal)
+  } catch {}
+  try {
+    process.on("beforeExit", clearTerminal)
+  } catch {}
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK", "SIGQUIT"] as const) {
+    try {
+      process.on(sig, () => {
+        clearTerminal()
+      })
+    } catch {}
+  }
+}
+
+registerTerminalCleanup()
+
 function paintStartupSplash(renderer: { width: number; height: number }): () => void {
   const width = Math.max(1, renderer.width)
   const height = Math.max(1, renderer.height)
   const centerRow = Math.max(2, Math.floor(height / 2))
   const barRow = centerRow + 2
-  const startTime = Date.now()
+  const startTime = globalThis.__opencodeStartupStartTime ?? Date.now()
   let frame = 0
+  let phase = 0
   let messageIndex = 0
   let lastMessageChange = Date.now()
   let stopped = false
@@ -184,7 +225,7 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
     } catch {}
   }
 
-  writeAll("\x1b[?1049h\x1b[2J\x1b[?25l\x1b[H")
+  writeAll("\x1b[3J\x1b[2J\x1b[?25l\x1b[H")
 
   const paint = () => {
     if (stopped) return
@@ -192,25 +233,24 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
     const textCol = Math.max(1, Math.floor((width - text.length) / 2) + 1)
 
     const elapsed = Date.now() - startTime
-    const progress = Math.min(1, elapsed / STARTUP_EXPECTED_DURATION_MS)
-    const filled = Math.round(progress * STARTUP_PROGRESS_BAR_WIDTH)
-    const bar = "█".repeat(filled) + "░".repeat(STARTUP_PROGRESS_BAR_WIDTH - filled)
-    const pct = `${Math.round(progress * 100)}%`
+    const progress = elapsed / STARTUP_EXPECTED_DURATION_MS
+    const { bar, pct } = buildProgressBar(elapsed, phase)
     const barVisualWidth = STARTUP_PROGRESS_BAR_WIDTH + 1 + pct.length
     const barCol = Math.max(1, Math.floor((width - barVisualWidth) / 2) + 1)
+    const barColor = progress >= 1 ? "\x1b[38;5;252m" : "\x1b[38;5;240m"
 
     writeAll(
       `\x1b[${centerRow};1H\x1b[2K\x1b[${centerRow};${textCol}H` +
       `\x1b[1m\x1b[38;5;252m${text}\x1b[0m` +
       `\x1b[${barRow};1H\x1b[2K\x1b[${barRow};${barCol}H` +
-      `\x1b[38;5;240m${bar}\x1b[0m\x1b[38;5;252m ${pct}\x1b[0m`
+      `${barColor}${bar}\x1b[0m\x1b[38;5;252m ${pct}\x1b[0m`
     )
   }
 
   globalThis.__opencodeStopInTuiSplash = () => {
     if (stopped) return
     stopped = true
-    writeAll("\x1b[?25h\x1b[?1049l")
+    writeAll("\x1b[?25h\x1b[2J\x1b[H")
   }
 
   paint()
@@ -218,6 +258,7 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
   const tick = () => {
     if (stopped) return
     frame = (frame + 1) % STARTUP_FRAMES.length
+    phase++
     const now = Date.now()
     if (now - lastMessageChange > STARTUP_MESSAGE_INTERVAL_MS) {
       messageIndex = (messageIndex + 1) % STARTUP_MESSAGES.length
@@ -304,6 +345,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         (renderer) =>
           Effect.sync(() => {
             destroyRenderer(renderer)
+            clearTerminal()
           }),
       )
       globalThis.__opencodeStopPreSplash?.()
