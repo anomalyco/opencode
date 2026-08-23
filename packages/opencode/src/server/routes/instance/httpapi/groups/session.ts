@@ -36,6 +36,11 @@ export const ListQuery = Schema.Struct({
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
 })
+export const AbortQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  background: Schema.optional(Schema.Literal("keep")),
+})
+
 export const DiffQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   ...Struct.omit(SessionSummary.DiffInput.fields, ["sessionID"]),
@@ -252,14 +257,15 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("abort", SessionPaths.abort, {
           params: { sessionID: SessionID },
-          query: WorkspaceRoutingQuery,
+          query: AbortQuery,
           success: described(Schema.Boolean, "Aborted session"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.abort",
             summary: "Abort session",
-            description: "Abort an active session and stop any ongoing AI processing or command execution.",
+            description:
+              "Abort an active session and stop any ongoing AI processing or command execution. Pass background=keep to leave subagent and background jobs running.",
           }),
         ),
         HttpApiEndpoint.post("init", SessionPaths.init, {
