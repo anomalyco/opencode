@@ -62,6 +62,7 @@ export namespace Workspace {
     z.object({
       name: z.string().min(1).max(255).optional(),
       region: z.array(Region).min(1).optional(),
+      allow_training: z.boolean().optional(),
     }),
     async (input) => {
       Actor.assertAdmin()
@@ -72,6 +73,7 @@ export namespace Workspace {
           .set({
             ...("name" in input ? { name: input.name } : {}),
             ...("region" in input ? { region: input.region } : {}),
+            ...("allow_training" in input ? { allow_training: input.allow_training } : {}),
           })
           .where(eq(WorkspaceTable.id, workspaceID)),
       )

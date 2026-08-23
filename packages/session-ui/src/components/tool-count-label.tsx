@@ -1,5 +1,6 @@
 import { createMemo } from "solid-js"
 import { AnimatedNumber } from "@opencode-ai/ui/animated-number"
+import { pluralCategory, pluralKey, useI18n, type UiI18nPluralKey } from "@opencode-ai/ui/context/i18n"
 
 function split(text: string) {
   const match = /{{\s*count\s*}}/.exec(text)
@@ -23,14 +24,16 @@ function common(one: string, other: string) {
   }
 }
 
-export function AnimatedCountLabel(props: { count: number; one: string; other: string; class?: string }) {
-  const one = createMemo(() => split(props.one))
-  const other = createMemo(() => split(props.other))
-  const singular = createMemo(() => Math.round(props.count) === 1)
-  const active = createMemo(() => (singular() ? one() : other()))
+export function AnimatedCountLabel(props: { count: number; plural: UiI18nPluralKey; class?: string }) {
+  const i18n = useI18n()
+  const category = createMemo(() => pluralCategory(i18n.locale(), Math.round(props.count)))
+  const one = createMemo(() => split(i18n.t(pluralKey(props.plural, "one"))))
+  const other = createMemo(() => split(i18n.t(pluralKey(props.plural, "other"))))
+  const active = createMemo(() => split(i18n.t(pluralKey(props.plural, category()))))
   const suffix = createMemo(() => common(one().after, other().after))
   const splitSuffix = createMemo(
     () =>
+      (category() === "one" || category() === "other") &&
       one().before === other().before &&
       (one().after.startsWith(other().after) || other().after.startsWith(one().after)),
   )
@@ -38,7 +41,7 @@ export function AnimatedCountLabel(props: { count: number; one: string; other: s
   const stem = createMemo(() => (splitSuffix() ? suffix().stem : active().after))
   const tail = createMemo(() => {
     if (!splitSuffix()) return ""
-    if (singular()) return suffix().one
+    if (category() === "one") return suffix().one
     return suffix().other
   })
   const showTail = createMemo(() => splitSuffix() && tail().length > 0)
