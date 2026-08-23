@@ -189,6 +189,7 @@ describe("Open Responses-compatible route", () => {
           streamOptions: { includeObfuscation: false },
           topLogprobs: 3,
           truncation: "auto",
+          serviceTier: "provider-tier",
           allowedTools: { toolNames: ["lookup"] },
           maxToolCalls: 2,
           parallelToolCalls: false,
@@ -213,6 +214,7 @@ describe("Open Responses-compatible route", () => {
         presence_penalty: 0.2,
         frequency_penalty: -0.1,
         truncation: "auto",
+        service_tier: "provider-tier",
         tool_choice: {
           type: "allowed_tools",
           mode: "auto",

@@ -134,7 +134,7 @@ const HOSTED_TOOLS = {
     name: "code_interpreter",
     input: (item) => ({ code: item.code, container_id: item.container_id }),
   },
-  computer_use_call: { name: "computer_use", input: (item) => item.action ?? {} },
+  computer_call: { name: "computer_use", input: (item) => item.action ?? {} },
   image_generation_call: { name: "image_generation", input: () => ({}), result: hostedToolResult },
   mcp_call: {
     name: "mcp",

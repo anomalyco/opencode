@@ -188,13 +188,13 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("omits unsupported semantic service tiers", () =>
+  it.effect("passes through provider-defined service tiers", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { serviceTier: "unsupported" } }),
+        LLMRequest.update(request, { providerOptions: { serviceTier: "scale" } }),
       )
 
-      expect(prepared.body).not.toHaveProperty("service_tier")
+      expect(prepared.body.service_tier).toBe("scale")
     }),
   )
 
@@ -2647,6 +2647,47 @@ describe("OpenAI Responses route", () => {
           result: { type: "json", value: item },
           providerExecuted: true,
           providerMetadata: { openai: { itemId: "ws_1" } },
+        },
+      ])
+    }),
+  )
+
+  it.effect("decodes computer_call as provider-executed tool-call + tool-result", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "computer_call",
+        id: "computer_1",
+        call_id: "call_1",
+        status: "completed",
+        action: { type: "click", x: 100, y: 200 },
+      }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.done", item },
+              { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type === "tool-call" || event.type === "tool-result")).toEqual([
+        {
+          type: "tool-call",
+          id: "computer_1",
+          name: "computer_use",
+          input: { type: "click", x: 100, y: 200 },
+          providerExecuted: true,
+          providerMetadata: { openai: { itemId: "computer_1" } },
+        },
+        {
+          type: "tool-result",
+          id: "computer_1",
+          name: "computer_use",
+          result: { type: "json", value: item },
+          providerExecuted: true,
+          providerMetadata: { openai: { itemId: "computer_1" } },
         },
       ])
     }),
