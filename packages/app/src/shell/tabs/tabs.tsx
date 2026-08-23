@@ -65,7 +65,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       createStore<Tab[]>([]),
     )
     const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), createStore<RecentTab>({}))
-    const [info, setInfo] = persisted(Persist.window("tabs.info"), createStore<Record<string, TabInfo>>({}))
+    const [info, setInfo, , infoReady] = persisted(
+      Persist.window("tabs.info"),
+      createStore<Record<string, TabInfo>>({}),
+    )
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), createStore<ClosedTab[]>([]))
 
     const params = useParams()
@@ -378,6 +381,6 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
     }
 
-    return { ...actions, store, info, ready, recentReady }
+    return { ...actions, store, info, ready, infoReady, recentReady }
   },
 })
