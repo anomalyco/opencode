@@ -41,6 +41,7 @@ import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
+import { abortSessionBranch } from "../../util/session-abort"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
@@ -394,7 +395,13 @@ export function Prompt(props: PromptProps) {
         name: "session.interrupt",
         category: "Session",
         hidden: true,
-        enabled: status().type !== "idle",
+        // Not keyed to this session's own status: a session reads idle while delegated work
+        // still runs beneath it, and that case is the defect, not a fast path. Scanning the
+        // subtree instead would not fix it - `session_status` is an event-fed projection, so
+        // it lags the work it would have to detect and carries nothing at all for a job whose
+        // child session does not exist yet. Ask rather than predict: `abort` answers success
+        // when a session has no work, so a request with nothing to close costs one round trip.
+        enabled: Boolean(props.sessionID),
         run: () => {
           if (auto()?.visible) return
           if (!input.focused) return
@@ -412,8 +419,15 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            void sdk.client.session.abort({
+            void abortSessionBranch({
+              client: sdk.client,
               sessionID: props.sessionID,
+              onFailure: (error) =>
+                toast.show({
+                  title: "Interrupt failed",
+                  message: errorMessage(error),
+                  variant: "error",
+                }),
             })
             setStore("interrupt", 0)
           }
