@@ -48,6 +48,13 @@ describe("Notebook.parse/serialize", () => {
     expect(parsed.summary).toBe("")
     expect(Object.keys(parsed.entries)).toHaveLength(0)
   })
+
+  test("does not instantiate JS tags from a hostile notebook (no RCE via !!js/function)", () => {
+    const hostile = "summary: !!js/function >\n  function evil(){ return 1; }\nentries: {}\n"
+    const parsed = parseNotebook(hostile, "/root", "")
+    expect(parsed.summary).toBe("")
+    expect(Object.keys(parsed.entries)).toHaveLength(0)
+  })
 })
 
 describe("Notebook tree placement", () => {

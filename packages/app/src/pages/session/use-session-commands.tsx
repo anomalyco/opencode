@@ -29,6 +29,12 @@ export type SessionCommandContext = {
   fileBrowser?: () => boolean
 }
 
+// Shared instruction for the `/save` command and the save-learnings button. Kept
+// in one place so a rename or gating of `notes_commit` cannot silently degrade
+// one path while the other keeps the stale tool name.
+export const RECORD_NOTES_PROMPT =
+  "Save the durable learnings from this session to the project notebook. Use `notes_commit` with rewritten, English, source-backed folder_summaries/entries/relations, and surface the review for my approval before saving."
+
 const withCategory = (category: string) => {
   return (option: Omit<CommandOption, "category">): CommandOption => ({
     ...option,
@@ -428,7 +434,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     await sdk().api.session.prompt({
       sessionID,
       model: { providerID: model.provider.id, modelID: model.id },
-      text: "Save the durable learnings from this session to the project notebook. Use `notes_commit` with rewritten, English, source-backed folder_summaries/entries/relations, and surface the review for my approval before saving.",
+      text: RECORD_NOTES_PROMPT,
     })
   }
 

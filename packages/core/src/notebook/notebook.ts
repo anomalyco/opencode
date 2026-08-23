@@ -1,6 +1,6 @@
 export * as Notebook from "./notebook"
 
-import { dump, load } from "js-yaml"
+import { CORE_SCHEMA, dump, load } from "js-yaml"
 
 export const NOTEBOOK_NAME = ".note.yaml"
 
@@ -86,7 +86,9 @@ const asConfidence = (value: unknown): Confidence =>
 export function parseNotebook(content: string, dir: string, rel: string): Notebook {
   let data: unknown
   try {
-    data = load(content) ?? {}
+    // CORE_SCHEMA restricts parsing to plain YAML (no `!!js/function` RCE tags)
+    // while still accepting the scalars/maps/lists a notebook uses.
+    data = load(content, { schema: CORE_SCHEMA }) ?? {}
   } catch {
     data = {}
   }

@@ -92,7 +92,7 @@ import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "@
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
-import { useSessionCommands } from "@/pages/session/use-session-commands"
+import { RECORD_NOTES_PROMPT, useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
@@ -2123,7 +2123,7 @@ export default function Page() {
                     void sdk().api.session.prompt({
                       sessionID: id,
                       model: { providerID: model.provider.id, modelID: model.id },
-                      text: "Save the durable learnings from this session to the project notebook. Use `notes_commit` with rewritten, English, source-backed folder_summaries/entries/relations, and surface the review for my approval before saving.",
+                      text: RECORD_NOTES_PROMPT,
                     })
                   }}
                   setScrollToEnd={(fn) => {
