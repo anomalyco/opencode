@@ -533,6 +533,40 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 
 ---
 
+### Bee by HEOSSI
+
+[Bee by HEOSSI](https://bee.heossi.com) is a governed multimodal intelligence platform with an OpenAI-compatible developer API. Create an API key in [Bee Workspace](https://workspace.bee.heossi.com/account/api-keys) and add Bee as a custom provider:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "bee": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Bee by HEOSSI",
+      "options": {
+        "baseURL": "https://api.bee.heossi.com/bee",
+        "apiKey": "bee_sk_..."
+      },
+      "models": {
+        "bee-cell": { "name": "Bee Cell 1.0" },
+        "bee-brood": { "name": "Bee Brood 1.0" },
+        "bee-comb": { "name": "Bee Comb 1.0" },
+        "bee-buzz": { "name": "Bee Buzz 1.0" },
+        "bee-hive": { "name": "Bee Hive 1.0" },
+        "bee-swarm": { "name": "Bee Swarm 1.0" }
+      }
+    }
+  }
+}
+```
+
+- Replace `bee_sk_...` with your real key; never commit keys.
+- Model IDs must match the ids returned by `GET https://api.bee.heossi.com/bee/models`.
+- Bee Cell is the free entry tier.
+
+---
+
 ### Cerebras
 
 1. Head over to the [Cerebras console](https://inference.cerebras.ai/), create an account, and generate an API key.
