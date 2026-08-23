@@ -9,6 +9,7 @@ import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
 import { PermissionV2 } from "../permission"
+import { jsonMetadata } from "./metadata"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -59,15 +60,16 @@ const layer = Layer.effectDiscard(
           ],
           execute: (input, context) =>
             Effect.gen(function* () {
+              const metadata = jsonMetadata({
+                root: input.path ?? ".",
+                path: input.path,
+                limit: input.limit,
+              })
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
                 save: ["*"],
-                metadata: {
-                  root: input.path ?? ".",
-                  path: input.path,
-                  limit: input.limit,
-                },
+                metadata,
                 sessionID: context.sessionID,
                 agent: context.agent,
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
