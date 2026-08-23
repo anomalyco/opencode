@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/merman",
+  "name": "@opencode-ai/mermaid",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -13,7 +13,7 @@ let treeSitterClient: TreeSitterClient
 let renderer: Awaited<ReturnType<typeof createTestRenderer>>["renderer"] | undefined
 
 beforeAll(async () => {
-  const dataPath = join(tmpdir(), "merman-markdown-test-data")
+  const dataPath = join(tmpdir(), "mermaid-markdown-test-data")
   await mkdir(dataPath, { recursive: true })
   treeSitterClient = new TreeSitterClient({ dataPath })
   await treeSitterClient.initialize()
