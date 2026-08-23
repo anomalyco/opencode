@@ -106,4 +106,17 @@ describe("Zen request body streaming", () => {
       stream_options: { include_usage: true },
     })
   })
+
+  test("preserves a UTF-8 BOM while patching the model", async () => {
+    const body = new Blob(['\uFEFF{"messages":[],"model":"client-model","stream":false}']).stream()
+    const request = await prepareRequestBody(body)
+    const output = new Uint8Array(await new Response(request.stream("provider-model", false)).arrayBuffer())
+
+    expect([...output.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf])
+    expect(JSON.parse(new TextDecoder().decode(output))).toEqual({
+      messages: [],
+      model: "provider-model",
+      stream: false,
+    })
+  })
 })
