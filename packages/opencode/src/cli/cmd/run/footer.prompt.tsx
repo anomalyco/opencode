@@ -1006,6 +1006,14 @@ export function createPromptState(input: PromptInput): PromptState {
           return false
         },
       },
+    ],
+    bindings: input.tuiConfig.keybinds.get("session.interrupt"),
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: input.prompt(),
+    commands: [
       {
         name: "session.interrupt_send",
         title: "Interrupt and send",
@@ -1025,10 +1033,7 @@ export function createPromptState(input: PromptInput): PromptState {
         },
       },
     ],
-    bindings: [
-      ...input.tuiConfig.keybinds.get("session.interrupt"),
-      ...input.tuiConfig.keybinds.get("session.interrupt_send"),
-    ],
+    bindings: input.tuiConfig.keybinds.get("session.interrupt_send"),
   }))
 
   useBindings(() => ({

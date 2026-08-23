@@ -95,7 +95,7 @@ export const Definitions = {
   session_share: keybind("none", "Share current session"),
   session_unshare: keybind("none", "Unshare current session"),
   session_interrupt: keybind("escape", "Interrupt current session"),
-  session_interrupt_send: keybind("ctrl+enter,<leader>i", "Interrupt and send prompt"),
+  session_interrupt_send: keybind("ctrl+enter", "Interrupt and send prompt"),
   session_background: keybind("ctrl+b", "Background synchronous subagents"),
   session_compact: keybind("<leader>c", "Compact the session"),
   session_toggle_timestamps: keybind("none", "Toggle message timestamps"),

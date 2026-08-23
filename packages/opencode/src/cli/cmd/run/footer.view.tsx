@@ -208,15 +208,6 @@ export function RunFooterView(props: RunFooterViewProps) {
         props.tuiConfig,
       ) ?? "",
   )
-  const queuedFlushShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["session.queued_flush"] })
-          .get("session.queued_flush")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
   const backgroundShortcut = useKeymapSelector(
     (keymap: OpenTuiKeymap) =>
       formatKeySequence(
@@ -478,9 +469,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     const items: Array<{ kind: string; key: string; label: string }> = []
-    if (queuedPrompts().length > 0 && queuedFlushShortcut()) {
-      items.push({ kind: "flush", key: queuedFlushShortcut(), label: "send all queued" })
-    }
     if (foregroundSubagents() && backgroundShortcut()) {
       items.push({ kind: "background", key: backgroundShortcut(), label: "background" })
     }
