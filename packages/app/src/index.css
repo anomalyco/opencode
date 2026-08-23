@@ -33,6 +33,133 @@
 }
 
 @layer components {
+  [data-slot="session-side-panel-presence"][data-opened="true"] {
+    animation: terminal-panel-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="session-side-panel-presence"][data-opened="false"] {
+    animation: terminal-panel-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  [data-slot="session-side-region-presence"][data-opened="true"] {
+    animation: side-region-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="session-side-region-presence"][data-opened="false"] {
+    animation: side-region-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="terminal-panel-presence"][data-opened="true"] {
+    animation: terminal-panel-presence-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="terminal-panel-presence"][data-opened="false"] {
+    animation: terminal-panel-presence-out 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  [data-slot="side-terminal-panel-presence"][data-opened="true"] {
+    animation: side-terminal-panel-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="side-terminal-panel-presence"][data-opened="false"] {
+    animation: side-terminal-panel-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  [data-component="terminal-panel"][data-size-animated="true"][data-opened="true"] {
+    animation: terminal-panel-size-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-component="terminal-panel"][data-size-animated="true"][data-opened="false"] {
+    animation: terminal-panel-size-out 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="terminal-panel-presence"],
+    [data-slot="side-terminal-panel-presence"],
+    [data-slot="session-side-panel-presence"],
+    [data-slot="session-side-region-presence"],
+    [data-component="terminal-panel"] {
+      animation: none !important;
+    }
+  }
+
+  @keyframes terminal-panel-presence-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes terminal-panel-presence-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes side-terminal-panel-presence-in {
+    from {
+      opacity: 0.999999;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes side-terminal-panel-presence-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.999999;
+      visibility: hidden;
+    }
+  }
+
+  @keyframes side-region-presence-in {
+    from {
+      opacity: 0;
+    }
+    0.01% {
+      opacity: 0.999999;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes side-region-presence-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.999999;
+      visibility: hidden;
+    }
+  }
+
+  @keyframes terminal-panel-size-in {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--terminal-panel-height);
+    }
+  }
+
+  @keyframes terminal-panel-size-out {
+    from {
+      height: var(--terminal-panel-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;

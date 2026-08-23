@@ -243,7 +243,8 @@ test("focuses a terminal created from the new-terminal button", async ({ page })
 
   await page.getByRole("button", { name: "New terminal" }).click()
   await expect(page.getByRole("tab", { name: "Terminal 2" })).toHaveAttribute("aria-selected", "true")
-  await expect.poll(() => terminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+  const active = page.locator(`#terminal-wrapper-${newPtyID} [data-component="terminal"]`)
+  await expect.poll(() => active.evaluate((element) => element.contains(document.activeElement))).toBe(true)
 })
 
 function seedCachedTerminal(page: Page) {

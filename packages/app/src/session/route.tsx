@@ -2,12 +2,11 @@ import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from 
 import { useParams } from "@solidjs/router"
 import { CommentsProvider } from "@/composer/comments"
 import { FileProvider } from "@/workspaces/files/model"
-import { LocationProvider, useWorkspaceLocation } from "@/workspaces/location"
+import { LocationProvider } from "@/workspaces/location"
 import { ModelsProvider } from "@/providers/models/models"
 import { useNotification } from "@/shell/notifications/notification"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { useData, useServer } from "@/runtime/server/current"
-import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection } from "@/runtime/server/registry"
 import { TerminalProvider } from "@/session/terminal/context"
 import { useSettingsCommand } from "@/settings/command"
@@ -86,7 +85,7 @@ function ResolvedTargetSessionRoute() {
     >
       <Show when={directory()} fallback={<PendingSessionState sessionID={params.id} />}>
         {(value) => (
-          <LocationProvider directory={value()}>
+          <LocationProvider directory={value}>
             <SessionUIProvider directory={value()} server={server.key}>
               <TargetSessionPage />
             </SessionUIProvider>
@@ -114,23 +113,18 @@ function SessionStatePanel(props: ParentProps) {
 }
 
 function TargetSessionPage() {
-  const location = useWorkspaceLocation()
-  const server = useServerSDK()
-
   return (
-    // Keep workspace-scoped file, prompt, comment, and terminal state alive when
-    // the user switches between Sessions in the same workspace.
-    <Show when={`${server.scope}\0${location().directory}`} keyed>
-      <TerminalProvider>
-        <FileProvider>
-          <ComposerPersistenceProvider>
-            <CommentsProvider>
-              <SessionPage />
-            </CommentsProvider>
-          </ComposerPersistenceProvider>
-        </FileProvider>
-      </TerminalProvider>
-    </Show>
+    // These providers select their scoped state reactively and retain bounded caches,
+    // so keep their owners alive while navigating between workspaces on this server.
+    <TerminalProvider>
+      <FileProvider>
+        <ComposerPersistenceProvider>
+          <CommentsProvider>
+            <SessionPage />
+          </CommentsProvider>
+        </ComposerPersistenceProvider>
+      </FileProvider>
+    </TerminalProvider>
   )
 }
 
