@@ -705,11 +705,39 @@ export const RunCommand = effectCmd({
           // mid-step and losing the trailing events.
           let openSteps = 0
           let idlePending = false
-          let drainTimedOut = false
-          let drainTimer: ReturnType<typeof setTimeout> | undefined
 
-          for await (const event of events.stream) {
-            if (drainTimedOut) break
+          // While draining, each wait for the next event races a deadline that
+          // resets on every delivered part, so a stream that goes quiet after
+          // idle can't block exit. OPENCODE_RUN_DRAIN_TIMEOUT overrides (ms).
+          const drainTimeoutMs = () => {
+            const raw = Number(process.env.OPENCODE_RUN_DRAIN_TIMEOUT)
+            return Number.isFinite(raw) && raw > 0 ? raw : 3_000
+          }
+          const drain = { idle: false, timer: undefined as ReturnType<typeof setTimeout> | undefined }
+          async function* raced<T>(stream: AsyncIterable<T>): AsyncGenerator<T> {
+            const iterator = stream[Symbol.asyncIterator]()
+            try {
+              while (true) {
+                const pending = iterator.next()
+                const settled = drain.idle
+                  ? await Promise.race([
+                      pending,
+                      new Promise<undefined>((resolve) => {
+                        drain.timer = setTimeout(() => resolve(undefined), drainTimeoutMs())
+                      }),
+                    ])
+                  : await pending
+                clearTimeout(drain.timer)
+                if (settled === undefined || settled.done) return
+                yield settled.value
+              }
+            } finally {
+              clearTimeout(drain.timer)
+              void Promise.resolve(iterator.return?.()).catch(() => {})
+            }
+          }
+
+          for await (const event of raced(events.stream)) {
             if (event.type === "session.created" && event.properties.info.parentID) {
               if (sessions.has(event.properties.info.parentID)) sessions.add(event.properties.info.id)
             }
@@ -803,6 +831,10 @@ export const RunCommand = effectCmd({
                 err = String(props.error.data.message)
               }
               error = error ? error + EOL + err : err
+              // Unlike the happy path we stop as soon as an error lands instead
+              // of waiting out the drain window: the error is what the caller
+              // needs, and reporting it promptly matters more than a trailing
+              // step-finish.
               if (emit("error", { error: props.error })) {
                 if (idlePending) break
                 continue
@@ -818,7 +850,7 @@ export const RunCommand = effectCmd({
             ) {
               if (openSteps > 0) {
                 idlePending = true
-                drainTimer = setTimeout(() => (drainTimedOut = true), 3_000)
+                drain.idle = true
                 continue
               }
               break
@@ -846,7 +878,6 @@ export const RunCommand = effectCmd({
               }
             }
           }
-          clearTimeout(drainTimer)
           return error
         }
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
