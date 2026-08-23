@@ -10,8 +10,8 @@ export function Footer() {
   const { theme } = useTheme()
   const sync = useSync()
   const route = useRoute()
-  const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
-  const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
+  const mcp = createMemo(() => Object.values(sync.data.mcp ?? {}).filter((x) => x.status === "connected").length)
+  const mcpError = createMemo(() => Object.values(sync.data.mcp ?? {}).some((x) => x.status === "failed"))
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
   const permissions = createMemo(() => {
     if (route.data.type !== "session") return []

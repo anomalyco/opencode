@@ -369,7 +369,7 @@ export function Autocomplete(props: {
     const options: AutocompleteOption[] = []
     const width = props.anchor().width - 4
 
-    for (const res of Object.values(sync.data.mcp_resource)) {
+    for (const res of Object.values(sync.data.mcp_resource ?? {})) {
       options.push({
         display: Locale.truncateMiddle(res.name, width),
         // Match the name only; matching the URI caused unrelated fuzzy hits.
