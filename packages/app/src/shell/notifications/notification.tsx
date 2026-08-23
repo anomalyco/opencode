@@ -215,7 +215,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
     dispatchEvent(new PopStateEvent("popstate"))
   }
 
-  const handleSessionIdle = (directory: string, sessionID: string, time: number) => {
+  const handleSessionIdle = (sessionID: string, time: number) => {
     void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (!session) return
@@ -226,7 +226,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
       }
 
       append({
-        directory,
+        directory: session.location.directory,
         time,
         viewed: viewedInCurrentSession(sessionID),
         type: "turn-complete",
@@ -243,7 +243,6 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
   }
 
   const handleSessionError = (
-    directory: string,
     sessionID: string,
     error: ErrorNotification["error"],
     time: number,
@@ -257,7 +256,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
       }
 
       append({
-        directory,
+        directory: session?.location.directory,
         time,
         viewed: viewedInCurrentSession(sessionID),
         type: "error",
@@ -275,21 +274,14 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
   }
 
   const unsub = input.sdk.event.listen((event) => {
-    if (
-      event.type !== "session.execution.succeeded" &&
-      event.type !== "session.execution.interrupted" &&
-      event.type !== "session.execution.failed"
-    )
-      return
+    if (event.type !== "session.execution.succeeded" && event.type !== "session.execution.failed") return
 
-    const directory = event.location?.directory
-    if (!directory) return
     const time = Date.now()
     if (event.type === "session.execution.failed") {
-      handleSessionError(directory, event.data.sessionID, event.data.error, time)
+      handleSessionError(event.data.sessionID, event.data.error, time)
       return
     }
-    handleSessionIdle(directory, event.data.sessionID, time)
+    handleSessionIdle(event.data.sessionID, time)
   })
   onCleanup(() => {
     meta.disposed = true
