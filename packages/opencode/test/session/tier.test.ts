@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { Provider } from "../../src/provider/provider"
 import { SessionTier } from "../../src/session/tier"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderTest } from "../fake/provider"
 
 function model(id: string, extra?: Partial<Provider.Model>) {
-  return { providerID: "test", api: { id }, ...extra } as Provider.Model
+  return ProviderTest.model({ id: ModelV2.ID.make(id), providerID: ProviderV2.ID.make("test"), ...extra })
 }
 
 describe("session.tier", () => {

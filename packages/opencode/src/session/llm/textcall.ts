@@ -66,8 +66,15 @@ export function middleware(tools: ReadonlySet<string>): LanguageModelV3Middlewar
   }
 }
 
+// Once the trimmed buffer starts with "{" or a complete prefix, plausible()
+// can never flip false again — the block is held until text-end regardless.
+function committed(buffer: string): boolean {
+  const trimmed = buffer.trimStart()
+  return trimmed.startsWith("{") || PREFIXES.some((prefix) => trimmed.startsWith(prefix))
+}
+
 export function transform(tools: ReadonlySet<string>) {
-  type Held = { start: LanguageModelV3StreamPart; buffer: string }
+  type Held = { start: LanguageModelV3StreamPart; buffer: string; committed: boolean }
   const held = new Map<string, Held>()
   let lifted = 0
   const flush = (controller: TransformStreamDefaultController<LanguageModelV3StreamPart>, id: string, state: Held) => {
@@ -77,7 +84,7 @@ export function transform(tools: ReadonlySet<string>) {
   return new TransformStream<LanguageModelV3StreamPart, LanguageModelV3StreamPart>({
     transform(part, controller) {
       if (part.type === "text-start") {
-        held.set(part.id, { start: part, buffer: "" })
+        held.set(part.id, { start: part, buffer: "", committed: false })
         return
       }
       if (part.type === "text-delta") {
@@ -87,7 +94,11 @@ export function transform(tools: ReadonlySet<string>) {
           return
         }
         state.buffer += part.delta
-        if (plausible(state.buffer)) return
+        if (state.committed) return
+        if (plausible(state.buffer)) {
+          state.committed = committed(state.buffer)
+          return
+        }
         held.delete(part.id)
         flush(controller, part.id, state)
         return

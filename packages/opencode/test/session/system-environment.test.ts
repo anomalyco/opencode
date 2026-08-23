@@ -5,11 +5,14 @@ import type { Provider } from "../../src/provider/provider"
 import { SystemPrompt } from "../../src/session/system"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderTest } from "../fake/provider"
 
 const it = testEffect(AppNodeBuilder.build(SystemPrompt.node))
 
 function model(id: string, extra?: Partial<Provider.Model>) {
-  return { providerID: "test", api: { id }, ...extra } as Provider.Model
+  return ProviderTest.model({ id: ModelV2.ID.make(id), providerID: ProviderV2.ID.make("test"), ...extra })
 }
 
 const environment = (input: Provider.Model) => SystemPrompt.Service.use((svc) => svc.environment(input))

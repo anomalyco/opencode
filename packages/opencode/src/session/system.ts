@@ -16,6 +16,7 @@ import PROMPT_META from "./prompt/meta.txt"
 import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
 import { SessionTier } from "./tier"
+import { ModelFamily } from "./model-family"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -33,27 +34,28 @@ export function provider(model: Provider.Model) {
   const tier = SessionTier.resolve(model)
   if (tier === "minimal") return [PROMPT_MINIMAL]
   if (tier === "default") return [PROMPT_DEFAULT_COMPACT]
-  if (model.api.id.includes("muse")) {
-    const name = model.api.id.includes("muse-glimmer") ? "Muse Glimmer" : "Muse Spark"
-    return [PROMPT_META.replaceAll("{{MODEL_NAME}}", name)]
-  }
-  if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
-    return [PROMPT_BEAST]
-  if (model.api.id.includes("gpt")) {
-    if (model.api.id.includes("codex")) {
-      return [PROMPT_CODEX]
+  switch (ModelFamily.family(model)) {
+    case "muse": {
+      const name = (model.api.id ?? model.id).includes("muse-glimmer") ? "Muse Glimmer" : "Muse Spark"
+      return [PROMPT_META.replaceAll("{{MODEL_NAME}}", name)]
     }
-    return [PROMPT_GPT]
+    case "beast":
+      return [PROMPT_BEAST]
+    case "codex":
+      return [PROMPT_CODEX]
+    case "gpt":
+      return [PROMPT_GPT]
+    case "gemini":
+      return [PROMPT_GEMINI]
+    case "claude":
+      return [PROMPT_ANTHROPIC]
+    case "trinity":
+      return [PROMPT_TRINITY]
+    case "kimi":
+      return [PROMPT_KIMI]
+    default:
+      return [PROMPT_DEFAULT]
   }
-  if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
-  if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
-  if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
-  if (
-    model.api.id.toLowerCase().includes("kimi") ||
-    ["kimi-for-coding", "moonshotai", "moonshotai-cn"].includes(model.providerID)
-  )
-    return [PROMPT_KIMI]
-  return [PROMPT_DEFAULT]
 }
 
 export interface Interface {

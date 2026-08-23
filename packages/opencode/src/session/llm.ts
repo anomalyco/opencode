@@ -293,6 +293,13 @@ const live: Layer.Layer<
         "llm.provider": input.model.providerID,
         "llm.model": input.model.id,
       })
+      // B6: models that cannot emit native tool calls, and minimal-tier models
+      // that habitually write calls as text, get stream-level text-format
+      // tool-call lifting. Everything else bypasses.
+      const liftable = new Set(Object.keys(prepared.tools).filter((name) => name !== "invalid"))
+      const liftTextCalls =
+        (input.model.capabilities.toolcall === false || SessionTier.resolve(input.model) === "minimal") &&
+        liftable.size > 0
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {
@@ -398,17 +405,7 @@ const live: Layer.Layer<
                   return args.params
                 },
               },
-              // B6: models that cannot emit native tool calls, and minimal-tier
-              // models that habitually write calls as text, get stream-level
-              // text-format tool-call lifting. Everything else bypasses.
-              ...(() => {
-                const names = new Set(Object.keys(prepared.tools).filter((name) => name !== "invalid"))
-                const gated =
-                  (input.model.capabilities.toolcall === false ||
-                    SessionTier.resolve(input.model) === "minimal") &&
-                  names.size > 0
-                return gated ? [LLMTextCall.middleware(names)] : []
-              })(),
+              ...(liftTextCalls ? [LLMTextCall.middleware(liftable)] : []),
             ],
           }),
           experimental_telemetry: {

@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import type { Provider } from "../../src/provider/provider"
 import { DoomLoop } from "../../src/session/doom-loop"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderTest } from "../fake/provider"
 
 function model(id: string) {
-  return { providerID: "test", api: { id } } as Provider.Model
+  return ProviderTest.model({ id: ModelV2.ID.make(id), providerID: ProviderV2.ID.make("test") })
 }
 
 describe("session.doom-loop", () => {

@@ -9,35 +9,15 @@ import {
   shouldWarnUnsetLimit,
   DEFAULT_USABLE_CONTEXT,
 } from "@/session/overflow"
-import type { Provider } from "@/provider/provider"
+import { ProviderTest } from "../fake/provider"
 
 function cfg(compaction?: ConfigV1.Info["compaction"]) {
   const base = Schema.decodeUnknownSync(ConfigV1.Info)({}) as ConfigV1.Info
   return { ...base, compaction }
 }
 
-function model(opts: { context: number; output: number; input?: number }): Provider.Model {
-  return {
-    id: "test-model",
-    providerID: "test",
-    name: "Test",
-    limit: {
-      context: opts.context,
-      input: opts.input,
-      output: opts.output,
-    },
-    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-    capabilities: {
-      toolcall: true,
-      attachment: false,
-      reasoning: false,
-      temperature: true,
-      input: { text: true, image: false, audio: false, video: false },
-      output: { text: true, image: false, audio: false, video: false },
-    },
-    api: { npm: "@ai-sdk/openai-compatible" },
-    options: {},
-  } as Provider.Model
+function model(opts: { context: number; output: number; input?: number }) {
+  return ProviderTest.model({ limit: { context: opts.context, input: opts.input, output: opts.output } })
 }
 
 describe("overflow.reserved", () => {

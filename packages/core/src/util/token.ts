@@ -15,20 +15,10 @@ const DENSITY: Record<string, number> = {
 
 const DEFAULT_DENSITY = 4
 
-export type Estimator = (input: string, hint?: string) => number
-
-// Registration point for an exact tokenizer (e.g. a vendored model tokenizer
-// installed by a plugin). An installed estimator wins over the density table.
-let installed: Estimator | undefined
-
-export const register = (estimator: Estimator | undefined) => {
-  installed = estimator
-}
-
 // Resolves a bytes-per-token density from a hint that is either a format tag
 // ("csv") or a filename ("data.csv"); unknown or missing hints fall back to
 // the prose default so general estimates keep today's behavior.
-export const density = (hint?: string) => {
+const density = (hint?: string) => {
   if (!hint) return DEFAULT_DENSITY
   const dot = hint.lastIndexOf(".")
   const tag = dot === -1 ? hint : hint.slice(dot + 1)
@@ -36,6 +26,5 @@ export const density = (hint?: string) => {
 }
 
 export const estimate = (input: string, hint?: string) => {
-  if (installed) return Math.max(0, Math.round(installed(input, hint)))
   return Math.max(0, Math.round(input.length / density(hint)))
 }

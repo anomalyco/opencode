@@ -10,9 +10,12 @@ import PROMPT_GEMINI from "../../src/session/prompt/gemini.txt"
 import PROMPT_GPT from "../../src/session/prompt/gpt.txt"
 import PROMPT_KIMI from "../../src/session/prompt/kimi.txt"
 import PROMPT_MINIMAL from "../../src/session/prompt/minimal.txt"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderTest } from "../fake/provider"
 
 function model(id: string, extra?: Partial<Provider.Model>) {
-  return { providerID: "test", api: { id }, ...extra } as Provider.Model
+  return ProviderTest.model({ id: ModelV2.ID.make(id), providerID: ProviderV2.ID.make("test"), ...extra })
 }
 
 describe("session.system tier prompts", () => {

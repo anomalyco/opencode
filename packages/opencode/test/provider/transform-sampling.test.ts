@@ -1,13 +1,17 @@
 import { describe, expect, test } from "bun:test"
 import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderTest } from "../fake/provider"
 
 function model(id: string, extra?: Partial<Provider.Model>) {
-  return {
-    providerID: "local",
+  return ProviderTest.model({
+    id: ModelV2.ID.make(id),
+    providerID: ProviderV2.ID.make("local"),
     api: { id, url: "http://localhost:8080/v1", npm: "@ai-sdk/openai-compatible" },
     ...extra,
-  } as Provider.Model
+  })
 }
 
 describe("provider.transform tier sampling", () => {

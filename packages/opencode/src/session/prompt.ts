@@ -32,6 +32,7 @@ import { ConfigMarkdown } from "@/config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { SessionProcessor } from "./processor"
+import { SessionOverflow } from "./overflow"
 import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
@@ -108,6 +109,13 @@ export interface Interface {
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
   readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
+  // D1: the model the next prompt will use (pinned session model, then the
+  // most recent user message's model, then the provider default) — exposed so
+  // the context-budget endpoint reports arithmetic for the same model the
+  // prompt loop resolves.
+  readonly currentModel: (
+    sessionID: SessionID,
+  ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID; variant?: string }>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
@@ -243,7 +251,7 @@ const layer = Layer.effect(
           Effect.orDie,
         )
       const cleaned = text
-        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+        .replace(SessionProcessor.THINK_BLOCK_RE, "")
         .split("\n")
         .map((line) => line.trim())
         .find((line) => line.length > 0)
@@ -1090,18 +1098,10 @@ const layer = Layer.effect(
         .messages({ sessionID })
         .pipe(Effect.catch(() => Effect.succeed<SessionV1.WithParts[]>([])))
       const lastUser = msgs.findLast((m) => m.info.role === "user")
-      const turn = lastUser
-        ? msgs.filter((m) => m.info.role === "assistant" && m.info.parentID === lastUser.info.id)
-        : []
-      const written = turn
-        .flatMap((m) => m.parts)
-        .filter(
-          (part) =>
-            part.type === "tool" &&
-            SessionProcessor.FILE_WRITING_TOOLS.has(part.tool) &&
-            part.state.status === "completed",
-        ).length
-      const last = turn.at(-1)?.info
+      const written = lastUser ? SessionProcessor.countFileWrites(msgs, lastUser.info.id) : 0
+      const last = lastUser
+        ? msgs.findLast((m) => m.info.role === "assistant" && m.info.parentID === lastUser.info.id)?.info
+        : undefined
       const assistantError = last?.role === "assistant" ? last.error : undefined
       const exitError = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
       const lastError = assistantError
@@ -1428,15 +1428,9 @@ const layer = Layer.effect(
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-            // D2: the same roster the task tool description advertises
-            // (ToolRegistry.describeTask), carried on telemetry headers.
-            const subagents = (yield* agents.list())
-              .filter(
-                (item) =>
-                  item.mode !== "primary" &&
-                  Permission.evaluate("task", item.name, agent.permission).action !== "deny",
-              )
-              .map((item) => item.name)
+            // D2: the same roster the task tool description and schema enum
+            // publish, carried on telemetry headers.
+            const subagents = (yield* registry.permittedSubagents(agent)).map((item) => item.name)
             const result = yield* handle.process({
               user: lastUser,
               agent,
@@ -1487,13 +1481,8 @@ const layer = Layer.effect(
             }
 
             // W6-3: accumulate this step's spend before the loop decides
-            // whether another step is affordable. `total` is used when the
-            // provider reports it, otherwise the components are summed the
-            // same way isOverflow does.
-            {
-              const t = handle.message.tokens
-              turnTokens += t.total || t.input + t.output + t.cache.read + t.cache.write
-            }
+            // whether another step is affordable.
+            turnTokens += SessionOverflow.tokenTotal(handle.message.tokens)
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
@@ -1666,6 +1655,7 @@ const layer = Layer.effect(
       shell,
       command,
       resolvePromptParts,
+      currentModel,
     })
   }),
 )

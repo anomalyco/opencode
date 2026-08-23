@@ -13,7 +13,8 @@ import { Session } from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { DoomLoop } from "./doom-loop"
-import { isOverflow, learnContextLimit, overflowReport } from "./overflow"
+import { SessionOverflow } from "./overflow"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { SessionBudgetEvent } from "@opencode-ai/schema/session-budget-event"
 import { Token } from "@/util/token"
 import { PartID } from "./schema"
@@ -33,9 +34,24 @@ import { Usage, type LLMEvent } from "@opencode-ai/llm"
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
 
+// Reasoning-in-text models leak <think> blocks into plain text; one regex
+// shared by title generation and the minimal-tier text scrub.
+export const THINK_BLOCK_RE = /<think>[\s\S]*?<\/think>\s*/g
+
 // D5: tools whose completed parts count as written artifacts when
 // reconciling a turn's reported status against what it actually produced.
 export const FILE_WRITING_TOOLS = new Set(["write", "edit", "apply_patch"])
+
+// Completed file-writing tool parts across one turn: every assistant message
+// sharing the turn's parent user message. One definition so the terminal
+// error event and session.turn.completed cannot disagree on parts_written.
+export function countFileWrites(msgs: SessionV1.WithParts[], parentID: SessionV1.Assistant["parentID"]) {
+  return msgs
+    .filter((m) => m.info.role === "assistant" && m.info.parentID === parentID)
+    .flatMap((m) => m.parts)
+    .filter((part) => part.type === "tool" && FILE_WRITING_TOOLS.has(part.tool) && part.state.status === "completed")
+    .length
+}
 
 export interface Handle {
   readonly message: SessionV1.Assistant
@@ -103,6 +119,7 @@ const layer = Layer.effect(
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
     const database = yield* Database.Service
+    const flags = yield* RuntimeFlags.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -504,18 +521,21 @@ const layer = Layer.effect(
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
             {
-              const check = {
+              const budget = SessionOverflow.evaluate({
                 cfg: yield* config.get(),
                 tokens: usage.tokens,
                 model: ctx.model,
+                outputTokenMax: flags.outputTokenMax,
                 sessionID: ctx.sessionID,
-              }
-              if (!ctx.assistantMessage.summary && isOverflow(check)) {
+              })
+              if (!ctx.assistantMessage.summary && budget.overflow) {
                 ctx.needsCompaction = true
                 // D3: the step-finish overflow gate decision, visible on the bus.
                 yield* events.publish(SessionBudgetEvent.OverflowDetected, {
                   sessionID: ctx.sessionID,
-                  ...overflowReport(check),
+                  tokens: budget.tokens,
+                  usable: budget.usable,
+                  reserve: budget.reserve,
                   action: "compact",
                 })
               }
@@ -565,9 +585,8 @@ const layer = Layer.effect(
             // E5: reasoning-in-text models leak <think> blocks into normal
             // turns; on the minimal tier scrub them from the completed part
             // (streaming deltas flow raw, the stored part is the record).
-            // Same regex the title generation uses.
             if (SessionTier.resolve(ctx.model) === "minimal")
-              ctx.currentText.text = ctx.currentText.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+              ctx.currentText.text = ctx.currentText.text.replace(THINK_BLOCK_RE, "")
             {
               const end = Date.now()
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
@@ -650,11 +669,7 @@ const layer = Layer.effect(
         const msgs = yield* session
           .messages({ sessionID: ctx.sessionID })
           .pipe(Effect.catch(() => Effect.succeed<SessionV1.WithParts[]>([])))
-        return msgs
-          .filter((m) => m.info.role === "assistant" && m.info.parentID === ctx.assistantMessage.parentID)
-          .flatMap((m) => m.parts)
-          .filter((part) => part.type === "tool" && FILE_WRITING_TOOLS.has(part.tool) && part.state.status === "completed")
-          .length
+        return countFileWrites(msgs, ctx.assistantMessage.parentID)
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
@@ -671,7 +686,7 @@ const layer = Layer.effect(
           // overflow check compacts before the provider rejects again.
           if (!input.model.limit.context && ctx.lastStream) {
             const estimated = Token.estimate(JSON.stringify([ctx.lastStream.system, ctx.lastStream.messages]))
-            learnContextLimit(ctx.sessionID, estimated)
+            SessionOverflow.learnContextLimit(ctx.sessionID, estimated)
             yield* Effect.logWarning("learned session context cap from provider overflow", {
               "session.id": ctx.sessionID,
               estimated,
@@ -794,6 +809,7 @@ export const node = LayerNode.make({
     Image.node,
     EventV2Bridge.node,
     Database.node,
+    RuntimeFlags.node,
   ],
 })
 

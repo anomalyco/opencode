@@ -14,7 +14,7 @@ import { NotFoundError } from "@/storage/storage"
 
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { isOverflow as overflow, overflowReport, usable, shouldWarnUnsetLimit, DEFAULT_USABLE_CONTEXT } from "./overflow"
+import { SessionOverflow } from "./overflow"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -116,7 +116,10 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
 function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
   return (
     input.cfg.compaction?.preserve_recent_tokens ??
-    Math.min(MAX_PRESERVE_RECENT_TOKENS, Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)))
+    Math.min(
+      MAX_PRESERVE_RECENT_TOKENS,
+      Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(SessionOverflow.usable(input) * 0.25)),
+    )
   )
 }
 
@@ -169,6 +172,9 @@ export interface Interface {
     model: Provider.Model
     sessionID?: SessionID
   }) => Effect.Effect<boolean>
+  // D1: the engine's history token estimate, shared with the context-budget
+  // endpoint so both report the same arithmetic.
+  readonly estimate: (input: { messages: SessionV1.WithParts[]; model: Provider.Model }) => Effect.Effect<number>
   readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
   readonly process: (input: {
     parentID: MessageID
@@ -208,11 +214,14 @@ const layer = Layer.effect(
       sessionID?: SessionID
     }) {
       const cfg = yield* config.get()
-      if (input.sessionID && shouldWarnUnsetLimit({ cfg, model: input.model, sessionID: input.sessionID })) {
+      if (
+        input.sessionID &&
+        SessionOverflow.shouldWarnUnsetLimit({ cfg, model: input.model, sessionID: input.sessionID })
+      ) {
         yield* Effect.logWarning("model reports no context limit; assuming conservative usable window", {
           providerID: input.model.providerID,
           modelID: input.model.id,
-          usable: DEFAULT_USABLE_CONTEXT,
+          usable: SessionOverflow.DEFAULT_USABLE_CONTEXT,
         })
       }
       const check = {
@@ -222,16 +231,18 @@ const layer = Layer.effect(
         outputTokenMax: flags.outputTokenMax,
         sessionID: input.sessionID,
       }
-      const result = overflow(check)
+      const result = SessionOverflow.evaluate(check)
       // D3: every positive overflow gate decision is visible on the bus.
-      if (result && input.sessionID) {
+      if (result.overflow && input.sessionID) {
         yield* events.publish(SessionBudgetEvent.OverflowDetected, {
           sessionID: input.sessionID,
-          ...overflowReport(check),
+          tokens: result.tokens,
+          usable: result.usable,
+          reserve: result.reserve,
           action: "compact",
         })
       }
-      return result
+      return result.overflow
     })
 
     const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {
@@ -633,6 +644,7 @@ const layer = Layer.effect(
 
     return Service.of({
       isOverflow,
+      estimate,
       prune,
       process: processCompaction,
       create,

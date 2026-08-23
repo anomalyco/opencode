@@ -12,7 +12,7 @@ import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
 import { Instruction } from "@/session/instruction"
 import { MessageV2 } from "@/session/message-v2"
-import { usable, reserved } from "@/session/overflow"
+import { SessionOverflow } from "@/session/overflow"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
@@ -116,6 +116,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* todoSvc.get(ctx.params.sessionID)
     })
 
+    const cost = (text: string) => ({ chars: text.length, est_tokens: Token.estimate(text) })
+
     // D1: context arithmetic for routers and other consumers. Resolves the
     // session's current model and agent the same way the prompt loop does,
     // then dry-runs the baseline assembly (system prompt, tool roster,
@@ -127,17 +129,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       const info = yield* requireSession(ctx.params.sessionID)
       const cfg = yield* configSvc.get()
 
-      // Model precedence mirrors SessionPrompt: session's pinned model, then
-      // the most recent user message's model, then the provider default.
-      const ref = info.model
-        ? { providerID: info.model.providerID, modelID: info.model.id }
-        : yield* Effect.gen(function* () {
-            const match = yield* session
-              .findMessage(ctx.params.sessionID, (m) => m.info.role === "user" && !!m.info.model)
-              .pipe(Effect.orDie)
-            if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
-            return yield* providerSvc.defaultModel().pipe(Effect.orDie)
-          })
+      const ref = yield* promptSvc.currentModel(ctx.params.sessionID)
       const model = yield* providerSvc
         .getModel(ref.providerID, ref.modelID)
         .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
@@ -181,15 +173,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
             item.description,
             ProviderTransform.schema(model, ToolJsonSchema.fromTool(item)),
           ])
-          return { id: item.id, chars: serialized.length, est_tokens: Token.estimate(serialized) }
+          return { id: item.id, ...cost(serialized) }
         })
 
       const all = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
       const filtered = yield* MessageV2.filterCompactedEffect(ctx.params.sessionID).pipe(
         Effect.provideService(Database.Service, database),
       )
-      const modelMsgs = yield* MessageV2.toModelMessagesEffect(filtered, model)
-      const historyTokens = Token.estimate(JSON.stringify(modelMsgs))
+      const historyTokens = yield* compactSvc.estimate({ messages: filtered, model })
       const finished = all.findLast((m) => m.info.role === "assistant" && !!m.info.time.completed)
       const lastReported =
         finished && finished.info.role === "assistant"
@@ -197,20 +188,20 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
               input: finished.info.tokens.input,
               output: finished.info.tokens.output,
               cache_read: finished.info.tokens.cache.read,
-              total:
-                finished.info.tokens.total ||
-                finished.info.tokens.input +
-                  finished.info.tokens.output +
-                  finished.info.tokens.cache.read +
-                  finished.info.tokens.cache.write,
+              total: SessionOverflow.tokenTotal(finished.info.tokens),
             }
           : undefined
 
-      const systemPrompt = { chars: systemText.length, est_tokens: Token.estimate(systemText) }
-      const instructionCost = { chars: instructionsText.length, est_tokens: Token.estimate(instructionsText) }
+      const systemPrompt = cost(systemText)
+      const instructionCost = cost(instructionsText)
       const toolsTokens = tools.reduce((sum, item) => sum + item.est_tokens, 0)
       const estInput = systemPrompt.est_tokens + instructionCost.est_tokens + toolsTokens + historyTokens
-      const usableWindow = usable({ cfg, model, outputTokenMax: flags.outputTokenMax, sessionID: ctx.params.sessionID })
+      const usableWindow = SessionOverflow.usable({
+        cfg,
+        model,
+        outputTokenMax: flags.outputTokenMax,
+        sessionID: ctx.params.sessionID,
+      })
 
       return {
         model: {
@@ -222,7 +213,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
           },
           tier,
         },
-        reserve: model.limit.context ? reserved(cfg, model.limit.input || model.limit.context) : 0,
+        reserve: SessionOverflow.reserveFor(cfg, model),
         usable: usableWindow,
         baseline: {
           system_prompt: systemPrompt,

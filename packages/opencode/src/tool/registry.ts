@@ -156,6 +156,9 @@ export interface Interface {
     tier?: SessionTier.ModelTier
     tierTools?: TierTools
   }) => Effect.Effect<Tool.Def[]>
+  // The subagents an agent may delegate to — the same list the task tool's
+  // description and schema enum publish, so consumers cannot drift from it.
+  readonly permittedSubagents: (agent: Agent.Info) => Effect.Effect<Agent.Info[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
@@ -345,8 +348,7 @@ const layer = Layer.effect(
       return filtered.toSorted((a, b) => a.name.localeCompare(b.name))
     })
 
-    const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (agent: Agent.Info) {
-      const list = yield* permittedSubagents(agent)
+    const describeTask = (list: Agent.Info[]) => {
       const description = list
         .map(
           (item) =>
@@ -354,7 +356,7 @@ const layer = Layer.effect(
         )
         .join("\n")
       return ["Available agent types and the tools they have access to:", description].join("\n")
-    })
+    }
 
     const describeCodeMode = Effect.fn("ToolRegistry.describeCodeMode")(function* (input: {
       agent: Agent.Info
@@ -368,6 +370,7 @@ const layer = Layer.effect(
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+      const subagents = yield* permittedSubagents(input.agent)
       const inRoster =
         input.tier === "minimal"
           ? minimalRosterFilter({
@@ -424,14 +427,14 @@ const layer = Layer.effect(
             tool.id === TaskTool.id
               ? withSubagentEnum(
                   baseJsonSchema ?? ToolJsonSchema.fromTool({ ...tool, ...output } as Tool.Def),
-                  (yield* permittedSubagents(input.agent)).map((item) => item.name),
+                  subagents.map((item) => item.name),
                 )
               : baseJsonSchema
           return {
             id: tool.id,
             description: [
               output.description,
-              tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
+              tool.id === TaskTool.id ? describeTask(subagents) : undefined,
               tool.id === "execute" ? codeModeDescription : undefined,
             ]
               .filter(Boolean)
@@ -451,7 +454,7 @@ const layer = Layer.effect(
       return { task: s.task, read: s.read }
     })
 
-    return Service.of({ ids, all, named, tools })
+    return Service.of({ ids, all, named, tools, permittedSubagents })
   }),
 )
 

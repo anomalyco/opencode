@@ -15,6 +15,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
 import { TurnBudget } from "@/session/turn-budget"
+import { MAX_STEPS_MARKERS } from "@opencode-ai/core/session/runner/max-steps"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -86,12 +87,10 @@ function renderOutput(input: {
 // parent ("tools are disabled until next user input"), and the parent surfaces
 // the whole delegation as an unexplained failure even when real work was done.
 // Strip it and report what actually happened instead.
-const STOP_DIRECTIVE_MARKERS = ["MAXIMUM STEPS REACHED", "maximum number of steps allowed"]
-
 function stripStopDirective(text: string) {
   return text
     .split(/\n{2,}/)
-    .filter((block) => !STOP_DIRECTIVE_MARKERS.some((marker) => block.includes(marker)))
+    .filter((block) => !MAX_STEPS_MARKERS.some((marker) => block.includes(marker)))
     .join("\n\n")
     .trim()
 }

@@ -105,35 +105,47 @@ export function usable(input: {
     : Math.max(0, context - ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
 }
 
-export function isOverflow(input: {
-  cfg: ConfigV1.Info
-  tokens: SessionV1.Assistant["tokens"]
-  model: Provider.Model
-  outputTokenMax?: number
-  sessionID?: string
-}) {
-  if (input.cfg.compaction?.auto === false) return false
-
-  const count =
-    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
-  return count >= usable(input)
+// Reported token count for an assistant message: providers that omit `total`
+// get the component sum. One definition so the overflow gate, turn budget,
+// and budget endpoint cannot disagree on what "reported tokens" means.
+export function tokenTotal(tokens: SessionV1.Assistant["tokens"]) {
+  return tokens.total || tokens.input + tokens.output + tokens.cache.read + tokens.cache.write
 }
 
-// D3: payload for the session.overflow.detected event — the same reported
-// token count isOverflow compares, plus usable/reserve with context-budget
-// endpoint semantics (reserve is 0 when the model reports no context limit).
-export function overflowReport(input: {
+// Reserve with context-budget endpoint semantics: 0 when the model reports no
+// context limit.
+export function reserveFor(cfg: ConfigV1.Info, model: Provider.Model) {
+  return model.limit.context ? reserved(cfg, model.limit.input || model.limit.context) : 0
+}
+
+type Check = {
   cfg: ConfigV1.Info
   tokens: SessionV1.Assistant["tokens"]
   model: Provider.Model
   outputTokenMax?: number
   sessionID?: string
-}) {
+}
+
+// D3: one evaluation of the budget arithmetic — the gate decision and the
+// event payload come from the same numbers, so call sites cannot drift.
+export function evaluate(input: Check) {
+  const tokens = tokenTotal(input.tokens)
+  const cap = usable(input)
   return {
-    tokens:
-      input.tokens.total ||
-      input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write,
-    usable: usable(input),
-    reserve: input.model.limit.context ? reserved(input.cfg, input.model.limit.input || input.model.limit.context) : 0,
+    overflow: input.cfg.compaction?.auto !== false && tokens >= cap,
+    tokens,
+    usable: cap,
+    reserve: reserveFor(input.cfg, input.model),
   }
 }
+
+export function isOverflow(input: Check) {
+  return evaluate(input).overflow
+}
+
+export function overflowReport(input: Check) {
+  const result = evaluate(input)
+  return { tokens: result.tokens, usable: result.usable, reserve: result.reserve }
+}
+
+export * as SessionOverflow from "./overflow"
