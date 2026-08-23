@@ -103,7 +103,7 @@ function init() {
   }
 
   useBindings(() => ({
-    enabled: store.stack.length > 0 && !renderer.getSelection()?.getSelectedText(),
+    enabled: store.stack.length > 0,
     bindings: [
       {
         key: "escape",

@@ -23,23 +23,40 @@ type SelectionKeyEvent = {
   stopPropagation: () => void
 }
 
-export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
+export function text(renderer: Renderer) {
   const selection = renderer.getSelection()
-  if (!selection) return false
-
-  const text = selection.getSelectedText()
-  if (!text) return false
-
+  if (!selection) return undefined
+  const selected = selection.getSelectedText()
+  if (!selected) return undefined
   const focus = renderer.currentFocusedRenderable
-  const clipboardText =
-    focus?.getClipboardText && selection.selectedRenderables.includes(focus) ? focus.getClipboardText(text) : text
+  if (focus?.getClipboardText && selection.selectedRenderables.includes(focus)) return focus.getClipboardText(selected)
+  return selected
+}
+
+// Consumes what is currently highlighted, so what the user sees is what gets added.
+export function take(renderer: Renderer) {
+  const selected = text(renderer)
+  renderer.clearSelection()
+  return selected?.trim() || undefined
+}
+
+// `retain` keeps the highlight up after copy-on-select so it can still be acted on, for
+// example added to the prompt. The highlight is dismissed by the next click or key press.
+export function copy(
+  renderer: Renderer,
+  toast: Toast,
+  clipboard: ClipboardService,
+  options?: { retain?: boolean },
+): boolean {
+  const clipboardText = text(renderer)
+  if (!clipboardText) return false
 
   clipboard
     ?.write?.(clipboardText)
     .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
     .catch(toast.error)
 
-  renderer.clearSelection()
+  if (!options?.retain) renderer.clearSelection()
   return true
 }
 
