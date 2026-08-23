@@ -1,0 +1,155 @@
+const PREFIX_LIMIT = 64 * 1024
+const TAIL_LIMIT = 4 * 1024
+const encoder = new TextEncoder()
+
+export async function prepareRequestBody(body: ReadableStream<Uint8Array>) {
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  const decoder = new TextDecoder()
+  let text = ""
+  let inspected = 0
+  let done = false
+
+  while (!done && inspected < PREFIX_LIMIT) {
+    const next = await reader.read()
+    done = next.done
+    if (!next.value) continue
+    chunks.push(next.value)
+    const length = Math.min(next.value.length, PREFIX_LIMIT - inspected)
+    text += decoder.decode(next.value.subarray(0, length), { stream: true })
+    inspected += length
+    if (/^\s*{\s*"model"\s*:\s*"[^"]+"/.test(text)) break
+  }
+
+  const match = text.match(/^(\s*{\s*"model"\s*:\s*")([^"]+)"/)
+  let used = false
+
+  return {
+    model: match?.[2] ?? "",
+    preview: text.substring(0, 300),
+    cancel: () => reader.cancel(),
+    stream(providerModel: string, includeUsage: boolean) {
+      if (used) throw new Error("Request body stream already consumed")
+      if (!match) throw new Error("Missing leading model field")
+      used = true
+
+      const initial = replace(chunks, match[1].length, match[1].length + match[2].length, providerModel)
+      const output = passthrough(initial, reader, done)
+      if (!includeUsage) return output
+      return appendUsage(output)
+    },
+  }
+}
+
+function replace(chunks: Uint8Array[], start: number, end: number, value: string) {
+  let offset = 0
+  let inserted = false
+  return chunks.flatMap((chunk) => {
+    const chunkStart = offset
+    const chunkEnd = offset + chunk.length
+    offset = chunkEnd
+    if (chunkEnd <= start || chunkStart >= end) return [chunk]
+
+    const parts = [chunk.subarray(0, Math.max(0, start - chunkStart))]
+    if (!inserted) {
+      parts.push(encoder.encode(value))
+      inserted = true
+    }
+    parts.push(chunk.subarray(Math.min(chunk.length, end - chunkStart)))
+    return parts.filter((part) => part.length)
+  })
+}
+
+function passthrough(
+  initial: Uint8Array[],
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  sourceDone: boolean,
+) {
+  let done = sourceDone
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const chunk = initial.shift()
+      if (chunk) {
+        controller.enqueue(chunk)
+        return
+      }
+      if (done) {
+        controller.close()
+        return
+      }
+      const next = await reader.read()
+      done = next.done
+      if (next.value) controller.enqueue(next.value)
+      if (done) controller.close()
+    },
+    cancel(reason) {
+      return reader.cancel(reason)
+    },
+  })
+}
+
+function appendUsage(body: ReadableStream<Uint8Array>) {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let tail = new Uint8Array()
+  let streamText = ""
+  let isStream = false
+  const inspect = (chunk?: Uint8Array) => {
+    streamText += chunk ? decoder.decode(chunk, { stream: true }) : decoder.decode()
+    for (const match of streamText.matchAll(/"stream"\s*:\s*(true|false)/g)) isStream = match[1] === "true"
+    streamText = streamText.slice(-64)
+  }
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      while (true) {
+        const next = await reader.read()
+        if (next.done) {
+          inspect()
+          if (!isStream) {
+            if (tail.length) controller.enqueue(tail)
+            controller.close()
+            return
+          }
+          const close = tail.lastIndexOf(125)
+          if (close < 0) {
+            controller.error(new Error("Invalid JSON request body"))
+            return
+          }
+          if (close) controller.enqueue(tail.subarray(0, close))
+          controller.enqueue(encoder.encode(',"stream_options":{"include_usage":true}}'))
+          if (close + 1 < tail.length) controller.enqueue(tail.subarray(close + 1))
+          controller.close()
+          return
+        }
+
+        const chunk = next.value
+        inspect(chunk)
+        if (tail.length + chunk.length <= TAIL_LIMIT) {
+          const combined = new Uint8Array(tail.length + chunk.length)
+          combined.set(tail)
+          combined.set(chunk, tail.length)
+          tail = combined
+          continue
+        }
+
+        const emit = tail.length + chunk.length - TAIL_LIMIT
+        if (emit <= tail.length) {
+          controller.enqueue(tail.subarray(0, emit))
+          const combined = new Uint8Array(TAIL_LIMIT)
+          combined.set(tail.subarray(emit))
+          combined.set(chunk, tail.length - emit)
+          tail = combined
+          return
+        }
+
+        if (tail.length) controller.enqueue(tail)
+        controller.enqueue(chunk.subarray(0, emit - tail.length))
+        tail = chunk.slice(emit - tail.length)
+        return
+      }
+    },
+    cancel(reason) {
+      return reader.cancel(reason)
+    },
+  })
+}

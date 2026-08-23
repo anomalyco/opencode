@@ -1,0 +1,78 @@
+import { describe, expect, test } from "bun:test"
+import { prepareRequestBody } from "../src/routes/zen/util/requestBody"
+
+describe("Zen request body streaming", () => {
+  test("patches the leading model without buffering the remaining body", async () => {
+    let reads = 0
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          const chunks = [
+            '{"model":"client-model","stream":true,"messages":[',
+            JSON.stringify({ role: "user", content: "large payload" }),
+            "]}",
+          ]
+          const chunk = chunks[reads++]
+          if (chunk) controller.enqueue(new TextEncoder().encode(chunk))
+          else controller.close()
+        },
+      },
+      { highWaterMark: 0 },
+    )
+
+    const request = await prepareRequestBody(body)
+    expect(request.model).toBe("client-model")
+    expect(reads).toBe(1)
+
+    const output = await new Response(request.stream("provider-model", false)).text()
+    expect(JSON.parse(output)).toEqual({
+      model: "provider-model",
+      stream: true,
+      messages: [{ role: "user", content: "large payload" }],
+    })
+  })
+
+  test("appends stream usage options at the end of the request", async () => {
+    const body = new Blob(['{"model":"client-model","stream":true,"messages":[]}   ']).stream()
+    const request = await prepareRequestBody(body)
+    const output = await new Response(request.stream("provider-model", true)).text()
+
+    expect(JSON.parse(output)).toEqual({
+      model: "provider-model",
+      stream: true,
+      messages: [],
+      stream_options: { include_usage: true },
+    })
+    expect(output.endsWith("   ")).toBe(true)
+  })
+
+  test("detects streaming after a large message while forwarding", async () => {
+    const content = "x".repeat(128 * 1024)
+    let reads = 0
+    const chunks = [
+      '{"model":"client-model","messages":[',
+      JSON.stringify({ role: "user", content }),
+      '],"stream":true}',
+    ]
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          const chunk = chunks[reads++]
+          if (chunk) controller.enqueue(new TextEncoder().encode(chunk))
+          else controller.close()
+        },
+      },
+      { highWaterMark: 0 },
+    )
+    const request = await prepareRequestBody(body)
+    expect(reads).toBe(1)
+    const output = await new Response(request.stream("provider-model", true)).text()
+
+    expect(JSON.parse(output)).toEqual({
+      model: "provider-model",
+      messages: [{ role: "user", content }],
+      stream: true,
+      stream_options: { include_usage: true },
+    })
+  })
+})
