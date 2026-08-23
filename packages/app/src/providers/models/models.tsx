@@ -1,44 +1,24 @@
-import { type Accessor, createMemo, createResource } from "solid-js"
-import { createStore } from "solid-js/store"
+import { type Accessor, createMemo } from "solid-js"
 import { DateTime } from "luxon"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useProviders } from "@/providers/catalog/providers"
-import { Persist, persisted } from "@/runtime/persistence/storage"
+import { useGlobal } from "@/runtime/server/runtime"
 
 export type ModelKey = { providerID: string; modelID: string }
 
 type Visibility = "show" | "hide"
-type User = ModelKey & { visibility: Visibility; favorite?: boolean }
-type Store = {
-  user: User[]
-  recent: ModelKey[]
-  variant?: Record<string, string | undefined>
-}
-
 const RECENT_LIMIT = 5
 
 function modelKey(model: ModelKey) {
   return `${model.providerID}:${model.modelID}`
 }
 
-const createModelsPersistedState = () => {
-  const [store, setStore, _, ready] = persisted(
-    Persist.global("model"),
-    createStore<Store>({
-      user: [],
-      recent: [],
-      variant: {},
-    }),
-  )
-
-  return [store, setStore, ready] as const
-}
-
 const createModelsController = (directory: Accessor<string | undefined>) => {
   const providers = useProviders(() => directory())
-
-  const [store, setStore, ready] = createModelsPersistedState()
+  const models = useGlobal().models
+  const store = models.store
+  const setStore = models.set
 
   const available = createMemo(() =>
     providers.connected().flatMap((p) =>
@@ -148,23 +128,14 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
     setStore("variant", key, value)
   }
 
-  const [recentModels] = createResource(
-    async () => {
-      const recent = store.recent
-      await ready.promise
-      return recent
-    },
-    (p) => p,
-    { initialValue: [] },
-  )
   return {
-    ready,
+    ready: models.ready,
     list,
     find,
     visible,
     setVisibility,
     recent: {
-      list: () => recentModels()!,
+      list: models.recent,
       push,
     },
     variant: {

@@ -53,6 +53,37 @@ benchmark.describe("performance: first navigation paint", () => {
     expect(result.summary.unknownSamples).toBe(0)
   })
 
+  benchmark("opens a session from the new session page without a blank frame", async ({ page, report }) => {
+    await mockStressTimeline(page)
+    await installTimelineSettings(page)
+    await installStressSessionTabs(page, { draftID })
+    await page.goto("/")
+
+    const draftHref = stressDraftHref(draftID)
+    const draftTab = page.locator(`[data-slot="titlebar-tabs"] a[href="${draftHref}"]`)
+    await expect(draftTab).toHaveCount(1)
+    await draftTab.click()
+    await expect(page.locator('[data-component="new-session"]')).toBeVisible()
+
+    const href = stressSessionHref(fixture.targetID)
+    const sessionTab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`)
+    await expect(sessionTab).toHaveCount(1)
+    const result = await measureFirstNavigation(page, {
+      href,
+      destinationPath: href,
+      sourceSelector: '[data-component="new-session"]',
+      destinationSelector: messageSelector(fixture.expected.targetMessageIDs.at(-1)!),
+      contentSelector,
+      navigate: async () => {
+        await sessionTab.click()
+        await expectSessionTitle(page, fixture.expected.targetTitle)
+      },
+    })
+    report(result)
+    expect(result.summary.blankSamples).toBe(0)
+    expect(result.summary.unknownSamples).toBe(0)
+  })
+
   benchmark("opens a child session without a blank frame", async ({ page, report }) => {
     await setup(page)
     const href = stressSessionHref(fixture.childID)

@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { Accessor, createEffect, createMemo, createRoot, getOwner } from "solid-js"
+import { Accessor, createEffect, createMemo, createResource, createRoot, getOwner } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
 import { pathKey } from "@/workspaces/path-key"
@@ -10,6 +10,7 @@ import { createData } from "@opencode-ai/client/solid"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createServerPermissionState } from "@/session/requests/server-permission"
 import { createServerNotificationState } from "@/shell/notifications/notification"
+import { Persist, persisted } from "@/runtime/persistence/storage"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -24,6 +25,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
         serverKey: undefined as ServerConnection.Key | undefined,
       },
     })
+    const models = createGlobalModels()
 
     const settingsServer = createMemo(() => {
       const list = server.list
@@ -86,12 +88,44 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
           },
         },
       },
+      models,
       ensureServerCtx(conn: ServerConnection.Any) {
         return ensureServerCtx(conn)
       },
     }
   },
 })
+
+function createGlobalModels() {
+  const [store, setStore, _, ready] = persisted(
+    Persist.global("model"),
+    createStore<{
+      user: Array<{ providerID: string; modelID: string; visibility: "show" | "hide"; favorite?: boolean }>
+      recent: Array<{ providerID: string; modelID: string }>
+      variant?: Record<string, string | undefined>
+    }>({
+      user: [],
+      recent: [],
+      variant: {},
+    }),
+  )
+  const [recent] = createResource(
+    async () => {
+      const value = store.recent
+      await ready.promise
+      return value
+    },
+    (value) => value,
+    { initialValue: [] },
+  )
+
+  return {
+    store,
+    set: setStore,
+    ready,
+    recent: () => recent()!,
+  }
+}
 
 function createServerController(
   conn: ServerConnection.Any,
