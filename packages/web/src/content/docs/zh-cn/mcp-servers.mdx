@@ -343,12 +343,12 @@ opencode mcp debug my-oauth-server
 
 ---
 
-### 按代理配置
+### 按智能体配置
 
-如果你有大量 MCP 服务器，可以选择全局禁用它们，然后仅在特定代理中启用。具体做法：
+如果你有大量 MCP 服务器，可以选择全局禁用它们，然后仅在特定智能体中启用。具体做法：
 
 1. 全局禁用该工具。
-2. 在[代理配置](/docs/agents#tools)中，将 MCP 服务器作为工具启用。
+2. 在[智能体配置](/docs/agents#tools)中，将 MCP 服务器作为工具启用。
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -498,7 +498,7 @@ When you need to search docs, use `context7` tools.
 }
 ```
 
-由于我们将 MCP 服务器命名为 `gh_grep`，你可以在提示词中添加 `use the gh_grep tool` 来让代理使用它。
+由于我们将 MCP 服务器命名为 `gh_grep`，你可以在提示词中添加 `use the gh_grep tool` 来让智能体使用它。
 
 ```txt "use the gh_grep tool"
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
