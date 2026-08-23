@@ -191,8 +191,22 @@ export function createTimelineVirtualizer(input: Input) {
         return
       }
       overscanFrame = undefined
-      virtualContent?.classList.add("animate-in", "fade-in", "duration-150")
-      virtualContent?.style.removeProperty("visibility")
+      const content = virtualContent
+      if (!content) return
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        content.style.removeProperty("visibility")
+        return
+      }
+      const animation = ["animate-in", "fade-in", "duration-150"]
+      const clearAnimation = () => {
+        content.removeEventListener("animationend", clearAnimation)
+        content.removeEventListener("animationcancel", clearAnimation)
+        content.classList.remove(...animation)
+      }
+      content.addEventListener("animationend", clearAnimation)
+      content.addEventListener("animationcancel", clearAnimation)
+      content.classList.add(...animation)
+      content.style.removeProperty("visibility")
     })
   }
   onMount(() => {
