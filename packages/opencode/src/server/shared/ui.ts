@@ -66,7 +66,9 @@ function notFound() {
 function embeddedUIResponse(cached: { body: Uint8Array; contentType: string; csp: string | undefined }) {
   const headers = new Headers({ "content-type": cached.contentType })
   if (cached.csp !== undefined) headers.set("content-security-policy", cached.csp)
-  return HttpServerResponse.raw(cached.body, { headers })
+  // Uint8Array body (not raw) so the compression middleware can gzip the
+  // payload — raw bodies are opaque streams the middleware must skip.
+  return HttpServerResponse.uint8Array(cached.body, { headers })
 }
 
 export function serveEmbeddedUIEffect(
