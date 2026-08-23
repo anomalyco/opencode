@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { agentRouterFetch } from "@opencode-ai/core/plugin/provider/agentrouter-fetch"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -173,6 +174,13 @@ function selectBedrockMantleLanguageModel(sdk: BundledSDK, modelID: string) {
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
+    agentrouter: (provider) =>
+      Effect.succeed({
+        autoload: provider.source === "config",
+        options: {
+          fetch: agentRouterFetch(typeof provider.options?.fetch === "function" ? provider.options.fetch : undefined),
+        },
+      }),
     anthropic: () =>
       Effect.succeed({
         autoload: false,
