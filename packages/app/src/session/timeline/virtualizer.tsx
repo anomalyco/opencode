@@ -178,15 +178,17 @@ export function createTimelineVirtualizer(input: Input) {
   })
 
   let overscanFrame: number | undefined
+  const pendingMeasurements = () =>
+    virtualizer.getVirtualItems().some((item) => !virtualizer.itemSizeCache.has(item.key))
   const settleColdBottom = () => {
     if (input.pinned()) virtualizer.scrollToEnd()
-    if (virtualContent?.querySelector(pendingMarkdown)) {
+    if (virtualContent?.querySelector(pendingMarkdown) || pendingMeasurements()) {
       overscanFrame = requestAnimationFrame(settleColdBottom)
       return
     }
     overscanFrame = requestAnimationFrame(() => {
       if (input.pinned()) virtualizer.scrollToEnd()
-      if (virtualContent?.querySelector(pendingMarkdown)) {
+      if (virtualContent?.querySelector(pendingMarkdown) || pendingMeasurements()) {
         settleColdBottom()
         return
       }
@@ -198,7 +200,8 @@ export function createTimelineVirtualizer(input: Input) {
         return
       }
       const animation = ["animate-in", "fade-in", "duration-150"]
-      const clearAnimation = () => {
+      const clearAnimation = (event: AnimationEvent) => {
+        if (event.target !== content) return
         content.removeEventListener("animationend", clearAnimation)
         content.removeEventListener("animationcancel", clearAnimation)
         content.classList.remove(...animation)

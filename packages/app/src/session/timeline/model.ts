@@ -20,7 +20,7 @@ export function createTimelineModel(input: { session: Pick<SessionModel, "identi
       if (!id) return
       const key = input.session.identity.sessionKey()
       await Promise.all([data.session.message.sync(id), data.session.pending.sync(id)])
-      void enrichLeadingTurn({
+      await enrichLeadingTurn({
         current: () => input.session.identity.sessionKey() === key,
         messages: () => data.session.message.list(id),
         more: () => data.session.message.more(id),
