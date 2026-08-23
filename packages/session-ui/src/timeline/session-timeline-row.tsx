@@ -11,6 +11,7 @@ import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
+import { BasicTool } from "../components/basic-tool"
 import {
   MessageDivider,
   SessionAssistantContent,
@@ -442,16 +443,35 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-thinking">
-              <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-              <Show when={!input.showReasoningSummaries()}>
-                <TextReveal
-                  text={current().reasoningHeading}
-                  class="session-turn-thinking-heading"
-                  travel={25}
-                  duration={700}
-                />
-              </Show>
+            <div data-slot="session-turn-thinking-row">
+              <BasicTool
+                icon="mcp"
+                status="running"
+                compact
+                locked
+                hideDetails
+                trigger={
+                  <div data-slot="session-turn-thinking">
+                    <div data-slot="basic-tool-tool-info-structured">
+                      <div data-slot="basic-tool-tool-info-main">
+                        <span data-slot="basic-tool-tool-title">
+                          <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                        </span>
+                        <Show when={!input.showReasoningSummaries()}>
+                          <span data-slot="basic-tool-tool-subtitle">
+                            <TextReveal
+                              text={current().reasoningHeading}
+                              class="session-turn-thinking-heading"
+                              travel={25}
+                              duration={700}
+                            />
+                          </span>
+                        </Show>
+                      </div>
+                    </div>
+                  </div>
+                }
+              />
             </div>
           </div>
         </Frame>

@@ -487,45 +487,42 @@ export function CurrentContextToolGroup(props: {
   }
 
   return (
-    <Collapsible
-      open={props.open}
-      onOpenChange={change}
-      variant="ghost"
-      class="tool-collapsible"
-      data-timeline-part-ids={props.tools.map((tool) => tool.id).join(",")}
-    >
-      <Collapsible.Trigger>
-        <div data-component="context-tool-group-trigger">
-          <span
-            data-slot="context-tool-group-title"
-            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
-          >
-            <span data-slot="context-tool-group-label" class="shrink-0">
-              <ToolStatusTitle
-                active={pending()}
-                activeText={i18n.t("ui.sessionTurn.status.gatheringContext")}
-                doneText={i18n.t("ui.sessionTurn.status.gatheredContext")}
-                split={false}
-              />
+    <div data-timeline-part-ids={props.tools.map((tool) => tool.id).join(",")}>
+      <BasicTool
+        icon="glasses"
+        status={pending() ? "running" : "completed"}
+        compact
+        allowOpenWhilePending
+        open={props.open}
+        onOpenChange={change}
+        trigger={
+          <div data-component="context-tool-group-trigger">
+            <span data-slot="context-tool-group-title" class="min-w-0 flex items-center gap-2">
+              <span data-slot="basic-tool-tool-title" class="shrink-0">
+                <ToolStatusTitle
+                  active={pending()}
+                  activeText={i18n.t("ui.sessionTurn.status.gatheringContext")}
+                  doneText={i18n.t("ui.sessionTurn.status.gatheredContext")}
+                  split={false}
+                />
+              </span>
+              <span
+                data-slot="basic-tool-tool-subtitle"
+                class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
+              >
+                <AnimatedCountList
+                  items={[
+                    { key: "ui.messagePart.context.read", count: summary().read },
+                    { key: "ui.messagePart.context.search", count: summary().search },
+                    { key: "ui.messagePart.context.list", count: summary().list },
+                  ]}
+                  fallback=""
+                />
+              </span>
             </span>
-            <span
-              data-slot="context-tool-group-summary"
-              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
-            >
-              <AnimatedCountList
-                items={[
-                  { key: "ui.messagePart.context.read", count: summary().read },
-                  { key: "ui.messagePart.context.search", count: summary().search },
-                  { key: "ui.messagePart.context.list", count: summary().list },
-                ]}
-                fallback=""
-              />
-            </span>
-          </span>
-          <Collapsible.Arrow />
-        </div>
-      </Collapsible.Trigger>
-      <Collapsible.Content>
+          </div>
+        }
+      >
         <div data-component="context-tool-group-list">
           <Index each={props.tools}>
             {(tool) => {
@@ -557,8 +554,8 @@ export function CurrentContextToolGroup(props: {
             }}
           </Index>
         </div>
-      </Collapsible.Content>
-    </Collapsible>
+      </BasicTool>
+    </div>
   )
 }
 
