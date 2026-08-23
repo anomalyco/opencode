@@ -8,7 +8,7 @@ import { useSettings } from "@/settings/model"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
-import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
+import { SessionPanelFrame } from "@/session/session-frame"
 import { TerminalPanel } from "@/session/terminal/panel"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
@@ -58,9 +58,14 @@ export function SessionScreen(props: { session: SessionModel }) {
 
   const sessionPanelContent = () => (
     <>
-      {timeline.resource() ?? ""}
       <Show when={!isDesktop() && !!session.identity.params.id && !mobileTabsBottom()}>
         <SessionMobileTabs review={review} compact />
+      </Show>
+      {/* Surface query errors without suspending session metadata while messages load. */}
+      <Show when={timeline.resource.error}>
+        {(error) => {
+          throw error()
+        }}
       </Show>
       <div class="flex-1 min-h-0 overflow-hidden">
         <Switch>
@@ -117,7 +122,7 @@ export function SessionScreen(props: { session: SessionModel }) {
   )
 
   return (
-    <SessionRouteFrame>
+    <>
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col gap-2 p-2">
         <div ref={screen.panel.ref} class="flex-1 min-h-0 flex flex-col md:flex-row gap-2">
@@ -220,6 +225,6 @@ export function SessionScreen(props: { session: SessionModel }) {
           </div>
         </Show>
       </div>
-    </SessionRouteFrame>
+    </>
   )
 }

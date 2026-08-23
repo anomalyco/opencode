@@ -15,7 +15,7 @@ import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import { useTabs } from "@/shell/tabs/tabs"
 import { requireServerKey } from "@/shell/routes/session"
 import { useSessionModel } from "./model"
-import { SessionPanelFrame, SessionRouteFrame } from "./session-frame"
+import { SessionPanelFrame } from "./session-frame"
 import { IncompatibleServerPanel } from "./incompatible-server-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
@@ -31,7 +31,7 @@ export function TargetSessionRouteContent() {
       <MarkSessionNotificationsViewed sessionID={() => params.id} />
       <ModelsProvider directory={directory}>
         <TargetSessionSettingsCommand />
-        <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+        <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
           <ResolvedTargetSessionRoute />
         </SessionRouteErrorBoundary>
       </ModelsProvider>
@@ -45,16 +45,14 @@ function TargetSessionSettingsCommand() {
 }
 
 function SessionRouteErrorBoundary(
-  props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key; padded?: boolean }>,
+  props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key }>,
 ) {
   return (
     <ErrorBoundary
       fallback={(error) => (
-        <SessionRouteFrame padded={props.padded}>
-          <SessionPanelFrame raised={!!props.sessionID}>
-            <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
-          </SessionPanelFrame>
-        </SessionRouteFrame>
+        <SessionStatePanel>
+          <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
+        </SessionStatePanel>
       )}
     >
       {props.children}
@@ -78,16 +76,14 @@ function ResolvedTargetSessionRoute() {
     <Show
       when={!server.health?.incompatible}
       fallback={
-        <SessionRouteFrame padded>
-          <SessionPanelFrame raised>
-            <IncompatibleServerPanel
-              onClose={() => tabs.removeSessionTab({ server: server.key, sessionId: params.id })}
-            />
-          </SessionPanelFrame>
-        </SessionRouteFrame>
+        <SessionStatePanel>
+          <IncompatibleServerPanel
+            onClose={() => tabs.removeSessionTab({ server: server.key, sessionId: params.id })}
+          />
+        </SessionStatePanel>
       }
     >
-      <Show when={directory()}>
+      <Show when={directory()} fallback={<SessionStatePanel />}>
         {(value) => (
           <LocationProvider directory={value()}>
             <SessionUIProvider directory={value()} server={server.key}>
@@ -97,6 +93,14 @@ function ResolvedTargetSessionRoute() {
         )}
       </Show>
     </Show>
+  )
+}
+
+function SessionStatePanel(props: ParentProps) {
+  return (
+    <div class="flex min-h-0 flex-1 p-2">
+      <SessionPanelFrame raised>{props.children}</SessionPanelFrame>
+    </div>
   )
 }
 
