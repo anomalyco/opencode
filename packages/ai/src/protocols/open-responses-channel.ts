@@ -112,6 +112,8 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
           responseID = created
           return { type: "frame", frame }
         }
+        // Keepalives carry no response state and may arrive before response.created.
+        if (event.type === "keepalive") return { type: "frame", frame }
         if (!responseID)
           return yield* ProviderShared.eventError(
             options.id,
