@@ -76,7 +76,10 @@ export async function tracingLayer() {
 
   return NodeSdk.layer(() => ({
     resource: resource(),
-    ...(sampler ? { sampler } : {}),
+    // NodeSdk.layer only forwards `tracerConfig` into the tracer provider; a
+    // top-level `sampler` is silently ignored (and a conditional spread hides
+    // it from excess-property checking), which made the ratio a no-op.
+    ...(sampler ? { tracerConfig: { sampler } } : {}),
     spanProcessor: new SdkBase.BatchSpanProcessor(
       new OTLP.OTLPTraceExporter({
         url: `${endpoint}/v1/traces`,
