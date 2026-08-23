@@ -201,7 +201,9 @@ const layer = Layer.effect(
           ).pipe(
             Effect.catch((error) =>
               "_tag" in error &&
-              (error._tag === "SessionClosureAdmissionRefused" || error._tag === "SessionClosureMutationRefused")
+              (error._tag === "SessionClosureAdmissionRefused" ||
+                error._tag === "SessionClosureMutationRefused" ||
+                error._tag === "SessionScopeOwnRefused")
                 ? Effect.fail(error)
                 : Effect.die(error),
             ),
@@ -1133,8 +1135,10 @@ const layer = Layer.effect(
 
     const prompt: (
       input: TaskPromptInput,
-    ) => Effect.Effect<SessionV1.WithParts, Image.Error | AdmissionError | Session.ReservedMetadataError> =
-      Effect.fn("SessionPrompt.prompt")(function* (input: TaskPromptInput) {
+    ) => Effect.Effect<
+      SessionV1.WithParts,
+      Image.Error | AdmissionError | Session.ReservedMetadataError | ScopeOwnRefused
+    > = Effect.fn("SessionPrompt.prompt")(function* (input: TaskPromptInput) {
         // An attachment scope is a private capability handed to one delegated call, never resolved
         // from a registry here. Generic ingress is unaffected: only a caller that was given a scope
         // can pass one, and it must be the scope for this very session.
@@ -1146,7 +1150,25 @@ const layer = Layer.effect(
         const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
         yield* revert.cleanup(session)
         const message = yield* createUserMessage(input)
-        if (claimed) yield* claimed.own(message.info.id)
+        // Claiming a resolved scope is the one prompt-internal boundary a supplemental prompt may
+        // report as an admission failure, so exactly this site's defect becomes the typed refusal.
+        // Interrupts pass through untouched, and every other prompt-internal defect keeps its cause.
+        if (claimed)
+          yield* claimed.own(message.info.id).pipe(
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterrupts(cause)) return Effect.failCause(cause)
+              const squashed = Cause.squash(cause)
+              return Effect.fail(
+                new ScopeOwnRefused({
+                  sessionID: input.sessionID,
+                  reason: squashed instanceof Error ? squashed.message : String(squashed),
+                }),
+              )
+            }),
+          )
+        // Admission has happened: the user message and its parts are persisted and the conditional
+        // claim succeeded. This runs before the runner is entered.
+        if (input.onAdmitted) yield* input.onAdmitted
         yield* sessions.touch(input.sessionID)
 
         const permissions: PermissionV1.Rule[] = []
@@ -1229,20 +1251,14 @@ const layer = Layer.effect(
           // the observer schedules the next wake. Provider turns never spin inside one wake.
           const attachmentNeedsTurn = step === 0 && (turnAttachment?.needsWake() ?? false)
 
-          if (
-            lastAssistant?.finish &&
-            !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-            !hasToolCalls &&
-            lastAssistant.parentID === lastUser.id &&
-            !attachmentNeedsTurn
-          ) {
+          if (turnAnswered({ lastUser, lastAssistant, hasToolCalls, attachmentNeedsTurn })) {
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
             )
             if (orphan) {
               yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
                 "session.id": sessionID,
-                messageID: lastAssistant.id,
+                messageID: lastAssistant?.id,
                 tool: orphan.tool,
                 callID: orphan.callID,
               })
@@ -1646,10 +1662,14 @@ const layer = Layer.effect(
 
     return Service.of({
       cancel,
-      prompt,
+      // The public surface takes scope-less `PromptInput`, which can never reach the `own()` wrap
+      // that mints the refusal - that needs an attachment scope, which only `TaskPromptInput`
+      // carries. Sealing the unreachable member here keeps a Task-only refusal out of every
+      // external consumer's error union.
+      prompt: (input: PromptInput) => prompt(input).pipe(Effect.catchTag("SessionScopeOwnRefused", Effect.die)),
       loop,
       shell,
-      command,
+      command: (input: CommandInput) => command(input).pipe(Effect.catchTag("SessionScopeOwnRefused", Effect.die)),
       resolvePromptParts,
     })
   }),
@@ -1689,12 +1709,31 @@ export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput"
 }) {}
 
 /**
+ * The one prompt-internal boundary that counts as an admission failure rather than a defect: a
+ * borrowed attachment scope that resolved or degraded between being captured and being claimed.
+ *
+ * Minted only at the `own()` call site below, which is the only place on the supplemental-admission
+ * path that can raise it, so a supplemental prompt can report exactly this boundary while every
+ * other prompt-internal defect still rethrows.
+ */
+export class ScopeOwnRefused extends Schema.TaggedErrorClass<ScopeOwnRefused>()("SessionScopeOwnRefused", {
+  sessionID: Schema.String,
+  reason: Schema.String,
+}) {}
+
+/**
  * A prompt carrying the attachment scope of the delegated call it belongs to. The scope is a
  * capability, not a schema field: it is handed to one caller and never appears on the wire, so the
  * public `PromptInput` is unchanged and generic ingress cannot supply one.
  */
 export type TaskPromptInput = PromptInput & {
   readonly attachmentScope?: AttachmentCoordinator.Scope
+  /**
+   * Invoked once the user message and its parts are durably persisted and the conditional
+   * attachment claim has succeeded, before the runner is entered. Task uses it to order same-id
+   * admission and to tell an admission failure from a later one.
+   */
+  readonly onAdmitted?: Effect.Effect<void>
 }
 
 export const ShellInput = Schema.Struct({
@@ -1733,6 +1772,28 @@ export const CommandInput = Schema.Struct({
   ),
 })
 export type CommandInput = Schema.Schema.Type<typeof CommandInput>
+
+/**
+ * @internal Exported for testing: the run loop's turn-answered exit predicate, lifted out of the
+ * loop without changing its behaviour.
+ *
+ * An assistant records the user message it was generated for, and that causal link is what decides
+ * whether the current turn already has an answer. An attachment that still needs a turn overrides
+ * the whole test, so a wake earns one provider opportunity rather than exiting immediately.
+ */
+export function turnAnswered(input: {
+  readonly lastUser: SessionV1.User
+  readonly lastAssistant: SessionV1.Assistant | undefined
+  readonly hasToolCalls: boolean
+  readonly attachmentNeedsTurn: boolean
+}): boolean {
+  const lastAssistant = input.lastAssistant
+  if (!lastAssistant?.finish) return false
+  if (["tool-calls", "unknown"].includes(lastAssistant.finish)) return false
+  if (input.hasToolCalls) return false
+  if (lastAssistant.parentID !== input.lastUser.id) return false
+  return !input.attachmentNeedsTurn
+}
 
 /** @internal Exported for testing */
 export function createStructuredOutputTool(input: {

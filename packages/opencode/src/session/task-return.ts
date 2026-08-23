@@ -225,22 +225,35 @@ function classify(sessionID: SessionID, selected: ReturnType<typeof select>) {
   }
 }
 
+const NOTICE_MAX = 256
+
+/**
+ * One sanitized single-line notice. Runs of carriage returns, newlines and tabs collapse to single
+ * spaces, `<` is escaped the same way evidence lines escape it, and the result is capped. Notice
+ * text can interpolate a failure cause, so this is what stops that cause nesting a Task envelope.
+ */
+function sanitizeNotice(value: string) {
+  const collapsed = value.replaceAll(/[\r\n\t]+/g, " ").replaceAll("<", "\\u003c")
+  return truncate(collapsed, NOTICE_MAX, 192)
+}
+
+function noticeElements(notes: readonly string[] | undefined) {
+  if (!notes?.length) return []
+  return notes.map((note) => ["<task_notice>", sanitizeNotice(note), "</task_notice>"].join("\n"))
+}
+
 export function renderOutput(input: {
   sessionID: SessionID
   state: RenderState
   summary?: string
-  priorOutput?: string
+  notes?: readonly string[]
   text: string
 }) {
   const tag = input.state === "running" ? "task_status" : input.state === "completed" ? "task_result" : "task_error"
-  const prior =
-    input.priorOutput !== undefined && (input.state === "error" || input.state === "cancelled")
-      ? ["<task_prior_output>", input.priorOutput, "</task_prior_output>"]
-      : []
   return [
     `<task id="${input.sessionID}" state="${input.state}">`,
     ...(input.summary ? [`<summary>${input.summary}</summary>`] : []),
-    ...prior,
+    ...noticeElements(input.notes),
     `<${tag}>`,
     input.text,
     `</${tag}>`,
@@ -251,13 +264,13 @@ export function renderOutput(input: {
 export function renderSelectedTask(input: {
   sessionID: SessionID
   selected: TaskSelectedReturn
-  priorOutput?: string
+  notes?: readonly string[]
 }) {
   if (input.selected.type === "cancelled") {
     return renderCancelledTask({
       sessionID: input.selected.taskID,
       status: input.selected.status,
-      priorOutput: input.priorOutput,
+      notes: input.notes,
     })
   }
   const classified = classify(input.sessionID, select(input.selected))
@@ -265,12 +278,12 @@ export function renderSelectedTask(input: {
   return renderOutput({
     sessionID: input.sessionID,
     state: classified.state,
-    priorOutput: input.priorOutput,
+    notes: input.notes,
     text,
   })
 }
 
-export function renderCancelledTask(input: { sessionID: SessionID; status?: string; priorOutput?: string }) {
+export function renderCancelledTask(input: { sessionID: SessionID; status?: string; notes?: readonly string[] }) {
   const status = assertedOpen(input.status)
   const text = [
     `Task child was cancelled. task_id: ${input.sessionID}. status: ${status}.`,
@@ -279,7 +292,17 @@ export function renderCancelledTask(input: { sessionID: SessionID; status?: stri
   return renderOutput({
     sessionID: input.sessionID,
     state: "cancelled",
-    priorOutput: input.priorOutput,
+    notes: input.notes,
     text,
+  })
+}
+
+/** A notice-only delivery, for a completed terminal whose notices are still undelivered. */
+export function renderNotices(input: { sessionID: SessionID; notes: readonly string[] }) {
+  return renderOutput({
+    sessionID: input.sessionID,
+    state: "completed",
+    notes: input.notes,
+    text: "",
   })
 }

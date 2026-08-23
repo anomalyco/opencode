@@ -291,15 +291,13 @@ describe("run entry body", () => {
             status: "completed",
             input: { description: "Inspect reducer", subagent_type: "explore" },
             title: "",
+            // A notice can precede the body, so extraction has to reach past it to the envelope's
+            // own result or error rather than starting at the first element it finds.
             output: [
               '<task id="child-1" state="error">',
-              "<task_prior_output>",
-              '<task id="child-1" state="completed">',
-              "<task_result>",
-              "stale prior report",
-              "</task_result>",
-              "</task>",
-              "</task_prior_output>",
+              "<task_notice>",
+              "A supplemental prompt could not be admitted: closing.",
+              "</task_notice>",
               "<task_error>",
               "current failure",
               "</task_error>",
@@ -321,17 +319,13 @@ describe("run entry body", () => {
             input: { description: "Inspect reducer", subagent_type: "explore" },
             title: "",
             output: [
-              '<task id="child-1" state="cancelled">',
-              "<task_prior_output>",
-              '<task id="child-1" state="error">',
-              "<task_error>",
-              "prior failure",
-              "</task_error>",
-              "</task>",
-              "</task_prior_output>",
-              "<task_error>",
-              "current cancellation",
-              "</task_error>",
+              '<task id="child-1" state="completed">',
+              "<task_notice>",
+              "Supplemental work was still registered when this answer completed.",
+              "</task_notice>",
+              "<task_result>",
+              "current report",
+              "</task_result>",
               "</task>",
             ].join("\n"),
             metadata: { sessionId: "child-1" },
@@ -339,7 +333,7 @@ describe("run entry body", () => {
           },
         }),
       ),
-    ).toEqual({ type: "markdown", content: "current cancellation" })
+    ).toEqual({ type: "markdown", content: "current report" })
 
     expect(
       structured(

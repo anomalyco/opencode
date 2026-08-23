@@ -7,6 +7,8 @@ export const ASYNC_TASK_PROTOCOL = [
   "",
   "`async: true` starts the subagent asynchronously; Task returns a running receipt instead of waiting for the subagent's result. When `async` is omitted, Task waits for the result.",
   "",
+  "A prompt sent with a running task's `task_id` joins that task's conversation as a supplemental prompt. It is registered and queued for admission immediately. Once admitted, the subagent takes it into account at its next history reload; if its turn has already ended, the prompt starts a new one.",
+  "",
   "Async results and errors are delivered to you automatically, so sleeping, polling for progress, or asking for status is unnecessary.",
   "",
   "Continue with non-overlapping work, or wait for the result.",

@@ -772,9 +772,7 @@ function taskBody(output: string): string | undefined {
     return undefined
   }
 
-  const prior = output.lastIndexOf("</task_prior_output>")
-  const scoped = prior === -1 ? output : output.slice(prior + "</task_prior_output>".length)
-  const match = scoped.match(/<(task_result|task_status|task_error)>\r?\n([\s\S]*)\r?\n<\/\1>\r?\n<\/task>\s*$/)
+  const match = output.match(/<(task_result|task_status|task_error)>\r?\n([\s\S]*)\r?\n<\/\1>\r?\n<\/task>\s*$/)
   if (match) {
     return match[2].trim() || undefined
   }

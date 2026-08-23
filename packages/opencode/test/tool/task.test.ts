@@ -196,9 +196,13 @@ const taskClosure = admittingClosure(leaseLog(), "task")
 const inertCoordinator = (): AttachmentCoordinator.TaskInterface => ({
   open: () => Effect.die("unused"),
   locate: () => Effect.succeed(undefined),
-  claim: () => Effect.die("unused"),
-  settleClaim: () => Effect.die("unused"),
-  awaitClaim: () => Effect.die("unused"),
+  // The same-ID claim is reached in both feature modes, because it orders admission between an
+  // owner and a supplemental prompt whether or not attachment machinery exists. These fixtures
+  // drive one call per task id, so that call is always the owner and nothing ever awaits it.
+  claim: (sessionID) =>
+    Deferred.make<boolean>().pipe(Effect.map((ready) => ({ owner: true as const, sessionID, token: {}, ready }))),
+  settleClaim: (claim, active) => Deferred.succeed(claim.ready, active).pipe(Effect.asVoid),
+  awaitClaim: (claim) => Deferred.await(claim.ready),
 })
 
 function stubOps(opts?: {
@@ -212,7 +216,11 @@ function stubOps(opts?: {
     cancel: () => Effect.void,
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt: (input) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
+        // Production admits - persisting the prompt and firing this hook - before entering the
+        // runner, and same-ID ordering depends on it. A stub that skipped it would leave an owner's
+        // claim unsettled until its whole run finished, which is not how production behaves.
+        if (input.onAdmitted) yield* input.onAdmitted
         opts?.onPrompt?.(input)
         return reply(input, opts?.text ?? "done", opts?.error, opts?.toolError)
       }),
@@ -235,6 +243,24 @@ function stubOps(opts?: {
  */
 const attachedOps = Effect.fn("TaskToolTest.attachedOps")(function* (opts?: Parameters<typeof stubOps>[0]) {
   return stubOps({ ...opts, attachments: yield* AttachmentCoordinator.make })
+})
+
+/**
+ * Wraps fixture ops so their prompt fires `onAdmitted`, the way production's does once the prompt is
+ * durably persisted and before the runner is entered.
+ *
+ * Same-ID admission ordering depends on that hook: the owner settles its claim there, and a second
+ * call naming the same task_id waits on that settlement. A test that overrides `prompt` wholesale
+ * replaces the base stub's firing, so without this wrapper the owner's claim stays unsettled for as
+ * long as its run is parked and the second call waits behind it.
+ */
+const admitting = (ops: TaskPromptOps): TaskPromptOps => ({
+  ...ops,
+  prompt: (input) =>
+    Effect.gen(function* () {
+      if (input.onAdmitted) yield* input.onAdmitted
+      return yield* ops.prompt(input)
+    }),
 })
 
 function reply(
@@ -992,12 +1018,16 @@ describe("tool.task", () => {
       expect(runs).toBe(1)
 
       yield* Deferred.succeed(done, undefined)
-      // The stored output is the classified result, produced once so the synchronous return and the
-      // async callback carry the same structured shape.
-      const promoted = (yield* jobs.wait({ id: result.metadata.sessionId })).info?.output
-      expect(promoted).toContain("background done")
-      expect(promoted).toContain(`state="completed"`)
-      expect((yield* Deferred.await(injected)).parts[0]?.type).toBe("text")
+      // Promotion moved delivery to the observer, so the terminal carries no inline payload: the
+      // answer is published for the observer to take and arrives as its own rendered envelope.
+      expect((yield* jobs.wait({ id: result.metadata.sessionId })).info?.output).toBeUndefined()
+      const delivered = yield* Deferred.await(injected)
+      const deliveredText = delivered.parts[0]
+      expect(deliveredText?.type).toBe("text")
+      if (deliveredText?.type === "text") {
+        expect(deliveredText.text).toContain("background done")
+        expect(deliveredText.text).toContain(`state="completed"`)
+      }
       expect(runs).toBe(1)
     }),
   )
@@ -1051,7 +1081,7 @@ describe("tool.task", () => {
       const updated = defer<SessionPrompt.PromptInput>()
       const injected = defer<SessionPrompt.PromptInput>()
       let prompts = 0
-      const promptOps: TaskPromptOps = {
+      const promptOps: TaskPromptOps = admitting({
         ...(yield* attachedOps()),
         prompt: (input) => {
           if (input.sessionID === chat.id) {
@@ -1063,7 +1093,7 @@ describe("tool.task", () => {
           updated.resolve(input)
           return Effect.promise(() => second.promise).pipe(Effect.as(reply(input, "second done")))
         },
-      }
+      })
       const context = {
         sessionID: chat.id,
         messageID: assistant.id,
@@ -1106,12 +1136,15 @@ describe("tool.task", () => {
       second.resolve()
       const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 1_000 })
       expect(waited.info?.status).toBe("completed")
-      expect(waited.info?.output).toContain("second done")
-      expect(waited.info?.output).toContain(`state="completed"`)
+      // Observer-owned, so the terminal carries no inline payload: both answers were published for
+      // the observer to take rather than one of them being stored on the terminal.
+      expect(waited.info?.output).toBeUndefined()
       const notification = yield* Effect.promise(() => injected.promise)
       expect(notification.variant).toBe("xhigh")
       expect(notification.parts[0]?.type).toBe("text")
-      if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("second done")
+      // Answers are delivered one at a time in conversation order, so the first delivery is the
+      // owner's own answer - not whichever run happened to settle last.
+      if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("first done")
     }),
   )
 
@@ -1144,8 +1177,10 @@ describe("tool.task", () => {
       const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
       expect(waited.timedOut).toBe(false)
       expect(waited.info?.status).toBe("completed")
-      expect(waited.info?.output).toContain("background done")
-      expect(waited.info?.output).toContain(`state="completed"`)
+      // An async task is observer-owned from the start, so its answer is published for the observer
+      // to take one at a time and the terminal carries no inline payload of its own. The rendered
+      // delivery is asserted where a test can observe the parent ingress.
+      expect(waited.info?.output).toBeUndefined()
     }),
   )
 

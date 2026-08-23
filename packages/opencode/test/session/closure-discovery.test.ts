@@ -10,7 +10,7 @@ import { SessionID } from "@/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { syntheticAdmission } from "../lib/background"
+import { noAnswer, syntheticAdmission } from "../lib/background"
 import { admittingJobs } from "../lib/closure"
 import { pollWithTimeout, testEffectBounded } from "../lib/effect"
 
@@ -135,7 +135,7 @@ describe("closure.discovery", () => {
       const started = yield* background.startExact({
         id: "job_k6",
         type: "test",
-        run: Deferred.await(release),
+        run: Deferred.await(release).pipe(Effect.as(noAnswer)),
         admission: syntheticAdmission("k6"),
         metadata: { sessionId: child, parentSessionId: parent },
       })
@@ -222,7 +222,7 @@ describe("closure.discovery", () => {
         .startExact({
           id: "job_unarmed",
           type: "test",
-          run: Effect.succeed("done"),
+          run: Effect.succeed(noAnswer),
           admission: syntheticAdmission("unarmed"),
           metadata: { sessionId: child },
         })

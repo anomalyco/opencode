@@ -326,7 +326,7 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "type": "string",
     },
     "task_id": {
-      "description": "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+      "description": "Continue a previous Task session. If task_id names a running task, a prompt sent with it joins that task's conversation as a supplemental prompt; if the task has finished, it resumes the same subagent session in a new turn. An unrecognized task_id starts a fresh Task.",
       "type": "string",
     },
   },

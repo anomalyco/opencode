@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { BackgroundJob } from "@opencode-ai/core/background-job"
 import { Deferred, Effect, Exit, Fiber, Ref, Scope } from "effect"
-import { syntheticAdmission } from "../lib/background"
+import { noAnswer, syntheticAdmission } from "../lib/background"
 import { itBounded } from "../lib/effect"
 
 // The exact JobLifetime token.
@@ -84,7 +84,7 @@ describe("closure.job-lifetime", () => {
           type: "test",
           // Parked so the assertions below land on the ARM itself rather than on a
           // lifetime that has already run to completion - `armed` is this row's subject.
-          run: Ref.update(started, (n) => n + 1).pipe(Effect.andThen(Deferred.await(release)), Effect.as("done")),
+          run: Ref.update(started, (n) => n + 1).pipe(Effect.andThen(Deferred.await(release)), Effect.as(noAnswer)),
         }),
       )
 
@@ -127,7 +127,7 @@ describe("closure.job-lifetime", () => {
         Deferred.await(gate).pipe(Effect.as({ kind: "arm_allowed" as const, permit: made.permit })),
       )
       const started = yield* Ref.make(0)
-      const run = Ref.update(started, (n) => n + 1).pipe(Effect.as("done"))
+      const run = Ref.update(started, (n) => n + 1).pipe(Effect.as(noAnswer))
 
       const first = yield* forkIn(
         scope,
@@ -181,7 +181,7 @@ describe("closure.job-lifetime", () => {
           type: "test",
           run: Deferred.await(release).pipe(
             Effect.andThen(Ref.update(order, (v) => [...v, "base"])),
-            Effect.as("base"),
+            Effect.as(noAnswer),
           ),
         }),
       )
@@ -192,7 +192,7 @@ describe("closure.job-lifetime", () => {
         jobs.extendExact({
           admission: syntheticAdmission(),
           lifetime: { id: "job_k116", token: calls[0]!.token },
-          run: Ref.update(order, (v) => [...v, "ext"]).pipe(Effect.as("ext")),
+          run: Ref.update(order, (v) => [...v, "ext"]).pipe(Effect.as(noAnswer)),
         }),
       )
       yield* Effect.sleep(10)
@@ -213,8 +213,11 @@ describe("closure.job-lifetime", () => {
       yield* Deferred.succeed(release, undefined)
       const terminal = yield* jobs.waitExact({ lifetime: base.lifetime! })
       expect(terminal.info?.status).toBe("completed")
-      // Ordering is preserved: the extension runs behind the base invocation's tail.
-      expect(yield* Ref.get(order)).toEqual(["base", "ext"])
+      // Execution is no longer serialized behind the previous run's tail, so the extension's run
+      // completes first even though it holds the later sequence. What this test still pins is the
+      // BIND ordering asserted above: no extension binds before the base is armed, and it takes
+      // sequence one. Answer ordering is by position at delivery, not by execution order.
+      expect(yield* Ref.get(order)).toEqual(["ext", "base"])
 
       yield* Scope.close(scope, Exit.void)
     }),
@@ -236,7 +239,7 @@ describe("closure.job-lifetime", () => {
           admission: syntheticAdmission(),
           id: "job_k116b",
           type: "test",
-          run: Effect.succeed("base"),
+          run: Effect.succeed(noAnswer),
         }),
       )
       yield* until(Effect.sync(() => calls.length === 1))
@@ -245,7 +248,7 @@ describe("closure.job-lifetime", () => {
         jobs.extendExact({
           admission: syntheticAdmission(),
           lifetime: { id: "job_k116b", token: calls[0]!.token },
-          run: Ref.update(started, (n) => n + 1).pipe(Effect.as("ext")),
+          run: Ref.update(started, (n) => n + 1).pipe(Effect.as(noAnswer)),
         }),
       )
       yield* Effect.sleep(10)
@@ -273,7 +276,7 @@ describe("closure.job-lifetime", () => {
         Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
       )
       const started = yield* Ref.make(0)
-      const run = Ref.update(started, (n) => n + 1).pipe(Effect.as("done"))
+      const run = Ref.update(started, (n) => n + 1).pipe(Effect.as(noAnswer))
 
       const registrar = yield* forkIn(
         scope,
@@ -322,7 +325,7 @@ describe("closure.job-lifetime", () => {
         admission: syntheticAdmission(),
         id: "job_k118",
         type: "test",
-        run: Ref.update(started, (n) => n + 1).pipe(Effect.as("done")),
+        run: Ref.update(started, (n) => n + 1).pipe(Effect.as(noAnswer)),
       })
 
       expect(result.lifetime).toBeUndefined()
@@ -344,7 +347,7 @@ describe("closure.job-lifetime", () => {
         admission: syntheticAdmission(),
         id: "job_k118b",
         type: "test",
-        run: Effect.succeed("done"),
+        run: Effect.succeed(noAnswer),
       })
 
       expect(result.lifetime).toBeDefined()
@@ -365,7 +368,7 @@ describe("closure.job-lifetime", () => {
       const release = yield* Deferred.make<void>()
       const { jobs, calls, scope } = yield* harness()
       const started = yield* Ref.make(0)
-      const run = Ref.update(started, (n) => n + 1).pipe(Effect.andThen(Deferred.await(release)), Effect.as("done"))
+      const run = Ref.update(started, (n) => n + 1).pipe(Effect.andThen(Deferred.await(release)), Effect.as(noAnswer))
 
       const first = yield* jobs.startExact({ admission: syntheticAdmission(), id: "job_k65", type: "test", run })
       const second = yield* jobs.startExact({ admission: syntheticAdmission(), id: "job_k65", type: "test", run })
@@ -393,7 +396,7 @@ describe("closure.job-lifetime", () => {
         admission: syntheticAdmission(),
         id: "job_k66",
         type: "test",
-        run: Deferred.await(release).pipe(Effect.as("base")),
+        run: Deferred.await(release).pipe(Effect.as(noAnswer)),
       })
       const lifetime = base.lifetime!
       if (!base.handle) return yield* Effect.die("base invocation was not accepted")
@@ -401,7 +404,7 @@ describe("closure.job-lifetime", () => {
       const first = yield* jobs.extendExact({
         admission: syntheticAdmission(),
         lifetime,
-        run: Effect.succeed("one"),
+        run: Effect.succeed(noAnswer),
       })
       expect(first.extended).toBe(true)
       if (!first.extended) return yield* Effect.die("first extension was not accepted")
@@ -409,7 +412,7 @@ describe("closure.job-lifetime", () => {
       const second = yield* jobs.extendExact({
         admission: syntheticAdmission(),
         lifetime,
-        run: Effect.succeed("two"),
+        run: Effect.succeed(noAnswer),
       })
       expect(second.extended).toBe(true)
       if (!second.extended) return yield* Effect.die("second extension was not accepted")
@@ -459,7 +462,7 @@ describe("closure.job-lifetime", () => {
         // `reserve` return absent and the extension would exit before ever reaching the
         // binder - so the refusal path this row is about would go unexercised. A mutant
         // disabling the acceptance gate survived until this was fixed.
-        run: Deferred.await(release).pipe(Effect.as("base")),
+        run: Deferred.await(release).pipe(Effect.as(noAnswer)),
       })
       const lifetime = base.lifetime!
 
@@ -467,7 +470,7 @@ describe("closure.job-lifetime", () => {
         yield* jobs.extendExact({
           admission: syntheticAdmission(),
           lifetime,
-          run: Ref.update(started, (n) => n + 1).pipe(Effect.as("ext")),
+          run: Ref.update(started, (n) => n + 1).pipe(Effect.as(noAnswer)),
         }),
       ).toEqual({ extended: false })
       expect(yield* Ref.get(started)).toBe(0)
@@ -484,7 +487,7 @@ describe("closure.job-lifetime", () => {
         admission: syntheticAdmission(),
         id: "job_k67",
         type: "test",
-        run: Effect.succeed("fresh"),
+        run: Effect.succeed(noAnswer),
       })
       expect(replacement.lifetime?.token).toBeDefined()
       expect(replacement.lifetime!.token).not.toBe(lifetime.token)
@@ -509,7 +512,7 @@ describe("closure.job-lifetime", () => {
           id: "job_k68",
           type: "test",
           onPromote: Ref.update(promotions, (v) => [...v, "original"]),
-          run: Effect.succeed("first"),
+          run: Effect.succeed(noAnswer),
         })
         const stale = original.lifetime!
         yield* jobs.waitExact({ lifetime: stale })
@@ -520,7 +523,7 @@ describe("closure.job-lifetime", () => {
           id: "job_k68",
           type: "test",
           onPromote: Ref.update(promotions, (v) => [...v, "replacement"]),
-          run: Deferred.await(release).pipe(Effect.as("second")),
+          run: Deferred.await(release).pipe(Effect.as(noAnswer)),
         })
         const fresh = replacement.lifetime!
         expect(fresh.token).not.toBe(stale.token)
@@ -540,7 +543,7 @@ describe("closure.job-lifetime", () => {
           yield* jobs.extendExact({
             admission: syntheticAdmission(),
             lifetime: stale,
-            run: Effect.succeed("stale"),
+            run: Effect.succeed(noAnswer),
           }),
         ).toEqual({ extended: false })
 
@@ -570,13 +573,13 @@ describe("closure.job-lifetime", () => {
         id: "job_k69_a",
         type: "test",
         metadata: { durable: false },
-        run: Deferred.await(release).pipe(Effect.as("a")),
+        run: Deferred.await(release).pipe(Effect.as(noAnswer)),
       })
       const second = yield* jobs.startExact({
         admission: syntheticAdmission(),
         id: "job_k69_b",
         type: "test",
-        run: Deferred.await(release).pipe(Effect.as("b")),
+        run: Deferred.await(release).pipe(Effect.as(noAnswer)),
       })
 
       const exact = yield* jobs.listExact()
@@ -618,7 +621,7 @@ describe("closure.job-lifetime", () => {
         id: "job_k69_compat",
         type: "test",
         onPromote: Ref.update(promotions, (v) => [...v, "original"]),
-        run: Effect.succeed("first"),
+        run: Effect.succeed(noAnswer),
       })
       yield* jobs.waitExact({ lifetime: original.lifetime! })
 
@@ -628,7 +631,7 @@ describe("closure.job-lifetime", () => {
         id: "job_k69_compat",
         type: "test",
         onPromote: Ref.update(promotions, (v) => [...v, "replacement"]),
-        run: Deferred.await(release).pipe(Effect.as("second")),
+        run: Deferred.await(release).pipe(Effect.as(noAnswer)),
       })
 
       expect((yield* jobs.promote("job_k69_compat"))?.metadata?.background).toBe(true)

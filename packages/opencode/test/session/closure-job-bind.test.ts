@@ -6,6 +6,7 @@ import { Deferred, Effect, Exit, Layer, Option, Queue } from "effect"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { AttachmentContract } from "@/session/attachment/contract"
 import { BackgroundJob } from "@/background/job"
+import { noAnswer } from "../lib/background"
 import { AttachmentCoordinator } from "@/session/attachment/coordinator"
 import { AttachmentParticipant } from "@/session/attachment/participant"
 import { SessionClosure } from "@/session/closure/coordinator"
@@ -1015,7 +1016,7 @@ describe("SessionClosure job bind", () => {
           const info = yield* jobs.start({
             id: "job_e2e",
             type: "test",
-            run: Deferred.await(release).pipe(Effect.as("done")),
+            run: Deferred.await(release).pipe(Effect.as(noAnswer)),
             admission: { lease: held.lease, epoch: held.epoch },
           })
           expect(info.status).toBe("running")

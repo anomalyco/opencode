@@ -26,6 +26,7 @@ import { Tool } from "@/tool/tool"
 import { ToolRegistry } from "@/tool/registry"
 import { ProviderTest } from "../fake/provider"
 import { disposeAllInstances } from "../fixture/fixture"
+import { answered } from "../lib/background"
 import { admittingClosure, unusedJobs } from "../lib/closure"
 import { recordingPhysical } from "../lib/physical"
 import { testEffect } from "../lib/effect"
@@ -245,6 +246,24 @@ function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithPa
   }
 }
 
+/**
+ * Makes a fixture's prompt fire `onAdmitted`, the way production's does once the prompt is durably
+ * persisted and before the runner is entered.
+ *
+ * Same-ID admission ordering depends on that hook: an owner settles its claim there, and a second
+ * call naming the same task_id waits on that settlement. Without it an owner parked in its run would
+ * never settle, and every supplemental prompt in this file would wait behind it forever. Applied
+ * centrally here so each test's own prompt stub stays about what it is testing.
+ */
+const admitting = (ops: TaskPromptOps): TaskPromptOps => ({
+  ...ops,
+  prompt: (input) =>
+    Effect.gen(function* () {
+      if (input.onAdmitted) yield* input.onAdmitted
+      return yield* ops.prompt(input)
+    }),
+})
+
 function context(input: {
   sessionID: SessionID
   messageID: MessageID
@@ -256,7 +275,7 @@ function context(input: {
     messageID: input.messageID,
     agent: "build",
     abort: new AbortController().signal,
-    extra: { promptOps: input.promptOps, attachment: input.attachment },
+    extra: { promptOps: admitting(input.promptOps), attachment: input.attachment },
     messages: [],
     metadata: () => Effect.void,
     ask: () => Effect.void,
@@ -362,7 +381,7 @@ describe("task attachment integration", () => {
     }),
   )
 
-  it.instance("attached cancellation delivers one truthful envelope with empty retained prior output", () =>
+  it.instance("attached cancellation delivers the retained answer rather than inlining it", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const jobs = yield* BackgroundJob.Service
@@ -415,27 +434,33 @@ describe("task attachment integration", () => {
       yield* Deferred.await(secondReady)
       const cancelled = yield* jobs.cancel(started.metadata.sessionId)
       expect(cancelled?.status).toBe("cancelled")
-      expect(cancelled?.output).toContain('state="completed"')
-      expect(cancelled?.output).toContain("final TextPart was absent")
+      // A cancelled terminal carries no answer payload of its own. The answer the first run
+      // completed stays retained, so it is still delivered rather than being folded into the
+      // cancellation envelope as an inlined copy of itself.
+      expect(cancelled?.output).toBeUndefined()
 
       const notification = yield* Deferred.await(injected)
       const text = notification.parts[0]
       expect(text?.type).toBe("text")
       if (text?.type === "text") {
-        expect(text.text).toContain(`state="cancelled"`)
-        expect(text.text).toContain(`<task_prior_output>\n${cancelled?.output}\n</task_prior_output>`)
-        expect(count(text.text, "<task_prior_output>")).toBe(1)
+        // The retained answer is delivered first, in conversation order, as its own envelope.
+        expect(text.text).toContain(`state="completed"`)
+        expect(text.text).toContain("final TextPart was absent")
+        expect(text.text).not.toContain("task_prior_output")
       }
       expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("parent final")
       expect(parent.current()).toMatchObject({ attached: 0, undelivered: 0 })
       expect(parent.current().failed).toBe(false)
-      expect(parentPrompts).toHaveLength(1)
+      // Two deliveries: the retained answer, then the cancellation envelope. Previously the answer
+      // was inlined into the cancellation as a copy of itself and arrived as one prompt.
+      expect(parentPrompts).toHaveLength(2)
+      expect(parentPrompts[1]?.parts[0]).toMatchObject({ type: "text" })
       expect(yield* sessions.children(chat.id)).toHaveLength(1)
       yield* parent.close()
     }),
   )
 
-  it.instance("root async error carries empty prior output once in its one terminal envelope", () =>
+  it.instance("a failing supplemental run terminalizes the root task with its own reason", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
       const { chat, assistant } = yield* seed()
@@ -485,16 +510,21 @@ describe("task attachment integration", () => {
       yield* Deferred.await(secondReady)
       const result = yield* jobs.wait({ id: started.metadata.sessionId })
       expect(result.info?.status).toBe("error")
-      expect(result.info?.output).toContain('state="completed"')
-      expect(result.info?.output).toContain("final TextPart was absent")
+      // An error terminal carries no answer payload of its own.
+      expect(result.info?.output).toBeUndefined()
 
       const notification = yield* Deferred.await(injected)
       const text = notification.parts[0]
       expect(text?.type).toBe("text")
       if (text?.type === "text") {
+        // A supplemental run may now begin without waiting for the run before it, so this failure
+        // lands while the owner is still in flight and the lifetime terminalizes with nothing filed.
+        // The parent therefore receives the failure itself, carrying its own reason and no inlined
+        // copy of any earlier output. Delivery of a retained answer ahead of a terminal is covered
+        // by the attached-cancellation case above, which sequences the two explicitly.
+        expect(text.text).toContain(`state="error"`)
         expect(text.text).toContain("later boom")
-        expect(text.text).toContain(`<task_prior_output>\n${result.info?.output}\n</task_prior_output>`)
-        expect(count(text.text, "<task_prior_output>")).toBe(1)
+        expect(text.text).not.toContain("task_prior_output")
       }
     }),
   )
@@ -678,7 +708,11 @@ describe("task attachment integration", () => {
       yield* Deferred.succeed(firstRelease, undefined)
       yield* Deferred.await(secondReady)
       yield* Deferred.succeed(secondRelease, undefined)
-      expect((yield* jobs.wait({ id: child.id })).info?.output).toBe(completedOutput(child.id, "second invocation"))
+      // Observer-owned, so the answer was published for the observer to take and the terminal keeps
+      // no inline payload of its own.
+      const settled = yield* jobs.wait({ id: child.id })
+      expect(settled.info?.status).toBe("completed")
+      expect(settled.info?.output).toBeUndefined()
       const notification = yield* Deferred.await(notified)
       yield* awaitSettled(log)
 
@@ -686,9 +720,11 @@ describe("task attachment integration", () => {
       expect(exactWaits).toBe(1)
       expect(log.acquired).toHaveLength(1)
       expect(log.settled).toHaveLength(1)
-      expect(parentPrompts).toEqual([notification])
+      // Both answers are delivered, in conversation order, through the one elected observer.
+      expect(parentPrompts).toHaveLength(2)
+      expect(parentPrompts[0]).toBe(notification)
       expect(notification.attachmentScope).toBeUndefined()
-      expect(notification.parts.find((part) => part.type === "text")?.text).toContain("second invocation")
+      expect(parentPrompts[1]?.parts.find((part) => part.type === "text")?.text).toContain("second invocation")
       expect(parent.current()).toMatchObject({ failed: true, everAttached: false })
       yield* parent.close()
     }),
@@ -805,7 +841,10 @@ describe("task attachment integration", () => {
       const child = (yield* sessions.children(chat.id))[0]
       if (!child) return yield* Effect.die("missing child")
       yield* Deferred.succeed(childRelease, undefined)
-      expect((yield* jobs.wait({ id: child.id })).info?.output).toBe(completedOutput(child.id, original))
+      const originalTerminal = yield* jobs.wait({ id: child.id })
+      expect(originalTerminal.info?.status).toBe("completed")
+      // Observer-owned: the answer is published rather than stored on the terminal.
+      expect(originalTerminal.info?.output).toBeUndefined()
 
       // The observer lease is held before its exact wait. Put a fresh lifetime under the same public
       // id now: an id-based observer reads this replacement, while waitHandle retains the original.
@@ -813,7 +852,7 @@ describe("task attachment integration", () => {
         id: child.id,
         type: "task",
         title: "same public ID replacement",
-        run: Effect.succeed(replacementOutput),
+        run: Effect.succeed(answered("m_replacement", 900, replacementOutput)),
         admission: { lease: "lease_task_fallback_replacement", epoch: 0n },
       })
       if (!replacement.handle) return yield* Effect.die("replacement did not arm")
@@ -942,7 +981,7 @@ describe("task attachment integration", () => {
     }),
   )
 
-  it.instance("synchronous terminal error carries empty prior output without an async envelope", () =>
+  it.instance("a synchronous terminal error reports its own reason without inlining a retained answer", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
@@ -1000,12 +1039,11 @@ describe("task attachment integration", () => {
       if (Exit.isFailure(exit)) {
         const error = Cause.squash(exit.cause)
         const message = error instanceof Error ? error.message : String(error)
-        expect(message).toContain("<task_prior_output>")
-        expect(message).toContain(
-          'Task child returned finish:"stop"; its final TextPart was absent, empty, or whitespace-only.',
-        )
-        expect(message).toContain("</task_prior_output>")
-        expect(message).toContain("sync later boom")
+        // The failure carries the terminal's own reason and nothing else. The answer the earlier run
+        // completed is not joined into it - it stays retained in the task session, which the caller
+        // reaches through the task_id it necessarily already holds.
+        expect(message).toBe("sync later boom")
+        expect(message).not.toContain("task_prior_output")
       }
       expect(parentPrompts).toHaveLength(0)
     }),
@@ -1074,12 +1112,21 @@ describe("task attachment integration", () => {
       yield* Deferred.succeed(firstRelease, undefined)
       yield* Deferred.await(secondReady)
       yield* Deferred.succeed(secondRelease, undefined)
-      expect((yield* jobs.wait({ id: child.id })).info?.output).toBe(completedOutput(child.id, "second"))
+      // Observer-owned: no inline payload on the terminal. What the parent actually receives is
+      // asserted below, which is where the rendered envelope belongs.
+      const adjacentTerminal = yield* jobs.wait({ id: child.id })
+      expect(adjacentTerminal.info?.status).toBe("completed")
+      expect(adjacentTerminal.info?.output).toBeUndefined()
       const notification = yield* Deferred.await(injected)
       const part = notification.parts[0]
       expect(part?.type).toBe("text")
       if (part?.type === "text") {
-        expect(part.text).toBe(completedOutput(child.id, "second"))
+        // Answers deliver in conversation order, so the first one the parent receives is the answer
+        // the first invocation produced - not whichever run settled last. It completed while the
+        // supplemental run was still registered, so it also carries the outstanding-work notice,
+        // which is what tells the caller a further answer may still arrive.
+        expect(part.text).toContain("<task_result>\nfirst\n</task_result>")
+        expect(part.text).toContain("Any further answer it produces will be delivered separately.")
         expect(part.text).not.toContain("<summary>")
       }
       expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("parent promoted final")
@@ -1095,7 +1142,9 @@ describe("task attachment integration", () => {
       expect((yield* jobs.observe({ lifetime, sequence: 1 }))?.accepted).toBe(true)
       expect((yield* jobs.observe({ lifetime, sequence: 2 }))?.accepted).toBe(false)
 
-      expect(parentPrompts).toHaveLength(1)
+      // Two child runs produced two answers, so the one observer makes two ordered deliveries.
+      // Previously the earlier answer was overwritten and only one delivery ever occurred.
+      expect(parentPrompts).toHaveLength(2)
       expect(childPrompts).toBe(2)
       expect(notification.attachmentScope).toBe(parent)
       expect(parent.needsWake()).toBe(false)
@@ -1180,7 +1229,10 @@ describe("task attachment integration", () => {
                 return reply(input, "second invocation")
               }
               parentPrompts.push(input)
-              if (parentPrompts.length > 1) return yield* admit(input, "duplicate parent prompt")
+              // Two answers means two deliveries through the one elected observer. The invariant this
+              // test guards is a single OBSERVER - asserted by observerClaims/exactWaits/log.acquired
+              // below - which is no longer the same thing as a single parent prompt.
+              if (parentPrompts.length > 1) return yield* admit(input, "later answer delivery")
               yield* Deferred.succeed(promptStarted, input)
               yield* Deferred.await(promptRelease)
               const response = yield* admit(input, "sole parent final")
@@ -1216,9 +1268,10 @@ describe("task attachment integration", () => {
       yield* Deferred.succeed(firstRelease, undefined)
       yield* Deferred.await(secondReady)
       yield* Deferred.succeed(secondRelease, undefined)
-      expect((yield* jobs.wait({ id: started.metadata.sessionId })).info?.output).toBe(
-        completedOutput(started.metadata.sessionId, "second invocation"),
-      )
+      // Observer-owned: the answer is published for the observer, not stored on the terminal.
+      const cohortTerminal = yield* jobs.wait({ id: started.metadata.sessionId })
+      expect(cohortTerminal.info?.status).toBe("completed")
+      expect(cohortTerminal.info?.output).toBeUndefined()
 
       const notification = yield* Deferred.await(promptStarted)
       expect(parent.current()).toMatchObject({ attached: 0, undelivered: 1, failed: false })
@@ -1235,12 +1288,20 @@ describe("task attachment integration", () => {
       yield* Deferred.succeed(releaseSettlement, undefined)
       yield* awaitSettled(log)
 
-      expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("sole parent final")
+      // The second answer's delivery is the later evidence, so selection resolves to its reply
+      // rather than the first one's. The single-observer invariants below are this test's subject.
+      expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("later answer delivery")
       expect(observerClaims).toBe(2)
-      expect(exactWaits).toBe(1)
+      // Two exact waits, one observer. The blocking wait is the observer's; the second is the
+      // supplemental prompt's receipt reading the accepted lifetime's own record with a zero
+      // timeout, which is what keys that receipt to the lifetime actually admitted rather than to
+      // whichever one currently holds the public id. One OBSERVER is asserted by the claim count
+      // and the single acquired/settled continuation lease below.
+      expect(exactWaits).toBe(2)
       expect(log.acquired).toHaveLength(1)
       expect(log.settled).toHaveLength(1)
-      expect(parentPrompts).toEqual([notification])
+      expect(parentPrompts).toHaveLength(2)
+      expect(parentPrompts[0]).toBe(notification)
       expect(notification.attachmentScope).toBe(attachment)
       expect(parent.current().failed).toBe(false)
       yield* parent.close()
@@ -1304,10 +1365,13 @@ describe("task attachment integration", () => {
       yield* Deferred.succeed(secondRelease, undefined)
       const terminal = yield* jobs.wait({ id: child.id })
       expect(terminal.info?.status).toBe("completed")
-      expect(terminal.info?.output).toBe(completedOutput(child.id, "second"))
+      // Observer-owned: the answer is published for the observer, not stored on the terminal.
+      expect(terminal.info?.output).toBeUndefined()
       expect(prompts).toBe(2)
       yield* Effect.yieldNow
-      expect(notifications).toBe(1)
+      // Two runs produced two answers, and both are delivered. Previously only the last one
+      // survived, so a single notification here recorded an answer being lost rather than kept.
+      expect(notifications).toBe(2)
     }),
   )
 

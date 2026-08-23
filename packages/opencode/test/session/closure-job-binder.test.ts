@@ -5,6 +5,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Deferred, Effect, Exit, Layer, Queue, Scope } from "effect"
 import { BackgroundJob } from "@/background/job"
+import { noAnswer } from "../lib/background"
 import { BackgroundJobBinder } from "@/background/binder"
 import { SessionClosure } from "@/session/closure/coordinator"
 import { SessionToolPartPermit } from "@/session/toolpart-permit"
@@ -333,7 +334,7 @@ describe("BackgroundJob binder", () => {
                 type: "test",
                 run:
                   winner === "completed"
-                    ? Effect.succeed("done")
+                    ? Effect.succeed(noAnswer)
                     : winner === "error"
                       ? Effect.fail(new Error("failed"))
                       : Effect.never,
@@ -393,7 +394,7 @@ describe("BackgroundJob binder", () => {
                 const started = yield* jobs.startExact({
                   id: `job_retention_${index}`,
                   type: "test",
-                  run: Effect.succeed("done"),
+                  run: Effect.succeed(noAnswer),
                   admission: { lease: held.lease, epoch: held.epoch },
                 })
                 if (!started.lifetime) return yield* Effect.die("retention lifetime did not arm")
@@ -511,7 +512,7 @@ describe("BackgroundJob binder", () => {
       const started = yield* jobs.startExact({
         id: "job_relay",
         type: "test",
-        run: Deferred.await(release).pipe(Effect.as("base")),
+        run: Deferred.await(release).pipe(Effect.as(noAnswer)),
         admission: zero,
       })
       expect(started.lifetime).toBeDefined()
@@ -524,7 +525,7 @@ describe("BackgroundJob binder", () => {
       const one = { lease: Model.id("lease", "lease_relay_one"), epoch: 9n }
       const extended = yield* jobs.extendExact({
         lifetime: started.lifetime!,
-        run: Effect.succeed("more"),
+        run: Effect.succeed(noAnswer),
         admission: one,
       })
       expect(extended.extended).toBe(true)

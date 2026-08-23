@@ -14,7 +14,7 @@ import type { SessionMutation } from "../session/closure/mutation"
 import type { SessionPhysical } from "../session/physical-interrupt"
 import { SessionAdmission } from "../session/closure/admission"
 import { AttachmentCoordinator } from "@/session/attachment/coordinator"
-import { renderCancelledTask, renderOutput, renderSelectedTask } from "@/session/task-return"
+import { renderCancelledTask, renderNotices, renderOutput, renderSelectedTask } from "@/session/task-return"
 import { Config } from "@/config/config"
 import { Cause, Deferred, Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -22,7 +22,10 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
 import { ASYNC_TASK_PROTOCOL } from "./task-protocol"
 
-type AdmissionError = SessionClosure.AdmissionRefused | SessionMutation.MutationRefused
+type AdmissionError =
+  | SessionClosure.AdmissionRefused
+  | SessionMutation.MutationRefused
+  | SessionPrompt.ScopeOwnRefused
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -72,9 +75,24 @@ export interface TaskPromptOps {
 
 const id = "task"
 const ASYNC_STARTED = "The task is running asynchronously. Follow the Async Task Protocol."
-const ASYNC_UPDATED = "Additional context queued for the running async task. Follow the Async Task Protocol."
+const ASYNC_UPDATED =
+  "Supplemental prompt registered for the running async task and queued for admission. Follow the Async Task Protocol."
 const TASK_UPDATED =
-  "Additional context queued for the running task. You will be notified automatically when it finishes."
+  "Supplemental prompt registered for the running task and queued for admission. The task session remains addressable by task_id."
+// Outstanding-work notices. The observer string rides a published answer, so it is only ever used
+// on the asynchronous route; the inline string rides the terminal notes when a success disposition
+// retains a second answer, so it is only ever used on the synchronous one. Each states what is true
+// of its own path: the observer will deliver a further answer if one is produced, whereas the
+// synchronous path pushes nothing and names the route back to it instead.
+const OUTSTANDING_ASYNC_NOTE =
+  "Supplemental work was still registered when this answer completed. Any further answer it produces will be delivered separately."
+const OUTSTANDING_SYNC_NOTE =
+  "A supplemental prompt was still registered when this answer completed. Its outcome remains in this task's session and is addressable by task_id."
+// Admission-failure notice: facts only - what happened, what was not affected, and the one
+// uncertainty the caller has to reason from, since the prompt is persisted before the scope join
+// that can fail. The interpolated reason is sanitized when the notice is rendered.
+const supplementalAdmissionNote = (reason: string) =>
+  `A supplemental prompt could not be admitted: ${reason}. The task's in-flight turn was not interrupted. The prompt may already be recorded in the task transcript.`
 const ASYNC_PARAMETER_DESCRIPTION =
   "Start the subagent asynchronously; Task returns a running receipt instead of waiting for the subagent's result"
 const BACKGROUND_PARAMETER_DESCRIPTION =
@@ -86,7 +104,7 @@ const BaseParameterFields = {
   subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
   task_id: Schema.optional(Schema.String).annotate({
     description:
-      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+      "Continue a previous Task session. If task_id names a running task, a prompt sent with it joins that task's conversation as a supplemental prompt; if the task has finished, it resumes the same subagent session in a new turn. An unrecognized task_id starts a fresh Task.",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
 }
@@ -272,57 +290,84 @@ export const TaskTool = Tool.define(
       }
       const reservation = parentScope ? yield* parentScope.reserve(nextSession.id) : undefined
 
-      // A successful replacement overwrites the terminal entry during registration, before the
-      // replacement run starts. Capture the earlier successful output while it is still addressable;
-      // an empty string is meaningful prior output and must not collapse into absence.
-      const previous = yield* background.get(nextSession.id)
-      const priorOutput = previous && Object.hasOwn(previous, "output") ? (previous.output ?? "") : undefined
-
-      const runTask = Effect.fn("TaskTool.runTask")(function* () {
-        const invoke = (invocation?: AttachmentCoordinator.Scope) =>
-          Effect.gen(function* () {
-            const parts = yield* ops.resolvePromptParts(params.prompt)
-            const result = yield* ops.prompt({
-              messageID: MessageID.ascending(),
-              sessionID: nextSession.id,
-              model: {
-                modelID: model.modelID,
-                providerID: model.providerID,
-              },
-              variant: next.model ? undefined : variant,
-              agent: next.name,
-              parts,
-              ...(invocation ? { attachmentScope: invocation } : {}),
-            })
-            if (result.info.role === "assistant" && result.info.error) {
-              const message =
-                "message" in result.info.error.data && typeof result.info.error.data.message === "string"
-                  ? result.info.error.data.message
-                  : result.info.error.name
-              return yield* Effect.fail(new Error(`Subagent failed (task_id: ${nextSession.id}): ${message}`))
-            }
-            const failed = result.parts.findLast((item) => item.type === "tool" && item.state.status === "error")
-            if (failed?.type === "tool" && failed.state.status === "error") {
-              return yield* Effect.fail(new Error(`Subagent failed (task_id: ${nextSession.id}): ${failed.state.error}`))
-            }
-            // The return gate. `result()` releases only once the async children this call started
-            // have settled, so a subagent cannot answer its caller before their results arrive.
-            const selected = invocation
-              ? yield* invocation.result(result)
-              : ({ type: "evidence", fallback: result, degraded: false } as const)
-            // Classified here, once, so the synchronous return and the async callback carry the
-            // same structured result rather than each deriving their own.
-            return renderSelectedTask({ sessionID: nextSession.id, selected, priorOutput })
-          })
-
-        if (!flags.experimentalBackgroundSubagents) return yield* invoke()
-        const invocation = yield* attachments.open(nextSession.id)
-        return yield* Effect.acquireUseRelease(
-          Effect.succeed(invocation),
-          (current) => invoke(current),
-          (current, exit) => AttachmentCoordinator.finalizeScope(current, exit),
-        )
+      // One prompt-input constructor shared by the owner's run and every supplemental one: a fresh
+      // messageID per call, the same child session, agent, model, variant and parts.
+      const constructPromptInput = (input: {
+        parts: SessionPrompt.PromptInput["parts"]
+        attachmentScope?: AttachmentCoordinator.Scope
+        onAdmitted?: Effect.Effect<void>
+      }): SessionPrompt.TaskPromptInput => ({
+        messageID: MessageID.ascending(),
+        sessionID: nextSession.id,
+        model: {
+          modelID: model.modelID,
+          providerID: model.providerID,
+        },
+        variant: next.model ? undefined : variant,
+        agent: next.name,
+        parts: input.parts,
+        ...(input.attachmentScope ? { attachmentScope: input.attachmentScope } : {}),
+        ...(input.onAdmitted ? { onAdmitted: input.onAdmitted } : {}),
       })
+
+      /**
+       * Announce the detected position the instant the prompt resolves, before any further step, so
+       * the registry withholds later positions from delivery while this filing is in flight. The
+       * span from announcement to return is uninterruptible and contains no other work, so nothing
+       * can separate the announcement from the filing that follows it.
+       *
+       * The detected value is the message itself, because that is what each delivery surface needs
+       * in order to classify and render at the moment it delivers.
+       */
+      const announceDetection = (result: SessionV1.WithParts) =>
+        Effect.gen(function* () {
+          const announce = yield* BackgroundJob.Announce
+          const detected = {
+            position: result.info.id,
+            at: result.info.time.created,
+            detected: result,
+          } satisfies BackgroundJob.Detected
+          yield* Effect.uninterruptible(announce({ position: detected.position, at: detected.at }))
+          return detected
+        })
+
+      // A run detects its answer and hands it back. No selection, no rendering and no comparison
+      // happen here: a parked attachment scope affects the owner's render moment at the delivery
+      // surface, never the filing.
+      const detect = (input: { invocation?: AttachmentCoordinator.Scope; onAdmitted?: Effect.Effect<void> }) =>
+        Effect.gen(function* () {
+          const parts = yield* ops.resolvePromptParts(params.prompt)
+          const result = yield* ops.prompt(
+            constructPromptInput({ parts, attachmentScope: input.invocation, onAdmitted: input.onAdmitted }),
+          )
+          // A child that stopped on its own error, or on a failed tool call, fails this call rather
+          // than being filed as an answer: the task session stays addressable by `task_id`, so the
+          // caller can still inspect or resume it.
+          if (result.info.role === "assistant" && result.info.error) {
+            const message =
+              "message" in result.info.error.data && typeof result.info.error.data.message === "string"
+                ? result.info.error.data.message
+                : result.info.error.name
+            return yield* Effect.fail(new Error(`Subagent failed (task_id: ${nextSession.id}): ${message}`))
+          }
+          const failed = result.parts.findLast((item) => item.type === "tool" && item.state.status === "error")
+          if (failed?.type === "tool" && failed.state.status === "error") {
+            return yield* Effect.fail(new Error(`Subagent failed (task_id: ${nextSession.id}): ${failed.state.error}`))
+          }
+          return yield* announceDetection(result)
+        })
+
+      const causeReason = (cause: Cause.Cause<unknown>) => {
+        const squashed = Cause.squash(cause)
+        // A typed refusal carries its meaning in a structured `reason` while its message is empty,
+        // so read that field first and let the notice name what actually happened.
+        if (squashed !== null && typeof squashed === "object" && "reason" in squashed) {
+          const reason = (squashed as { reason?: unknown }).reason
+          if (typeof reason === "string" && reason.length > 0) return reason
+        }
+        if (squashed instanceof Error) return squashed.message.length > 0 ? squashed.message : "unspecified"
+        return String(squashed)
+      }
 
       // This finalizer runs inside the delegated execution being torn down, and it targets the very
       // session whose runner that execution is using. A full `cancel` here would close a loop:
@@ -333,8 +378,92 @@ export const TaskTool = Tool.define(
       // interrupt for this identity is already in flight, awaiting it would block on a signal that
       // cannot complete until this finalizer returns. Reporting returns immediately and lets the
       // in-flight interrupt finish.
-      const executeTask = () =>
-        runTask().pipe(Effect.onInterrupt(() => ops.physical.reportExact({ type: "session", session: nextSession.id })))
+      const interruptReported = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+        effect.pipe(Effect.onInterrupt(() => ops.physical.reportExact({ type: "session", session: nextSession.id })))
+
+      /**
+       * A supplemental prompt: a second call naming a running task's `task_id` joins that task's
+       * conversation rather than starting another one.
+       *
+       * With the feature on it resolves the child scope once - borrowing the live scope so claiming
+       * the message invalidates the turn's evidence, or opening and finalizing its own when none is
+       * live. With it off no scope exists and it prompts without one.
+       *
+       * Classification consults an `admitted` flag set by its own hook, which fires after the prompt
+       * is durably persisted and the conditional claim succeeds. An interrupt rethrows; a failure
+       * after admission follows ordinary failure accounting rather than being laundered into an
+       * admission notice; and a failure before admission becomes a notice carried back on this run's
+       * own return - no filing, no terminalization, and no interruption of the in-flight run.
+       */
+      const executeSupplement = () =>
+        Effect.gen(function* () {
+          const admitted = { value: false }
+          const onAdmitted = Effect.sync(() => {
+            admitted.value = true
+          })
+          // Only these three typed refusals become notices. Everything else rethrows: interrupts are
+          // owned by cancellation, anything after admission is ordinary failure, and every defect -
+          // inside the prompt or outside it - stays a defect.
+          const ADMISSION_REFUSAL_TAGS = [
+            "SessionClosureAdmissionRefused",
+            "SessionClosureMutationRefused",
+            "SessionScopeOwnRefused",
+          ] as const
+          const attempt = (invocation?: AttachmentCoordinator.Scope) =>
+            Effect.gen(function* () {
+              const parts = yield* ops.resolvePromptParts(params.prompt)
+              const outcome = yield* ops
+                .prompt(constructPromptInput({ parts, attachmentScope: invocation, onAdmitted }))
+                .pipe(
+                  Effect.map((result) => ({ _tag: "detected" as const, result })),
+                  Effect.catchCause(
+                    (
+                      cause: Cause.Cause<unknown>,
+                    ): Effect.Effect<
+                      | { readonly _tag: "detected"; readonly result: SessionV1.WithParts }
+                      | { readonly _tag: "note"; readonly note: string },
+                      unknown
+                    > => {
+                      if (Cause.hasInterrupts(cause)) return Effect.failCause(cause)
+                      if (admitted.value) return Effect.failCause(cause)
+                      if (Cause.hasDies(cause)) return Effect.failCause(cause)
+                      const squashed = Cause.squash(cause)
+                      const tag =
+                        squashed !== null && typeof squashed === "object" && "_tag" in squashed
+                          ? (squashed as { readonly _tag?: string })._tag
+                          : undefined
+                      if (!tag || !ADMISSION_REFUSAL_TAGS.includes(tag as (typeof ADMISSION_REFUSAL_TAGS)[number])) {
+                        return Effect.failCause(cause)
+                      }
+                      return Effect.succeed({
+                        _tag: "note" as const,
+                        note: supplementalAdmissionNote(causeReason(cause)),
+                      })
+                    },
+                  ),
+                )
+              if (outcome._tag === "note") return { note: outcome.note } satisfies BackgroundJob.SequenceOutcome
+              return yield* announceDetection(outcome.result)
+            })
+          if (!flags.experimentalBackgroundSubagents) return yield* attempt()
+          const located = yield* attachments.locate(nextSession.id)
+          if (located) return yield* attempt(located)
+          const opened = yield* attachments.open(nextSession.id).pipe(Effect.exit)
+          if (Exit.isFailure(opened)) {
+            // Only the exclusive open losing is an admission failure. An interrupted or defective
+            // open rethrows - `Effect.exit` captures every cause, so the guards that live inside the
+            // prompt's catch have to be restated here.
+            if (Cause.hasInterrupts(opened.cause) || Cause.hasDies(opened.cause)) {
+              return yield* Effect.failCause(opened.cause)
+            }
+            return { note: supplementalAdmissionNote(causeReason(opened.cause)) }
+          }
+          return yield* Effect.acquireUseRelease(
+            Effect.succeed(opened.value),
+            (scope) => attempt(scope),
+            (scope, exit) => AttachmentCoordinator.finalizeScope(scope, exit),
+          )
+        }).pipe(interruptReported)
 
       // Public job ids are reusable, so this call keeps the physical lifetime for its own exact
       // wait and cancellation, and the opaque invocation handle for the one async observer. The
@@ -346,15 +475,29 @@ export const TaskTool = Tool.define(
 
       // The observer waits on the exact accepted invocation. A wait by public id could attach to a
       // replacement lifetime and report another invocation's outcome as this one's result.
-      const exactObservation = Deferred.await(armed).pipe(
-        Effect.flatMap((current) =>
-          current
-            ? background.waitHandle({ handle: current.handle })
-            : // Nothing was armed for this attempt, so there is no invocation of ours to observe.
-              // Never fall back to the reusable public id.
-              Effect.succeed<BackgroundJob.WaitResult>({ timedOut: false }),
-        ),
-      )
+      const armedHandle = Deferred.await(armed).pipe(Effect.map((current) => current?.handle))
+
+      /**
+       * The owner's child attachment scope now outlives its run, because the run only detects and
+       * returns while the owner's render moment happens later at the delivery surface. Finalizing it
+       * therefore belongs to whichever consumer takes the terminal: the synchronous inline path, the
+       * observer's completion, or the caller's teardown.
+       *
+       * The holder makes that exactly-once across those consumers. `observerOwned` records that
+       * delivery ownership moved to the observer - a task started asynchronously, or one that was
+       * promoted - so a blocked caller's teardown leaves the scope to it.
+       */
+      const ownerScopeHolder: { scope: AttachmentCoordinator.Scope | undefined; finalized: boolean } = {
+        scope: undefined,
+        finalized: false,
+      }
+      const observerOwned = { value: false }
+      const finalizeOwnerScope = (exit: Exit.Exit<unknown, unknown>) =>
+        Effect.gen(function* () {
+          if (!ownerScopeHolder.scope || ownerScopeHolder.finalized) return
+          ownerScopeHolder.finalized = true
+          yield* AttachmentCoordinator.finalizeScope(ownerScopeHolder.scope, exit)
+        })
 
       // Takes already-rendered text: a completed run carries the structured result the classifier
       // produced inside `runTask`, and re-wrapping it here would give the async path a different
@@ -379,51 +522,72 @@ export const TaskTool = Tool.define(
         readonly owner: boolean
       }
 
-      /**
-       * Output retained from a terminal run that a later invocation replaced. A completed run has
-       * no prior output to report — its own output is the result — and an empty string is real
-       * output, so absence and emptiness stay distinct.
-       */
-      const prior = (info: BackgroundJob.Info): string | undefined => {
-        if (info.status === "completed") return undefined
-        if (!Object.hasOwn(info, "output")) return undefined
-        return info.output ?? ""
-      }
+      // Each delivery is rendered from the retained answer at the moment it is delivered: the filed
+      // position carries the message, never a rendered form.
+      const renderAnswer = (answer: BackgroundJob.Answer) =>
+        renderSelectedTask({
+          sessionID: nextSession.id,
+          selected: {
+            type: "evidence",
+            fallback: answer.detected as SessionV1.WithParts,
+            degraded: false,
+          },
+          notes: answer.notes,
+        })
 
-      const injectResult = Effect.fn("TaskTool.injectObservedResult")(function* (
-        info: BackgroundJob.Info,
-        attachment: AttachmentCoordinator.Scope | undefined,
-        allowCancelled: boolean,
-      ) {
-        if (info.status === "completed") {
-          yield* inject(info.output ?? "", attachment)
-          return true
-        }
+      // What the terminal itself adds, per status: the error envelope, the cancelled envelope when
+      // this observer may report cancellation, or a notice-only delivery when a completed terminal
+      // still carries undelivered notices. Undefined when the terminal adds nothing.
+      const renderTerminal = (info: BackgroundJob.Info, allowCancelled: boolean): string | undefined => {
         if (info.status === "error") {
-          yield* inject(
-            renderOutput({
-              sessionID: nextSession.id,
-              state: "error",
-              priorOutput: prior(info),
-              text: info.error ?? "Task failed",
-            }),
-            attachment,
-          )
-          return true
+          return renderOutput({
+            sessionID: nextSession.id,
+            state: "error",
+            text: info.error ?? "Task failed",
+            notes: info.notes,
+          })
         }
         if (info.status === "cancelled" && allowCancelled) {
-          yield* inject(
-            renderCancelledTask({ sessionID: nextSession.id, status: "cancelled", priorOutput: prior(info) }),
-            attachment,
-          )
-          return true
+          return renderCancelledTask({ sessionID: nextSession.id, status: "cancelled", notes: info.notes })
         }
-        return false
+        if (info.status === "completed" && info.notes?.length) {
+          return renderNotices({ sessionID: nextSession.id, notes: info.notes })
+        }
+        return undefined
+      }
+
+      // Drains this lifetime's retained answers in conversation order through the given ingress,
+      // then the terminal content, and reports whether anything was delivered. This serves the
+      // attached-owner path, whose delivery stays terminal-scoped even though the answers within it
+      // are still delivered in order.
+      const deliverRetained = Effect.fn("TaskTool.deliverRetained")(function* (
+        handle: BackgroundJob.InvocationHandle,
+        via: AttachmentCoordinator.Scope | undefined,
+      ) {
+        const cursor = { value: 0 }
+        const state = { injected: false }
+        while (true) {
+          const step = yield* background.waitAnswer({ handle, after: cursor.value })
+          if (step.answer) {
+            yield* inject(renderAnswer(step.answer), via)
+            state.injected = true
+            cursor.value = step.answer.index + 1
+            continue
+          }
+          const info = step.info
+          if (!info) return state.injected
+          const text = renderTerminal(info, true)
+          if (text !== undefined) {
+            yield* inject(text, via)
+            state.injected = true
+          }
+          return state.injected
+        }
       })
 
       /** One continuation lease, one wait, and at most one parent prompt. */
       const notify = Effect.fn("TaskTool.notifyBackgroundResult")(function* (
-        observation: Effect.Effect<BackgroundJob.WaitResult>,
+        handleSource: Effect.Effect<BackgroundJob.InvocationHandle | undefined>,
         target?: AttachedObserver,
       ) {
         // Acquired before the waiter is scheduled, so the lease exists for the whole time the
@@ -453,31 +617,63 @@ export const TaskTool = Tool.define(
               "task.id": nextSession.id,
               cause: Cause.pretty(acquired.cause),
             })
-          }).pipe(Effect.ensuring(target?.owner ? target.attachment.finishContinuation() : Effect.void))
+          }).pipe(
+            // No observer will ever consume this lifetime's terminal from this invocation, so the
+            // owner scope's finalization cannot ride the observation. Without this the child scope
+            // stays registered and a later terminal resume fails its exclusive open, leaving a task
+            // that cannot be resumed at all.
+            Effect.ensuring(finalizeOwnerScope(Exit.void)),
+            Effect.ensuring(target?.owner ? target.attachment.finishContinuation() : Effect.void),
+          )
         }
         const held = acquired.value
 
         const observe = Effect.gen(function* () {
-          const result = yield* observation
-          const info = result.info
-          if (!info) {
+          const handle = yield* handleSource
+          if (!handle) {
+            // Nothing was armed for this attempt, so there is no invocation of ours to observe.
+            // Never fall back to the reusable public id.
             if (target?.owner) yield* target.attachment.absent(target.reservation)
             return
           }
-          if (target?.attachment.current().cancelled) return
 
-          // No attachment, or a scope that has already degraded: use the ordinary parent ingress
-          // exactly once, without claiming the stronger delivery guarantee an owned scope carries.
-          // A cancelled child still keeps its envelope when this invocation was attached; ordinary
-          // root notification continues to suppress cancellation.
+          // No attachment, or a scope that has already degraded: deliver each answer through the
+          // ordinary parent ingress as it publishes, in conversation order, then the terminal -
+          // without claiming the stronger delivery guarantee an owned scope carries. A cancelled
+          // child still keeps its envelope when this invocation was attached; ordinary root
+          // notification continues to suppress cancellation.
           if (!target || !target.owner) {
-            yield* injectResult(info, undefined, target !== undefined)
-            return
+            const cursor = { value: 0 }
+            while (true) {
+              const step = yield* background.waitAnswer({ handle, after: cursor.value })
+              if (step.answer) {
+                if (target?.attachment.current().cancelled) return
+                yield* inject(renderAnswer(step.answer))
+                cursor.value = step.answer.index + 1
+                continue
+              }
+              const info = step.info
+              if (!info) return
+              if (target?.attachment.current().cancelled) return
+              const text = renderTerminal(info, target !== undefined)
+              if (text !== undefined) yield* inject(text)
+              return
+            }
           }
 
+          // Attached owner. Its delivery contract stays terminal-scoped, so wait for the terminal
+          // and then deliver the retained answers in order, and the terminal content, inside the
+          // window the attachment dance holds open.
           const attachment = target.attachment
+          const waited = yield* background.waitHandle({ handle })
+          const info = waited.info
+          if (!info) {
+            yield* attachment.absent(target.reservation)
+            return
+          }
+          if (attachment.current().cancelled) return
           if (attachment.current().failed) {
-            yield* injectResult(info, undefined, true)
+            yield* deliverRetained(handle, undefined)
             return
           }
           if (info.status === "running") {
@@ -491,7 +687,7 @@ export const TaskTool = Tool.define(
           if (!terminal) return
           const current = attachment.current()
           if (current.cancelled) return
-          const delivered = yield* injectResult(info, current.failed ? undefined : attachment, true)
+          const delivered = yield* deliverRetained(handle, current.failed ? undefined : attachment)
           if (!delivered) {
             yield* attachment.degrade()
             return
@@ -513,6 +709,10 @@ export const TaskTool = Tool.define(
             if (Cause.hasInterruptsOnly(cause)) return target.attachment.claimCancellation("cancelled")
             return target.attachment.degrade()
           }),
+          // Observation being over means this lifetime's delivery is settled, so the owner scope's
+          // finalization rides here when the observer owns it. A no-op for extension observers,
+          // which never hold one.
+          Effect.ensuring(finalizeOwnerScope(Exit.void)),
           Effect.ensuring(target?.owner ? target.attachment.finishContinuation() : Effect.void),
         )
         yield* handled.pipe(Effect.forkIn(scope, { startImmediately: true }))
@@ -520,15 +720,15 @@ export const TaskTool = Tool.define(
 
       /** Elects at most one observer per reservation, and never silently shares delivery ownership. */
       const attachObservation = Effect.fn("TaskTool.attachObservation")(function* (
-        observation: Effect.Effect<BackgroundJob.WaitResult>,
+        handleSource: Effect.Effect<BackgroundJob.InvocationHandle | undefined>,
       ) {
         if (!parentScope || !reservation) {
-          yield* notify(observation)
+          yield* notify(handleSource)
           return
         }
         const claim = yield* parentScope.claimObserver(reservation)
         if (claim.type === "owner") {
-          yield* notify(observation, { attachment: parentScope, reservation, owner: true })
+          yield* notify(handleSource, { attachment: parentScope, reservation, owner: true })
           return
         }
         if (claim.type === "fallback") {
@@ -536,23 +736,34 @@ export const TaskTool = Tool.define(
             "session.id": ctx.sessionID,
             "task.id": nextSession.id,
           })
-          yield* notify(observation, { attachment: parentScope, reservation, owner: false })
+          yield* notify(handleSource, { attachment: parentScope, reservation, owner: false })
           return
         }
-        if (claim.type !== "unavailable") return
-        if (claim.reason !== "invalid") return
+        // Every exit below installs no observer, so the owner scope has to be finalized here or it
+        // would leak past a no-observer outcome. Exactly-once; extensions never hold one.
+        if (claim.type !== "unavailable") {
+          yield* finalizeOwnerScope(Exit.void)
+          return
+        }
+        if (claim.reason !== "invalid") {
+          yield* finalizeOwnerScope(Exit.void)
+          return
+        }
         const current = parentScope.current()
-        if (!current.failed || current.cancelled) return
+        if (!current.failed || current.cancelled) {
+          yield* finalizeOwnerScope(Exit.void)
+          return
+        }
         yield* Effect.logWarning("attached task unavailable before observer ownership; routing ordinarily", {
           "session.id": ctx.sessionID,
           "task.id": nextSession.id,
           reason: claim.reason,
         })
-        yield* notify(observation, { attachment: parentScope, reservation, owner: false })
+        yield* notify(handleSource, { attachment: parentScope, reservation, owner: false })
       })
 
       const attach = Effect.fn("TaskTool.attach")(function* () {
-        yield* attachObservation(exactObservation)
+        yield* attachObservation(armedHandle)
       })
 
       const attachExtension = Effect.fn("TaskTool.attachExtension")(function* (
@@ -563,7 +774,7 @@ export const TaskTool = Tool.define(
         // duplicate the result and every later extension. Only a distinct parent reservation can own
         // a new observer cohort.
         if (!parentScope || !reservation) return
-        yield* attachObservation(background.waitHandle({ handle }))
+        yield* attachObservation(Effect.succeed(handle))
       })
 
       const runningResult = (summary: "Async task started" | "Async task updated", text: string) => ({
@@ -591,10 +802,45 @@ export const TaskTool = Tool.define(
         )
       })
 
-      // One call owns the initial start. A second call aimed at the same task_id either becomes an
-      // ordered extension of the run that start produced, or is told it collided — it never creates
-      // a second lifetime, and it never shares delivery ownership ambiguously.
-      const claim = flags.experimentalBackgroundSubagents ? yield* attachments.claim(nextSession.id) : undefined
+      // One call owns the initial start. A second call aimed at the same task_id either becomes a
+      // supplemental prompt joining the run that start produced, or is told it collided — it never
+      // creates a second lifetime, and it never shares delivery ownership ambiguously.
+      //
+      // The claim is taken in both feature modes, because a supplemental prompt is possible in both:
+      // an extension carries different content joining the same conversation, so which prompt is
+      // admitted first is a question that exists whether or not attachment machinery does.
+      const claim = yield* attachments.claim(nextSession.id)
+
+      // Owner-first ordering: the owner's claim settles true at its own admission - after its prompt
+      // is durably persisted and the conditional claim succeeds - so a racing same-id call cannot
+      // register ahead of the owner's first message. The run's `ensuring` settles false as the net
+      // for every exit that never admits; settling dedupes, so a late false after a true admission
+      // does nothing.
+      const executeOwner = (invocation?: AttachmentCoordinator.Scope) =>
+        detect({
+          invocation,
+          onAdmitted: attachments.settleClaim(claim, true),
+        }).pipe(interruptReported, Effect.ensuring(attachments.settleClaim(claim, false)))
+
+      /**
+       * The receipt for a supplemental prompt is keyed on the accepted lifetime's actual delivery
+       * mode, never on the feature flag and never on a re-read by public id.
+       *
+       * Public ids are reusable: between acceptance and this read the accepted lifetime can
+       * terminalize and a same-id replacement can install, so reading by id could describe the wrong
+       * lifetime. The exact invocation handle reads the accepted lifetime's own record, which
+       * survives replacement. Directing the caller to the async protocol is only true of a lifetime
+       * that has an observer; a foreground one has none, and neither does an unreadable record.
+       */
+      const supplementReceipt = (handle: BackgroundJob.InvocationHandle) =>
+        Effect.gen(function* () {
+          const current = yield* background.waitHandle({ handle, timeout: 0 })
+          return runningResult(
+            "Async task updated",
+            current.info?.metadata?.background === true ? ASYNC_UPDATED : TASK_UPDATED,
+          )
+        })
+
       if (claim && !claim.owner) {
         if (!(yield* attachments.awaitClaim(claim))) {
           if (parentScope && reservation) yield* parentScope.reject(reservation)
@@ -603,7 +849,7 @@ export const TaskTool = Tool.define(
         if (parentScope) yield* background.promote(nextSession.id)
         const handle = yield* background.extendWithHandle({
           id: nextSession.id,
-          run: executeTask(),
+          run: executeSupplement(),
           admission: jobAdmission,
         })
         if (!handle) {
@@ -611,13 +857,13 @@ export const TaskTool = Tool.define(
           return yield* collision()
         }
         yield* attachExtension(handle)
-        return runningResult("Async task updated", flags.experimentalBackgroundSubagents ? ASYNC_UPDATED : TASK_UPDATED)
+        return yield* supplementReceipt(handle)
       }
 
       const admission = yield* Effect.gen(function* () {
         if (parentScope) yield* background.promote(nextSession.id)
         const extended = yield* background
-          .extendWithHandle({ id: nextSession.id, run: executeTask(), admission: jobAdmission })
+          .extendWithHandle({ id: nextSession.id, run: executeSupplement(), admission: jobAdmission })
           .pipe(Effect.exit)
         if (Exit.isFailure(extended)) {
           if (parentScope && reservation) yield* parentScope.reject(reservation)
@@ -626,7 +872,7 @@ export const TaskTool = Tool.define(
         if (extended.value) {
           yield* attachExtension(extended.value)
           if (claim) yield* attachments.settleClaim(claim, true)
-          return { type: "extended" as const }
+          return { type: "extended" as const, handle: extended.value }
         }
 
         // The previous lifetime may have terminalized while its sole observer still owns this
@@ -635,6 +881,24 @@ export const TaskTool = Tool.define(
         if (parentScope && reservation && !reservation.fresh) {
           yield* parentScope.reject(reservation)
           return yield* collision()
+        }
+
+        // The owner's child attachment scope is opened before registration and outlives its run: the
+        // run detects and returns, while the owner's render moment - the selection that may park for
+        // attached children - happens later at the synchronous delivery surface. Whichever consumer
+        // takes the terminal finalizes it.
+        ownerScopeHolder.scope = flags.experimentalBackgroundSubagents
+          ? yield* attachments.open(nextSession.id)
+          : undefined
+        const ownerScope = ownerScopeHolder.scope
+
+        // The observer forks above `startExact`. It awaits the armed handle, and answers stay
+        // retained until observed, so nothing can be missed by starting it early. Forked rather than
+        // awaited because acquiring the continuation lease can park, and a parked acquisition must
+        // never gate the lifetime's registration.
+        if (runAsync) {
+          observerOwned.value = true
+          yield* attach().pipe(Effect.forkIn(scope, { startImmediately: true }))
         }
 
         const started = yield* background
@@ -667,13 +931,17 @@ export const TaskTool = Tool.define(
               ...(ctx.callID ? { taskCallId: ctx.callID } : {}),
             },
             onPromote: Effect.all([
+              Effect.sync(() => {
+                observerOwned.value = true
+              }),
               ctx.metadata({
                 title: params.description,
                 metadata: { ...metadata, background: true, jobId: nextSession.id },
               }),
               attach(),
             ]),
-            run: executeTask(),
+            outstanding: { observer: OUTSTANDING_ASYNC_NOTE, inline: OUTSTANDING_SYNC_NOTE },
+            run: executeOwner(ownerScope),
             admission: jobAdmission,
           })
           .pipe(Effect.exit)
@@ -682,25 +950,34 @@ export const TaskTool = Tool.define(
           // onward, which is inside `startExact`. Publishing the absence releases it, and `undefined`
           // is the honest value — a start that failed armed no lifetime for anyone to observe.
           yield* Deferred.succeed(armed, undefined)
+          yield* finalizeOwnerScope(started)
           if (parentScope && reservation) yield* parentScope.reject(reservation)
           return yield* Effect.failCause(started.cause)
         }
-        // Published before `attach()`, so the common async path never parks. The lifetime is absent
-        // only when this attempt joined an arm already in progress that then terminalized; passing
-        // that absence through unchanged is deliberate, because it is the one fact observers need.
+        // Published before any observer can need it. The lifetime is absent only when this attempt
+        // joined an arm already in progress that then terminalized; passing that absence through
+        // unchanged is deliberate, because it is the one fact observers need.
         yield* Deferred.succeed(
           armed,
           started.value.lifetime && started.value.handle
             ? { lifetime: started.value.lifetime, handle: started.value.handle }
             : undefined,
         )
-        if (runAsync) yield* attach()
-        if (claim) yield* attachments.settleClaim(claim, true)
         return { type: "started" as const, result: started.value }
-      }).pipe(Effect.ensuring(claim ? attachments.settleClaim(claim, false) : Effect.void))
+      }).pipe(
+        // Settle false only when this block armed no run at all. An armed run settles its own claim,
+        // true at its admission or false in its `ensuring`, so settling here as well would race it.
+        Effect.onExit((exit) => {
+          const armedRun =
+            Exit.isSuccess(exit) &&
+            (exit.value.type === "extended" ||
+              (exit.value.result.lifetime !== undefined && exit.value.result.handle !== undefined))
+          return armedRun ? Effect.void : attachments.settleClaim(claim, false)
+        }),
+      )
 
       if (admission.type === "extended") {
-        return runningResult("Async task updated", flags.experimentalBackgroundSubagents ? ASYNC_UPDATED : TASK_UPDATED)
+        return yield* supplementReceipt(admission.handle)
       }
       const info = admission.result.info
       // The exact lifetime the synchronous consumers below are entitled to act on.
@@ -765,17 +1042,18 @@ export const TaskTool = Tool.define(
                     .pipe(Effect.flatMap((promoted) => (promoted ? Effect.succeed(promoted) : Effect.never)))
                 : Effect.never,
             )
-            if (result?.metadata?.background === true) return backgroundResult()
+            if (result?.metadata?.background === true) {
+              // Delivery ownership moved to the observer, so the owner scope is now its to finalize.
+              observerOwned.value = true
+              return backgroundResult()
+            }
             // Settled synchronously, so no async observer will ever consume this reservation.
             if (parentScope && reservation) yield* parentScope.reject(reservation)
             if (result?.status === "error") {
-              const reason = result.error ?? "Task failed"
-              const output = prior(result)
-              const body =
-                output === undefined
-                  ? reason
-                  : ["<task_prior_output>", output, "</task_prior_output>", reason].join("\n")
-              return yield* Effect.fail(new Error(body))
+              // A failure carries the terminal's own reason. Any answer this lifetime filed stays
+              // retained rather than being joined into the error text, and the caller necessarily
+              // holds the task_id that reaches it.
+              return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             }
             // A cancelled child is reported as a result rather than a tool failure: the task session
             // is still addressable, and the caller needs to be able to tell "the child was stopped"
@@ -787,16 +1065,29 @@ export const TaskTool = Tool.define(
                 output: renderCancelledTask({
                   sessionID: nextSession.id,
                   status: "cancelled",
-                  priorOutput: prior(result),
+                  notes: result.notes,
                 }),
               }
             }
-            // Already the structured result the classifier produced inside `runTask`; re-wrapping it
-            // here is what made a failed child look like an empty successful task.
+            // The success slot carries the first answer in conversation order - the one this blocked
+            // call's own prompt produced - and it is rendered here, at the moment of delivery, in
+            // owner context: the selection that may park for attached children, then classification.
+            // Presence is the check rather than truthiness, because an empty answer is a real one.
+            const detected =
+              result && Object.hasOwn(result, "output") ? (result.output as SessionV1.WithParts) : undefined
+            const selected = detected
+              ? ownerScopeHolder.scope && !ownerScopeHolder.finalized
+                ? yield* ownerScopeHolder.scope.result(detected)
+                : ({ type: "evidence", fallback: detected, degraded: false } as const)
+              : undefined
+            const rendered = selected
+              ? renderSelectedTask({ sessionID: nextSession.id, selected, notes: result?.notes })
+              : ""
+            yield* finalizeOwnerScope(Exit.void)
             return {
               title: params.description,
               metadata,
-              output: result?.output ?? "",
+              output: rendered,
             }
           }),
         (_, exit) =>
@@ -825,6 +1116,10 @@ export const TaskTool = Tool.define(
                 { discard: true },
               )
             }
+            // Teardown is the owner scope's last consumer unless delivery ownership moved to the
+            // observer. On interrupt the exit is carried through so the scope claims cancellation;
+            // after an inline return this is a no-op backstop.
+            if (!observerOwned.value) yield* finalizeOwnerScope(exit)
           }).pipe(
             Effect.ensuring(
               Effect.sync(() => {
