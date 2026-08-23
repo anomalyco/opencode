@@ -29,9 +29,9 @@ const seedOrphan = Effect.fn("RecoveryTest.seedOrphan")(function* (input: {
   updated: number
 }) {
   const { db } = yield* Database.Service
+  // Mirrors the real V1MessageData shape: id and sessionID live in their own
+  // SQL columns and are NOT part of the stored JSON blob.
   const data = {
-    id: input.id,
-    sessionID: input.sessionID,
     parentID: "msg_" + input.id.slice(4) + "_parent",
     role: "assistant",
     mode: "build",

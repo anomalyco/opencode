@@ -38,6 +38,8 @@ export const recover = Effect.fn("SessionRecovery.recover")(function* (input: {
     const completed = Date.now()
     const info = {
       ...data,
+      id: row.id,
+      sessionID: row.session_id,
       error:
         data.error ??
         MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
