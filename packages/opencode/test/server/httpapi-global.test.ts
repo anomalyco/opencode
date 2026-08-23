@@ -43,9 +43,12 @@ const apiLayer = HttpRouter.serve(
 const it = testEffect(apiLayer)
 
 describe("global HttpApi", () => {
-  it.live("upgrades to latest when the request body is omitted", () =>
+  it.live("upgrades to latest with an empty JSON payload", () =>
     Effect.gen(function* () {
-      const response = yield* HttpClient.post(GlobalPaths.upgrade)
+      const response = yield* HttpClientRequest.post(GlobalPaths.upgrade).pipe(
+        HttpClientRequest.bodyJson({}),
+        Effect.flatMap(HttpClient.execute),
+      )
 
       expect(response.status).toBe(200)
       expect(yield* response.json).toEqual({ success: true, version: "9.9.9" })
@@ -61,6 +64,42 @@ describe("global HttpApi", () => {
 
       expect(response.status).toBe(400)
       expect(yield* response.json).toEqual({ success: false, error: "Invalid request body" })
+    }),
+  )
+
+  it.live("rejects non-JSON upgrade payloads", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.post(GlobalPaths.upgrade).pipe(
+        HttpClientRequest.setBody(HttpBody.text('{"target":"1.2.3"}', "text/plain")),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(415)
+      expect(yield* response.json).toEqual({ success: false, error: "Expected application/json" })
+    }),
+  )
+
+  it.live("rejects non-semver upgrade targets", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.post(GlobalPaths.upgrade).pipe(
+        HttpClientRequest.bodyJson({ target: "latest" }),
+        Effect.flatMap(HttpClient.execute),
+      )
+
+      expect(response.status).toBe(400)
+      expect(yield* response.json).toEqual({ success: false, error: "Invalid request body" })
+    }),
+  )
+
+  it.live("accepts semantic version upgrade targets", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.post(GlobalPaths.upgrade).pipe(
+        HttpClientRequest.bodyJson({ target: "1.2.3-beta.1" }),
+        Effect.flatMap(HttpClient.execute),
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toEqual({ success: true, version: "1.2.3-beta.1" })
     }),
   )
 })
