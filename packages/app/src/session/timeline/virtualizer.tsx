@@ -149,9 +149,13 @@ export function createTimelineVirtualizer(input: Input) {
     if (listRoot() && input.pinned()) anchorResizedBottom()
   }
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
-    if (!instance.itemSizeCache.has(item.key) && addedKeys.delete(String(item.key))) {
-      return item.start < (instance.scrollOffset ?? 0) + instance.scrollAdjustments
-    }
+    // Prepended rows can resize more than once as deferred content mounts. Keep
+    // compensating while they remain entirely above the visible content fold.
+    if (addedKeys.has(String(item.key)))
+      return (
+        item.end <=
+        (instance.scrollOffset ?? 0) + instance.scrollAdjustments + instance.options.scrollMargin
+      )
     const first = instance.range?.startIndex
     return first !== undefined && item.index < first
   }
