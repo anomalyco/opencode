@@ -30,7 +30,14 @@ type GlobalEventStream = {
   stream: AsyncIterable<GlobalEventEnvelope>
 }
 
-export function start(input: { sdk: OpencodeClient; connection: Connection; session: ACPSession.Interface }) {
+export function start(input: {
+  sdk: OpencodeClient
+  connection: Connection
+  session: ACPSession.Interface
+  isV2?: () => boolean
+  onBusy?: (sessionId: string) => Effect.Effect<void>
+  onIdle?: (sessionId: string) => Effect.Effect<void>
+}) {
   const subscription = new Subscription(input)
   subscription.start()
   return subscription
@@ -51,6 +58,9 @@ export class Subscription {
       sdk: OpencodeClient
       connection: Connection
       session: ACPSession.Interface
+      isV2?: () => boolean
+      onBusy?: (sessionId: string) => Effect.Effect<void>
+      onIdle?: (sessionId: string) => Effect.Effect<void>
     },
   ) {
     this.permission = new ACPPermission.Handler(input)
@@ -93,7 +103,14 @@ export class Subscription {
   async handle(event: Event) {
     switch (event.type) {
       case "session.status":
-        if (event.properties.status.type === "idle") this.idle(event.properties.sessionID)
+        if (event.properties.status.type === "idle") {
+          this.idle(event.properties.sessionID)
+          if (this.input.isV2?.())
+            await Effect.runPromise(this.input.onIdle?.(event.properties.sessionID) ?? Effect.void)
+        }
+        if (event.properties.status.type === "busy" && this.input.isV2?.()) {
+          await Effect.runPromise(this.input.onBusy?.(event.properties.sessionID) ?? Effect.void)
+        }
         return
       case "permission.asked":
         this.permission.handle(event)

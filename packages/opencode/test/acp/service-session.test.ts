@@ -195,7 +195,9 @@ describe("ACP service sessions", () => {
     options?: {
       abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
+      promptAsync?: (input: unknown) => Promise<unknown>
       sessionUpdate?: (update: SessionNotification) => Promise<void>
+      v2?: boolean
     },
   ) => {
     const updates: SessionNotification[] = []
@@ -203,6 +205,7 @@ describe("ACP service sessions", () => {
     const aborts: string[] = []
     const forks: string[] = []
     const prompts: unknown[] = []
+    const promptAsyncs: unknown[] = []
     const commands: unknown[] = []
     const summarizes: unknown[] = []
     const usageUpdates: string[] = []
@@ -265,6 +268,13 @@ describe("ACP service sessions", () => {
           events.push(idleEvent(input.sessionID))
           return response
         },
+        promptAsync: async (input: { sessionID: string }) => {
+          await (options?.promptAsync?.(input) ?? Promise.resolve())
+          promptAsyncs.push(input)
+          // The async admission returns immediately; the turn completes later when
+          // the test pushes an idle event, mirroring the real server's lifecycle.
+          return { data: undefined }
+        },
         command: (input: { sessionID: string }) => {
           commands.push(input)
           events.push(idleEvent(input.sessionID))
@@ -320,12 +330,13 @@ describe("ACP service sessions", () => {
     })
 
     return {
-      service: ACPService.make({ sdk, connection, usage }),
+      service: ACPService.make({ sdk, connection, usage, v2: options?.v2 }),
       updates,
       mcpAdds,
       aborts,
       forks,
       prompts,
+      promptAsyncs,
       commands,
       summarizes,
       usageUpdates,
@@ -1338,6 +1349,138 @@ describe("ACP service sessions", () => {
     )
 
     expect(error.code).toBe(-32000)
+  })
+
+  describe("v2 prompt lifecycle", () => {
+    function busyEvent(sessionID: string): Event {
+      return {
+        id: `evt_busy_${sessionID}`,
+        type: "session.status",
+        properties: { sessionID, status: { type: "busy" } },
+      }
+    }
+
+    function sessionUpdateName(update: SessionNotification) {
+      return (update.update as { sessionUpdate?: string }).sessionUpdate
+    }
+
+    // The event subscription emits v2 state_update notifications asynchronously off the
+    // global event stream, so poll the captured updates for the published signal rather
+    // than racing a fixed sleep.
+    async function waitForIdleState(updates: SessionNotification[], sessionId: string, timeoutMs = 1000) {
+      const start = Date.now()
+      while (Date.now() - start < timeoutMs) {
+        const found = updates.find((u) => {
+          if (u.sessionId !== sessionId) return false
+          const upd = u.update as { sessionUpdate?: string; state?: string }
+          return upd.sessionUpdate === "state_update" && upd.state === "idle"
+        })
+        if (found) return found
+        await new Promise((r) => setTimeout(r, 5))
+      }
+      throw new Error("timeout waiting for v2 state_update idle")
+    }
+
+    it("negotiates protocolVersion 2 when the flag is on and the client requests v2", async () => {
+      const { service } = makeService([], { v2: true })
+      const result = await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      expect(result.protocolVersion).toBe(2)
+      expect((result as unknown as { info: { name: string } }).info.name).toBe("OpenCode")
+      expect((result as unknown as { capabilities: { session: object } }).capabilities.session).toBeDefined()
+    })
+
+    it("falls back to protocolVersion 1 when the client requests v1 even with the flag on", async () => {
+      const { service } = makeService([], { v2: true })
+      const result = await Effect.runPromise(service.initialize({ protocolVersion: 1 }))
+      expect(result.protocolVersion).toBe(1)
+      expect((result as unknown as { agentInfo?: unknown }).agentInfo).toBeDefined()
+    })
+
+    it("admits a v2 prompt non-blocking via prompt_async and acknowledges immediately", async () => {
+      const { service, promptAsyncs, prompts, updates } = makeService([], { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      const result = await Effect.runPromise(
+        service.prompt({
+          sessionId: session.sessionId,
+          messageId: "msg_1",
+          prompt: [{ type: "text", text: "hello" }],
+        }),
+      )
+
+      // v2 acceptance is an empty result; the turn has not completed yet.
+      expect(Object.keys(result as object)).toHaveLength(0)
+      // Admitted asynchronously, not via the blocking v1 prompt path.
+      expect(promptAsyncs).toHaveLength(1)
+      expect(prompts).toHaveLength(0)
+      expect((promptAsyncs[0] as { messageID: string }).messageID).toBe("msg_1")
+      // A user_message ack and state_update running were emitted immediately.
+      expect(updates.map(sessionUpdateName)).toEqual(expect.arrayContaining(["user_message", "state_update"]))
+    })
+
+    it("emits state_update idle with a stop reason when the turn completes", async () => {
+      const messages = [
+        {
+          info: assistantInfo({ input: 100, output: 40, reasoning: 7, cache: { read: 11, write: 13 } }),
+          parts: [],
+        },
+      ]
+      const { service, events, updates, usageUpdates } = makeService(messages, { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+      await Effect.runPromise(
+        service.prompt({ sessionId: session.sessionId, messageId: "msg_1", prompt: [{ type: "text", text: "hello" }] }),
+      )
+
+      events.push(busyEvent(session.sessionId))
+      events.push(idleEvent(session.sessionId))
+
+      const idle = await waitForIdleState(updates, session.sessionId)
+      expect((idle.update as { stopReason?: string }).stopReason).toBe("end_turn")
+      expect(usageUpdates).toContain(session.sessionId)
+    })
+
+    it("steers a running turn by admitting a second prompt before idle", async () => {
+      const { service, promptAsyncs } = makeService([], { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      await Effect.runPromise(
+        service.prompt({ sessionId: session.sessionId, messageId: "msg_1", prompt: [{ type: "text", text: "first" }] }),
+      )
+      // A second prompt arriving while the first turn is still running admits another
+      // input (steer by default) instead of blocking on the running turn.
+      await Effect.runPromise(
+        service.prompt({ sessionId: session.sessionId, messageId: "msg_2", prompt: [{ type: "text", text: "steer" }] }),
+      )
+
+      expect(promptAsyncs.map((p) => (p as { messageID: string }).messageID)).toEqual(["msg_1", "msg_2"])
+    })
+
+    it("derives stopReason cancelled from an aborted turn on cancel", async () => {
+      const messages = [
+        {
+          info: assistantInfo(
+            { input: 5, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            { name: "MessageAbortedError", data: { message: "aborted" } },
+          ),
+          parts: [],
+        },
+      ]
+      const { service, events, updates, aborts } = makeService(messages, { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+      await Effect.runPromise(
+        service.prompt({ sessionId: session.sessionId, messageId: "msg_1", prompt: [{ type: "text", text: "hello" }] }),
+      )
+      await Effect.runPromise(service.cancel({ sessionId: session.sessionId }))
+
+      expect(aborts).toEqual([session.sessionId])
+      events.push(idleEvent(session.sessionId))
+      const idle = await waitForIdleState(updates, session.sessionId)
+      expect((idle.update as { stopReason?: string }).stopReason).toBe("cancelled")
+    })
   })
 })
 

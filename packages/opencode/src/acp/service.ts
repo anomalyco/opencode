@@ -22,6 +22,7 @@ import {
   type ResumeSessionRequest,
   type ResumeSessionResponse,
   type SessionInfo,
+  type SessionNotification,
   type SetSessionConfigOptionRequest,
   type SetSessionConfigOptionResponse,
   type SetSessionModelRequest,
@@ -79,13 +80,45 @@ export function make(input: {
   session?: ACPSession.Interface
   usage?: UsageService.Interface
   eventSubscription?: (subscription: ACPEvent.Subscription) => void
+  v2?: boolean
 }): Interface {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
   const sessionSnapshots = new Map<string, Directory.Snapshot>()
+  // v2 is negotiated per-connection in `initialize`: the flag enables it, the client must
+  // request protocolVersion 2. `v2Active` flips true only after a successful v2 handshake,
+  // so the event subscription can start emitting v2 state_update notifications.
+  let v2Active = false
+  const onBusy = Effect.fn("ACP.v2.onBusy")(function* (sessionId: string) {
+    yield* emitV2StateUpdate(input.connection, sessionId, "running")
+  })
+  const onIdle = Effect.fn("ACP.v2.onIdle")(function* (sessionId: string) {
+    const current = yield* session.tryGet(sessionId)
+    if (!current) return
+    yield* sendUsageUpdate(input.usage, input.sdk, input.connection, sessionId, current.cwd)
+    const messages = yield* request(
+      () => input.sdk.session.messages({ sessionID: sessionId, directory: current.cwd }, { throwOnError: true }),
+      "session",
+    ).pipe(
+      Effect.catch(() =>
+        Effect.logError("v2 idle: failed to fetch messages", { sessionId }).pipe(Effect.as(undefined)),
+      ),
+    )
+    const info = messages
+      ? UsageService.latestAssistantMessage(messages as readonly UsageService.SessionMessage[])
+      : undefined
+    yield* emitV2StateUpdate(input.connection, sessionId, "idle", stopReasonForMessage(info))
+  })
   const events = input.connection
-    ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session })
+    ? ACPEvent.start({
+        sdk: input.sdk,
+        connection: input.connection,
+        session,
+        isV2: () => v2Active,
+        onBusy,
+        onIdle,
+      })
     : undefined
   if (events) input.eventSubscription?.(events)
   const runUntilIdle = <A>(sessionId: string, fn: () => Promise<A>) =>
@@ -99,7 +132,12 @@ export function make(input: {
       id: AuthMethodID,
     }
 
-    if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
+    // v2 clients send `capabilities` (not `clientCapabilities`); the v1 SDK schema strips it,
+    // so read it back from the raw params to detect the terminal-auth capability in either form.
+    const rawCapabilities = (params as unknown as { capabilities?: { _meta?: Record<string, unknown> } }).capabilities
+    const terminalAuth =
+      params.clientCapabilities?._meta?.["terminal-auth"] === true || rawCapabilities?._meta?.["terminal-auth"] === true
+    if (terminalAuth) {
       authMethod._meta = {
         "terminal-auth": {
           command: "opencode",
@@ -107,6 +145,32 @@ export function make(input: {
           label: "OpenCode Login",
         },
       }
+    }
+
+    if (input.v2 && params.protocolVersion === 2) {
+      v2Active = true
+      const v2AuthMethod = {
+        methodId: AuthMethodID,
+        type: "agent" as const,
+        name: "Login with opencode",
+        description: "Run `opencode auth login` in the terminal",
+        ...(terminalAuth ? { _meta: authMethod._meta } : {}),
+      }
+      const v2Response = {
+        protocolVersion: 2,
+        info: { name: "OpenCode", version: InstallationVersion },
+        capabilities: {
+          session: {
+            prompt: { image: {}, embeddedContext: {} },
+            mcp: { http: {}, stdio: {} },
+            delete: {},
+            additionalDirectories: {},
+          },
+        },
+        authMethods: [v2AuthMethod],
+      }
+      ACPProfile.duration("acp.initialize", started)
+      return v2Response as unknown as InitializeResponse
     }
 
     const response = {
@@ -257,23 +321,19 @@ export function make(input: {
         ),
       "session",
     )
-    const serverEntries = sessions.map(
-      (item): SessionInfo => ({
-        sessionId: item.id,
-        cwd: item.directory,
-        title: item.title,
-        updatedAt: new Date(item.time.updated).toISOString(),
-      }),
-    )
+    const serverEntries = sessions.map((item): SessionInfo => ({
+      sessionId: item.id,
+      cwd: item.directory,
+      title: item.title,
+      updatedAt: new Date(item.time.updated).toISOString(),
+    }))
     const liveEntries = (yield* session.list(params.cwd ?? undefined))
       .filter((item) => !serverEntries.some((entry) => entry.sessionId === item.id))
-      .map(
-        (item): SessionInfo => ({
-          sessionId: item.id,
-          cwd: item.cwd,
-          updatedAt: item.createdAt.toISOString(),
-        }),
-      )
+      .map((item): SessionInfo => ({
+        sessionId: item.id,
+        cwd: item.cwd,
+        updatedAt: item.createdAt.toISOString(),
+      }))
     const sorted = [...liveEntries, ...serverEntries].toSorted(
       (a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime(),
     )
@@ -504,6 +564,34 @@ export function make(input: {
       const command = detectSlashCommand(parts)
 
       if (!command) {
+        if (v2Active) {
+          // v2 prompt lifecycle: admit non-blocking via prompt_async and acknowledge
+          // immediately with `{}`. The event subscription drives foreground state:
+          // state_update running on busy, idle + stopReason on idle. A second
+          // session/prompt arriving while a turn is still running admits another
+          // input, which opencode steers by default at the next safe boundary.
+          const messageId = params.messageId ?? crypto.randomUUID()
+          yield* request(
+            () =>
+              input.sdk.session.promptAsync(
+                {
+                  sessionID: current.id,
+                  model: { providerID: selected.providerID, modelID: selected.modelID },
+                  ...(variant ? { variant } : {}),
+                  parts,
+                  ...(modeId ? { agent: modeId } : {}),
+                  directory: current.cwd,
+                  messageID: messageId,
+                },
+                { throwOnError: true },
+              ),
+            "session",
+          ).pipe(Effect.asVoid)
+          yield* emitV2UserMessage(input.connection, current.id, messageId, params.prompt)
+          yield* emitV2StateUpdate(input.connection, current.id, "running")
+          return {} as unknown as PromptResponse
+        }
+
         const response = yield* request(
           () =>
             runUntilIdle(current.id, () =>
@@ -875,6 +963,58 @@ const promptResponse = Effect.fn("ACP.promptResponse")(function* (
 function promptErrorMessage(error: AssistantError) {
   if ("message" in error.data && typeof error.data.message === "string") return error.data.message
   return "OpenCode prompt failed"
+}
+
+// --- ACP v2 prompt-lifecycle helpers -------------------------------------------
+
+type V2StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled"
+
+// v2 cannot fail the prompt response post-acceptance, so auth/service errors that v1
+// surfaces as request errors collapse to end_turn here. The common stop reasons
+// (cancelled / max_tokens / refusal) are still derived from the assistant message error.
+function stopReasonForMessage(info: AssistantInfo): V2StopReason {
+  if (!info?.error) return "end_turn"
+  if (info.error.name === "MessageAbortedError") return "cancelled"
+  if (info.error.name === "MessageOutputLengthError") return "max_tokens"
+  if (info.error.name === "ContentFilterError") return "refusal"
+  return "end_turn"
+}
+
+// The v2 state_update / user_message variants are not in the SDK 0.21 (v1) SessionUpdate
+// union, so they are cast at the wire boundary. The constructed payloads are valid v2
+// session/update notifications; only the TypeScript type is widened through `unknown`.
+function emitV2StateUpdate(
+  connection: ServiceConnection | undefined,
+  sessionId: string,
+  state: "running" | "idle",
+  stopReason?: V2StopReason,
+) {
+  if (!connection) return Effect.void
+  return Effect.promise(() =>
+    connection
+      .sessionUpdate({
+        sessionId,
+        update: { sessionUpdate: "state_update", state, ...(stopReason ? { stopReason } : {}) },
+      } as unknown as SessionNotification)
+      .then(() => {}),
+  )
+}
+
+function emitV2UserMessage(
+  connection: ServiceConnection | undefined,
+  sessionId: string,
+  messageId: string,
+  content: readonly unknown[],
+) {
+  if (!connection) return Effect.void
+  return Effect.promise(() =>
+    connection
+      .sessionUpdate({
+        sessionId,
+        update: { sessionUpdate: "user_message", messageId, content },
+      } as unknown as SessionNotification)
+      .then(() => {}),
+  )
 }
 
 function sendUsageUpdate(
