@@ -41,10 +41,12 @@ export function upstreamURL(path: string) {
   return new URL(path, UI_UPSTREAM).toString()
 }
 
-// PERF: embedded assets are immutable for the process lifetime; cache the
-// constructed response so repeat fetches (the web UI re-requests sprites/fonts
-// per view) serve from memory instead of re-reading from disk each time.
-const embeddedUICache = new Map<string, ReturnType<typeof embeddedUIResponse>>()
+// PERF: embedded assets are immutable for the process lifetime, so cache the
+// file bytes to skip disk reads on repeat fetches (the web UI re-requests
+// sprites/fonts per view). A fresh Response is built per request: Response
+// bodies are one-shot streams per the fetch spec, so instances must not be
+// shared across requests. Map insertion order doubles as LRU eviction order.
+const embeddedUICache = new Map<string, { body: Uint8Array; contentType: string; csp: string | undefined }>()
 
 export function embeddedUI(disableEmbeddedWebUi: boolean) {
   if (disableEmbeddedWebUi) return Promise.resolve(null)
@@ -57,13 +59,10 @@ function notFound() {
   return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 }
 
-function embeddedUIResponse(file: string, body: Uint8Array) {
-  const mime = FSUtil.mimeType(file)
-  const headers = new Headers({ "content-type": mime })
-  if (mime.startsWith("text/html")) {
-    headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
-  }
-  return HttpServerResponse.raw(body, { headers })
+function embeddedUIResponse(cached: { body: Uint8Array; contentType: string; csp: string | undefined }) {
+  const headers = new Headers({ "content-type": cached.contentType })
+  if (cached.csp !== undefined) headers.set("content-security-policy", cached.csp)
+  return HttpServerResponse.raw(cached.body, { headers })
 }
 
 export function serveEmbeddedUIEffect(
@@ -71,17 +70,31 @@ export function serveEmbeddedUIEffect(
   fs: FSUtil.Interface,
   embeddedWebUI: Record<string, string>,
 ) {
-  const file = embeddedWebUI[requestPath.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
+  const path = requestPath.split("?")[0].replace(/^\//, "")
+  const file = embeddedWebUI[path] ?? embeddedWebUI["index.html"] ?? null
   if (!file) return Effect.succeed(notFound())
 
-  const cached = embeddedUICache.get(requestPath)
-  if (cached) return Effect.succeed(cached)
+  const cached = embeddedUICache.get(path)
+  if (cached) {
+    embeddedUICache.delete(path)
+    embeddedUICache.set(path, cached)
+    return Effect.succeed(embeddedUIResponse(cached))
+  }
 
   return fs.readFile(file).pipe(
     Effect.map((body) => {
-      const response = embeddedUIResponse(file, body)
-      if (embeddedUICache.size < 512) embeddedUICache.set(requestPath, response)
-      return response
+      const contentType = FSUtil.mimeType(file)
+      const entry = {
+        body,
+        contentType,
+        csp: contentType.startsWith("text/html") ? cspForHtml(new TextDecoder().decode(body)) : undefined,
+      }
+      if (embeddedUICache.size >= 512) {
+        const oldest = embeddedUICache.keys().next()
+        if (!oldest.done) embeddedUICache.delete(oldest.value)
+      }
+      embeddedUICache.set(path, entry)
+      return embeddedUIResponse(entry)
     }),
     Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(notFound())),
   )
