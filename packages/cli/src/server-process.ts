@@ -81,6 +81,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           port,
           password,
           simulation: truthy(process.env.OPENCODE_SIMULATE),
+          // Packaged servers default to in-memory event streams; this opts into
+          // durable event payload rows when a persistent database is attached.
+          events: {
+            persist: truthy(process.env.OPENCODE_EVENTS_PERSIST),
+          },
           database: {
             path:
               process.env.OPENCODE_DB ??
