@@ -41,13 +41,14 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
 
     // PERF: the provider list is expensive to build (models.dev catalog transform +
     // deep clone + per-model schema validation) and to serialize (5MB+ JSON).
-    // All four inputs are reference-stable between reloads, so we memoize the
-    // serialized payload on input identity and serve raw bytes on cache hits.
+    // Config, catalog, and connected providers are reference-stable between
+    // reloads, so they are memoized by identity; Auth.all() allocates a fresh
+    // object per call, so credentials are memoized by serialized value instead.
     let listCache: {
       config: unknown
       all: unknown
       connected: unknown
-      credentials: unknown
+      credentialsJSON: string
       json: Uint8Array
     } | undefined
 
@@ -72,7 +73,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
         connected: Object.keys(providers).filter((id) => id in connected || credentials[id]),
       }
       const json = new TextEncoder().encode(JSON.stringify(result))
-      listCache = { config, all, connected, credentials, json }
+      listCache = { config, all, connected, credentialsJSON: JSON.stringify(credentials), json }
       return json
     })
 
@@ -80,13 +81,13 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       const config = yield* cfg.get()
       const all = yield* ModelsDev.Service.use((s) => s.get())
       const connected = yield* provider.list()
-      const credentials = yield* authStore.all().pipe(Effect.orDie)
+      const credentialsJSON = JSON.stringify(yield* authStore.all().pipe(Effect.orDie))
       const hit =
         listCache !== undefined &&
         listCache.config === config &&
         listCache.all === all &&
         listCache.connected === connected &&
-        listCache.credentials === credentials
+        listCache.credentialsJSON === credentialsJSON
           ? listCache.json
           : undefined
       const json = hit ?? (yield* computeList())
