@@ -235,29 +235,32 @@ Allows the LLM to fetch and read web pages. Useful for looking up documentation 
 
 Search the web for information.
 
-:::note
-This tool is only available when using the OpenCode provider or when the `OPENCODE_ENABLE_EXA` environment variable is set to any truthy value (e.g., `true` or `1`).
+OpenCode ships with four search backends. Each reads its API key from the environment or from a stored credential:
 
-To enable when launching OpenCode:
+| Backend     | Credential                                                                    |
+| ----------- | ----------------------------------------------------------------------------- |
+| `exa`       | `EXA_API_KEY` (optional — its hosted MCP endpoint also answers without a key) |
+| `parallel`  | `PARALLEL_API_KEY`                                                            |
+| `firecrawl` | `FIRECRAWL_API_KEY`                                                           |
+| `tavily`    | `TAVILY_API_KEY`                                                              |
 
-```bash
-OPENCODE_ENABLE_EXA=1 opencode
-```
-
-:::
+Pick the backend in `opencode.json` — use `"random"` to rotate across every registered backend:
 
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "websearch": "allow"
+  },
+  "websearch": {
+    "provider": "exa"
   }
 }
 ```
 
-Performs web searches using Exa AI to find relevant information online. Useful for researching topics, finding current events, or gathering information beyond the training data cutoff.
+Without a `websearch` entry no backend is selected and the tool stays unavailable. Set `"websearch": false` to disable it explicitly.
 
-No API key is required — the tool connects directly to Exa AI's hosted MCP service without authentication.
+Performs web searches to find relevant information online. Useful for researching topics, finding current events, or gathering information beyond the training data cutoff.
 
 :::tip
 Use `websearch` when you need to find information (discovery), and `webfetch` when you need to retrieve content from a specific URL (retrieval).
