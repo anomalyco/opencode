@@ -26,6 +26,8 @@ export interface GanttDiagram {
 export interface GanttDiagramRenderOptions {
   layoutMaxWidth?: number
   style?: GanttRenderStyle
+  track?: "dots" | "line"
+  endpoints?: "caps" | "points"
 }
 
 export type GanttRenderStyle = "rail" | "block" | "capsule" | "points" | "track"

@@ -60,6 +60,8 @@ describe("GanttDiagram", () => {
     expect(renderGanttDiagram(secondsDiagram, { style: "capsule" })).toContain("╺")
     expect(renderGanttDiagram(secondsDiagram, { style: "points" })).toContain("●")
     expect(renderGanttDiagram(secondsDiagram, { style: "track" })).toContain("·")
+    expect(renderGanttDiagram(secondsDiagram, { style: "track", track: "line" })).not.toContain("·")
+    expect(renderGanttDiagram(secondsDiagram, { style: "track", endpoints: "points" })).toContain("●")
   })
 
   test("resolves task ids, after dependencies, durations, and milestones", () => {

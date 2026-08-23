@@ -52,7 +52,7 @@ export function drawGanttDiagramGrid(diagram: GanttDiagram, options: GanttDiagra
       return
     }
     grid.setText(labelWidth - diagramTextWidth(entry.task.label), y, entry.task.label, entry.task.state)
-    drawTask(grid, entry.task, chartX, y, chartWidth, minimum, span, options.style ?? "rail")
+    drawTask(grid, entry.task, chartX, y, chartWidth, minimum, span, options)
   })
   return grid
 }
@@ -99,8 +99,9 @@ function drawTask(
   width: number,
   minimum: number,
   span: number,
-  style: GanttRenderStyle,
+  options: GanttDiagramRenderOptions,
 ): void {
+  const style: GanttRenderStyle = options.style ?? "rail"
   const start = Math.round(((task.start - minimum) / span) * (width - 1))
   const end = Math.round(((task.end - minimum) / span) * (width - 1))
   if (task.state === "milestone" || start === end) {
@@ -108,12 +109,19 @@ function drawTask(
     return
   }
   if (style === "track") {
-    for (let offset = 0; offset < width; offset++) grid.setCell(x + offset, y, "·", "axis")
+    for (let offset = 0; offset < width; offset++) {
+      grid.setCell(x + offset, y, options.track === "line" ? "━" : "·", "axis")
+    }
   }
   const glyph = style === "block" ? "█" : style === "points" ? "─" : "━"
   for (let offset = start; offset <= end; offset++) grid.setCell(x + offset, y, glyph, task.state)
   if (style === "block") return
   if (style === "capsule" || style === "track") {
+    if (style === "track" && options.endpoints === "points") {
+      grid.setCell(x + start, y, "●", task.state)
+      grid.setCell(x + end, y, "●", task.state)
+      return
+    }
     grid.setCell(x + start, y, "╺", task.state)
     grid.setCell(x + end, y, "╸", task.state)
     return

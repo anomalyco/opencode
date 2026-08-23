@@ -2,7 +2,7 @@ import { createMermaidMarkdownRenderer } from "@opencode-ai/mermaid/markdown"
 import { createOpenCodeDiagramPalette } from "@opencode-ai/mermaid/palette"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
-import { createSignal, For } from "solid-js"
+import { createMemo, createSignal, For } from "solid-js"
 import { useThemes } from "../../../context/theme"
 import { StoryFooter } from "./footer"
 import type { Story } from "./index"
@@ -46,7 +46,7 @@ const VARIATIONS = [
   {
     style: "track",
     title: "Full tracks",
-    description: "Every task gets a complete dotted lane with its active interval overlaid.",
+    description: "Every task gets a complete dim lane; toggle its glyph and the active endpoints independently.",
   },
 ] as const
 
@@ -55,11 +55,14 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
   const themes = useThemes()
   const theme = props.context.theme.contextual.elevated
   const [selected, setSelected] = createSignal(0)
+  const [track, setTrack] = createSignal<"dots" | "line">("dots")
+  const [endpoints, setEndpoints] = createSignal<"caps" | "points">("caps")
   const variation = () => VARIATIONS[selected()]
+  const rendering = createMemo(() => ({ ...variation(), track: track(), endpoints: endpoints() }))
   const select = (index: number) => setSelected((index + VARIATIONS.length) % VARIATIONS.length)
-  const renderer = (style: (typeof VARIATIONS)[number]["style"]) =>
+  const renderer = (item: ReturnType<typeof rendering>) =>
     createMermaidMarkdownRenderer(props.context.renderer, () => ({
-      gantt: { style },
+      gantt: { style: item.style, track: item.track, endpoints: item.endpoints },
       colors: createOpenCodeDiagramPalette({
         text: props.context.theme.text.default,
         subdued: props.context.theme.text.subdued,
@@ -97,10 +100,26 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         run: () => select(index),
       })),
       {
+        bind: "t",
+        title: "Toggle track glyph",
+        group: "Storybook",
+        run: () => setTrack((value) => (value === "dots" ? "line" : "dots")),
+      },
+      {
+        bind: "e",
+        title: "Toggle endpoints",
+        group: "Storybook",
+        run: () => setEndpoints((value) => (value === "caps" ? "points" : "caps")),
+      },
+      {
         bind: "r",
         title: "Reset rendering",
         group: "Storybook",
-        run: () => select(0),
+        run() {
+          select(0)
+          setTrack("dots")
+          setEndpoints("caps")
+        },
       },
     ],
   }))
@@ -116,7 +135,7 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         <text fg={theme.text.default}>{variation().title}</text>
         <text fg={theme.text.subdued}>{variation().description}</text>
         <box height={1} />
-        <For each={[variation()]}>
+        <For each={[rendering()]}>
           {(item) => (
             <markdown
               syntaxStyle={themes.currentSyntax()}
@@ -124,7 +143,7 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
               conceal={true}
               fg={theme.markdown.text}
               bg={theme.background.default}
-              renderNode={renderer(item.style)}
+              renderNode={renderer(item)}
             />
           )}
         </For>
@@ -134,10 +153,12 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         context={props.context}
         title="storybook / Mermaid Gantt render lab"
         details={[`${selected() + 1}/${VARIATIONS.length}`, `${dimensions().width}×${dimensions().height}`]}
-        status={variation().title}
+        status={`${variation().title}${variation().style === "track" ? ` · ${track()} · ${endpoints()}` : ""}`}
         controls={[
           { shortcut: "←/→", label: "rendering" },
           { shortcut: "1–5", label: "select" },
+          { shortcut: "t", label: "track" },
+          { shortcut: "e", label: "ends" },
           { shortcut: "r", label: "reset" },
           { shortcut: "esc", label: "back" },
         ]}
