@@ -147,6 +147,7 @@ function manageConnections(
   onConnected?: OnIntegrationConnected,
 ) {
   dialog.replace(() => {
+    const theme = useTheme("elevated")
     const data = useData()
     const client = useClient()
     const toast = useToast()
@@ -166,6 +167,9 @@ function manageConnections(
           ...credentialConnections(integration).map((connection) => ({
             title: `Disconnect ${connection.label}`,
             value: connection.id,
+            category: "Connected accounts",
+            bg: theme.background.action.destructive.focused,
+            fg: theme.text.action.destructive.focused,
             onSelect: () => {
               void client.api.credential
                 .remove({ credentialID: connection.id, location: location(data) })
