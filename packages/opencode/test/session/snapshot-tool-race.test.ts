@@ -183,6 +183,19 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
         yield* Effect.sleep("100 millis")
       }
       expect(diff.length).toBeGreaterThan(0)
+
+      // The session-level summary must be written back with the aggregated
+      // diff stats (not left at the initial 0|0|0). See #41512.
+      let info = yield* sessions.get(session.id).pipe(Effect.orDie)
+      let sessionSummary = info.summary
+      for (let i = 0; i < 50 && !(sessionSummary && sessionSummary.files > 0); i++) {
+        yield* Effect.sleep("100 millis")
+        info = yield* sessions.get(session.id).pipe(Effect.orDie)
+        sessionSummary = info.summary
+      }
+      expect(sessionSummary?.additions).toBeGreaterThan(0)
+      expect(sessionSummary?.deletions).toBeGreaterThanOrEqual(0)
+      expect(sessionSummary?.files).toBeGreaterThan(0)
     }),
     { git: true, config: providerCfg },
   ),
