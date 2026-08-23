@@ -54,7 +54,10 @@ type RenderResult = {
 }
 
 const renderedCodeTokens = new WeakMap<HTMLDivElement, RenderedCodeState>()
-const renderedMarkdown = new WeakMap<HTMLDivElement, ReturnType<typeof createMarkdownRenderer>>()
+const renderedMarkdown = new WeakMap<
+  HTMLDivElement,
+  { renderer: ReturnType<typeof createMarkdownRenderer>; raw: string }
+>()
 
 function escape(text: string) {
   return text
@@ -184,7 +187,7 @@ function disposeRenderedMarkdown(root: Element) {
     ...Array.from(root.querySelectorAll<HTMLDivElement>("[data-markdown-block]")),
   ]
   blocks.forEach((block) => {
-    renderedMarkdown.get(block)?.dispose()
+    renderedMarkdown.get(block)?.renderer.dispose()
     renderedMarkdown.delete(block)
   })
 }
@@ -629,17 +632,21 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   const html = source.innerHTML
 
   if (existing) {
-    const renderer = renderedMarkdown.get(existing)
-    if (renderer) {
-      renderer.update(html, block.mode === "live")
+    const rendered = renderedMarkdown.get(existing)
+    if (rendered) {
+      rendered.renderer.update(html, block.mode === "live", rendered.raw !== block.raw)
+      rendered.raw = block.raw
       return
     }
     existing.innerHTML = ""
-    renderedMarkdown.set(existing, createMarkdownRenderer(existing, html, block.mode === "live"))
+    renderedMarkdown.set(existing, {
+      renderer: createMarkdownRenderer(existing, html, block.mode === "live"),
+      raw: block.raw,
+    })
     return
   }
 
-  renderedMarkdown.set(next, createMarkdownRenderer(next, html, block.mode === "live"))
+  renderedMarkdown.set(next, { renderer: createMarkdownRenderer(next, html, block.mode === "live"), raw: block.raw })
   if (!current) {
     container.appendChild(next)
     return

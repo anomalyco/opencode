@@ -5,7 +5,7 @@ import { Dynamic, render } from "solid-js/web"
 type MarkdownNode =
   | { key: string; type: "element"; tag: string; attributes: Record<string, string>; children: MarkdownNode[] }
   | { key: string; type: "text"; text: string }
-  | { key: string; type: "word"; text: string }
+  | { key: string; type: "word"; text: string; animate?: true }
 
 export function createMarkdownRenderer(root: HTMLDivElement, html: string, words: boolean) {
   const [nodes, setNodes] = createStore(parseMarkdownNodes(html, words))
@@ -17,8 +17,8 @@ export function createMarkdownRenderer(root: HTMLDivElement, html: string, words
   ready = true
 
   return {
-    update(next: string, nextWords: boolean) {
-      setNodes(reconcile(parseMarkdownNodes(next, nextWords), { key: "key" }))
+    update(next: string, nextWords: boolean, animate = true) {
+      setNodes(reconcile(parseMarkdownNodes(next, nextWords, animate), { key: "key" }))
     },
     dispose,
   }
@@ -30,7 +30,7 @@ function MarkdownDomNode(props: { node: MarkdownNode; animate: () => boolean }) 
   if (node.type === "word") {
     let ref: HTMLSpanElement | undefined
     onMount(() => {
-      if (props.animate()) ref?.setAttribute("data-markdown-enter", "")
+      if (props.animate() && node.animate) ref?.setAttribute("data-markdown-enter", "")
     })
     return (
       <span ref={ref} data-markdown-word="">
@@ -45,19 +45,19 @@ function MarkdownDomNode(props: { node: MarkdownNode; animate: () => boolean }) 
   )
 }
 
-export function parseMarkdownNodes(html: string, words: boolean) {
+export function parseMarkdownNodes(html: string, words: boolean, animate = false) {
   const template = document.createElement("template")
   template.innerHTML = html
-  return Array.from(template.content.childNodes).flatMap((node, index) => parseNode(node, `${index}`, words))
+  return Array.from(template.content.childNodes).flatMap((node, index) => parseNode(node, `${index}`, words, animate))
 }
 
-function parseNode(node: Node, key: string, words: boolean): MarkdownNode[] {
+function parseNode(node: Node, key: string, words: boolean, animate: boolean): MarkdownNode[] {
   if (node instanceof Text) {
     if (!words) return [{ key, type: "text", text: node.data }]
     return node.data.split(/(\s+)/).flatMap((text, index): MarkdownNode[] => {
       if (!text) return []
       if (/^\s+$/.test(text)) return [{ key: `${key}:${index}`, type: "text", text }]
-      return [{ key: `${key}:${index}`, type: "word", text }]
+      return [{ key: `${key}:${index}`, type: "word", text, ...(animate ? { animate: true as const } : {}) }]
     })
   }
   if (!(node instanceof Element)) return []
@@ -67,7 +67,7 @@ function parseNode(node: Node, key: string, words: boolean): MarkdownNode[] {
       type: "element",
       tag: node.tagName.toLowerCase(),
       attributes: Object.fromEntries(Array.from(node.attributes).map((attribute) => [attribute.name, attribute.value])),
-      children: Array.from(node.childNodes).flatMap((child, index) => parseNode(child, `${key}.${index}`, words)),
+      children: Array.from(node.childNodes).flatMap((child, index) => parseNode(child, `${key}.${index}`, words, animate)),
     },
   ]
 }

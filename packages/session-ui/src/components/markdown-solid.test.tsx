@@ -40,3 +40,23 @@ test("keeps completed block text compact", () => {
     },
   ])
 })
+
+test("marks words for animation only when requested", () => {
+  expect(
+    parseMarkdownNodes("<p>Hello</p>", true).flatMap((node) => (node.type === "element" ? node.children : [node]))[0],
+  ).toEqual({
+    key: "0.0:0",
+    type: "word",
+    text: "Hello",
+  })
+  expect(
+    parseMarkdownNodes("<p>Hello</p>", true, true).flatMap((node) =>
+      node.type === "element" ? node.children : [node],
+    )[0],
+  ).toEqual({
+    key: "0.0:0",
+    type: "word",
+    text: "Hello",
+    animate: true,
+  })
+})
