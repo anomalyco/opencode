@@ -25,7 +25,7 @@ const META: Record<string, { deny?: boolean; login?: boolean; ps?: boolean }> = 
 export type Item = {
   path: string
   name: string
-  acceptable: boolean
+  compatible: boolean
 }
 
 export const Options = Schema.Struct({
@@ -74,7 +74,7 @@ function meta(file: string) {
   return META[name(file)]
 }
 
-function ok(file: string) {
+function compatible(file: string) {
   return meta(file)?.deny !== true
 }
 
@@ -112,8 +112,8 @@ async function unix() {
   return ["/bin/bash", "/bin/zsh", "/bin/sh"]
 }
 
-function select(file: string | undefined, options?: Options, opts?: { acceptable?: boolean }, bin?: string) {
-  if (file && (!opts?.acceptable || ok(file))) {
+function select(file: string | undefined, options?: Options, opts?: { compatible?: boolean }, bin?: string) {
+  if (file && (!opts?.compatible || compatible(file))) {
     const shell = executable(file, options, bin)
     if (shell) return shell
   }
@@ -156,7 +156,7 @@ function info(file: string, options?: Options, bin?: string): Item {
   return {
     path: item,
     name: executable(n, options, bin) ? n : item,
-    acceptable: ok(item),
+    compatible: compatible(item),
   }
 }
 
@@ -171,7 +171,7 @@ let defaultConfigured: { bin?: string; value: string } | undefined
 let defaultCompatible: { bin?: string; value: string } | undefined
 
 export function resolve(input: ResolveInput, configShell?: string, options?: Options, bin?: string) {
-  const filter = input.preference === "compatible" ? { acceptable: true } : undefined
+  const filter = input.preference === "compatible" ? { compatible: true } : undefined
   if (configShell) return select(configShell, options, filter, bin)
   if (options?.gitbash) return select(process.env.SHELL, options, filter, bin)
   const cached = input.preference === "compatible" ? defaultCompatible : defaultConfigured
