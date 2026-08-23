@@ -772,6 +772,14 @@ export function ToolDisplay(
     if (typeof value === "string" && value) return value
     return taskId()
   })
+  // The Figma error card shows the shell command as the muted subtitle
+  // ("Shell sleep 30"), mirroring the shell tool trigger.
+  const shellSubtitle = createMemo(() => {
+    if (props.tool !== "shell") return undefined
+    if (typeof props.input.command === "string" && props.input.command) return props.input.command
+    if (typeof props.metadata.command === "string" && props.metadata.command) return props.metadata.command
+    return undefined
+  })
   const error = createMemo(() => toolDisplayError(props, i18n.t("ui.toolErrorCard.failed")))
   const render = createMemo(() => ToolRegistry.render(props.tool) ?? GenericTool)
 
@@ -799,7 +807,7 @@ export function ToolDisplay(
                   defaultOpen={props.defaultOpen}
                   open={props.open}
                   onOpenChange={props.onOpenChange}
-                  subtitle={taskSubtitle()}
+                  subtitle={taskSubtitle() ?? shellSubtitle()}
                   href={taskHref()}
                   onSubtitleClick={(event) => {
                     if (!data.navigateToSession) return

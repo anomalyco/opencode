@@ -1,13 +1,91 @@
+/* Metrics, colors, and states come from the Figma "Test Error Card" fixtures
+   (closed 1845:15508, open 1845:15482): a full-height 2px fg-danger rail,
+   10px left inset, a 24px header row (16px ban icon + 8px gap + 13px text with
+   6px gaps), a 13px/440 fg-danger summary, and a faint detail body when open. */
 [data-component="card"][data-kind="tool-error-card"] {
   --card-pad-y: 0px;
-  --card-line-pad: 4px;
+  /* Figma draws the rail as a square full-height border-left, not an inset bar. */
+  --card-line-pad: 0px;
+  --card-pad-r: 0px;
 
+  &::before {
+    border-radius: 0;
+  }
+
+  /* Inter 13px at Figma weights 530/440 with -0.04px tracking. Figma's
+     leading-none becomes the 16px compact metric because solid 13px line
+     boxes clip Inter descenders. */
   [data-slot="basic-tool-tool-title"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 530;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
     color: var(--v2-text-text-base);
   }
 
   [data-slot="basic-tool-tool-subtitle"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
     color: var(--v2-text-text-muted);
+  }
+
+  /* Figma separator: size/sm 11px at weight/medium 530, +0.05px tracking,
+     line-height/tight, text-muted. */
+  [data-slot="tool-error-card-dot"] {
+    flex-shrink: 0;
+    font-family: var(--v2-font-family-sans);
+    font-size: 11px;
+    font-weight: 530;
+    line-height: var(--line-height-tight);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="tool-error-card-summary"],
+  [data-slot="tool-error-card-message"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    color: var(--v2-state-fg-danger);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot="tool-error-card-summary"] {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  /* Closed state: the summary sits on its own line, indented to the 24px
+     text column (16px icon + 8px gap). */
+  [data-slot="tool-error-card-message"] {
+    padding-inline-start: 24px;
+  }
+
+  /* Figma row: flex gap-6 items-center inside a 24px-tall header. */
+  [data-slot="basic-tool-tool-info-main"] {
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* The 14px triangle follows the text with the row's 6px gap and is visible
+     in both Figma states rather than hover-revealed. */
+  [data-slot="basic-tool-tool-trigger-content"] {
+    max-width: calc(100% - 20px);
+  }
+
+  [data-slot="collapsible-arrow"] {
+    width: 14px;
+    height: 14px;
+    margin-inline-start: 6px;
+    opacity: 1;
   }
 
   [data-slot="collapsible-arrow"],
@@ -16,7 +94,14 @@
   }
 
   > [data-component="collapsible"].tool-collapsible {
-    gap: 0px;
+    /* Figma: 4px between the 24px header box and the 13px summary row. The
+       summary's 16px compact line box centers the 13px em, so the box gap
+       shrinks by 1.5px to keep the em at Figma's 28px offset. */
+    gap: 2.5px;
+
+    > [data-slot="collapsible-trigger"] {
+      height: 24px;
+    }
 
     > [data-slot="collapsible-content"] {
       border-inline-start: none;
@@ -31,7 +116,10 @@
   }
 
   > [data-component="collapsible"].tool-collapsible[data-open="true"] {
-    gap: 4px;
+    /* Open detail: Figma places the detail em 1px under the 24px header (6px
+       under the header's text row); the compact line box already contributes
+       1.5px, so no extra gap. */
+    gap: 0px;
   }
 
   [data-component="tool-error-card-icon"] [data-slot="icon-svg"] {
@@ -41,9 +129,18 @@
   [data-slot="tool-error-card-content"] {
     position: relative;
     padding-left: 24px;
-    margin-bottom: 8px;
     -webkit-user-select: text;
     user-select: text;
+  }
+
+  /* Figma detail body: Inter 13px/440 in text-faint ("502 Bad Gateway"). */
+  [data-slot="tool-error-card-content"] [data-slot="card-description"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    color: var(--v2-text-text-faint);
   }
 
   > [data-component="collapsible"].tool-collapsible[data-open="true"] [data-slot="tool-error-card-content"] {
