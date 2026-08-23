@@ -15,18 +15,19 @@ export type ApplyPatchFile = {
 
 export type ApplyPatchFileGroup = Omit<ApplyPatchFile, "view" | "contents"> & { views: ViewDiff[] }
 
-function fileDiff(value: unknown): value is FileDiffInfo {
+export function changedFileDiff(value: unknown): value is FileDiffInfo {
   if (!value || typeof value !== "object") return false
   if (!("file" in value) || typeof value.file !== "string") return false
   if (!("patch" in value) || typeof value.patch !== "string") return false
   if (!("additions" in value) || typeof value.additions !== "number") return false
   if (!("deletions" in value) || typeof value.deletions !== "number") return false
   if (!("status" in value)) return false
-  return value.status === "added" || value.status === "deleted" || value.status === "modified"
+  if (value.status !== "added" && value.status !== "deleted" && value.status !== "modified") return false
+  return value.additions > 0 || value.deletions > 0
 }
 
 export function patchFile(value: unknown): ApplyPatchFile | undefined {
-  if (!fileDiff(value)) return
+  if (!changedFileDiff(value)) return
   return {
     path: value.file,
     type: value.status === "added" ? "add" : value.status === "deleted" ? "delete" : "update",

@@ -33,7 +33,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "../components/tool-count-summary"
 import { ToolStatusTitle } from "../components/tool-status-title"
-import { patchFileGroups } from "../components/apply-patch-file"
+import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
 import { animate } from "motion"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 import type { SessionMessageAssistantTool, SessionMessageShell } from "@opencode-ai/client/promise"
@@ -1349,11 +1349,7 @@ ToolRegistry.register({
     const diff = createMemo(() => {
       const files = props.metadata.files
       if (!Array.isArray(files)) return undefined
-      const value = files.find(
-        (file) => !!file && typeof file === "object" && "file" in file && typeof file.file === "string",
-      )
-      if (!value || typeof value !== "object") return undefined
-      return value
+      return files.find(changedFileDiff)
     })
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, inputPath()))
     const path = createMemo(() => {
