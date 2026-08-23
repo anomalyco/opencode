@@ -65,10 +65,12 @@ export async function tracingLayer() {
   manager.enable()
   context.setGlobalContextManager(manager)
 
-  // PERF/observability: optional head sampling via OPENCODE_TRACE_RATIO (default 1 = all traces)
-  const ratio = Number(process.env.OPENCODE_TRACE_RATIO ?? "1")
+  // PERF/observability: optional head sampling via OPENCODE_TRACE_RATIO (default 1 = all traces).
+  // Empty/garbage values fall back to full sampling; valid values are clamped to [0, 1].
+  const parsed = Number(process.env.OPENCODE_TRACE_RATIO?.trim() || 1)
+  const ratio = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), 1) : 1
   const sampler =
-    Number.isFinite(ratio) && ratio < 1
+    ratio < 1
       ? new SdkBase.ParentBasedSampler({ root: new SdkBase.TraceIdRatioBasedSampler(ratio) })
       : undefined
 
