@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
-import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
+import { ndJsonStream } from "@agentclientprotocol/sdk/experimental/v2"
 import { ServerAuth } from "@/server/auth"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
@@ -55,12 +55,9 @@ export const AcpCommand = effectCmd({
     })
 
     const stream = ndJsonStream(input, output)
-    const agent = ACP.init({ sdk, v2: flags.experimentalAcpV2 })
-
-    new AgentSideConnection((conn) => {
-      ACPProfile.mark("cli.acp.connection.create")
-      return agent.create(conn)
-    }, stream)
+    const router = yield* Effect.promise(() => ACP.createRouter(sdk, flags.experimentalAcpV2))
+    ACPProfile.mark("cli.acp.connection.create")
+    router.connect(stream)
 
     yield* Effect.logInfo("setup connection")
     process.stdin.resume()
