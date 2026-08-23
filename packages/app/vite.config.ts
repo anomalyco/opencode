@@ -25,11 +25,13 @@ export default defineConfig({
     desktopPlugin,
     VitePWA({
       strategies: "generateSW",
+      registerType: "prompt",
       injectRegister: false,
       manifest: false,
       workbox: {
         cleanupOutdatedCaches: true,
-        clientsClaim: true,
+        clientsClaim: false,
+        skipWaiting: false,
         inlineWorkboxRuntime: true,
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api(?:\/|$)/],
