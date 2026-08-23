@@ -226,7 +226,8 @@ export const TuiThreadCommand = cmd({
         stopped = true
         process.off("SIGUSR2", reload)
         await withTimeout(client.call("shutdown", undefined), 5000).catch(() => {})
-        // Keep disconnects observable until immediately before our own termination.
+        // Keep disconnects observable until immediately before our own termination, so a
+        // crash mid-shutdown still fast-rejects the pending call instead of idling out at 5s.
         client.expectDisconnect()
         worker.terminate()
       }
@@ -271,11 +272,11 @@ export const TuiThreadCommand = cmd({
           client.call("checkUpgrade", { directory: cwd }).catch(() => {})
         }, 1000).unref?.()
 
-        const { Effect } = await import("effect")
+        const { Effect, Fiber } = await import("effect")
         const { run } = await import("../tui/layer")
         const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
         try {
-          await Effect.runPromise(
+          const fiber = Effect.runFork(
             run({
               url: transport.url,
               async onSnapshot() {
@@ -291,11 +292,6 @@ export const TuiThreadCommand = cmd({
               events: transport.events,
               onReady: (controls) => {
                 triggerFatal = controls.triggerFatal
-                client.onDisconnect((error) => {
-                  if (triggerFatal) return triggerFatal(error)
-                  UI.error(errorMessage(error))
-                  process.exitCode = 1
-                })
               },
               args: {
                 continue: args.continue,
@@ -308,6 +304,27 @@ export const TuiThreadCommand = cmd({
               },
             }),
           )
+
+          type RunOutcome = { kind: "done" } | { kind: "early"; error: unknown }
+          // Registered here (rather than at client construction) so that if the worker
+          // already died during the dynamic imports above, onDisconnect's dead-state
+          // replay fires the handler immediately instead of the signal being dropped.
+          const early = new Promise<RunOutcome>((resolve) => {
+            client.onDisconnect((error) => {
+              if (triggerFatal) return triggerFatal(error)
+              resolve({ kind: "early", error })
+            })
+          })
+          const done: Promise<RunOutcome> = Effect.runPromise(Fiber.join(fiber)).then(() => ({ kind: "done" }))
+
+          const outcome = await Promise.race([done, early])
+          if (outcome.kind === "early") {
+            // Interrupt (not just abandon) the fiber so its finalizers run and the
+            // terminal is restored before we fall through to stop() / process.exit().
+            await Effect.runPromise(Fiber.interrupt(fiber))
+            UI.error(errorMessage(outcome.error))
+            process.exitCode = 1
+          }
         } finally {
           triggerFatal = undefined
         }

@@ -165,14 +165,29 @@ describe("util.rpc", () => {
     await expect(pending).rejects.toThrow("invalid RPC message")
   })
 
-  test("an in-flight call rejects when the worker sends an unknown RPC message", async () => {
+  test("an unrecognized but well-formed RPC message type is skipped instead of bricking the client", async () => {
     const worker = createFakeWorker()
-    const client = Rpc.client<{ fetch: (input: undefined) => void }>(worker)
+    const client = Rpc.client<{ ping: (input: undefined) => string }>(worker)
+
+    const pending = client.call("ping", undefined)
+    worker.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ type: "unknown" }) }))
+    worker.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ type: "rpc.result", id: 0, result: "pong" }) }))
+
+    await expect(pending).resolves.toBe("pong")
+  })
+
+  test("an unrecognized RPC message type carrying a known request id fails only that call", async () => {
+    const worker = createFakeWorker()
+    const client = Rpc.client<{ fetch: (input: undefined) => void; ping: (input: undefined) => string }>(worker)
 
     const pending = client.call("fetch", undefined)
-    worker.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ type: "unknown" }) }))
+    worker.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ type: "unknown", id: 0 }) }))
 
-    await expect(pending).rejects.toThrow("unknown RPC message")
+    await expect(pending).rejects.toThrow("unrecognized RPC message type")
+
+    const other = client.call("ping", undefined)
+    worker.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ type: "rpc.result", id: 1, result: "pong" }) }))
+    await expect(other).resolves.toBe("pong")
   })
 
   test("a call made after the worker has already died rejects immediately instead of hanging", async () => {

@@ -97,7 +97,16 @@ export function client<T extends Definition>(target: {
       }
       return
     }
-    rejectAllPending(new Error("Worker sent an unknown RPC message"))
+    // Unknown but well-formed message. If it's a reply to a call we're waiting on, fail
+    // just that call instead of leaving it hanging forever; otherwise skip it, so a newer
+    // worker emitting an extra broadcast type doesn't kill an older CLI host's session.
+    if (typeof parsed.id === "number" && pending.has(parsed.id)) {
+      const entry = pending.get(parsed.id)!
+      pending.delete(parsed.id)
+      entry.reject(new Error(`Worker sent an unrecognized RPC message type: ${String(parsed.type)}`))
+      return
+    }
+    console.error(`Worker sent an unrecognized RPC message type: ${String(parsed.type)}`)
   }
   return {
     call<Method extends keyof T>(method: Method, input: Parameters<T[Method]>[0]): Promise<ReturnType<T[Method]>> {
