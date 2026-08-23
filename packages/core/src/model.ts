@@ -38,10 +38,13 @@ export function compatibility(input: unknown): Compatibility | undefined {
 }
 
 export function parse(input: string): { providerID: Provider.ID; modelID: ID } {
-  const [providerID, ...modelID] = input.split("/")
+  // User-supplied references (config, CLI flags) occasionally carry stray
+  // whitespace, which upstream gateways reject with an opaque 400. Trim the
+  // reference and each segment; model IDs never legitimately contain them.
+  const [providerID, ...modelID] = input.trim().split("/")
   return {
-    providerID: Provider.ID.make(providerID),
-    modelID: ID.make(modelID.join("/")),
+    providerID: Provider.ID.make(providerID.trim()),
+    modelID: ID.make(modelID.join("/").trim()),
   }
 }
 
