@@ -510,3 +510,46 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Build Remote Agent
+
+Pair a phone running [Build Remote Agent](https://grokbuildremote.com/) as a **spectator** for this OpenCode session. Protocol `gbr/1`. Independent product; not affiliated with xAI or SpaceX.
+
+Install the free MIT `gbr-agent` (v0.6.0+), pair (browser QR **and** printed 8-char code), then leave `gbr-agent run` going. Attach only via MCP stdio `gbr-mcp` or Bot API `http://127.0.0.1:8788`. The phone does not orchestrate OpenCode.
+
+```bash
+curl -fsSL https://grokbuildremote.com/install.sh | bash
+gbr-agent version    # need v0.6.0+
+gbr-agent pair && gbr-agent run
+```
+
+Clone and run the MCP server:
+
+```bash
+git clone https://github.com/LinespottingOrg/GrokBuildRemote-Agents.git
+cd GrokBuildRemote-Agents/mcp/gbr-mcp && npm install
+```
+
+```json title="opencode.json" {4-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gbr": {
+      "type": "local",
+      "command": ["node", "GrokBuildRemote-Agents/mcp/gbr-mcp/bin/gbr-mcp.js"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Point `command` at the cloned `gbr-mcp.js` path on your machine. Never put mailbox keys in `opencode.json`. After `gbr-agent run`:
+
+```bash
+curl -sS http://127.0.0.1:8788/health
+curl -sS http://127.0.0.1:8788/v1/sessions
+```
+
+Add `use gbr` to a prompt when you want OpenCode to talk to the pairing device. Agent source: [GrokBuildRemote-Agents](https://github.com/LinespottingOrg/GrokBuildRemote-Agents).
