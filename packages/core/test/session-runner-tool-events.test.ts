@@ -176,6 +176,22 @@ test("provider metadata is flattened using the route key", async () => {
   })
 })
 
+test("overlapping reasoning starts settle the open fragment instead of dying", async () => {
+  const { published, publisher } = capture("openai")
+  await Effect.runPromise(publisher.publish(LLMEvent.reasoningStart({ id: "rs_a:0" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.reasoningDelta({ id: "rs_a:0", text: "first" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.reasoningStart({ id: "rs_b:0" })))
+  await Effect.runPromise(
+    publisher.publish(LLMEvent.reasoningEnd({ id: "rs_b:0", providerMetadata: { openai: { itemId: "rs_b" } } })),
+  )
+
+  const started = published.filter((event) => event.type === "session.reasoning.started.1")
+  const ended = published.filter((event) => event.type === "session.reasoning.ended.1")
+  expect(started).toHaveLength(2)
+  expect(ended).toHaveLength(2)
+  expect((ended[0]?.data as any).text).toBe("first")
+})
+
 test("reasoning state from start, empty delta, and end is merged", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(

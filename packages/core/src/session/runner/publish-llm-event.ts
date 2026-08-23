@@ -137,12 +137,18 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     const chunks = new Map<string, Fragment>()
     let nextOrdinal = 0
     const start = (id: string, state?: Record<string, unknown>) =>
-      Effect.suspend(() => {
-        if (chunks.has(id)) return Effect.die(new Error(`Duplicate ${name} start: ${id}`))
-        if (single && chunks.size > 0) return Effect.die(new Error(`${name} start before end: ${id}`))
+      Effect.gen(function* () {
+        if (single && chunks.size > 0) {
+          // Providers occasionally open a new fragment before closing the
+          // previous one (e.g. overlapping reasoning summaries). Force-settle
+          // open fragments so a malformed boundary degrades to merged output
+          // instead of failing the whole execution as an untyped defect.
+          yield* flush()
+        }
+        if (chunks.has(id)) yield* end(id)
         const ordinal = nextOrdinal++
         chunks.set(id, { ordinal, values: [], pending: "", state })
-        return Effect.succeed(ordinal)
+        return ordinal
       })
     const publishDelta = Effect.fnUntraced(function* (id: string, force = false) {
       if (!delta) return undefined
