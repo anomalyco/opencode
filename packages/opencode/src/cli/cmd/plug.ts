@@ -9,6 +9,7 @@ import { Global } from "@opencode-ai/core/global"
 import { installPlugin, patchPluginConfig, readPluginManifest } from "../../plugin/install"
 import { resolvePluginTarget } from "../../plugin/shared"
 import * as ConfigPlugin from "@/config/plugin"
+import { parsePluginSpecifier } from "../../plugin/shared"
 import { errorMessage } from "../../util/error"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
@@ -251,7 +252,7 @@ const PluginListCommand = effectCmd({
     intro("Plugins")
 
     const plugins = config.plugin ?? []
-    const disabledPlugins = new Set(config.disabled_plugins ?? [])
+    const disabledPlugins = new Set((config.disabled_plugins ?? []).map(pluginPackageName))
 
     if (plugins.length === 0) {
       log.warn("No plugins configured")
@@ -260,7 +261,7 @@ const PluginListCommand = effectCmd({
     }
 
     for (const spec of plugins) {
-      const name = ConfigPlugin.pluginSpecifier(spec)
+      const name = pluginPackageName(spec)
       const disabled = disabledPlugins.has(name)
       const icon = disabled ? "✗" : "✓"
       const status = disabled ? "disabled" : "enabled"
@@ -291,6 +292,19 @@ async function readConfigText(file: string): Promise<string> {
     if (err?.code === "ENOENT") return "{}"
     throw err
   }
+}
+
+function pluginPackageName(spec: string | readonly [string, unknown]): string {
+  const str = Array.isArray(spec) ? spec[0] : spec
+  return parsePluginSpecifier(str).pkg
+}
+
+function parseFilePlugins(text: string): string[] {
+  const errs: JsoncParseError[] = []
+  const data = parseJsonc(text, errs, { allowTrailingComma: true })
+  if (errs.length) return []
+  const plugins = Array.isArray(data?.plugin) ? data.plugin : []
+  return plugins.map((spec: unknown) => pluginPackageName(String(spec)))
 }
 
 function patchConfigDisabledPlugins(text: string, module: string, action: "add" | "remove"): { text: string; changed: boolean } {
@@ -355,25 +369,12 @@ const PluginDisableCommand = effectCmd({
     const ctx = yield* InstanceRef
     if (!ctx) return
 
-    const cfgSvc = yield* Config.Service
-    const config = yield* cfgSvc.get()
     const global = Boolean(args.global)
+    const dir = global ? Global.Path.config : ctx.directory
+    const normalizedMod = parsePluginSpecifier(mod).pkg
 
     UI.empty()
     intro(`Disable plugin ${mod}`)
-
-    // Check that plugin is configured
-    const plugins = config.plugin ?? []
-    const pluginNames = plugins.map((spec) => ConfigPlugin.pluginSpecifier(spec))
-    if (!pluginNames.includes(mod)) {
-      log.error(`Plugin "${mod}" is not configured`)
-      log.info(`Available plugins: ${pluginNames.join(", ") || "none"}`)
-      outro("Done")
-      process.exitCode = 1
-      return
-    }
-
-    const dir = global ? Global.Path.config : ctx.directory
 
     yield* Effect.acquireUseRelease(
       Effect.promise(() => Flock.acquire(`plug-config:${Filesystem.resolve(path.join(dir, "opencode"))}`)),
@@ -381,7 +382,17 @@ const PluginDisableCommand = effectCmd({
         Effect.gen(function* () {
           const file = yield* Effect.promise(() => findConfigFile(global, dir))
           const text = yield* Effect.promise(() => readConfigText(file))
-          const result = patchConfigDisabledPlugins(text, mod, "add")
+
+          // Validate against the target file, not merged config
+          const filePluginNames = parseFilePlugins(text)
+          if (!filePluginNames.includes(normalizedMod)) {
+            log.error(`Plugin "${mod}" is not configured in ${file}`)
+            log.info(`Available plugins: ${filePluginNames.join(", ") || "none"}`)
+            process.exitCode = 1
+            return
+          }
+
+          const result = patchConfigDisabledPlugins(text, normalizedMod, "add")
           if (!result.changed) {
             log.info(`Plugin "${mod}" is already disabled`)
             return
@@ -423,21 +434,12 @@ const PluginEnableCommand = effectCmd({
     const ctx = yield* InstanceRef
     if (!ctx) return
 
-    const cfgSvc = yield* Config.Service
-    const config = yield* cfgSvc.get()
     const global = Boolean(args.global)
+    const dir = global ? Global.Path.config : ctx.directory
+    const normalizedMod = parsePluginSpecifier(mod).pkg
 
     UI.empty()
     intro(`Enable plugin ${mod}`)
-
-    const disabledPlugins = config.disabled_plugins ?? []
-    if (!disabledPlugins.includes(mod)) {
-      log.info(`Plugin "${mod}" is not disabled`)
-      outro("Done")
-      return
-    }
-
-    const dir = global ? Global.Path.config : ctx.directory
 
     yield* Effect.acquireUseRelease(
       Effect.promise(() => Flock.acquire(`plug-config:${Filesystem.resolve(path.join(dir, "opencode"))}`)),
@@ -445,7 +447,7 @@ const PluginEnableCommand = effectCmd({
         Effect.gen(function* () {
           const file = yield* Effect.promise(() => findConfigFile(global, dir))
           const text = yield* Effect.promise(() => readConfigText(file))
-          const result = patchConfigDisabledPlugins(text, mod, "remove")
+          const result = patchConfigDisabledPlugins(text, normalizedMod, "remove")
           if (!result.changed) {
             log.info(`Plugin "${mod}" is not disabled in ${file}`)
             return
@@ -462,7 +464,7 @@ const PluginEnableCommand = effectCmd({
 // --- Parent command ---
 
 export const PluginCommand = cmd({
-  command: "plugin",
+  command: "plugin [module]",
   aliases: ["plug"],
   describe: "manage plugins (install, list, disable, enable)",
   builder: (yargs) =>
@@ -471,6 +473,17 @@ export const PluginCommand = cmd({
       .command(PluginListCommand)
       .command(PluginDisableCommand)
       .command(PluginEnableCommand)
-      .demandCommand(),
-  async handler() {},
+      .positional("module", {
+        type: "string",
+        describe: "npm module name (shorthand for install)",
+      }),
+  async handler(args) {
+    const mod = String(args.module ?? "").trim()
+    if (!mod) {
+      // No subcommand and no module → show help
+      return
+    }
+    // Backward compat: `opencode plugin <module>` → hint to use install
+    log.info(`To install a plugin, use: opencode plugin install ${mod}`)
+  },
 })

@@ -179,14 +179,12 @@ const layer = Layer.effect(
           if (init._tag === "Some") hooks.push(init.value)
         }
 
-        const disabledPlugins = new Set(cfg.disabled_plugins ?? [])
+        const disabledPlugins = new Set((cfg.disabled_plugins ?? []).map((spec) => parsePluginSpecifier(spec).pkg))
         const plugins = flags.pure
           ? []
           : (cfg.plugin_origins ?? []).filter(
-              (origin) => !disabledPlugins.has(ConfigPlugin.pluginSpecifier(origin.spec)),
+              (origin) => !disabledPlugins.has(parsePluginSpecifier(ConfigPlugin.pluginSpecifier(origin.spec)).pkg),
             )
-        if (flags.pure && cfg.plugin_origins?.length) {
-        }
         if (plugins.length) yield* config.waitForDependencies()
 
         const loaded = yield* Effect.promise(() =>
