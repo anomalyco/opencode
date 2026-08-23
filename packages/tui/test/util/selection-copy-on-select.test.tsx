@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { testRender, useRenderer } from "@opentui/solid"
 import { useClipboard } from "../../src/context/clipboard"
-import { copy } from "../../src/util/selection"
+import { copyOnSelectRelease } from "../../src/util/selection"
 import { TestTuiContexts } from "../fixture/tui-environment"
 
 function CopyOnSelectText() {
@@ -13,7 +13,7 @@ function CopyOnSelectText() {
     error: () => {},
   }
   return (
-    <box onMouseUp={() => copy(renderer, toast, clipboard)}>
+    <box onMouseUp={(event) => copyOnSelectRelease(event, renderer, toast, clipboard)}>
       <text>alpha beta gamma</text>
     </box>
   )
