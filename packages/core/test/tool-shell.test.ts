@@ -289,6 +289,37 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  productionIt.live(
+    "skips unresolvable socket arguments during the advisory scan",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              if (process.platform === "win32") return
+              const net = yield* Effect.promise(() => import("node:net"))
+              const socketPath = path.join(tmp.path, "live.sock")
+              const server = net.createServer(() => undefined)
+              yield* Effect.promise(
+                () => new Promise<void>((resolve) => server.listen(socketPath, () => resolve())),
+              )
+              try {
+                const settled = yield* executeTool(registry, call({ command: `printf %s ${socketPath}` }))
+                expect(settled.status).toBe("completed")
+                expect(settled.content?.[0]).toMatchObject({ type: "text", text: socketPath })
+              } finally {
+                server.close()
+              }
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
   it.live("resolves a relative workdir from the active Location", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

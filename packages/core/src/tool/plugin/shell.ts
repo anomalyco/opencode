@@ -209,9 +209,18 @@ export const Plugin = {
                       const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, {
                         portable,
                       })
-                      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-                        mutation.resolve({ path: path.resolve(target.absolute, directory), kind: "directory" }),
-                      )
+                      const directories = (
+                        yield* Effect.forEach(parsed.directories, (directory) =>
+                          mutation
+                            .resolve({ path: path.resolve(target.absolute, directory), kind: "directory" })
+                            .pipe(
+                              // The argument scan is advisory: candidates can be
+                              // sockets, devices, or otherwise unresolvable paths.
+                              // Skip them instead of failing the whole command.
+                              Effect.catch(() => Effect.succeed(undefined)),
+                            ),
+                        )
+                      ).filter((item): item is NonNullable<typeof item> => item !== undefined)
                       const external = [target, ...directories]
                         .map((item) => item.externalDirectory)
                         .filter((item) => item !== undefined)
