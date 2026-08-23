@@ -87,6 +87,21 @@ describe("sync optimistic reducers", () => {
     expect(page.session.map((message) => message.id)).toEqual(["msg_a", "msg_z"])
   })
 
+  test("mergeOptimisticPage treats a time-shifted same-id message as found", () => {
+    const sessionID = "ses_1"
+    const page = mergeOptimisticPage(
+      {
+        session: [userMessage("msg_2", sessionID, 2)],
+        part: [{ id: "msg_2", part: [textPart("prt_1", sessionID, "msg_2")] }],
+        complete: true,
+      },
+      [{ message: userMessage("msg_2", sessionID, 1), parts: [textPart("prt_1", sessionID, "msg_2")] }],
+    )
+
+    expect(page.session).toEqual([userMessage("msg_2", sessionID, 2)])
+    expect(page.confirmed).toEqual(["msg_2"])
+  })
+
   test("mergeOptimisticPage keeps missing optimistic parts until the server has them", () => {
     const sessionID = "ses_1"
     const page = mergeOptimisticPage(

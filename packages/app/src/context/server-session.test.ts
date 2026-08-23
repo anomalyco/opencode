@@ -1260,6 +1260,61 @@ describe("server session", () => {
     expect(store.data.part[stale.id]).toEqual([{ ...stalePart, text: "stale live" }])
   })
 
+  test("replaces a stored message when an update shifts its creation time", async () => {
+    const stale = userMessage("message")
+    const store = createServerSession(messageClient(response([{ info: stale, parts: [] }])))
+    await store.sync("child")
+    const live = { ...stale, time: { created: 2 } }
+
+    store.apply({ type: "message.updated", properties: { info: live } })
+
+    expect(store.data.message.child).toEqual([live])
+  })
+
+  test("confirms an optimistic message when the server shifts its creation time", () => {
+    const message = userMessage("message")
+    const part = textPart(message.id)
+    const store = setup({ child: session("child") }).store
+    store.optimistic.add({ sessionID: "child", message, parts: [part] })
+    const confirmed = { ...message, time: { created: 2 } }
+
+    store.apply({ type: "message.updated", properties: { info: confirmed } })
+    store.optimistic.remove({ sessionID: "child", messageID: message.id })
+
+    expect(store.data.message.child).toEqual([confirmed])
+  })
+
+  test("removes a time-shifted message without leaving a ghost row", () => {
+    const message = userMessage("message")
+    const part = textPart(message.id)
+    const store = setup({ child: session("child") }).store
+    store.optimistic.add({ sessionID: "child", message, parts: [part] })
+    store.apply({ type: "message.updated", properties: { info: { ...message, time: { created: 2 } } } })
+
+    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
+
+    expect(store.data.message.child).toEqual([])
+    expect(store.data.part[message.id]).toBeUndefined()
+  })
+
+  test("confirms optimistic content when a refresh shifts its creation time", async () => {
+    const pending = deferredResponse()
+    const message = userMessage("message")
+    const part = textPart(message.id)
+    const server = { ...message, time: { created: 2 } }
+    const store = createServerSession(messageClient(response([]), pending.promise))
+    await store.sync("child")
+    store.optimistic.add({ sessionID: "child", message, parts: [part] })
+    const refreshing = store.sync("child", { force: true })
+    pending.resolve(response([{ info: server, parts: [part] }]))
+    await refreshing
+
+    store.optimistic.remove({ sessionID: "child", messageID: message.id })
+
+    expect(store.data.message.child).toEqual([server])
+    expect(store.data.part[message.id]).toEqual([part])
+  })
+
   test("keeps fetched message metadata when only a part changes", async () => {
     const pending = deferredResponse()
     const stale = userMessage("message")

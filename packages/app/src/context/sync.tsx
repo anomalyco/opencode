@@ -69,7 +69,7 @@ export function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) 
 
   for (const item of items) {
     const result = Binary.search(session, messageKey(item.message), messageKey)
-    const found = result.found
+    const found = result.found || session.some((message) => message.id === item.message.id)
     if (!found) session.splice(result.index, 0, item.message)
 
     const current = part.get(item.message.id)
