@@ -190,9 +190,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("passes through provider-defined service tiers", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { serviceTier: "scale" } }),
-      )
+      const prepared = yield* compileRequest(LLMRequest.update(request, { providerOptions: { serviceTier: "scale" } }))
 
       expect(prepared.body.service_tier).toBe("scale")
     }),
@@ -1273,7 +1271,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "input_file",
           filename: "report.pdf",
-          file_data: "JVBERi0xLjQ=",
+          file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
         },
       ])
     }),
@@ -1300,7 +1298,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(expectToolOutput(prepared.body).output).toEqual([
-        { type: "input_file", filename: "report.pdf", file_data: base64 },
+        { type: "input_file", filename: "report.pdf", file_data: dataUrl },
       ])
     }),
   )
@@ -1333,7 +1331,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "input_file",
           filename: "report.pdf",
-          file_data: "JVBERi0xLjQ=",
+          file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
         },
       ])
     }),
@@ -1358,7 +1356,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(expectToolOutput(prepared.body).output).toEqual([
-        { type: "input_file", filename: "file", file_data: "AAECAw==" },
+        { type: "input_file", filename: "file", file_data: "data:audio/mpeg;base64,AAECAw==" },
       ])
     }),
   )
@@ -2806,7 +2804,7 @@ describe("OpenAI Responses route", () => {
             {
               type: "input_file",
               filename: "report.pdf",
-              file_data: "JVBERi0xLjQ=",
+              file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
             },
           ],
         },
@@ -2837,7 +2835,7 @@ describe("OpenAI Responses route", () => {
             {
               type: "input_file",
               filename: "report.pdf",
-              file_data: "JVBERi0xLjQ=",
+              file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
             },
           ],
         },
@@ -2862,7 +2860,7 @@ describe("OpenAI Responses route", () => {
             {
               type: "input_file",
               filename: "file",
-              file_data: "AAECAw==",
+              file_data: "data:application/x-tar;base64,AAECAw==",
             },
           ],
         },

@@ -428,7 +428,7 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
     return {
       type: "input_file" as const,
       filename: part.filename ?? (media.mime === "application/pdf" ? "document.pdf" : "file"),
-      ...(url ? { file_url: url } : { file_data: media.base64 }),
+      ...(url ? { file_url: url } : { file_data: media.dataUrl }),
     }
   }
   return { type: "input_image" as const, image_url: url ?? media.dataUrl }
@@ -580,8 +580,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         if (part.type === "tool-result" && part.providerExecuted === true) {
           flushText()
           const id = itemID(part.providerMetadata, providerMetadataKey)
-          if (store !== false && id && !hostedToolReferences.has(id))
-            input.push({ type: "item_reference", id })
+          if (store !== false && id && !hostedToolReferences.has(id)) input.push({ type: "item_reference", id })
           if (store === false && part.result.type === "content") {
             const content: ReadonlyArray<Content> = part.result.value
             input.push({
@@ -1126,7 +1125,8 @@ export const step = (state: ParserState, event: Event) => {
   }
   if (event.type === "response.refusal.delta" || event.type === "response.refusal.done") {
     const value = event.type === "response.refusal.delta" ? event.delta : event.refusal
-    if (!event.item_id || typeof value !== "string") return ProviderShared.eventError(state.id, `${event.type} is malformed`)
+    if (!event.item_id || typeof value !== "string")
+      return ProviderShared.eventError(state.id, `${event.type} is malformed`)
     return Effect.succeed(
       event.type === "response.refusal.delta"
         ? onOutputTextDelta(state, event, event.item_id)
