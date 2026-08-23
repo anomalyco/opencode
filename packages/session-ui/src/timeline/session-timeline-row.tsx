@@ -233,7 +233,7 @@ export function createSessionTimelineRowRenderer(input: {
       data-timeline-row={props.row._tag}
       classList={{
         "min-w-0 w-full max-w-full": true,
-        "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": input.centered?.(),
+        "md:max-w-[1000px] md:mx-auto": input.centered?.(),
         "pt-3": props.row._tag === "AssistantPart" && props.row.previousAssistantPart,
       }}
     >
