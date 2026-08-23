@@ -1,4 +1,3 @@
-/* Values match the Figma "Test Error Card" fixtures: closed 1845:15508, open 1845:15482. */
 [data-component="card"][data-kind="tool-error-card"] {
   --card-pad-y: 0px;
   --card-line-pad: 0px;
