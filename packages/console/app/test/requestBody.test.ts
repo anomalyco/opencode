@@ -75,4 +75,35 @@ describe("Zen request body streaming", () => {
       stream_options: { include_usage: true },
     })
   })
+
+  test("buffers through a late model field and then streams the rest", async () => {
+    const content = "こんにちは".repeat(32 * 1024)
+    let reads = 0
+    const chunks = [
+      '{"messages":[',
+      JSON.stringify({ role: "user", content }),
+      '],"model":"client-model","stream":true,"extra":"after-model"}',
+    ]
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          const chunk = chunks[reads++]
+          if (chunk) controller.enqueue(new TextEncoder().encode(chunk))
+          else controller.close()
+        },
+      },
+      { highWaterMark: 0 },
+    )
+    const request = await prepareRequestBody(body)
+
+    expect(request.model).toBe("client-model")
+    expect(reads).toBe(3)
+    expect(JSON.parse(await new Response(request.stream("provider-model", true)).text())).toEqual({
+      messages: [{ role: "user", content }],
+      model: "provider-model",
+      stream: true,
+      extra: "after-model",
+      stream_options: { include_usage: true },
+    })
+  })
 })

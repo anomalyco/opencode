@@ -1,4 +1,3 @@
-const PREFIX_LIMIT = 64 * 1024
 const TAIL_LIMIT = 4 * 1024
 const encoder = new TextEncoder()
 
@@ -7,38 +6,68 @@ export async function prepareRequestBody(body: ReadableStream<Uint8Array>) {
   const chunks: Uint8Array[] = []
   const decoder = new TextDecoder()
   let text = ""
-  let inspected = 0
   let done = false
+  let searchFrom = 0
+  let match: RegExpExecArray | null = null
+  const pattern = /("model"\s*:\s*")([^"]+)"/g
 
-  while (!done && inspected < PREFIX_LIMIT) {
+  while (!done && !match) {
     const next = await reader.read()
     done = next.done
     if (!next.value) continue
     chunks.push(next.value)
-    const length = Math.min(next.value.length, PREFIX_LIMIT - inspected)
-    text += decoder.decode(next.value.subarray(0, length), { stream: true })
-    inspected += length
-    if (/^\s*{\s*"model"\s*:\s*"[^"]+"/.test(text)) break
+    text += decoder.decode(next.value, { stream: true })
+    pattern.lastIndex = searchFrom
+    match = pattern.exec(text)
+    searchFrom = Math.max(0, text.length - 256)
+  }
+  if (done) {
+    text += decoder.decode()
+    if (!match) {
+      pattern.lastIndex = searchFrom
+      match = pattern.exec(text)
+    }
   }
 
-  const match = text.match(/^(\s*{\s*"model"\s*:\s*")([^"]+)"/)
+  const found = (() => {
+    if (!match) return
+    const start = utf8Length(text, match.index + match[1].length)
+    return { model: match[2], start, end: start + utf8Length(match[2], match[2].length) }
+  })()
+  const preview = text.substring(0, 300)
+  text = ""
+  match = null
   let used = false
 
   return {
-    model: match?.[2] ?? "",
-    preview: text.substring(0, 300),
+    model: found?.model ?? "",
+    preview,
     cancel: () => reader.cancel(),
     stream(providerModel: string, includeUsage: boolean) {
       if (used) throw new Error("Request body stream already consumed")
-      if (!match) throw new Error("Missing leading model field")
+      if (!found) throw new Error("Missing model field")
       used = true
 
-      const initial = replace(chunks, match[1].length, match[1].length + match[2].length, providerModel)
+      const initial = replace(chunks, found.start, found.end, providerModel)
       const output = passthrough(initial, reader, done)
       if (!includeUsage) return output
       return appendUsage(output)
     },
   }
+}
+
+function utf8Length(value: string, end: number) {
+  let length = 0
+  for (let i = 0; i < end; i++) {
+    const code = value.charCodeAt(i)
+    if (code <= 0x7f) length++
+    else if (code <= 0x7ff) length += 2
+    else if (code >= 0xd800 && code <= 0xdbff && i + 1 < end && value.charCodeAt(i + 1) >= 0xdc00) {
+      length += 4
+      i++
+    } else length += 3
+  }
+  return length
 }
 
 function replace(chunks: Uint8Array[], start: number, end: number, value: string) {
