@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js"
+import { For, Show, onCleanup, onMount } from "solid-js"
 import type { PermissionRequest } from "@opencode-ai/client/promise"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
@@ -11,6 +11,21 @@ export function SessionPermissionDock(props: {
   onDecide: (response: "once" | "always" | "reject") => void
 }) {
   const language = useLanguage()
+  let container: HTMLDivElement | undefined
+
+  // Number-key shortcuts let keyboard and screen-reader users respond without
+  // arrow-key navigation. Keys are handled on the focused dock so typing in
+  // other surfaces never triggers a decision.
+  onMount(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (props.responding || !container?.contains(event.target as Node)) return
+      const responses: Record<string, "once" | "always" | "reject"> = { "1": "once", "2": "always", "3": "reject" }
+      const response = responses[event.key]
+      if (response) props.onDecide(response)
+    }
+    window.addEventListener("keydown", handler)
+    onCleanup(() => window.removeEventListener("keydown", handler))
+  })
 
   const toolDescription = () => {
     const key = `settings.permissions.tool.${props.request.action}.description`
@@ -22,6 +37,11 @@ export function SessionPermissionDock(props: {
   return (
     <DockPrompt
       kind="permission"
+      ref={(el) => {
+        container = el
+        queueMicrotask(() => el.focus())
+      }}
+      onKeyDown={(event) => container?.contains(event.target as Node) && event.stopPropagation()}
       header={
         <div data-slot="permission-row" data-variant="header">
           <span data-slot="permission-icon">
@@ -34,7 +54,13 @@ export function SessionPermissionDock(props: {
         <>
           <div />
           <div data-slot="permission-footer-actions">
-            <Button variant="ghost" size="normal" onClick={() => props.onDecide("reject")} disabled={props.responding}>
+            <Button
+              variant="ghost"
+              size="normal"
+              onClick={() => props.onDecide("reject")}
+              disabled={props.responding}
+              title="Shortcut: 3"
+            >
               {language.t("ui.permission.deny")}
             </Button>
             <Button
@@ -42,10 +68,17 @@ export function SessionPermissionDock(props: {
               size="normal"
               onClick={() => props.onDecide("always")}
               disabled={props.responding}
+              title="Shortcut: 2"
             >
               {language.t("ui.permission.allowAlways")}
             </Button>
-            <Button variant="contrast" size="normal" onClick={() => props.onDecide("once")} disabled={props.responding}>
+            <Button
+              variant="contrast"
+              size="normal"
+              onClick={() => props.onDecide("once")}
+              disabled={props.responding}
+              title="Shortcut: 1"
+            >
               {language.t("ui.permission.allowOnce")}
             </Button>
           </div>
