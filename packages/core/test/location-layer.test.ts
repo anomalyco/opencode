@@ -12,6 +12,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { LocationServiceMap, type LocationServices } from "@opencode-ai/core/location-services"
+import { LocationActivity } from "@opencode-ai/core/location-activity"
 import { Location } from "@opencode-ai/core/location"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
@@ -24,7 +25,6 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { SessionStore } from "@opencode-ai/core/session/store"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
@@ -46,78 +46,26 @@ const itWithSdk = testEffect(
 )
 const activityLocations = Layer.effect(
   LocationServiceMap.Service,
-  Effect.gen(function* () {
-    const bus = yield* Bus.Service
-    const sessions = yield* SessionStore.Service
-    return yield* LocationServiceMap.make(
-      (ref) =>
-        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of({
-            directory: ref.directory,
-            workspaceID: ref.workspaceID,
-            project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
-          }),
-        ) as unknown as Layer.Layer<LocationServices>,
-      { activity: { observe: bus.listen, getSession: sessions.get } },
-    )
-  }),
+  LocationServiceMap.make((ref) =>
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+    Layer.succeed(
+      Location.Service,
+      Location.Service.of({
+        directory: ref.directory,
+        workspaceID: ref.workspaceID,
+        project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
+      }),
+    ) as unknown as Layer.Layer<LocationServices>,
+  ),
 )
 const itWithActivity = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, LocationServiceMap.node]),
+    LayerNode.group([Database.node, Bus.node, LocationServiceMap.node, LocationActivity.node]),
     [[LocationServiceMap.node, activityLocations]],
   ),
 )
 
 describe("LocationServiceMap", () => {
-  it.effect("expires from Session activity instead of Location reads", () =>
-    Effect.gen(function* () {
-      const lifecycle = { acquired: 0, released: 0 }
-      const ref = Location.Ref.make({ directory: AbsolutePath.make("/project") })
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      const layer = Layer.effect(
-        Location.Service,
-        Effect.acquireRelease(
-          Effect.sync(() => {
-            lifecycle.acquired++
-            return Location.Service.of({
-              directory: ref.directory,
-              project: { id: Project.ID.global, directory: AbsolutePath.make("/"), canonical: AbsolutePath.make("/") },
-            })
-          }),
-          () =>
-            Effect.sync(() => {
-              lifecycle.released++
-            }),
-        ),
-      ) as unknown as Layer.Layer<LocationServices>
-      const locations = yield* LocationServiceMap.make(() => layer, {
-        activityTimeToLive: "60 minutes",
-        sweepInterval: "1 minute",
-      })
-      const read = Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
-
-      yield* read
-      yield* TestClock.adjust("59 minutes")
-      yield* read
-      yield* TestClock.adjust("1 minute")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
-      expect(lifecycle).toEqual({ acquired: 1, released: 1 })
-
-      yield* read
-      yield* locations.touch(ref)
-      yield* TestClock.adjust("59 minutes")
-      yield* locations.touch(ref)
-      yield* TestClock.adjust("1 minute")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([ref])
-      yield* TestClock.adjust("59 minutes")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
-      expect(lifecycle).toEqual({ acquired: 2, released: 2 })
-    }),
-  )
-
   itWithActivity.effect("refreshes lifetime from Session events only", () =>
     Effect.gen(function* () {
       const locations = yield* LocationServiceMap.Service

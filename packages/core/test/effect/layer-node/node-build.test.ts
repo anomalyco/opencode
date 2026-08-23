@@ -60,7 +60,6 @@ describe("node build", () => {
                 project: { id: Project.ID.global, directory: service.directory, canonical: service.directory },
               }),
             ) as unknown as Layer.Layer<LocationServices>,
-          { activityTimeToLive: "1 minute" },
         )
       }),
     )
