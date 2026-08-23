@@ -186,18 +186,6 @@ resolve.reset = () => {
   defaultCompatible = undefined
 }
 
-/** @deprecated Use `resolve({ preference: "configured" })` instead. */
-export function preferred(configShell?: string, options?: Options, bin?: string) {
-  return resolve({ preference: "configured" }, configShell, options, bin)
-}
-preferred.reset = resolve.reset
-
-/** @deprecated Use `resolve({ preference: "compatible" })` instead. */
-export function acceptable(configShell?: string, options?: Options, bin?: string) {
-  return resolve({ preference: "compatible" }, configShell, options, bin)
-}
-acceptable.reset = resolve.reset
-
 export async function list(options?: Options, bin?: string): Promise<Item[]> {
   const shells = process.platform === "win32" ? win(options, bin) : await unix()
   return shells.filter((shell) => executable(shell, options, bin)).map((shell) => info(shell, options, bin))
