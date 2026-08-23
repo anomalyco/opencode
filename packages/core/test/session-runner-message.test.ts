@@ -798,6 +798,59 @@ Recent work
     ])
   })
 
+  test("keeps signed reasoning ahead of tool calls when replaying an errored same-model message", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-failed-signed"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              text: "Signed thought",
+              state: { signature: "sig_failed" },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "tool-failed",
+              name: "read",
+              executed: false,
+              state: SessionMessage.ToolStateError.make({
+                status: "error",
+                input: { path: "docs" },
+                error: { type: "unknown", message: "Step interrupted" },
+              }),
+              time: { created, completed: created },
+            }),
+          ],
+          finish: "error",
+          error: { type: "unknown", message: "Step interrupted" },
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+      "anthropic",
+    )
+
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "reasoning",
+        text: "Signed thought",
+        providerMetadata: { anthropic: { signature: "sig_failed" } },
+      },
+      {
+        type: "tool-call",
+        id: "tool-failed",
+        name: "read",
+        input: { path: "docs" },
+        providerExecuted: false,
+        providerMetadata: undefined,
+      },
+    ])
+  })
+
   test("lowers failed assistant reasoning to text", () => {
     const messages = toLLMMessages(
       [

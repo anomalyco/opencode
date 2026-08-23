@@ -157,8 +157,19 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
           providerMetadata: reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.state) : undefined,
         },
       ]
-    if (item.type === "reasoning")
-      return reuseProviderMetadata
+    if (item.type === "reasoning") {
+      // Anthropic requires every thinking block to precede its sibling tool_use
+      // blocks on replay. Demoting a signed/redacted block to plain text on an
+      // errored message that still replays tool calls breaks that invariant and
+      // fails the follow-up request with a 400 - so same-model proofs survive
+      // errors, while everything else keeps demoting.
+      const state = item.state as Record<string, unknown> | undefined
+      const proofed =
+        sameModel &&
+        state !== undefined &&
+        ((typeof state.signature === "string" && state.signature.length > 0) ||
+          typeof state.redactedData === "string")
+      return reuseProviderMetadata || proofed
         ? [
             {
               type: "reasoning",
@@ -169,6 +180,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
         : item.text.length > 0
           ? [{ type: "text", text: item.text }]
           : []
+    }
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.
