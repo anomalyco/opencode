@@ -67,13 +67,27 @@ export function createSessionRevert(input: {
     await stage(message, messages[index - 1])
   }
 
+  // The revert boundary must reference promoted history: an admitted-but-
+  // unpromoted prompt exists only in the client store, and the server's revert
+  // planner cannot stage against it ("Message not found").
+  const promotedUserMessageIDs = async (sessionID: string) => {
+    const page = await server.api.message.list({ sessionID, limit: 200, order: "desc" }).catch(() => undefined)
+    if (!page) return undefined
+    return new Set(page.data.filter((message) => message.type === "user").map((message) => message.id))
+  }
+
   const undo = async () => {
+    const sessionID = input.session.identity.params.id
+    if (!sessionID) return
     const messages = input.session.history.userMessages()
     const reverted = input.session.data.revertMessageID()
-    const boundary = reverted ? messages.findIndex((message) => message.id === reverted) : messages.length
+    const promoted = await promotedUserMessageIDs(sessionID)
+    if (!promoted) return
+    const candidates = messages.filter((message) => promoted.has(message.id))
+    const boundary = reverted ? candidates.findIndex((message) => message.id === reverted) : candidates.length
     if (boundary <= 0) return
-    const message = messages[boundary - 1]
-    if (message) await stage(message, messages[boundary - 2])
+    const message = candidates[boundary - 1]
+    if (message) await stage(message, candidates[boundary - 2])
   }
 
   const redo = async () => {
