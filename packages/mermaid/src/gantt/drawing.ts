@@ -1,7 +1,7 @@
 import { DiagramCanvas } from "../core/canvas.js"
 import { diagramTextWidth } from "../core/text.js"
 import type { GanttGrid } from "./render-grid.js"
-import type { GanttCellStyle, GanttDiagram, GanttDiagramRenderOptions, GanttTask } from "./types.js"
+import type { GanttCellStyle, GanttDiagram, GanttDiagramRenderOptions, GanttRenderStyle, GanttTask } from "./types.js"
 
 const LABEL_GAP = 2
 const MIN_CHART_WIDTH = 24
@@ -52,7 +52,7 @@ export function drawGanttDiagramGrid(diagram: GanttDiagram, options: GanttDiagra
       return
     }
     grid.setText(labelWidth - diagramTextWidth(entry.task.label), y, entry.task.label, entry.task.state)
-    drawTask(grid, entry.task, chartX, y, chartWidth, minimum, span)
+    drawTask(grid, entry.task, chartX, y, chartWidth, minimum, span, options.style ?? "rail")
   })
   return grid
 }
@@ -99,6 +99,7 @@ function drawTask(
   width: number,
   minimum: number,
   span: number,
+  style: GanttRenderStyle,
 ): void {
   const start = Math.round(((task.start - minimum) / span) * (width - 1))
   const end = Math.round(((task.end - minimum) / span) * (width - 1))
@@ -106,7 +107,22 @@ function drawTask(
     grid.setCell(x + start, y, "◆", task.state)
     return
   }
-  for (let offset = start; offset <= end; offset++) grid.setCell(x + offset, y, "━", task.state)
+  if (style === "track") {
+    for (let offset = 0; offset < width; offset++) grid.setCell(x + offset, y, "·", "axis")
+  }
+  const glyph = style === "block" ? "█" : style === "points" ? "─" : "━"
+  for (let offset = start; offset <= end; offset++) grid.setCell(x + offset, y, glyph, task.state)
+  if (style === "block") return
+  if (style === "capsule" || style === "track") {
+    grid.setCell(x + start, y, "╺", task.state)
+    grid.setCell(x + end, y, "╸", task.state)
+    return
+  }
+  if (style === "points") {
+    grid.setCell(x + start, y, "●", task.state)
+    grid.setCell(x + end, y, "●", task.state)
+    return
+  }
   grid.setCell(x + start, y, "┣", task.state)
   grid.setCell(x + end, y, "┫", task.state)
 }

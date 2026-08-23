@@ -25,6 +25,9 @@ export interface GanttDiagram {
 
 export interface GanttDiagramRenderOptions {
   layoutMaxWidth?: number
+  style?: GanttRenderStyle
 }
+
+export type GanttRenderStyle = "rail" | "block" | "capsule" | "points" | "track"
 
 export type GanttCellStyle = "title" | "axis" | "section" | GanttTaskState

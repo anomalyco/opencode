@@ -55,6 +55,13 @@ describe("GanttDiagram", () => {
     expect(renderGanttDiagram(secondsDiagram)).toContain("┣")
   })
 
+  test("renders alternate terminal bar styles", () => {
+    expect(renderGanttDiagram(secondsDiagram, { style: "block" })).toContain("█")
+    expect(renderGanttDiagram(secondsDiagram, { style: "capsule" })).toContain("╺")
+    expect(renderGanttDiagram(secondsDiagram, { style: "points" })).toContain("●")
+    expect(renderGanttDiagram(secondsDiagram, { style: "track" })).toContain("·")
+  })
+
   test("resolves task ids, after dependencies, durations, and milestones", () => {
     const diagram = parseMermaidGanttDiagram(`gantt
       dateFormat YYYY-MM-DD
