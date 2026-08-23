@@ -140,7 +140,6 @@ const HOSTED_TOOLS = {
     name: "mcp",
     input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
   },
-  local_shell_call: { name: "local_shell", input: (item) => item.action ?? {} },
 } as const satisfies ResponsesHostedTools.Definitions
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
