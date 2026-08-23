@@ -1,8 +1,11 @@
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
+import { Database } from "@opencode-ai/core/database/database"
 import { Plugin } from "../plugin"
 import { Format } from "../format"
 import { LSP } from "@/lsp/lsp"
 import { Snapshot } from "../snapshot"
+import { Session } from "@/session/session"
+import { SessionRecovery } from "@/session/recovery"
 import * as Project from "./project"
 import * as Vcs from "./vcs"
 import { InstanceState } from "@/effect/instance-state"
@@ -21,10 +24,12 @@ const layer = Layer.effect(
     // InstanceStore imports only the lightweight tag from bootstrap-service.ts,
     // so it can depend on bootstrap without importing this implementation graph.
     const config = yield* Config.Service
+    const database = yield* Database.Service
     const format = yield* Format.Service
     const lsp = yield* LSP.Service
     const plugin = yield* Plugin.Service
     const project = yield* Project.Service
+    const sessions = yield* Session.Service
     const shareNext = yield* ShareNext.Service
     const snapshot = yield* Snapshot.Service
     const vcs = yield* Vcs.Service
@@ -34,6 +39,8 @@ const layer = Layer.effect(
       yield* Effect.logInfo("bootstrapping", { directory: ctx.directory })
       // everything depends on config so eager load it for nice traces
       yield* config.get()
+      // Finalize assistant messages orphaned by a previous process dying mid-turn.
+      yield* SessionRecovery.recover({ db: database.db, sessions }).pipe(Effect.ignore)
       // Plugin can mutate config so it has to be initialized before anything else.
       yield* plugin.init()
       // Each service self-manages its own slow work via Effect.forkScoped against
@@ -52,7 +59,18 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Config.node, Format.node, LSP.node, Plugin.node, Project.node, ShareNext.node, Snapshot.node, Vcs.node],
+  deps: [
+    Config.node,
+    Database.node,
+    Format.node,
+    LSP.node,
+    Plugin.node,
+    Project.node,
+    Session.node,
+    ShareNext.node,
+    Snapshot.node,
+    Vcs.node,
+  ],
 })
 
 export * as InstanceBootstrap from "./bootstrap"

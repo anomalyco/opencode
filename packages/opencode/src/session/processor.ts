@@ -443,6 +443,14 @@ const layer = Layer.effect(
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
+            yield* Effect.logInfo("step-finish", {
+              "session.id": ctx.sessionID,
+              messageID: ctx.assistantMessage.id,
+              step: value.index,
+              reason: value.reason,
+              "tokens.output": usage.tokens.output,
+              cost: usage.cost,
+            })
             yield* session.updatePart({
               id: PartID.ascending(),
               reason: value.reason,
