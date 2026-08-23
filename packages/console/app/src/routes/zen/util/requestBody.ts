@@ -8,6 +8,7 @@ export async function prepareRequestBody(body: ReadableStream<Uint8Array>) {
   let text = ""
   let done = false
   let searchFrom = 0
+  let bom = 0
   let match: RegExpExecArray | null = null
   const pattern = /("model"\s*:\s*")([^"]+)"/g
 
@@ -15,6 +16,7 @@ export async function prepareRequestBody(body: ReadableStream<Uint8Array>) {
     const next = await reader.read()
     done = next.done
     if (!next.value) continue
+    if (!chunks.length && next.value[0] === 0xef && next.value[1] === 0xbb && next.value[2] === 0xbf) bom = 3
     chunks.push(next.value)
     text += decoder.decode(next.value, { stream: true })
     pattern.lastIndex = searchFrom
@@ -31,7 +33,7 @@ export async function prepareRequestBody(body: ReadableStream<Uint8Array>) {
 
   const found = (() => {
     if (!match) return
-    const start = utf8Length(text, match.index + match[1].length)
+    const start = bom + utf8Length(text, match.index + match[1].length)
     return { model: match[2], start, end: start + utf8Length(match[2], match[2].length) }
   })()
   const preview = text.substring(0, 300)
@@ -49,6 +51,7 @@ export async function prepareRequestBody(body: ReadableStream<Uint8Array>) {
       used = true
 
       const initial = replace(chunks, found.start, found.end, providerModel)
+      chunks.length = 0
       const output = passthrough(initial, reader, done)
       if (!includeUsage) return output
       return appendUsage(output)
@@ -89,15 +92,18 @@ function replace(chunks: Uint8Array[], start: number, end: number, value: string
   })
 }
 
-function passthrough(initial: Uint8Array[], reader: ReadableStreamDefaultReader<Uint8Array>, sourceDone: boolean) {
+function passthrough(initial: Array<Uint8Array | undefined>, reader: ReadableStreamDefaultReader<Uint8Array>, sourceDone: boolean) {
   let done = sourceDone
+  let index = 0
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
-      const chunk = initial.shift()
+      const chunk = initial[index]
       if (chunk) {
+        initial[index++] = undefined
         controller.enqueue(chunk)
         return
       }
+      initial.length = 0
       if (done) {
         controller.close()
         return
@@ -108,6 +114,7 @@ function passthrough(initial: Uint8Array[], reader: ReadableStreamDefaultReader<
       if (done) controller.close()
     },
     cancel(reason) {
+      initial.length = 0
       return reader.cancel(reason)
     },
   })
