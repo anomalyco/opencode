@@ -301,6 +301,11 @@ export function createSessionTimelineRowRenderer(input: {
     if (message.type === "model-switched") return undefined
     if (message.type === "skill") return { label: i18n.t("ui.tool.skill"), data: message.name }
     if (message.type === "system") {
+      const sources = Array.isArray(message.metadata?.instructionSources)
+        ? message.metadata.instructionSources.filter((item): item is string => typeof item === "string")
+        : undefined
+      if (message.metadata?.notice === "instructions" && sources?.length)
+        return { label: i18n.t("ui.sessionTimeline.notice.instructionsUpdated"), items: sources }
       const prefix = "Instructions updated: "
       if (message.description?.startsWith(prefix)) {
         const keys = message.description
@@ -316,6 +321,7 @@ export function createSessionTimelineRowRenderer(input: {
       return { label: message.description ?? message.text }
     }
     if (message.type !== "synthetic") return undefined
+    if (message.metadata?.notice === "restart") return { label: i18n.t("ui.sessionTimeline.notice.restart") }
     if (message.description === "Continuing after restart") return { label: message.description }
     const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
     const state = typeof message.metadata?.state === "string" ? message.metadata.state : undefined
