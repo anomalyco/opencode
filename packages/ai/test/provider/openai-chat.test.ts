@@ -342,6 +342,7 @@ describe("OpenAI Chat route", () => {
           },
           { role: "tool", tool_call_id: "call_1", content: encodeJson({ forecast: "sunny" }) },
         ],
+        tools: [],
         stream: true,
         stream_options: { include_usage: true },
       })

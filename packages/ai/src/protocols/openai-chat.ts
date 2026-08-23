@@ -156,6 +156,9 @@ const OpenAIChatUsage = Schema.StructWithRest(
     prompt_tokens: optionalNull(Schema.Number),
     completion_tokens: optionalNull(Schema.Number),
     total_tokens: optionalNull(Schema.Number),
+    // Zai reports cache hits as top-level `cached_tokens`; DeepSeek uses `prompt_cache_hit_tokens`.
+    cached_tokens: optionalNull(Schema.Number),
+    prompt_cache_hit_tokens: optionalNull(Schema.Number),
     prompt_tokens_details: optionalNull(
       Schema.StructWithRest(
         Schema.Struct({
@@ -204,11 +207,16 @@ const OpenAIChatDelta = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 
-const OpenAIChatChoice = Schema.Struct({
-  delta: optionalNull(OpenAIChatDelta),
-  finish_reason: optionalNull(Schema.String),
-  native_finish_reason: optionalNull(Schema.String),
-})
+const OpenAIChatChoice = Schema.StructWithRest(
+  Schema.Struct({
+    delta: optionalNull(OpenAIChatDelta),
+    finish_reason: optionalNull(Schema.String),
+    native_finish_reason: optionalNull(Schema.String),
+    // Moonshot streams usage on `choice.usage` instead of top-level `usage`.
+    usage: optionalNull(OpenAIChatUsage),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 
 const OpenAIChatError = Schema.Struct({
   code: optionalNull(Schema.Union([Schema.String, Schema.Number])),
@@ -509,6 +517,17 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
   return messages
 })
 
+// Anthropic via LiteLLM and Amazon Bedrock require `tools` to be present
+// whenever the conversation history contains tool calls/results. Send an
+// explicit empty array when we have history but no active tools.
+const hasToolHistory = (messages: ReadonlyArray<LLMRequest["messages"][number]>) => {
+  for (const message of messages) {
+    if (message.role === "tool") return true
+    if (message.role === "assistant" && message.content.some((part) => part.type === "tool-call")) return true
+  }
+  return false
+}
+
 const lowerOptions = (request: LLMRequest) => {
   const options = OpenAIOptions.resolve(request)
   return {
@@ -532,12 +551,15 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const maxTokensField = request.model.compatibility?.maxTokensField ?? "max_tokens"
+  const hasHistory = hasToolHistory(request.messages)
   return {
     model: request.model.id,
     messages: yield* lowerMessages(request, options),
     tools:
       request.tools.length === 0
-        ? undefined
+        ? hasHistory
+          ? []
+          : undefined
         : request.tools.map((tool) =>
             lowerTool(
               tool,
@@ -581,11 +603,18 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // total) with a `reasoning_tokens` subset. We pass the inclusive totals
 // through and derive the non-cached breakdown so the `AI.Usage` contract is
 // satisfied on both sides.
+// Providers differ on cache-hit location: OpenAI uses
+// `prompt_tokens_details.cached_tokens`, DeepSeek uses
+// `prompt_cache_hit_tokens`, and Zai uses top-level `cached_tokens`.
 const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
   const input = usage.prompt_tokens ?? undefined
   const output = usage.completion_tokens ?? undefined
-  const cached = usage.prompt_tokens_details?.cached_tokens ?? undefined
+  const cached =
+    (usage.prompt_tokens_details?.cached_tokens ??
+      (usage as { prompt_cache_hit_tokens?: number | null }).prompt_cache_hit_tokens ??
+      (usage as { cached_tokens?: number | null }).cached_tokens ??
+      undefined) as number | undefined
   const cacheWrite = usage.prompt_tokens_details?.cache_write_tokens ?? undefined
   const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? undefined
   const nonCached = ProviderShared.subtractTokens(input, ProviderShared.sumTokens(cached, cacheWrite))
@@ -691,8 +720,11 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         }),
       })
     const events: LLMEvent[] = []
-    const usage = mapUsage(event.usage) ?? state.usage
     const choice = event.choices?.[0]
+    // Moonshot (and a few other OpenAI-compatible providers) attach usage to
+    // `choice.usage` instead of the top-level `usage` field.
+    const choiceUsage = (choice as unknown as { usage?: OpenAIChatEvent["usage"] })?.usage
+    const usage = mapUsage(event.usage) ?? (choiceUsage ? mapUsage(choiceUsage) : undefined) ?? state.usage
     const rawFinishReason = choice?.finish_reason
     const finishReason =
       rawFinishReason !== undefined && rawFinishReason !== null
