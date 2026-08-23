@@ -1028,7 +1028,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(props.sessionID, -1, input.plainText)
+            const item = history.move(-1, input.plainText)
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1067,7 +1067,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(props.sessionID, 1, input.plainText)
+            const item = history.move(1, input.plainText)
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1260,7 +1260,7 @@ export function Prompt(props: PromptProps) {
     }
 
     const target = sessionID
-    history.append(target, entry)
+    history.append(entry)
     const dispatch = (send: () => Promise<unknown>) => {
       const setup = newSession
       if (setup) void setup.gate.then(send).catch(setup.recover)
@@ -1562,7 +1562,7 @@ export function Prompt(props: PromptProps) {
       (store.prompt.files?.length ?? 0) > 0 ||
       (store.prompt.agents?.length ?? 0) > 0
     ) {
-      history.append(props.sessionID, {
+      history.append({
         ...store.prompt,
         mode: store.mode,
       })
