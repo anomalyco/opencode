@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { MermaidSyntaxError } from "../diagnostics.js"
 import { expectDiagram } from "../test/diagram.js"
 import { renderGanttDiagram } from "./diagram.js"
+import { drawGanttDiagramGrid } from "./drawing.js"
 import { isMermaidGanttDiagram, parseMermaidGanttDiagram } from "./parser.js"
 
 const secondsDiagram = `gantt
@@ -62,6 +63,18 @@ describe("GanttDiagram", () => {
     expect(renderGanttDiagram(secondsDiagram, { style: "track" })).toContain("·")
     expect(renderGanttDiagram(secondsDiagram, { style: "track", track: "line" })).not.toContain("·")
     expect(renderGanttDiagram(secondsDiagram, { style: "track", endpoints: "points" })).toContain("●")
+    expect(renderGanttDiagram(secondsDiagram, { style: "track", line: "thin" })).toContain("─")
+    expect(renderGanttDiagram(secondsDiagram, { style: "track", line: "double" })).toContain("═")
+    expect(renderGanttDiagram(secondsDiagram, { style: "track", line: "dashed" })).toContain("╌")
+    expect(renderGanttDiagram(secondsDiagram, { labels: "tree" })).toContain("├─ provider.create")
+    expect(renderGanttDiagram(secondsDiagram, { labels: "tree" })).toContain("└─ model streams first token")
+    expect(renderGanttDiagram(secondsDiagram, { sections: "spaced" })).toContain("\n\nNEW (eager kick)")
+
+    const points = drawGanttDiagramGrid(parseMermaidGanttDiagram(secondsDiagram), {
+      style: "track",
+      endpoints: "points",
+    }).rows.flatMap((row) => row.filter((cell) => cell.char === "●"))
+    expect(points.every((cell) => cell.style === "axis")).toBe(true)
   })
 
   test("resolves task ids, after dependencies, durations, and milestones", () => {

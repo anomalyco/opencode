@@ -1,7 +1,15 @@
 import { DiagramCanvas } from "../core/canvas.js"
 import { diagramTextWidth } from "../core/text.js"
 import type { GanttGrid } from "./render-grid.js"
-import type { GanttCellStyle, GanttDiagram, GanttDiagramRenderOptions, GanttRenderStyle, GanttTask } from "./types.js"
+import type {
+  GanttCellStyle,
+  GanttDiagram,
+  GanttDiagramRenderOptions,
+  GanttLabelLayout,
+  GanttLineStyle,
+  GanttRenderStyle,
+  GanttTask,
+} from "./types.js"
 
 const LABEL_GAP = 2
 const MIN_CHART_WIDTH = 24
@@ -9,15 +17,19 @@ const MAX_CHART_WIDTH = 64
 
 export function drawGanttDiagramGrid(diagram: GanttDiagram, options: GanttDiagramRenderOptions = {}): GanttGrid {
   if (diagram.entries.length === 0) return new DiagramCanvas(0, 0)
-  const labelWidth = Math.max(
-    ...diagram.entries.map((entry) =>
-      diagramTextWidth(entry.type === "section" ? entry.section.label : entry.task.label),
-    ),
-  )
+  const labels = diagram.entries.map((_, index) => entryLabel(diagram, index, options.labels ?? "right"))
+  const labelWidth = Math.max(...labels.map(diagramTextWidth))
+  const entryRows: number[] = []
+  let bodyHeight = 0
+  diagram.entries.forEach((entry, index) => {
+    if (options.sections === "spaced" && entry.type === "section" && index > 0) bodyHeight += 1
+    entryRows.push(bodyHeight)
+    bodyHeight += 1
+  })
   if (diagram.tasks.length === 0) {
-    const grid: GanttGrid = new DiagramCanvas(labelWidth, diagram.entries.length)
+    const grid: GanttGrid = new DiagramCanvas(labelWidth, bodyHeight)
     diagram.entries.forEach((entry, index) => {
-      if (entry.type === "section") grid.setText(0, index, entry.section.label, "section")
+      if (entry.type === "section") grid.setText(0, entryRows[index]!, entry.section.label, "section")
     })
     return grid
   }
@@ -30,10 +42,7 @@ export function drawGanttDiagramGrid(diagram: GanttDiagram, options: GanttDiagra
   const span = Math.max(1, maximum - minimum)
   const titleHeight = diagram.title ? 2 : 0
   const axisHeight = 2
-  const grid: GanttGrid = new DiagramCanvas(
-    labelWidth + LABEL_GAP + chartWidth,
-    titleHeight + axisHeight + diagram.entries.length,
-  )
+  const grid: GanttGrid = new DiagramCanvas(labelWidth + LABEL_GAP + chartWidth, titleHeight + axisHeight + bodyHeight)
   const chartX = labelWidth + LABEL_GAP
 
   if (diagram.title)
@@ -46,12 +55,14 @@ export function drawGanttDiagramGrid(diagram: GanttDiagram, options: GanttDiagra
   drawAxis(grid, chartX, titleHeight, chartWidth, minimum, span, diagram.axisFormat)
 
   diagram.entries.forEach((entry, index) => {
-    const y = titleHeight + axisHeight + index
+    const y = titleHeight + axisHeight + entryRows[index]!
     if (entry.type === "section") {
-      grid.setText(0, y, entry.section.label, "section")
+      grid.setText(0, y, labels[index]!, "section")
       return
     }
-    grid.setText(labelWidth - diagramTextWidth(entry.task.label), y, entry.task.label, entry.task.state)
+    const label = labels[index]!
+    const labelX = options.labels === undefined || options.labels === "right" ? labelWidth - diagramTextWidth(label) : 0
+    grid.setText(labelX, y, label, entry.task.state)
     drawTask(grid, entry.task, chartX, y, chartWidth, minimum, span, options)
   })
   return grid
@@ -102,6 +113,7 @@ function drawTask(
   options: GanttDiagramRenderOptions,
 ): void {
   const style: GanttRenderStyle = options.style ?? "rail"
+  const line = lineGlyph(options.line ?? "heavy")
   const start = Math.round(((task.start - minimum) / span) * (width - 1))
   const end = Math.round(((task.end - minimum) / span) * (width - 1))
   if (task.state === "milestone" || start === end) {
@@ -110,20 +122,24 @@ function drawTask(
   }
   if (style === "track") {
     for (let offset = 0; offset < width; offset++) {
-      grid.setCell(x + offset, y, options.track === "line" ? "━" : "·", "axis")
+      grid.setCell(x + offset, y, options.track === "line" ? line : "·", "axis")
     }
   }
-  const glyph = style === "block" ? "█" : style === "points" ? "─" : "━"
+  const glyph = style === "block" ? "█" : line
   for (let offset = start; offset <= end; offset++) grid.setCell(x + offset, y, glyph, task.state)
   if (style === "block") return
   if (style === "capsule" || style === "track") {
-    if (style === "track" && options.endpoints === "points") {
-      grid.setCell(x + start, y, "●", task.state)
-      grid.setCell(x + end, y, "●", task.state)
-      return
+    if (style === "track") {
+      const endpoints = options.endpoints ?? "caps"
+      if (endpoints === "points") {
+        grid.setCell(x + start, y, "●", "axis")
+        grid.setCell(x + end, y, "●", "axis")
+        return
+      }
     }
-    grid.setCell(x + start, y, "╺", task.state)
-    grid.setCell(x + end, y, "╸", task.state)
+    const caps = capGlyphs(options.line ?? "heavy")
+    grid.setCell(x + start, y, caps.start, task.state)
+    grid.setCell(x + end, y, caps.end, task.state)
     return
   }
   if (style === "points") {
@@ -133,6 +149,28 @@ function drawTask(
   }
   grid.setCell(x + start, y, "┣", task.state)
   grid.setCell(x + end, y, "┫", task.state)
+}
+
+function entryLabel(diagram: GanttDiagram, index: number, layout: GanttLabelLayout): string {
+  const entry = diagram.entries[index]!
+  if (entry.type === "section" || layout !== "tree") {
+    return entry.type === "section" ? entry.section.label : entry.task.label
+  }
+  const last = diagram.entries[index + 1]?.type !== "task"
+  return `  ${last ? "└" : "├"}─ ${entry.task.label}`
+}
+
+function lineGlyph(line: GanttLineStyle): string {
+  if (line === "thin") return "─"
+  if (line === "double") return "═"
+  if (line === "dashed") return "╌"
+  return "━"
+}
+
+function capGlyphs(line: GanttLineStyle): { start: string; end: string } {
+  if (line === "thin" || line === "dashed") return { start: "╶", end: "╴" }
+  if (line === "double") return { start: "╞", end: "╡" }
+  return { start: "╺", end: "╸" }
 }
 
 function formatTime(value: number, format: string): string {

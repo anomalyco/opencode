@@ -28,8 +28,13 @@ export interface GanttDiagramRenderOptions {
   style?: GanttRenderStyle
   track?: "dots" | "line"
   endpoints?: "caps" | "points"
+  line?: GanttLineStyle
+  labels?: GanttLabelLayout
+  sections?: "compact" | "spaced"
 }
 
 export type GanttRenderStyle = "rail" | "block" | "capsule" | "points" | "track"
+export type GanttLineStyle = "heavy" | "thin" | "double" | "dashed"
+export type GanttLabelLayout = "right" | "left" | "tree"
 
 export type GanttCellStyle = "title" | "axis" | "section" | GanttTaskState

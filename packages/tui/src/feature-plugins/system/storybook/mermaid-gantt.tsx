@@ -50,6 +50,9 @@ const VARIATIONS = [
   },
 ] as const
 
+const LINES = ["heavy", "thin", "double", "dashed"] as const
+const LABELS = ["right", "left", "tree"] as const
+
 function MermaidGanttStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const themes = useThemes()
@@ -57,12 +60,29 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
   const [selected, setSelected] = createSignal(0)
   const [track, setTrack] = createSignal<"dots" | "line">("dots")
   const [endpoints, setEndpoints] = createSignal<"caps" | "points">("caps")
+  const [line, setLine] = createSignal(0)
+  const [labels, setLabels] = createSignal(0)
+  const [sections, setSections] = createSignal<"compact" | "spaced">("compact")
   const variation = () => VARIATIONS[selected()]
-  const rendering = createMemo(() => ({ ...variation(), track: track(), endpoints: endpoints() }))
+  const rendering = createMemo(() => ({
+    ...variation(),
+    track: track(),
+    endpoints: endpoints(),
+    line: LINES[line()],
+    labels: LABELS[labels()],
+    sections: sections(),
+  }))
   const select = (index: number) => setSelected((index + VARIATIONS.length) % VARIATIONS.length)
   const renderer = (item: ReturnType<typeof rendering>) =>
     createMermaidMarkdownRenderer(props.context.renderer, () => ({
-      gantt: { style: item.style, track: item.track, endpoints: item.endpoints },
+      gantt: {
+        style: item.style,
+        track: item.track,
+        endpoints: item.endpoints,
+        line: item.line,
+        labels: item.labels,
+        sections: item.sections,
+      },
       colors: createOpenCodeDiagramPalette({
         text: props.context.theme.text.default,
         subdued: props.context.theme.text.subdued,
@@ -88,7 +108,7 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         run: () => select(selected() - 1),
       },
       {
-        bind: "right,l",
+        bind: "right",
         title: "Next rendering",
         group: "Storybook",
         run: () => select(selected() + 1),
@@ -112,6 +132,24 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         run: () => setEndpoints((value) => (value === "caps" ? "points" : "caps")),
       },
       {
+        bind: "l",
+        title: "Next line style",
+        group: "Storybook",
+        run: () => setLine((value) => (value + 1) % LINES.length),
+      },
+      {
+        bind: "a",
+        title: "Next label alignment",
+        group: "Storybook",
+        run: () => setLabels((value) => (value + 1) % LABELS.length),
+      },
+      {
+        bind: "s",
+        title: "Toggle section spacing",
+        group: "Storybook",
+        run: () => setSections((value) => (value === "compact" ? "spaced" : "compact")),
+      },
+      {
         bind: "r",
         title: "Reset rendering",
         group: "Storybook",
@@ -119,6 +157,9 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
           select(0)
           setTrack("dots")
           setEndpoints("caps")
+          setLine(0)
+          setLabels(0)
+          setSections("compact")
         },
       },
     ],
@@ -153,12 +194,15 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         context={props.context}
         title="storybook / Mermaid Gantt render lab"
         details={[`${selected() + 1}/${VARIATIONS.length}`, `${dimensions().width}×${dimensions().height}`]}
-        status={`${variation().title}${variation().style === "track" ? ` · ${track()} · ${endpoints()}` : ""}`}
+        status={`${variation().title} · ${LINES[line()]} · ${LABELS[labels()]} · ${sections()}${variation().style === "track" ? ` · ${track()} · ${endpoints()}` : ""}`}
         controls={[
           { shortcut: "←/→", label: "rendering" },
           { shortcut: "1–5", label: "select" },
+          { shortcut: "l", label: "line" },
           { shortcut: "t", label: "track" },
           { shortcut: "e", label: "ends" },
+          { shortcut: "a", label: "labels" },
+          { shortcut: "s", label: "spacing" },
           { shortcut: "r", label: "reset" },
           { shortcut: "esc", label: "back" },
         ]}
