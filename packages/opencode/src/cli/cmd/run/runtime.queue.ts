@@ -178,7 +178,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             },
             {
               phase: "running",
-              status: "sending prompt",
+              status: queued ? "sending your queued message" : "sending prompt",
               queue: state.queue.length,
             },
           )

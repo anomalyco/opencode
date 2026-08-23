@@ -1005,7 +1005,7 @@ export class RunFooter implements FooterApi {
 
     this.clearInterruptTimer()
     this.patch({ interrupt: 0 })
-    this.setNotice("interrupting")
+    this.setNotice(this.state().queue > 0 ? "interrupted — sending your queued message" : "interrupting")
     this.options.onInterrupt?.()
     return true
   }
