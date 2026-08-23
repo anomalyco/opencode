@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM } from "../../src/index.js"
+import { LLM, Message, ToolCallPart } from "../../src/index.js"
 import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -72,6 +72,53 @@ describe("Google Vertex providers", () => {
       expect(prepared.body).toMatchObject({
         labels: { component: "opencode", environment: "test" },
       })
+    }),
+  )
+
+  it.effect("strips function call ids Vertex does not accept from lowered bodies", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: GoogleVertex.configure({
+            accessToken: "vertex-token",
+            project: "vertex-project",
+          }).model("gemini-3.5-flash"),
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({
+                id: "call_1",
+                name: "lookup",
+                input: { query: "weather" },
+                providerMetadata: { google: { functionCallId: "provider_call_1" } },
+              }),
+            ]),
+            Message.tool({
+              id: "call_1",
+              name: "lookup",
+              result: "sunny",
+              resultType: "text",
+              providerMetadata: { google: { functionCallId: "provider_call_1" } },
+            }),
+          ],
+        }),
+      )
+
+      expect(JSON.stringify(prepared.body.contents)).not.toContain('"id"')
+      expect(prepared.body.contents).toMatchObject([
+        { role: "model", parts: [{ functionCall: { id: undefined, name: "lookup", args: { query: "weather" } } }] },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                id: undefined,
+                name: "lookup",
+                response: { name: "lookup", content: "sunny" },
+              },
+            },
+          ],
+        },
+      ])
     }),
   )
 

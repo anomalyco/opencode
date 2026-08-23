@@ -38,13 +38,23 @@ export type Settings = ProviderPackage.Settings &
 
 const fromRequest = Effect.fn("GoogleVertex.fromRequest")(function* (request: LLMRequest) {
   const body = yield* Gemini.protocol.body.from(request)
+  // Vertex's native REST schema rejects `id` on FunctionCall/FunctionResponse parts with HTTP 400,
+  // unlike AI Studio, so history minted there cannot be lowered verbatim.
+  const contents = body.contents.map((content) => ({
+    ...content,
+    parts: content.parts.map((part) => {
+      if ("functionCall" in part) return { ...part, functionCall: { ...part.functionCall, id: undefined } }
+      if ("functionResponse" in part) return { ...part, functionResponse: { ...part.functionResponse, id: undefined } }
+      return part
+    }),
+  }))
   const value = request.providerOptions?.labels
   const labels = ProviderShared.isRecord(value)
     ? Object.fromEntries(
         Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
       )
     : undefined
-  return { ...body, labels }
+  return { ...body, contents, labels }
 })
 
 const protocol = {
