@@ -75,6 +75,9 @@ const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?ma
 const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded/i
 const CONTENT_POLICY_TEXT = /content[-_\s]?policy|content_filter|safety/i
 const NETWORK_ERROR_TEXT = /network[-_\s]error/i
+// Plain stream errors (no status, no code) often carry only transient-capacity
+// phrasing; these still belong on the retryable provider-internal path.
+const PROVIDER_CAPACITY_TEXT = /\bat capacity\b|\bhigh demand\b|\boverloaded\b/i
 
 export interface ProviderFailure {
   readonly message: string
@@ -140,6 +143,8 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
       status: input.status,
       retryAfterMs: input.retryAfterMs,
     })
+  if (PROVIDER_CAPACITY_TEXT.test(text))
+    return new ProviderInternalReason({ ...common, status: input.status, retryAfterMs: input.retryAfterMs })
   if (input.status === 429) {
     return new RateLimitReason({
       ...common,

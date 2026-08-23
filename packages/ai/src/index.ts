@@ -3,7 +3,7 @@ export { ImageClient } from "./image-client.js"
 export { Auth } from "./route/auth.js"
 export { Provider } from "./provider.js"
 export { ProviderPackage } from "./provider-package.js"
-export { isContextOverflow, isContextOverflowFailure } from "./provider-error.js"
+export { isContextOverflow, isContextOverflowFailure, classifyProviderFailure } from "./provider-error.js"
 export type {
   RouteLanguageModelInput,
   RouteRoutedLanguageModelInput,

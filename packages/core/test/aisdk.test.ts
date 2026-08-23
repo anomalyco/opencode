@@ -536,6 +536,18 @@ it.effect("preserves non-empty AI SDK error messages", () =>
   }),
 )
 
+it.effect("classifies plain AI SDK stream capacity errors as retryable", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      new Error("The model is currently at capacity due to high demand. Please try again in a few minutes."),
+    )
+    expect(error).toBeInstanceOf(AIError)
+    expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
+    const projected = toSessionError(error)
+    expect(projected.type).toBe("provider.internal")
+  }),
+)
+
 const apiCallError = (input: Partial<ConstructorParameters<typeof APICallError>[0]>) =>
   new APICallError({
     message: "",

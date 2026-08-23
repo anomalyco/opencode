@@ -25,11 +25,11 @@ import {
   ProviderMetadata,
   TransportReason,
   ToolResultValue,
-  UnknownProviderReason,
   type ContentPart,
   type LLMRequest,
   type ToolDefinition,
   type UsageInput,
+  classifyProviderFailure,
 } from "@opencode-ai/ai"
 import { Auth, Endpoint, RequestExecutor, type AnyRoute } from "@opencode-ai/ai/route"
 import { ProviderShared } from "@opencode-ai/ai/protocols/shared"
@@ -791,7 +791,9 @@ function llmError(method: string, error: unknown) {
       ? new InvalidProviderOutputReason({ message: error.message })
       : APICallError.isInstance(error)
         ? apiCallErrorReason(error)
-        : new UnknownProviderReason({ message: unknownErrorMessage(error) })
+        : // Plain stream errors carry only a message; run the shared classifier so
+          // known transient text retries instead of falling straight to UnknownProvider.
+          classifyProviderFailure({ message: unknownErrorMessage(error) })
   return new AIError({
     module: "AISDK",
     method,
