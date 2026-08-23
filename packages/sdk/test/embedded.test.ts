@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
-import { LanguageModel } from "@opencode-ai/ai"
+import { LanguageModel, LLMClient, LLMResponse, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -586,6 +586,108 @@ it.live(
 it.live(
   "starts model execution without provisioning a lazy workspace",
   () => withEmbedded("opencode-embedded-workspace-lazy-", (fixture) => workspaceModelScenario(fixture, "lazy")),
+  15_000,
+)
+
+it.live(
+  "blocks the model-selected first tool on lazy provisioning",
+  () =>
+    withEmbedded("opencode-embedded-workspace-tool-", (fixture) =>
+      Effect.gen(function* () {
+        const calls: string[] = []
+        const createStarted = yield* Deferred.make<void>()
+        const createRelease = yield* Deferred.make<void>()
+        yield* Effect.addFinalizer(() => Deferred.succeed(createRelease, undefined).pipe(Effect.asVoid))
+        const model = LanguageModel.make({ id: "workspace-tool-test", provider: "test", route: OpenAIChat.route })
+        // The first tool-advertising request selects the shell tool; everything else
+        // (including title generation, which carries no tools) answers with text.
+        let toolIssued = false
+        const respond = (request: LLMRequest) => {
+          const wantsTool = !toolIssued && request.tools.some((tool) => tool.name === "shell")
+          if (!wantsTool) return TestLLM.text("done", "answer")
+          toolIssued = true
+          return TestLLM.tool("call-shell", "shell", { command: "echo hi" })
+        }
+        const client = Layer.succeed(
+          LLMClient.Service,
+          LLMClient.Service.of({
+            stream: (request) => Stream.fromIterable(respond(request)),
+            generate: (request) =>
+              Stream.fromIterable(respond(request)).pipe(
+                Stream.runFold(LLMResponse.empty, LLMResponse.reduce),
+                Effect.flatMap((state) => {
+                  const response = LLMResponse.complete(state)
+                  if (response) return Effect.succeed(response)
+                  return Effect.die("test response ended without a terminal finish event")
+                }),
+              ),
+          }),
+        )
+        const models = Layer.mock(SessionRunnerModel.Service, {
+          resolve: () =>
+            Effect.succeed(
+              SessionRunnerModel.resolved(model, {
+                capabilities: { tools: true, input: ["text"], output: ["text"] },
+                cost: [],
+                limit: { context: 100_000, output: 1_000 },
+              }),
+            ),
+        })
+        const driver = WorkspaceDriver.make({
+          create: ({ workspaceID }) => {
+            calls.push("create")
+            return Deferred.succeed(createStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(createRelease)),
+              Effect.as({ binding: { workspaceID } }),
+            )
+          },
+          connect: () => {
+            calls.push("connect")
+            return Effect.succeed(makeMemoryDriver())
+          },
+          suspendForIdle: () => Effect.void,
+          destroy: () => Effect.void,
+        })
+        const configDirectory = path.join(fixture.directory, "config")
+        yield* Effect.promise(() => fs.mkdir(configDirectory))
+        const opencode = yield* fixture.sdk.OpenCode.create(
+          {
+            config: { directory: configDirectory, project: false, content: "{}" },
+            workspaceProviders: { fake: driver },
+          },
+          {
+            overrides: [
+              [llmClient, client],
+              [SessionRunnerModel.node, models],
+            ],
+          },
+        )
+        const workspaceID = yield* opencode.workspace.create({ provider: "fake" })
+        const session = yield* opencode.sessions.create({
+          location: fixture.sdk.Location.Ref.make({
+            directory: fixture.sdk.AbsolutePath.make(fixture.directory),
+            workspaceID,
+          }),
+        })
+        expect(calls).toEqual([])
+
+        yield* opencode.sessions.prompt({ sessionID: session.id, text: "Run echo" })
+        // The model-selected shell tool is the first execution-plane demand: it alone
+        // starts provisioning and blocks inside the tool call until the provider is ready.
+        yield* Deferred.await(createStarted).pipe(
+          Effect.timeoutOrElse({ duration: "8 seconds", orElse: () => Effect.die("first tool did not provision") }),
+        )
+        expect(calls).toEqual(["create"])
+
+        yield* Deferred.succeed(createRelease, undefined)
+        yield* opencode.sessions.wait({ sessionID: session.id })
+        // Provisioning settled, the workspace connected, and the turn completed. The
+        // memory driver rejects the actual spawn, which surfaces to the model as an
+        // ordinary tool error before the final text response.
+        expect(calls).toEqual(["create", "connect"])
+        expect(toolIssued).toBe(true)
+      }),
+    ),
   15_000,
 )
 
