@@ -54,7 +54,7 @@ export type ThinkingInput =
   | {
       readonly type: "disabled"
     }
-  | ({ readonly type: "enabled" } & (
+  | ({ readonly type: "enabled"; readonly display?: "summarized" | "omitted" } & (
       | { readonly budgetTokens: number; readonly budget_tokens?: number }
       | { readonly budgetTokens?: number; readonly budget_tokens: number }
     ))
@@ -213,6 +213,7 @@ const AnthropicThinking = Schema.Union([
   Schema.Struct({
     type: Schema.tag("enabled"),
     budget_tokens: Schema.Number,
+    display: Schema.optional(Schema.Literals(["summarized", "omitted"])),
   }),
   Schema.Struct({
     type: Schema.tag("adaptive"),
@@ -615,15 +616,12 @@ const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (
 
 const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function* (input: unknown) {
   if (!ProviderShared.isRecord(input)) return undefined
-  if (input.type === "adaptive") {
-    const display =
-      input.display === "summarized"
-        ? ("summarized" as const)
-        : input.display === "omitted"
-          ? ("omitted" as const)
-          : undefined
+  const display =
+    input.display === "summarized" || input.display === "omitted"
+      ? (input.display as "summarized" | "omitted")
+      : undefined
+  if (input.type === "adaptive")
     return { type: "adaptive" as const, ...(display === undefined ? {} : { display }) }
-  }
   if (input.type === "disabled") return { type: "disabled" as const }
   if (input.type !== "enabled") return undefined
   const budget =
@@ -634,7 +632,7 @@ const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function*
         : undefined
   if (budget === undefined)
     return yield* ProviderShared.invalidRequest("Anthropic thinking provider option requires budgetTokens")
-  return { type: "enabled" as const, budget_tokens: budget }
+  return { type: "enabled" as const, budget_tokens: budget, ...(display === undefined ? {} : { display }) }
 })
 
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
