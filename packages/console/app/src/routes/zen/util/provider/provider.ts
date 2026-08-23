@@ -1,3 +1,4 @@
+import { z } from "zod"
 import { ZenData } from "@opencode-ai/console-core/model.js"
 import {
   fromAnthropicChunk,
@@ -166,14 +167,50 @@ export interface CommonChunk {
   }
 }
 
-export function buildCostChunk(format: ZenData.Format, cost: string): string {
+export interface ChunkIdentity {
+  readonly id?: string
+  readonly model?: string
+  readonly created?: number
+}
+
+const identityJson = z.object({
+  id: z.string().optional(),
+  model: z.string().optional(),
+  created: z.number().optional(),
+})
+
+// Extract the stream-identity fields (id / model / created) from one SSE data
+// frame so a synthesized trailing chunk can echo them back to the client.
+export function parseChunkIdentity(part: string): ChunkIdentity | undefined {
+  const line = part.split("\n").find((line) => line.startsWith("data:"))
+  if (!line) return undefined
+  const payload = line.slice(5).trim()
+  if (!payload || payload === "[DONE]") return undefined
+  const decoded = identityJson.safeParse(JSON.parse(payload))
+  if (!decoded.success) return undefined
+  const { id, model, created } = decoded.data
+  if (id === undefined && model === undefined && created === undefined) return undefined
+  return { id, model, created }
+}
+
+export function buildCostChunk(format: ZenData.Format, cost: string, identity?: ChunkIdentity): string {
   switch (format) {
     case "anthropic":
       return `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`
     case "openai":
       return `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`
     case "oa-compat":
-      return `data: ${JSON.stringify({ choices: [], cost })}\n\n`
+      // OpenAI-compatible clients rebuild the response from these frames and
+      // expect the identity fields on every chunk, including the trailing
+      // usage/cost frame with empty choices.
+      return `data: ${JSON.stringify({
+        id: identity?.id ?? "",
+        object: "chat.completion.chunk",
+        created: identity?.created ?? 0,
+        model: identity?.model ?? "",
+        choices: [],
+        cost,
+      })}\n\n`
     default:
       return `data: ${JSON.stringify({ type: "ping", cost })}\n\n`
   }

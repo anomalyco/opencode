@@ -32,6 +32,7 @@ import {
   createBodyConverter,
   createStreamPartConverter,
   createResponseConverter,
+  parseChunkIdentity,
   UsageInfo,
 } from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
@@ -364,6 +365,9 @@ export async function handler(
         let buffer = ""
         let responseLength = 0
         let timestampFirstByte = 0
+        // Identity of the last forwarded chunk, echoed on the trailing cost
+        // frame so OpenAI-compatible clients can rebuild the response.
+        let lastChunkIdentity: ReturnType<typeof parseChunkIdentity> = undefined
 
         function pump(): Promise<void> {
           return (
@@ -397,7 +401,7 @@ export async function handler(
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
                   const cost = calculateOccurredCost(billingSource, costInfo)
-                  c.enqueue(encoder.encode(buildCostChunk(opts.format, cost)))
+                  c.enqueue(encoder.encode(buildCostChunk(opts.format, cost, lastChunkIdentity)))
                 }
                 c.close()
                 return
@@ -425,6 +429,11 @@ export async function handler(
 
                 part = part.trim()
                 usageParser.parse(part)
+
+                if (opts.format === "oa-compat") {
+                  const identity = parseChunkIdentity(part)
+                  if (identity) lastChunkIdentity = identity
+                }
 
                 if (providerInfo.format !== opts.format) {
                   part = streamConverter(part)
