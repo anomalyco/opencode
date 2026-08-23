@@ -234,6 +234,7 @@ jobs:
             host: macos-26
           - target: windows-arm64
             host: blacksmith-4vcpu-windows-2025
+            bun_install_flags: --cpu=*
           - target: windows-x64
             host: blacksmith-4vcpu-windows-2025
     runs-on: ${{ matrix.settings.host }}
@@ -245,7 +246,7 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
         with:
-          install-flags: --os=* --cpu=*
+          install-flags: ${{ matrix.settings.bun_install_flags }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
