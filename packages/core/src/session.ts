@@ -31,7 +31,6 @@ import { SessionModelTransport } from "./session/model-transport.js"
 import { ForkEmptyError, MessageDecodeError, NotFoundError } from "./session/error.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LocationServiceMap } from "./location-service-map.js"
-import { LocationActivity } from "./location-activity.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
@@ -1164,7 +1163,6 @@ export const node = makeGlobalNode({
     SessionExecution.node,
     SessionStore.node,
     LocationServiceMap.node,
-    LocationActivity.node,
     SessionProjector.node,
     FSUtil.node,
     Global.node,

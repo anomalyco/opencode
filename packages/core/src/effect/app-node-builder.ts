@@ -2,6 +2,8 @@ import { buildLocationServiceMap } from "../location-services.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { Bus } from "../bus.js"
+import { SessionStore } from "../session/store.js"
 
 export function build<A, E>(root: LayerNode.Node<A, E, any>, replacements: LayerNode.Replacements = []) {
   // Only build the location service map if it's actually needed
@@ -9,7 +11,11 @@ export function build<A, E>(root: LayerNode.Node<A, E, any>, replacements: Layer
     return LayerNode.compile(root, replacements)
 
   const locationMap = buildLocationServiceMap(replacements)
-  const locationMapNode = makeGlobalNode({ service: LocationServiceMap.Service, layer: locationMap, deps: [] })
+  const locationMapNode = makeGlobalNode({
+    service: LocationServiceMap.Service,
+    layer: locationMap,
+    deps: [Bus.node, SessionStore.node],
+  })
   return LayerNode.compile(root, replacements.concat([[LocationServiceMap.node, locationMapNode]]))
 }
 

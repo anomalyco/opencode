@@ -1,16 +1,16 @@
-import { Clock, Context, Duration, Effect, Layer, LayerMap } from "effect"
+import { Clock, Context, Duration, Effect, Layer, LayerMap, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Node } from "@opencode-ai/util/effect/app-node"
 import { Location } from "./location.js"
 import type { LocationError, LocationServices } from "./location-services.js"
+import type { Bus } from "./bus.js"
+import { SessionEvent } from "./session/event.js"
+import type { SessionStore } from "./session/store.js"
 
-export type Activity =
-  | { readonly type: "touch" }
-  | { readonly type: "start"; readonly id: string }
-  | { readonly type: "stop"; readonly id: string }
+const isSessionEvent = Schema.is(SessionEvent.Durable)
 
 export interface Interface extends LayerMap.LayerMap<Location.Ref, LocationServices> {
-  readonly activity: (ref: Location.Ref, activity: Activity) => Effect.Effect<void>
+  readonly touch: (ref: Location.Ref) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/example/LocationServiceMap") {
@@ -25,6 +25,10 @@ export function make<R>(
     readonly canonical?: (ref: Location.Ref) => Location.Ref
     readonly activityTimeToLive?: Duration.Input | ((ref: Location.Ref) => Duration.Input)
     readonly sweepInterval?: Duration.Input
+    readonly activity?: {
+      readonly observe: (subscriber: Bus.Subscriber) => Effect.Effect<Bus.Unsubscribe>
+      readonly getSession: SessionStore.Interface["get"]
+    }
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -35,10 +39,7 @@ export function make<R>(
       typeof activityTimeToLive === "function"
         ? (ref: Location.Ref) => Duration.toMillis(activityTimeToLive(ref))
         : () => Duration.toMillis(activityTimeToLive ?? "60 minutes")
-    const entries = new Map<
-      string,
-      { readonly ref: Location.Ref; readonly active: Set<string>; expiresAt: number }
-    >()
+    const entries = new Map<string, { readonly ref: Location.Ref; expiresAt: number }>()
     const key = (ref: Location.Ref) => `${ref.directory}\0${ref.workspaceID ?? ""}`
     const register = (ref: Location.Ref) =>
       Effect.sync(() => {
@@ -47,7 +48,6 @@ export function make<R>(
         if (entries.has(id)) return
         entries.set(id, {
           ref: value,
-          active: new Set(),
           expiresAt: clock.currentTimeMillisUnsafe() + activityDuration(value),
         })
       })
@@ -60,13 +60,11 @@ export function make<R>(
       entries.delete(key(value))
       return locations.invalidate(value)
     }
-    const activity = (ref: Location.Ref, input: Activity) =>
+    const touch = (ref: Location.Ref) =>
       Effect.sync(() => {
         const value = canonical(ref)
         const entry = entries.get(key(value))
         if (!entry) return
-        if (input.type === "start") entry.active.add(input.id)
-        if (input.type === "stop") entry.active.delete(input.id)
         entry.expiresAt = clock.currentTimeMillisUnsafe() + activityDuration(value)
       })
     const contextEffect = (ref: Location.Ref) => {
@@ -74,12 +72,22 @@ export function make<R>(
       return locations.contextEffect(value).pipe(Effect.onError(() => locations.invalidate(value)))
     }
 
+    if (options.activity) {
+      const activity = options.activity
+      const unsubscribe = yield* activity.observe((event) => {
+        if (!isSessionEvent(event)) return Effect.void
+        return Effect.gen(function* () {
+          const location = event.location ?? (yield* activity.getSession(event.data.sessionID))?.location
+          if (location) yield* touch(location)
+        })
+      })
+      yield* Effect.addFinalizer(() => unsubscribe)
+    }
+
     yield* Effect.gen(function* () {
       yield* Effect.sleep(options.sweepInterval ?? "1 minute")
       const now = clock.currentTimeMillisUnsafe()
-      const expired = Array.from(entries.values()).filter(
-        (entry) => entry.active.size === 0 && entry.expiresAt <= now,
-      )
+      const expired = Array.from(entries.values()).filter((entry) => entry.expiresAt <= now)
       yield* Effect.forEach(
         expired,
         (entry) =>
@@ -96,7 +104,7 @@ export function make<R>(
       get: (ref) => Layer.effectContext(contextEffect(ref)),
       contextEffect,
       invalidate,
-      activity,
+      touch,
     })
   })
 }

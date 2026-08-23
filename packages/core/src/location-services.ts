@@ -7,6 +7,7 @@ import { Command } from "./command.js"
 import { Config } from "./config.js"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Node } from "@opencode-ai/util/effect/app-node"
+import { Bus } from "./bus.js"
 import { FileMutation } from "./file-mutation.js"
 import { Environment } from "./environment/index.js"
 import { Formatter } from "./formatter.js"
@@ -37,6 +38,7 @@ import { SessionRunnerModel } from "./session/runner/model.js"
 import { SessionModelTransport } from "./session/model-transport.js"
 import { SessionCompaction } from "./session/compaction.js"
 import { SessionTitle } from "./session/title.js"
+import { SessionStore } from "./session/store.js"
 import { Skill } from "./skill.js"
 import { SkillInstructions } from "./skill/instructions.js"
 import { Snapshot } from "./snapshot.js"
@@ -112,7 +114,7 @@ export type LocationError = LayerNode.Error<typeof locationServices>
 
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
-): Layer.Layer<LocationServiceMap.Service> {
+): Layer.Layer<LocationServiceMap.Service, never, Bus.Service | SessionStore.Service> {
   // Structural Equal distinguishes optional-key shape and Windows separator style.
   // The RcMap caches the raw key before the build callback, so normalize both here.
   const canonical = (ref: Location.Ref) =>
@@ -122,29 +124,33 @@ export function buildLocationServiceMap(
     })
   return Layer.effect(
     LocationServiceMap.Service,
-    LocationServiceMap.make(
-      (ref: Location.Ref) => {
-        const startedAt = performance.now()
-        const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
-        // Apply replacements during hoist, not afterward: replacements can
-        // introduce new tagged dependencies (Location.boundNode depends on
-        // Project), and the hoist walk is the only pass that can still slice
-        // those back out.
-        const location = LayerNode.hoist(locationServices, Node.tags.values.global, allReplacements)
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const sessions = yield* SessionStore.Service
+      return yield* LocationServiceMap.make(
+        (ref: Location.Ref) => {
+          const startedAt = performance.now()
+          const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
+          // Apply replacements during hoist, not afterward: replacements can
+          // introduce new tagged dependencies (Location.boundNode depends on
+          // Project), and the hoist walk is the only pass that can still slice
+          // those back out.
+          const location = LayerNode.hoist(locationServices, Node.tags.values.global, allReplacements)
 
-        return LayerNode.compile(location.node).pipe(
-          Layer.fresh,
-          Layer.tap(() =>
-            Effect.logInfo("location services booted", {
-              directory: ref.directory,
-              workspaceID: ref.workspaceID,
-              durationMs: Math.round(performance.now() - startedAt),
-            }),
-          ),
-          Layer.provide(LayerNode.compile(location.hoisted)),
-        )
-      },
-      { canonical },
-    ),
+          return LayerNode.compile(location.node).pipe(
+            Layer.fresh,
+            Layer.tap(() =>
+              Effect.logInfo("location services booted", {
+                directory: ref.directory,
+                workspaceID: ref.workspaceID,
+                durationMs: Math.round(performance.now() - startedAt),
+              }),
+            ),
+            Layer.provide(LayerNode.compile(location.hoisted)),
+          )
+        },
+        { canonical, activity: { observe: bus.listen, getSession: sessions.get } },
+      )
+    }),
   )
 }
