@@ -568,8 +568,8 @@ function TopModelsChart(props: {
                               style={{
                                 background: getRankColor(item.segment.model, item.index, segmentOrder(), usageColors),
                               }}
-                            />{" "}
-                            {item.segment.model}
+                            />
+                            <span data-slot="tooltip-name">{item.segment.model}</span>
                           </span>
                           <b>{formatUsageChartValue(item.segment.value, metric())}</b>
                         </p>
