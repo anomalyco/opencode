@@ -98,10 +98,13 @@ export async function handler(
 
   try {
     const url = input.request.url
-    const body = await input.request.json()
-    const model = opts.parseModel(url, body)
-    const variant = opts.parseVariant(url, body)
-    const isStream = opts.parseIsStream(url, body)
+    const body = await input.request.text()
+    const model =
+      opts.format === "google"
+        ? opts.parseModel(url, undefined)
+        : body.match(/"model"\s*:\s*"([^"]+)"/)?.[1] ?? ""
+    const isStream =
+      opts.format === "google" ? opts.parseIsStream(url, undefined) : /"stream"\s*:\s*true/.test(body)
     const rawIp = input.request.headers.get("x-real-ip") ?? ""
     const ip = rawIp.includes(":") ? rawIp.split(":").slice(0, 4).join(":") : rawIp
     const rawZenApiKey = opts.parseApiKey(input.request.headers)
@@ -117,7 +120,6 @@ export async function handler(
       request: requestId,
       client: ocClient,
       user_agent: userAgent,
-      "model.variant": variant,
       "model.tier": opts.modelList === "full" ? "zen" : "go",
     })
     const zenData = ZenData.list(opts.modelList)
@@ -200,9 +202,25 @@ export async function handler(
 
       const startTimestamp = Date.now()
       const reqUrl = providerInfo.modifyUrl(providerInfo.api, isStream)
-      const reqBody = JSON.stringify(
+      const directBody = (() => {
+        const specialAnthropic =
+          providerInfo.format === "anthropic" &&
+          (providerInfo.model.startsWith("arn:aws:bedrock:") ||
+            providerInfo.model.startsWith("global.anthropic.") ||
+            providerInfo.model.startsWith("databricks-claude-"))
+        if (providerInfo.format === opts.format && !providerInfo.payloadModifier && !specialAnthropic) {
+          const patched = body.replace(
+            /"model"\s*:\s*"[^"]+"/,
+            `"model":${JSON.stringify(providerInfo.model)}`,
+          )
+          if (providerInfo.format !== "oa-compat" || !isStream) return patched
+          return patched.replace(/}\s*$/, ',"stream_options":{"include_usage":true}}')
+        }
+        return undefined
+      })()
+      const reqBody = directBody ?? JSON.stringify(
         providerInfo.modifyBody({
-          ...createBodyConverter(opts.format, providerInfo.format)(body),
+          ...createBodyConverter(opts.format, providerInfo.format)(JSON.parse(body)),
           model: providerInfo.model,
           ...(() => {
             const replacer = (obj: Record<string, any>): Record<string, any> =>
