@@ -34,8 +34,46 @@ export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<Dispat
   )
 }
 
+type Revived = { readonly value: unknown; readonly changed: boolean }
+
+// Some gateways serialize null as the literal string "null" inside tool
+// arguments. Revive those tokens before decoding: nullable fields then receive
+// real nulls, while schemas that reject the revived form fall back to the raw
+// payload - so a string field whose legitimate content is "null" still works.
+const reviveNullStrings = (value: unknown): Revived => {
+  if (value === "null") return { value: null, changed: true }
+  if (Array.isArray(value)) {
+    let changed = false
+    const items = value.map((item) => {
+      const revived = reviveNullStrings(item)
+      changed = changed || revived.changed
+      return revived.value
+    })
+    return { value: items, changed }
+  }
+  if (value !== null && typeof value === "object") {
+    let changed = false
+    const entries = Object.entries(value).map(([key, item]) => {
+      const revived = reviveNullStrings(item)
+      changed = changed || revived.changed
+      return [key, revived.value]
+    })
+    return { value: Object.fromEntries(entries), changed }
+  }
+  return { value, changed: false }
+}
+
+const decodeToolInput = (tool: AnyTool, input: ToolCallPart["input"]) => {
+  const salvaged = reviveNullStrings(input)
+  if (!salvaged.changed) return tool._decode(input)
+  // Gateways that serialize null as the string "null" hit every nullable field,
+  // so try the revived form first; fall back to the raw payload when the schema
+  // rejects it (e.g. a string field whose legitimate content is "null").
+  return tool._decode(salvaged.value).pipe(Effect.catch(() => tool._decode(input)))
+}
+
 const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
-  tool._decode(call.input).pipe(
+  decodeToolInput(tool, call.input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
     Effect.flatMap((decoded) =>
       tool.execute!(decoded, { id: call.id, name: call.name }).pipe(

@@ -863,4 +863,36 @@ describe("LLMClient tools", () => {
       expect(results.map((event) => event.id).toSorted()).toEqual(["c1", "c2"])
     }),
   )
+const nullable = Tool.make({
+  description: "Echoes a nullable string.",
+  parameters: Schema.Struct({ value: Schema.NullOr(Schema.String) }),
+  success: Schema.Struct({ received: Schema.NullOr(Schema.String) }),
+  execute: ({ value }) => Effect.succeed({ received: value }),
+})
+
+const strictString = Tool.make({
+  description: "Echoes a plain string.",
+  parameters: Schema.Struct({ value: Schema.String }),
+  success: Schema.Struct({ received: Schema.String }),
+  execute: ({ value }) => Effect.succeed({ received: value }),
+})
+  it.effect("revives stringified null tokens when the schema allows null", () =>
+    Effect.gen(function* () {
+      const settled = yield* ToolRuntime.dispatch(
+        { nullable },
+        LLMEvent.toolCall({ id: "call_null", name: "nullable", input: { value: "null" } }),
+      )
+      expect(settled.result).toMatchObject({ type: "json", value: { received: null } })
+    }),
+  )
+
+  it.effect("keeps literal null strings when the schema expects a string", () =>
+    Effect.gen(function* () {
+      const settled = yield* ToolRuntime.dispatch(
+        { strictString },
+        LLMEvent.toolCall({ id: "call_str", name: "strictString", input: { value: "null" } }),
+      )
+      expect(settled.result).toMatchObject({ type: "json", value: { received: "null" } })
+    }),
+  )
 })
