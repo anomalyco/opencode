@@ -41,6 +41,7 @@ const SSE_EVENTS = new Set([
   "content_block_start",
   "content_block_delta",
   "content_block_stop",
+  "ping",
   "error",
 ])
 export const framing = Framing.sseEvents(SSE_EVENTS)
@@ -1004,11 +1005,13 @@ const providerErrorMessage = (event: AnthropicEvent): string => {
 }
 
 const onError = (event: AnthropicEvent) =>
-  new AIError({
-    module: ADAPTER,
-    method: "stream",
-    reason: classifyProviderFailure({ message: providerErrorMessage(event), code: event.error?.type }),
-  })
+  Effect.fail(
+    new AIError({
+      module: ADAPTER,
+      method: "stream",
+      reason: classifyProviderFailure({ message: providerErrorMessage(event), code: event.error?.type }),
+    }),
+  )
 
 const step = (state: ParserState, event: AnthropicEvent) => {
   if (event.type === "message_start") return Effect.succeed(onMessageStart(state, event))
