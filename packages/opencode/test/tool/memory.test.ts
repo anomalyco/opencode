@@ -34,17 +34,17 @@ describe("MemoryTool", () => {
         metadata: () => Effect.void,
       } as never
 
-      const write = yield* def.execute({ action: "write", name: "user-prefs", content: "# Prefers bun" }, ctx)
+      const write = yield* def.execute({ action: "write", name: "environment/user-prefs", content: "# Prefers bun" }, ctx)
       expect(write.output).toContain("Stored memory")
 
       const list = yield* def.execute({ action: "list" }, ctx)
       expect(list.output).toContain("user-prefs")
       expect(list.output).toContain("Prefers bun")
 
-      const read = yield* def.execute({ action: "read", name: "user-prefs" }, ctx)
+      const read = yield* def.execute({ action: "read", name: "environment/user-prefs" }, ctx)
       expect(read.output).toBe("# Prefers bun")
 
-      const del = yield* def.execute({ action: "delete", name: "user-prefs" }, ctx)
+      const del = yield* def.execute({ action: "delete", name: "environment/user-prefs" }, ctx)
       expect(del.output).toContain("Deleted")
 
       const emptyList = yield* def.execute({ action: "list" }, ctx)

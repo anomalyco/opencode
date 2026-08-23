@@ -26,16 +26,15 @@ const loadMemoryIndex = Effect.fn("SystemContextBuiltIns.loadMemoryIndex")(funct
 ) {
   const exists = yield* fs.existsSafe(dir)
   if (!exists) return ""
-  const entries = yield* fs.readDirectoryEntries(dir).pipe(Effect.catch(() => Effect.succeed([])))
-  const files = entries.filter((e) => e.type === "file" && e.name.endsWith(".md"))
+  const files = (yield* fs.glob("**/*.md", { cwd: dir }).pipe(Effect.catch(() => Effect.succeed([])))).sort()
   if (files.length === 0) return ""
   const lines: string[] = []
   for (const file of files.slice(0, 50)) {
     const content =
-      (yield* fs.readFileStringSafe(path.join(dir, file.name)).pipe(Effect.catch(() => Effect.succeed(undefined))))
+      (yield* fs.readFileStringSafe(path.join(dir, file)).pipe(Effect.catch(() => Effect.succeed(undefined))))
         ?.split("\n")
         .find((l) => l.trim()) ?? ""
-    lines.push(`- ${file.name.replace(/\.md$/, "")}${content ? ` — ${content.slice(0, 120)}` : ""}`)
+    lines.push(`- ${file.replace(/\.md$/, "")}${content ? ` — ${content.slice(0, 120)}` : ""}`)
   }
   return [
     "Persistent project memories recorded by previous sessions (use the memory tool to read or update):",

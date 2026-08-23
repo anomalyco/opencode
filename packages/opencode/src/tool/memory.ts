@@ -64,14 +64,13 @@ export const MemoryTool = Tool.define<typeof Parameters, Metadata, FSUtil.Servic
 
           if (params.action === "list") {
             yield* fs.ensureDir(dir)
-            const entries = yield* fs.readDirectoryEntries(dir).pipe(Effect.catch(() => Effect.succeed([])))
-            const files = entries.filter((e) => e.type === "file" && e.name.endsWith(".md"))
+            const files = (yield* fs.glob("**/*.md", { cwd: dir })).sort()
             if (files.length === 0) return { title: "memory", metadata: {}, output: "No memories stored yet." }
             const lines = []
-            for (const file of files) {
+            for (const file of files.slice(0, 100)) {
               const content =
-                (yield* fs.readFileStringSafe(path.join(dir, file.name)))?.split("\n").find((l) => l.trim()) ?? ""
-              lines.push(`- ${file.name.replace(/\.md$/, "")}${content ? ` — ${content.slice(0, 120)}` : ""}`)
+                (yield* fs.readFileStringSafe(path.join(dir, file)))?.split("\n").find((l) => l.trim()) ?? ""
+              lines.push(`- ${file.replace(/\.md$/, "")}${content ? ` — ${content.slice(0, 120)}` : ""}`)
             }
             return { title: `${files.length} memories`, metadata: { count: files.length }, output: lines.join("\n") }
           }
