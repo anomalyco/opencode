@@ -17,12 +17,12 @@ const MAX_CHART_WIDTH = 64
 
 export function drawGanttDiagramGrid(diagram: GanttDiagram, options: GanttDiagramRenderOptions = {}): GanttGrid {
   if (diagram.entries.length === 0) return new DiagramCanvas(0, 0)
-  const labels = diagram.entries.map((_, index) => entryLabel(diagram, index, options.labels ?? "right"))
+  const labels = diagram.entries.map((_, index) => entryLabel(diagram, index, options.labels ?? "left"))
   const labelWidth = Math.max(...labels.map(diagramTextWidth))
   const entryRows: number[] = []
   let bodyHeight = 0
   diagram.entries.forEach((entry, index) => {
-    if (options.sections === "spaced" && entry.type === "section" && index > 0) bodyHeight += 1
+    if ((options.sections ?? "spaced") === "spaced" && entry.type === "section" && index > 0) bodyHeight += 1
     entryRows.push(bodyHeight)
     bodyHeight += 1
   })
@@ -61,7 +61,7 @@ export function drawGanttDiagramGrid(diagram: GanttDiagram, options: GanttDiagra
       return
     }
     const label = labels[index]!
-    const labelX = options.labels === undefined || options.labels === "right" ? labelWidth - diagramTextWidth(label) : 0
+    const labelX = options.labels === "right" ? labelWidth - diagramTextWidth(label) : 0
     grid.setText(labelX, y, label, entry.task.state)
     drawTask(grid, entry.task, chartX, y, chartWidth, minimum, span, options)
   })
@@ -112,8 +112,8 @@ function drawTask(
   span: number,
   options: GanttDiagramRenderOptions,
 ): void {
-  const style: GanttRenderStyle = options.style ?? "rail"
-  const line = lineGlyph(options.line ?? "heavy")
+  const style: GanttRenderStyle = options.style ?? "track"
+  const line = lineGlyph(options.line ?? "thin")
   const start = Math.round(((task.start - minimum) / span) * (width - 1))
   const end = Math.round(((task.end - minimum) / span) * (width - 1))
   if (task.state === "milestone" || start === end) {
@@ -122,7 +122,7 @@ function drawTask(
   }
   if (style === "track") {
     for (let offset = 0; offset < width; offset++) {
-      grid.setCell(x + offset, y, options.track === "line" ? line : "·", trackCellStyle(options))
+      grid.setCell(x + offset, y, (options.track ?? "line") === "line" ? line : "·", trackCellStyle(options))
     }
   }
   const glyph = style === "block" ? "█" : line
@@ -130,14 +130,13 @@ function drawTask(
   if (style === "block") return
   if (style === "capsule" || style === "track") {
     if (style === "track") {
-      const endpoints = options.endpoints ?? "caps"
-      if (endpoints === "points") {
+      if (options.endpoints === "points") {
         grid.setCell(x + start, y, "●", trackCellStyle(options))
         grid.setCell(x + end, y, "●", trackCellStyle(options))
-        return
       }
+      return
     }
-    const caps = capGlyphs(options.line ?? "heavy")
+    const caps = capGlyphs(options.line ?? "thin")
     grid.setCell(x + start, y, caps.start, task.state)
     grid.setCell(x + end, y, caps.end, task.state)
     return

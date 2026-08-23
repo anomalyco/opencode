@@ -53,14 +53,15 @@ describe("GanttDiagram", () => {
       "NEW (pure chat thread)",
       "model answers, never calls bash",
     )
-    expect(renderGanttDiagram(secondsDiagram)).toContain("┣")
+    expect(renderGanttDiagram(secondsDiagram)).toContain("\n\nNEW (eager kick)")
+    expect(renderGanttDiagram(secondsDiagram)).not.toContain("·")
   })
 
   test("renders alternate terminal bar styles", () => {
     expect(renderGanttDiagram(secondsDiagram, { style: "block" })).toContain("█")
-    expect(renderGanttDiagram(secondsDiagram, { style: "capsule" })).toContain("╺")
+    expect(renderGanttDiagram(secondsDiagram, { style: "capsule" })).toContain("╶")
     expect(renderGanttDiagram(secondsDiagram, { style: "points" })).toContain("●")
-    expect(renderGanttDiagram(secondsDiagram, { style: "track" })).toContain("·")
+    expect(renderGanttDiagram(secondsDiagram, { style: "track", track: "dots" })).toContain("·")
     expect(renderGanttDiagram(secondsDiagram, { style: "track", track: "line" })).not.toContain("·")
     expect(renderGanttDiagram(secondsDiagram, { style: "track", endpoints: "points" })).toContain("●")
     expect(renderGanttDiagram(secondsDiagram, { style: "track", line: "thin" })).toContain("─")

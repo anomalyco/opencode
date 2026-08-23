@@ -58,12 +58,12 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const themes = useThemes()
   const theme = props.context.theme.contextual.elevated
-  const [selected, setSelected] = createSignal(0)
-  const [track, setTrack] = createSignal<"dots" | "line">("dots")
-  const [endpoints, setEndpoints] = createSignal<"caps" | "points">("caps")
-  const [line, setLine] = createSignal(0)
-  const [labels, setLabels] = createSignal(0)
-  const [sections, setSections] = createSignal<"compact" | "spaced">("compact")
+  const [selected, setSelected] = createSignal(4)
+  const [track, setTrack] = createSignal<"dots" | "line">("line")
+  const [endpoints, setEndpoints] = createSignal<"plain" | "points">("plain")
+  const [line, setLine] = createSignal(1)
+  const [labels, setLabels] = createSignal(1)
+  const [sections, setSections] = createSignal<"compact" | "spaced">("spaced")
   const [trackTone, setTrackTone] = createSignal(2)
   const variation = () => VARIATIONS[selected()]
   const rendering = createMemo(() => ({
@@ -133,7 +133,7 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         bind: "e",
         title: "Toggle endpoints",
         group: "Storybook",
-        run: () => setEndpoints((value) => (value === "caps" ? "points" : "caps")),
+        run: () => setEndpoints((value) => (value === "plain" ? "points" : "plain")),
       },
       {
         bind: "l",
@@ -164,12 +164,12 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         title: "Reset rendering",
         group: "Storybook",
         run() {
-          select(0)
-          setTrack("dots")
-          setEndpoints("caps")
-          setLine(0)
-          setLabels(0)
-          setSections("compact")
+          select(4)
+          setTrack("line")
+          setEndpoints("plain")
+          setLine(1)
+          setLabels(1)
+          setSections("spaced")
           setTrackTone(2)
         },
       },

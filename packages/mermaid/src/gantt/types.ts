@@ -27,7 +27,7 @@ export interface GanttDiagramRenderOptions {
   layoutMaxWidth?: number
   style?: GanttRenderStyle
   track?: "dots" | "line"
-  endpoints?: "caps" | "points"
+  endpoints?: "plain" | "points"
   line?: GanttLineStyle
   labels?: GanttLabelLayout
   sections?: "compact" | "spaced"
