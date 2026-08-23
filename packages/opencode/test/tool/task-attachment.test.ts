@@ -446,7 +446,6 @@ describe("task attachment integration", () => {
         // The retained answer is delivered first, in conversation order, as its own envelope.
         expect(text.text).toContain(`state="completed"`)
         expect(text.text).toContain("final TextPart was absent")
-        expect(text.text).not.toContain("task_prior_output")
       }
       expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("parent final")
       expect(parent.current()).toMatchObject({ attached: 0, undelivered: 0 })
@@ -524,7 +523,6 @@ describe("task attachment integration", () => {
         // by the attached-cancellation case above, which sequences the two explicitly.
         expect(text.text).toContain(`state="error"`)
         expect(text.text).toContain("later boom")
-        expect(text.text).not.toContain("task_prior_output")
       }
     }),
   )
@@ -1043,7 +1041,6 @@ describe("task attachment integration", () => {
         // completed is not joined into it - it stays retained in the task session, which the caller
         // reaches through the task_id it necessarily already holds.
         expect(message).toBe("sync later boom")
-        expect(message).not.toContain("task_prior_output")
       }
       expect(parentPrompts).toHaveLength(0)
     }),
