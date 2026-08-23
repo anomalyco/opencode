@@ -1,7 +1,7 @@
 import type { SessionMessageUser } from "@opencode-ai/client/promise"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
-import { createEffect, createSignal, on, onCleanup } from "solid-js"
+import { createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLayout } from "@/shell/state/layout"
 import type { SessionModel } from "../model"
@@ -19,6 +19,10 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       overflow: false,
       jump: false,
     },
+    follow: {
+      sessionKey: session.identity.sessionKey(),
+      pinned: true,
+    },
     refs: {
       content: undefined as HTMLDivElement | undefined,
       dock: undefined as HTMLDivElement | undefined,
@@ -26,11 +30,11 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   })
   // The single source of truth for "follow the newest content". The virtualizer pins and unpins
   // it from scroll geometry; everything else only expresses explicit intent.
-  const [pinned, setPinned] = createSignal(true)
-  const pin = () => setPinned(true)
+  const pinned = () => state.follow.sessionKey !== session.identity.sessionKey() || state.follow.pinned
+  const pin = () => setState("follow", { sessionKey: session.identity.sessionKey(), pinned: true })
   const unpin = () => {
     if (!scroller || scroller.scrollHeight - scroller.clientHeight <= 1) return
-    setPinned(false)
+    setState("follow", { sessionKey: session.identity.sessionKey(), pinned: false })
   }
   let scroller: HTMLDivElement | undefined
   let dockHeight = 0
@@ -209,8 +213,10 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     on(
       session.identity.sessionKey,
       () => {
+        pin()
         setState("messageID", undefined)
         setState("pendingMessage", undefined)
+        setState("scroll", { overflow: false, jump: false })
       },
       { defer: true },
     ),
