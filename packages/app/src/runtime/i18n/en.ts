@@ -570,10 +570,13 @@ export const dict = {
   "toast.update.action.notYet": "Not yet",
 
   "error.page.title": "Something went wrong",
+  "error.page.title.status": "Server request failed",
   "error.page.description": "An error occurred while loading the application.",
+  "error.page.description.status": "The server returned an HTTP {{status}} response.",
   "error.page.description.localServerStartup": "An error occurred while starting the local server.",
   "error.page.details.label": "Error Details",
   "error.page.action.restart": "Restart",
+  "error.page.action.reload": "Reload",
   "error.page.action.report": "Report Error",
   "error.page.action.reported": "Error Reported",
   "error.page.action.exportLogs": "Export Logs",
