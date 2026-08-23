@@ -259,6 +259,7 @@ export function registerIpcHandlers(deps: Deps) {
   })
 
   ipcMain.handle("set-taskbar-attention", (event: IpcMainInvokeEvent, sessions: unknown) => {
+    if (process.platform !== "win32") return
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win || !Array.isArray(sessions) || !sessions.every((session) => typeof session === "string")) return
     setTaskbarAttention(win, sessions).forEach((session) => win.webContents.send("taskbar-session-viewed", session))

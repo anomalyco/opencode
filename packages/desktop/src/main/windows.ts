@@ -186,6 +186,12 @@ function updateTaskbarAttention() {
   app.setBadgeCount(taskbarAttention.count())
 }
 
+function releaseTaskbarAttention(win: BrowserWindow) {
+  if (process.platform !== "win32") return
+  taskbarAttention.close(win.id)
+  updateTaskbarAttention()
+}
+
 export function createMainWindow(id: string = randomUUID()) {
   const state = windowState({
     file: windowStateFile(id),
@@ -292,6 +298,10 @@ function registerWindow(win: BrowserWindow, id: string) {
   windowIDs.set(win, id)
   registry.register(id, win)
   if (process.platform === "win32") taskbarAttention.open(win.id)
+  win.webContents.on("render-process-gone", () => releaseTaskbarAttention(win))
+  win.webContents.on("did-fail-load", (_event, _code, _description, _url, isMainFrame) => {
+    if (isMainFrame) releaseTaskbarAttention(win)
+  })
 
   win.on("focus", () => {
     registry.focused(id)
@@ -300,8 +310,7 @@ function registerWindow(win: BrowserWindow, id: string) {
   // gets session-end before it closes; flag the quit so ids stay persisted.
   win.on("session-end", () => registry.setQuitting())
   win.on("closed", () => {
-    taskbarAttention.close(win.id)
-    updateTaskbarAttention()
+    releaseTaskbarAttention(win)
     registry.closed(id)
   })
 }

@@ -206,7 +206,10 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     }
 
     const markSessionViewed = (sessionID: string) => {
-      selected().session.markViewed(sessionID)
+      const state = selected()
+      const attention = state.session.hasTaskbarAttention(sessionID)
+      state.session.markViewed(sessionID)
+      if (!attention) return
       void platform.markTaskbarSessionViewed?.(`${server.scope(activeServer())}\0${sessionID}`)
     }
 
@@ -544,6 +547,18 @@ function createServerNotificationState(input: {
       },
       unseenHasError(session: string) {
         return index.session.unseenHasError[session] ?? false
+      },
+      hasTaskbarAttention(session: string) {
+        if ((index.session.unseen[session] ?? empty).length) return true
+        const directory = input.sync.session.data.info[session]?.directory
+        if (
+          input.sync.session.data.permission[session]?.some(
+            (request) => !input.isPermissionAutoResponded(request, directory),
+          )
+        ) {
+          return true
+        }
+        return !!input.sync.session.data.question[session]?.length
       },
       markViewed(session: string) {
         taskbarAttention.remove(session)
