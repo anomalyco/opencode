@@ -51,6 +51,7 @@ export type ComposerSession = {
     location: { command: Pick<Data["location"]["command"], "list"> }
     session: {
       prompt: (input: Parameters<Data["session"]["prompt"]>[0]) => Promise<unknown>
+      setStatus: Data["session"]["setStatus"]
     }
   }
   current: Accessor<{ agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined>
@@ -77,7 +78,7 @@ export type NewSessionComposerAdapter = ComposerAdapterBase & {
   start: (
     selection: ComposerSelection,
     submission: ReturnType<typeof createComposerSubmission>,
-  ) => Promise<ComposerSession | undefined>
+  ) => Promise<{ session: ComposerSession; cleanupReady: Promise<void> } | undefined>
 }
 
 export type ComposerAdapter = ActiveComposerAdapter | NewSessionComposerAdapter

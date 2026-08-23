@@ -69,6 +69,7 @@ function submitInput(
 function session(input: {
   calls: string[]
   prompt: (value: Parameters<ComposerSession["data"]["session"]["prompt"]>[0]) => Promise<void>
+  statuses?: ("idle" | "running")[]
   current?: ComposerSession["current"]
   admitted?: (messageID: string) => boolean
   shell?: () => Promise<unknown>
@@ -92,6 +93,7 @@ function session(input: {
     data: {
       location: { command: { list: () => [] } },
       session: {
+        setStatus: (_sessionID, status) => input.statuses?.push(status),
         prompt: async (value) => {
           input.calls.push("prompt")
           await input.prompt(value)
@@ -140,10 +142,12 @@ describe("Composer submission", () => {
 
   test("starts and promotes a New Session once before admitting its first prompt", async () => {
     const draft = createMemoryComposerState({ prompt: "first prompt" }).capture()
-    const promoted = createMemoryComposerState().capture()
+    const promoted = createMemoryComposerState({ prompt: "restored draft" }).capture()
     const calls: string[] = []
+    const statuses: ("idle" | "running")[] = []
     const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
-    const target = session({ calls, prompt: async (value) => admitted.resolve(value) })
+    const cleanupReady = Promise.withResolvers<void>()
+    const target = session({ calls, statuses, prompt: async (value) => admitted.resolve(value) })
     const adapter: NewSessionComposerAdapter = {
       kind: "new-session",
       state: draft,
@@ -156,14 +160,20 @@ describe("Composer submission", () => {
       async start(_selection, submission) {
         calls.push("start")
         submission.retarget(promoted)
-        return target
+        return { session: target, cleanupReady: cleanupReady.promise }
       },
     }
 
-    await submitInput(adapter).submit(new Event("submit"))
+    const submitted = submitInput(adapter).submit(new Event("submit"))
     const request = await admitted.promise
 
-    expect(calls).toEqual(["start", "submitted", "switch-agent", "switch-model", "prompt"])
+    expect(calls).toEqual(["start", "switch-agent", "switch-model", "prompt"])
+    expect(statuses).toEqual(["running"])
+    expect(promoted.current()).toMatchObject([{ type: "text", content: "restored draft" }])
+    cleanupReady.resolve()
+    await submitted
+
+    expect(calls).toEqual(["start", "switch-agent", "switch-model", "prompt", "submitted"])
     expect(request.delivery).toBe("steer")
     expect(request.text).toBe("first prompt")
     expect(draft.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
@@ -233,7 +243,7 @@ describe("Composer submission", () => {
       submitted() {},
       async start(_selection, submission) {
         submission.retarget(promoted)
-        return target
+        return { session: target, cleanupReady: Promise.resolve() }
       },
     }
 
@@ -250,10 +260,12 @@ describe("Composer submission", () => {
   test("reuses the message ID when an unacknowledged admission is retried", async () => {
     const state = createMemoryComposerState({ prompt: "retry me" }).capture()
     const attempts: string[] = []
+    const statuses: ("idle" | "running")[] = []
     const first = Promise.withResolvers<void>()
     const second = Promise.withResolvers<void>()
     const target = session({
       calls: [],
+      statuses,
       prompt: async (value) => {
         attempts.push(value.id ?? "")
         throw new Error("network unavailable")
@@ -283,6 +295,7 @@ describe("Composer submission", () => {
 
     expect(attempts).toHaveLength(4)
     expect(new Set(attempts).size).toBe(1)
+    expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toMatchObject([{ type: "text", content: "retry me" }])
   })
 
