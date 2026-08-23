@@ -19,8 +19,10 @@ export type ToolContext = {
   ask(input: AskInput): Promise<void>
   /**
    * Present an interactive question popup (the same modal the `question`
-   * tool uses) and wait for the user's answer. Resolves with the selected
-   * labels per question, in order; rejects if the user dismisses the modal.
+   * tool uses) and wait for the user's answer. Resolves with one label list
+   * per question, **in the same order as `input.questions`** (callers zip them
+   * by index); for a `multiple: true` question the list holds all selected
+   * labels. Rejects if the user dismisses the modal.
    */
   question(input: QuestionInput): Promise<ReadonlyArray<QuestionAnswer>>
 }
