@@ -3068,14 +3068,14 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("falls back to the raw payload when both error and response are absent", () =>
+  it.effect("classifies a detail-free error event as a transient provider failure", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
-        Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
+        Effect.provide(fixedResponse(sseEvents({ type: "error", sequence_number: 2 }))),
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
       expect(error.reason.message).toContain('"type":"error"')
       expect(error.body).toBe(error.reason.message)
     }),

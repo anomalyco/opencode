@@ -5,6 +5,7 @@ import { Protocol } from "../route/protocol.js"
 import {
   AIError,
   LLMEvent,
+  ProviderInternalReason,
   Usage,
   type FinishReason,
   type JsonSchema,
@@ -1104,11 +1105,19 @@ export const providerFailure = (id: string, event: Event, fallback: string) => {
       : typeof event.status_code === "number"
         ? event.status_code
         : undefined
+  const reason =
+    event.type === "error" &&
+    event.error === undefined &&
+    event.response === undefined &&
+    summary === undefined &&
+    status === undefined
+      ? new ProviderInternalReason({ message })
+      : classifyProviderFailure({ message, code, status, rawBody: body })
   return new AIError({
     module: id,
     method: "stream",
     body,
-    reason: classifyProviderFailure({ message, code, status, rawBody: body }),
+    reason,
   })
 }
 
