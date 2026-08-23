@@ -122,7 +122,7 @@ function drawTask(
   }
   if (style === "track") {
     for (let offset = 0; offset < width; offset++) {
-      grid.setCell(x + offset, y, options.track === "line" ? line : "·", "axis")
+      grid.setCell(x + offset, y, options.track === "line" ? line : "·", trackCellStyle(options))
     }
   }
   const glyph = style === "block" ? "█" : line
@@ -132,8 +132,8 @@ function drawTask(
     if (style === "track") {
       const endpoints = options.endpoints ?? "caps"
       if (endpoints === "points") {
-        grid.setCell(x + start, y, "●", "axis")
-        grid.setCell(x + end, y, "●", "axis")
+        grid.setCell(x + start, y, "●", trackCellStyle(options))
+        grid.setCell(x + end, y, "●", trackCellStyle(options))
         return
       }
     }
@@ -171,6 +171,12 @@ function capGlyphs(line: GanttLineStyle): { start: string; end: string } {
   if (line === "thin" || line === "dashed") return { start: "╶", end: "╴" }
   if (line === "double") return { start: "╞", end: "╡" }
   return { start: "╺", end: "╸" }
+}
+
+function trackCellStyle(options: GanttDiagramRenderOptions): "trackMedium" | "trackDim" | "trackFaint" {
+  if (options.trackTone === "medium") return "trackMedium"
+  if (options.trackTone === "dim") return "trackDim"
+  return "trackFaint"
 }
 
 function formatTime(value: number, format: string): string {

@@ -180,6 +180,7 @@ function prepareDiagram(
           resolveGanttStyleColors({
             title: color(colors.text),
             axis: color(colors.muted),
+            background: color(colors.background),
             section: color(colors.secondary),
             task: color(colors.primary),
             active: color(colors.primary),

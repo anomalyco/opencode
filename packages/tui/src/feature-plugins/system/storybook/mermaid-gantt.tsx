@@ -52,6 +52,7 @@ const VARIATIONS = [
 
 const LINES = ["heavy", "thin", "double", "dashed"] as const
 const LABELS = ["right", "left", "tree"] as const
+const TRACK_TONES = ["medium", "dim", "faint"] as const
 
 function MermaidGanttStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
@@ -63,6 +64,7 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
   const [line, setLine] = createSignal(0)
   const [labels, setLabels] = createSignal(0)
   const [sections, setSections] = createSignal<"compact" | "spaced">("compact")
+  const [trackTone, setTrackTone] = createSignal(2)
   const variation = () => VARIATIONS[selected()]
   const rendering = createMemo(() => ({
     ...variation(),
@@ -71,6 +73,7 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
     line: LINES[line()],
     labels: LABELS[labels()],
     sections: sections(),
+    trackTone: TRACK_TONES[trackTone()],
   }))
   const select = (index: number) => setSelected((index + VARIATIONS.length) % VARIATIONS.length)
   const renderer = (item: ReturnType<typeof rendering>) =>
@@ -82,6 +85,7 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         line: item.line,
         labels: item.labels,
         sections: item.sections,
+        trackTone: item.trackTone,
       },
       colors: createOpenCodeDiagramPalette({
         text: props.context.theme.text.default,
@@ -150,6 +154,12 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         run: () => setSections((value) => (value === "compact" ? "spaced" : "compact")),
       },
       {
+        bind: "d",
+        title: "Cycle track dimness",
+        group: "Storybook",
+        run: () => setTrackTone((value) => (value + 1) % TRACK_TONES.length),
+      },
+      {
         bind: "r",
         title: "Reset rendering",
         group: "Storybook",
@@ -160,6 +170,7 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
           setLine(0)
           setLabels(0)
           setSections("compact")
+          setTrackTone(2)
         },
       },
     ],
@@ -194,7 +205,7 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
         context={props.context}
         title="storybook / Mermaid Gantt render lab"
         details={[`${selected() + 1}/${VARIATIONS.length}`, `${dimensions().width}×${dimensions().height}`]}
-        status={`${variation().title} · ${LINES[line()]} · ${LABELS[labels()]} · ${sections()}${variation().style === "track" ? ` · ${track()} · ${endpoints()}` : ""}`}
+        status={`${variation().title} · ${LINES[line()]} · ${LABELS[labels()]} · ${sections()}${variation().style === "track" ? ` · ${track()} · ${TRACK_TONES[trackTone()]} · ${endpoints()}` : ""}`}
         controls={[
           { shortcut: "←/→", label: "rendering" },
           { shortcut: "1–5", label: "select" },
@@ -203,6 +214,7 @@ function MermaidGanttStory(props: { context: Plugin.Context }) {
           { shortcut: "e", label: "ends" },
           { shortcut: "a", label: "labels" },
           { shortcut: "s", label: "spacing" },
+          { shortcut: "d", label: "dimness" },
           { shortcut: "r", label: "reset" },
           { shortcut: "esc", label: "back" },
         ]}

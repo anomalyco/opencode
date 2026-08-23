@@ -73,8 +73,9 @@ describe("GanttDiagram", () => {
     const points = drawGanttDiagramGrid(parseMermaidGanttDiagram(secondsDiagram), {
       style: "track",
       endpoints: "points",
+      trackTone: "faint",
     }).rows.flatMap((row) => row.filter((cell) => cell.char === "●"))
-    expect(points.every((cell) => cell.style === "axis")).toBe(true)
+    expect(points.every((cell) => cell.style === "trackFaint")).toBe(true)
   })
 
   test("resolves task ids, after dependencies, durations, and milestones", () => {

@@ -31,10 +31,14 @@ export interface GanttDiagramRenderOptions {
   line?: GanttLineStyle
   labels?: GanttLabelLayout
   sections?: "compact" | "spaced"
+  trackTone?: GanttTrackTone
 }
 
 export type GanttRenderStyle = "rail" | "block" | "capsule" | "points" | "track"
 export type GanttLineStyle = "heavy" | "thin" | "double" | "dashed"
 export type GanttLabelLayout = "right" | "left" | "tree"
+export type GanttTrackTone = "medium" | "dim" | "faint"
 
-export type GanttCellStyle = "title" | "axis" | "section" | GanttTaskState
+export type GanttBaseCellStyle = "title" | "axis" | "section" | GanttTaskState
+export type GanttTrackCellStyle = "trackMedium" | "trackDim" | "trackFaint"
+export type GanttCellStyle = GanttBaseCellStyle | GanttTrackCellStyle
