@@ -15,18 +15,9 @@ describe("websearch provider", () => {
   })
 
   test("supports an operational override", () => {
-    const original = process.env.OPENCODE_WEBSEARCH_PROVIDER
-
-    try {
-      process.env.OPENCODE_WEBSEARCH_PROVIDER = "parallel"
-      expect(selectWebSearchProvider(SESSION_ID)).toBe("parallel")
-
-      process.env.OPENCODE_WEBSEARCH_PROVIDER = "exa"
-      expect(selectWebSearchProvider(SESSION_ID)).toBe("exa")
-    } finally {
-      if (original === undefined) delete process.env.OPENCODE_WEBSEARCH_PROVIDER
-      else process.env.OPENCODE_WEBSEARCH_PROVIDER = original
-    }
+    expect(selectWebSearchProvider(SESSION_ID, { exa: false, parallel: false, provider: "parallel" })).toBe("parallel")
+    expect(selectWebSearchProvider(SESSION_ID, { exa: true, parallel: false, provider: "parallel" })).toBe("parallel")
+    expect(selectWebSearchProvider(SESSION_ID, { exa: false, parallel: false, provider: "exa" })).toBe("exa")
   })
 
   test("routes to Exa when the Exa flag is enabled", () => {
@@ -43,6 +34,16 @@ describe("websearch provider", () => {
     expect(webSearchEnabled(ProviderV2.ID.openai, { exa: false, parallel: false })).toBe(false)
     expect(webSearchEnabled(ProviderV2.ID.openai, { exa: true, parallel: false })).toBe(true)
     expect(webSearchEnabled(ProviderV2.ID.openai, { exa: false, parallel: true })).toBe(true)
+  })
+
+  test("is enabled for any provider when a websearch provider is pinned", () => {
+    expect(webSearchEnabled(ProviderV2.ID.openai, { exa: false, parallel: false, provider: "exa" })).toBe(true)
+    expect(webSearchEnabled(ProviderV2.ID.make("ollama"), { exa: false, parallel: false, provider: "parallel" })).toBe(
+      true,
+    )
+    expect(webSearchEnabled(ProviderV2.ID.make("ollama"), { exa: false, parallel: false, provider: undefined })).toBe(
+      false,
+    )
   })
 
   test("uses branded labels", () => {

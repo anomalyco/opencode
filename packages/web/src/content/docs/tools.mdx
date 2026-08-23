@@ -257,13 +257,15 @@ Allows the LLM to fetch and read web pages. Useful for looking up documentation 
 Search the web for information.
 
 :::note
-This tool is only available when using the OpenCode or OpenCode Go provider, or when the `OPENCODE_ENABLE_EXA` environment variable is set to any truthy value (e.g., `true` or `1`).
+This tool is only available when using the OpenCode or OpenCode Go provider, or when a websearch backend is selected through an environment variable. Any provider, including local models through Ollama or LM Studio, can use it once a backend is enabled.
 
-To enable when launching OpenCode:
+To enable it for any provider when launching OpenCode, pin a search backend:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+OPENCODE_WEBSEARCH_PROVIDER=exa opencode
 ```
+
+Valid values are `exa` and `parallel`. Alternatively, set `OPENCODE_ENABLE_EXA` or `OPENCODE_ENABLE_PARALLEL` to any truthy value (e.g., `true` or `1`) to enable the tool and let OpenCode pick the backend.
 
 :::
 

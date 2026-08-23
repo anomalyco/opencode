@@ -25,7 +25,7 @@ import z from "zod"
 import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
-import { WebSearchTool } from "./websearch"
+import { WebSearchTool, type WebSearchProvider } from "./websearch"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
@@ -55,12 +55,16 @@ import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 
-export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
+export function webSearchEnabled(
+  providerID: ProviderV2.ID,
+  flags: { exa: boolean; parallel: boolean; provider?: WebSearchProvider } = { exa: false, parallel: false },
+) {
   return (
     providerID === ProviderV2.ID.opencode ||
     providerID === ProviderV2.ID.make("opencode-go") ||
     flags.exa ||
-    flags.parallel
+    flags.parallel ||
+    flags.provider !== undefined
   )
 }
 
@@ -291,7 +295,11 @@ const layer = Layer.effect(
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
-          return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
+          return webSearchEnabled(input.providerID, {
+            exa: flags.enableExa,
+            parallel: flags.enableParallel,
+            provider: flags.websearchProvider,
+          })
         }
 
         const usePatch =
