@@ -211,10 +211,6 @@ export function DialogProvider(props: ParentProps) {
   const copyOnSelectEnabled = () =>
     (config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select"
 
-  function copySelection() {
-    return copy(renderer, toast, clipboard)
-  }
-
   return (
     <ctx.Provider value={value}>
       {props.children}
@@ -225,11 +221,11 @@ export function DialogProvider(props: ParentProps) {
           if (copyOnSelectEnabled()) return
           if (evt.button !== MouseButton.RIGHT) return
 
-          if (!copySelection()) return
+          if (!copy(renderer, toast, clipboard)) return
           evt.preventDefault()
           evt.stopPropagation()
         }}
-        onMouseUp={copyOnSelectEnabled() ? copySelection : undefined}
+        onMouseUp={copyOnSelectEnabled() ? () => copy(renderer, toast, clipboard) : undefined}
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size} centered={value.centered}>
