@@ -18,7 +18,11 @@ export function themePreloadHash(body: string) {
 
 export function cspForHtml(body: string) {
   const match = themePreloadHash(body)
-  return csp(match ? createHash("sha256").update(match[2]).digest("base64") : "")
+  // Browsers compute CSP script hashes over the parsed script text, and the
+  // HTML tokenizer normalizes CRLF/CR to LF — hash the normalized text or
+  // CRLF-built assets (e.g. checked out on Windows) get their inline theme
+  // script blocked by the CSP we emit.
+  return csp(match ? createHash("sha256").update(match[2].replace(/\r\n?/g, "\n")).digest("base64") : "")
 }
 
 function requestBody(request: HttpServerRequest.HttpServerRequest) {
