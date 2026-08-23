@@ -107,7 +107,7 @@ export default { ...config, out: ${JSON.stringify(output)} }
 
 async function generatedMigrations(directory: string) {
   return (await Array.fromAsync(new Bun.Glob("*/migration.sql").scan({ cwd: directory })))
-    .map((file) => file.split("/")[0])
+    .map((file) => file.split(/[\\/]/)[0])
     .filter((name): name is string => name !== undefined)
     .sort()
 }
