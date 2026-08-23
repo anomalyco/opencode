@@ -29,8 +29,8 @@ import {
 
 type TabsState = {
   tabs: SessionTab[]
-  // Read only long enough to remove the former client-owned state from persisted tab files.
-  unread?: Record<string, unknown>
+  // Kept empty for rollback compatibility with clients that still read this field.
+  unread: Record<string, unknown>
 }
 
 type PersistedState = {
@@ -43,7 +43,7 @@ type ScrollAnchor = {
   screenY: number
 }
 
-const empty = (): TabsState => ({ tabs: [] })
+const empty = (): TabsState => ({ tabs: [], unread: {} })
 
 // Deliberately after connect settles: the visible session's mount syncs win the first slots.
 const TAB_PREFETCH_DELAY = 300
@@ -128,6 +128,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         const sessionID = root(tab.sessionID)
         return openSessionTab(tabs, { sessionID, title: title(sessionID, tab.title) })
       }, []),
+      unread: {},
     })
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
     const newTab = createMemo((open = false) => {
@@ -219,7 +220,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       update((draft) => {
         const next = normalize(draft)
         draft.tabs = next.tabs
-        delete draft.unread
+        draft.unread = next.unread
       })
     })
 

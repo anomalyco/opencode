@@ -265,10 +265,10 @@ test("stores session tabs for the current working directory by default", async (
     const file = path.join(setup.state, "test", "tui", "tabs.json")
     await wait(() => Bun.file(file).size > 0)
     const stored = await Bun.file(file).json()
-    expect(stored.global).toEqual({ tabs: [] })
+    expect(stored.global).toEqual({ tabs: [], unread: {} })
     expect(Object.keys(stored.cwd)).toEqual([directory])
     expect(stored.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first"])
-    expect(stored.cwd[directory]).not.toHaveProperty("unread")
+    expect(stored.cwd[directory].unread).toEqual({})
   } finally {
     await setup.destroy()
   }
@@ -336,14 +336,14 @@ test("acknowledges viewed sessions even when tabs are disabled", async () => {
   }
 })
 
-test("purges legacy persisted unread records", async () => {
+test("empties legacy persisted unread records for rollback compatibility", async () => {
   const setup = await renderSessionTabs("first", { persisted: ["first"] })
   try {
     const file = path.join(setup.state, "test", "tui", "tabs.json")
-    // Normalize rewrites the active scope; the legacy record must not survive it.
+    // Normalize rewrites the active scope; legacy values must not survive, but older clients require the field.
     await wait(async () => {
       const stored = await Bun.file(file).json()
-      return !("unread" in stored.cwd[directory])
+      return Object.keys(stored.cwd[directory].unread).length === 0
     })
   } finally {
     await setup.destroy()
