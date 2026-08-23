@@ -42,7 +42,9 @@ function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets:
     "x-content-type-options": "nosniff",
   }
   return Effect.succeed(
-    request.method === "HEAD" ? HttpServerResponse.empty({ headers }) : HttpServerResponse.raw(file, { headers }),
+    request.method === "HEAD"
+      ? HttpServerResponse.empty({ headers })
+      : HttpServerResponse.raw(file, { headers, contentType: headers["content-type"] }),
   )
 }
 
