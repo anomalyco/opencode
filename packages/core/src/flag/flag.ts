@@ -5,7 +5,6 @@ export function truthy(key: string) {
   return value === "true" || value === "1"
 }
 
-const copy = process.env["OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
 const fff = process.env["OPENCODE_DISABLE_FFF"]
 
 function enabledByExperimental(key: string) {
@@ -40,8 +39,7 @@ export const Flag = {
   OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: Config.boolean("OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER").pipe(
     Config.withDefault(false),
   ),
-  OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT:
-    copy === undefined ? process.platform === "win32" : truthy("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"),
+  OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT: truthy("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"),
   OPENCODE_MODELS_URL: process.env["OPENCODE_MODELS_URL"],
   OPENCODE_MODELS_PATH: process.env["OPENCODE_MODELS_PATH"],
   OPENCODE_DB: process.env["OPENCODE_DB"],
