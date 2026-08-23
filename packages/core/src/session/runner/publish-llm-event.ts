@@ -69,6 +69,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   let assistantActive = false
   let assistantFailed = false
   let providerFailed = false
+  let hasUsableOutput = false
   let stepSettlement: { readonly finish: string; readonly tokens: ReturnType<typeof tokens> } | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
@@ -120,6 +121,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const text = fragments("text", (textID, value) =>
     Effect.gen(function* () {
+      if (value.length > 0) hasUsableOutput = true
       yield* events.publish(SessionEvent.Text.Ended, {
         sessionID: input.sessionID,
         assistantMessageID: yield* currentAssistantMessageID(),
@@ -131,6 +133,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   )
   const reasoning = fragments("reasoning", (reasoningID, value, providerMetadata) =>
     Effect.gen(function* () {
+      if (value.length > 0) hasUsableOutput = true
       yield* events.publish(SessionEvent.Reasoning.Ended, {
         sessionID: input.sessionID,
         assistantMessageID: yield* currentAssistantMessageID(),
@@ -318,6 +321,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           return yield* Effect.die(`Tool call name changed for ${event.id}: ${tool.name} -> ${event.name}`)
         if (tool.called) return yield* Effect.die(`Duplicate tool call: ${event.id}`)
         tool.called = true
+        hasUsableOutput = true
         tool.providerExecuted = event.providerExecuted === true
         tool.providerMetadata = event.providerMetadata
         yield* events.publish(SessionEvent.Tool.Called, {
@@ -416,6 +420,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     hasActiveAssistant: () => assistantActive,
     hasAssistantStarted: () => assistantMessageID !== undefined,
     hasProviderError: () => providerFailed,
+    hasUsableOutput: () => hasUsableOutput,
     stepSettlement: () => stepSettlement,
     startAssistant,
     assistantMessageID: assistantMessageIDForTool,
