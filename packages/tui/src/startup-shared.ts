@@ -1,3 +1,5 @@
+import { closeSync, openSync, writeSync } from "node:fs"
+
 export const STARTUP_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 export type StartupStage = "boot" | "syncing" | "completing" | "finishing"
@@ -45,6 +47,27 @@ export function buildProgressBar(elapsedMs: number, phase: number = 0): { bar: s
   const bar = "█".repeat(filled) + "░".repeat(STARTUP_PROGRESS_BAR_WIDTH - filled)
   const pct = `${Math.round(progress * 100)}%`
   return { bar, pct }
+}
+
+// Erases only the specific rows the splash wrote to, leaving the rest of the
+// terminal (scrollback, shell output, prompt) untouched.
+export function clearSplashRows(rows: number[]) {
+  if (rows.length === 0) return
+  const seq = rows.map((row) => `\x1b[${row};1H\x1b[2K`).join("")
+  try {
+    const tty = openSync("/dev/tty", "w")
+    try {
+      writeSync(tty, seq)
+    } finally {
+      closeSync(tty)
+    }
+  } catch {}
+  try {
+    writeSync(1, seq)
+  } catch {}
+  try {
+    process.stderr.write(seq)
+  } catch {}
 }
 
 declare global {

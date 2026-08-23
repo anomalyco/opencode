@@ -14,7 +14,7 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
-import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS, buildProgressBar } from "@opencode-ai/tui/startup-shared"
+import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS, buildProgressBar, clearSplashRows } from "@opencode-ai/tui/startup-shared"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -177,9 +177,15 @@ export const TuiThreadCommand = cmd({
       } catch {}
     }
 
-    // Clear the screen (including any shell echo like "$ bun run ...")
-    // and hide the cursor. No alt screen — the renderer takes over directly.
-    writeRaw("\x1b[3J\x1b[2J\x1b[?25l\x1b[H")
+    // Only erase the rows the splash will use, leaving prior shell output
+    // (e.g. `echo hallo`) visible above and below.
+    writeRaw(
+      `\x1b[${centerRow - 1};1H\x1b[2K` +
+      `\x1b[${centerRow};1H\x1b[2K` +
+      `\x1b[${centerRow + 1};1H\x1b[2K` +
+      `\x1b[${centerRow + 2};1H\x1b[2K` +
+      `\x1b[?25l`
+    )
 
     let frame = 0
     let phase = 0
@@ -225,7 +231,7 @@ export const TuiThreadCommand = cmd({
       if (stopped) return
       stopped = true
       clearInterval(preSplashTimer)
-      writeRaw("\x1b[?25h\x1b[2J\x1b[H")
+      clearSplashRows([centerRow - 1, centerRow, centerRow + 1, centerRow + 2])
     }
 
     globalThis.__opencodeStopPreSplash = stopPreSplash

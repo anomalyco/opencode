@@ -87,7 +87,7 @@ import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
-import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS, buildProgressBar } from "./startup-shared"
+import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS, buildProgressBar, clearSplashRows } from "./startup-shared"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
 registerOpencodeSpinner()
@@ -158,44 +158,6 @@ export type TuiInput = {
   events?: EventSource
   pluginHost: TuiPluginHost
 }
-function clearTerminal() {
-  const seq = "\x1b[?25h\x1b[3J\x1b[2J\x1b[H"
-  try {
-    const tty = openSync("/dev/tty", "w")
-    try {
-      writeSync(tty, seq)
-    } finally {
-      closeSync(tty)
-    }
-  } catch {}
-  try {
-    fs.writeSync(1, seq)
-  } catch {}
-  try {
-    process.stderr.write(seq)
-  } catch {}
-}
-
-let terminalCleanupRegistered = false
-function registerTerminalCleanup() {
-  if (terminalCleanupRegistered) return
-  terminalCleanupRegistered = true
-  try {
-    process.on("exit", clearTerminal)
-  } catch {}
-  try {
-    process.on("beforeExit", clearTerminal)
-  } catch {}
-  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK", "SIGQUIT"] as const) {
-    try {
-      process.on(sig, () => {
-        clearTerminal()
-      })
-    } catch {}
-  }
-}
-
-registerTerminalCleanup()
 
 function paintStartupSplash(renderer: { width: number; height: number }): () => void {
   const width = Math.max(1, renderer.width)
@@ -225,7 +187,9 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
     } catch {}
   }
 
-  writeAll("\x1b[3J\x1b[2J\x1b[?25l\x1b[H")
+  // Hide the cursor only — the renderer has already cleared the screen, and
+  // the pre-splash's stopPreSplash already cleared our target rows.
+  writeAll("\x1b[?25l")
 
   const paint = () => {
     if (stopped) return
@@ -250,7 +214,8 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
   globalThis.__opencodeStopInTuiSplash = () => {
     if (stopped) return
     stopped = true
-    writeAll("\x1b[?25h\x1b[2J\x1b[H")
+    clearSplashRows([centerRow - 1, centerRow, centerRow + 1, centerRow + 2])
+    writeAll("\x1b[?25h")
   }
 
   paint()
@@ -277,7 +242,8 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
     if (stopped) return
     stopped = true
     clearTimeout(fallbackStop)
-    writeAll("\x1b[0m\x1b[2J\x1b[H")
+    clearSplashRows([centerRow - 1, centerRow, centerRow + 1, centerRow + 2])
+    writeAll("\x1b[?25h\x1b[0m")
     if (ttyFd !== undefined) {
       try {
         closeSync(ttyFd)
@@ -345,7 +311,13 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         (renderer) =>
           Effect.sync(() => {
             destroyRenderer(renderer)
-            clearTerminal()
+            const height = Math.max(1, renderer.height)
+            const centerRow = Math.max(2, Math.floor(height / 2))
+            // SolidJS StartupLoading centers 3 lines (spinner + gap + bar)
+            // around centerRow, so it occupies rows centerRow-1, centerRow, and
+            // centerRow+1. The raw ANSI splashes use centerRow and centerRow+2.
+            // Clear all four rows so neither survives the renderer exit.
+            clearSplashRows([centerRow - 1, centerRow, centerRow + 1, centerRow + 2])
           }),
       )
       globalThis.__opencodeStopPreSplash?.()
