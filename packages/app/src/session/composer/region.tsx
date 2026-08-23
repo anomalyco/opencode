@@ -204,9 +204,7 @@ export function ActiveSessionComposerRegion(props: {
 }) {
   const region = createSessionComposerRegionController({
     state: props.model.region.state,
-    sessionKey: props.session.identity.sessionKey,
     sessionID: () => props.session.identity.params.id,
-    prompt: props.model.region.prompt,
     centered: props.model.region.centered,
     onResponseSubmit: props.onResponseSubmit,
     openParent: props.model.region.openParent,

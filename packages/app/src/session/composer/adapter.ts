@@ -16,6 +16,7 @@ export function createActiveComposerAdapter(input: {
   if (!id) throw new Error("Active Composer requires a Session ID")
 
   const prompt = useComposerState()
+  prompt.current()
   const state = prompt.capture()
   const data = useData()
   const server = useServerSDK()

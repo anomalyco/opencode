@@ -1,7 +1,6 @@
 import type { SelectedLineRange } from "@/workspaces/files/model"
 
 type HandoffSession = {
-  prompt: string
   files: Record<string, SelectedLineRange | null>
 }
 
@@ -23,7 +22,7 @@ const touch = <K, V>(map: Map<K, V>, key: K, value: V) => {
 }
 
 export const setSessionHandoff = (key: string, patch: Partial<HandoffSession>) => {
-  const prev = store.session.get(key) ?? { prompt: "", files: {} }
+  const prev = store.session.get(key) ?? { files: {} }
   touch(store.session, key, { ...prev, ...patch })
 }
 

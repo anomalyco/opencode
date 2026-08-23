@@ -208,8 +208,6 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     parentID: () => props.child?.parentID,
     child: () => !!props.child,
     showComposer: () => true,
-    handoffPrompt: () => undefined,
-    promptReady: () => true,
   } satisfies SessionComposerRegionViewController
 
   return (
