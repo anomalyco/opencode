@@ -318,7 +318,7 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
   const groupByPart = new Map<string, PriorGroup>()
   previous.forEach((row, index) => {
     if (row._tag !== "AssistantPart" || row.group.type === "part") return
-    row.group.refs.forEach((ref) => groupByPart.set(groupPartKey(row.userMessageID, ref), { index, row }))
+    row.group.refs.forEach((ref) => groupByPart.set(groupPartKey(ref), { index, row }))
   })
   const reserved = new Map<string, number>()
   rows.forEach((row, index) => {
@@ -413,7 +413,7 @@ function stabilizeGroupKey(
 ) {
   if (row._tag !== "AssistantPart" || row.group.type === "part") return row
   const existing = row.group.refs.reduce<PriorGroup | undefined>((result, ref) => {
-    const candidate = groupByPart.get(groupPartKey(row.userMessageID, ref))
+    const candidate = groupByPart.get(groupPartKey(ref))
     if (!candidate) return result
     const key = TimelineRow.key(candidate.row)
     if (claimed.has(key)) return result
@@ -432,8 +432,10 @@ function stabilizeGroupKey(
   })
 }
 
-function groupPartKey(userMessageID: string, ref: PartRef) {
-  return `${userMessageID}:${ref.messageID}:${ref.partID}`
+// Part refs are globally unique; keying by the turn would break reuse when a
+// page-boundary turn regroups under its real user message after a history prepend.
+function groupPartKey(ref: PartRef) {
+  return `${ref.messageID}:${ref.partID}`
 }
 
 function renderable(content: Content, showReasoning: boolean) {

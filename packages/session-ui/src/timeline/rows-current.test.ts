@@ -29,10 +29,10 @@ describe("current session timeline rows", () => {
     expect(result.activeMessageID).toBe("msg_3")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_1",
-      "assistant-part:msg_1:part:msg_2:msg_2:text:0",
+      "assistant-part:part:msg_2:msg_2:text:0",
       "turn-gap:msg_3",
       "user-message:msg_3",
-      "assistant-part:msg_3:part:msg_4:msg_4:reasoning:0",
+      "assistant-part:part:msg_4:msg_4:reasoning:0",
     ])
   })
 
@@ -79,7 +79,7 @@ describe("current session timeline rows", () => {
     expect(result.activeMessageID).toBe("msg_assistant")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "notice:msg_notice",
-      "assistant-part:msg_assistant:part:msg_assistant:msg_assistant:text:0",
+      "assistant-part:part:msg_assistant:msg_assistant:text:0",
     ])
   })
 
@@ -140,10 +140,10 @@ describe("current session timeline rows", () => {
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_user",
       "notice:msg_agent",
-      "assistant-part:msg_user:part:msg_assistant_1:msg_assistant_1:text:0",
+      "assistant-part:part:msg_assistant_1:msg_assistant_1:text:0",
       "notice:msg_background",
       "notice:msg_model",
-      "assistant-part:msg_user:part:msg_assistant_2:msg_assistant_2:text:0",
+      "assistant-part:part:msg_assistant_2:msg_assistant_2:text:0",
       "notice:msg_restart",
       "notice:msg_skill",
       "notice:msg_compaction",
@@ -414,9 +414,9 @@ describe("current session timeline rows", () => {
 
     expect(keys).toEqual([
       "user-message:msg_user",
-      "assistant-part:msg_user:context:msg_assistant_1:tool_0",
-      "assistant-part:msg_user:part:msg_assistant_2:tool_0",
-      "assistant-part:msg_user:context:msg_assistant_3:tool_0",
+      "assistant-part:context:msg_assistant_1:tool_0",
+      "assistant-part:part:msg_assistant_2:tool_0",
+      "assistant-part:context:msg_assistant_3:tool_0",
     ])
   })
 

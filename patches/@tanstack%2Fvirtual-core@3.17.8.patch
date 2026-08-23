@@ -1,5 +1,5 @@
 diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
-index e470032a9572b3ced764ca02238a8c6be435a9d4..65cd7ba4159d47d4c0cfb1adea69281ee30ba28a 100644
+index e470032a9572b3ced764ca02238a8c6be435a9d4..93770cdc02c570ce6aaa2ce256792b940c25e4d3 100644
 --- a/dist/cjs/index.cjs
 +++ b/dist/cjs/index.cjs
 @@ -289,7 +289,7 @@ class Virtualizer {
@@ -11,16 +11,78 @@ index e470032a9572b3ced764ca02238a8c6be435a9d4..65cd7ba4159d47d4c0cfb1adea69281e
          const prevCount = prevOptions.count;
          const nextCount = merged.count;
          const measurements = this.getMeasurements();
-@@ -303,7 +303,7 @@ class Virtualizer {
+@@ -299,11 +299,20 @@ class Virtualizer {
+         const didEdgeKeysChange = didCountChange || prevCount > 0 && nextCount > 0 && (merged.getItemKey(0) !== prevFirstKey || merged.getItemKey(nextCount - 1) !== prevLastKey);
+         if (didEdgeKeysChange) {
+           edgeKeysChanged = true;
++          // A data change can legitimately re-key the rows around the current offset
++          // (e.g. a truncated leading chat turn regrouping once a prepended page loads
++          // its parent). Capture fallback anchors below the primary one so the scroll
++          // position survives even when the nearest keys disappear.
+           const item = prevCount > 0 ? this.getVirtualItemForOffset(this.getScrollOffset()) ?? measurements[0] : null;
            if (item) {
-             anchor = [item.key, this.getScrollOffset() - item.start];
+-            anchor = [item.key, this.getScrollOffset() - item.start];
++            anchor = [];
++            for (let i = item.index; i < prevCount && anchor.length < 100; i++) {
++              const candidate = measurements[i];
++              if (!candidate) break;
++              anchor.push([candidate.key, this.getScrollOffset() - candidate.start]);
++            }
            }
 -          const behavior = merged.followOnAppend === true ? "auto" : merged.followOnAppend || null;
 +          const behavior = merged.anchorTo === "end" ? merged.followOnAppend === true ? "auto" : merged.followOnAppend || null : null;
            if (behavior && nextCount > prevCount && this.isAtEnd(prevOptions.scrollEndThreshold) && (prevCount === 0 || merged.getItemKey(nextCount - 1) !== prevLastKey)) {
              followOnAppend = behavior;
            }
-@@ -725,17 +725,20 @@ class Virtualizer {
+@@ -316,30 +325,31 @@ class Virtualizer {
+       }
+       let anchorResolved = false;
+       let anchorDelta = 0;
+-      if (anchor && this.scrollOffset !== null) {
+-        const [anchorKey, anchorOffset] = anchor;
++      let resolvedAnchor = null;
++      if (anchor && anchor.length > 0 && this.scrollOffset !== null) {
+         const newMeasurements = this.getMeasurements();
+         const { count, getItemKey } = this.options;
+-        let idx = 0;
+-        while (idx < count && getItemKey(idx) !== anchorKey) {
+-          idx++;
+-        }
+-        if (idx < count) {
++        const indexByKey = new Map();
++        for (let i = 0; i < count; i++) indexByKey.set(getItemKey(i), i);
++        for (const [anchorKey, anchorOffset] of anchor) {
++          const idx = indexByKey.get(anchorKey);
++          if (idx === void 0) continue;
+           const anchorItem = newMeasurements[idx];
+-          if (anchorItem) {
+-            const newOffset = Math.max(0, anchorItem.start + anchorOffset);
+-            if (newOffset !== this.scrollOffset) {
+-              anchorDelta = newOffset - this.scrollOffset;
+-              this.scrollOffset = newOffset;
+-              anchorResolved = true;
+-            }
++          if (!anchorItem) continue;
++          resolvedAnchor = [anchorKey, anchorOffset];
++          const newOffset = Math.max(0, anchorItem.start + anchorOffset);
++          if (newOffset !== this.scrollOffset) {
++            anchorDelta = newOffset - this.scrollOffset;
++            this.scrollOffset = newOffset;
++            anchorResolved = true;
+           }
++          break;
+         }
+       }
+       if (anchorResolved || followOnAppend) {
+         this.pendingScrollAnchor = [
+-          anchorResolved ? anchor[0] : null,
+-          anchorResolved ? anchor[1] : 0,
++          anchorResolved ? resolvedAnchor[0] : null,
++          anchorResolved ? resolvedAnchor[1] : 0,
+           followOnAppend,
+           anchorDelta
+         ];
+@@ -725,17 +735,20 @@ class Virtualizer {
          this.getMeasurements(),
          this.getSize(),
          this.getScrollOffset(),
@@ -71,7 +133,7 @@ index 6b43c0aea7ed9eeef75cbfb1351fcbd243913bdd..7be2680967934ddfbc4583a210a3d11e
      getVirtualIndexes: {
          (): number[];
 diff --git a/dist/esm/index.js b/dist/esm/index.js
-index 2495b26cf2c3589213546b3958eaadf2eb6b751d..01373d68c540e022bd7be59d307a3e39a5b0b899 100644
+index 2495b26cf2c3589213546b3958eaadf2eb6b751d..dc062edd6438f315bd8dddcf231986ad72158477 100644
 --- a/dist/esm/index.js
 +++ b/dist/esm/index.js
 @@ -287,7 +287,7 @@ class Virtualizer {
@@ -83,16 +145,78 @@ index 2495b26cf2c3589213546b3958eaadf2eb6b751d..01373d68c540e022bd7be59d307a3e39
          const prevCount = prevOptions.count;
          const nextCount = merged.count;
          const measurements = this.getMeasurements();
-@@ -301,7 +301,7 @@ class Virtualizer {
+@@ -297,11 +297,20 @@ class Virtualizer {
+         const didEdgeKeysChange = didCountChange || prevCount > 0 && nextCount > 0 && (merged.getItemKey(0) !== prevFirstKey || merged.getItemKey(nextCount - 1) !== prevLastKey);
+         if (didEdgeKeysChange) {
+           edgeKeysChanged = true;
++          // A data change can legitimately re-key the rows around the current offset
++          // (e.g. a truncated leading chat turn regrouping once a prepended page loads
++          // its parent). Capture fallback anchors below the primary one so the scroll
++          // position survives even when the nearest keys disappear.
+           const item = prevCount > 0 ? this.getVirtualItemForOffset(this.getScrollOffset()) ?? measurements[0] : null;
            if (item) {
-             anchor = [item.key, this.getScrollOffset() - item.start];
+-            anchor = [item.key, this.getScrollOffset() - item.start];
++            anchor = [];
++            for (let i = item.index; i < prevCount && anchor.length < 100; i++) {
++              const candidate = measurements[i];
++              if (!candidate) break;
++              anchor.push([candidate.key, this.getScrollOffset() - candidate.start]);
++            }
            }
 -          const behavior = merged.followOnAppend === true ? "auto" : merged.followOnAppend || null;
 +          const behavior = merged.anchorTo === "end" ? merged.followOnAppend === true ? "auto" : merged.followOnAppend || null : null;
            if (behavior && nextCount > prevCount && this.isAtEnd(prevOptions.scrollEndThreshold) && (prevCount === 0 || merged.getItemKey(nextCount - 1) !== prevLastKey)) {
              followOnAppend = behavior;
            }
-@@ -723,17 +723,20 @@ class Virtualizer {
+@@ -314,30 +323,31 @@ class Virtualizer {
+       }
+       let anchorResolved = false;
+       let anchorDelta = 0;
+-      if (anchor && this.scrollOffset !== null) {
+-        const [anchorKey, anchorOffset] = anchor;
++      let resolvedAnchor = null;
++      if (anchor && anchor.length > 0 && this.scrollOffset !== null) {
+         const newMeasurements = this.getMeasurements();
+         const { count, getItemKey } = this.options;
+-        let idx = 0;
+-        while (idx < count && getItemKey(idx) !== anchorKey) {
+-          idx++;
+-        }
+-        if (idx < count) {
++        const indexByKey = new Map();
++        for (let i = 0; i < count; i++) indexByKey.set(getItemKey(i), i);
++        for (const [anchorKey, anchorOffset] of anchor) {
++          const idx = indexByKey.get(anchorKey);
++          if (idx === void 0) continue;
+           const anchorItem = newMeasurements[idx];
+-          if (anchorItem) {
+-            const newOffset = Math.max(0, anchorItem.start + anchorOffset);
+-            if (newOffset !== this.scrollOffset) {
+-              anchorDelta = newOffset - this.scrollOffset;
+-              this.scrollOffset = newOffset;
+-              anchorResolved = true;
+-            }
++          if (!anchorItem) continue;
++          resolvedAnchor = [anchorKey, anchorOffset];
++          const newOffset = Math.max(0, anchorItem.start + anchorOffset);
++          if (newOffset !== this.scrollOffset) {
++            anchorDelta = newOffset - this.scrollOffset;
++            this.scrollOffset = newOffset;
++            anchorResolved = true;
+           }
++          break;
+         }
+       }
+       if (anchorResolved || followOnAppend) {
+         this.pendingScrollAnchor = [
+-          anchorResolved ? anchor[0] : null,
+-          anchorResolved ? anchor[1] : 0,
++          anchorResolved ? resolvedAnchor[0] : null,
++          anchorResolved ? resolvedAnchor[1] : 0,
+           followOnAppend,
+           anchorDelta
+         ];
+@@ -723,17 +733,20 @@ class Virtualizer {
          this.getMeasurements(),
          this.getSize(),
          this.getScrollOffset(),
@@ -117,9 +241,18 @@ index 2495b26cf2c3589213546b3958eaadf2eb6b751d..01373d68c540e022bd7be59d307a3e39
            // Pass the typed array so binary search + forward-walk can read
            // start/end directly from Float64Array, skipping the Proxy traps.
 diff --git a/src/index.ts b/src/index.ts
-index dc6f1010c4d4758de9c46fb8d69209e582e47171..6988f58f7406ee64789ad9ad44f519ed4cf9a00f 100644
+index dc6f1010c4d4758de9c46fb8d69209e582e47171..5d8bf755e285e4d0688d5e41ed768c60e4267131 100644
 --- a/src/index.ts
 +++ b/src/index.ts
+@@ -567,7 +567,7 @@ export class Virtualizer<
+     const prevOptions = this.options as
+       | Required<VirtualizerOptions<TScrollElement, TItemElement>>
+       | undefined
+-    let anchor: [Key, number] | null = null
++    let anchor: Array<[Key, number]> | null = null
+     let followOnAppend: ScrollBehavior | null = null
+     let edgeKeysChanged = false
+
 @@ -575,7 +575,6 @@ export class Virtualizer<
        prevOptions !== undefined &&
        prevOptions.enabled &&
@@ -128,7 +261,28 @@ index dc6f1010c4d4758de9c46fb8d69209e582e47171..6988f58f7406ee64789ad9ad44f519ed
        this.scrollElement !== null
      ) {
        const prevCount = prevOptions.count
-@@ -611,9 +610,11 @@ export class Virtualizer<
+@@ -600,6 +599,10 @@ export class Virtualizer<
+
+       if (didEdgeKeysChange) {
+         edgeKeysChanged = true
++        // A data change can legitimately re-key the rows around the current offset
++        // (e.g. a truncated leading chat turn regrouping once a prepended page loads
++        // its parent). Capture fallback anchors below the primary one so the scroll
++        // position survives even when the nearest keys disappear.
+         const item =
+           prevCount > 0
+             ? (this.getVirtualItemForOffset(this.getScrollOffset()) ??
+@@ -607,13 +610,20 @@ export class Virtualizer<
+             : null
+
+         if (item) {
+-          anchor = [item.key, this.getScrollOffset() - item.start]
++          anchor = []
++          for (let i = item.index; i < prevCount && anchor.length < 100; i++) {
++            const candidate = measurements[i]
++            if (!candidate) break
++            anchor.push([candidate.key, this.getScrollOffset() - candidate.start])
++          }
          }
 
          const behavior =
@@ -143,7 +297,64 @@ index dc6f1010c4d4758de9c46fb8d69209e582e47171..6988f58f7406ee64789ad9ad44f519ed
 
          if (
            behavior &&
-@@ -1410,16 +1411,25 @@ export class Virtualizer<
+@@ -646,35 +656,36 @@ export class Virtualizer<
+     // frame, producing a visible "jump" on prepend with dynamic sizes.
+     let anchorResolved = false
+     let anchorDelta = 0
+-    if (anchor && this.scrollOffset !== null) {
+-      const [anchorKey, anchorOffset] = anchor
++    let resolvedAnchor: [Key, number] | null = null
++    if (anchor && anchor.length > 0 && this.scrollOffset !== null) {
+       const newMeasurements = this.getMeasurements()
+       const { count, getItemKey } = this.options
+-      let idx = 0
+-      while (idx < count && getItemKey(idx) !== anchorKey) {
+-        idx++
+-      }
+-      if (idx < count) {
++      const indexByKey = new Map<Key, number>()
++      for (let i = 0; i < count; i++) indexByKey.set(getItemKey(i), i)
++      for (const [anchorKey, anchorOffset] of anchor) {
++        const idx = indexByKey.get(anchorKey)
++        if (idx === undefined) continue
+         const anchorItem = newMeasurements[idx]
+-        if (anchorItem) {
+-          // Clamp to the reachable range's lower bound — anchorOffset may
+-          // have been derived from a transiently negative scrollOffset
+-          // (rubber-band), and a negative tracked offset never self-heals
+-          // when the element cannot scroll (#1229).
+-          const newOffset = Math.max(0, anchorItem.start + anchorOffset)
+-          if (newOffset !== this.scrollOffset) {
+-            anchorDelta = newOffset - this.scrollOffset
+-            this.scrollOffset = newOffset
+-            anchorResolved = true
+-          }
++        if (!anchorItem) continue
++        resolvedAnchor = [anchorKey, anchorOffset]
++        // Clamp to the reachable range's lower bound — anchorOffset may
++        // have been derived from a transiently negative scrollOffset
++        // (rubber-band), and a negative tracked offset never self-heals
++        // when the element cannot scroll (#1229).
++        const newOffset = Math.max(0, anchorItem.start + anchorOffset)
++        if (newOffset !== this.scrollOffset) {
++          anchorDelta = newOffset - this.scrollOffset
++          this.scrollOffset = newOffset
++          anchorResolved = true
+         }
++        break
+       }
+     }
+
+     if (anchorResolved || followOnAppend) {
+       this.pendingScrollAnchor = [
+-        anchorResolved ? anchor![0] : null,
+-        anchorResolved ? anchor![1] : 0,
++        anchorResolved ? resolvedAnchor![0] : null,
++        anchorResolved ? resolvedAnchor![1] : 0,
+         followOnAppend,
+         anchorDelta,
+       ]
+@@ -1410,16 +1421,25 @@ export class Virtualizer<
        this.getSize(),
        this.getScrollOffset(),
        this.options.lanes,

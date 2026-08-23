@@ -60,6 +60,7 @@ export type CreateDataInput = {
 }
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
+const messagePageLimit = 20
 
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
@@ -1318,7 +1319,7 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
-            const response = await api().message.list({ sessionID, limit: 200, order: "desc" })
+            const response = await api().message.list({ sessionID, limit: messagePageLimit, order: "desc" })
             const fetched = response.data.toReversed()
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
@@ -1348,7 +1349,7 @@ export function createData(config: CreateDataInput) {
           if (!cursor || store.session.messageLoading[sessionID]) return
           setStore("session", "messageLoading", sessionID, true)
           const response = await api()
-            .message.list({ sessionID, limit: 200, cursor })
+            .message.list({ sessionID, limit: messagePageLimit, cursor })
             .finally(() => setStore("session", "messageLoading", sessionID, false))
           const older = response.data.toReversed()
           const existing = store.session.message[sessionID] ?? []

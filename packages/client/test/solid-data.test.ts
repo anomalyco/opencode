@@ -103,6 +103,38 @@ test("reports optimistic sessions as creating until the request settles", async 
   }
 })
 
+test("loads bounded message pages", async () => {
+  const requests: URL[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      requests.push(url)
+      return Response.json({ data: [], cursor: requests.length === 1 ? { next: "next" } : {} })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: { on: () => () => {}, listen: () => () => {} },
+    }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    await setup.data.session.message.loadMore("ses_refresh")
+
+    expect(requests).toHaveLength(2)
+    expect(Object.fromEntries(requests[0].searchParams)).toEqual({ limit: "20", order: "desc" })
+    expect(Object.fromEntries(requests[1].searchParams)).toEqual({ cursor: "next", limit: "20" })
+  } finally {
+    setup.dispose()
+  }
+})
+
 async function wait(check: () => boolean) {
   const started = Date.now()
   while (!check()) {

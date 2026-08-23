@@ -33,63 +33,65 @@ describe("reuseTimelineRows", () => {
       name: "reuses an unchanged context group",
       previous: [context("context:a", ["a", "b"])],
       rows: [context("context:a", ["a", "b"])],
-      expected: ["assistant-part:user-1:context:a"],
+      expected: ["assistant-part:context:a"],
       reused: [[0, 0]],
     },
     {
       name: "preserves the group key when a member is appended",
       previous: [context("context:a", ["a"])],
       rows: [context("context:a", ["a", "b"])],
-      expected: ["assistant-part:user-1:context:a"],
+      expected: ["assistant-part:context:a"],
       reused: [],
     },
     {
       name: "preserves a patch group key when a member is appended",
       previous: [patch("patch:a", ["a"])],
       rows: [patch("patch:a", ["a", "b"])],
-      expected: ["assistant-part:user-1:patch:a"],
+      expected: ["assistant-part:patch:a"],
       reused: [],
     },
     {
       name: "preserves the group key when the first member is removed",
       previous: [context("context:a", ["a", "b"])],
       rows: [context("context:b", ["b"])],
-      expected: ["assistant-part:user-1:context:a"],
+      expected: ["assistant-part:context:a"],
       reused: [],
     },
     {
       name: "lets only the natural owner retain an old key after a split",
       previous: [context("context:a", ["a", "b"])],
       rows: [context("context:a", ["a"]), context("context:b", ["b"])],
-      expected: ["assistant-part:user-1:context:a", "assistant-part:user-1:context:b"],
+      expected: ["assistant-part:context:a", "assistant-part:context:b"],
       reused: [],
     },
     {
       name: "chooses the earliest prior key when groups merge",
       previous: [context("context:a", ["a"]), context("context:b", ["b"])],
       rows: [context("context:b", ["b", "a"])],
-      expected: ["assistant-part:user-1:context:a"],
+      expected: ["assistant-part:context:a"],
       reused: [],
     },
     {
       name: "reserves an old key for its natural owner when two new groups compete",
       previous: [context("context:a", ["a", "b"])],
       rows: [context("context:b", ["b"]), context("context:a", ["a"])],
-      expected: ["assistant-part:user-1:context:b", "assistant-part:user-1:context:a"],
+      expected: ["assistant-part:context:b", "assistant-part:context:a"],
       reused: [],
     },
     {
-      name: "does not reuse context identity across user messages",
+      // A history prepend can regroup a page-boundary turn under its real user
+      // message; the same parts must keep their identity across that move.
+      name: "reuses context identity when the same parts move to another user message",
       previous: [context("context:a", ["a", "b"], { userMessageID: "user-1" })],
       rows: [context("context:b", ["b"], { userMessageID: "user-2" })],
-      expected: ["assistant-part:user-2:context:b"],
+      expected: ["assistant-part:context:a"],
       reused: [],
     },
     {
       name: "does not reuse context identity across assistant messages",
       previous: [context("context:assistant-1:a", ["a"], { messageID: "assistant-1" })],
       rows: [context("context:assistant-2:a", ["a"], { messageID: "assistant-2" })],
-      expected: ["assistant-part:user-1:context:assistant-2:a"],
+      expected: ["assistant-part:context:assistant-2:a"],
       reused: [],
     },
     {
@@ -103,11 +105,7 @@ describe("reuseTimelineRows", () => {
       name: "does not create accidental key collisions",
       previous: [context("context:a", ["a", "b", "c"])],
       rows: [context("context:b", ["b"]), context("context:a", ["a"]), context("context:c", ["c"])],
-      expected: [
-        "assistant-part:user-1:context:b",
-        "assistant-part:user-1:context:a",
-        "assistant-part:user-1:context:c",
-      ],
+      expected: ["assistant-part:context:b", "assistant-part:context:a", "assistant-part:context:c"],
       reused: [],
     },
   ])("$name", ({ previous, rows, expected, reused }) => {
@@ -197,4 +195,5 @@ describe("createTimelineProjection", () => {
     expect(second.rows[0]).toBe(first.rows[0])
     expect(second.rows[1]).toBe(first.rows[1])
   })
+
 })
