@@ -29,7 +29,7 @@ mock.module("@lydell/node-pty", () => ({
 
 const { resolveWslOpencode } = await import("./runtime")
 
-test("resolves OpenCode from the distro PATH", async () => {
+test("resolves OpenCode from the distro PATH without Windows interop entries", async () => {
   calls.length = 0
   stdout = "/home/alice/.local/bin/opencode\n"
 
@@ -41,7 +41,7 @@ test("resolves OpenCode from the distro PATH", async () => {
       "--",
       "sh",
       "-c",
-      'command -v opencode || { [ -x "$HOME/.opencode/bin/opencode" ] && printf "%s\\n" "$HOME/.opencode/bin/opencode"; }',
+      'PATH=$(printf "%s" "$PATH" | awk -v RS=: -v ORS=: \'$0 !~ /^\\/mnt\\//\' | sed "s/:$//"); export PATH; command -v opencode || { [ -x "$HOME/.opencode/bin/opencode" ] && printf "%s\\n" "$HOME/.opencode/bin/opencode"; }',
     ],
   ])
 })
