@@ -21,9 +21,10 @@
 //   - The renderer's DESTROY event triggers destroy() so the footer
 //     doesn't outlive the renderer.
 //
-// Ctrl-c clears a live prompt draft first; otherwise interrupt and exit use a
-// two-press pattern where the first press shows a hint and the second press
-// within 5 seconds actually fires the action.
+// Ctrl-c clears a live prompt draft first; otherwise interrupt uses a
+// two-press pattern, and exit needs two presses when idle but three while a
+// turn is running. The first press shows a hint and the remaining presses
+// within 5 seconds actually fire the action.
 import { CliRenderEvents, type CliRenderer, type KeyEvent, type Renderable, type TreeSitterClient } from "@opentui/core"
 import type { Keymap } from "@opentui/keymap"
 import { render } from "@opentui/solid"
@@ -169,6 +170,7 @@ export class RunFooter implements FooterApi {
   private destroyed = false
   private prompts = new Set<(input: RunPrompt) => void>()
   private queuedRemoves = new Set<(messageID: string) => boolean | Promise<boolean>>()
+  private queuedFlushes = new Set<() => boolean>()
   private closes = new Set<() => void>()
   // Microtask-coalesced commit queue. Flushed on next microtask or on close/destroy.
   private queue: StreamCommit[] = []
@@ -329,12 +331,14 @@ export class RunFooter implements FooterApi {
               onQuestionReject: footer.handleQuestionReject,
               onCycle: footer.handleCycle,
               onInterrupt: footer.handleInterrupt,
+              onInterruptFire: footer.fireInterrupt,
               onBackground: options.onBackground,
               onEditorOpen: options.onEditorOpen,
               onInputClear: footer.handleInputClear,
               onExitRequest: footer.handleExit,
               onRequestExit: footer.setRequestExitHandler,
               onExit: () => footer.close(),
+              onQueuedFlush: footer.handleQueuedFlush,
               onModelSelect: footer.handleModelSelect,
               onVariantSelect: footer.handleVariantSelect,
               onRows: footer.syncRows,
@@ -372,6 +376,13 @@ export class RunFooter implements FooterApi {
     this.queuedRemoves.add(fn)
     return () => {
       this.queuedRemoves.delete(fn)
+    }
+  }
+
+  public onQueuedFlush(fn: () => boolean): () => void {
+    this.queuedFlushes.add(fn)
+    return () => {
+      this.queuedFlushes.delete(fn)
     }
   }
 
@@ -681,6 +692,11 @@ export class RunFooter implements FooterApi {
     return fn ? await fn(messageID) : false
   }
 
+  private handleQueuedFlush = (): boolean => {
+    const fn = [...this.queuedFlushes][0]
+    return fn ? fn() : false
+  }
+
   private handleInputClear = (): void => {
     this.clearInterruptTimer()
     this.clearExitTimer()
@@ -977,6 +993,16 @@ export class RunFooter implements FooterApi {
       return true
     }
 
+    return this.fireInterrupt()
+  }
+
+  // The actual abort path shared by the second esc press and
+  // session.interrupt_send. Never arms the two-press counter.
+  private fireInterrupt = (): boolean => {
+    if (this.isClosed || this.state().phase !== "running") {
+      return false
+    }
+
     this.clearInterruptTimer()
     this.patch({ interrupt: 0 })
     this.setNotice("interrupting")
@@ -990,10 +1016,11 @@ export class RunFooter implements FooterApi {
     }
 
     this.clearInterruptTimer()
+    const required = this.state().phase === "running" ? 3 : 2
     const next = this.state().exit + 1
     this.patch({ exit: next, interrupt: 0 })
 
-    if (next < 2) {
+    if (next < required) {
       this.armExitTimer()
       return true
     }
@@ -1101,6 +1128,7 @@ export class RunFooter implements FooterApi {
     this.themeRefreshTimeouts.length = 0
     this.prompts.clear()
     this.queuedRemoves.clear()
+    this.queuedFlushes.clear()
     this.closes.clear()
     this.scrollback.destroy()
     for (const theme of [...this.themes]) this.destroyTheme(theme)

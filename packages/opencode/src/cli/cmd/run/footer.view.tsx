@@ -98,12 +98,14 @@ type RunFooterViewProps = {
   onQuestionReject: (input: QuestionReject) => void | Promise<void>
   onCycle: () => void
   onInterrupt: () => boolean
+  onInterruptFire?: () => boolean
   onBackground?: () => void
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onInputClear: () => void
   onExitRequest?: () => boolean
   onRequestExit?: (fn: (() => boolean) | undefined) => void
   onExit: () => void
+  onQueuedFlush?: () => boolean
   onModelSelect: (model: NonNullable<RunInput["model"]>) => void
   onVariantSelect: (variant: string | undefined) => void
   onRows: (rows: number) => void
@@ -242,6 +244,8 @@ export function RunFooterView(props: RunFooterViewProps) {
   const busy = createMemo(() => props.state().phase === "running")
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
+  const exitRequired = createMemo(() => (props.state().phase === "running" ? 3 : 2))
+  const exitRemaining = createMemo(() => Math.max(0, exitRequired() - props.state().exit))
   const queue = createMemo(() => props.state().queue)
   const usage = createMemo(() => props.state().usage)
   const interruptLabel = createMemo(() => {
@@ -372,6 +376,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     onSubmit: props.onSubmit,
     onCycle: props.onCycle,
     onInterrupt: props.onInterrupt,
+    onInterruptFire: props.onInterruptFire,
     onEditorOpen: props.onEditorOpen,
     onInputClear: props.onInputClear,
     onExitRequest: props.onExitRequest,
@@ -403,7 +408,8 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const statusText = createMemo(() => {
     if (exiting()) {
-      return `Press ${clearShortcut() || "ctrl+c"} again to exit`
+      const suffix = exitRemaining() > 1 ? `${exitRemaining()} more times` : "again"
+      return `Press ${clearShortcut() || "ctrl+c"} ${suffix} to exit`
     }
 
     if (busy()) {
@@ -559,8 +565,19 @@ export function RunFooterView(props: RunFooterViewProps) {
         category: "Session",
         run: openQueuedMenu,
       },
+      {
+        name: "session.queued_flush",
+        title: "Send queued prompts now",
+        category: "Session",
+        run: () => {
+          props.onQueuedFlush?.()
+        },
+      },
     ],
-    bindings: props.tuiConfig.keybinds.get("session.queued_prompts"),
+    bindings: [
+      ...props.tuiConfig.keybinds.get("session.queued_prompts"),
+      ...props.tuiConfig.keybinds.get("session.queued_flush"),
+    ],
   }))
 
   createEffect(() => {

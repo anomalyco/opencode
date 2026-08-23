@@ -341,6 +341,7 @@ export type FooterApi = {
   readonly isClosed: boolean
   onPrompt(fn: (input: RunPrompt) => void): () => void
   onQueuedRemove(fn: (messageID: string) => boolean | Promise<boolean>): () => void
+  onQueuedFlush(fn: () => boolean): () => void
   onClose(fn: () => void): () => void
   event(next: FooterEvent): void
   append(commit: StreamCommit): void

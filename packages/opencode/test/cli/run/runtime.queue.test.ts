@@ -5,6 +5,7 @@ import type { FooterApi, FooterEvent, RunPrompt, StreamCommit } from "@/cli/cmd/
 function footer() {
   const prompts = new Set<(input: RunPrompt) => void>()
   const queuedRemoves = new Set<(messageID: string) => void>()
+  const queuedFlushes = new Set<() => boolean>()
   const closes = new Set<() => void>()
   const events: FooterEvent[] = []
   const commits: StreamCommit[] = []
@@ -24,6 +25,12 @@ function footer() {
       queuedRemoves.add(fn)
       return () => {
         queuedRemoves.delete(fn)
+      }
+    },
+    onQueuedFlush(fn) {
+      queuedFlushes.add(fn)
+      return () => {
+        queuedFlushes.delete(fn)
       }
     },
     onClose(fn) {
@@ -67,14 +74,19 @@ function footer() {
     api,
     events,
     commits,
-    submit(text: string, mode?: RunPrompt["mode"]) {
-      const next = mode ? { text, parts: [] as RunPrompt["parts"], mode } : { text, parts: [] as RunPrompt["parts"] }
+    submit(text: string, mode?: RunPrompt["mode"], parts: RunPrompt["parts"] = []) {
+      const next = mode ? { text, parts, mode } : { text, parts }
       for (const fn of [...prompts]) {
         fn(next)
       }
     },
     removeQueued(messageID: string) {
       for (const fn of [...queuedRemoves]) fn(messageID)
+    },
+    flushQueued() {
+      let result = false
+      for (const fn of [...queuedFlushes]) result = fn()
+      return result
     },
   }
 }
@@ -477,5 +489,105 @@ describe("run runtime queue", () => {
 
     ui.submit("one")
     await expect(task).rejects.toThrow("boom")
+  })
+
+  test("flush merges queued prompts into a single turn ahead of everything else", async () => {
+    const ui = footer()
+    const seen: RunPrompt[] = []
+    let wake: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      wake = resolve
+    })
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input) => {
+        seen.push(input)
+        if (seen.length === 1) await gate
+        if (seen.length === 3) ui.api.close()
+      },
+    })
+
+    ui.submit("active")
+    await Promise.resolve()
+    ui.submit("queued one")
+    ui.submit("queued two")
+    ui.submit("later shell", "shell")
+
+    expect(ui.flushQueued()).toBe(true)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const event = ui.events.findLast((item) => item.type === "queued.prompts")
+    expect(event?.type === "queued.prompts" ? event.prompts : []).toEqual([])
+
+    wake?.()
+    await task
+
+    expect(seen.map((item) => item.text)).toEqual(["active", "queued one\n\nqueued two", "later shell"])
+    expect(seen[1]?.messageID).toEqual(expect.any(String))
+    expect(seen[1]?.parts).toEqual([])
+  })
+
+  test("flush keeps mention parts from every queued prompt", async () => {
+    const ui = footer()
+    const seen: RunPrompt[] = []
+    let wake: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      wake = resolve
+    })
+    const filePart = {
+      type: "file",
+      url: "file:///tmp/a.txt",
+      filename: "a.txt",
+      mime: "text/plain",
+    } as const
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input) => {
+        seen.push(input)
+        if (seen.length === 1) {
+          await gate
+          return
+        }
+
+        ui.api.close()
+      },
+    })
+
+    ui.submit("one")
+    await Promise.resolve()
+    ui.submit("two")
+    await Promise.resolve()
+    await Promise.resolve()
+    ui.submit("three", undefined, [filePart])
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(ui.flushQueued()).toBe(true)
+
+    wake?.()
+    await task
+
+    expect(seen[1]?.text).toBe("two\n\nthree")
+    expect(seen[1]?.parts).toEqual([filePart])
+  })
+
+  test("flush reports false when nothing is queued", async () => {
+    const ui = footer()
+    let calls = 0
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      initialInput: "hello",
+      run: async () => {
+        calls += 1
+        expect(ui.flushQueued()).toBe(false)
+        ui.api.close()
+      },
+    })
+
+    await task
+    expect(calls).toBe(1)
   })
 })

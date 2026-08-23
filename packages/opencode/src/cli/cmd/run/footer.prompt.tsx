@@ -71,6 +71,7 @@ type PromptInput = {
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onCycle: () => void
   onInterrupt: () => boolean
+  onInterruptFire?: () => boolean
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onInputClear: () => void
   onExitRequest?: () => boolean
@@ -1005,8 +1006,29 @@ export function createPromptState(input: PromptInput): PromptState {
           return false
         },
       },
+      {
+        name: "session.interrupt_send",
+        title: "Interrupt and send",
+        category: "Session",
+        run() {
+          syncDraft()
+          if (!draft.text.trim()) {
+            if (input.onInterrupt()) return
+            return false
+          }
+
+          // Queue the composer text first so it becomes the next turn once the
+          // abort below lets the drain advance past the active prompt.
+          submitPrompt(clonePrompt(draft))
+          if (input.onInterruptFire?.()) return
+          return false
+        },
+      },
     ],
-    bindings: input.tuiConfig.keybinds.get("session.interrupt"),
+    bindings: [
+      ...input.tuiConfig.keybinds.get("session.interrupt"),
+      ...input.tuiConfig.keybinds.get("session.interrupt_send"),
+    ],
   }))
 
   useBindings(() => ({

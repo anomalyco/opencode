@@ -327,6 +327,25 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     removeLocalQueued(queued)
     return true
   })
+  const offQueuedFlush = input.footer.onQueuedFlush(() => {
+    if (state.queued.length === 0) {
+      return false
+    }
+
+    // Queued entries are always ordinary prompts (no shell/command modes are
+    // queued locally), so merging them into one turn is safe. Parts keep their
+    // original source offsets; the merged text is the only lossy dimension.
+    const merged: RunPrompt = {
+      text: state.queued.map((item) => item.prompt.text).join("\n\n"),
+      parts: state.queued.flatMap((item) => item.prompt.parts),
+    }
+    const replaced = new Set(state.queued.map((item) => item.prompt))
+    state.queue = [merged, ...state.queue.filter((prompt) => !replaced.has(prompt))]
+    state.queued = []
+    syncQueue()
+    drain()
+    return true
+  })
 
   try {
     if (state.closed) {
@@ -343,6 +362,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     offPrompt()
     offClose()
     offRemoveQueued()
+    offQueuedFlush()
     close()
     await draining?.catch(() => {})
   }

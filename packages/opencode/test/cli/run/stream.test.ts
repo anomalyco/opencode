@@ -10,6 +10,7 @@ function footer() {
     isClosed: false,
     onPrompt: () => () => {},
     onQueuedRemove: () => () => {},
+    onQueuedFlush: () => () => {},
     onClose: () => () => {},
     event: (next) => {
       events.push(next)
