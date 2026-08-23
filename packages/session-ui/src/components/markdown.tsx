@@ -367,7 +367,13 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   }
 }
 
-function initialResult(text: string, key: string | undefined, projection: Projection, owner: string): RenderResult {
+function initialResult(
+  text: string,
+  key: string | undefined,
+  projection: Projection,
+  owner: string,
+  deferUntilReady: boolean | undefined,
+): RenderResult {
   if (!text) return { text, blocks: [] }
   const base = key ?? checksum(text)
   if (base) {
@@ -380,6 +386,7 @@ function initialResult(text: string, key: string | undefined, projection: Projec
     })
     if (blocks.length === projection.blocks.length) return { text, blocks }
   }
+  if (deferUntilReady) return { text, blocks: [] }
   return {
     text,
     blocks: [
@@ -403,11 +410,12 @@ export function Markdown(
     text: string
     cacheKey?: string
     streaming?: boolean
+    deferUntilReady?: boolean
     class?: string
     classList?: Record<string, boolean>
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "deferUntilReady", "class", "classList"])
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
@@ -523,6 +531,7 @@ export function Markdown(
         local.cacheKey,
         local.streaming ? pendingProjection(local.text) : completedProjection(local.text),
         owner,
+        local.deferUntilReady,
       ),
     },
   )
@@ -533,7 +542,7 @@ export function Markdown(
     const container = root()
     const result = html.latest ?? html()
     const projected = currentProjection()
-    const content = local.text ? pendingBlocks(result, projected, local.cacheKey, owner) : []
+    const content = local.text ? pendingBlocks(result, projected, local.cacheKey, owner, local.deferUntilReady) : []
     if (!container) return
     if (isServer) return
     if (content.length === 0) {
@@ -596,9 +605,11 @@ function pendingBlocks(
   projection: Projection | undefined,
   cacheKey: string | undefined,
   owner: string,
+  deferUntilReady: boolean | undefined,
 ) {
   if (!result) return []
   if (!projection || result.text === projection.text) return result.blocks
+  if (deferUntilReady) return result.blocks
   const initial = result.blocks.length === 1 && result.blocks[0]?.key === "initial"
   return projection.blocks.map((block, index) => {
     const current = initial ? undefined : result.blocks[index]

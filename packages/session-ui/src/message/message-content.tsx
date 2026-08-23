@@ -159,7 +159,7 @@ function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boole
 
   return (
     <Show when={value()}>
-      <Markdown text={value()} cacheKey={props.cacheKey} streaming={props.streaming} />
+      <Markdown text={value()} cacheKey={props.cacheKey} streaming={props.streaming} deferUntilReady />
     </Show>
   )
 }
