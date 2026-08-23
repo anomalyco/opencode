@@ -195,9 +195,33 @@ jobs:
           path: packages/cli/dist/cli-*
           if-no-files-found: error
 
-  build-node-cli:
+  build-node-app-archive:
     needs: version
-    if: github.repository == 'anomalyco/opencode' && false # Temporarily disabled
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build app archive
+        run: bun packages/cli/script/build-node.ts --app-archive-only --app-archive=.cache/app-archive.bin --skip-install
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-node-app-archive
+          path: packages/cli/.cache/app-archive.bin
+          if-no-files-found: error
+
+  build-node-cli:
+    needs:
+      - version
+      - build-node-app-archive
+    if: github.repository == 'anomalyco/opencode'
     strategy:
       fail-fast: false
       matrix:
@@ -227,8 +251,13 @@ jobs:
         with:
           node-version: "26.4.0"
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-node-app-archive
+          path: packages/cli/.cache
+
       - name: Build
-        run: bun packages/cli/script/build-node.ts --target=${{ matrix.settings.target }} --skip-install --outdir=dist/node
+        run: bun packages/cli/script/build-node.ts --target=${{ matrix.settings.target }} --skip-install --outdir=dist/node --app-archive=.cache/app-archive.bin
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
@@ -543,6 +572,7 @@ jobs:
       - version
       - build-cli
       - sign-cli-macos
+      - build-node-app-archive
       - build-node-cli
       - sign-cli-windows
       - build-electron
