@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { Card, CardActions, CardDescription, CardTitle } from "./card"
-import { Button } from "./button"
+import { Button } from "@opencode-ai/ui/button"
 
 const docs = `### Overview
 Surface container for grouping related content and actions.
@@ -52,7 +52,7 @@ export default {
         <CardTitle variant={props.variant}>Card title</CardTitle>
         <CardDescription>Small supporting text.</CardDescription>
         <CardActions>
-          <Button size="small" variant="secondary">
+          <Button size="small" variant="neutral">
             Action
           </Button>
         </CardActions>

@@ -130,8 +130,10 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.agent.reload()),
           },
           aisdk: {
-            hook: (name, callback) =>
-              register(host.aisdk.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
+            hook: (name, callback, options) =>
+              register(
+                host.aisdk.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
+              ),
           },
           catalog: {
             provider: {
@@ -259,6 +261,12 @@ export function fromPromise(plugin: Plugin) {
             transform: transform(host.skill),
             reload: () => run(host.skill.reload()),
           },
+          storage: {
+            get: (key) => run(host.storage.get(key)),
+            set: (key, value) => run(host.storage.set(key, value)),
+            remove: (key) => run(host.storage.remove(key)),
+            scan: (options) => run(host.storage.scan(options)),
+          },
           tool: {
             transform: (callback) =>
               register(
@@ -295,10 +303,14 @@ export function fromPromise(plugin: Plugin) {
               ),
           },
           session: {
-            hook: (name, callback) =>
-              register(host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
+            hook: (name, callback, options) =>
+              register(
+                host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
+              ),
             create: adaptApiMethod(SessionEndpoints["session.create"], host.session.create),
             get: adaptApiMethod(SessionEndpoints["session.get"], host.session.get),
+            switchAgent: adaptApiMethod(SessionEndpoints["session.switchAgent"], host.session.switchAgent),
+            switchModel: adaptApiMethod(SessionEndpoints["session.switchModel"], host.session.switchModel),
             prompt: adaptApiMethod(SessionEndpoints["session.prompt"], host.session.prompt),
             generate: adaptApiMethod(SessionEndpoints["session.generate"], host.session.generate),
             command: adaptApiMethod(SessionEndpoints["session.command"], host.session.command),

@@ -48,13 +48,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   env.OPENCODE_DISABLE_MODELS_FETCH = true;
   env.OPENCODE_VERSION = finalAttrs.version;
   env.OPENCODE_CHANNEL = "prod";
+  env.NODE_OPTIONS = "--max-old-space-size=4096";
 
   buildPhase = ''
     runHook preBuild
 
-    cd ./packages/opencode
+    cd ./packages/cli
     bun --bun ./script/build.ts --single --skip-install
-    bun --bun ./script/schema.ts schema.json
 
     runHook postBuild
   '';
@@ -62,10 +62,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
-    install -Dm644 schema.json $out/share/opencode/schema.json
+    install -Dm755 dist/cli-*/bin/opencode2 $out/bin/opencode2
 
-    wrapProgram $out/bin/opencode \
+    wrapProgram $out/bin/opencode2 \
       --prefix PATH : ${
         lib.makeBinPath (
           [
@@ -81,9 +80,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
     # trick yargs into also generating zsh completions
-    installShellCompletion --cmd opencode \
-      --bash <($out/bin/opencode completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+    installShellCompletion --cmd opencode2 \
+      --bash <($out/bin/opencode2 completion) \
+      --zsh <(SHELL=/bin/zsh $out/bin/opencode2 completion)
   '';
 
   nativeInstallCheckInputs = [
@@ -95,7 +94,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   versionCheckProgramArg = "--version";
 
   passthru = {
-    jsonschema = "${placeholder "out"}/share/opencode/schema.json";
     env = finalAttrs.env;
   };
 
@@ -103,7 +101,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     description = "The open source coding agent";
     homepage = "https://opencode.ai";
     license = lib.licenses.mit;
-    mainProgram = "opencode";
+    mainProgram = "opencode2";
     inherit (node_modules.meta) platforms;
   };
 })

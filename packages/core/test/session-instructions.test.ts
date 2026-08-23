@@ -233,6 +233,37 @@ describe("SessionInstructions", () => {
       }),
   )
 
+  it.effect("re-injects nested instructions dropped from history by compaction", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const dir = location.directory
+      const subPath = path.resolve(dir, "sub", "AGENTS.md")
+      yield* mkdir(path.resolve(dir, "sub"))
+      yield* writeAgents(path.resolve(dir, "AGENTS.md"), "root-instructions")
+      yield* writeAgents(subPath, "sub-instructions")
+      yield* Effect.promise(() => fs.writeFile(path.resolve(dir, "sub", "file.txt"), "content"))
+
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
+      const bus = yield* Bus.Service
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
+
+      yield* executeTool(registry, readCall(sessionID, "call-before", "sub/file.txt"))
+      expect(yield* synthetics(sessionID)).toHaveLength(1)
+
+      // A completed compaction truncates model-visible history at its boundary, dropping
+      // the synthetic that carried sub's instructions.
+      yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "" })
+      yield* bus.publish(SessionEvent.Compaction.Ended, { sessionID, reason: "manual", text: "summary", recent: "" })
+      expect(yield* synthetics(sessionID)).toHaveLength(0)
+
+      // The model no longer has the rules, so the next read under the subtree must
+      // re-inject them rather than trusting a stale in-memory claim.
+      yield* executeTool(registry, readCall(sessionID, "call-after", "sub/file.txt"))
+      expect(yield* synthetics(sessionID)).toHaveLength(1)
+    }),
+  )
+
   it.effect("listing the Location root directory injects no instructions", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service

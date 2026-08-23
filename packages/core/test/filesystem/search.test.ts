@@ -1,5 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test"
 import fuzzysort from "fuzzysort"
+import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import os from "os"
 import path from "path"
 import { Deferred, Effect, Layer } from "effect"
@@ -14,6 +15,41 @@ import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
 
 describe("FileSystemSearch", () => {
+  test("honors wildcard directory rules from .gitignore", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-fff-ignore-"))
+    try {
+      await mkdir(path.join(directory, "rust/target/debug/deps"), { recursive: true })
+      await Bun.write(path.join(directory, ".gitignore"), "**/target/\n")
+      await Bun.write(path.join(directory, "rust/target/debug/deps/ignored.rs"), "ignored")
+      const git = Bun.spawnSync(["git", "init", "-q"], { cwd: directory })
+      expect(git.exitCode).toBe(0)
+
+      const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+      const layer = FileSystemSearch.fffLayer.pipe(
+        Layer.provide(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location(ref, {
+                vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) },
+              }),
+            ),
+          ),
+        ),
+      )
+      const entries = await Effect.runPromise(
+        Effect.gen(function* () {
+          const search = yield* FileSystemSearch.Service
+          return yield* search.find({ query: "target" })
+        }).pipe(Effect.provide(layer), Effect.scoped),
+      )
+
+      expect(entries.every((entry) => !entry.path.startsWith("rust/target/"))).toBe(true)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test("bounds a home scan even when home is detected as a repository", async () => {
     let observed: Ripgrep.FindInput | undefined
     const home = AbsolutePath.make(os.homedir())

@@ -11,14 +11,17 @@ async function main() {
   process.env.OPENCODE_DISABLE_CHANNEL_DB = "0"
   const options = selectOptions()
   if (options.server.type === "build") process.env.OPENCODE_DESKTOP_SERVER_CHANNEL = "local"
+  process.env.OPENCODE_DESKTOP_ISOLATED_SERVER = "1"
   await prepareDesktop()
   await prepareServer(options.server)
   await startDesktop(options.electron)
 }
 
 async function prepareDesktop() {
-  await $`bun run install-electron`
-  await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
+  await Promise.all([
+    $`bun run install-electron`,
+    $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`,
+  ])
 }
 
 function selectOptions(): DevOptions {
@@ -46,7 +49,6 @@ async function prepareServer(source: ServerSource) {
 }
 
 async function startDesktop(args: string[]) {
-  process.env.OPENCODE_DESKTOP_ISOLATED_SERVER = "1"
   await $`electron-vite dev ${args}`
 }
 

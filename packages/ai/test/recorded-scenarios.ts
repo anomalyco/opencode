@@ -181,12 +181,10 @@ const normalizeImageText = (value: string) =>
     .trim()
 
 const encryptedReasoningOptions = {
-  openai: {
-    store: false,
-    include: ["reasoning.encrypted_content"],
-    reasoningEffort: "low",
-    reasoningSummary: "auto",
-  },
+  store: false,
+  include: ["reasoning.encrypted_content"],
+  reasoningEffort: "low",
+  reasoningSummary: "auto",
 } as const
 
 type AssistantTextExpectation = string | RegExp
@@ -304,8 +302,7 @@ const runTextScenario = (context: GoldenScenarioContext) =>
     assistant.expectText(/^Hello!?$/, {
       system: "You are concise.",
       maxTokens: context.maxTokens ?? 40,
-      providerOptions:
-        context.model.route.id === "gemini" ? { gemini: { thinkingConfig: { thinkingBudget: 0 } } } : undefined,
+      providerOptions: context.model.route.id === "gemini" ? { thinkingConfig: { thinkingBudget: 0 } } : undefined,
     }),
   ])
 
@@ -388,7 +385,7 @@ const runReasoningScenario = (context: GoldenScenarioContext) =>
     user("Think briefly, then reply exactly with: Hello!"),
     assistant.expectText(/^Hello!?$/, {
       system: "Show concise reasoning when the provider supports visible reasoning summaries.",
-      providerOptions: { openai: { reasoningEffort: "low", reasoningSummary: "auto" } },
+      providerOptions: { reasoningEffort: "low", reasoningSummary: "auto" },
       maxTokens: context.maxTokens ?? 120,
       assert: (response) => expect(response.usage?.reasoningTokens ?? 0).toBeGreaterThan(0),
     }),

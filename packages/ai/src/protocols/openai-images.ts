@@ -110,7 +110,7 @@ export const model = (input: ModelInput) => {
       const multipartImages = yield* Effect.forEach(sourceImages, (image) => {
         if (image.type === "bytes") return Effect.succeed({ data: image.data, mediaType: image.mediaType })
         if (image.type === "url") return ImageInputs.decodeDataUrl(image.url, ADAPTER)
-        return Effect.succeed(undefined)
+        return Effect.undefined
       })
       const multipartMask =
         mask === undefined

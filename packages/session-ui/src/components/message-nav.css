@@ -71,6 +71,13 @@
   border-radius: var(--radius-sm);
 }
 
+[data-slot="message-nav-diff-bars"] {
+  display: block;
+  width: 18px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 [data-slot="message-nav-title-preview"] {
   font-size: 14px; /* text-14-regular */
   color: var(--text-base);

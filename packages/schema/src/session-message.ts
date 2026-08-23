@@ -215,6 +215,8 @@ export const Assistant = Schema.Struct({
     files: Schema.Array(RelativePath).pipe(optional),
   }).pipe(optional),
   finish: FinishReason.pipe(optional),
+  rawFinish: Schema.String.pipe(optional),
+  providerState: ProviderState.pipe(optional),
   cost: Money.USD.pipe(optional),
   tokens: TokenUsage.Info.pipe(optional),
   error: SessionError.Error.pipe(optional),

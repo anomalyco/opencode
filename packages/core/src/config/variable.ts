@@ -37,11 +37,10 @@ const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, tex
   const fs = yield* FSUtil.Service
   const configDir = input.type === "path" ? path.dirname(input.path) : input.dir
   const configSource = input.type === "path" ? input.path : input.source
-  const matches = Array.from(text.matchAll(/\{file:[^}]+\}/g))
   let out = ""
   let cursor = 0
 
-  for (const match of matches) {
+  for (const match of text.matchAll(/\{file:[^}]+\}/g)) {
     const token = match[0]
     const index = match.index
     out += text.slice(cursor, index)
@@ -54,7 +53,7 @@ const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, tex
       continue
     }
 
-    const filePath = token.replace(/^\{file:/, "").replace(/\}$/, "")
+    const filePath = token.slice("{file:".length, -1)
     const expandedPath = filePath.startsWith("~/") ? path.join(os.homedir(), filePath.slice(2)) : filePath
     const resolvedPath = path.isAbsolute(expandedPath) ? expandedPath : path.resolve(configDir, expandedPath)
     const fileContent = yield* fs.readFileString(resolvedPath).pipe(

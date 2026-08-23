@@ -1,56 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import type { FilePart } from "../presentation"
-import { attached, inline, kind, typeLabel } from "./message-file"
-
-function file(part: Partial<FilePart> = {}): FilePart {
-  return {
-    id: "part_1",
-    sessionID: "ses_1",
-    messageID: "msg_1",
-    type: "file",
-    mime: "text/plain",
-    url: "file:///repo/README.txt",
-    filename: "README.txt",
-    ...part,
-  }
-}
+import { typeLabel } from "./message-file"
 
 describe("message-file", () => {
-  test("treats data URLs as attachments", () => {
-    expect(attached(file({ url: "data:text/plain;base64,SGVsbG8=" }))).toBe(true)
-    expect(attached(file())).toBe(false)
-  })
-
-  test("keeps data-backed file mentions inline", () => {
-    expect(
-      inline(
-        file({
-          source: {
-            type: "file",
-            path: "/repo/README.txt",
-            text: { value: "@README.txt", start: 0, end: 11 },
-          },
-        }),
-      ),
-    ).toBe(true)
-
-    const mentioned = file({
-      url: "data:text/plain;base64,SGVsbG8=",
-      source: {
-        type: "file",
-        path: "/repo/README.txt",
-        text: { value: "@README.txt", start: 0, end: 11 },
-      },
-    })
-    expect(inline(mentioned)).toBe(true)
-    expect(attached(mentioned)).toBe(false)
-  })
-
-  test("separates image and file attachment kinds", () => {
-    expect(kind(file({ mime: "image/png" }))).toBe("image")
-    expect(kind(file({ mime: "application/pdf" }))).toBe("file")
-  })
-
   test("labels attachment types from the basename extension", () => {
     expect(typeLabel("list.md", "text/plain", "File")).toBe("Markdown")
     expect(typeLabel("/repo/src/main.ts", "text/plain", "File")).toBe("TypeScript")

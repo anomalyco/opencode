@@ -16,10 +16,10 @@ export type TriggerTitle = {
   action?: JSX.Element
 }
 
-const isTriggerTitle = (val: any): val is TriggerTitle => {
-  return (
-    typeof val === "object" && val !== null && "title" in val && (typeof Node === "undefined" || !(val instanceof Node))
-  )
+const isTriggerTitle = (val: unknown): val is TriggerTitle => {
+  if (typeof val !== "object" || val === null) return false
+  if (typeof Node !== "undefined" && val instanceof Node) return false
+  return "title" in val && typeof val.title === "string"
 }
 
 export interface BasicToolProps {
@@ -36,12 +36,14 @@ export interface BasicToolProps {
   defer?: boolean
   locked?: boolean
   animated?: boolean
+  rail?: boolean
   onSubtitleClick?: () => void
   onTriggerClick?: JSX.EventHandlerUnion<HTMLElement, MouseEvent>
   onTriggerKeyDown?: JSX.EventHandlerUnion<HTMLElement, KeyboardEvent>
   triggerHref?: string
   triggerAsLink?: boolean
   clickable?: boolean
+  compact?: boolean
 }
 
 const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
@@ -90,7 +92,7 @@ export function BasicTool(props: BasicToolProps) {
   })
   const open = () => props.open ?? state.open
   const ready = () => state.ready
-  const pending = () => props.status === "pending" || props.status === "running"
+  const pending = () => props.status === "streaming" || props.status === "running"
   const hasChildren = () => (props.defer ? "children" in props : props.children)
   const dynamicTrigger = typeof props.trigger === "function" ? props.trigger(open) : undefined
 
@@ -255,16 +257,35 @@ export function BasicTool(props: BasicToolProps) {
   )
 
   return (
-    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
+    <Collapsible
+      open={open()}
+      onOpenChange={props.locked ? undefined : handleOpenChange}
+      class="tool-collapsible"
+      data-compact={props.compact ? "true" : undefined}
+      data-rail={props.rail === false ? "false" : undefined}
+    >
       <Show
-        when={props.triggerAsLink || props.triggerHref}
+        when={!props.locked && (props.triggerAsLink || props.triggerHref)}
         fallback={
-          <Collapsible.Trigger
-            data-hide-details={props.hideDetails ? "true" : undefined}
-            onClick={props.onTriggerClick}
+          <Show
+            when={!props.locked}
+            fallback={
+              <div
+                data-slot="collapsible-trigger"
+                data-locked
+                data-hide-details={props.hideDetails ? "true" : undefined}
+              >
+                {trigger()}
+              </div>
+            }
           >
-            {trigger()}
-          </Collapsible.Trigger>
+            <Collapsible.Trigger
+              data-hide-details={props.hideDetails ? "true" : undefined}
+              onClick={props.onTriggerClick}
+            >
+              {trigger()}
+            </Collapsible.Trigger>
+          </Show>
         }
       >
         <Collapsible.Trigger
@@ -302,13 +323,13 @@ export function BasicTool(props: BasicToolProps) {
 }
 
 function label(input: Record<string, unknown> | undefined) {
-  const keys = ["description", "query", "url", "filePath", "path", "pattern", "name"]
+  const keys = ["description", "query", "url", "path", "pattern", "name"]
   return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
 }
 
 function args(input: Record<string, unknown> | undefined) {
   if (!input) return []
-  const skip = new Set(["description", "query", "url", "filePath", "path", "pattern", "name"])
+  const skip = new Set(["description", "query", "url", "path", "pattern", "name"])
   return Object.entries(input)
     .filter(([key]) => !skip.has(key))
     .flatMap(([key, value]) => {

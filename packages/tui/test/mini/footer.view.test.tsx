@@ -169,6 +169,7 @@ async function renderFooter(
           subagent={subagents}
           queuedPrompts={() => input.queuedPrompts ?? []}
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
+          tuiConfig={config}
           mono={input.mono ?? false}
           miniSettings={miniSettings}
           onSubmit={input.onSubmit ?? (() => true)}
@@ -1454,6 +1455,7 @@ test("direct footer shows authoritative queued work while running", async () => 
             },
           ]}
           theme={() => RUN_THEME_FALLBACK}
+          tuiConfig={tuiConfig}
           miniSettings={() => ({
             thinking: "hide",
             shell_output: "hide",

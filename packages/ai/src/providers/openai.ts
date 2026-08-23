@@ -124,7 +124,6 @@ const config = (settings: Settings): Config => {
     baseURL: settings.baseURL,
     headers: Object.keys(headers).length === 0 ? undefined : headers,
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
     providerOptions: settings.providerOptions,
     queryParams: settings.queryParams === undefined ? undefined : { ...settings.queryParams },
   }

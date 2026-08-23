@@ -70,13 +70,11 @@ export function make(origin = "http://127.0.0.1:1234", interval: Duration.Input 
               input: ["text", ...(item.capabilities?.vision ? ["image"] : [])],
               output: ["text"],
             }
-            model.limit = {
-              context:
-                item.loaded_instances.length === 0
-                  ? item.max_context_length
-                  : Math.min(...item.loaded_instances.map((instance) => instance.config.context_length)),
-              output: 0,
-            }
+            const context =
+              item.loaded_instances.length === 0
+                ? item.max_context_length
+                : Math.min(...item.loaded_instances.map((instance) => instance.config.context_length))
+            if (context > 0) model.limit.context = context
           })
         }
       })

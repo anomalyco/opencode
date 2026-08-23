@@ -94,13 +94,87 @@ it.effect("projects request settings, headers, and body overlays", () =>
       headers: { "x-test": "header" },
       body: { safety_setting: "strict" },
     })
-    const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        prompt: "Hello",
+        providerOptions: { safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }] },
+      }),
+    )
 
     expect(prepared.body.providerOptions).toEqual({
-      google: { thinkingConfig: { thinkingBudget: 1024 } },
+      google: {
+        thinkingConfig: { thinkingBudget: 1024 },
+        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
+      },
     })
     expect(prepared.body.headers).toEqual({ "x-test": "header" })
     expect(body).toEqual({ safety_setting: "strict" })
+  }),
+)
+
+it.effect("uses only the provider timeout signal when the request signal is null", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    let wrappedFetch: typeof fetch | undefined
+    let requestSignal: AbortSignal | null | undefined
+    yield* aisdk.hook.sdk((event) => {
+      wrappedFetch = event.options.fetch
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    yield* aisdk.language(
+      model("test-ai-sdk", {
+        timeout: 60_000,
+        fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          requestSignal = init?.signal
+          return new Response()
+        },
+      }),
+    )
+    const request = wrappedFetch
+    if (!request) return yield* Effect.die("Expected wrapped fetch")
+    yield* Effect.promise(() => request("https://example.com", { signal: null }))
+
+    expect(requestSignal).toBeInstanceOf(AbortSignal)
+    expect(requestSignal?.aborted).toBeFalse()
+  }),
+)
+
+it.effect("lowers chronological system updates to wrapped user messages", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model(model("opaque-provider"))
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        system: "Initial instructions.",
+        messages: [
+          Message.user("Before."),
+          Message.system("Updated <rules> & constraints."),
+          Message.assistant("After."),
+        ],
+      }),
+    )
+
+    expect(prepared.body.prompt).toEqual([
+      { role: "system", content: "Initial instructions." },
+      { role: "user", content: [{ type: "text", text: "Before." }] },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "<system-update>\nUpdated &lt;rules&gt; &amp; constraints.\n</system-update>",
+          },
+        ],
+      },
+      { role: "assistant", content: [{ type: "text", text: "After." }] },
+    ])
   }),
 )
 

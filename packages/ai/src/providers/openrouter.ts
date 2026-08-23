@@ -4,7 +4,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { ProviderID, type CacheHint, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type CacheHint, type ModelID } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
@@ -71,9 +71,7 @@ export interface OpenRouterOptions {
   }>
 }
 
-export type OpenRouterProviderOptionsInput = ProviderOptions & {
-  readonly openrouter?: OpenRouterOptions
-}
+export type OpenRouterProviderOptionsInput = OpenRouterOptions
 
 export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
@@ -120,7 +118,7 @@ export const protocol = Protocol.make({
           return {
             ...body,
             messages,
-            ...bodyOptions(request.providerOptions?.openrouter),
+            ...bodyOptions(request.providerOptions),
             ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
           } as OpenRouterBody
         }),
@@ -202,6 +200,5 @@ export const model: ProviderPackage.Definition<Settings, OpenRouterProviderOptio
     baseURL: settings.baseURL,
     headers: settings.headers,
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
     providerOptions: settings.providerOptions,
   }).model(modelID)

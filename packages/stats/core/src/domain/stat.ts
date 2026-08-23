@@ -151,6 +151,15 @@ export function isMissingUniqueUsersColumn(cause: unknown): boolean {
   return errorText(cause).includes("Unknown column 'unique_users'")
 }
 
+export async function withUniqueUsersFallback<T>(write: (includeUniqueUsers: boolean) => Promise<T>) {
+  try {
+    return await write(true)
+  } catch (cause) {
+    if (!isMissingUniqueUsersColumn(cause)) throw cause
+    return write(false)
+  }
+}
+
 export function omitUniqueUsers<T extends { unique_users?: number }>(rows: T[]) {
   return rows.map((row) => {
     const result = { ...row }

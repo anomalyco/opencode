@@ -286,10 +286,10 @@ export const Plugin = {
                   }),
                 { discard: true },
               )
-              const files = yield* Effect.forEach(prepared, (change) => {
-                if (change.type === "delete") return Effect.succeed(patchFile(change))
+              const files = prepared.map((change) => {
+                if (change.type === "delete") return patchFile(change)
                 const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
-                return Effect.succeed(patchFile(change, formatted.get(target.absolute)))
+                return patchFile(change, formatted.get(target.absolute))
               })
               return { applied, files }
             }).pipe(

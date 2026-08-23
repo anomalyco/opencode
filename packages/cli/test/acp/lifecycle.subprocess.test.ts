@@ -77,13 +77,6 @@ describe("acp lifecycle subprocess", () => {
     expect(listed.sessions.some((item) => item.sessionId === session.sessionId)).toBe(false)
   }, 60_000)
 
-  test("resume capability advertisement", async () => {
-    await using fixture = await createAcpFixture()
-    const initialized = await initialize(fixture.spawn())
-
-    expect(initialized.agentCapabilities?.sessionCapabilities?.resume).toEqual({})
-  }, 60_000)
-
   test("resume request returns session config options", async () => {
     await using fixture = await createAcpFixture()
     const acp = fixture.spawn()

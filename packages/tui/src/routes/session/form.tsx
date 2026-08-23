@@ -12,8 +12,7 @@ import {
 import open from "open"
 import { useTheme, useThemes } from "../../context/theme"
 import type { FormAnswer, FormField, FormValue } from "@opencode-ai/client"
-import type { FormWithLocation } from "../../context/data"
-import { useClient } from "../../context/client"
+import { useData, type FormWithLocation } from "../../context/data"
 import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
 import { useToast } from "../../ui/toast"
@@ -41,22 +40,8 @@ function truncate(label: string, max: number) {
   return label.length > max ? label.slice(0, max - 1).trimEnd() + "…" : label
 }
 
-function requestOptions(form: FormWithLocation) {
-  if (form.sessionID !== "global" || !form.location) return undefined
-  return {
-    headers: {
-      "x-opencode-directory": encodeURIComponent(form.location.directory),
-      ...(form.location.workspaceID ? { "x-opencode-workspace": form.location.workspaceID } : {}),
-    },
-  }
-}
-
-export function FormPrompt(props: {
-  form: FormWithLocation
-  onReply?: (answer: FormAnswer) => void | Promise<void>
-  onCancel?: () => void | Promise<void>
-}) {
-  const client = useClient()
+export function FormPrompt(props: { form: FormWithLocation }) {
+  const data = useData()
   const themes = useThemes()
   const theme = useTheme("elevated")
   const themeMode = themes.mode
@@ -258,16 +243,9 @@ export function FormPrompt(props: {
   }
 
   function reply(answer: FormAnswer) {
-    void Promise.resolve()
-      .then(() =>
-        props.onReply
-          ? props.onReply(answer)
-          : client.api.form.reply(
-              { sessionID: props.form.sessionID, formID: props.form.id, answer },
-              requestOptions(props.form),
-            ),
-      )
-      .catch((error: unknown) => setStore("error", errorMessage(error)))
+    void data.session.form
+      .reply({ sessionID: props.form.sessionID, formID: props.form.id, answer }, props.form.location)
+      .catch(showError)
   }
 
   function replySingle(field: FormAnswerField, value: FormValue) {
@@ -340,15 +318,35 @@ export function FormPrompt(props: {
     pick(row.value)
   }
 
+  function pasteCustom(value: string) {
+    const current = answerField()
+    if (!current || textual() || !custom() || confirm()) return false
+    setStore("selected", rows().length)
+    updateCustom(current, input() + value)
+    setStore("editing", true)
+    return true
+  }
+
   usePaste((event) => {
     if (keymap.mode.current() !== FORM_MODE) return
-    const current = answerField()
-    if (!current || textual() || !custom() || confirm()) return
+    if (!pasteCustom(stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n"))) return
     event.preventDefault()
-    setStore("selected", rows().length)
-    updateCustom(current, input() + stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n"))
-    setStore("editing", true)
   })
+
+  function pasteClipboard() {
+    return clipboard
+      .read()
+      .then((content) => {
+        if (content?.mime !== "text/plain") return
+        const value = stripAnsiSequences(content.data).replace(/\r\n?/g, "\n")
+        if (store.editing || textual()) {
+          textarea?.insertText(value)
+          return
+        }
+        pasteCustom(value)
+      })
+      .catch(toast.error)
+  }
 
   function commitInput(text: string) {
     const current = answerField()
@@ -437,11 +435,13 @@ export function FormPrompt(props: {
   }
 
   function cancel() {
-    if (props.onCancel) {
-      void props.onCancel()
-      return
-    }
-    void client.api.form.cancel({ sessionID: props.form.sessionID, formID: props.form.id }, requestOptions(props.form))
+    void data.session.form
+      .cancel({ sessionID: props.form.sessionID, formID: props.form.id }, props.form.location)
+      .catch(showError)
+  }
+
+  function showError(error: unknown) {
+    setStore("error", errorMessage(error))
   }
 
   function openExternal() {
@@ -504,6 +504,23 @@ export function FormPrompt(props: {
   }
 
   onMount(() => onCleanup(keymap.mode.push(FORM_MODE)))
+
+  Keymap.createLayer(() => ({
+    mode: FORM_MODE,
+    enabled: !confirm() && answerField() !== undefined,
+    commands: [
+      {
+        id: "prompt.paste",
+        title: "Paste from clipboard",
+        group: "Form",
+        run: (_input, event) => {
+          event?.preventDefault()
+          event?.stopPropagation()
+          return pasteClipboard()
+        },
+      },
+    ],
+  }))
 
   Keymap.createLayer(() => ({
     mode: FORM_MODE,

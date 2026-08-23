@@ -1,6 +1,6 @@
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Button } from "@opencode-ai/ui/button"
 import "./session-review-v2.css"
 
 export type SessionReviewEmptyNoGitV2Props = {
@@ -18,11 +18,11 @@ export function SessionReviewEmptyNoGitV2(props: SessionReviewEmptyNoGitV2Props)
       <div data-slot="session-review-v2-empty-no-git-description">
         {i18n.t("ui.sessionReviewV2.empty.noGit.description")}
       </div>
-      <ButtonV2 variant="neutral" size="normal" disabled={props.pending} onClick={props.onInitGit}>
+      <Button variant="neutral" size="normal" disabled={props.pending} onClick={props.onInitGit}>
         {props.pending
           ? i18n.t("ui.sessionReviewV2.empty.noGit.actionLoading")
           : i18n.t("ui.sessionReviewV2.empty.noGit.action")}
-      </ButtonV2>
+      </Button>
     </div>
   )
 }

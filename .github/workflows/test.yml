@@ -50,6 +50,14 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Test Effect simplification rules
+        if: runner.os == 'Linux'
+        run: bun run test:effect-simplification-rules
+
+      - name: Check Effect simplifications
+        if: runner.os == 'Linux'
+        run: bun run lint:effect-simplifications
+
       - name: Configure git identity
         run: |
           git config --global user.email "bot@opencode.ai"

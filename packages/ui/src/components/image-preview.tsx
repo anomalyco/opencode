@@ -1,6 +1,7 @@
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
 import { useI18n } from "../context/i18n"
-import { IconButton } from "./icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 
 export interface ImagePreviewProps {
   src: string
@@ -17,7 +18,7 @@ export function ImagePreview(props: ImagePreviewProps) {
             <Kobalte.CloseButton
               data-slot="image-preview-close"
               as={IconButton}
-              icon="close"
+              icon={<Icon name="close" />}
               variant="ghost"
               aria-label={i18n.t("ui.common.close")}
             />

@@ -1,0 +1,3 @@
+:dir(rtl) [data-slot="icon-svg"][data-directional] {
+  transform: scaleX(-1);
+}

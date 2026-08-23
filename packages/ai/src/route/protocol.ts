@@ -73,8 +73,7 @@ export interface ProtocolStream<Frame, Event, State> {
  *
  * Provider implementations should usually call `Protocol.make({ ... })`
  * without explicit type arguments; the schemas and parser functions are the
- * source of truth. The constructor remains as the public seam for future
- * cross-cutting concerns such as tracing or instrumentation.
+ * source of truth.
  */
 export const make = <Body, Frame, Event, State>(
   input: Protocol<Body, Frame, Event, State>,

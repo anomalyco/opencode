@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { Effect, Layer, Schema, Context, RcMap, Stream, Scope } from "effect"
+import { Cause, Effect, Layer, Schema, Context, RcMap, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { Project } from "./project.js"
@@ -40,6 +40,7 @@ import { SessionRevert } from "./session/revert.js"
 import { Session } from "@opencode-ai/schema/session"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Image } from "./image.js"
+import { PluginSupervisor } from "./plugin/supervisor-service.js"
 import { Mime } from "./mime.js"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { Event } from "@opencode-ai/schema/event"
@@ -52,6 +53,8 @@ import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { fileURLToPath } from "url"
 import { SessionEnvironment } from "./session/environment.js"
+import { SessionHistory } from "./session/history.js"
+import { InstructionEntry } from "./session/instruction-entry.js"
 
 // get project -> project.locations
 //
@@ -154,6 +157,11 @@ export class DestinationNotDirectoryError extends Schema.TaggedError<Destination
   "Session.DestinationNotDirectoryError",
   { directory: AbsolutePath },
 ) {}
+
+export class DestinationUnavailableError extends Schema.TaggedError<DestinationUnavailableError>()(
+  "Session.DestinationUnavailableError",
+  { directory: AbsolutePath },
+) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
@@ -170,6 +178,7 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly variables?: SessionEnvironment.Variables
   }) => Effect.Effect<SessionEnvironment.Variables | undefined, NotFoundError>
+  readonly view: (input: { sessionID: SessionSchema.ID; idle: number }) => Effect.Effect<void, NotFoundError>
   readonly remove: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -216,7 +225,10 @@ export interface Interface {
     directory: AbsolutePath
     workspaceID?: Location.Ref["workspaceID"]
     delivery?: SessionInbox.Delivery
-  }) => Effect.Effect<void, NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError>
+  }) => Effect.Effect<
+    void,
+    NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError | DestinationUnavailableError
+  >
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -323,19 +335,8 @@ const layer = Layer.effect(
         Effect.provide(locations.get(location)),
       )
     })
-    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
-    const decode = (row: typeof SessionMessageTable.$inferSelect) =>
-      decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
-        Effect.mapError(
-          () =>
-            new MessageDecodeError({
-              sessionID: SessionSchema.ID.make(row.session_id),
-              messageID: SessionMessage.ID.make(row.id),
-            }),
-        ),
-      )
 
     const pendingConflict = Effect.fn("Session.pendingConflict")(function* (input: InboxItemRef) {
       yield* result.get(input.sessionID)
@@ -437,6 +438,14 @@ const layer = Layer.effect(
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
         const sessionID = SessionSchema.ID.create()
+        const inherited = yield* db
+          .transaction(() =>
+            Effect.all({
+              instructions: InstructionState.current(db, parent.id),
+              instructionEntries: InstructionEntry.snapshot(db, parent.id),
+            }),
+          )
+          .pipe(Effect.orDie)
         // The fork adopts the parent's newest instruction values rather than the
         // values in effect at the boundary; copied history may contain frozen
         // instruction-update text the initial baseline already reflects.
@@ -444,7 +453,7 @@ const layer = Layer.effect(
           sessionID,
           parentID: parent.id,
           boundary: { ...input.boundary, messageID: boundary.id },
-          instructions: yield* InstructionState.current(db, parent.id),
+          ...inherited,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
@@ -457,6 +466,18 @@ const layer = Layer.effect(
         yield* result.get(input.sessionID)
         if (input.variables !== undefined) yield* environments.set(input.sessionID, input.variables)
         return yield* environments.get(input.sessionID)
+      }),
+      view: Effect.fn("Session.view")(function* (input) {
+        const row = yield* db
+          .select({ idle: SessionTable.time_idle, viewed: SessionTable.time_viewed })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, input.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!row) return yield* new NotFoundError({ sessionID: input.sessionID })
+        if (row.idle === null || input.idle > row.idle || (row.viewed !== null && row.viewed >= input.idle))
+          return yield* Effect.void
+        yield* bus.publish(SessionEvent.Viewed, { sessionID: input.sessionID, idle: input.idle })
       }),
       remove: Effect.fn("Session.remove")(function* (sessionID) {
         const session = yield* result.get(sessionID)
@@ -542,7 +563,10 @@ const layer = Layer.effect(
         const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
           Effect.orDie,
         )
-        return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
+        return yield* Effect.forEach(
+          direction === "previous" ? rows.toReversed() : rows,
+          SessionHistory.decodeMessageRow,
+        )
       }),
       message: Effect.fn("Session.message")(function* (input) {
         const stored = yield* store.message(input.messageID)
@@ -579,7 +603,11 @@ const layer = Layer.effect(
             if (session.revert) yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
             // Resolved lazily so prompt admission only boots location services when an
             // image attachment actually needs the resizer.
-            const image = Image.Service.pipe(Effect.provide(locations.get(session.location)))
+            const image = Effect.gen(function* () {
+              const plugins = yield* PluginSupervisor.Service
+              yield* plugins.flush
+              return yield* Image.Service
+            }).pipe(Effect.provide(locations.get(session.location)))
             const skills = Skill.Service.pipe(Effect.provide(locations.get(session.location)))
             const prompt = yield* resolvePrompt(
               { text: input.text, files: input.files, agents: input.agents, skills: input.skills },
@@ -603,10 +631,9 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (
-              admitted.type !== "user" ||
-              !SessionInbox.equivalent(admitted, { sessionID: input.sessionID, item: admittedInput })
-            )
+            // First admission wins: same-session reuse is idempotent and ignores the
+            // retried payload, metadata, and delivery mode.
+            if (admitted.type !== "user" || admitted.sessionID !== input.sessionID)
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             if (input.resume !== false) {
               if (activeShells.has(admitted.sessionID)) return admitted
@@ -623,7 +650,11 @@ const layer = Layer.effect(
       }),
       command: Effect.fn("Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const commands = yield* Command.Service.pipe(Effect.provide(locations.get(session.location)))
+        const commands = yield* Effect.gen(function* () {
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush
+          return yield* Command.Service
+        }).pipe(Effect.provide(locations.get(session.location)))
         const command = yield* commands.get(input.command)
         if (!command)
           return yield* new Command.NotFoundError({
@@ -662,6 +693,8 @@ const layer = Layer.effect(
             activeShells.add(input.sessionID)
             yield* execution.awaitIdle(input.sessionID)
             const started = yield* Effect.gen(function* () {
+              const plugins = yield* PluginSupervisor.Service
+              yield* plugins.flush
               const shell = yield* Shell.Service
               return yield* shell
                 .create({
@@ -765,51 +798,52 @@ const layer = Layer.effect(
         const expanded =
           value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
         const directory = AbsolutePath.make(path.resolve(current.location.directory, expanded))
-        const info = yield* fs.stat(directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const info = yield* fs.stat(directory).pipe(Effect.orElseSucceed(() => undefined))
         if (!info) return yield* new DestinationNotFoundError({ directory })
         if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
         const project = yield* projects.resolve(directory)
-        yield* persistProject(project)
         const payload: SessionInbox.MovePayload = {
           location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
           projectID: project.id,
           subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
         }
+        yield* Location.Service.pipe(
+          Effect.provide(locations.get(payload.location)),
+          Effect.scoped,
+          Effect.catchCause((cause) => {
+            if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
+            return Effect.logWarning("session move destination unavailable", { directory, cause }).pipe(
+              Effect.andThen(Effect.fail(new DestinationUnavailableError({ directory }))),
+            )
+          }),
+        )
+        yield* persistProject(project)
         const item = SessionInbox.Item.make({
           type: "move",
           payload,
           delivery: input.delivery ?? "steer",
         })
-        const recovered = yield* SessionInbox.serialized(
+        yield* SessionInbox.serialized(
           input.sessionID,
           Effect.gen(function* () {
             const latest = yield* result.get(input.sessionID)
-            const source = yield* fs.stat(latest.location.directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            const source = yield* fs.stat(latest.location.directory).pipe(Effect.orElseSucceed(() => undefined))
             if (!source || source.type !== "Directory") {
               const cancellations = (yield* SessionInbox.moveIDs(db, input.sessionID)).map(
                 (item) => [SessionEvent.InboxCancelled, { sessionID: input.sessionID, inboxID: item.id }] as const,
               )
               const moved = [SessionEvent.Moved, { sessionID: input.sessionID, ...payload }] as const
               const first = cancellations[0]
-              if (!first) {
-                yield* bus.publish(...moved)
-                return true
-              }
-              yield* bus.publishAll([first, ...cancellations.slice(1), moved])
-              return true
+              if (!first) return yield* bus.publish(...moved).pipe(Effect.asVoid)
+              return yield* bus.publishAll([first, ...cancellations.slice(1), moved])
             }
             yield* SessionInbox.admit(db, bus, {
               id: SessionMessage.ID.create(),
               sessionID: input.sessionID,
               item,
             })
-            return false
           }),
         )
-        if (recovered) {
-          yield* execution.wakeActive(input.sessionID)
-          return
-        }
         yield* execution.wake(input.sessionID)
       }),
       compact: Effect.fn("Session.compact")(function* (input) {
@@ -818,7 +852,7 @@ const layer = Layer.effect(
         const admitted = yield* SessionInbox.admitCompaction(db, bus, {
           id: inputID,
           sessionID: input.sessionID,
-          delivery: input.delivery ?? "queue",
+          delivery: input.delivery ?? "steer",
         }).pipe(
           Effect.catchDefect((defect) =>
             defect instanceof SessionInbox.LifecycleConflict
@@ -881,10 +915,9 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (
-              admitted.type !== "synthetic" ||
-              !SessionInbox.equivalent(admitted, { sessionID: input.sessionID, item: admittedInput })
-            )
+            // First admission wins: same-session reuse is idempotent and ignores the
+            // retried payload, metadata, and delivery mode.
+            if (admitted.type !== "synthetic" || admitted.sessionID !== input.sessionID)
               return yield* new SyntheticConflictError({ sessionID: input.sessionID, inputID })
             if (input.resume !== false && !(yield* result.get(input.sessionID)).revert)
               yield* execution.wake(input.sessionID)
@@ -900,19 +933,23 @@ const layer = Layer.effect(
           const session = yield* result.get(input.sessionID)
           if ((yield* execution.active).has(input.sessionID))
             return yield* new BusyError({ sessionID: input.sessionID })
-          return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
-            Effect.provideService(Database.Service, database),
-            Effect.provideService(Bus.Service, bus),
-            Effect.provide(locations.get(session.location)),
-          )
+          return yield* Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush
+            return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
+              Effect.provideService(Database.Service, database),
+              Effect.provideService(Bus.Service, bus),
+            )
+          }).pipe(Effect.provide(locations.get(session.location)))
         }),
         clear: Effect.fn("Session.revert.clear")(function* (sessionID) {
           const session = yield* result.get(sessionID)
           if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          const revert = yield* SessionRevert.clear(session).pipe(
-            Effect.provideService(Bus.Service, bus),
-            Effect.provide(locations.get(session.location)),
-          )
+          const revert = yield* Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush
+            return yield* SessionRevert.clear(session).pipe(Effect.provideService(Bus.Service, bus))
+          }).pipe(Effect.provide(locations.get(session.location)))
           yield* execution.wake(sessionID)
           return revert
         }),
@@ -960,14 +997,14 @@ const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
   const requested = input.skills
   const selected = yield* Effect.gen(function* () {
     if (!requested?.length) return undefined
-    const available = yield* (yield* skills).list()
+    const skillService = yield* skills
+    const available = yield* skillService.list()
     return yield* Effect.forEach(requested, (attachment) => {
       const skill = available.find((item) => item.id === attachment.id)
       if (!skill) return Effect.fail(new SkillNotFoundError({ skill: attachment.id }))
       return Effect.succeed({
         id: skill.id,
         name: skill.name,
-        text: Skill.toModelOutput(skill, []),
         mention: attachment.mention,
       })
     })

@@ -1,10 +1,13 @@
 # OpenCode website
 
-The OpenCode V2 website, powered by Blume and deployed with Wrangler at `https://opencode.ai/v2/`. Blume mounts the documentation at `/v2/docs`, and `https://v2.opencode.ai` redirects to the same deployment.
+The standard Astro website for OpenCode. The only deployment-specific path is the `base` setting in `astro.config.ts`; application code uses `import.meta.env.BASE_URL`.
 
-Wrangler deploys the site through Blume's Cloudflare server adapter. Documentation pages are prerendered, while custom dynamic routes and endpoints can run in the Worker. Production uses `opencode-www` at `opencode.ai/v2/`; dev uses `opencode-www-dev` at `dev.opencode.ai/v2/`. The `v2.opencode.ai` alias is handled by a Cloudflare Redirect Rule outside this project.
+- `src/pages/` owns website routes.
+- `src/docs/` is the self-contained documentation feature rendered under `/docs`.
+- `/install` proxies the current installer.
+- `/openapi.json` serves the generated OpenAPI specification.
 
-The `deploy-www` GitHub workflow deploys the `dev` branch to the dev Worker and the `v2` branch to the production Worker.
+The deployment currently sets `base: "/v2"`. The `v2.opencode.ai` alias is handled by a Cloudflare Redirect Rule outside this project.
 
 ## Development
 
@@ -14,12 +17,12 @@ From this directory, run:
 bun dev
 ```
 
-The site opens at `http://localhost:3000/v2/`; documentation is available at `http://localhost:3000/v2/docs`.
+The local URL includes the base configured in `astro.config.ts`.
 
 ## Verification
 
 ```bash
 bun typecheck
-bun validate
+bun run check:generated
 bun run build
 ```

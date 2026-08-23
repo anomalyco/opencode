@@ -392,7 +392,7 @@ export type FormCancel = {
   location?: LocationRef
 }
 
-export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "mini" | "session">
+export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "mini" | "session" | "cursor">
 
 export type MiniSettings = {
   thinking: "show" | "hide"

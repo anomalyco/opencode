@@ -1,7 +1,6 @@
 import type { FileDiffInfo, SessionInfo, SessionStatus } from "@opencode-ai/client/promise"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
-import type { Message, Part, PresentationFileDiff } from "../presentation"
 
 export type SessionSummary = Pick<SessionInfo, "id" | "parentID" | "title" | "time">
 
@@ -24,17 +23,10 @@ type Data = {
     [sessionID: string]: SessionStatus
   }
   session_diff: {
-    [sessionID: string]: (PresentationFileDiff | FileDiffInfo)[]
+    [sessionID: string]: FileDiffInfo[]
   }
   session_diff_preload?: {
-    [sessionID: string]: PreloadMultiFileDiffResult<any>[]
-  }
-  message?: Record<string, Message[]>
-  part?: {
-    [messageID: string]: Part[]
-  }
-  part_text_accum_delta?: {
-    [partID: string]: string
+    [sessionID: string]: PreloadMultiFileDiffResult<unknown>[]
   }
 }
 

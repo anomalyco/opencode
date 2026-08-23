@@ -55,7 +55,7 @@ const schema_only_weather = Tool.make({
 })
 
 describe("LLMClient tools", () => {
-  it.effect("uses the registered model route when adding runtime tools", () =>
+  it.effect("uses the selected model route when adding runtime tools", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([
         sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
@@ -191,7 +191,7 @@ describe("LLMClient tools", () => {
         success: Schema.String,
         execute: () => Effect.succeed("hello"),
       })
-      const providerMetadata = { google: { functionCallId: "provider_call" } }
+      const providerMetadata = { google: { thoughtSignature: "provider_sig" } }
       const dispatched = yield* ToolRuntime.dispatch(
         { tool },
         LLMEvent.toolCall({ id: "call_1", name: "tool", input: {}, providerMetadata }),
@@ -636,7 +636,7 @@ describe("LLMClient tools", () => {
             .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
             .model({ id: "gpt-5.5" }),
           prompt: "Use the tool.",
-          providerOptions: { openai: { store: false, include: ["reasoning.encrypted_content"] } },
+          providerOptions: { store: false, include: ["reasoning.encrypted_content"] },
         }),
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))

@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { contextUsage, formatContextUsage } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
 
@@ -10,6 +10,7 @@ const money = new Intl.NumberFormat("en-US", {
 
 export function PromptFooter(props: { context: Plugin.Context; sessionID?: string; mode: "normal" | "shell" }) {
   const dimensions = useTerminalDimensions()
+  const [liveHovered, setLiveHovered] = createSignal(false)
   const subagents = createMemo(() => {
     if (!props.sessionID) return 0
     const count = props.context.data.session
@@ -47,16 +48,34 @@ export function PromptFooter(props: { context: Plugin.Context; sessionID?: strin
       <Match when={props.mode === "normal"}>
         <Switch>
           <Match when={live() || status().length > 0}>
-            <text fg={props.context.theme.text.subdued} wrapMode="none" truncate flexShrink={1}>
-              <Show when={live() && shortcut("session.child.first")}>
-                {(value) => <span style={{ fg: props.context.theme.text.default }}>{value()} </span>}
+            <box flexDirection="row" flexShrink={1} minWidth={0}>
+              <Show when={live()}>
+                <box
+                  flexShrink={0}
+                  onMouseOver={() => setLiveHovered(true)}
+                  onMouseOut={() => setLiveHovered(false)}
+                  onMouseUp={() => props.context.keymap.dispatch("session.child.first")}
+                >
+                  <text
+                    fg={liveHovered() ? props.context.theme.text.default : props.context.theme.text.subdued}
+                    wrapMode="none"
+                  >
+                    <Show when={shortcut("session.child.first")}>
+                      {(value) => <span style={{ fg: props.context.theme.text.default }}>{value()} </span>}
+                    </Show>
+                    <Show when={subagents()}>{(value) => <>{value()}</>}</Show>
+                    <Show when={subagents() && shells()}> · </Show>
+                    <Show when={shells()}>{(value) => <>{value()}</>}</Show>
+                  </text>
+                </box>
               </Show>
-              <Show when={subagents()}>{(value) => <span>{value()}</span>}</Show>
-              <Show when={subagents() && shells()}> · </Show>
-              <Show when={shells()}>{(value) => <span>{value()}</span>}</Show>
-              <Show when={live() && status().length > 0}> · </Show>
-              <Show when={status().length > 0}>{status().join(" · ")}</Show>
-            </text>
+              <Show when={status().length > 0}>
+                <text fg={props.context.theme.text.subdued} wrapMode="none" truncate flexShrink={1}>
+                  <Show when={live()}> · </Show>
+                  {status().join(" · ")}
+                </text>
+              </Show>
+            </box>
           </Match>
           <Match when={dimensions().width >= 44}>
             <text fg={props.context.theme.text.default} flexShrink={0}>

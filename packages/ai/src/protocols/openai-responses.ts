@@ -5,14 +5,13 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import { LLMEvent, LLMRequest, type JsonSchema, type ToolDefinition } from "../schema/index.js"
+import { LLMRequest, type JsonSchema, type ToolDefinition } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { optionalArray, ProviderShared } from "./shared.js"
-import { Lifecycle } from "./utils/lifecycle.js"
 import { OpenAIImage } from "./utils/openai-image.js"
+import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
-import { OpenAIResponsesChannel } from "./openai-responses-channel.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
@@ -40,18 +39,8 @@ const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.tag("image_generation") }),
 ])
 
-const OpenAIResponsesInputItem = Schema.Union([
-  Schema.Struct({
-    role: Schema.tag("assistant"),
-    content: Schema.Array(Schema.Struct({ type: Schema.tag("output_text"), text: Schema.String })),
-    phase: Schema.optionalKey(Schema.NullOr(OpenResponses.MessagePhase)),
-  }),
-  OpenResponses.InputItem,
-])
-
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
-  input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
 }
@@ -65,16 +54,6 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 const extension = {
   id: ADAPTER,
   name: NAME,
-  messagePhase: (value: unknown) => (value === null ? null : undefined),
-  lowerMedia: ({ part, media, request }) => {
-    if (request.model.provider !== "xai" || media.mime !== "application/pdf") return undefined
-    return {
-      type: "input_file",
-      filename: part.filename ?? "document.pdf",
-      file_data: media.base64,
-      mime_type: media.mime,
-    }
-  },
 } satisfies OpenResponses.Extension
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
@@ -121,50 +100,12 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
         : yield* Effect.forEach(request.tools, (tool) =>
             lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
           ),
-    tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined,
+    tool_choice:
+      body.tool_choice ?? (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
   } satisfies OpenAIResponsesBody
 })
 
-type HostedToolData = OpenResponses.StreamItem & {
-  readonly id: string
-  readonly status?: string
-  readonly action?: unknown
-  readonly queries?: unknown
-  readonly results?: unknown
-  readonly code?: string
-  readonly container_id?: string
-  readonly outputs?: unknown
-  readonly server_label?: string
-  readonly output?: unknown
-  readonly result?: string
-  readonly output_format?: "png" | "jpeg" | "webp"
-  readonly error?: unknown
-}
-
-const HOSTED_TOOLS = {
-  web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
-  web_search_preview_call: { name: "web_search_preview", input: (item) => item.action ?? {} },
-  file_search_call: { name: "file_search", input: (item) => ({ queries: item.queries ?? [] }) },
-  code_interpreter_call: {
-    name: "code_interpreter",
-    input: (item) => ({ code: item.code, container_id: item.container_id }),
-  },
-  computer_use_call: { name: "computer_use", input: (item) => item.action ?? {} },
-  image_generation_call: { name: "image_generation", input: () => ({}) },
-  mcp_call: {
-    name: "mcp",
-    input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
-  },
-  local_shell_call: { name: "local_shell", input: (item) => item.action ?? {} },
-} as const satisfies Record<string, { readonly name: string; readonly input: (item: HostedToolData) => unknown }>
-
-type HostedToolType = keyof typeof HOSTED_TOOLS
-type HostedToolItem = HostedToolData & { readonly type: HostedToolType }
-
-const isHostedToolItem = (item: OpenResponses.StreamItem): item is HostedToolItem =>
-  item.type in HOSTED_TOOLS && typeof item.id === "string" && item.id.length > 0
-
-const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function* (item: HostedToolItem) {
+const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function* (item: ResponsesHostedTools.Item) {
   const isError = item.error !== undefined && item.error !== null
   if (item.type === "image_generation_call" && item.result) {
     yield* Effect.fromResult(Encoding.decodeBase64(item.result)).pipe(
@@ -185,32 +126,21 @@ const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function*
   return isError ? { type: "error" as const, value: item.error } : { type: "json" as const, value: item }
 })
 
-const onHostedToolDone = Effect.fn("OpenAIResponses.onHostedToolDone")(function* (
-  state: OpenResponses.ParserState,
-  item: HostedToolItem,
-) {
-  const tool = HOSTED_TOOLS[item.type]
-  const providerMetadata = OpenResponses.providerMetadata(state, { itemId: item.id })
-  const events: LLMEvent[] = []
-  const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
-  events.push(
-    LLMEvent.toolCall({
-      id: item.id,
-      name: tool.name,
-      input: tool.input(item),
-      providerExecuted: true,
-      providerMetadata,
-    }),
-    LLMEvent.toolResult({
-      id: item.id,
-      name: tool.name,
-      result: yield* hostedToolResult(item),
-      providerExecuted: true,
-      providerMetadata,
-    }),
-  )
-  return [{ ...state, lifecycle }, events] satisfies OpenResponses.StepResult
-})
+const HOSTED_TOOLS = {
+  web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
+  web_search_preview_call: { name: "web_search_preview", input: (item) => item.action ?? {} },
+  file_search_call: { name: "file_search", input: (item) => ({ queries: item.queries ?? [] }) },
+  code_interpreter_call: {
+    name: "code_interpreter",
+    input: (item) => ({ code: item.code, container_id: item.container_id }),
+  },
+  computer_call: { name: "computer_use", input: (item) => item.action ?? {} },
+  image_generation_call: { name: "image_generation", input: () => ({}), result: hostedToolResult },
+  mcp_call: {
+    name: "mcp",
+    input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
+  },
+} as const satisfies ResponsesHostedTools.Definitions
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
   if (event.type === "response.reasoning_text.delta" || event.type === "response.reasoning_summary.delta")
@@ -221,8 +151,8 @@ const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
     return event.item_id
       ? Effect.succeed(OpenResponses.onReasoningDone(state, event))
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
-  if (event.type === "response.output_item.done" && event.item && isHostedToolItem(event.item))
-    return onHostedToolDone(state, event.item)
+  if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
+    return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
   return OpenResponses.step(state, event)
 }
 
@@ -244,12 +174,12 @@ const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BAS
 const auth = Auth.none
 
 export const httpTransport = HttpTransport.sseJson.with<OpenAIResponsesBody>()
-export const transport = OpenResponsesChannel.transport<OpenAIResponsesBody>({
+export const channelTransport = OpenResponsesChannel.transport<OpenAIResponsesBody>
+export const transport = channelTransport({
   id: ADAPTER,
   name: NAME,
   rotateAfterMs: WEBSOCKET_ROTATE_AFTER_MS,
   headers: (headers) => Headers.set(headers, "openai-beta", headers["openai-beta"] ?? WEBSOCKET_PROTOCOL_HEADER),
-  driver: (input) => OpenAIResponsesChannel.driver({ id: ADAPTER, name: NAME, ...input }),
 })
 
 export const route = Route.make({
@@ -260,7 +190,7 @@ export const route = Route.make({
   endpoint,
   auth,
   transport,
-  defaults: { providerOptions: { openai: { store: false } } },
+  defaults: { providerOptions: { store: false } },
 })
 
 export * as OpenAIResponses from "./openai-responses.js"

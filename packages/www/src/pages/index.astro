@@ -1,0 +1,17 @@
+---
+export const prerender = true
+const destination = `${import.meta.env.BASE_URL}docs`
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content={`0; url=${destination}`} />
+    <link rel="canonical" href={destination} />
+    <title>OpenCode Docs</title>
+  </head>
+  <body>
+    <a href={destination}>Continue to the OpenCode docs</a>
+  </body>
+</html>

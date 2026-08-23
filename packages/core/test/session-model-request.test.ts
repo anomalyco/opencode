@@ -9,16 +9,18 @@ describe("SessionModelRequest.unsupportedParts", () => {
     const messages = unsupportedParts(
       [
         Message.user([
-          Message.text("Describe this image"),
+          Message.text("Describe these files"),
           { type: "media", mediaType: "image/png", data: "aGVsbG8=", filename: "logo.png" },
+          { type: "media", mediaType: "application/pdf", data: "JVBERg==", filename: "document.pdf" },
         ]),
       ],
       capabilities(["text"]),
     )
 
     expect(messages[0]?.content).toEqual([
-      Message.text("Describe this image"),
+      Message.text("Describe these files"),
       Message.text('ERROR: Cannot read "logo.png" (this model does not support image input). Inform the user.'),
+      Message.text('ERROR: Cannot read "document.pdf" (this model does not support pdf input). Inform the user.'),
     ])
   })
 

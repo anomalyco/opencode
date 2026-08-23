@@ -1,6 +1,6 @@
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import type { Model } from "@opencode-ai/schema/model"
-import type { Hooks } from "./registration.js"
+import type { ModelHooks } from "./registration.js"
 
 export interface AISDKHooks {
   sdk: {
@@ -18,5 +18,5 @@ export interface AISDKHooks {
 }
 
 export interface AISDKDomain {
-  readonly hook: Hooks<AISDKHooks>
+  readonly hook: ModelHooks<AISDKHooks>
 }

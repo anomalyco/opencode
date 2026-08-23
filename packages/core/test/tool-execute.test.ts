@@ -94,6 +94,24 @@ test("declared outputs cannot bypass validation and raw outputs stay JSON-compat
   )
 })
 
+test("foreign typed failures settle as Tool.Error at the untrusted boundary", async () => {
+  class ForeignFailure extends Schema.TaggedError<ForeignFailure>()("Plugin.ForeignFailure", {
+    message: Schema.String,
+  }) {}
+  const lying: Info = {
+    name: "lying",
+    description: "Fails with a non-Tool.Error typed failure",
+    input: Schema.Struct({}),
+    execute: () => new ForeignFailure({ message: "transport died" }) as never,
+  }
+
+  const exit = await Effect.runPromiseExit(execute(lying, {}, context))
+  expect(exit._tag).toBe("Failure")
+  const error = exit._tag === "Failure" ? exit.cause.reasons.find((reason) => "error" in reason)?.error : undefined
+  expect(error).toBeInstanceOf(Tool.Error)
+  expect((error as Tool.Error).message).toBe("transport died")
+})
+
 test("execute supports callable namespace tools", async () => {
   const callable: Info = {
     name: "admin",

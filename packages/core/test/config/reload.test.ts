@@ -11,12 +11,13 @@ import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
 import { ConfigReferencePlugin } from "@opencode-ai/core/config/plugin/reference"
 import { ConfigSkillPlugin } from "@opencode-ai/core/config/plugin/skill"
 import { Bus } from "@opencode-ai/core/bus"
-import { Global } from "@opencode-ai/util/global"
+import { Integration } from "@opencode-ai/core/integration"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { Provider } from "@opencode-ai/core/provider"
 import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
+import { Global } from "@opencode-ai/util/global"
 import { Effect, Schema } from "effect"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { testEffect } from "../lib/effect"
@@ -32,6 +33,7 @@ describe("config plugin reloads", () => {
       const agents = yield* Agent.Service
       const catalog = yield* Catalog.Service
       const commands = yield* Command.Service
+      const integrations = yield* Integration.Service
       const bus = yield* Bus.Service
       const plugins = yield* Plugin.Service
       const references = yield* Reference.Service
@@ -47,6 +49,7 @@ describe("config plugin reloads", () => {
 
       expect((yield* agents.get(Agent.ID.make("first")))?.description).toBe("First agent")
       expect((yield* commands.get("first"))?.description).toBe("First command")
+      expect(yield* integrations.get(Integration.ID.make("first"))).toBeDefined()
       expect((yield* skills.list()).some((skill) => skill.id === "first")).toBe(true)
       expect((yield* references.list()).map((reference) => reference.name)).toEqual(["first"])
       expect(yield* catalog.provider.get(Provider.ID.make("first"))).toBeDefined()
@@ -61,6 +64,8 @@ describe("config plugin reloads", () => {
             (yield* agents.get(Agent.ID.make("second")))?.description === "Second agent" &&
             (yield* commands.get("first")) === undefined &&
             (yield* commands.get("second"))?.description === "Second command" &&
+            (yield* integrations.get(Integration.ID.make("first"))) === undefined &&
+            (yield* integrations.get(Integration.ID.make("second"))) !== undefined &&
             (yield* references.list()).some((reference) => reference.name === "second") &&
             (yield* catalog.provider.get(Provider.ID.make("first"))) === undefined &&
             (yield* catalog.provider.get(Provider.ID.make("second"))) !== undefined

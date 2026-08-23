@@ -63,7 +63,11 @@ describe("VLLMPlugin", () => {
               state.models++
               return Response.json({
                 object: "list",
-                data: [remoteModel("Qwen/Qwen3-Coder", 65_536), remoteModel("foreign-model", 4096, "other")],
+                data: [
+                  remoteModel("Qwen/Qwen3-Coder", 65_536),
+                  remoteModel("unknown-limit", 0),
+                  remoteModel("foreign-model", 4096, "other"),
+                ],
               })
             },
           }),
@@ -97,7 +101,10 @@ describe("VLLMPlugin", () => {
             modelID: "Qwen/Qwen3-Coder",
             name: "Qwen/Qwen3-Coder",
             capabilities: { tools: false, input: ["text"], output: ["text"] },
-            limit: { context: 65_536, output: 0 },
+            limit: { context: 65_536, output: 32_000 },
+          })
+          expect(yield* catalog.model.get(providerID, Model.ID.make("unknown-limit"))).toMatchObject({
+            limit: { context: 200_000, output: 32_000 },
           })
           expect(yield* catalog.model.get(providerID, Model.ID.make("foreign-model"))).toBeUndefined()
         }),

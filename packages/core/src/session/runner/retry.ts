@@ -15,6 +15,9 @@ export class RetryableFailure extends Data.TaggedError("SessionRunner.RetryableF
 }> {}
 
 export function isRetryable(error: AIError) {
+  const override = "http" in error.reason ? error.reason.http?.response?.headers["x-should-retry"] : undefined
+  if (override === "true") return true
+  if (override === "false") return false
   switch (error.reason._tag) {
     case "RateLimit":
     case "ProviderInternal":

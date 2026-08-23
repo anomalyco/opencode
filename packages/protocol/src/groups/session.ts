@@ -5,7 +5,7 @@ import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
 import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import { Project } from "@opencode-ai/schema/project"
-import { AbsolutePath, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
+import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Event } from "@opencode-ai/schema/event"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
@@ -440,7 +440,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           OpenApi.annotations({
             identifier: "v2.session.compact",
             summary: "Compact session",
-            description: "Queue a durable session compaction request.",
+            description:
+              "Durably admit a session compaction request. Steers by default: it runs at the next step boundary instead of waiting behind queued prompts.",
           }),
         ),
     )
@@ -660,7 +661,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.interrupt",
             summary: "Interrupt session execution",
             description:
-              "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes pending steering input while queued work remains parked.",
+              "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
           }),
         ),
     )
@@ -704,6 +705,20 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           identifier: "v2.session.environment",
           summary: "Set session environment",
           description: "Replace the process environment used by local shell commands for this session.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.view", "/api/session/:sessionID/view", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({ idle: NonNegativeInt }),
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.view",
+          summary: "View session",
+          description: "Mark the idle transition observed by the viewer as viewed.",
         }),
       ),
     )

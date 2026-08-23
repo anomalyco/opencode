@@ -49,7 +49,7 @@ const layer = Layer.effect(
     const state = { info: impl ? yield* impl.info() : ({ branch: {} } satisfies Info) }
 
     if (vcs && impl) {
-      const store = yield* fs.realPath(vcs.store).pipe(Effect.catch(() => Effect.succeed(vcs.store)))
+      const store = yield* fs.realPath(vcs.store).pipe(Effect.orElseSucceed(() => vcs.store))
       const isBranchMetadata =
         vcs.type === "git"
           ? (file: string) => path.basename(file) === "HEAD" && FSUtil.contains(store, file)

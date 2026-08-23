@@ -9,7 +9,7 @@ export type BaseHue = Schema.Schema.Type<typeof BaseHue>
 export const HueAlias = Schema.Literals(["accent", "interactive", "neutral"])
 export type HueAlias = Schema.Schema.Type<typeof HueAlias>
 
-export const ActionVariant = Schema.Literals(["primary", "destructive"])
+export const ActionVariant = Schema.Literals(["primary", "secondary", "destructive"])
 export type ActionVariant = Schema.Schema.Type<typeof ActionVariant>
 
 export const ActionState = Schema.Literals(["disabled", "pressed", "focused", "selected", "hovered"])
@@ -90,6 +90,7 @@ export type FormfieldColorDefinition = StatefulColorDefinition
 
 const ActionColorDefinition = Schema.Struct({
   primary: Schema.optional(StatefulColorDefinition),
+  secondary: Schema.optional(StatefulColorDefinition),
   destructive: Schema.optional(StatefulColorDefinition),
 })
 

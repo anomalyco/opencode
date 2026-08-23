@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:google-vertex",
+      "provider:google-vertex",
+      "protocol:gemini"
+    ],
+    "name": "google-vertex/continues-after-a-tool-result",
+    "recordedAt": "2026-08-23T17:21:51.853Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"What is the weather in Paris?\"}]},{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"lookup_weather\",\"args\":{\"city\":\"Paris\"}},\"thoughtSignature\":\"skip_thought_signature_validator\"}]},{\"role\":\"user\",\"parts\":[{\"functionResponse\":{\"name\":\"lookup_weather\",\"response\":{\"name\":\"lookup_weather\",\"content\":\"18C, light rain\"}}}]}],\"tools\":[{\"functionDeclarations\":[{\"name\":\"lookup_weather\",\"description\":\"Look up the current weather for a city\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}]}]}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"role\": \"model\",\"parts\": [{\"text\": \"The weather in Paris is currently 18°C with light rain.\"}]}}],\"usageMetadata\": {\"trafficType\": \"ON_DEMAND\"},\"modelVersion\": \"gemini-3.5-flash\",\"createTime\": \"2026-08-23T17:21:51.220919Z\",\"responseId\": \"LyyLave9DbWnrb8P1IjLmQQ\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"role\": \"model\",\"parts\": [{\"text\": \"\",\"thoughtSignature\": \"AY89a197c+fpHJftPtcufnqMAyoRQKVEQK+KeG+RVHVx2wKil3L4jP4YWvfVbcuOFr2jio4Kre/hCrDANAoMFSvaZrdaPeo1b5bXQSmJKMH03yM5M6q6ME6JiBvXym143U4exIde4UbOh2tMeyXMvB3aWxcavIHd78g5G5QPLreo6A3LO5871cYYVeRwteY+/zbEdqfaAq1hlk6WYpWkNljYpjMyKwr15YC8rFLh3HYayS9tTN++GGrk/reZn6C3OEPlzPou/pXRATzcEAGVl/TW\"}]},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 59,\"candidatesTokenCount\": 15,\"totalTokenCount\": 98,\"trafficType\": \"ON_DEMAND\",\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 59}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 15}],\"thoughtsTokenCount\": 24},\"modelVersion\": \"gemini-3.5-flash\",\"createTime\": \"2026-08-23T17:21:51.220919Z\",\"responseId\": \"LyyLave9DbWnrb8P1IjLmQQ\"}\r\n\r\n"
+      }
+    }
+  ]
+}

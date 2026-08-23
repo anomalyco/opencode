@@ -9,6 +9,7 @@ import {
   type LLMRequest,
 } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
+import type { StreamOptions } from "@opencode-ai/ai/route"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -51,17 +52,17 @@ import { Effect, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 const requests: LLMRequest[] = []
-let hasHttpMiddleware = false
+const options: Array<StreamOptions | undefined> = []
 let instruction: string | Instructions.Unavailable = "Initial context"
 const sessionID = SessionSchema.ID.make("ses_generate_test")
 
 const model = LanguageModel.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
 const client = Layer.mock(LLMClient.Service)({
   stream: () => Stream.die(new Error("unused")),
-  generate: (request, options) =>
+  generate: (request, requestOptions) =>
     Effect.sync(() => {
       requests.push(request)
-      hasHttpMiddleware = typeof options?.http === "function"
+      options.push(requestOptions)
       const response = LLMResponse.fromEvents([
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.textStart({ id: "generate" }),
@@ -84,6 +85,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
       SessionRunnerModel.resolved(model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         cost: [],
+        limit: { context: 200_000, output: 32_000 },
       }),
     ),
 })
@@ -225,7 +227,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       requests.length = 0
-      hasHttpMiddleware = false
+      options.length = 0
       instruction = "Initial context"
       const { db, bus, instructions } = yield* setup
       yield* InstructionState.prepare(db, bus, instructions, sessionID)
@@ -291,19 +293,26 @@ it.effect(
       instruction = "Changed context"
       const before = yield* durableState(db, sessionID)
       const hooks = yield* PluginHooks.Service
+      let modelRequestHook = false
       yield* hooks.register("session", "context", (event) =>
         Effect.sync(() => {
           event.system = [SystemPart.make("Hooked system"), ...event.system]
           if (event.tools.lookup) event.tools.lookup.description = "Hooked lookup"
         }),
       )
+      yield* hooks.register("session", "model.request", () =>
+        Effect.sync(() => {
+          modelRequestHook = true
+        }),
+      )
+      yield* hooks.register("session", "http.request", () => Effect.void)
 
       const generate = yield* SessionGenerate.Service
       const result = yield* generate.generate({ sessionID, prompt: "Summarize privately" })
 
       expect(result).toBe("Transient answer")
       expect(requests).toHaveLength(1)
-      expect(hasHttpMiddleware).toBe(true)
+      expect(modelRequestHook).toBe(true)
       expect(requests[0]?.model).toBe(model)
       expect(requests[0]?.system[0]?.text).toBe("Hooked system")
       expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
@@ -327,6 +336,8 @@ it.effect(
       ).toEqual(["Settled partial answer"])
       expect(requests[0]?.tools).toMatchObject([{ name: "lookup", description: "Hooked lookup" }])
       expect(requests[0]?.toolChoice).toBeUndefined()
+      expect(options[0]?.http).toBeFunction()
+      expect(options[0]?.webSocket).toBeUndefined()
       expect(yield* durableState(db, sessionID)).toEqual(before)
     }),
   { timeout: 15_000 },

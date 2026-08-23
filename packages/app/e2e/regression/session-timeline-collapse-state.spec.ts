@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { JsonValue, OpenCodeEvent, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
+import { createTwoFilesPatch } from "diff"
 
 const directory = "C:/OpenCode/TimelineStateRegression"
 const projectID = "proj_timeline_state_regression"
@@ -40,18 +41,28 @@ const editPart = {
   tool: "edit",
   state: {
     status: "completed",
-    input: { filePath: "src/regression.ts" },
+    input: {
+      path: "src/regression.ts",
+      oldString: "export const value = 'before'",
+      newString: "export const value = 'after'",
+    },
     output: "Edited src/regression.ts",
     title: "src/regression.ts",
     metadata: {
-      filediff: {
-        file: "src/regression.ts",
-        additions: 1,
-        deletions: 1,
-        before: "export const value = 'before'\n",
-        after: "export const value = 'after'\n",
-      },
-      diff: "diff --git a/src/regression.ts b/src/regression.ts\n-export const value = 'before'\n+export const value = 'after'\n",
+      files: [
+        {
+          file: "src/regression.ts",
+          patch: createTwoFilesPatch(
+            "a/src/regression.ts",
+            "b/src/regression.ts",
+            "export const value = 'before'\n",
+            "export const value = 'after'\n",
+          ),
+          additions: 1,
+          deletions: 1,
+          status: "modified",
+        },
+      ],
     },
     time: { start: 1700000001000, end: 1700000002000 },
   },
@@ -88,7 +99,7 @@ test.describe("regression: session timeline local row state", () => {
     await wrapper.evaluate((element) => {
       ;(element as HTMLElement).dataset.regressionMarker = "before-stream"
     })
-    await wrapper.locator('[data-slot="collapsible-trigger"]').first().click()
+    await wrapper.locator('[data-scope="apply-patch"] button').click()
     await expectExpanded(wrapper, false)
 
     events.push(...textEvents())
@@ -128,7 +139,7 @@ test.describe("regression: session timeline local row state", () => {
     expect(siblingProbe).toEqual({
       fileMarker: "before",
       frameMarker: "before",
-      rowKey: `assistant-part:${userMessageID}:part:${assistantMessageID}:${editPartID}`,
+      rowKey: `assistant-part:part:${assistantMessageID}:${editPartID}`,
       rowMarker: "before",
       shadowRoots: 0,
       toolMarker: "before",
@@ -149,13 +160,15 @@ test.describe("regression: session timeline local row state", () => {
         ...editPart.state,
         metadata: {
           ...editPart.state.metadata,
-          filediff: {
-            file: "src/regression.ts",
-            additions: 1,
-            deletions: 1,
-            before: lines,
-            after,
-          },
+          files: [
+            {
+              file: "src/regression.ts",
+              patch: createTwoFilesPatch("a/src/regression.ts", "b/src/regression.ts", lines, after),
+              additions: 5,
+              deletions: 5,
+              status: "modified",
+            },
+          ],
         },
       },
     }
@@ -166,8 +179,8 @@ test.describe("regression: session timeline local row state", () => {
     await expectSessionTitle(page, title)
 
     const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
-    const trigger = wrapper.locator('[data-slot="collapsible-trigger"]').first()
-    const diff = wrapper.locator('[data-component="edit-content"]').first()
+    const trigger = wrapper.locator('[data-component="sticky-accordion-header"]')
+    const diff = wrapper.locator('[data-component="apply-patch-file-diff"]').first()
     await expectAppVisible(diff)
     await expect.poll(() => wrapper.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(500)
     const samples = await wrapper.evaluate(async (element) => {
@@ -177,8 +190,8 @@ test.describe("regression: session timeline local row state", () => {
       for (const offset of [0, 120, 240, 360, 480]) {
         root.scrollBy(0, offset - (result.at(-1)?.offset ?? 0))
         await new Promise(requestAnimationFrame)
-        const trigger = element.querySelector<HTMLElement>('[data-slot="collapsible-trigger"]')!
-        const diff = element.querySelector<HTMLElement>('[data-component="edit-content"]')!
+        const trigger = element.querySelector<HTMLElement>('[data-component="sticky-accordion-header"]')!
+        const diff = element.querySelector<HTMLElement>('[data-component="apply-patch-file-diff"]')!
         result.push({
           offset,
           trigger: trigger.getBoundingClientRect().y,
@@ -189,7 +202,7 @@ test.describe("regression: session timeline local row state", () => {
       return result
     })
 
-    expect(samples[0]!.trigger).toBeLessThan(samples[0]!.diff)
+    expect(samples[0]!.trigger).toBeGreaterThanOrEqual(samples[0]!.diff)
     expect(samples.every((sample) => Math.abs(sample.trigger - samples[0]!.trigger) <= 1)).toBe(true)
     expect(samples.every((sample) => sample.trigger < sample.bottom)).toBe(true)
   })
@@ -221,7 +234,9 @@ async function readToolState(page: Page) {
     .evaluate(
       (element, textPartID) => ({
         expanded: (() => {
-          const trigger = element.querySelector('[data-slot="collapsible-trigger"]')
+          const trigger =
+            element.querySelector('[data-scope="apply-patch"] button') ??
+            element.querySelector('[data-slot="collapsible-trigger"]')
           const aria = trigger?.getAttribute("aria-expanded")
           if (aria === "true") return true
           if (aria === "false") return false
@@ -396,7 +411,9 @@ function eventValue<Type extends OpenCodeEvent["type"]>(
 }
 
 function readExpanded(element: Element) {
-  const trigger = element.querySelector('[data-slot="collapsible-trigger"]')
+  const trigger =
+    element.querySelector('[data-scope="apply-patch"] button') ??
+    element.querySelector('[data-slot="collapsible-trigger"]')
   const aria = trigger?.getAttribute("aria-expanded")
   if (aria === "true") return true
   if (aria === "false") return false

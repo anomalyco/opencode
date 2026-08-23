@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { createSignal } from "solid-js"
-import * as mod from "./line-comment"
+import { LineComment, LineCommentAnchor, LineCommentEditor } from "./line-comment"
 
 const docs = `### Overview
 Inline comment anchor and editor for code review or annotation flows.
@@ -28,9 +27,9 @@ Pair with \`Diff\` or \`Code\` to align comments to lines.
 `
 
 export default {
-  title: "UI/LineComment",
+  title: "OpenCode/Review/Line comments",
   id: "components-line-comment",
-  component: mod.LineComment,
+  component: LineComment,
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -57,7 +56,7 @@ export const Default = {
     >
       <div>12 | const total = sum(values)</div>
       <div>13 | return total / values.length</div>
-      <mod.LineComment open top={18} comment="Consider guarding against empty arrays." selection="L12-L13" />
+      <LineComment open top={18} comment="Consider guarding against empty arrays." selection="L12-L13" />
     </div>
   ),
 }
@@ -79,7 +78,7 @@ export const Editor = {
         }}
       >
         <div>40 | if (values.length === 0) return 0</div>
-        <mod.LineCommentEditor
+        <LineCommentEditor
           top={24}
           value={value()}
           selection="L40"
@@ -107,9 +106,9 @@ export const AnchorOnly = {
       }}
     >
       <div>20 | const ready = true</div>
-      <mod.LineCommentAnchor top={18} open={false}>
+      <LineCommentAnchor top={18} open={false}>
         <div data-slot="line-comment-content">Anchor content</div>
-      </mod.LineCommentAnchor>
+      </LineCommentAnchor>
     </div>
   ),
 }

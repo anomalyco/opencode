@@ -154,6 +154,23 @@ test("merges partial documents with the selected OpenCode defaults", () => {
   expect(theme.background.action.destructive.pressed).toBeInstanceOf(RGBA)
 })
 
+test("resolves custom secondary actions and falls back per mode", () => {
+  const document = {
+    version: 2,
+    light: {
+      text: { action: { secondary: { default: "#123456", $hovered: "#234567" } } },
+    },
+    dark: {},
+  } as const
+  const lightTheme = resolveSource(document, "light")
+  const darkTheme = resolveSource(document, "dark")
+
+  expect(lightTheme.text.action.secondary.default.toInts()).toEqual([18, 52, 86, 255])
+  expect(lightTheme.text.action.secondary.hovered.toInts()).toEqual([35, 69, 103, 255])
+  expect(darkTheme.text.action.secondary.default).toBe(darkTheme.text.subdued)
+  expect(darkTheme.text.action.secondary.hovered).toBe(darkTheme.text.default)
+})
+
 test("expands user structural fallbacks before merging defaults", () => {
   const expanded = resolveSource(
     {
@@ -214,6 +231,8 @@ test("resolves matched action variants and states", () => {
   expect(theme.text.action.primary.pressed).toBeInstanceOf(RGBA)
   expect(theme.text.action.primary.hovered).toBeInstanceOf(RGBA)
   expect(theme.text.action.primary.selected).toBeInstanceOf(RGBA)
+  expect(theme.text.action.secondary.default).toBe(theme.text.subdued)
+  expect(theme.text.action.secondary.hovered).toBe(theme.text.default)
   expect(theme.background.action.primary.pressed).toBeInstanceOf(RGBA)
   expect(theme.background.action.primary.hovered).toBeInstanceOf(RGBA)
   expect(theme.background.action.primary.selected).toBeInstanceOf(RGBA)

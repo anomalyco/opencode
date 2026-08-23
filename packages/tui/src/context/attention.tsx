@@ -11,7 +11,6 @@ export function AttentionProvider(props: ParentProps) {
   const attention = createTuiAttention({
     renderer: useRenderer(),
     config: config.data,
-    update: config.update,
   })
   onCleanup(() => attention.dispose())
   return <AttentionContext.Provider value={attention}>{props.children}</AttentionContext.Provider>

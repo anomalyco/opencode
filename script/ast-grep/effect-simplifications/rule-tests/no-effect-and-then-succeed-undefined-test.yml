@@ -1,0 +1,21 @@
+id: no-effect-and-then-succeed-undefined
+valid:
+  - effect.pipe(Effect.as(undefined))
+  - Effect.as(effect, undefined)
+  - effect.pipe(Effect.asVoid)
+  - effect.pipe(Effect.andThen(Effect.succeed(null)))
+  - effect.pipe(Effect.andThen(() => Effect.succeed(undefined)))
+  - effect.pipe(Effect.andThen(Effect.sync(() => undefined)))
+  - effect.pipe(Stream.andThen(Effect.succeed(undefined)))
+  - Effect.andThen(effect, options, Effect.succeed(undefined))
+  - Effect.andThen(first, second, third, Effect.succeed(undefined))
+  - Effect.succeed(undefined)
+invalid:
+  - effect.pipe(Effect.andThen(Effect.succeed(undefined)))
+  - Effect.andThen(effect, Effect.succeed(undefined))
+  - |
+    effect.pipe(
+      Effect.andThen(
+        Effect.succeed(undefined),
+      ),
+    )

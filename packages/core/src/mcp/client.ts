@@ -34,6 +34,7 @@ import { MCPStdio } from "./stdio.js"
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
+const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 
 // Some servers advertise tool outputSchemas the SDK's strict validator can't resolve; this drops
 // only that field so a single bad schema doesn't blank out the whole tool list.
@@ -261,7 +262,7 @@ export const connect = Effect.fnUntraced(function* (
                 },
                 (result) => result.tools,
               ),
-            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+            catch: toError,
           }).pipe(
             Effect.tapError((error) => Effect.logWarning("failed to list MCP tools", { server, error: error.message })),
           )
@@ -286,7 +287,7 @@ export const connect = Effect.fnUntraced(function* (
                 },
                 (result) => result.prompts,
               ),
-            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+            catch: toError,
           }).pipe(
             Effect.tapError((error) =>
               Effect.logWarning("failed to list MCP prompts", { server, error: error.message }),
@@ -312,7 +313,7 @@ export const connect = Effect.fnUntraced(function* (
                   client.listResources(cursor === undefined ? undefined : { cursor }, { timeout: catalogTimeout }),
                 (result) => result.resources,
               ),
-            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+            catch: toError,
           }).pipe(
             Effect.tapError((error) =>
               Effect.logWarning("failed to list MCP resources", { server, error: error.message }),
@@ -337,7 +338,7 @@ export const connect = Effect.fnUntraced(function* (
                   }),
                 (result) => result.resourceTemplates,
               ),
-            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+            catch: toError,
           }).pipe(
             Effect.tapError((error) =>
               Effect.logWarning("failed to list MCP resource templates", { server, error: error.message }),
@@ -355,7 +356,7 @@ export const connect = Effect.fnUntraced(function* (
           if (!client.getServerCapabilities()?.resources) return undefined
           const result = yield* Effect.tryPromise({
             try: (signal) => client.readResource({ uri: input.uri }, { signal, timeout: executionTimeout }),
-            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+            catch: toError,
           }).pipe(
             Effect.tapError((error) =>
               Effect.logWarning("failed to read MCP resource", { server, uri: input.uri, error: error.message }),
@@ -378,7 +379,7 @@ export const connect = Effect.fnUntraced(function* (
               GetPromptResultSchema,
               { signal, timeout: executionTimeout },
             ),
-          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          catch: toError,
         }).pipe(
           Effect.map((result) => ({
             messages: result.messages.map((message) => ({ role: message.role, content: message.content })),
@@ -393,7 +394,7 @@ export const connect = Effect.fnUntraced(function* (
               // Keep progress tokens available while enforcing a hard wall-clock execution timeout.
               { signal, timeout: executionTimeout, onprogress: () => {} },
             ),
-          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          catch: toError,
         }).pipe(
           Effect.map((result) => ({
             isError: result.isError === true,

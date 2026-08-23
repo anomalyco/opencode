@@ -1,8 +1,9 @@
 export * as PluginSupervisor from "./supervisor.js"
+export { Service, type Interface } from "./supervisor-service.js"
 
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
-import { Cause, Context, Deferred, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Effect, Latch, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { ConfigPluginSource } from "../config/plugin/source.js"
@@ -14,6 +15,7 @@ import { PluginPromise } from "../plugin/promise.js"
 import { PluginInternal } from "./internal.js"
 import { SdkPlugins } from "./sdk.js"
 import { importModule } from "@opencode-ai/util/runtime-import"
+import { Service } from "./supervisor-service.js"
 
 const PluginModule = Schema.Struct({
   default: Schema.Union([
@@ -93,7 +95,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   return {
     plugins: [
       ...pre.filter((plugin) => enabled.has(plugin.id)),
-      ...Array.from(packages.values()).filter((plugin) => enabled.has(plugin.id)),
+      ...[...packages.values()].filter((plugin) => enabled.has(plugin.id)),
       ...post.filter((plugin) => enabled.has(plugin.id)),
     ],
     failures: [...failures.values()],
@@ -128,13 +130,6 @@ const load = Effect.fn("PluginSupervisor.load")(function* (
   } satisfies Plugin.Versioned
 })
 
-export interface Interface {
-  /** Wait for the initial plugin generation and startup updates to settle. */
-  readonly flush: Effect.Effect<void>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/PluginSupervisor") {}
-
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -142,7 +137,7 @@ export const layer = Layer.effect(
     const sdk = yield* SdkPlugins.Service
     const sources = yield* ConfigPluginSource.Service
     const bus = yield* Bus.Service
-    const ready = { current: yield* Deferred.make<void>() }
+    const ready = yield* Latch.make()
     let observed = 0
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
@@ -169,7 +164,7 @@ export const layer = Layer.effect(
       Stream.mapEffect(() =>
         Effect.gen(function* () {
           observed++
-          if (yield* Deferred.isDone(ready.current)) ready.current = yield* Deferred.make<void>()
+          yield* ready.close
           return observed
         }),
       ),
@@ -181,12 +176,12 @@ export const layer = Layer.effect(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
           yield* activate()
-          if (observed === target) yield* Deferred.succeed(ready.current, undefined)
+          if (observed === target) yield* ready.open
         }).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: Effect.suspend(() => Deferred.await(ready.current)) })
+    return Service.of({ flush: ready.await })
   }),
 )
 

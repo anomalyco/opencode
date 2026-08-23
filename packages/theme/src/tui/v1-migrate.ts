@@ -82,6 +82,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
           $focused: selected,
           $selected: primary,
         },
+        secondary: { default: "$text.subdued", $hovered: "$text.default" },
         destructive: { default: destructive, $disabled: textMuted },
       },
       formfield: {
@@ -107,6 +108,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
       },
       action: {
         primary: { default: "transparent", $hovered: backgroundPanel, $focused: primary, $selected: "transparent" },
+        secondary: { default: "transparent" },
         destructive: { default: color("error") },
       },
       formfield: {

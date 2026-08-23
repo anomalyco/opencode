@@ -70,6 +70,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
       SessionRunnerModel.resolved(model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         cost: [],
+        limit: { context: 200_000, output: 20 },
       }),
     ),
 })
@@ -87,16 +88,16 @@ const config = Config.testLayer()
 const pluginSupervisor = Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void }))
 const promptCatalog = Layer.mock(Catalog.Service, {
   provider: {
-    get: () => Effect.succeed(undefined),
+    get: () => Effect.undefined,
     all: () => Effect.succeed([]),
     available: () => Effect.succeed([]),
   },
   model: {
-    get: () => Effect.succeed(undefined),
+    get: () => Effect.undefined,
     all: () => Effect.succeed([]),
     available: () => Effect.succeed([]),
-    default: () => Effect.succeed(undefined),
-    small: () => Effect.succeed(undefined),
+    default: () => Effect.undefined,
+    small: () => Effect.undefined,
   },
 })
 const runnerLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
@@ -126,7 +127,6 @@ const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
         active: coordinator.active,
         resume: coordinator.run,
         wake: coordinator.wake,
-        wakeActive: coordinator.wakeActive,
         interrupt: (sessionID) => coordinator.interrupt(sessionID),
         awaitIdle: coordinator.awaitIdle,
       })

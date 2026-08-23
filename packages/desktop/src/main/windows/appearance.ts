@@ -2,10 +2,12 @@ import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../../ui/src/theme/themes/oc-2.json"
 import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
-import { join } from "node:path"
-import { Ipc, sendIpcEvent, type TitlebarTheme } from "../../shared/ipc-contract"
-import { developmentResourcesRoot, preloadPath } from "../paths"
-import { PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
+import type { Path } from "effect"
+import { type TitlebarTheme } from "../../shared/ipc-contract"
+import { WindowFullscreenChanged, WindowPinchZoomChanged, WindowZoomChanged } from "../../shared/ipc-rpc/events"
+import { emitIpcEvent } from "../ipc-events"
+import type { DesktopPaths } from "../paths"
+import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 
 const oc2Theme = oc2ThemeJson as DesktopTheme
@@ -20,12 +22,12 @@ const maxZoomLevel = 10
 const minZoomLevel = 0.2
 let backgroundColor: string | undefined
 
-export function windowAppearance() {
+export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) {
   const mode = tone()
   return {
     title: "OpenCode",
-    icon: iconPath(),
-    backgroundColor: backgroundColor ?? oc2Background[mode],
+    icon: iconPath(path, paths),
+    backgroundColor: getBackgroundColor() ?? oc2Background[mode],
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hidden" as const,
@@ -40,7 +42,7 @@ export function windowAppearance() {
         }
       : {}),
     webPreferences: {
-      preload: preloadPath,
+      preload: paths.preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -48,14 +50,15 @@ export function windowAppearance() {
   }
 }
 
-export function setDockIcon() {
+export function setDockIcon(path: Path.Path, paths: DesktopPaths.Resolved) {
   if (process.platform !== "darwin") return
-  const icon = nativeImage.createFromPath(join(iconsDir(), "dock.png"))
+  const icon = nativeImage.createFromPath(path.join(iconsDir(path, paths), "dock.png"))
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
 export function setBackgroundColor(color: string) {
   backgroundColor = color
+  getStore().set(BACKGROUND_COLOR_KEY, color)
   BrowserWindow.getAllWindows().forEach((win) => {
     win.setBackgroundColor(color)
     if (process.platform === "darwin") win.invalidateShadow()
@@ -63,7 +66,8 @@ export function setBackgroundColor(color: string) {
 }
 
 export function getBackgroundColor() {
-  return backgroundColor
+  const stored = getStore().get(BACKGROUND_COLOR_KEY)
+  return backgroundColor ?? (typeof stored === "string" ? stored : undefined)
 }
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
@@ -82,7 +86,7 @@ export function setPinchZoomEnabled(enabled: boolean) {
   getStore().set(PINCH_ZOOM_ENABLED_KEY, enabled)
   BrowserWindow.getAllWindows().forEach((win) => {
     pinchZoomEnabled.set(win, enabled)
-    sendIpcEvent(win.webContents, Ipc.window.pinchZoomEnabledChanged, enabled)
+    emitIpcEvent(win.webContents, new WindowPinchZoomChanged({ enabled }))
     if (!enabled && win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
     updateZoom(win)
   })
@@ -111,18 +115,18 @@ export function wireZoom(win: BrowserWindow) {
 export function wireFullscreen(win: BrowserWindow) {
   const send = (fullscreen: boolean) => {
     if (win.isDestroyed() || win.webContents.isDestroyed()) return
-    sendIpcEvent(win.webContents, Ipc.window.fullscreenChanged, fullscreen)
+    emitIpcEvent(win.webContents, new WindowFullscreenChanged({ fullscreen }))
   }
   win.on("enter-full-screen", () => send(true))
   win.on("leave-full-screen", () => send(false))
 }
 
-function iconsDir() {
-  return app.isPackaged ? join(process.resourcesPath, "icons") : join(developmentResourcesRoot, "icons")
+function iconsDir(path: Path.Path, paths: DesktopPaths.Resolved) {
+  return app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(paths.developmentResourcesRoot, "icons")
 }
 
-function iconPath() {
-  return join(iconsDir(), `icon.${process.platform === "win32" ? "ico" : "png"}`)
+function iconPath(path: Path.Path, paths: DesktopPaths.Resolved) {
+  return path.join(iconsDir(path, paths), `icon.${process.platform === "win32" ? "ico" : "png"}`)
 }
 
 function tone() {
@@ -144,5 +148,5 @@ function clampZoom(value: number) {
 
 function updateZoom(win: BrowserWindow) {
   updateTitlebar(win)
-  sendIpcEvent(win.webContents, Ipc.window.zoomFactorChanged, win.webContents.getZoomFactor())
+  emitIpcEvent(win.webContents, new WindowZoomChanged({ factor: win.webContents.getZoomFactor() }))
 }

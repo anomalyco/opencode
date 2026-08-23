@@ -1,10 +1,36 @@
 export * as CpuProfile from "./cpu-profile"
 
-import { Effect, FileSystem } from "effect"
+import { Global } from "@opencode-ai/util/global"
+import { Effect, FileSystem, Queue } from "effect"
 import { Session } from "node:inspector"
 import path from "node:path"
 
-export function run<A, E, R>(file: string, effect: Effect.Effect<A, E, R>) {
+export const listen = Effect.gen(function* () {
+  const global = yield* Global.Service
+  if (process.platform === "win32") return
+  const signals = yield* Queue.dropping<void>(1)
+  yield* Effect.acquireRelease(
+    Effect.sync(() => {
+      const handler = () => Queue.offerUnsafe(signals, undefined)
+      process.on("SIGPROF", handler)
+      return handler
+    }),
+    (handler) => Effect.sync(() => process.off("SIGPROF", handler)),
+  )
+  yield* Effect.gen(function* () {
+    yield* Queue.take(signals)
+    const file = path.join(
+      global.log,
+      `cpu-${process.pid}-${new Date().toISOString().replace(/[:.]/g, "")}.cpuprofile`,
+    )
+    yield* run(file, Effect.sleep("10 seconds")).pipe(
+      Effect.catchCause((cause) => Effect.logError("Failed to capture CPU profile", { path: file, cause })),
+    )
+    yield* Queue.poll(signals)
+  }).pipe(Effect.forever, Effect.forkScoped({ startImmediately: true }))
+})
+
+function run<A, E, R>(file: string, effect: Effect.Effect<A, E, R>) {
   const target = path.resolve(file)
   return Effect.acquireUseRelease(
     Effect.gen(function* () {

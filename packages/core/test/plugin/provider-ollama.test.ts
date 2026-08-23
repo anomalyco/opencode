@@ -54,6 +54,7 @@ describe("OllamaPlugin", () => {
                 return Response.json({
                   models: [
                     summary("gemma3:4b", "gemma-digest", "gemma3"),
+                    summary("unknown-context", "unknown-digest"),
                     summary("nomic-embed", "embed-digest"),
                     summary("removed-model", "removed-digest"),
                   ],
@@ -68,6 +69,8 @@ describe("OllamaPlugin", () => {
                       capabilities: ["completion", "tools", "vision"],
                       model_info: { "gemma3.context_length": 131_072 },
                     }
+                  : body.model === "unknown-context"
+                    ? show({ family: "unknown", capabilities: ["completion"], context: 0 })
                   : show({ family: "nomic-bert", capabilities: ["embedding"], context: 8192 }),
               )
             },
@@ -98,7 +101,10 @@ describe("OllamaPlugin", () => {
             name: "gemma3:4b",
             family: "gemma3",
             capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-            limit: { context: 131_072, output: 0 },
+            limit: { context: 131_072, output: 32_000 },
+          })
+          expect(yield* catalog.model.get(providerID, Model.ID.make("unknown-context"))).toMatchObject({
+            limit: { context: 200_000, output: 32_000 },
           })
           expect(yield* catalog.model.get(providerID, Model.ID.make("nomic-embed"))).toBeUndefined()
           expect(requests).toContainEqual({ method: "GET", path: "/api/tags" })

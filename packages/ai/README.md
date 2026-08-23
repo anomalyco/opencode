@@ -237,11 +237,11 @@ Prompt caching is **on by default**. Every `LLMRequest` resolves to `cache: "aut
 
 ### Auto placement
 
-`"auto"` places up to four breakpoints — the last tool definition, the first system part, the last system part when distinct, and the final message boundary. These expose successively larger reusable prefixes for tools, the base agent, project instructions, and the active conversation. The rolling final-message boundary is the load-bearing detail in tool loops: it advances on every request so the previous cache entry stays within Anthropic's 20-block lookback.
+`"auto"` places up to four breakpoints — the last tool definition, the first system part, the last system part when distinct, and the final message boundary. These expose successively larger reusable prefixes for tools, the base agent, project instructions, and the active conversation. The rolling final-message boundary advances on every request so recent conversation prefixes remain reusable during tool loops.
 
 Tools precede every system and conversation block in the provider prefix, so tool definitions must remain byte-stable and deterministically ordered for downstream breakpoints to remain reusable.
 
-The math justifies the default: Anthropic's 5-minute cache write is 1.25× base, read is 0.1×, so a single reuse within 5 minutes already wins. One-shot completions below the per-model minimum-cacheable-token threshold silently no-op on the wire, so the worst case is harmless.
+Requests below a provider's minimum cacheable size simply do not produce a reusable cache entry.
 
 ### Opting out
 
@@ -285,6 +285,7 @@ LLM.request({
 | ----------------------- | ------------------------------------------------------------------------- |
 | Anthropic Messages      | emits up to 4 `cache_control` markers (4-breakpoint cap enforced)         |
 | Bedrock Converse        | emits up to 4 `cachePoint` blocks (4-breakpoint cap enforced)             |
+| OpenRouter              | emits up to 4 `cache_control` markers                                     |
 | OpenAI Chat / Responses | no-op (implicit caching above 1024 tokens)                                |
 | Gemini                  | no-op (implicit caching on 2.5+; explicit `CachedContent` is out-of-band) |
 
@@ -308,7 +309,7 @@ Included providers: OpenAI, Anthropic, Google (Gemini), Google Vertex Gemini and
 
 ### Package-like entrypoints
 
-Native catalog integrations load provider behavior through package-like entrypoints. These are export paths from the same `@opencode-ai/ai` npm package, not independently published packages. Each entrypoint exports the same `model(modelID, settings)` contract, and `settings` contains serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
+Native catalog integrations load provider behavior through package-like entrypoints. These are export paths from the same `@opencode-ai/ai` npm package, not independently published packages. Each entrypoint exports the same `model(modelID, settings)` contract, and `settings` contains serializable provider configuration plus common `headers` and `body` overlays.
 
 ```ts
 import { model } from "@opencode-ai/ai/providers/openai/responses"
@@ -316,7 +317,6 @@ import { model } from "@opencode-ai/ai/providers/openai/responses"
 const selected = model("gpt-5", {
   apiKey: process.env.OPENAI_API_KEY,
   headers: { "x-application": "opencode" },
-  limits: { context: 200_000, output: 64_000 },
 })
 ```
 
@@ -371,10 +371,22 @@ Request options in order of stability:
 
 1. **`generation`** — portable knobs (`maxTokens`, `temperature`, `topP`, `topK`, penalties, seed, stop).
 2. **`promptCacheKey`** — stable cache affinity lowered by every protocol that supports it.
-3. **`providerOptions: { <provider>: {...} }`** — typed-at-the-facade provider-specific knobs (OpenAI `store`, Anthropic `thinking`, Gemini `thinkingConfig`, OpenRouter routing).
+3. **`providerOptions: { ... }`** — flat options inferred from the selected model (OpenAI `store`, Anthropic `thinking`, Gemini `thinkingConfig`, OpenRouter routing).
 4. **`http: { body, headers, query }`** — last-resort serializable overlays merged into the final HTTP request. Reach for this only when a stable typed path doesn't yet exist.
 
 Route/provider defaults are overridden by request-level values for each axis.
+
+The selected model supplies the provider-specific option type, so per-request overrides stay flat while the canonical runtime request remains provider-neutral:
+
+```ts
+LLM.request({
+  model,
+  prompt,
+  providerOptions: {
+    reasoningEffort: "low",
+  },
+})
+```
 
 ## Routes
 
@@ -387,6 +399,5 @@ This package is built on Effect. Public methods return `Effect` or `Stream`; pro
 ## See also
 
 - `AGENTS.md` — architecture, route construction, contributor guide
-- `STATUS.md` — native provider parity status and AI SDK migration gaps
 - `example/tutorial.ts` — runnable end-to-end walkthrough
 - `test/provider/*.test.ts` — fixture-first protocol tests; `*.recorded.test.ts` files cover live cassettes

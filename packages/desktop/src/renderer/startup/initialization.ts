@@ -1,23 +1,40 @@
+import type { ElectronAPI } from "../api-types"
+
+type SidecarData = Awaited<ReturnType<ElectronAPI["awaitInitialization"]>>
+
 export function initializationData<A>(state: (() => A | undefined) & { error: unknown }) {
   if (state.error !== undefined) throw markLocalServerStartup(state.error)
   return state()
 }
 
+export function sidecarHttp(data: SidecarData) {
+  return {
+    url: data.url,
+    username: data.username ?? undefined,
+    password: data.password ?? undefined,
+  }
+}
+
+export function createSidecarResolver(input: {
+  api: Pick<ElectronAPI, "reconnectService">
+  current: () => SidecarData | undefined
+  update: (data: SidecarData) => void
+}) {
+  return async (signal: AbortSignal) => {
+    if (signal.aborted) throw signal.reason
+    const next = await input.api.reconnectService()
+    if (signal.aborted) throw signal.reason
+    if (!sameSidecar(input.current(), next)) input.update(next)
+    return sidecarHttp(next)
+  }
+}
+
+function sameSidecar(current: SidecarData | undefined, next: SidecarData) {
+  return current?.url === next.url && current.username === next.username && current.password === next.password
+}
+
 function markLocalServerStartup(error: unknown) {
   const failure = error instanceof Error ? error : new Error(String(error))
-  const prefix = `Error invoking remote method '${Ipc.app.awaitInitialization}': Error: `
-  if (failure.message.startsWith(prefix)) {
-    const previous = failure.message
-    failure.message = failure.message.slice(prefix.length)
-    if (failure.stack) failure.stack = failure.stack.replace(`Error: ${previous}`, `Error: ${failure.message}`)
-  }
   Object.defineProperty(failure, "localServerStartup", { value: true })
   return failure
 }
-
-export function initializationReady<A>(state: (() => A | undefined) & { error: unknown; loading: boolean }) {
-  if (state.loading) return false
-  initializationData(state)
-  return true
-}
-import { Ipc } from "../../shared/ipc-contract"

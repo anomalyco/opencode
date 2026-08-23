@@ -23,7 +23,7 @@ describe("session tab marquee", () => {
     scope.dispose()
   })
 
-  test("keeps the leading fade through a natural loop boundary", () => {
+  test("stops after one cycle", () => {
     jest.useFakeTimers()
     const scope = createRoot((dispose) => ({ marquee: createMarquee(() => false), dispose }))
 
@@ -32,7 +32,7 @@ describe("session tab marquee", () => {
 
     expect(scope.marquee.active()).toBe("first")
     expect(scope.marquee.offset()).toBe(0)
-    expect(scope.marquee.leading()).toBe(1)
+    expect(scope.marquee.leading()).toBe(0)
     scope.dispose()
   })
 

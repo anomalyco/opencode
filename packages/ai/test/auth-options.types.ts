@@ -81,7 +81,7 @@ OpenAI.configure({
 }).responses("gpt-4.1-mini")
 OpenAI.configure({
   generation: { maxTokens: 100 },
-  providerOptions: { openai: { store: false } },
+  providerOptions: { store: false },
 }).responses("gpt-4.1-mini")
 
 // @ts-expect-error OpenAI model selectors only accept model ids.
@@ -97,7 +97,7 @@ OpenAI.configure({ bogus: true })
 OpenAI.configure({ generation: { maxTokens: "many" } })
 
 // @ts-expect-error provider-native options remain typed.
-OpenAI.configure({ providerOptions: { openai: { store: "false" } } })
+OpenAI.configure({ providerOptions: { store: "false" } })
 
 // @ts-expect-error auth is an override, so OpenAI rejects apiKey with auth.
 OpenAI.configure({ apiKey: "sk-test", auth: Auth.bearer("oauth-token") })
@@ -139,7 +139,8 @@ Anthropic.configure({ apiKey: "anthropic-key" }).model("claude-haiku")
 Anthropic.configure({
   apiKey: "anthropic-key",
   providerOptions: {
-    anthropic: { thinking: { type: "enabled", budgetTokens: 1_024 }, effort: "high" },
+    thinking: { type: "enabled", budgetTokens: 1_024 },
+    effort: "high",
   },
 }).model("claude-haiku")
 // @ts-expect-error Anthropic model selectors only accept model ids.
@@ -147,15 +148,15 @@ Anthropic.configure({ apiKey: "anthropic-key" }).model("claude-haiku", {})
 // @ts-expect-error Anthropic package settings accept only one auth source.
 Anthropic.model("claude-sonnet-4-6", { apiKey: "anthropic-key", authToken: "anthropic-token" })
 // @ts-expect-error Enabled Anthropic thinking requires a token budget.
-Anthropic.configure({ providerOptions: { anthropic: { thinking: { type: "enabled" } } } })
+Anthropic.configure({ providerOptions: { thinking: { type: "enabled" } } })
 // @ts-expect-error Anthropic thinking budgets must be numbers.
-Anthropic.configure({ providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: "large" } } } })
+Anthropic.configure({ providerOptions: { thinking: { type: "enabled", budgetTokens: "large" } } })
 
 AnthropicCompatible.configure({
   apiKey: "messages-key",
   baseURL: "https://messages.example.com/v1",
   provider: "example",
-  providerOptions: { anthropic: { thinking: { type: "disabled" } } },
+  providerOptions: { thinking: { type: "disabled" } },
 }).model("compatible-model")
 // @ts-expect-error Anthropic-compatible providers require a base URL.
 AnthropicCompatible.configure({ apiKey: "messages-key" })
@@ -171,16 +172,16 @@ AnthropicCompatible.model("compatible-model", {
 Google.configure({ apiKey: "google-key" }).model("gemini-2.5-flash")
 Google.configure({
   apiKey: "google-key",
-  providerOptions: { gemini: { thinkingConfig: { thinkingBudget: 0, includeThoughts: false } } },
+  providerOptions: { thinkingConfig: { thinkingBudget: 0, includeThoughts: false } },
 }).model("gemini-2.5-flash")
 // @ts-expect-error Google model selectors only accept model ids.
 Google.configure({ apiKey: "google-key" }).model("gemini-2.5-flash", {})
 // @ts-expect-error Gemini thinking budgets must be numbers.
-Google.configure({ providerOptions: { gemini: { thinkingConfig: { thinkingBudget: "large" } } } })
+Google.configure({ providerOptions: { thinkingConfig: { thinkingBudget: "large" } } })
 
 GoogleVertex.configure({
   apiKey: "vertex-key",
-  providerOptions: { gemini: { thinkingConfig: { thinkingBudget: 1_024 } } },
+  providerOptions: { thinkingConfig: { thinkingBudget: 1_024 } },
 }).model("gemini-3.5-flash")
 GoogleVertex.configure({ accessToken: "vertex-token", project: "project" }).model("gemini-3.5-flash")
 GoogleVertex.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model("gemini-3.5-flash")
@@ -230,7 +231,7 @@ GoogleVertexResponses.configure({
 GoogleVertexMessages.configure({
   accessToken: "vertex-token",
   project: "project",
-  providerOptions: { anthropic: { thinking: { type: "adaptive", display: "omitted" }, effort: "low" } },
+  providerOptions: { thinking: { type: "adaptive", display: "omitted" }, effort: "low" },
 }).model("claude-sonnet-4-6")
 // @ts-expect-error Vertex Messages package settings do not accept API keys.
 GoogleVertexMessages.model("claude-sonnet-4-6", { apiKey: "vertex-key", project: "project" })

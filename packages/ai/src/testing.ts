@@ -7,6 +7,7 @@ import {
   type FinishReasonDetails,
   type AIError,
   type LLMRequest,
+  type ProviderMetadata,
   type UsageInput,
 } from "./schema/index.js"
 import { Context, Deferred, Effect, Latch, Layer, Queue, Scope, Stream } from "effect"
@@ -33,13 +34,22 @@ export interface LayerOptions {
 export class Service extends Context.Service<Service, Interface>()("@opencode/ai/TestLLM") {}
 
 export const complete = (
-  options: { readonly reason: FinishReasonDetails; readonly usage?: UsageInput },
+  options: {
+    readonly reason: FinishReasonDetails
+    readonly usage?: UsageInput
+    readonly providerMetadata?: ProviderMetadata
+  },
   ...events: readonly LLMEvent[]
 ) => [
   LLMEvent.stepStart({ index: 0 }),
   ...events,
-  LLMEvent.stepFinish({ index: 0, reason: options.reason, usage: options.usage }),
-  LLMEvent.finish({ reason: options.reason }),
+  LLMEvent.stepFinish({
+    index: 0,
+    reason: options.reason,
+    usage: options.usage,
+    providerMetadata: options.providerMetadata,
+  }),
+  LLMEvent.finish({ reason: options.reason, providerMetadata: options.providerMetadata }),
 ]
 
 export const stop = (...events: readonly LLMEvent[]) => complete({ reason: { normalized: "stop" } }, ...events)

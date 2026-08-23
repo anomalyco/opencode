@@ -115,7 +115,6 @@ const executionNode = makeGlobalNode({
         active: Effect.succeed(new Set()),
         resume: complete,
         wake: () => Effect.void,
-        wakeActive: () => Effect.void,
         interrupt: () => Effect.void,
         awaitIdle: (id) => complete(id).pipe(Effect.exit, Effect.asVoid),
       })
@@ -761,10 +760,14 @@ describe("ShellTool", () => {
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
             expect((yield* shell.wait(id)).status).toBe("timeout")
             expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
+              text: expect.stringContaining("Command timed out before completion."),
               description: idleCommand,
               metadata: {
                 source: "shell",
+                shellID,
                 state: "completed",
+                timeout: true,
+                truncated: false,
               },
             })
           }),
@@ -774,40 +777,105 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("updates and clears a running shell timeout", () =>
+  it.live("preserves a background command's non-zero exit", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
         reset()
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
-            const shell = yield* Shell.Service
-            const timed = yield* executeTool(
-              registry,
-              call({ command: idleCommand, background: true }, "call-updated-timeout"),
+            const bus = yield* Bus.Service
+            const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+              Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+              Stream.runHead,
+              Effect.forkScoped({ startImmediately: true }),
             )
-            const timedID = timed.metadata?.shellID
-            expect(typeof timedID).toBe("string")
-            if (typeof timedID !== "string") return
-            const timedShellID = ShellSchema.ID.make(timedID)
-            yield* shell.timeout(timedShellID, 50)
-            expect((yield* shell.wait(timedShellID)).status).toBe("timeout")
-
-            const cleared = yield* executeTool(
+            const settled = yield* executeTool(
               registry,
-              call({ command: idleCommand, timeout: 50, background: true }, "call-cleared-timeout"),
+              call({ command: bodyExitCommand, background: true }, "call-background-nonzero"),
             )
-            const clearedID = cleared.metadata?.shellID
-            expect(typeof clearedID).toBe("string")
-            if (typeof clearedID !== "string") return
-            const clearedShellID = ShellSchema.ID.make(clearedID)
-            yield* shell.timeout(clearedShellID, 0)
-            yield* Effect.sleep(Duration.millis(100))
-            expect((yield* shell.get(clearedShellID)).status).toBe("running")
-            yield* shell.remove(clearedShellID)
+            const shellID = settled.metadata?.shellID
+            expect(typeof shellID).toBe("string")
+            expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
+              text: expect.stringContaining("Command exited with code 7."),
+              description: bodyExitCommand,
+              metadata: {
+                source: "shell",
+                jobID: "call-background-nonzero",
+                shellID,
+                state: "completed",
+                exit: 7,
+                truncated: false,
+              },
+            })
           }),
         )
       },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  it.live(
+    "updates and clears a running shell timeout",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              const timed = yield* executeTool(
+                registry,
+                call({ command: idleCommand, background: true }, "call-updated-timeout"),
+              )
+              const timedID = timed.metadata?.shellID
+              expect(typeof timedID).toBe("string")
+              if (typeof timedID !== "string") return
+              const timedShellID = ShellSchema.ID.make(timedID)
+              yield* shell.timeout(timedShellID, 50)
+              expect((yield* shell.wait(timedShellID)).status).toBe("timeout")
+
+              const cleared = yield* executeTool(
+                registry,
+                call({ command: idleCommand, timeout: 50, background: true }, "call-cleared-timeout"),
+              )
+              const clearedID = cleared.metadata?.shellID
+              expect(typeof clearedID).toBe("string")
+              if (typeof clearedID !== "string") return
+              const clearedShellID = ShellSchema.ID.make(clearedID)
+              yield* shell.timeout(clearedShellID, 0)
+              yield* Effect.sleep(Duration.millis(100))
+              expect((yield* shell.get(clearedShellID)).status).toBe("running")
+              yield* shell.remove(clearedShellID)
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
+  it.live("does not retain removed running shells in exit order", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        withSession(tmp.path, () =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            yield* Effect.forEach(Array.from({ length: 26 }), () =>
+              Effect.gen(function* () {
+                const info = yield* shell.create({ command: idleCommand, timeout: 0 })
+                yield* shell.remove(info.id)
+                yield* Effect.sleep(Duration.millis(10))
+              }),
+            )
+
+            const info = yield* shell.create({ command: helloCommand, timeout: 0 })
+            const settled = yield* shell.wait(info.id).pipe(Effect.timeoutOption(Duration.seconds(2)))
+            expect(settled._tag).toBe("Some")
+          }),
+        ),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
   )

@@ -17,31 +17,25 @@ describe("request option precedence", () => {
   test("deep-merges provider option records and replaces arrays, primitives, and null", () => {
     const merged = mergeProviderOptions(
       {
-        openai: {
-          include: ["route"],
-          metadata: { route: true, shared: "route" },
-          nullable: "route",
-          primitive: "route",
-        },
+        include: ["route"],
+        metadata: { route: true, shared: "route" },
+        nullable: "route",
+        primitive: "route",
       },
       {
-        openai: {
-          include: ["model"],
-          metadata: { model: true, shared: "model" },
-          nullable: null,
-          primitive: "model",
-        },
+        include: ["model"],
+        metadata: { model: true, shared: "model" },
+        nullable: null,
+        primitive: "model",
       },
-      { openai: { metadata: { request: true }, primitive: false } },
+      { metadata: { request: true }, primitive: false },
     )
 
     expect(merged).toEqual({
-      openai: {
-        include: ["model"],
-        metadata: { route: true, model: true, request: true, shared: "model" },
-        nullable: null,
-        primitive: false,
-      },
+      include: ["model"],
+      metadata: { route: true, model: true, request: true, shared: "model" },
+      nullable: null,
+      primitive: false,
     })
   })
 
@@ -51,13 +45,13 @@ describe("request option precedence", () => {
         endpoint: { baseURL: "https://api.openai.test/v1/" },
         auth: Auth.bearer("test"),
         generation: { maxTokens: 10, temperature: 1, stop: ["route"] },
-        providerOptions: { openai: { store: false, reasoningEffort: "low" } },
+        providerOptions: { store: false, reasoningEffort: "low" },
       })
       const model = route.model({
         id: "gpt-4o-mini",
         defaults: {
           generation: { maxTokens: 20, temperature: 0.5, frequencyPenalty: 0.25, stop: ["model"] },
-          providerOptions: { openai: { reasoningEffort: "medium" } },
+          providerOptions: { reasoningEffort: "medium" },
         },
       })
       const prepared = yield* compileRequest(
@@ -65,7 +59,7 @@ describe("request option precedence", () => {
           model,
           prompt: "Say hello.",
           generation: { maxTokens: 30, topP: 0.9, stop: ["request"] },
-          providerOptions: { openai: { store: true } },
+          providerOptions: { store: true },
         }),
       )
 
@@ -276,21 +270,20 @@ describe("request option precedence", () => {
     ),
   )
 
-  it.effect("uses model output limits after route limits and before call maxTokens", () =>
+  it.effect("uses the Anthropic default before call maxTokens", () =>
     Effect.gen(function* () {
       const route = AnthropicMessages.route.with({
         endpoint: { baseURL: "https://api.anthropic.test/v1/" },
         auth: Auth.header("x-api-key", "test"),
-        limits: { output: 128 },
       })
-      const model = route.model({ id: "claude-sonnet-4-5", defaults: { limits: { output: 64 } } })
+      const model = route.model({ id: "claude-sonnet-4-5" })
       const withoutMaxTokens = yield* compileRequest(LLM.request({ model, prompt: "Say hello.", cache: "none" }))
       const withMaxTokens = yield* compileRequest(
-        LLM.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 32 } }),
+        LLM.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 8_000 } }),
       )
 
-      expect(withoutMaxTokens.body.max_tokens).toBe(64)
-      expect(withMaxTokens.body.max_tokens).toBe(32)
+      expect(withoutMaxTokens.body.max_tokens).toBe(32_000)
+      expect(withMaxTokens.body.max_tokens).toBe(8_000)
     }),
   )
 })

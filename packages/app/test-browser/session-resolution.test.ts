@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { createSessionResolution } from "@/pages/session/session-resolution"
+import { createSessionResolution } from "@/session/session-resolution"
 
 type Session = { id: string; directory: string }
 

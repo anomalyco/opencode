@@ -17,16 +17,14 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const fs = yield* FSUtil.Service
+    const loadEntry = Effect.fnUntraced(function* (entry: Entry) {
+      if (entry.type === "document") return [{ commands: entry.info.commands }]
+      if (entry.type !== "directory") return []
+      const commands = yield* loadDirectory(fs, entry.path)
+      return [{ commands: Object.fromEntries(commands.map((command) => [command.name, command.info])) }]
+    })
     const load = Effect.fn("ConfigCommandPlugin.load")(function* () {
-      return yield* Effect.forEach(yield* config.entries(), (entry) => {
-        if (entry.type === "document") return Effect.succeed([{ commands: entry.info.commands }])
-        if (entry.type !== "directory") return Effect.succeed([])
-        return loadDirectory(fs, entry.path).pipe(
-          Effect.map((commands) => [
-            { commands: Object.fromEntries(commands.map((command) => [command.name, command.info])) },
-          ]),
-        )
-      }).pipe(Effect.map((documents) => documents.flat()))
+      return yield* Effect.forEach(yield* config.entries(), loadEntry).pipe(Effect.map((documents) => documents.flat()))
     })
     const loaded = { documents: [] as { commands: Info["commands"] }[] }
     const reload = load().pipe(
@@ -88,11 +86,11 @@ function loadDirectory(fs: FSUtil.Interface, directory: string) {
   return Effect.gen(function* () {
     const files = yield* fs
       .scan("{command,commands}/**/*.md", { cwd: directory, absolute: true, dot: true, symlink: true })
-      .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+      .pipe(Effect.orElseSucceed(() => [] as string[]))
     return yield* Effect.forEach(files.toSorted(), (filepath) =>
       fs.readFileStringSafe(filepath).pipe(
         Effect.map((content) => (content === undefined ? undefined : decode(directory, filepath, content))),
-        Effect.catch(() => Effect.succeed(undefined)),
+        Effect.orElseSucceed(() => undefined),
       ),
     ).pipe(
       Effect.map((commands) =>

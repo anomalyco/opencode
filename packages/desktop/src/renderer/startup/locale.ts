@@ -1,4 +1,4 @@
-import { loadLocaleDict, normalizeLocale, type Locale, type Platform } from "@opencode-ai/app"
+import { loadLocaleDict, normalizeLocale, type Locale, type Platform } from "@opencode-ai/app/desktop"
 import { storedLocaleValue } from "./locale-value"
 
 export async function preloadStoredLocale(platform: Platform) {

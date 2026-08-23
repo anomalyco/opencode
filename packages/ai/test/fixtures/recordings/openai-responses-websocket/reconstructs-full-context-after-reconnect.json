@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "metadata": {
+    "provider": "openai",
+    "protocol": "openai-responses",
+    "transport": "websocket",
+    "model": "gpt-5.5",
+    "tags": [
+      "prefix:openai-responses-websocket",
+      "provider:openai",
+      "protocol:openai-responses",
+      "transport:websocket",
+      "reconnect",
+      "full-context"
+    ],
+    "name": "openai-responses-websocket/reconstructs-full-context-after-reconnect",
+    "recordedAt": "2026-08-20T00:00:00.000Z"
+  },
+  "interactions": [
+    {
+      "transport": "websocket",
+      "connection": {
+        "sequence": 0,
+        "url": "wss://api.openai.com/v1/responses",
+        "protocols": [],
+        "close": {
+          "code": 1000,
+          "reason": ""
+        }
+      },
+      "events": [
+        {
+          "direction": "client",
+          "kind": "text",
+          "body": "{\"type\":\"response.create\",\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Follow the user's exact reply instruction.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Reply exactly: Alpha.\"}]}],\"store\":false,\"max_output_tokens\":30,\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"text\":{\"verbosity\":\"low\"}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.created\",\"response\":{\"id\":\"resp_ws_reconnect_1\"}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\",\"id\":\"msg_ws_reconnect_1\",\"role\":\"assistant\",\"content\":[]}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_text.delta\",\"item_id\":\"msg_ws_reconnect_1\",\"delta\":\"Alpha.\"}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_text.done\",\"item_id\":\"msg_ws_reconnect_1\",\"text\":\"Alpha.\"}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\",\"id\":\"msg_ws_reconnect_1\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Alpha.\"}]}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ws_reconnect_1\"}}"
+        }
+      ]
+    },
+    {
+      "transport": "websocket",
+      "connection": {
+        "sequence": 1,
+        "url": "wss://api.openai.com/v1/responses",
+        "protocols": [],
+        "close": {
+          "code": 1000,
+          "reason": ""
+        }
+      },
+      "events": [
+        {
+          "direction": "client",
+          "kind": "text",
+          "body": "{\"type\":\"response.create\",\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Follow the user's exact reply instruction.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Reply exactly: Alpha.\"}]},{\"type\":\"message\",\"id\":\"msg_ws_reconnect_1\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Alpha.\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Reply exactly: Beta.\"}]}],\"store\":false,\"max_output_tokens\":30,\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"text\":{\"verbosity\":\"low\"}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.created\",\"response\":{\"id\":\"resp_ws_reconnect_2\"}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\",\"id\":\"msg_ws_reconnect_2\",\"role\":\"assistant\",\"content\":[]}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_text.delta\",\"item_id\":\"msg_ws_reconnect_2\",\"delta\":\"Beta.\"}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_text.done\",\"item_id\":\"msg_ws_reconnect_2\",\"text\":\"Beta.\"}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\",\"id\":\"msg_ws_reconnect_2\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Beta.\"}]}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ws_reconnect_2\"}}"
+        }
+      ]
+    }
+  ]
+}

@@ -90,7 +90,6 @@ const config = (settings: Settings): Config => {
     credentials: settings.credentials,
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
     providerOptions: settings.providerOptions,
     region: settings.region,
   }

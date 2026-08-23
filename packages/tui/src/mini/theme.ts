@@ -6,12 +6,13 @@
 // the run footer + scrollback color model. Falls back to a hardcoded dark-mode
 // palette if detection fails.
 import { RGBA, SyntaxStyle, type CliRenderer, type ColorInput, type TerminalColors } from "@opentui/core"
-import type { TuiThemeCurrent } from "@opencode-ai/plugin/v1/tui"
 import { ansiToRgba } from "../theme/color"
 import { resolveThemeColors } from "../theme/resolve"
 import { terminalMode } from "../theme/system"
-import type { ThemeV1Json } from "../theme/v1"
+import type { Theme, ThemeV1Json } from "../theme/v1"
 import type { EntryKind, RunTuiConfig } from "./types"
+
+type ThemeCurrent = Omit<Theme, "_hasSelectedListItemText">
 
 type Tone = {
   body: ColorInput
@@ -66,9 +67,9 @@ export type RunTheme = {
   block: RunBlockTheme
 }
 
-type ThemeColor = Exclude<keyof TuiThemeCurrent, "thinkingOpacity">
+type ThemeColor = Exclude<keyof ThemeCurrent, "thinkingOpacity">
 
-type SharedSyntaxTheme = TuiThemeCurrent & {
+type SharedSyntaxTheme = ThemeCurrent & {
   _hasSelectedListItemText: boolean
 }
 
@@ -184,7 +185,7 @@ function splashShadow(indexed: RGBA[], base: RGBA, overlay: RGBA, value: number)
   return nearestIndexed(indexed, mixed)
 }
 
-export function resolveTheme(theme: ThemeV1Json, pick: "dark" | "light"): TuiThemeCurrent {
+export function resolveTheme(theme: ThemeV1Json, pick: "dark" | "light"): ThemeCurrent {
   const resolved = resolveThemeColors(theme, pick, (code) => RGBA.fromIndex(code, ansiToRgba(code)))
   return {
     ...resolved.theme,
@@ -340,7 +341,7 @@ function quantizeColor(indexed: RGBA[], rgba: RGBA): RGBA {
   return nearestIndexed(indexed, rgba)
 }
 
-function quantizeTheme(theme: TuiThemeCurrent, indexed: RGBA[]): TuiThemeCurrent {
+function quantizeTheme(theme: ThemeCurrent, indexed: RGBA[]): ThemeCurrent {
   const resolved = Object.fromEntries(
     Object.entries(theme)
       .filter(([key]) => key !== "thinkingOpacity")
@@ -353,7 +354,7 @@ function quantizeTheme(theme: TuiThemeCurrent, indexed: RGBA[]): TuiThemeCurrent
   }
 }
 
-function splashTheme(theme: TuiThemeCurrent, indexed: RGBA[]): RunSplashTheme {
+function splashTheme(theme: ThemeCurrent, indexed: RGBA[]): RunSplashTheme {
   const left = nearestIndexed(indexed, theme.textMuted)
   const right = nearestIndexed(indexed, theme.text)
   return {
@@ -364,8 +365,8 @@ function splashTheme(theme: TuiThemeCurrent, indexed: RGBA[]): RunSplashTheme {
 }
 
 function map(
-  footerTheme: TuiThemeCurrent,
-  scrollbackTheme: TuiThemeCurrent,
+  footerTheme: ThemeCurrent,
+  scrollbackTheme: ThemeCurrent,
   splash: RunSplashTheme,
   syntax?: SyntaxStyle,
 ): RunTheme {

@@ -34,6 +34,7 @@ import type {
 } from "./types"
 import { canonicalToolName, normalizeTool, toolOutputText, toolView } from "./tool"
 import { toolDisplayContent } from "../util/tool-display"
+import { isRecord } from "../util/record"
 
 const CHILD_MESSAGE_LIMIT = 80
 const CHILD_FRAME_LIMIT = 80
@@ -154,8 +155,7 @@ type DiscoveryJob = {
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) return value as Record<string, unknown>
-  return undefined
+  return isRecord(value) ? value : undefined
 }
 
 function text(value: unknown): string | undefined {

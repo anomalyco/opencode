@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
+import { Shell } from "@opencode-ai/schema/shell"
 import { Agent } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -12,6 +13,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Hash } from "@opencode-ai/util/hash"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
+import { Instructions } from "@opencode-ai/core/instructions/index"
 import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
@@ -23,6 +25,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
+import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -41,6 +44,7 @@ const it = testEffect(
       SessionStore.node,
       Session.node,
       SessionTransfer.node,
+      InstructionEntry.node,
     ]),
     [
       [Bus.node, Bus.configured({ persist: true })],
@@ -401,6 +405,188 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("replays a fork with stable projected identities", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location, title: "Parent" })
+      yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      yield* session.synthetic({ sessionID: parent.id, text: "Second", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+      const original = (yield* session.context(forked.id)).map((message) => message.id)
+      const recorded = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, forked.id))
+        .get()
+        .pipe(Effect.orDie)
+      if (!recorded) return yield* Effect.die(new Error("Fork event not found"))
+
+      yield* bus.remove(forked.id)
+      yield* db.delete(SessionTable).where(eq(SessionTable.id, forked.id)).run().pipe(Effect.orDie)
+      yield* bus.replay({
+        id: recorded.id,
+        created: recorded.created,
+        aggregateID: recorded.aggregate_id,
+        seq: recorded.seq,
+        type: recorded.type,
+        data: recorded.data,
+      })
+
+      expect((yield* session.context(forked.id)).map((message) => message.id)).toEqual(original)
+    }),
+  )
+
+  it.effect("inherits instruction entries when forking", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const entries = yield* InstructionEntry.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location })
+      yield* session.prompt({ sessionID: parent.id, text: "Fork context", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      yield* entries.put({ sessionID: parent.id, key: "deploy-target", value: "production" })
+      yield* entries.put({ sessionID: parent.id, key: "retired", value: true })
+      yield* entries.remove({ sessionID: parent.id, key: "retired" })
+      yield* Effect.forEach(
+        Array.from({ length: 20 }, (_, index) => index),
+        (index) => entries.put({ sessionID: parent.id, key: `entry-${String(index).padStart(2, "0")}`, value: index }),
+        { discard: true },
+      )
+
+      const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+      const inheritedList = yield* entries.list(forked.id)
+      const inheritedValues = yield* entries.load(forked.id).pipe(Effect.flatMap(Instructions.read))
+
+      expect(inheritedList).toHaveLength(21)
+      expect(inheritedList).toContainEqual({ key: "deploy-target", value: "production" })
+      expect(inheritedValues).toContainEqual({
+        key: Instructions.Key.make("api/retired"),
+        value: Instructions.removed,
+      })
+
+      const recorded = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, forked.id))
+        .get()
+        .pipe(Effect.orDie)
+      if (!recorded) return yield* Effect.die(new Error("Fork event not found"))
+      yield* entries.put({ sessionID: parent.id, key: "deploy-target", value: "staging" })
+      yield* entries.put({ sessionID: parent.id, key: "new-parent-entry", value: true })
+      yield* bus.remove(forked.id)
+      yield* db.delete(SessionTable).where(eq(SessionTable.id, forked.id)).run().pipe(Effect.orDie)
+      yield* bus.replay({
+        id: recorded.id,
+        created: recorded.created,
+        aggregateID: recorded.aggregate_id,
+        seq: recorded.seq,
+        type: recorded.type,
+        data: recorded.data,
+      })
+
+      expect(yield* entries.list(forked.id)).toEqual(inheritedList)
+      expect(yield* entries.load(forked.id).pipe(Effect.flatMap(Instructions.read))).toEqual(inheritedValues)
+    }),
+  )
+
+  it.effect("does not copy a running assistant into a fork", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location })
+      yield* session.prompt({ sessionID: parent.id, text: "Run both tools", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      const assistantMessageID = SessionMessage.ID.create()
+      const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: parent.id,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model,
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_running",
+        name: "shell",
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_running",
+        text: '{"command":"sleep 10"}',
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_running",
+        input: { command: "sleep 10" },
+        executed: true,
+      })
+
+      const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+
+      expect(yield* session.context(parent.id)).toMatchObject([
+        { type: "user", text: "Run both tools" },
+        {
+          type: "assistant",
+          content: [{ type: "tool", id: "call_running", state: { status: "running" } }],
+        },
+      ])
+      expect(yield* session.context(forked.id)).toMatchObject([{ type: "user", text: "Run both tools" }])
+    }),
+  )
+
+  it.effect("copies only settled shell messages into forks", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location })
+      yield* session.prompt({ sessionID: parent.id, text: "Run a shell", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      const shell = Shell.Info.make({
+        id: Shell.ID.make("sh_fork_running"),
+        status: "running",
+        command: "sleep 10",
+        cwd: location.directory,
+        shell: "/bin/sh",
+        file: "/tmp/sh_fork_running.out",
+        metadata: {},
+        time: { started: 0 },
+      })
+      yield* bus.publish(SessionEvent.Shell.Started, { sessionID: parent.id, shell })
+
+      const running = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+
+      expect(yield* session.context(parent.id)).toMatchObject([
+        { type: "user", text: "Run a shell" },
+        { type: "shell", command: "sleep 10", status: "running" },
+      ])
+      expect(yield* session.context(running.id)).toMatchObject([{ type: "user", text: "Run a shell" }])
+
+      yield* bus.publish(SessionEvent.Shell.Ended, {
+        sessionID: parent.id,
+        shell: { ...shell, status: "exited", exit: 0, time: { started: 0, completed: 1 } },
+        output: { output: "complete", cursor: 8, size: 8, truncated: false },
+      })
+      const completed = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+
+      expect(yield* session.context(running.id)).toMatchObject([{ type: "user", text: "Run a shell" }])
+      expect(yield* session.context(completed.id)).toMatchObject([
+        { type: "user", text: "Run a shell" },
+        { type: "shell", command: "sleep 10", status: "exited", output: { output: "complete" } },
+      ])
+    }),
+  )
+
   it.effect("rejects forking an empty session", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -470,6 +656,11 @@ describe("Session.create", () => {
       expect(forked).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
       expect(yield* session.context(beforeFirst.id)).toEqual([])
       expect(beforeFirst).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
+      expect(yield* session.context(complete.id)).toMatchObject([
+        { type: "user", text: "First" },
+        { type: "user", text: "Second" },
+        { type: "assistant", finish: "stop" },
+      ])
       expect(complete).toMatchObject({
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -832,6 +1023,134 @@ describe("Session.create", () => {
 })
 
 describe("SessionTransfer", () => {
+  it.effect("exports only settled projected messages", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const source = yield* session.create({ location })
+      yield* session.prompt({ sessionID: source.id, text: "Settled", resume: false })
+      yield* SessionInbox.promote(db, bus, source.id, "steer")
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: source.id,
+        assistantMessageID: SessionMessage.ID.create(),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+      })
+      yield* bus.publish(SessionEvent.Shell.Started, {
+        sessionID: source.id,
+        shell: Shell.Info.make({
+          id: Shell.ID.make("sh_transfer_export"),
+          status: "running",
+          command: "sleep 10",
+          cwd: location.directory,
+          shell: "/bin/sh",
+          file: "/tmp/sh_transfer_export.out",
+          metadata: {},
+          time: { started: 0 },
+        }),
+      })
+      yield* bus.publish(SessionEvent.Compaction.Started, {
+        sessionID: source.id,
+        reason: "manual",
+        recent: "pending",
+      })
+
+      expect((yield* transfer.export({ sessionID: source.id })).messages).toMatchObject([
+        { type: "user", text: "Settled" },
+      ])
+    }),
+  )
+
+  it.effect("imports only settled projected messages", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const { db } = yield* Database.Service
+      const template = yield* session.create({ location, title: "Transfer source" })
+      const sessionID = Session.ID.create()
+      const userID = SessionMessage.ID.create()
+      const runningAssistantID = SessionMessage.ID.create()
+      const completedAssistantID = SessionMessage.ID.create()
+      const runningShellID = SessionMessage.ID.create()
+      const completedShellID = SessionMessage.ID.create()
+      const runningCompactionID = SessionMessage.ID.create()
+      const completedCompactionID = SessionMessage.ID.create()
+      const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+
+      yield* transfer.import({
+        data: {
+          info: { ...template, id: sessionID },
+          messages: [
+            { id: userID, type: "user", text: "Settled", time: { created: DateTime.makeUnsafe(1) } },
+            {
+              id: runningAssistantID,
+              type: "assistant",
+              agent: Agent.ID.make("build"),
+              model,
+              content: [],
+              time: { created: DateTime.makeUnsafe(2) },
+            },
+            {
+              id: completedAssistantID,
+              type: "assistant",
+              agent: Agent.ID.make("build"),
+              model,
+              content: [],
+              time: { created: DateTime.makeUnsafe(3), completed: DateTime.makeUnsafe(4) },
+            },
+            {
+              id: runningShellID,
+              type: "shell",
+              shellID: Shell.ID.make("sh_transfer_running"),
+              command: "sleep 10",
+              status: "running",
+              time: { created: DateTime.makeUnsafe(5) },
+            },
+            {
+              id: completedShellID,
+              type: "shell",
+              shellID: Shell.ID.make("sh_transfer_completed"),
+              command: "pwd",
+              status: "exited",
+              exit: 0,
+              output: { output: "/project", cursor: 8, size: 8, truncated: false },
+              time: { created: DateTime.makeUnsafe(6), completed: DateTime.makeUnsafe(7) },
+            },
+            {
+              id: runningCompactionID,
+              type: "compaction",
+              status: "running",
+              reason: "manual",
+              summary: "pending",
+              recent: "pending",
+              time: { created: DateTime.makeUnsafe(8) },
+            },
+            {
+              id: completedCompactionID,
+              type: "compaction",
+              status: "completed",
+              reason: "manual",
+              summary: "summary",
+              recent: "recent",
+              time: { created: DateTime.makeUnsafe(9) },
+            },
+          ],
+        },
+        location,
+      })
+
+      expect((yield* session.messages({ sessionID, order: "asc" })).map((message) => message.id)).toEqual([
+        userID,
+        completedAssistantID,
+        completedShellID,
+        completedCompactionID,
+      ])
+      expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
+    }),
+  )
+
   it.effect("imports projected messages and reserves their aggregate sequence", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -845,7 +1164,15 @@ describe("SessionTransfer", () => {
 
       const imported = yield* transfer.import({
         data: {
-          info: { ...template, id: sessionID },
+          info: {
+            ...template,
+            id: sessionID,
+            time: {
+              ...template.time,
+              idle: DateTime.makeUnsafe(200),
+              viewed: DateTime.makeUnsafe(150),
+            },
+          },
           messages: [
             {
               id: sourceMessageID,
@@ -868,13 +1195,18 @@ describe("SessionTransfer", () => {
       const messages = yield* session.messages({ sessionID, order: "asc" })
 
       expect(imported).toMatchObject({ id: sessionID, title: "Exported", location })
+      expect(imported.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
       expect(messages).toMatchObject([
         { id: sourceMessageID, type: "user", text: "Imported message" },
         { id: errorMessageID, type: "compaction", error: { type: "test_error", message: "Original error" } },
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(2)
-      expect((yield* transfer.export({ sessionID })).messages).toEqual(messages)
-      expect((yield* transfer.export({ sessionID, sanitize: true })).messages).toMatchObject([
+      const exported = yield* transfer.export({ sessionID })
+      expect(exported.info.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
+      expect(exported.messages).toEqual(messages)
+      const sanitized = yield* transfer.export({ sessionID, sanitize: true })
+      expect(sanitized.info.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
+      expect(sanitized.messages).toMatchObject([
         { id: sourceMessageID, text: `[redacted:text:${sourceMessageID}]` },
         { id: errorMessageID, error: { type: "test_error", message: "Original error" } },
       ])
@@ -901,6 +1233,33 @@ describe("SessionTransfer", () => {
       expect(exit._tag).toBe("Failure")
       expect((yield* session.get(existing.id)).title).toBe("Existing")
       expect(yield* session.messages({ sessionID: existing.id })).toEqual([])
+    }),
+  )
+
+  it.effect("clamps an imported viewed watermark to its idle transition", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const template = yield* session.create({ location })
+      const imported = yield* transfer.import({
+        data: {
+          info: {
+            ...template,
+            id: Session.ID.create(),
+            outcome: "succeeded",
+            time: {
+              ...template.time,
+              idle: DateTime.makeUnsafe(200),
+              viewed: DateTime.makeUnsafe(250),
+            },
+          },
+          messages: [],
+        },
+        location,
+      })
+
+      expect(imported.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(200) })
+      expect(imported.outcome).toBe("succeeded")
     }),
   )
 })

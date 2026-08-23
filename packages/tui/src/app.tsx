@@ -1,6 +1,6 @@
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
-import { Deferred, Effect } from "effect"
+import { Effect, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/util/global"
@@ -96,7 +96,6 @@ import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
 import { DialogVariant } from "./component/dialog-variant"
-import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
@@ -266,7 +265,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             Effect.catch((error) => Effect.sync(() => log("error", "Failed to dispose TUI clipboard", { error }))),
           ),
       )
-      win32DisableProcessedInput()
       const finalizers = new Set<() => Promise<void>>()
       yield* Effect.addFinalizer(() =>
         Effect.promise(async () => {
@@ -276,13 +274,13 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             .forEach((result) => log("error", "Failed to dispose TUI resource", { error: result.reason }))
         }),
       )
-      const shutdown = yield* Deferred.make<unknown>()
+      const shutdown = yield* Latch.make()
       const onSighup = () => destroyRenderer(renderer)
       yield* Effect.acquireRelease(
         Effect.sync(() => process.on("SIGHUP", onSighup)),
         () => Effect.sync(() => process.off("SIGHUP", onSighup)),
       )
-      renderer.once("destroy", () => Deferred.doneUnsafe(shutdown, Effect.void))
+      renderer.once("destroy", () => shutdown.openUnsafe())
       yield* Effect.tryPromise(async () => {
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
@@ -445,12 +443,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
           renderer.requestRender()
         }
       })
-      yield* Deferred.await(shutdown)
+      yield* shutdown.await
       return { epilogue: exit.epilogue, reason: exit.reason }
     }),
   )
   yield* Effect.sync(() => {
-    win32FlushInputBuffer()
     if (result.reason !== undefined)
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
     if (result.epilogue) process.stdout.write(result.epilogue + "\n")
@@ -489,6 +486,7 @@ function App(props: { pair?: DialogPairCredentials }) {
     if (route.data.type !== "session") return
     const session = data.session.get(route.data.sessionID)
     if (!session) return
+    if (data.session.creating(session.id)) return
     if (session.location.workspaceID !== undefined || terminalEnvironment.variables === undefined) return
     void client.api.session
       .environment({ sessionID: session.id, variables: terminalEnvironment.variables })
@@ -1284,7 +1282,9 @@ function App(props: { pair?: DialogPairCredentials }) {
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={copyOnSelectEnabled() ? () => Selection.copy(renderer, toast, clipboard) : undefined}
+      onMouseUp={
+        copyOnSelectEnabled() ? (event) => Selection.copyOnSelectRelease(event, renderer, toast, clipboard) : undefined
+      }
     >
       <box
         flexGrow={1}
@@ -1376,7 +1376,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         <StartupLoading ready={plugins.ready} />
       </Show>
       <Show when={showReconnecting()}>
-        <Reconnecting />
+        <Reconnecting managed={client.restart !== undefined} />
       </Show>
       <MigrationOverlay />
       <Toast />

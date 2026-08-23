@@ -26,6 +26,7 @@ const render = (skills: ReadonlyArray<Summary>) =>
   [
     "Skills provide specialized instructions and workflows for specific tasks.",
     "Use the skill tool to load a skill when a task matches its description.",
+    "When the user references a skill with @skill-id, load that skill with the skill tool.",
     ...(skills.length === 0
       ? ["No skills are currently available."]
       : ["<available_skills>", ...entries(skills), "</available_skills>"]),
@@ -71,8 +72,7 @@ const layer = Layer.effect(
       load: Effect.fn("SkillInstructions.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return Instructions.empty
-        const permitted = Skill.available(yield* skills.list(), agent)
-        const available = permitted
+        const available = Skill.available(yield* skills.list(), agent)
           .flatMap((skill) =>
             skill.description === undefined || skill.autoinvoke === false
               ? []

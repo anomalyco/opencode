@@ -94,6 +94,12 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused skill.transform"),
       reload: () => Effect.die("unused skill.reload"),
     },
+    storage: overrides.storage ?? {
+      get: () => Effect.die("unused storage.get"),
+      set: () => Effect.die("unused storage.set"),
+      remove: () => Effect.die("unused storage.remove"),
+      scan: () => Effect.die("unused storage.scan"),
+    },
     shell: overrides.shell ?? {
       hook: () => Effect.die("unused shell.hook"),
     },
@@ -111,6 +117,8 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       hook: overrides.session?.hook ?? (() => Effect.die("unused session.hook")),
       create: overrides.session?.create ?? (() => Effect.die("unused session.create")),
       get: overrides.session?.get ?? (() => Effect.die("unused session.get")),
+      switchAgent: overrides.session?.switchAgent ?? (() => Effect.die("unused session.switchAgent")),
+      switchModel: overrides.session?.switchModel ?? (() => Effect.die("unused session.switchModel")),
       prompt: overrides.session?.prompt ?? (() => Effect.die("unused session.prompt")),
       generate: overrides.session?.generate ?? (() => Effect.die("unused session.generate")),
       command: overrides.session?.command ?? (() => Effect.die("unused session.command")),

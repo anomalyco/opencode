@@ -55,7 +55,6 @@ export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOp
     baseURL: settings.baseURL,
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    limits: settings.limits,
     provider: settings.provider,
     providerOptions: settings.providerOptions,
   }).model(modelID)

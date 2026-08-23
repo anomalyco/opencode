@@ -1,7 +1,9 @@
 import type {
   AgentInfo,
   CommandInfo,
+  FormCancelInput,
   FormInfo,
+  FormReplyInput,
   IntegrationInfo,
   LocationRef,
   McpResource,
@@ -91,6 +93,8 @@ export interface Data {
       list(sessionID: string, location?: LocationRef): Array<FormInfo & { readonly location?: LocationRef }> | undefined
       sync(sessionID: string, location?: LocationRef): Promise<void>
       invalidate(sessionID: string, location?: LocationRef): void
+      reply(input: FormReplyInput, location?: LocationRef): Promise<void>
+      cancel(input: FormCancelInput, location?: LocationRef): Promise<void>
     }
   }
   readonly project: {

@@ -481,7 +481,7 @@ export function transformSession(input: TransformInput): TransformResult {
 
 export function status(): Effect.Effect<Status, never, Database.Service> {
   return Effect.gen(function* () {
-    const { db } = yield* Database.Service
+    const db = (yield* Database.Service).db
     if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
     const state = yield* readState(db)
     if (runtimeState.status === "running") return runtimeState
@@ -523,7 +523,7 @@ function updateProgress(progress: Progress) {
 export function run(options: Options = {}): Effect.Effect<RunResult, never, Database.Service | Global.Service> {
   return lock.withPermit(
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
+      const db = (yield* Database.Service).db
       const global = yield* Global.Service
       const state = yield* readState(db)
       if (state?.phase === "completed") return { status: "completed" as const }

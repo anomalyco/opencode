@@ -1,6 +1,4 @@
-import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
-import appPlugin from "@opencode-ai/app/vite"
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -11,9 +9,10 @@ const channel = (() => {
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
 
+const appPlugin = (await import("@opencode-ai/app/vite")).default
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
-    ? sentryVitePlugin({
+    ? (await import("@sentry/vite-plugin")).sentryVitePlugin({
         authToken: process.env.SENTRY_AUTH_TOKEN,
         org: process.env.SENTRY_ORG,
         project: process.env.SENTRY_PROJECT,
@@ -34,11 +33,12 @@ export default defineConfig({
       "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
     },
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         input: { index: "src/main/index.ts" },
         // Keep this identical to electron-vite's Node 20.11+ shim. Its regex insertion can
-        // corrupt bundled TypeScript, while a Rollup banner places the shim safely.
+        // corrupt bundled TypeScript, while an output banner places the shim safely.
         output: {
+          format: "es",
           banner: `
 // -- CommonJS Shims --
 import __cjs_mod__ from 'node:module';
@@ -56,13 +56,14 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         enforce: "pre",
         resolveId(s) {
           if (s === "@lydell/node-pty") return nodePtyPkg
+          return undefined
         },
       },
     ],
   },
   preload: {
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         input: { index: "src/preload/index.ts" },
         output: {
           format: "cjs",
@@ -72,6 +73,9 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     },
   },
   renderer: {
+    experimental: {
+      bundledDev: true,
+    },
     define: {
       "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
@@ -81,7 +85,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     root: "src/renderer",
     build: {
       sourcemap: true,
-      rollupOptions: {
+      rolldownOptions: {
         input: {
           main: "src/renderer/index.html",
         },

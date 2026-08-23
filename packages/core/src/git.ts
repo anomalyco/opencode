@@ -171,7 +171,7 @@ const layer = Layer.effect(
     const discover = Effect.fn("Git.repo.discover")(function* (input: AbsolutePath) {
       const dotgit = yield* fs.up({ targets: [".git"], start: input, mode: "first" }).pipe(
         Effect.map((matches) => matches[0]),
-        Effect.catch(() => Effect.succeed(undefined)),
+        Effect.orElseSucceed(() => undefined),
       )
       if (!dotgit) return undefined
 
@@ -346,17 +346,9 @@ const layer = Layer.effect(
       gitDirectory: AbsolutePath
       seed?: Repository
     }) {
-      yield* fs.ensureDir(input.gitDirectory).pipe(
-        Effect.mapError(
-          (cause) =>
-            new OperationError({
-              operation: "create",
-              directory: input.gitDirectory,
-              message: "Failed to create Git storage",
-              cause,
-            }),
-        ),
-      )
+      const operationError = (message: string) => (cause: unknown) =>
+        new OperationError({ operation: "create", directory: input.gitDirectory, message, cause })
+      yield* fs.ensureDir(input.gitDirectory).pipe(Effect.mapError(operationError("Failed to create Git storage")))
       const repository = new Repository({
         worktree: input.worktree,
         gitDirectory: input.gitDirectory,
@@ -371,48 +363,20 @@ const layer = Layer.effect(
         yield* fs.writeFileString(config, `${current.endsWith("\n") ? "\n" : "\n\n"}${snapshotConfigInclude}`, {
           flag: "a",
         })
-      }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new OperationError({
-              operation: "create",
-              directory: input.gitDirectory,
-              message: "Failed to configure Git storage",
-              cause,
-            }),
-        ),
-      )
+      }).pipe(Effect.mapError(operationError("Failed to configure Git storage")))
       if (!input.seed) return repository
-      yield* fs.ensureDir(path.join(input.gitDirectory, "objects", "info")).pipe(
-        Effect.mapError(
-          (cause) =>
-            new OperationError({
-              operation: "create",
-              directory: input.gitDirectory,
-              message: "Failed to configure shared Git objects",
-              cause,
-            }),
-        ),
-      )
+      yield* fs
+        .ensureDir(path.join(input.gitDirectory, "objects", "info"))
+        .pipe(Effect.mapError(operationError("Failed to configure shared Git objects")))
       yield* fs
         .writeFileString(
           path.join(input.gitDirectory, "objects", "info", "alternates"),
           path.join(input.seed.commonDirectory, "objects") + "\n",
         )
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new OperationError({
-                operation: "create",
-                directory: input.gitDirectory,
-                message: "Failed to configure shared Git objects",
-                cause,
-              }),
-          ),
-        )
+        .pipe(Effect.mapError(operationError("Failed to configure shared Git objects")))
       yield* fs
         .copyFile(path.join(input.seed.gitDirectory, "index"), path.join(input.gitDirectory, "index"))
-        .pipe(Effect.catch(() => Effect.void))
+        .pipe(Effect.ignore)
       return repository
     })
 
@@ -439,7 +403,7 @@ const layer = Layer.effect(
         ? new Set(
             (yield* repositoryOperation("refresh", input.ignores, ["check-ignore", "--no-index", "--stdin", "-z"], {
               stdin: candidates.join("\0") + "\0",
-            }).pipe(Effect.catch(() => Effect.succeed({ text: "", stderr: "" })))).text
+            }).pipe(Effect.orElseSucceed(() => ({ text: "", stderr: "" })))).text
               .split("\0")
               .filter(Boolean),
           )
@@ -454,7 +418,7 @@ const layer = Layer.effect(
                 Effect.map((info) =>
                   info.type === "File" && Number(info.size) > maximum ? RelativePath.make(item) : undefined,
                 ),
-                Effect.catch(() => Effect.succeed(undefined)),
+                Effect.orElseSucceed(() => undefined),
               ),
             { concurrency: 8 },
           )).filter((item): item is RelativePath => item !== undefined)
@@ -606,7 +570,7 @@ const layer = Layer.effect(
       )
     })
 
-    const entry = Effect.fnUntraced(function* (repository: Repository, tree: TreeID, file: RelativePath) {
+    const hasEntry = Effect.fnUntraced(function* (repository: Repository, tree: TreeID, file: RelativePath) {
       const text = (yield* repositoryOperation("restore", repository, [
         "ls-tree",
         "-z",
@@ -614,15 +578,14 @@ const layer = Layer.effect(
         "--",
         file,
       ])).text.replace(/\0$/, "")
-      if (!text) return
-      const match = text.match(/^(\d+)\s+\w+\s+([0-9a-f]+)\t/)
-      if (!match)
+      if (!text) return false
+      if (!/^\d+\s+\w+\s+[0-9a-f]+\t/.test(text))
         return yield* new OperationError({
           operation: "restore",
           directory: repository.worktree,
           message: `Invalid tree entry for ${file}`,
         })
-      return { mode: match[1], object: match[2] }
+      return true
     })
 
     const restore = Effect.fn("Git.tree.restore")(
@@ -633,7 +596,7 @@ const layer = Layer.effect(
             input.files,
             ([file, tree]) =>
               Effect.gen(function* () {
-                if (yield* entry(input.repository, tree, file)) {
+                if (yield* hasEntry(input.repository, tree, file)) {
                   yield* repositoryOperation("restore", input.repository, ["checkout", tree, "--", file])
                   return
                 }
@@ -752,7 +715,7 @@ interface Result {
 
 function run(cwd: string, proc: AppProcess.Interface) {
   return (args: string[]) =>
-    execute(cwd, proc)(args).pipe(Effect.catch(() => Effect.succeed({ exitCode: 1, text: "", stderr: "" })))
+    execute(cwd, proc)(args).pipe(Effect.orElseSucceed(() => ({ exitCode: 1, text: "", stderr: "" })))
 }
 
 function execute(cwd: string, proc: AppProcess.Interface) {

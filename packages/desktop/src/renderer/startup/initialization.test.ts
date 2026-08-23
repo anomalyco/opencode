@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Ipc } from "../../shared/ipc-contract"
-import { initializationData, initializationReady } from "./initialization"
+import { createSidecarResolver, initializationData } from "./initialization"
 
 describe("desktop renderer initialization", () => {
   test("throws the original initialization error before rendering server providers", () => {
@@ -15,10 +14,8 @@ describe("desktop renderer initialization", () => {
     }
   })
 
-  test("removes Electron's remote invocation wrapper from startup errors", () => {
-    const error = new Error(
-      `Error invoking remote method '${Ipc.app.awaitInitialization}': Error: Cannot migrate session_message projections`,
-    )
+  test("preserves clean RPC startup errors", () => {
+    const error = new Error("Cannot migrate session_message projections")
 
     try {
       initializationData(Object.assign(() => undefined, { error }))
@@ -49,26 +46,47 @@ describe("desktop renderer initialization", () => {
     expect((caught as Error & { localServerStartup?: boolean }).localServerStartup).toBe(true)
   })
 
-  test("checks initialization errors before rendering server providers", () => {
-    const error = new Error("sidecar startup failed")
+  test("refreshes the managed sidecar endpoint", async () => {
+    const sidecar = { url: "http://127.0.0.1:4321", username: "opencode", password: "next" }
+    const updates: (typeof sidecar)[] = []
+    const resolve = createSidecarResolver({
+      api: { reconnectService: async () => sidecar },
+      current: () => undefined,
+      update: (next) => updates.push(next),
+    })
 
-    expect(() => initializationReady(Object.assign(() => undefined, { error, loading: false }))).toThrow(error)
+    expect(await resolve(new AbortController().signal)).toEqual(sidecar)
+    expect(updates).toEqual([sidecar])
   })
 
-  test("waits for pending initialization without reading it", () => {
-    let reads = 0
+  test("keeps the current sidecar when reconnection resolves the same endpoint", async () => {
+    const sidecar = { url: "http://127.0.0.1:4321", username: "opencode", password: "same" }
+    const updates: (typeof sidecar)[] = []
+    const resolve = createSidecarResolver({
+      api: { reconnectService: async () => ({ ...sidecar }) },
+      current: () => sidecar,
+      update: (next) => updates.push(next),
+    })
 
-    expect(
-      initializationReady(
-        Object.assign(
-          () => {
-            reads++
-            return undefined
-          },
-          { error: undefined, loading: true },
-        ),
-      ),
-    ).toBe(false)
-    expect(reads).toBe(0)
+    expect(await resolve(new AbortController().signal)).toEqual(sidecar)
+    expect(updates).toEqual([])
+  })
+
+  test("does not publish a sidecar resolved after cancellation", async () => {
+    const sidecar = { url: "http://127.0.0.1:4321", username: "opencode", password: "next" }
+    const pending = Promise.withResolvers<typeof sidecar>()
+    const updates: (typeof sidecar)[] = []
+    const resolve = createSidecarResolver({
+      api: { reconnectService: () => pending.promise },
+      current: () => undefined,
+      update: (next) => updates.push(next),
+    })
+    const abort = new AbortController()
+    const result = resolve(abort.signal)
+    abort.abort()
+    pending.resolve(sidecar)
+
+    await expect(result).rejects.toBe(abort.signal.reason)
+    expect(updates).toEqual([])
   })
 })

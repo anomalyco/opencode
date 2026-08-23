@@ -2,6 +2,7 @@ export * as Plugin from "./plugin.js"
 export { Event, ID, Info, Source } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
+import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "./app.js"
 import { Cause, Context, Effect, Exit, Layer, Logger, References, Scope, Semaphore } from "effect"
@@ -11,6 +12,7 @@ import { Catalog } from "./catalog.js"
 import { Command } from "./command.js"
 import { Bus } from "./bus.js"
 import { Integration } from "./integration.js"
+import { KV } from "./kv.js"
 import { MCP } from "./mcp/index.js"
 import { Location } from "./location.js"
 import { PluginHost } from "./plugin/host.js"
@@ -30,7 +32,7 @@ export interface Interface {
   readonly list: () => Effect.Effect<Plugin.Info[]>
 }
 
-export type Versioned = import("@opencode-ai/plugin/effect/plugin").Plugin & {
+export type Versioned = PluginDefinition & {
   readonly version: string
   readonly source?: Plugin.Source
 }
@@ -41,16 +43,18 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const kv = yield* KV.Service
     const scope = yield* Scope.make()
     const active = new Map<Plugin.ID, { readonly plugin: Versioned; readonly scope: Scope.Closeable }>()
     const lock = Semaphore.makeUnsafe(1)
     let inventory: Plugin.Info[] = []
-    let host: Parameters<import("@opencode-ai/plugin/effect/plugin").Plugin["effect"]>[0]
-
+    let host: Parameters<PluginDefinition["effect"]>[0]
     const load = Effect.fnUntraced(function* (plugin: Versioned) {
       const child = yield* Scope.fork(scope)
       const inherit = yield* State.inherit()
-      const loaded = yield* Effect.suspend(() => plugin.effect(host)).pipe(
+      const loaded = yield* Effect.suspend(() =>
+        plugin.effect({ ...host, storage: PluginHost.storage(kv, plugin.id) }),
+      ).pipe(
         inherit,
         Effect.updateContext((context: Context.Context<never>) =>
           Context.make(Scope.Scope, child).pipe(
@@ -189,6 +193,7 @@ export const node = makeLocationNode({
     Catalog.node,
     Command.node,
     Integration.node,
+    KV.node,
     MCP.node,
     Location.node,
     Reference.node,

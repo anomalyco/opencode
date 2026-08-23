@@ -65,6 +65,7 @@ async function renderSubagent(interrupt: "ctrl+i" | "none") {
           view={view}
           subagent={subagents}
           theme={() => RUN_THEME_FALLBACK}
+          tuiConfig={config}
           miniSettings={() => ({
             thinking: "hide",
             shell_output: "hide",

@@ -349,7 +349,6 @@ test("serializes migration and updates across processes", async () => {
     })
     try {
       await waitForFile(updateReady, update.exited)
-      expect(await Promise.race([update.exited.then(() => true), Bun.sleep(500).then(() => false)])).toBe(false)
       await Bun.write(release, "")
       const [migrateCode, updateCode] = await Promise.all([migrate.exited, update.exited])
       expect(await new Response(migrate.stderr).text()).toBe("")

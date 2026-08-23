@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Exit, Layer, Stream } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { Config } from "@opencode-ai/core/config"
-import { Document, Info } from "@opencode-ai/schema/config"
-import { ConfigMedia } from "@opencode-ai/schema/config/media"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -90,7 +88,7 @@ const permission = permissionLayer({
     ),
 })
 const config = Config.testLayer()
-const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
+const imageLayer = AppNodeBuilder.build(Image.node)
 const testFileSystem = Layer.effect(
   FSUtil.Service,
   FSUtil.Service.use((fs) =>
@@ -130,10 +128,9 @@ const mutation = Layer.succeed(
     },
   }),
 )
-const unavailableImage = Layer.succeed(
-  Image.Service,
-  Image.Service.of({ normalize: () => Effect.fail(new Image.ResizerUnavailableError()) }),
-)
+const unavailableImage = Layer.mock(Image.Service, {
+  normalize: () => Effect.fail(new Image.ResizerUnavailableError()),
+})
 const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
   Layer.mergeAll(
     AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode]), [
@@ -146,8 +143,9 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
       [Location.node, locationLayer],
       [Global.node, Global.layerWith({ data: Global.Path.data })],
     ]),
-    // Merge by reference so Config.Test resolves to the memoized instance.
+    // Merge by reference so Config.Test and Image.Service resolve to the memoized instances.
     config,
+    imageLayer,
   )
 const it = testEffect(readLayer(imageLayer))
 const itWithoutResizer = testEffect(readLayer(unavailableImage))
@@ -384,17 +382,8 @@ describe("ReadTool", () => {
         encoding: "base64",
         mime: "image/png",
       }
-      const configTest = yield* Config.Test
-      yield* configTest.setEntries([
-        new Document({
-          type: "document",
-          info: new Info({
-            media: new ConfigMedia.Info({
-              image: new ConfigMedia.Image({ auto_resize: false, max_width: 4 }),
-            }),
-          }),
-        }),
-      ])
+      const image = yield* Image.Service
+      yield* image.transform((draft) => draft.configure({ autoResize: false, maxWidth: 4 }))
       const registry = yield* Tool.Service
 
       expect(
@@ -427,15 +416,8 @@ describe("ReadTool", () => {
         encoding: "base64",
         mime: "image/png",
       }
-      const configTest = yield* Config.Test
-      yield* configTest.setEntries([
-        new Document({
-          type: "document",
-          info: new Info({
-            media: new ConfigMedia.Info({ image: new ConfigMedia.Image({ max_width: 4 }) }),
-          }),
-        }),
-      ])
+      const image = yield* Image.Service
+      yield* image.transform((draft) => draft.configure({ maxWidth: 4 }))
       const registry = yield* Tool.Service
       const result = yield* executeTool(registry, {
         sessionID,
@@ -466,17 +448,8 @@ describe("ReadTool", () => {
         encoding: "base64",
         mime: "image/png",
       }
-      const configTest = yield* Config.Test
-      yield* configTest.setEntries([
-        new Document({
-          type: "document",
-          info: new Info({
-            media: new ConfigMedia.Info({
-              image: new ConfigMedia.Image({ max_base64_bytes: 1 }),
-            }),
-          }),
-        }),
-      ])
+      const image = yield* Image.Service
+      yield* image.transform((draft) => draft.configure({ maxBase64Bytes: 1 }))
       const registry = yield* Tool.Service
 
       expect(

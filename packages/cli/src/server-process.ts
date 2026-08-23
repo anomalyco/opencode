@@ -1,17 +1,17 @@
 export * as ServerProcess from "./server-process"
 
 import { NodeServices } from "@effect/platform-node"
-import { Service, type DiscoverOptions, type Info } from "@opencode-ai/client/effect/service"
+import { Service, type DiscoverOptions } from "@opencode-ai/client/effect/service"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode-ai/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
-import path from "node:path"
-import { Effect, FileSystem, Option, Redacted, Schedule, Schema } from "effect"
+import { Effect, Option, Redacted, Schedule } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
+import { ServiceRegistration } from "./services/service-registration"
 import { Updater } from "./services/updater"
 import { WebUi } from "./services/web-ui"
 
@@ -120,7 +120,13 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               onListen: (address, shutdown) =>
                 Effect.gen(function* () {
                   if (!config.password) yield* ServiceConfig.password(password)
-                  return yield* register(address, password, instanceID, serviceOptions.file, shutdown)
+                  return yield* ServiceRegistration.register({
+                    address,
+                    password,
+                    id: instanceID,
+                    file: serviceOptions.file,
+                    shutdown,
+                  })
                 }),
             },
         transform,
@@ -154,70 +160,6 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           ? waitForStdinClose()
           : Effect.never
     }).pipe(Effect.annotateLogs({ role: "server" })),
-  )
-})
-
-const infoJson = Schema.fromJsonString(Service.Info)
-const encodeInfo = Schema.encodeEffect(infoJson)
-const decodeInfo = Schema.decodeUnknownEffect(infoJson)
-
-const register = Effect.fnUntraced(function* (
-  address: HttpServer.Address,
-  password: string,
-  id: string,
-  file: string,
-  shutdown: Effect.Effect<void>,
-) {
-  const fs = yield* FileSystem.FileSystem
-  const temp = file + "." + id + ".tmp"
-  yield* fs.makeDirectory(path.dirname(file), { recursive: true })
-  const info = {
-    id,
-    version: OPENCODE_VERSION,
-    url: HttpServer.formatAddress(address),
-    pid: process.pid,
-    password,
-  }
-  const encoded = yield* encodeInfo(info)
-  const current = fs.readFileString(file).pipe(Effect.flatMap(decodeInfo))
-  const owns = (found: Info) =>
-    found.id === info.id &&
-    found.version === info.version &&
-    found.url === info.url &&
-    found.pid === info.pid &&
-    found.password === info.password
-  yield* fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, file)))
-  yield* current.pipe(
-    Effect.catchCause((cause) =>
-      Effect.logWarning("managed service registration check failed; shutting down", {
-        cause,
-        serviceID: id,
-        servicePID: process.pid,
-        registration: file,
-      }).pipe(Effect.andThen(Effect.failCause(cause))),
-    ),
-    Effect.tap((found) =>
-      owns(found)
-        ? Effect.void
-        : Effect.logWarning("managed service registration replaced; shutting down", {
-            serviceID: id,
-            servicePID: process.pid,
-            registration: file,
-            observedServiceID: found.id,
-            observedServicePID: found.pid,
-            observedVersion: found.version,
-            observedURL: found.url,
-          }),
-    ),
-    Effect.filterOrFail(owns),
-    Effect.repeat(Schedule.spaced("5 seconds")),
-    Effect.ignore,
-    Effect.andThen(shutdown),
-    Effect.forkScoped,
-  )
-  return current.pipe(
-    Effect.flatMap((found) => (owns(found) ? fs.remove(file) : Effect.void)),
-    Effect.ignore,
   )
 })
 

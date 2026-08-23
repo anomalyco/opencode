@@ -4,42 +4,81 @@
 import {
   AppBaseProviders,
   AppInterface,
+  currentRoute,
   PlatformProvider,
+  preloadRoute,
   ServerConnection,
   useCommand,
+  useCurrentRoute,
   useLanguage,
+  useTabs,
   useWslServers,
+  type LayoutRoute,
   type UpdaterPlatform,
-} from "@opencode-ai/app"
+} from "@opencode-ai/app/desktop"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
-import { createEffect, createMemo, createResource, Show } from "solid-js"
-import type { ElectronAPI } from "../preload/types"
-import { MigrationStatus } from "./migration-status"
+import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
+import { createStore } from "solid-js/store"
+import type { ElectronAPI } from "./api-types"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform, type DesktopWindowState } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
-import { initializationData } from "./startup/initialization"
+import { createSidecarResolver, initializationData, sidecarHttp } from "./startup/initialization"
 import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 
+const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
+
 export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; version: string }) {
-  const [windowState] = createResource(() => props.api.getWindowID().then((id) => ({ id, version: props.version })))
+  const windowState = { id: props.api.getWindowID(), version: props.version }
+  const url = new URL(getLastActiveUrl(windowState.id), "http://localhost")
+  const route = currentRoute(url.pathname, url.search)
+  const [startup, setStartup] = createStore<{ ready: boolean; visible: boolean; route: LayoutRoute }>({
+    ready: false,
+    visible: true,
+    route,
+  })
   return (
-    <Show when={windowState.latest} fallback={<LoadingSplash />} keyed>
-      {(state) => <DesktopWindow api={props.api} updater={props.updater} windowState={state} />}
-    </Show>
+    <>
+      <DesktopWindow
+        api={props.api}
+        updater={props.updater}
+        windowState={windowState}
+        onReady={() => setStartup("ready", true)}
+        onRoute={(route) => setStartup("route", route)}
+      />
+      <Show when={startup.visible}>
+        <div
+          class="fixed inset-0 z-[100] transition-opacity duration-300 ease-out"
+          classList={{ "pointer-events-none opacity-0": startup.ready }}
+          onTransitionEnd={(event) => {
+            if (event.target !== event.currentTarget || !startup.ready) return
+            setStartup("visible", false)
+          }}
+        >
+          <LoadingSplash deep={startup.route.type === "draft"} />
+        </div>
+      </Show>
+    </>
   )
 }
 
-function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; windowState: DesktopWindowState }) {
+function DesktopWindow(props: {
+  api: ElectronAPI
+  updater: UpdaterPlatform
+  windowState: DesktopWindowState
+  onReady: () => void
+  onRoute: (route: LayoutRoute) => void
+}) {
   const platform = createDesktopPlatform(props.api, props.windowState, props.updater)
-  const [sidecar] = createResource(() => props.api.awaitInitialization())
+  const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(() => preloadStoredLocale(platform))
+  const [initialRoute] = createResource(() => preloadRoute(getLastActiveUrl(props.windowState.id)))
   const router = (routerProps: BaseRouterProps) => (
     <DesktopMemoryRouter {...routerProps} windowID={props.windowState.id} />
   )
@@ -58,11 +97,8 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
           displayName: language.t("desktop.server.local"),
           type: "sidecar",
           variant: "base",
-          http: {
-            url: data.url,
-            username: data.username ?? undefined,
-            password: data.password ?? undefined,
-          },
+          http: sidecarHttp(data),
+          reconnect: createSidecarResolver({ api: props.api, current: sidecar, update: setSidecar }),
         })
       }
       list.push(...readyWslConnections(wslServers.data, language.t("wsl.server.label")))
@@ -73,19 +109,26 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
     )
 
     return (
-      <Show when={ready()} fallback={<LoadingSplash />}>
+      <Show when={ready()}>
         <Show when={effectiveDefaultServer()} keyed>
           {(key) => (
             <AppInterface defaultServer={key} servers={servers()} router={router}>
+              <DesktopStartupReady
+                routeReady={() => !initialRoute.loading}
+                onReady={props.onReady}
+                onRoute={props.onRoute}
+              />
               <DesktopFirstLaunchOnboarding
                 api={props.api}
                 initialUrl={getLastActiveUrl(props.windowState.id)}
                 serverKey={key}
               />
               <DesktopEffects api={props.api} />
-              <Show when={initializationData(sidecar)} keyed>
-                {(server) => <MigrationStatus server={server} />}
-              </Show>
+              <Suspense fallback={null}>
+                <Show when={initializationData(sidecar)} keyed>
+                  {(server) => <MigrationStatus server={server} />}
+                </Show>
+              </Suspense>
             </AppInterface>
           )}
         </Show>
@@ -98,11 +141,27 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
       <AppBaseProviders
         locale={locale.latest}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
+        onThemeApplied={() => void props.api.themeReady()}
       >
         <Show when={true}>{(_) => <ReadyApp />}</Show>
       </AppBaseProviders>
     </PlatformProvider>
   )
+}
+
+function DesktopStartupReady(props: {
+  routeReady: () => boolean
+  onReady: () => void
+  onRoute: (route: LayoutRoute) => void
+}) {
+  const tabs = useTabs()
+  const route = useCurrentRoute()
+  createEffect(() => props.onRoute(route()))
+  createEffect(() => {
+    if (!props.routeReady() || !tabs.ready() || !tabs.infoReady()) return
+    props.onReady()
+  })
+  return null
 }
 
 function DesktopEffects(props: { api: ElectronAPI }) {

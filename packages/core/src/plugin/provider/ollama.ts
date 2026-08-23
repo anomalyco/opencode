@@ -96,13 +96,10 @@ export function make(origin = "http://127.0.0.1:11434", interval: Duration.Input
               input: ["text", ...(item.show.capabilities?.includes("vision") ? ["image"] : [])],
               output: ["text"],
             }
-            model.limit = {
-              context:
-                Object.entries(item.show.model_info ?? {}).flatMap(([key, value]) =>
-                  key.endsWith(".context_length") && typeof value === "number" && value > 0 ? [value] : [],
-                )[0] ?? 0,
-              output: 0,
-            }
+            const context = Object.entries(item.show.model_info ?? {}).flatMap(([key, value]) =>
+              key.endsWith(".context_length") && typeof value === "number" && value > 0 ? [value] : [],
+            )[0]
+            if (context !== undefined) model.limit.context = context
           })
         }
       })
@@ -151,7 +148,7 @@ export function make(origin = "http://127.0.0.1:11434", interval: Duration.Input
                         )
                   shows.set(model.model, { digest: model.digest, info })
                   return { ...model, show: info }
-                }).pipe(Effect.catch(() => Effect.succeed(undefined))),
+                }).pipe(Effect.orElseSucceed(() => undefined)),
               { concurrency: 4 },
             )
             const filtered = models.filter(

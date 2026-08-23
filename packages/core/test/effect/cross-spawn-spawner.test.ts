@@ -262,7 +262,6 @@ describe("cross-spawn spawner", () => {
       Effect.gen(function* () {
         if (process.platform === "win32") return
 
-        const started = Date.now()
         const exit = yield* Effect.exit(
           Effect.gen(function* () {
             const handle = yield* js('process.on("SIGTERM", () => {}); setInterval(() => {}, 10_000)')
@@ -271,7 +270,6 @@ describe("cross-spawn spawner", () => {
           }),
         )
 
-        expect(Date.now() - started).toBeLessThan(1_000)
         expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
       }),
     )

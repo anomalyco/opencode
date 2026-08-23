@@ -15,7 +15,7 @@ const cases = [
     model: LanguageModel.update(
       OpenRouter.configure({
         apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
-        providerOptions: { openrouter: { reasoning: { max_tokens: 1024 } } },
+        providerOptions: { reasoning: { max_tokens: 1024 } },
       }).model("anthropic/claude-sonnet-4.6"),
       { compatibility: { reasoningField: "reasoning" } },
     ),

@@ -52,7 +52,7 @@ test("shows a pending question dock", async ({ page }) => {
       rejectRequests.push(request.url())
   })
 
-  await question.locator('[data-component="icon-button"][data-icon="chevron-down"]').click()
+  await question.getByRole("button", { name: "Minimize question" }).click()
   await expect(question).toBeVisible()
   await expect(question.getByText("Which implementation should be used?")).toBeVisible()
   await expect(question.getByText("Select one answer")).toBeHidden()
@@ -63,7 +63,7 @@ test("shows a pending question dock", async ({ page }) => {
   await expect(page.locator('[data-component="question-minimized-dock"]')).toHaveCount(0)
   expect(rejectRequests).toEqual([])
 
-  await question.locator('[data-component="icon-button"][data-icon="chevron-down"]').click()
+  await question.getByRole("button", { name: "Restore question" }).click()
   await expect(question).toBeVisible()
   await expect(question.getByText("Which implementation should be used?")).toBeVisible()
   await expect(question.getByRole("radio", { name: /Minimal/ })).toBeVisible()
@@ -85,7 +85,7 @@ test("shows a pending permission dock", async ({ page }) => {
       {
         id: "permission-request",
         sessionID,
-        permission: "bash",
+        permission: "shell",
         patterns: ["git status", "git diff"],
         metadata: {},
         always: [],
@@ -120,7 +120,7 @@ test("restores the draft caret before typing after a request dock closes", async
   await transport.waitForConnection()
   await expectSessionTitle(page, title)
 
-  const editor = page.locator('[data-component="prompt-input"][contenteditable="true"]')
+  const editor = page.locator('[data-component="composer-editor"][contenteditable="true"]')
   const draft = "keep the caret at the end"
   await editor.fill(draft)
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))

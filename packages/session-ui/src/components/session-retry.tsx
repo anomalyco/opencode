@@ -58,7 +58,7 @@ export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {
             <Spinner class="size-4 mt-0.5" />
             <div class="min-w-0">
               <Show when={truncated()} fallback={<div data-slot="session-turn-retry-message">{message()}</div>}>
-                <Tooltip value={retry()?.message ?? ""} placement="top">
+                <Tooltip appearance="standard" value={retry()?.message ?? ""} placement="top">
                   <div data-slot="session-turn-retry-message" class="cursor-help truncate">
                     {message()}
                   </div>

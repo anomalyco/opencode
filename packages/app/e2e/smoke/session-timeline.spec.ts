@@ -358,7 +358,8 @@ test.describe("smoke: session timeline", () => {
     const shellTrigger = shell.locator('[data-slot="collapsible-trigger"]')
     const shellSubtitle = shell.locator('[data-slot="basic-tool-tool-subtitle"]')
     await expect(shellSubtitle).toHaveCount(0)
-    await expect(shell.locator('[data-slot="bash-pre"]')).toContainText("$ bun typecheck")
+    await expect(shell.locator('[data-slot="bash-command"]')).toHaveText("bun typecheck")
+    await expect(shell.locator('[data-slot="bash-result"]')).not.toContainText("bun typecheck")
     await shellTrigger.click()
     await expect(shellTrigger).toHaveAttribute("aria-expanded", "false")
     await expect(shellSubtitle).toHaveText("bun typecheck")
@@ -477,7 +478,7 @@ async function configureSmokePage(page: Page, directory: string) {
     }
     let recordFrame: number | undefined
     const record = () => {
-      for (const toast of document.querySelectorAll<HTMLElement>('[data-component="toast"][data-variant="error"]')) {
+      for (const toast of document.querySelectorAll<HTMLElement>(".toast-v2--error")) {
         const text = toast.textContent?.trim()
         if (text && !smoke.__timelineSmokeErrorToasts!.includes(text)) smoke.__timelineSmokeErrorToasts!.push(text)
       }
@@ -518,7 +519,7 @@ async function expectCanScrollToStart(
   let current = await timelineState(page)
   let unchangedAtTop = 0
 
-  for (let attempt = 0; attempt < 600; attempt++) {
+  for (let attempt = 0; attempt < 800; attempt++) {
     collectSeen(current, seenParts, seenMessages)
     samples.push(sampleTraversal(current, seenParts.size, seenMessages.size))
     expectNoSmokeErrors(errors, current.errorToasts, current.forbiddenText)

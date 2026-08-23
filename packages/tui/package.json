@@ -24,6 +24,7 @@
     "./context/client": "./src/context/client.tsx",
     "./context/theme": "./src/context/theme.tsx",
     "./theme/discovery": "./src/theme/discovery.ts",
+    "./plugin/discovery": "./src/plugin/discovery.ts",
     "./context/editor": "./src/context/editor.ts",
     "./context/clipboard": "./src/context/clipboard.tsx",
     "./attention": "./src/attention.ts",
@@ -57,11 +58,6 @@
       "bun": "./src/attention-sounds.bun.ts",
       "node": "./src/attention-sounds.node.ts",
       "default": "./src/attention-sounds.bun.ts"
-    },
-    "#terminal-win32": {
-      "bun": "./src/terminal-win32.bun.ts",
-      "node": "./src/terminal-win32.node.ts",
-      "default": "./src/terminal-win32.bun.ts"
     },
     "#string-width": {
       "bun": "./src/util/string-width.bun.ts",

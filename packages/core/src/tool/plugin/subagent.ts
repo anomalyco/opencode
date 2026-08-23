@@ -12,12 +12,15 @@ import { SessionSchema } from "../../session/schema.js"
 export const name = "subagent"
 
 const NO_TEXT = "Subagent completed without a text response."
-const backgroundStarted = (sessionID: SessionSchema.ID) =>
-  [
+const backgroundResult = (sessionID: SessionSchema.ID) => ({
+  sessionID,
+  status: "running" as const,
+  output: [
     `The subagent is working in the background (sessionID: ${sessionID}). You will be notified automatically when it finishes.`,
     "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
-  ].join("\n")
+  ].join("\n"),
+})
 
 export const Input = Schema.Struct({
   agent: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
@@ -259,11 +262,7 @@ export const Plugin = {
               if (background) {
                 yield* runtime.job.background(info.id)
                 yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description, info.started_at)
-                return {
-                  sessionID: child.id,
-                  status: "running" as const,
-                  output: backgroundStarted(child.id),
-                }
+                return backgroundResult(child.id)
               }
 
               const result = yield* runtime.job.block({ id: child.id, sessionID: context.sessionID }).pipe(
@@ -281,11 +280,7 @@ export const Plugin = {
                   input.description,
                   result.info.started_at,
                 )
-                return {
-                  sessionID: child.id,
-                  status: "running" as const,
-                  output: backgroundStarted(child.id),
-                }
+                return backgroundResult(child.id)
               }
               // Failure surfaces keep the sessionID visible so the model can continue the child.
               if (result?.info.status === "error")

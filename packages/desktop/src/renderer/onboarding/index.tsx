@@ -1,6 +1,6 @@
-import { ServerConnection, useServers, useTabs } from "@opencode-ai/app"
+import { ServerConnection, useServers, useTabs } from "@opencode-ai/app/desktop"
 import { onMount } from "solid-js"
-import type { ElectronAPI } from "../../preload/types"
+import type { ElectronAPI } from "../api-types"
 
 export function DesktopFirstLaunchOnboarding(props: {
   api: ElectronAPI
@@ -16,9 +16,10 @@ export function DesktopFirstLaunchOnboarding(props: {
 
   async function runFirstLaunchOnboarding() {
     try {
-      await Promise.all([tabs.ready.promise, tabs.recentReady.promise].map((p) => p ?? Promise.resolve()))
       const pending = await props.api.isFirstLaunchOnboardingPending()
       if (!pending) return
+
+      await Promise.all([tabs.ready.promise, tabs.recentReady.promise].map((p) => p ?? Promise.resolve()))
 
       const shouldTrigger =
         props.initialUrl === "/" && tabs.store.length === 0 && server.list.every(ServerConnection.builtin)
