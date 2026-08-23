@@ -460,11 +460,11 @@ it.live("configures workspace providers through the SDK facade", () =>
         },
       })
       const opencode = yield* fixture.sdk.OpenCode.create({ workspaceProviders: { fake: driver } })
-      const reservation = yield* opencode.workspace.reserve({ provider: "fake" })
+      const workspaceID = yield* opencode.workspace.create({ provider: "fake" })
 
       expect(calls).toEqual([])
 
-      const workspace = yield* opencode.workspace.reconcile({ workspaceID: reservation.id })
+      const workspace = yield* opencode.workspace.provision({ workspaceID })
 
       expect(workspace.provider).toBe("fake")
       expect(workspace.binding).toEqual({ externalID: workspace.id })
@@ -544,12 +544,10 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
         ],
       },
     )
-    const workspace = yield* opencode.workspace.reserve({ provider: "fake" })
+    const workspaceID = yield* opencode.workspace.create({ provider: "fake" })
     const provisioning =
       policy === "eager"
-        ? yield* opencode.workspace
-            .reconcile({ workspaceID: workspace.id })
-            .pipe(Effect.forkScoped({ startImmediately: true }))
+        ? yield* opencode.workspace.provision({ workspaceID }).pipe(Effect.forkScoped({ startImmediately: true }))
         : undefined
     if (provisioning) {
       yield* Deferred.await(createStarted).pipe(
@@ -560,7 +558,7 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
     const session = yield* opencode.sessions.create({
       location: fixture.sdk.Location.Ref.make({
         directory: fixture.sdk.AbsolutePath.make(fixture.directory),
-        workspaceID: workspace.id,
+        workspaceID,
       }),
     })
     yield* opencode.sessions.prompt({ sessionID: session.id, text: "Answer without using tools" })
@@ -575,7 +573,7 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
     expect(provisioning.pollUnsafe()).toBeUndefined()
     expect(calls).toEqual(["create"])
     yield* Deferred.succeed(createRelease, undefined)
-    expect((yield* Fiber.join(provisioning)).binding).toEqual({ workspaceID: workspace.id })
+    expect((yield* Fiber.join(provisioning)).binding).toEqual({ workspaceID })
     expect(calls).toEqual(["create"])
   })
 

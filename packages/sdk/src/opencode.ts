@@ -51,11 +51,10 @@ export type Interface = Omit<OpenCodeClient, "plugin" | "workspace"> & {
   readonly sessions: OpenCodeClient["session"]
   readonly events: OpenCodeClient["event"]
   readonly workspace: {
-    readonly reserve: (options: { readonly provider: string }) => ReturnType<Workspace.Interface["reserve"]>
-    readonly reconcile: (options: {
-      readonly workspaceID: Workspace.ID
-    }) => ReturnType<Workspace.Interface["reconcile"]>
     readonly create: (options: { readonly provider: string }) => ReturnType<Workspace.Interface["create"]>
+    readonly provision: (options: {
+      readonly workspaceID: Workspace.ID
+    }) => ReturnType<Workspace.Interface["provision"]>
     readonly destroy: (options: { readonly workspaceID: Workspace.ID }) => ReturnType<Workspace.Interface["destroy"]>
   }
   readonly plugin: SdkPlugins.Interface["register"] & OpenCodeClient["plugin"]
@@ -109,9 +108,8 @@ export const create: (
     sessions: client.session,
     events: client.event,
     workspace: {
-      reserve: ({ provider }: { readonly provider: string }) => workspace.reserve(provider),
-      reconcile: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => workspace.reconcile(workspaceID),
       create: ({ provider }: { readonly provider: string }) => workspace.create(provider),
+      provision: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => workspace.provision(workspaceID),
       destroy: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => workspace.destroy(workspaceID),
     },
     // The embedded host contributes plugins through the ordinary discovery flow:
