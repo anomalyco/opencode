@@ -20,6 +20,7 @@ import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { filterVirtualIndexes } from "./virtual-items"
 
 const fallbackItemSize = 60
+const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 // Distance from the bottom that counts as "at the end". Deliberately tight: a collapse clamps
 // exactly to the end, while a one-pixel nudge upward is a deliberate move away from it.
 const endEpsilon = 0.5
@@ -177,6 +178,22 @@ export function createTimelineVirtualizer(input: Input) {
   })
 
   let overscanFrame: number | undefined
+  const settleColdBottom = () => {
+    if (input.pinned()) virtualizer.scrollToEnd()
+    if (virtualContent?.querySelector(pendingMarkdown)) {
+      overscanFrame = requestAnimationFrame(settleColdBottom)
+      return
+    }
+    overscanFrame = requestAnimationFrame(() => {
+      if (input.pinned()) virtualizer.scrollToEnd()
+      if (virtualContent?.querySelector(pendingMarkdown)) {
+        settleColdBottom()
+        return
+      }
+      overscanFrame = undefined
+      virtualContent?.style.removeProperty("visibility")
+    })
+  }
   onMount(() => {
     overscanFrame = requestAnimationFrame(() => {
       if (renderOverscan() < 20) setRenderOverscan(20)
@@ -184,13 +201,7 @@ export function createTimelineVirtualizer(input: Input) {
         overscanFrame = undefined
         return
       }
-      if (input.pinned()) virtualizer.scrollToEnd()
-      // Let newly overscanned rows measure before exposing the estimated cold viewport.
-      overscanFrame = requestAnimationFrame(() => {
-        overscanFrame = undefined
-        if (input.pinned()) virtualizer.scrollToEnd()
-        virtualContent?.style.removeProperty("visibility")
-      })
+      settleColdBottom()
     })
   })
 
