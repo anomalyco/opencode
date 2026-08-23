@@ -55,6 +55,14 @@ function compareMessage(a: Message, b: Message) {
   return a.time.created - b.time.created || a.id.localeCompare(b.id)
 }
 
+function groupBySession<T extends { id: string; sessionID: string }>(requests: T[]) {
+  const grouped: Record<string, T[]> = {}
+  for (const request of requests.toSorted((a, b) => a.id.localeCompare(b.id))) {
+    ;(grouped[request.sessionID] ??= []).push(request)
+  }
+  return grouped
+}
+
 const messageKey = (message: Message) => message.time.created + message.id
 
 export const {
@@ -532,6 +540,15 @@ export const {
             }),
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
+            // Pending prompts are process-local on the server, so hydrate them
+            // from the live service instead of trusting event-fed state that a
+            // restart may have orphaned.
+            sdk.client.permission
+              .list({ workspace })
+              .then((x) => setStore("permission", reconcile(groupBySession(x.data ?? [])))),
+            sdk.client.question
+              .list({ workspace })
+              .then((x) => setStore("question", reconcile(groupBySession(x.data ?? [])))),
             project.workspace.sync(),
           ]).then(() => {
             setStore("status", "complete")
@@ -664,6 +681,21 @@ export const {
           })
           syncingSessions.set(sessionID, task)
           return task
+        },
+      },
+      question: {
+        dismiss(sessionID: string, requestID: string) {
+          const requests = store.question[sessionID]
+          if (!requests) return
+          const match = search(requests, requestID, (r) => r.id)
+          if (!match.found) return
+          setStore(
+            "question",
+            sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 1)
+            }),
+          )
         },
       },
       bootstrap,
