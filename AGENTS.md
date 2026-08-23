@@ -1,3 +1,21 @@
+## Fork Development
+
+- This fork is intended to remain compatible with upstream OpenCode whenever practical.
+- Keep customizations isolated and easy to rebase onto upstream `dev`.
+- Prefer additive changes over modifying upstream behavior.
+- Do not rewrite or remove existing architecture merely to implement a customization.
+- Before changing an upstream file, determine whether the change can be implemented through an existing extension point, configuration, theme definition, or package boundary.
+- Keep custom features clearly separated from upstream behavior.
+
+## Fork Development
+
+- This fork is intended to remain compatible with upstream OpenCode whenever practical.
+- Keep customizations isolated and easy to rebase onto upstream `dev`.
+- Prefer additive changes over modifying upstream behavior.
+- Do not rewrite or remove existing architecture merely to implement a customization.
+- Before changing an upstream file, determine whether the change can be implemented through an existing extension point, configuration, theme definition, or package boundary.
+- Keep custom features clearly separated from upstream behavior.u
+
 - To regenerate the legacy JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`. Do not edit `src/generated` or `src/generated-effect` directly.
 - Keep runtime dependencies directed from Schema to Core and Protocol, then from Core and Protocol to Server. Client runtime code may depend on Schema and Protocol but never Core or Server; `sdk-next` composes Client, Core, and Server.
