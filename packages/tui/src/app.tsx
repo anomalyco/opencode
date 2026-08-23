@@ -86,7 +86,7 @@ import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
-import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS } from "./startup-shared"
+import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS } from "./startup-shared"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
 registerOpencodeSpinner()
@@ -160,7 +160,9 @@ export type TuiInput = {
 function paintStartupSplash(renderer: { width: number; height: number }): () => void {
   const width = Math.max(1, renderer.width)
   const height = Math.max(1, renderer.height)
-  const row = Math.max(1, Math.floor(height / 2) + 1)
+  const centerRow = Math.max(2, Math.floor(height / 2))
+  const barRow = centerRow + 2
+  const startTime = Date.now()
   let frame = 0
   let messageIndex = 0
   let lastMessageChange = Date.now()
@@ -182,19 +184,33 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
     } catch {}
   }
 
+  writeAll("\x1b[?1049h\x1b[2J\x1b[?25l\x1b[H")
+
   const paint = () => {
     if (stopped) return
-    const message = `${STARTUP_FRAMES[frame]} ${STARTUP_MESSAGES[messageIndex]}`
-    const col = Math.max(1, Math.floor((width - message.length) / 2) + 1)
-    writeAll("\x1b[?25l\x1b[2J\x1b[H" + `\x1b[${row};${col}H` + "\x1b[1m\x1b[38;5;252m" + message + "\x1b[0m")
+    const text = `${STARTUP_FRAMES[frame]} ${STARTUP_MESSAGES[messageIndex]}`
+    const textCol = Math.max(1, Math.floor((width - text.length) / 2) + 1)
+
+    const elapsed = Date.now() - startTime
+    const progress = Math.min(1, elapsed / STARTUP_EXPECTED_DURATION_MS)
+    const filled = Math.round(progress * STARTUP_PROGRESS_BAR_WIDTH)
+    const bar = "█".repeat(filled) + "░".repeat(STARTUP_PROGRESS_BAR_WIDTH - filled)
+    const pct = `${Math.round(progress * 100)}%`
+    const barVisualWidth = STARTUP_PROGRESS_BAR_WIDTH + 1 + pct.length
+    const barCol = Math.max(1, Math.floor((width - barVisualWidth) / 2) + 1)
+
+    writeAll(
+      `\x1b[${centerRow};1H\x1b[2K\x1b[${centerRow};${textCol}H` +
+      `\x1b[1m\x1b[38;5;252m${text}\x1b[0m` +
+      `\x1b[${barRow};1H\x1b[2K\x1b[${barRow};${barCol}H` +
+      `\x1b[38;5;240m${bar}\x1b[0m\x1b[38;5;252m ${pct}\x1b[0m`
+    )
   }
 
   globalThis.__opencodeStopInTuiSplash = () => {
     if (stopped) return
     stopped = true
-    try {
-      writeAll("\x1b[0m\x1b[2J\x1b[H")
-    } catch {}
+    writeAll("\x1b[?25h\x1b[?1049l")
   }
 
   paint()
@@ -220,9 +236,7 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
     if (stopped) return
     stopped = true
     clearTimeout(fallbackStop)
-    try {
-      writeAll("\x1b[0m\x1b[2J\x1b[H")
-    } catch {}
+    writeAll("\x1b[0m\x1b[2J\x1b[H")
     if (ttyFd !== undefined) {
       try {
         closeSync(ttyFd)
