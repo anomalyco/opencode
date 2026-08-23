@@ -392,7 +392,8 @@ function indexAssistantMessages(messages: SessionMessageInfo[]) {
   messages.forEach((message) => {
     if (message.type === "user") userID = message.id
     if (message.type === "shell") userID = undefined
-    if (message.type !== "assistant" || !userID) return
+    if (message.type !== "assistant") return
+    if (!userID) userID = message.id
     const existing = result.get(userID)
     if (existing) {
       existing.push(message)

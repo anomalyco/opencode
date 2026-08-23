@@ -196,4 +196,35 @@ describe("createTimelineProjection", () => {
     expect(second.rows[1]).toBe(first.rows[1])
   })
 
+  test("indexes a leading partial assistant turn under its projected turn ID", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "partial answer" }],
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "assistant-2",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "final answer" }],
+        time: { created: 4, completed: 5 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = createTimelineProjection({
+      sessionMessages: messages,
+      status: { type: "idle" },
+      showReasoningSummaries: true,
+    })
+
+    expect(result.assistantMessagesByParent.get("assistant-1")?.map((message) => message.id)).toEqual([
+      "assistant-1",
+      "assistant-2",
+    ])
+  })
 })

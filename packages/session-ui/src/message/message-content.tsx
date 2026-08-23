@@ -388,7 +388,7 @@ export function AssistantTextContent(props: {
   text: string
   message: SessionMessageAssistant
   showCopy: boolean
-  turnDurationMs?: number
+  turnDurationMs?: number | null
 }) {
   const data = useData()
   const i18n = useI18n()
@@ -404,11 +404,13 @@ export function AssistantTextContent(props: {
   const duration = createMemo(() => {
     const completed = props.message.time.completed
     const ms =
-      typeof props.turnDurationMs === "number"
-        ? props.turnDurationMs
-        : typeof completed === "number"
-          ? completed - props.message.time.created
-          : -1
+      props.turnDurationMs === null
+        ? -1
+        : typeof props.turnDurationMs === "number"
+          ? props.turnDurationMs
+          : typeof completed === "number"
+            ? completed - props.message.time.created
+            : -1
     if (!(ms >= 0)) return ""
     const total = Math.round(ms / 1000)
     if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt().format(total) })

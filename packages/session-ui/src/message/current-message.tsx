@@ -41,7 +41,7 @@ export function SessionAssistantContent(props: {
   content: SessionMessageAssistant["content"][number]
   contentID: string
   showAssistantCopyPartID?: string | null
-  turnDurationMs?: number
+  turnDurationMs?: number | null
   defaultOpen?: boolean
   toolOpen?: boolean
   onToolOpenChange?: (open: boolean) => void
