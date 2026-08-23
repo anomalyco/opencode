@@ -42,7 +42,7 @@ export type ComposerEditorProps = {
   borderUnderlay?: boolean
   class?: string
   modelControl?: JSX.Element
-  variantControlVisible?: boolean
+  modelControlsVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
 }
@@ -233,17 +233,19 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 />
               )}
             </Show>
-            {props.modelControl}
-            <Show when={(props.variantControlVisible ?? true) && view.variant} keyed>
-              {(control) => (
-                <Show when={control.options().length > 1}>
-                  <ComposerEditorConfiguredSelect
-                    title={i18n.t("ui.promptInput.chooseVariant")}
-                    keybind={["Shift", "Mod", "D"]}
-                    control={control}
-                  />
-                </Show>
-              )}
+            <Show when={props.modelControlsVisible ?? true}>
+              {props.modelControl}
+              <Show when={view.variant} keyed>
+                {(control) => (
+                  <Show when={control.options().length > 1}>
+                    <ComposerEditorConfiguredSelect
+                      title={i18n.t("ui.promptInput.chooseVariant")}
+                      keybind={["Shift", "Mod", "D"]}
+                      control={control}
+                    />
+                  </Show>
+                )}
+              </Show>
             </Show>
           </div>
           <ComposerEditorSubmitButton
