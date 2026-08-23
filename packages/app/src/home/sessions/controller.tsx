@@ -137,6 +137,17 @@ export function createHomeSessionsController(home: HomeController) {
       showProjectName: () => !home.project.selected(),
       server: () => home.selection.value().server,
       canCreate: () => !!home.project.newSession(),
+      lookup: async (sessionID: string) => {
+        const ctx = home.server.focusedContext()
+        if (!ctx) return
+        const result = await ctx.sdk.api.session.get({ sessionID })
+        if (result.time.archived) return
+        return buildHomeSessionRecords({
+          sessions: () => [result],
+          projectDirectories,
+          projects: home.project.list,
+        })[0]
+      },
       create: home.project.openNewSession,
       open: (session: SessionInfo, options?: OpenSessionOptions) => {
         const directoryKey = pathKey(session.location.directory)
