@@ -109,18 +109,23 @@ const layer = Layer.effect(
       ),
     )
 
+    // Settlement claims the pending entry before publishing so a concurrent
+    // reply/reject cannot observe it as pending while listeners delay the
+    // publish; a failed publish restores the entry.
     const reply = Effect.fn("QuestionV2.reply")((input: ReplyInput) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const existing = pending.get(input.requestID)
           if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-          yield* events.publish(Event.Replied, {
-            sessionID: existing.request.sessionID,
-            requestID: existing.request.id,
-            answers: input.answers.map((answer) => [...answer]),
-          })
-          yield* Deferred.succeed(existing.deferred, input.answers)
           pending.delete(input.requestID)
+          yield* events
+            .publish(Event.Replied, {
+              sessionID: existing.request.sessionID,
+              requestID: existing.request.id,
+              answers: input.answers.map((answer) => [...answer]),
+            })
+            .pipe(Effect.onError(() => Effect.sync(() => pending.set(input.requestID, existing))))
+          yield* Deferred.succeed(existing.deferred, input.answers)
         }),
       ),
     )
@@ -130,12 +135,14 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const existing = pending.get(requestID)
           if (!existing) return yield* new NotFoundError({ requestID })
-          yield* events.publish(Event.Rejected, {
-            sessionID: existing.request.sessionID,
-            requestID: existing.request.id,
-          })
-          yield* Deferred.fail(existing.deferred, new RejectedError())
           pending.delete(requestID)
+          yield* events
+            .publish(Event.Rejected, {
+              sessionID: existing.request.sessionID,
+              requestID: existing.request.id,
+            })
+            .pipe(Effect.onError(() => Effect.sync(() => pending.set(requestID, existing))))
+          yield* Deferred.fail(existing.deferred, new RejectedError())
         }),
       ),
     )

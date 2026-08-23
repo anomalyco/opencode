@@ -283,6 +283,40 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("settles a pending request exactly once under concurrent replies", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const events = yield* EventV2.Service
+      const gate = yield* Deferred.make<void>()
+      const entered = yield* Deferred.make<void>()
+      const replied: unknown[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === PermissionV2.Event.Replied.type
+          ? Effect.gen(function* () {
+              replied.push(event.data)
+              yield* Deferred.succeed(entered, undefined)
+              yield* Deferred.await(gate)
+            })
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const { service, fiber, request } = yield* waitForRequest()
+
+      const winner = yield* service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.forkScoped)
+      yield* Deferred.await(entered)
+
+      expect(yield* service.reply({ requestID: request.id, reply: "reject" }).pipe(Effect.flip)).toEqual(
+        new PermissionV2.NotFoundError({ requestID: request.id }),
+      )
+
+      yield* Deferred.succeed(gate, undefined)
+      yield* Fiber.join(winner)
+      yield* Fiber.join(fiber)
+      expect(replied).toEqual([{ sessionID: request.sessionID, requestID: request.id, reply: "once" }])
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("stores and removes saved resources for a project", () =>
     Effect.gen(function* () {
       yield* setup()
