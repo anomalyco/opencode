@@ -1,9 +1,14 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
+import { LanguageModel } from "@opencode-ai/ai"
+import { OpenAIChat } from "@opencode-ai/ai/protocols"
+import { TestLLM } from "@opencode-ai/ai/testing"
+import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
+import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
-import { Deferred, Effect, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import type { OpenCodeEvent } from "../src"
@@ -455,7 +460,11 @@ it.live("configures workspace providers through the SDK facade", () =>
         },
       })
       const opencode = yield* fixture.sdk.OpenCode.create({ workspaceProviders: { fake: driver } })
-      const workspace = yield* opencode.workspace.create({ provider: "fake" })
+      const reservation = yield* opencode.workspace.reserve({ provider: "fake" })
+
+      expect(calls).toEqual([])
+
+      const workspace = yield* opencode.workspace.reconcile({ workspaceID: reservation.id })
 
       expect(workspace.provider).toBe("fake")
       expect(workspace.binding).toEqual({ externalID: workspace.id })
@@ -475,6 +484,111 @@ it.live("configures workspace providers through the SDK facade", () =>
       )
     }),
   ),
+)
+
+const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
+  Effect.gen(function* () {
+    const calls: string[] = []
+    const createStarted = yield* Deferred.make<void>()
+    const createRelease = yield* Deferred.make<void>()
+    const modelStarted = yield* Deferred.make<void>()
+    yield* Effect.addFinalizer(() => Deferred.succeed(createRelease, undefined).pipe(Effect.asVoid))
+    const model = LanguageModel.make({ id: "workspace-test", provider: "test", route: OpenAIChat.route })
+    const client = TestLLM.clientLayer.pipe(
+      Layer.provide(
+        TestLLM.layer({
+          fallback: TestLLM.text("ready", "answer"),
+          transformRequest: (request) => {
+            Deferred.doneUnsafe(modelStarted, Effect.void)
+            return request
+          },
+        }),
+      ),
+    )
+    const models = Layer.mock(SessionRunnerModel.Service, {
+      resolve: () =>
+        Effect.succeed(
+          SessionRunnerModel.resolved(model, {
+            capabilities: { tools: true, input: ["text"], output: ["text"] },
+            cost: [],
+            limit: { context: 100_000, output: 1_000 },
+          }),
+        ),
+    })
+    const driver = WorkspaceDriver.make({
+      create: ({ workspaceID }) => {
+        calls.push("create")
+        return Deferred.succeed(createStarted, undefined).pipe(
+          Effect.andThen(Deferred.await(createRelease)),
+          Effect.as({ binding: { workspaceID } }),
+        )
+      },
+      connect: () => {
+        calls.push("connect")
+        return Effect.succeed(makeMemoryDriver())
+      },
+      suspendForIdle: () => Effect.void,
+      destroy: () => Effect.void,
+    })
+    const configDirectory = path.join(fixture.directory, "config")
+    yield* Effect.promise(() => fs.mkdir(configDirectory))
+    const opencode = yield* fixture.sdk.OpenCode.create(
+      {
+        config: { directory: configDirectory, project: false, content: "{}" },
+        workspaceProviders: { fake: driver },
+      },
+      {
+        overrides: [
+          [llmClient, client],
+          [SessionRunnerModel.node, models],
+        ],
+      },
+    )
+    const workspace = yield* opencode.workspace.reserve({ provider: "fake" })
+    const provisioning =
+      policy === "eager"
+        ? yield* opencode.workspace
+            .reconcile({ workspaceID: workspace.id })
+            .pipe(Effect.forkScoped({ startImmediately: true }))
+        : undefined
+    if (provisioning) {
+      yield* Deferred.await(createStarted).pipe(
+        Effect.timeoutOrElse({ duration: "4 seconds", orElse: () => Effect.die("provider create did not start") }),
+      )
+    }
+
+    const session = yield* opencode.sessions.create({
+      location: fixture.sdk.Location.Ref.make({
+        directory: fixture.sdk.AbsolutePath.make(fixture.directory),
+        workspaceID: workspace.id,
+      }),
+    })
+    yield* opencode.sessions.prompt({ sessionID: session.id, text: "Answer without using tools" })
+    yield* Deferred.await(modelStarted).pipe(
+      Effect.timeoutOrElse({ duration: "8 seconds", orElse: () => Effect.die("model stream did not start") }),
+    )
+
+    if (!provisioning) {
+      expect(calls).toEqual([])
+      return
+    }
+    expect(provisioning.pollUnsafe()).toBeUndefined()
+    expect(calls).toEqual(["create"])
+    yield* Deferred.succeed(createRelease, undefined)
+    expect((yield* Fiber.join(provisioning)).binding).toEqual({ workspaceID: workspace.id })
+    expect(calls).toEqual(["create"])
+  })
+
+it.live(
+  "starts model execution while eager workspace provisioning is blocked",
+  () => withEmbedded("opencode-embedded-workspace-eager-", (fixture) => workspaceModelScenario(fixture, "eager")),
+  15_000,
+)
+
+it.live(
+  "starts model execution without provisioning a lazy workspace",
+  () => withEmbedded("opencode-embedded-workspace-lazy-", (fixture) => workspaceModelScenario(fixture, "lazy")),
+  15_000,
 )
 
 it.live("preserves unknown workspace provider errors", () =>

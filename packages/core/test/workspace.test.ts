@@ -7,7 +7,7 @@ import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { WorkspaceTable } from "@opencode-ai/core/workspace/sql"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { eq } from "drizzle-orm"
-import { Effect } from "effect"
+import { Deferred, Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
 import { ChildProcess } from "effect/unstable/process"
 import { testEffect } from "./lib/effect"
@@ -15,11 +15,13 @@ import { testEffect } from "./lib/effect"
 const calls: Array<{ readonly operation: string; readonly binding?: WorkspaceDriver.Binding }> = []
 const memory = makeMemoryDriver()
 let failConnect = false
+let create: WorkspaceDriver.Interface["create"] = ({ workspaceID }) =>
+  Effect.succeed({ binding: { workspaceID, generation: 0 } })
 
 const driver = WorkspaceDriver.make({
-  create: ({ workspaceID }) => {
+  create: (input) => {
     calls.push({ operation: "create" })
-    return Effect.succeed({ binding: { workspaceID, generation: 0 } })
+    return create(input)
   },
   connect: ({ binding }) => {
     calls.push({ operation: "connect", binding })
@@ -46,6 +48,18 @@ const it = testEffect(
 beforeEach(() => {
   calls.splice(0)
   failConnect = false
+  create = ({ workspaceID }) => Effect.succeed({ binding: { workspaceID, generation: 0 } })
+})
+
+const gateCreate = Effect.fnUntraced(function* () {
+  const started = yield* Deferred.make<void>()
+  const release = yield* Deferred.make<void>()
+  create = ({ workspaceID }) =>
+    Deferred.succeed(started, undefined).pipe(
+      Effect.andThen(Deferred.await(release)),
+      Effect.as({ binding: { workspaceID, generation: 0 } }),
+    )
+  return { started, release }
 })
 
 it.effect("rejects unregistered workspace providers", () =>
@@ -57,6 +71,150 @@ it.effect("rejects unregistered workspace providers", () =>
         new WorkspaceDriver.ProviderNotFound({ provider }),
       )
     }
+  }),
+)
+
+it.effect("reserves and persists an ID without provisioning", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const reserved = yield* workspace.reserve("fake")
+
+    expect(reserved.id.startsWith("wrk_")).toBe(true)
+    expect(calls).toEqual([])
+    expect(
+      yield* Database.Service.use(({ db }) =>
+        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, reserved.id)).get(),
+      ).pipe(Effect.orDie),
+    ).toMatchObject({ id: reserved.id, provider: "fake", binding: null })
+  }),
+)
+
+it.effect("destroys an unprovisioned reservation without calling the driver", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const reserved = yield* workspace.reserve("fake")
+
+    yield* workspace.destroy(reserved.id)
+    expect(calls).toEqual([])
+    expect(
+      yield* Database.Service.use(({ db }) =>
+        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, reserved.id)).get(),
+      ).pipe(Effect.orDie),
+    ).toBeUndefined()
+  }),
+)
+
+it.effect("starts eager provisioning in the background and lets callers join it", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const reserved = yield* workspace.reserve("fake")
+    const gate = yield* gateCreate()
+
+    const eager = yield* workspace.reconcile(reserved.id).pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* Deferred.await(gate.started)
+    const waiter = yield* workspace.reconcile(reserved.id).pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* Effect.yieldNow
+    expect(calls.map((call) => call.operation)).toEqual(["create"])
+
+    yield* Deferred.succeed(gate.release, undefined)
+    const [eagerResult, waiterResult] = yield* Effect.all([Fiber.join(eager), Fiber.join(waiter)])
+    expect(eagerResult).toEqual(waiterResult)
+    expect(eagerResult.binding).toEqual({ workspaceID: reserved.id, generation: 0 })
+  }),
+)
+
+it.effect("starts lazy provisioning on the first spawn", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const reserved = yield* workspace.reserve("fake")
+    const environment = yield* workspace.connect(reserved.id)
+    const gate = yield* gateCreate()
+
+    expect(calls).toEqual([])
+    const spawned = yield* Effect.scoped(environment.spawner.spawn(ChildProcess.make("lazy"))).pipe(
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* Deferred.await(gate.started)
+    expect(calls.map((call) => call.operation)).toEqual(["create"])
+    yield* Deferred.succeed(gate.release, undefined)
+    yield* Fiber.await(spawned)
+    expect(calls.map((call) => call.operation)).toEqual(["create", "connect"])
+  }),
+)
+
+it.effect("shares provisioning between concurrent first spawns", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const reserved = yield* workspace.reserve("fake")
+    const environment = yield* workspace.connect(reserved.id)
+    const gate = yield* gateCreate()
+
+    const spawned = yield* Effect.all(
+      ["first", "second"].map((command) =>
+        Effect.scoped(environment.spawner.spawn(ChildProcess.make(command))).pipe(
+          Effect.forkScoped({ startImmediately: true }),
+        ),
+      ),
+    )
+    yield* Deferred.await(gate.started)
+    yield* Effect.yieldNow
+    expect(calls.map((call) => call.operation)).toEqual(["create"])
+
+    yield* Deferred.succeed(gate.release, undefined)
+    yield* Effect.forEach(spawned, Fiber.await)
+    expect(calls.map((call) => call.operation)).toEqual(["create", "connect"])
+  }),
+)
+
+it.effect("keeps shared provisioning alive when a waiter is interrupted", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const reserved = yield* workspace.reserve("fake")
+    const gate = yield* gateCreate()
+
+    const owner = yield* workspace.reconcile(reserved.id).pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* Deferred.await(gate.started)
+    const waiter = yield* workspace.reconcile(reserved.id).pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* Fiber.interrupt(waiter)
+    expect(calls.map((call) => call.operation)).toEqual(["create"])
+
+    yield* Deferred.succeed(gate.release, undefined)
+    expect((yield* Fiber.join(owner)).binding).toEqual({ workspaceID: reserved.id, generation: 0 })
+    expect(calls.map((call) => call.operation)).toEqual(["create"])
+  }),
+)
+
+it.effect("shares a failed attempt and retries the same workspace ID", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const reserved = yield* workspace.reserve("fake")
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    let fail = true
+    create = ({ workspaceID }) =>
+      Deferred.succeed(started, undefined).pipe(
+        Effect.andThen(Deferred.await(release)),
+        Effect.andThen(
+          Effect.suspend(() =>
+            fail
+              ? Effect.fail(new WorkspaceDriver.Error({ message: "create failed" }))
+              : Effect.succeed({ binding: { workspaceID, generation: 0 } }),
+          ),
+        ),
+      )
+
+    const first = yield* workspace.reconcile(reserved.id).pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* Deferred.await(started)
+    const second = yield* workspace.reconcile(reserved.id).pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* Deferred.succeed(release, undefined)
+    const [firstExit, secondExit] = yield* Effect.all([Fiber.await(first), Fiber.await(second)])
+    expect(firstExit._tag).toBe("Failure")
+    expect(secondExit._tag).toBe("Failure")
+    expect(calls.map((call) => call.operation)).toEqual(["create"])
+
+    fail = false
+    expect((yield* workspace.reconcile(reserved.id)).binding).toEqual({ workspaceID: reserved.id, generation: 0 })
+    expect(calls.map((call) => call.operation)).toEqual(["create", "create"])
   }),
 )
 

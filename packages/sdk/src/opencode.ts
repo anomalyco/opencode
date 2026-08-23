@@ -51,6 +51,10 @@ export type Interface = Omit<OpenCodeClient, "plugin" | "workspace"> & {
   readonly sessions: OpenCodeClient["session"]
   readonly events: OpenCodeClient["event"]
   readonly workspace: {
+    readonly reserve: (options: { readonly provider: string }) => ReturnType<Workspace.Interface["reserve"]>
+    readonly reconcile: (options: {
+      readonly workspaceID: Workspace.ID
+    }) => ReturnType<Workspace.Interface["reconcile"]>
     readonly create: (options: { readonly provider: string }) => ReturnType<Workspace.Interface["create"]>
     readonly destroy: (options: { readonly workspaceID: Workspace.ID }) => ReturnType<Workspace.Interface["destroy"]>
   }
@@ -105,6 +109,8 @@ export const create: (
     sessions: client.session,
     events: client.event,
     workspace: {
+      reserve: ({ provider }: { readonly provider: string }) => workspace.reserve(provider),
+      reconcile: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => workspace.reconcile(workspaceID),
       create: ({ provider }: { readonly provider: string }) => workspace.create(provider),
       destroy: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => workspace.destroy(workspaceID),
     },
