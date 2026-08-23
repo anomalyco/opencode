@@ -131,8 +131,11 @@ test("animates review and terminal panels while caching hidden terminal content"
   await resetTerminalBottomMotion(page)
   await resetTerminalAnchorGaps(page)
   await resetPanelGaps(page)
+  const reviewContent = page.locator('[data-component="session-review-v2"]')
+  await reviewContent.evaluate((element) => element.setAttribute("data-cache-probe", "original"))
   await reviewToggle.click()
-  await expect(page.locator("#review-panel")).toHaveCount(0)
+  await expect(page.locator("#review-panel")).toBeHidden()
+  await expect(reviewContent).toHaveAttribute("data-cache-probe", "original")
   await expect(panel).toBeVisible()
   await expectHeightMotions(page, "session-side-region", 2)
   await expectHeightMotions(page, "session-side-terminal-region", 2)
@@ -142,6 +145,7 @@ test("animates review and terminal panels while caching hidden terminal content"
   await expectPanelGapHeld(page)
   await reviewToggle.click()
   await expect(page.locator("#review-panel")).toBeVisible()
+  await expect(reviewContent).toHaveAttribute("data-cache-probe", "original")
   await expectHeightMotions(page, "session-side-region", 3)
   await expectHeightMotions(page, "session-side-terminal-region", 3)
 
@@ -161,14 +165,18 @@ test("animates review and terminal panels while caching hidden terminal content"
   await reviewToggle.click()
   await expect(page.locator("#review-panel")).toHaveCount(0)
   await expectWidthMotions(page, 2)
+  await expectSideSlideSettled(page, 2)
+  await expectHiddenSideAligned(page)
 
   await resetHeightMotions(page)
+  await resetHorizontalScrolls(page)
   await page.keyboard.press("Control+Backquote")
   await expect(panel).toHaveAttribute("aria-hidden", "false")
   await expect(page.locator('[data-component="terminal"]')).toBeVisible()
   await expectWidthMotions(page, 3)
-  await expectSideMotionSettled(page)
+  await expectSideSlideSettled(page, 3)
   await expectNoHeightMotion(page)
+  await expectNoHorizontalScroll(page)
 
   await page.keyboard.press("Control+Backquote")
   await expect(panel).toBeHidden()
@@ -209,6 +217,8 @@ test("animates review and terminal panels while caching hidden terminal content"
 
 type MotionProbe = {
   widths: number
+  widthEnds: number
+  horizontalScrolls: number[]
   reviewWidths: number[]
   paintGaps: { review: number; terminalSurface: number }[]
   terminalContentSizes: { width: number; height: number }[]
@@ -225,6 +235,8 @@ async function installMotionProbe(page: Page) {
   await page.evaluate(() => {
     const probe: MotionProbe = {
       widths: 0,
+      widthEnds: 0,
+      horizontalScrolls: [],
       reviewWidths: [],
       paintGaps: [],
       terminalContentSizes: [],
@@ -299,10 +311,16 @@ async function installMotionProbe(page: Page) {
         probe.heights.push(slot)
       }
     })
+    document.addEventListener("transitionend", (event) => {
+      if (!(event.target instanceof Element)) return
+      if (event.propertyName === "width" && event.target.getAttribute("data-slot") === "session-chat-panel")
+        probe.widthEnds++
+    })
     document.addEventListener("animationstart", (event) => {
       if (!(event.target instanceof Element) || event.target.getAttribute("data-component") !== "terminal-panel") return
       probe.animations.push(event.animationName)
     })
+    window.addEventListener("scroll", () => probe.horizontalScrolls.push(window.scrollX))
     ;(window as Window & { __panelMotion?: MotionProbe }).__panelMotion = probe
   })
 }
@@ -320,11 +338,10 @@ async function resetHeightMotions(page: Page) {
   })
 }
 
-async function expectSideMotionSettled(page: Page) {
-  const side = page.locator('[data-slot="session-side-panel-presence"]')
+async function expectSideSlideSettled(page: Page, count: number) {
   await expect
-    .poll(() => side.evaluate((element) => element.getAnimations().every((item) => item.playState === "finished")))
-    .toBe(true)
+    .poll(() => page.evaluate(() => (window as Window & { __panelMotion?: MotionProbe }).__panelMotion?.widthEnds ?? 0))
+    .toBeGreaterThanOrEqual(count)
 }
 
 async function expectNoHeightMotion(page: Page) {
@@ -332,6 +349,40 @@ async function expectNoHeightMotion(page: Page) {
     () => (window as Window & { __panelMotion?: MotionProbe }).__panelMotion?.heights ?? [],
   )
   expect(heights).toEqual([])
+}
+
+async function expectHiddenSideAligned(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const chat = document.querySelector<HTMLElement>('[data-slot="session-chat-panel"]')
+        const side = document.querySelector<HTMLElement>('[data-slot="session-side-panel-presence"]')
+        if (!chat?.parentElement || !side) return Number.POSITIVE_INFINITY
+        const row = chat.parentElement.getBoundingClientRect()
+        const hidden = side.getBoundingClientRect()
+        return Math.max(
+          Math.abs(row.top - hidden.top),
+          Math.abs(row.right - hidden.right),
+          Math.abs(row.bottom - hidden.bottom),
+        )
+      }),
+    )
+    .toBeLessThanOrEqual(1)
+}
+
+async function resetHorizontalScrolls(page: Page) {
+  await page.evaluate(() => {
+    const probe = (window as Window & { __panelMotion?: MotionProbe }).__panelMotion
+    if (probe) probe.horizontalScrolls = []
+  })
+}
+
+async function expectNoHorizontalScroll(page: Page) {
+  const scrolls = await page.evaluate(
+    () => (window as Window & { __panelMotion?: MotionProbe }).__panelMotion?.horizontalScrolls ?? [],
+  )
+  expect(Math.max(0, ...scrolls)).toBe(0)
+  expect(await page.evaluate(() => window.scrollX)).toBe(0)
 }
 
 async function expectReviewWidthStable(page: Page) {
