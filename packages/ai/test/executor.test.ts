@@ -125,6 +125,40 @@ describe("RequestExecutor", () => {
     ),
   )
 
+  it.effect("recovers cause-chain signals when the native failure does not decode", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* RequestExecutor.stream(executor, secretRequest).pipe(Stream.runDrain, Effect.flip)
+
+      expectAIError(error)
+      // The nested cause carries the code but a non-string message, so the
+      // shallow native decode misses it; the bounded chain probe recovers it.
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        message: "ECONNRESET: fetch failed",
+        operation: "read",
+        code: "ECONNRESET",
+      })
+      const http = errorHttp(error)
+      expect(http?.response?.status).toBe(200)
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode('data: {"choices":[]}\n\n'))
+              },
+              pull(controller) {
+                controller.error(new TypeError("fetch failed", { cause: { code: "ECONNRESET", message: 42 } }))
+              },
+            }),
+          ),
+        ]),
+      ),
+    ),
+  )
+
   it.effect("preserves middleware error messages", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service

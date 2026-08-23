@@ -240,6 +240,33 @@ const nativeTransportFailure = (error: unknown) => {
   return failure
 }
 
+const maxCauseDepth = 4
+
+// A mid-stream rejection nests the native failure under Effect's decode wrapper,
+// sometimes beyond what nativeTransportFailure can see. Walk a bounded cause
+// chain and keep only stable class/code signals - never payloads - so surfaced
+// errors stay diagnosable.
+const describeCauseChain = (source: unknown) => {
+  const classes: string[] = []
+  let code: string | undefined
+  let message: string | undefined
+  let node: unknown = source
+  for (let depth = 0; depth < maxCauseDepth && node !== null && typeof node === "object"; depth += 1) {
+    const record = node as Record<string, unknown>
+    if (typeof record.name === "string" && record.name !== "Error") classes.push(record.name)
+    if (code === undefined && typeof record.code === "string") code = record.code
+    if (
+      message === undefined &&
+      typeof record.message === "string" &&
+      record.message.trim() !== "" &&
+      !record.message.startsWith("Decode error")
+    )
+      message = record.message
+    node = record.cause
+  }
+  return { classes, code, message }
+}
+
 const httpError = (input: {
   readonly error: unknown
   readonly request: HttpClientRequest.HttpClientRequest
@@ -256,7 +283,10 @@ const httpError = (input: {
         operation: input.operation,
         code: failure.code,
         url: request.url,
-        http: new HttpContext({ request: requestDetails(request) }),
+        http: new HttpContext({
+          request: requestDetails(request),
+          ...(failedResponse ? { response: responseDetails(failedResponse) } : {}),
+        }),
       }),
     })
 
@@ -265,10 +295,24 @@ const httpError = (input: {
       ? input.error.reason.cause
       : input.error
   const native = nativeTransportFailure(source)
-  const code = native?.code
-  const raw = native?.message ?? (input.error instanceof Error ? input.error.message : undefined)
+  // Shallow decode found no code: probe the bounded chain for the missing
+  // signals instead of surfacing only Effect's generic decode message.
+  const chain = native?.code === undefined ? describeCauseChain(source) : undefined
+  const code = native?.code ?? chain?.code ?? chain?.classes[chain.classes.length - 1]
+  const raw = native?.message ?? chain?.message ?? (input.error instanceof Error ? input.error.message : undefined)
   const detail = raw
   const message = code && detail && !detail.includes(code) ? `${code}: ${detail}` : detail
+
+  // Read failures carry the response that broke mid-stream; keep its safe
+  // metadata (status, headers) so callers can tell a truncated 200 apart.
+  const failedResponse =
+    input.operation === "read" &&
+    HttpClientError.isHttpClientError(input.error) &&
+    "response" in input.error.reason &&
+    input.error.reason.response !== null &&
+    typeof input.error.reason.response === "object"
+      ? (input.error.reason.response as HttpClientResponse.HttpClientResponse)
+      : undefined
 
   if (Cause.isTimeoutError(input.error) || Cause.isTimeoutError(source))
     return transportError({ message: message ?? "HTTP transport timed out", code: code ?? "Timeout" })
