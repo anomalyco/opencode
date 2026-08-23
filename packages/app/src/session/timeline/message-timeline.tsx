@@ -505,7 +505,7 @@ function MessageTimelineView(
               ref={setBackgroundHintRef}
               class="duration-150 motion-reduce:animate-none"
               classList={{
-                [`flex h-8 items-start pt-2 ${turnPadding()}`]: true,
+                [`flex h-9 items-start pt-3 ${turnPadding()}`]: true,
                 "animate-in fade-in": backgroundHintVisibility().animate && backgroundHintVisibility().show,
                 "animate-out fade-out fill-mode-forwards":
                   backgroundHintVisibility().animate && !backgroundHintVisibility().show,
