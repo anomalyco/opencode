@@ -27,6 +27,36 @@ Give me a quick summary of the codebase.
 
 ---
 
+## Projects and sessions
+
+OpenCode organizes your work into projects, and every conversation happens inside a session.
+
+A project is the codebase OpenCode is working in. When you start OpenCode, it looks upward from the starting directory until it finds a `.git` or `.hg` folder and treats that repository as the project. Starting from any subdirectory of the same repository therefore opens the same project, and separate clones of that repository count as one project too. Outside of version control, the directory you start in groups your sessions.
+
+Sessions belong to the project they were started in. Each session keeps its own messages, tool calls, and file changes, so different tasks stay separated.
+
+To begin a new task, run:
+
+```bash frame="none"
+/new
+```
+
+This starts a fresh session while your current one stays around. To return to an earlier session, run:
+
+```bash frame="none"
+/sessions
+```
+
+This lists recent sessions of the current project so you can pick up where you left off.
+
+To work on another codebase, start OpenCode in its directory instead. It becomes its own project with its own sessions.
+
+```bash
+opencode /path/to/project
+```
+
+---
+
 ## File references
 
 You can reference files in your messages using `@`. This does a fuzzy file search in the current working directory.
