@@ -70,6 +70,76 @@ function resolve(text: string, params?: Record<string, string | number>) {
   })
 }
 
+function inspectRequestBody(text: string) {
+  const nextToken = (start: number) => {
+    for (let i = start; i < text.length; i++) {
+      if (!/\s/.test(text[i])) return i
+    }
+  }
+  const endString = (start: number) => {
+    for (let i = start + 1; i < text.length; i++) {
+      if (text[i] === "\\") {
+        i++
+        continue
+      }
+      if (text[i] === '"') return i
+    }
+  }
+
+  const stack: string[] = []
+  let expectKey = false
+  let model: { value: string; start: number; end: number } | undefined
+  let stream: boolean | undefined
+  let streamOptions = false
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]
+    if (char === '"') {
+      const end = endString(i)
+      if (end === undefined) return
+      if (stack.length === 1 && expectKey) {
+        const key = JSON.parse(text.slice(i, end + 1))
+        const colon = nextToken(end + 1)
+        if (colon === undefined || text[colon] !== ":") return
+        const start = nextToken(colon + 1)
+        if (start === undefined) return
+        if (key === "model") {
+          if (model || text[start] !== '"') return
+          const valueEnd = endString(start)
+          if (valueEnd === undefined) return
+          model = { value: JSON.parse(text.slice(start, valueEnd + 1)), start, end: valueEnd + 1 }
+        }
+        if (key === "stream") {
+          if (stream !== undefined) return
+          if (text.startsWith("true", start)) stream = true
+          else if (text.startsWith("false", start)) stream = false
+          else return
+        }
+        if (key === "stream_options") {
+          if (streamOptions) return
+          streamOptions = true
+        }
+        expectKey = false
+      }
+      i = end
+      continue
+    }
+    if (char === "{" || char === "[") {
+      if (stack.length === 0 && char !== "{") return
+      stack.push(char)
+      if (stack.length === 1) expectKey = true
+      continue
+    }
+    if (char === "}" || char === "]") {
+      if (stack.pop() !== (char === "}" ? "{" : "[")) return
+      continue
+    }
+    if (char === "," && stack.length === 1) expectKey = true
+    if (stack.length === 0 && !/\s/.test(char)) return
+  }
+  if (stack.length || !model) return
+  return { model, isStream: stream ?? false, streamOptions }
+}
+
 export async function handler(
   input: APIEvent,
   opts: {
@@ -99,12 +169,14 @@ export async function handler(
   try {
     const url = input.request.url
     const body = await input.request.text()
+    const inspected = opts.format === "google" ? undefined : inspectRequestBody(body)
+    const parsed = opts.format === "google" || inspected ? undefined : JSON.parse(body)
     const model =
       opts.format === "google"
         ? opts.parseModel(url, undefined)
-        : body.match(/"model"\s*:\s*"([^"]+)"/)?.[1] ?? ""
+        : inspected?.model.value ?? opts.parseModel(url, parsed)
     const isStream =
-      opts.format === "google" ? opts.parseIsStream(url, undefined) : /"stream"\s*:\s*true/.test(body)
+      opts.format === "google" ? opts.parseIsStream(url, undefined) : inspected?.isStream ?? opts.parseIsStream(url, parsed)
     const rawIp = input.request.headers.get("x-real-ip") ?? ""
     const ip = rawIp.includes(":") ? rawIp.split(":").slice(0, 4).join(":") : rawIp
     const rawZenApiKey = opts.parseApiKey(input.request.headers)
@@ -209,18 +281,21 @@ export async function handler(
             providerInfo.model.startsWith("global.anthropic.") ||
             providerInfo.model.startsWith("databricks-claude-"))
         if (providerInfo.format === opts.format && !providerInfo.payloadModifier && !specialAnthropic) {
-          const patched = body.replace(
-            /"model"\s*:\s*"[^"]+"/,
-            `"model":${JSON.stringify(providerInfo.model)}`,
-          )
+          if (providerInfo.format === "google") return body
+          if (!inspected) return
+          const patched =
+            body.slice(0, inspected.model.start) +
+            JSON.stringify(providerInfo.model) +
+            body.slice(inspected.model.end)
           if (providerInfo.format !== "oa-compat" || !isStream) return patched
+          if (inspected.streamOptions) return
           return patched.replace(/}\s*$/, ',"stream_options":{"include_usage":true}}')
         }
         return undefined
       })()
       const reqBody = directBody ?? JSON.stringify(
         providerInfo.modifyBody({
-          ...createBodyConverter(opts.format, providerInfo.format)(JSON.parse(body)),
+          ...createBodyConverter(opts.format, providerInfo.format)(parsed ?? JSON.parse(body)),
           model: providerInfo.model,
           ...(() => {
             const replacer = (obj: Record<string, any>): Record<string, any> =>
