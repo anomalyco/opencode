@@ -130,7 +130,7 @@ it.instance("github-copilot is not loaded from GITHUB_TOKEN", () =>
   }),
 )
 
-it.instance("github-copilot OAuth remains loaded with GITHUB_TOKEN", () =>
+it.instance("github-copilot enterprise OAuth remains loaded with GITHUB_TOKEN", () =>
   Effect.gen(function* () {
     yield* setProcessEnv("GITHUB_TOKEN", "test-github-token")
     yield* setProcessEnv(
@@ -138,9 +138,9 @@ it.instance("github-copilot OAuth remains loaded with GITHUB_TOKEN", () =>
       JSON.stringify({
         "github-copilot": {
           type: "oauth",
-          refresh: "test-refresh-token",
-          access: "test-access-token",
-          expires: 0,
+          refresh: "test-oauth-token",
+          access: "test-oauth-token",
+          expires: 0, // Copilot stores GitHub OAuth tokens as non-expiring.
           enterpriseUrl: "invalid",
         },
       }),
