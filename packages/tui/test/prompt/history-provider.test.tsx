@@ -50,18 +50,6 @@ test("keeps legacy unscoped history on the home composer", async () => {
   }
 })
 
-test("loads recently scoped history on the home composer", async () => {
-  await using tmp = await tmpdir()
-  const persisted =
-    JSON.stringify({ sessionID: "session-a", prompt: { text: "scoped", files: [], agents: [], pasted: [] } }) + "\n"
-  const setup = await renderHistory(tmp.path, persisted)
-  try {
-    expect((await waitForHistory(setup.history))?.text).toBe("scoped")
-  } finally {
-    setup.app.renderer.destroy()
-  }
-})
-
 async function renderHistory(root: string, persisted?: string) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })

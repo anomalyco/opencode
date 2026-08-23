@@ -58,9 +58,4 @@ describe("prompt history", () => {
 
     expect(parsePromptHistory(JSON.stringify(value))).toEqual([value])
   })
-
-  test("migrates scoped entries into global history", () => {
-    const value = { sessionID: "session-a", prompt: entry("hello") }
-    expect(parsePromptHistory(JSON.stringify(value))).toEqual([entry("hello")])
-  })
 })

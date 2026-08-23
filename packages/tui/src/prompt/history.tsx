@@ -36,9 +36,7 @@ export function parsePromptHistory(text: string) {
     .filter(Boolean)
     .map((line) => {
       try {
-        const value: unknown = JSON.parse(line)
-        const input = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined
-        return parsePromptInfo(input?.prompt ?? value)
+        return parsePromptInfo(JSON.parse(line))
       } catch {
         return undefined
       }
