@@ -2269,6 +2269,14 @@ export type McpServerNotFoundError = {
 export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
 
+export type ProjectNotFoundError = {
+  readonly _tag: "ProjectNotFoundError"
+  readonly projectID: string
+  readonly message: string
+}
+export const isProjectNotFoundError = (value: unknown): value is ProjectNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProjectNotFoundError"
+
 export type FormNotFoundError = { readonly _tag: "FormNotFoundError"; readonly id: string; readonly message: string }
 export const isFormNotFoundError = (value: unknown): value is FormNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormNotFoundError"
@@ -4378,6 +4386,27 @@ export type CredentialRemoveInput = {
 export type CredentialRemoveOutput = void
 
 export type ProjectListOutput = Array<Project>
+
+export type ProjectUpdateInput = {
+  readonly projectID: { readonly projectID: string }["projectID"]
+  readonly name?: {
+    readonly name?: string
+    readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+    readonly commands?: { readonly start?: string }
+  }["name"]
+  readonly icon?: {
+    readonly name?: string
+    readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+    readonly commands?: { readonly start?: string }
+  }["icon"]
+  readonly commands?: {
+    readonly name?: string
+    readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+    readonly commands?: { readonly start?: string }
+  }["commands"]
+}
+
+export type ProjectUpdateOutput = Project
 
 export type ProjectCurrentInput = {
   readonly location?: {

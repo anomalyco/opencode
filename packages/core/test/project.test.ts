@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Database } from "@opencode-ai/core/database/database"
 import { Project } from "@opencode-ai/core/project"
@@ -62,6 +62,55 @@ describe("Project.list", () => {
           sandboxes: [abs("/older/sandbox")],
         },
       ])
+    }),
+  )
+})
+
+describe("Project.update", () => {
+  it.effect("updates and clears project metadata", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const id = Project.ID.make("update")
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id,
+          worktree: abs("/update"),
+          sandboxes: [],
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+
+      expect(
+        yield* project.update({
+          projectID: id,
+          name: "Updated",
+          icon: { color: "blue", override: "data:image/png;base64,test" },
+          commands: { start: "bun install" },
+        }),
+      ).toMatchObject({
+        id,
+        name: "Updated",
+        icon: { color: "blue", override: "data:image/png;base64,test" },
+        commands: { start: "bun install" },
+      })
+
+      expect(
+        yield* project.update({
+          projectID: id,
+          name: "",
+          icon: { color: "", override: "" },
+          commands: { start: "" },
+        }),
+      ).toMatchObject({ id })
+      expect((yield* project.list())[0]).toEqual({
+        id,
+        canonical: abs("/update"),
+        time: { created: 1, updated: expect.any(Number) },
+        sandboxes: [],
+      })
     }),
   )
 })
