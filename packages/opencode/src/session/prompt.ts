@@ -1083,6 +1083,7 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let emptyStops = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1108,10 +1109,44 @@ const layer = Layer.effect(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
 
+          // Some providers emit an empty response with a clean "stop" reason under
+          // load. Treat it as unfinished so the loop retries instead of ending the
+          // turn silently; bail after two consecutive empties to avoid spinning.
+          const hasVisibleOutput =
+            lastAssistantMsg?.parts.some((part) => {
+              if (part.type === "text") return part.text.trim().length > 0
+              if (part.type === "reasoning") return part.text.trim().length > 0
+              return false
+            }) ?? false
+          const emptyStop =
+            lastAssistant?.finish === "stop" &&
+            !lastAssistant.time.completed &&
+            !hasToolCalls &&
+            !hasVisibleOutput
+          if (emptyStop) {
+            emptyStops += 1
+            yield* Effect.logWarning("empty stop; continuing loop", {
+              "session.id": sessionID,
+              messageID: lastAssistant.id,
+              consecutive: emptyStops,
+            })
+          } else {
+            emptyStops = 0
+          }
+
+          if (emptyStop && emptyStops >= 2) {
+            yield* Effect.logWarning("exiting loop after consecutive empty stops", {
+              "session.id": sessionID,
+              messageID: lastAssistant.id,
+            })
+            break
+          }
+
           if (
             lastAssistant?.finish &&
             !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
+            !emptyStop &&
             lastAssistant.parentID === lastUser.id
           ) {
             const orphan = lastAssistantMsg?.parts.find(
