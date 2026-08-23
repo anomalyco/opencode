@@ -66,10 +66,9 @@ export async function substitute(input: SubstituteInput) {
     const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
     const fileContent = (
       await Filesystem.readText(resolvedPath).catch((error: NodeJS.ErrnoException) => {
-        if (missing === "empty") return ""
-
         const errMsg = `bad file reference: "${token}"`
         if (error.code === "ENOENT") {
+          if (missing === "empty") return ""
           throw new InvalidError(
             {
               path: configSource,
