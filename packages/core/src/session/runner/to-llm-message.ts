@@ -26,6 +26,13 @@ const attachmentLocation = (file: FileAttachment) => {
   }
 }
 
+// Inline uploads (data: URIs from client paste/attach) carry the original
+// filename only in `name`; wire formats drop it, so surface it as a note.
+const inlineAttachmentName = (file: FileAttachment) => {
+  if (file.source.type !== "uri") return undefined
+  return URL.parse(file.source.uri)?.protocol === "data:" ? file.name : undefined
+}
+
 const textAttachment = (file: FileAttachment): ContentPart => ({
   type: "text",
   text: `\n\n${[
@@ -68,8 +75,8 @@ const attachmentContent = (file: FileAttachment): ContentPart[] => {
   if (file.mime === "text/plain") return [textAttachment(file)]
   if (file.mime === "application/x-directory") return [directoryAttachment(file)]
   if (imageMimes.has(file.mime) || file.mime === "application/pdf") {
-    const location = attachmentLocation(file)
-    return [...(location === undefined ? [] : [Message.text(`Attached file: ${location}`)]), media(file)]
+    const origin = attachmentLocation(file) ?? inlineAttachmentName(file)
+    return [...(origin === undefined ? [] : [Message.text(`Attached file: ${origin}`)]), media(file)]
   }
   return []
 }

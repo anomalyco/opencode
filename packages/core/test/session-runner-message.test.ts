@@ -421,6 +421,35 @@ Recent work
     ])
   })
 
+  test("notes inline image attachments by name when no local path exists", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-inline-image-name"),
+          type: "user",
+          text: "Inspect this image",
+          files: [
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "uri", uri: "data:image/png;base64,AAECAw==" },
+              name: "IMG_3480.JPG",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect this image" },
+      { type: "text", text: "Attached file: IMG_3480.JPG" },
+      { type: "media", mediaType: "image/png", data, filename: "IMG_3480.JPG" },
+    ])
+  })
+
   test("falls back to attachment names for invalid local source paths", () => {
     const data = Base64.make("AAECAw==")
     const messages = toLLMMessages(
