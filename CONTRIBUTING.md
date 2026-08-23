@@ -39,6 +39,41 @@ https://github.com/anomalyco/models.dev
   bun dev
   ```
 
+### Running Bun via Docker (no local Bun required)
+
+If `bun` is not available on your machine, you can run Bun in Docker:
+
+```bash
+script/bun-docker.sh --version
+script/bun-docker.sh install
+```
+
+On first run this script builds a local image (`opencode-bun:<bun-version>-build`)
+using the Bun version from `package.json` (`packageManager`), with `python3`,
+`make`, `g++`, and `git` so native package installs work.
+
+Run package-scoped checks the same way:
+
+```bash
+script/bun-docker.sh run --cwd packages/tui test
+script/bun-docker.sh run --cwd packages/tui typecheck
+```
+
+For a single regression test file:
+
+```bash
+script/bun-docker.sh run --cwd packages/tui test test/util/sidebar-selection.test.ts
+```
+
+To run the OpenCode terminal UI (TUI) itself with Docker Bun:
+
+```bash
+script/bun-docker.sh run dev .
+```
+
+This starts the same interactive terminal experience as `bun dev .`, but without
+requiring Bun on your host machine.
+
 ### Running against a different directory
 
 By default, `bun dev` runs OpenCode in the `packages/opencode` directory. To run it against a different directory or repository:
