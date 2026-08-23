@@ -31,6 +31,7 @@ export class Handler {
       sdk: OpencodeClient
       connection: Connection
       session: ACPSession.Interface
+      isV2?: () => boolean
     },
   ) {}
 
@@ -58,20 +59,32 @@ export class Handler {
       return
     }
 
-    const result = await this.input.connection
-      .requestPermission({
-        sessionId: permission.sessionID,
-        toolCall: await permissionToolCall({
-          toolCallId: permission.tool?.callID ?? permission.id,
-          toolName: permission.permission,
-          input: permission.metadata,
-        }),
-        options: permissionOptions,
-      })
-      .catch(async () => {
-        await this.reply(permission.id, "reject", session.cwd)
-        return undefined
-      })
+    const toolCall = await permissionToolCall({
+      toolCallId: permission.tool?.callID ?? permission.id,
+      toolName: permission.permission,
+      input: permission.metadata,
+    })
+    const title = permissionTitle(permission.permission, permission.metadata) ?? permission.permission
+
+    // v2: title is required, subject is a tagged union (type: tool_call / type: command).
+    // v1: bare toolCall field, no title/description separation.
+    const params = this.input.isV2?.()
+      ? ({
+          sessionId: permission.sessionID,
+          title,
+          subject: { type: "tool_call", toolCall },
+          options: permissionOptions,
+        } as unknown as Parameters<NonNullable<Connection["requestPermission"]>>[0])
+      : {
+          sessionId: permission.sessionID,
+          toolCall,
+          options: permissionOptions,
+        }
+
+    const result = await this.input.connection.requestPermission(params).catch(async () => {
+      await this.reply(permission.id, "reject", session.cwd)
+      return undefined
+    })
 
     if (!result) return
 

@@ -1,4 +1,5 @@
-import type { AgentSideConnection } from "@agentclientprotocol/sdk"
+import type { AgentSideConnection, SessionNotification, ToolCallContent } from "@agentclientprotocol/sdk"
+import { createTwoFilesPatch } from "diff"
 import type {
   Event,
   EventMessagePartDelta,
@@ -119,6 +120,8 @@ export class Subscription {
         return this.handlePartUpdated(event)
       case "message.part.delta":
         return this.handlePartDelta(event)
+      case "todo.updated":
+        return this.handleTodoUpdated(event)
     }
   }
 
@@ -275,6 +278,35 @@ export class Subscription {
     }
   }
 
+  private async handleTodoUpdated(event: {
+    properties: { sessionID: string; todos: Array<{ content: string; status: string; priority: string }> }
+  }) {
+    const { sessionID, todos } = event.properties
+    const entries = todos.map((todo) => ({
+      content: todo.content,
+      priority: todo.priority as "high" | "medium" | "low",
+      status: todo.status as "pending" | "in_progress" | "completed" | "cancelled",
+    }))
+
+    if (this.input.isV2?.()) {
+      await this.input.connection.sessionUpdate({
+        sessionId: sessionID,
+        update: {
+          sessionUpdate: "plan_update",
+          plan: { type: "items", planId: "default", entries },
+        },
+      } as SessionNotification)
+    } else {
+      await this.input.connection.sessionUpdate({
+        sessionId: sessionID,
+        update: {
+          sessionUpdate: "plan",
+          entries,
+        },
+      } as SessionNotification)
+    }
+  }
+
   private async fetchPartMetadata(sessionId: string, cwd: string, messageId: string, partId: string) {
     const message = await this.input.sdk.session
       .message(
@@ -327,14 +359,25 @@ export class Subscription {
           sessionId,
           update: {
             sessionUpdate: "tool_call_update",
-            ...completedToolUpdate({
-              toolCallId: part.callID,
-              toolName: part.tool,
-              state: part.state,
-              cwd,
-            }),
+            ...this.v2ToolUpdate(
+              completedToolUpdate({
+                toolCallId: part.callID,
+                toolName: part.tool,
+                state: part.state,
+                cwd,
+              }),
+            ),
           },
         })
+        if (this.input.isV2?.() && isShellTool(part.tool)) {
+          await this.emitTerminalUpdate(
+            sessionId,
+            part,
+            cwd,
+            shellOutputSnapshot(part.state) ?? part.state.output,
+            true,
+          )
+        }
         return
 
       case "error":
@@ -343,12 +386,14 @@ export class Subscription {
           sessionId,
           update: {
             sessionUpdate: "tool_call_update",
-            ...errorToolUpdate({
-              toolCallId: part.callID,
-              toolName: part.tool,
-              state: part.state,
-              cwd,
-            }),
+            ...this.v2ToolUpdate(
+              errorToolUpdate({
+                toolCallId: part.callID,
+                toolName: part.tool,
+                state: part.state,
+                cwd,
+              }),
+            ),
           },
         })
         return
@@ -391,28 +436,90 @@ export class Subscription {
         }),
       },
     })
+
+    if (this.input.isV2?.() && isShellTool(part.tool)) {
+      await this.emitTerminalUpdate(sessionId, part, cwd, output, false)
+    }
   }
 
   private async toolStart(sessionId: string, part: ToolPart, cwd: string) {
     if (this.toolStarts.has(part.callID)) return
     this.toolStarts.add(part.callID)
-    await this.input.connection.sessionUpdate({
-      sessionId,
-      update: {
-        sessionUpdate: "tool_call",
-        ...pendingToolCall({
-          toolCallId: part.callID,
-          toolName: part.tool,
-          state: part.state,
-          cwd,
-        }),
-      },
+    const toolCall = pendingToolCall({
+      toolCallId: part.callID,
+      toolName: part.tool,
+      state: part.state,
+      cwd,
     })
+    // v2: the first tool_call_update for an unseen toolCallId creates the tool call.
+    // v1: a separate tool_call notification creates it, then tool_call_update patches it.
+    if (this.input.isV2?.()) {
+      await this.input.connection.sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call_update",
+          ...pendingToolCall({
+            toolCallId: part.callID,
+            toolName: part.tool,
+            state: part.state,
+            cwd,
+          }),
+        },
+      })
+    } else {
+      await this.input.connection.sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call",
+          ...pendingToolCall({
+            toolCallId: part.callID,
+            toolName: part.tool,
+            state: part.state,
+            cwd,
+          }),
+        },
+      })
+    }
   }
 
   private clearTool(toolCallId: string) {
     this.toolStarts.delete(toolCallId)
     this.shellSnapshots.delete(toolCallId)
+  }
+
+  private v2ToolUpdate(update: { content?: ToolCallContent[] | null; toolCallId: string; [key: string]: unknown }) {
+    if (!this.input.isV2?.() || !update.content) return update
+    return { ...update, content: update.content.map(v2DiffContent) }
+  }
+
+  private async emitTerminalUpdate(
+    sessionId: string,
+    part: ToolPart,
+    cwd: string,
+    output: string | undefined,
+    exited: boolean,
+  ) {
+    const input = part.state.input as Record<string, unknown>
+    const command = stringValue(input.command) ?? stringValue(input.cmd) ?? part.tool
+    const terminalUpdate: Record<string, unknown> = {
+      terminalId: part.callID,
+      command,
+      cwd,
+    }
+    if (output !== undefined) {
+      terminalUpdate.output = { data: Buffer.from(output).toString("base64") }
+    }
+    if (exited) {
+      const exitCode = typeof input.exitCode === "number" ? input.exitCode : 0
+      terminalUpdate.exitStatus = { exitCode }
+    }
+    await this.input.connection.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: "terminal_update",
+        ...terminalUpdate,
+      },
+    } as unknown as SessionNotification)
   }
 }
 
@@ -436,3 +543,43 @@ function signal() {
 }
 
 export * as ACPEvent from "./event"
+
+function v2DiffContent(content: ToolCallContent): ToolCallContent {
+  if (!("type" in content) || content.type !== "diff") return content
+  const v1Diff = content as unknown as { type: "diff"; path: string; oldText: string; newText: string }
+  if (!v1Diff.path) return content
+
+  const raw = createTwoFilesPatch(v1Diff.path, v1Diff.path, v1Diff.oldText, v1Diff.newText, undefined, undefined, {
+    context: 3,
+  })
+  // Strip Index: and === separator lines, prepend diff --git header for git_patch format
+  const hunks = raw
+    .split("\n")
+    .filter((line) => !line.startsWith("Index: ") && !line.startsWith("======="))
+    .join("\n")
+  const patchText = `diff --git a/${v1Diff.path} b/${v1Diff.path}\n${hunks}`
+
+  return {
+    type: "diff",
+    changes: [
+      {
+        operation: "modify",
+        path: v1Diff.path,
+        fileType: "text",
+      },
+    ],
+    patch: {
+      format: "git_patch",
+      text: patchText,
+    },
+  } as unknown as ToolCallContent
+}
+
+function isShellTool(toolName: string) {
+  const tool = toolName.toLocaleLowerCase()
+  return tool === "bash" || tool === "shell"
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : undefined
+}
