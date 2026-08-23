@@ -1086,7 +1086,10 @@ async function load(input: {
       }).pipe(Effect.provide(AppNodeBuilder.build(RuntimeFlags.node))),
     )
     const pluginOrigins = config.plugin_origins ?? (await TuiConfig.pluginOrigins())
-    const records = Flag.OPENCODE_PURE ? [] : pluginOrigins
+    const disabledPlugins = new Set(config.disabled_plugins ?? [])
+    const records = Flag.OPENCODE_PURE
+      ? []
+      : pluginOrigins.filter((origin) => !disabledPlugins.has(ConfigPlugin.pluginSpecifier(origin.spec)))
     if (Flag.OPENCODE_PURE && pluginOrigins.length) {
     }
 

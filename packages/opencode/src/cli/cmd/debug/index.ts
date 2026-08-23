@@ -70,8 +70,11 @@ const InfoCommand = effectCmd({
       console.log("none")
       return
     }
+    const disabledPlugins = new Set(config.disabled_plugins ?? [])
     for (const plugin of config.plugin_origins) {
-      console.log(`- ${ConfigPlugin.pluginSpecifier(plugin.spec)}`)
+      const spec = ConfigPlugin.pluginSpecifier(plugin.spec)
+      const suffix = disabledPlugins.has(spec) ? " (disabled)" : ""
+      console.log(`- ${spec}${suffix}`)
     }
   }),
 })
