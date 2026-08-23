@@ -25,6 +25,7 @@ const checkLoggedIn = query(async () => {
 const models = [
   { name: "Grok 4.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.2", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.1", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Kimi K3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -32,13 +33,15 @@ const models = [
   { name: "Kimi K2.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.5-Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Qwen3.8 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.7 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.7 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.6 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M2.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Muse Spark 1.2 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "DeepSeek V4 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "DeepSeek V4 Flash", training: "go.faq.a5.used", retention: "go.faq.a5.noAgreement" },
+  { name: "DeepSeek V4 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
 ] as const
 
@@ -65,27 +68,32 @@ function LimitsGraph(props: { href: string }) {
 
   const baseline = 100
   const graph = [
-    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "50ms" },
-    { id: "kimi-k3", name: "Kimi K3", req: 110, d: "75ms" },
+    { id: "kimi-k3", name: "Kimi K3", req: 110, d: "50ms" },
+    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "75ms" },
+    { id: "qwen3.8-max", name: "Qwen3.8 Max", req: 160, d: "90ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
+    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 1050, d: "150ms" },
+    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 2050, d: "290ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
-    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "270ms" },
-    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna (2x usage)", req: 4100, baseReq: 2050, d: "290ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
-    { id: "hy3", name: "Hy3", req: 4300, d: "320ms" },
+    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 7600, d: "330ms" },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
-    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 31650, d: "340ms" },
+    { id: "hy3", name: "Hy3", req: 34400, baseReq: 4300, d: "320ms" },
+    { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", req: 45300, edge: true, d: "360ms" },
+    { id: "ox-alpha-free", name: "Ox Alpha Free", req: Infinity, infinite: true, edge: true, d: "400ms" },
   ]
 
-  const w = 720
+  const w = 1040
+  const chartW = 720
   const left = 40
   const right = 60
   const top = 18
   const bottom = 44
-  const plot = w - left - right
+  const plot = chartW - left - right
+  const infiniteX = w - 180
 
   const ratio = (n: number) => n / baseline
-  const rmax = Math.max(1, ...graph.map((m) => ratio(m.req)))
+  const rmax = Math.max(1, ...graph.filter((m) => !("infinite" in m)).map((m) => ratio(m.req)))
   const log = (n: number) => Math.log10(Math.max(n, 1))
   const base = 24
   const p = 2.2
@@ -147,10 +155,10 @@ function LimitsGraph(props: { href: string }) {
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
-                    width={Math.max(0, x(ratio(m.baseReq ?? m.req)) - left)}
+                    width={Math.max(0, ("infinite" in m ? infiniteX : x(ratio(m.baseReq ?? m.req))) - left)}
                     height={bh}
                     data-bar
-                    data-kind="go"
+                    data-kind={"infinite" in m ? "infinite" : "go"}
                     data-model={m.id}
                   />
                   {m.baseReq && (
@@ -186,17 +194,32 @@ function LimitsGraph(props: { href: string }) {
           </For>
         </div>
 
-        <div data-slot="pills" aria-hidden="true">
+        <div data-slot="pills">
           <For each={graph}>
             {(m, i) => (
               <span
                 data-item
                 data-kind="go"
                 data-model={m.id}
-                style={{ "--x": px(x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any}
+                data-edge={"edge" in m ? "" : undefined}
+                data-infinite={"infinite" in m ? "" : undefined}
+                style={
+                  { "--x": px("infinite" in m ? infiniteX : x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any
+                }
               >
-                <span data-value>{m.req.toLocaleString()}</span>
+                <span data-value>{"infinite" in m ? "∞" : m.req.toLocaleString()}</span>
                 <span data-name>{m.name}</span>
+                {m.id === "muse-spark-1.2-contributor" && (
+                  <span data-regions>
+                    (
+                    <a href="https://ai.developer.meta.com/legal/geographic-use-policy">
+                      {i18n.t("go.graph.limitedRegions")}
+                    </a>
+                    )
+                  </span>
+                )}
+                {"infinite" in m && <span data-limited>({i18n.t("go.graph.limitedTime")})</span>}
+                {m.baseReq && <span data-bonus>8x usage</span>}
               </span>
             )}
           </For>
@@ -504,6 +527,16 @@ export default function Home() {
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>
                       .
+                    </p>
+                    <p>
+                      <strong>Muse Spark 1.2 Contributor:</strong> {i18n.t("go.faq.a5.museRetention")}{" "}
+                      <a href="https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier">
+                        {i18n.t("go.faq.a5.learnMore")}
+                      </a>
+                      .
+                    </p>
+                    <p>
+                      <strong>DeepSeek V4 Flash:</strong> {i18n.t("go.faq.a5.deepseekRetention")}
                     </p>
                   </div>
                 </Faq>
