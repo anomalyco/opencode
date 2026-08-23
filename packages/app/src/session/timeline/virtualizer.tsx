@@ -191,6 +191,7 @@ export function createTimelineVirtualizer(input: Input) {
         return
       }
       overscanFrame = undefined
+      virtualContent?.classList.add("animate-in", "fade-in", "duration-150")
       virtualContent?.style.removeProperty("visibility")
     })
   }
@@ -388,6 +389,7 @@ export function createTimelineVirtualizer(input: Input) {
           <Show when={input.showHeader()}>{props.header}</Show>
           <div
             data-timeline-virtual-content
+            class="motion-reduce:animate-none"
             ref={(element) => {
               virtualContent = element
               input.setContentRef(element)
