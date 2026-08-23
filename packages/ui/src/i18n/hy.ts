@@ -178,7 +178,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Ստեղծել նոր նիստի ճյուղ",
   "ui.message.revertMessage": "Վերադարձնել հաղորդագրությունը",
   "ui.message.copyResponse": "Պատճենել պատասխանը",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Պատճենված",
   "ui.message.duration.seconds": "{{count}} վ",
   "ui.message.duration.minutesSeconds": "{{minutes}}ր {{seconds}}վ",

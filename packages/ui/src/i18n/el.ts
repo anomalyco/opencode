@@ -178,7 +178,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Διακλάδωση σε νέα συνεδρία",
   "ui.message.revertMessage": "Επαναφορά μηνύματος",
   "ui.message.copyResponse": "Απάντηση αντιγραφής",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Αντιγράφηκε",
   "ui.message.duration.seconds": "{{count}}δ",
   "ui.message.duration.minutesSeconds": "{{minutes}}λ {{seconds}}δ",

@@ -178,7 +178,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "නව සැසියට ෆෝක් කරන්න",
   "ui.message.revertMessage": "පණිවිඩය ප්‍රතිවර්තනය කරන්න",
   "ui.message.copyResponse": "ප්රතිචාරය පිටපත් කරන්න",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "පිටපත් කර ඇත",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}මි {{seconds}}ත",

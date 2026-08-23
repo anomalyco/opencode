@@ -171,8 +171,6 @@ export const dict = {
   "command.session.redo": "ድገም",
   "command.session.redo.description": "የመጨረሻውን የተቀለበሰ መልእክት ይድገሙት",
   "command.session.compact": "የታመቀ ክፍለ ጊዜ",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "የአውድ መጠንን ለመቀነስ ክፍለ-ጊዜውን ያጠቃልሉት",
   "command.session.fork": "ከመልዕክት አዲስ ቅርንጫፍ ፍጠር",
   "command.session.fork.description": "ከቀደመው መልእክት አዲስ ክፍለ ጊዜ ፍጠር",

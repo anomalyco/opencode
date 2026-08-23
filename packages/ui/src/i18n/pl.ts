@@ -194,7 +194,6 @@ export const dict = {
   "ui.message.forkMessage": "Rozwidlij do nowej sesji",
   "ui.message.revertMessage": "Cofnij wiadomość",
   "ui.message.copyResponse": "Kopiuj odpowiedź",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Skopiowano!",
   "ui.message.interrupted": "Przerwano",
   "ui.message.queued": "W kolejce",

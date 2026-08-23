@@ -177,8 +177,6 @@ export const dict = {
   "command.session.redo": "دوبارہ کرو",
   "command.session.redo.description": "آخری انڈون سنیہا دوبارہ کرو",
   "command.session.compact": "سیشن مختصر کرو",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "سیاق و سباق دا سائز گھٹ کرن لئی سیشن دا خلاصہ کرو",
   "command.session.fork": "سنیہا توں فورک",
   "command.session.fork.description": "پچھلے سنیہے توں اک نواں سیشن بناؤ",

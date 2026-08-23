@@ -177,8 +177,6 @@ export const dict = {
   "command.session.redo": "やり直す",
   "command.session.redo.description": "元に戻したメッセージをやり直す",
   "command.session.compact": "セッションを圧縮",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "セッションを要約してコンテキストサイズを削減",
   "command.session.fork": "メッセージからフォーク",
   "command.session.fork.description": "以前のメッセージから新しいセッションを作成",

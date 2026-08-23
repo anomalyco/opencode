@@ -185,8 +185,6 @@ export const dict = {
   "command.session.redo": "Ulangi",
   "command.session.redo.description": "Ulangi pesan yang diurungkan",
   "command.session.compact": "Ringkas sesi",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Ringkas sesi untuk mengurangi ukuran konteks",
   "command.session.fork": "Fork dari pesan",
   "command.session.fork.description": "Buat sesi baru dari pesan sebelumnya",

@@ -171,8 +171,6 @@ export const dict = {
   "command.session.redo": "Opnieuw uitvoeren",
   "command.session.redo.description": "Voer het laatste ongedaan gemaakte bericht opnieuw uit",
   "command.session.compact": "Sessie comprimeren",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Vat de sessie samen om de contextgrootte te verkleinen",
   "command.session.fork": "Afsplitsen vanaf bericht",
   "command.session.fork.description": "Maak een nieuwe sessie op basis van een eerder bericht",

@@ -183,7 +183,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Odvoji u novu sesiju",
   "ui.message.revertMessage": "Vrati poruku",
   "ui.message.copyResponse": "Kopiraj odgovor",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Kopirano",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

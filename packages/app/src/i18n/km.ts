@@ -171,8 +171,6 @@ export const dict = {
   "command.session.redo": "ធ្វើឡើងវិញ",
   "command.session.redo.description": "ធ្វើសារឡើងវិញនូវសារដែលមិនបានធ្វើចុងក្រោយ",
   "command.session.compact": "សម័យបង្រួម",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "សង្ខេបសម័យដើម្បីកាត់បន្ថយទំហំបរិបទ",
   "command.session.fork": "បំបែកចេញពីសារ",
   "command.session.fork.description": "បង្កើតសម័យថ្មីពីសារមុន។",

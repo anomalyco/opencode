@@ -178,8 +178,6 @@ export const dict = {
   "command.session.redo": "फिर से करें",
   "command.session.redo.description": "अंतिम पूर्ववत संदेश को पुनः करें",
   "command.session.compact": "सेशन संक्षिप्त करें",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "कॉन्टेक्स्ट आकार को कम करने के लिए सेशन को सारांशित करें",
   "command.session.fork": "संदेश से फ़ोर्क",
   "command.session.fork.description": "पिछले संदेश से एक नया सेशन बनाएं",

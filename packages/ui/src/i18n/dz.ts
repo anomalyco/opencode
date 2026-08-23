@@ -180,7 +180,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "ལཱ་ཡུན་གསརཔ་ལུ་ཕོརཀ།",
   "ui.message.revertMessage": "འཕྲིན་དོན་ཕྱིར་ལོག་འབད།",
   "ui.message.copyResponse": "ལན་འདེབས་འདྲ་བཤུས།",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "འདྲ་བཤུས་འབད་ཡོདཔ།",
   "ui.message.duration.seconds": "{{count}}ས །",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}ས །",

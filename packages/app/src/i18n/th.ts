@@ -183,8 +183,6 @@ export const dict = {
   "command.session.redo": "ทำซ้ำ",
   "command.session.redo.description": "ทำซ้ำข้อความที่ถูกยกเลิกล่าสุด",
   "command.session.compact": "บีบอัดเซสชัน",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "สรุปเซสชันเพื่อลดขนาดบริบท",
   "command.session.fork": "แตกแขนงจากข้อความ",
   "command.session.fork.description": "สร้างเซสชันใหม่จากข้อความก่อนหน้า",

@@ -192,7 +192,6 @@ export const dict = {
   "ui.message.forkMessage": "Yeni oturuma dallandır",
   "ui.message.revertMessage": "Bu noktaya sıfırla",
   "ui.message.copyResponse": "Yanıtı kopyala",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Kopyalandı",
   "ui.message.interrupted": "Kesildi",
   "ui.message.queued": "Sırada",

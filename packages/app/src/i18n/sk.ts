@@ -171,8 +171,6 @@ export const dict = {
   "command.session.redo": "Znovu",
   "command.session.redo.description": "Obnoviť poslednú vrátenú správu",
   "command.session.compact": "Zhutniť reláciu",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Zhrnúť reláciu na zmenšenie kontextu",
   "command.session.fork": "Vytvoriť vetvu zo správy",
   "command.session.fork.description": "Vytvoriť novú reláciu z predchádzajúcej správy",

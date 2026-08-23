@@ -178,8 +178,6 @@ export const dict = {
   "command.session.redo": "Ponów",
   "command.session.redo.description": "Ponów ostatnią cofniętą wiadomość",
   "command.session.compact": "Kompaktuj sesję",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Podsumuj sesję, aby zmniejszyć rozmiar kontekstu",
   "command.session.fork": "Rozwidlij od wiadomości",
   "command.session.fork.description": "Utwórz nową sesję od poprzedniej wiadomości",

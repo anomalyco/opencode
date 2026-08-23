@@ -175,8 +175,6 @@ export const dict = {
   "command.session.redo": "Ponovi",
   "command.session.redo.description": "Ponovite zadnju poništenu poruku",
   "command.session.compact": "Sažmi sesiju",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Sažmite sesiju kako biste smanjili veličinu konteksta",
   "command.session.fork": "Odvoji od poruke",
   "command.session.fork.description": "Stvorite novu sesiju iz prethodne poruke",

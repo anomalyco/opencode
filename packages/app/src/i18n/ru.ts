@@ -184,8 +184,6 @@ export const dict = {
   "command.session.redo": "Повторить",
   "command.session.redo.description": "Повторить отменённое сообщение",
   "command.session.compact": "Сжать сессию",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Сократить сессию для уменьшения размера контекста",
   "command.session.fork": "Создать ответвление",
   "command.session.fork.description": "Создать новую сессию из сообщения",

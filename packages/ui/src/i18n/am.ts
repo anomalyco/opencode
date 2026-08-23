@@ -177,7 +177,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "ወደ አዲስ ክፍለ ጊዜ ቅርንጫፍ ፍጠር",
   "ui.message.revertMessage": "መልዕክት ቀይር",
   "ui.message.copyResponse": "መልስ ቅጂ",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "የተገለበጠ",
   "ui.message.duration.seconds": "{{count}} ሰ",
   "ui.message.duration.minutesSeconds": "{{minutes}} ደ {{seconds}} ሰ",

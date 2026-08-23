@@ -175,8 +175,6 @@ export const dict = {
   "command.session.redo": "Újra",
   "command.session.redo.description": "Ismételje meg az utolsó visszavont üzenetet",
   "command.session.compact": "Munkamenet tömörítése",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "A kontextus méretének csökkentése érdekében foglalja össze a munkamenetet",
   "command.session.fork": "Elágazás az üzenettől",
   "command.session.fork.description": "Hozzon létre új munkamenetet egy korábbi üzenetből",

@@ -178,7 +178,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Greina í nýggja setu",
   "ui.message.revertMessage": "Send boðum aftur",
   "ui.message.copyResponse": "Avrita svar",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Avritað",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

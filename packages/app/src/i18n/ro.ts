@@ -171,8 +171,6 @@ export const dict = {
   "command.session.redo": "Refă",
   "command.session.redo.description": "Refă ultimul mesaj anulat",
   "command.session.compact": "Compactează sesiunea",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Rezumă sesiunea pentru a reduce dimensiunea contextului",
   "command.session.fork": "Derivează din mesaj",
   "command.session.fork.description": "Creează o sesiune nouă dintr-un mesaj anterior",

@@ -172,8 +172,6 @@ export const dict = {
   "command.session.redo": "Такрор кунед",
   "command.session.redo.description": "Паёми охирини бекоршударо такрор кунед",
   "command.session.compact": "Сеанси компакт",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Барои кам кардани андозаи контекст ҷаласаро ҷамъбаст кунед",
   "command.session.fork": "Аз паём шоха созед",
   "command.session.fork.description": "Аз паёми қаблӣ сессияи нав эҷод кунед",

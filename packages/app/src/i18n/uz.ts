@@ -173,8 +173,6 @@ export const dict = {
   "command.session.redo": "Qayta qiling",
   "command.session.redo.description": "Oxirgi bekor qilingan xabarni takrorlang",
   "command.session.compact": "Yilni seans",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Kontekst hajmini kamaytirish uchun sessiyani umumlashtiring",
   "command.session.fork": "Xabardan vilka",
   "command.session.fork.description": "Oldingi xabardan yangi seans yarating",

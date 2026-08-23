@@ -173,8 +173,6 @@ export const dict = {
   "command.session.redo": "Yenidən et",
   "command.session.redo.description": "Son geri alınmış mesajı yenidən et",
   "command.session.compact": "Sessiyanı sıxlaşdır",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Kontekst həcmini azaltmaq üçün sessiyanı xülasə et",
   "command.session.fork": "Mesajdan fork et",
   "command.session.fork.description": "Əvvəlki mesajdan yeni sessiya yarat",
