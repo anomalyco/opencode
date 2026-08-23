@@ -59,3 +59,10 @@ export function schema<S extends EffectSchema.Decoder<unknown, never>>(
     { cause: error },
   )
 }
+
+export function unrecognizedKeys(schema: EffectSchema.Top, data: unknown) {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return []
+  if (schema.ast._tag !== "Objects" || schema.ast.indexSignatures.length > 0) return []
+  const known = new Set(schema.ast.propertySignatures.map((item) => String(item.name)))
+  return Object.keys(data).filter((key) => !known.has(key))
+}
