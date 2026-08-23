@@ -106,6 +106,7 @@
 
     [data-slot="setting-row"] {
       margin-top: 0;
+      padding-block: var(--space-2);
     }
   }
 
