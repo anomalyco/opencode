@@ -30,7 +30,7 @@ import {
 import "./dialog.css"
 import { Divider } from "@opencode-ai/ui/divider"
 import { getFilename } from "@opencode-ai/util/path"
-import { createTreeTouchScrollController } from "./scroll"
+import { createTreeTouchScrollController, findTreeTouch } from "./scroll"
 
 interface DirectoryPickerDialogProps {
   title?: string
@@ -365,20 +365,22 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
           class="directory-picker-browser"
           ref={container}
           onTouchStart={(event) => {
-            const touch = event.touches[0]
-            if (touch) touchScroll.start(touch.clientY)
+            const touch = event.changedTouches[0]
+            if (touch) touchScroll.start(touch.identifier, touch.clientY)
           }}
           onTouchMove={(event) => {
-            const touch = event.touches[0]
-            if (!touch || !touchScroll.move(touch.clientY)) return
+            const touch = findTreeTouch(event.touches, touchScroll.identifier)
+            if (!touch || !touchScroll.move(touch.identifier, touch.clientY)) return
             event.preventDefault()
-            getTreeScroller()?.dispatchEvent(new Event("scroll"))
           }}
-          onTouchEnd={() => {
-            touchScroll.end()
-            window.setTimeout(() => touchScroll.releaseClick(), 0)
+          onTouchEnd={(event) => {
+            const touch = findTreeTouch(event.changedTouches, touchScroll.identifier)
+            if (touch) touchScroll.end(touch.identifier)
           }}
-          onTouchCancel={() => touchScroll.cancel()}
+          onTouchCancel={(event) => {
+            const touch = findTreeTouch(event.changedTouches, touchScroll.identifier)
+            if (touch) touchScroll.cancel(touch.identifier)
+          }}
           onWheel={(event) => {
             const scroller = getTreeScroller()
             if (!scroller) return
