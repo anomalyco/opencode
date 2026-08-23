@@ -2027,6 +2027,28 @@ describe("SessionNs.getUsage", () => {
     expect(result.cost).toBe(3 + 1.5)
   })
 
+  test("drops a tier with valid shape but no pricing, falling back to base", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0, write: 0 },
+        // valid type + size>0, but NO input/output pricing → must not silently zero the cost
+        tiers: [{ tier: { type: "context", size: 5000 } }],
+      } as unknown as Provider.Model["cost"],
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    })
+    // before the fix this pricing-less tier won selection and yielded cost 0; now it is
+    // dropped and the base rates apply
+    expect(result.cost).toBe(3 + 1.5)
+    expect(Number.isNaN(result.cost)).toBe(false)
+  })
+
   test("ignores a cost.tiers that is not an array", () => {
     const model = createModel({
       context: 1_000_000,
