@@ -86,6 +86,7 @@ import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
+import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS } from "./startup-shared"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
 registerOpencodeSpinner()
@@ -156,25 +157,10 @@ export type TuiInput = {
   events?: EventSource
   pluginHost: TuiPluginHost
 }
-
-const STARTUP_SPLASH_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-const STARTUP_SPLASH_MESSAGES = [
-  "Starting OpenCode...",
-  "Initializing terminal...",
-  "Loading configuration...",
-  "Resolving theme...",
-  "Preparing workspace...",
-  "Almost ready...",
-]
-const STARTUP_SPLASH_OPENCODE_ASCII = [
-  "  █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█  ",
-  "  █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀  ",
-  "  ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀  ",
-]
-
 function paintStartupSplash(renderer: { width: number; height: number }): () => void {
   const width = Math.max(1, renderer.width)
   const height = Math.max(1, renderer.height)
+  const row = Math.max(1, Math.floor(height / 2) + 1)
   let frame = 0
   let messageIndex = 0
   let lastMessageChange = Date.now()
@@ -194,69 +180,13 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
     try {
       process.stderr.write(out)
     } catch {}
-    try {
-      process.stdout.write(out)
-    } catch {}
   }
 
-  const boxWidth = Math.min(width, 60)
-  const boxHeight = 11
-  const boxLeft = Math.max(1, Math.floor((width - boxWidth) / 2) + 1)
-  const boxTop = Math.max(1, Math.floor((height - boxHeight) / 2) + 1)
-
-  const moveTo = (col: number, row: number) => `\x1b[${row};${col}H`
-
-  const drawFrame = () => {
-    if (stopped) return ""
-    const out: string[] = []
-    out.push("\x1b[?25l")
-    out.push(moveTo(boxLeft, boxTop))
-    out.push("\x1b[48;5;236m\x1b[38;5;215m")
-    const top = "┌" + "─".repeat(boxWidth - 2) + "┐"
-    out.push(top)
-    for (let i = 1; i < boxHeight - 1; i++) {
-      out.push(moveTo(boxLeft, boxTop + i))
-      out.push("│")
-      out.push(moveTo(boxLeft + boxWidth - 1, boxTop + i))
-      out.push("│")
-    }
-    out.push(moveTo(boxLeft, boxTop + boxHeight - 1))
-    out.push("└" + "─".repeat(boxWidth - 2) + "┘")
-    out.push("\x1b[0m")
-    return out.join("")
-  }
-
-  const drawContent = () => {
-    if (stopped) return ""
-    const out: string[] = []
-    out.push("\x1b[0m")
-    const logoRow = boxTop + 2
-    for (let i = 0; i < STARTUP_SPLASH_OPENCODE_ASCII.length; i++) {
-      const line = STARTUP_SPLASH_OPENCODE_ASCII[i]
-      const col = Math.max(boxLeft + 1, Math.floor((width - line.length) / 2) + 1)
-      out.push(moveTo(col, logoRow + i))
-      out.push("\x1b[1m\x1b[38;5;252m" + line + "\x1b[0m")
-    }
-    const message = `${STARTUP_SPLASH_FRAMES[frame]} ${STARTUP_SPLASH_MESSAGES[messageIndex]}`
-    const messageRow = boxTop + boxHeight - 3
-    const messageCol = Math.max(boxLeft + 2, Math.floor((width - message.length) / 2) + 1)
-    out.push(moveTo(messageCol, messageRow))
-    out.push("\x1b[1m\x1b[38;5;215m" + message + "\x1b[0m")
-    return out.join("")
-  }
-
-  let firstPaint = true
   const paint = () => {
     if (stopped) return
-    if (firstPaint) {
-      writeAll("\x1b[2J\x1b[H" + drawFrame() + drawContent())
-      firstPaint = false
-      return
-    }
-    const message = `${STARTUP_SPLASH_FRAMES[frame]} ${STARTUP_SPLASH_MESSAGES[messageIndex]}`
-    const messageRow = boxTop + boxHeight - 3
-    const messageCol = Math.max(boxLeft + 2, Math.floor((width - message.length) / 2) + 1)
-    writeAll(moveTo(messageCol, messageRow) + "\x1b[1m\x1b[38;5;215m" + message + "\x1b[0m")
+    const message = `${STARTUP_FRAMES[frame]} ${STARTUP_MESSAGES[messageIndex]}`
+    const col = Math.max(1, Math.floor((width - message.length) / 2) + 1)
+    writeAll("\x1b[?25l\x1b[2J\x1b[H" + `\x1b[${row};${col}H` + "\x1b[1m\x1b[38;5;252m" + message + "\x1b[0m")
   }
 
   globalThis.__opencodeStopInTuiSplash = () => {
@@ -271,17 +201,16 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
 
   const tick = () => {
     if (stopped) return
-    frame = (frame + 1) % STARTUP_SPLASH_FRAMES.length
+    frame = (frame + 1) % STARTUP_FRAMES.length
     const now = Date.now()
-    if (now - lastMessageChange > 1500) {
-      messageIndex = (messageIndex + 1) % STARTUP_SPLASH_MESSAGES.length
+    if (now - lastMessageChange > STARTUP_MESSAGE_INTERVAL_MS) {
+      messageIndex = (messageIndex + 1) % STARTUP_MESSAGES.length
       lastMessageChange = now
-      firstPaint = true
     }
     paint()
-    setTimeout(tick, 16)
+    setTimeout(tick, STARTUP_FRAME_INTERVAL_MS)
   }
-  setTimeout(tick, 16)
+  setTimeout(tick, STARTUP_FRAME_INTERVAL_MS)
 
   const fallbackStop = setTimeout(() => {
     if (!stopped) globalThis.__opencodeStopInTuiSplash?.()

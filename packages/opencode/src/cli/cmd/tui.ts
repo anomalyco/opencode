@@ -14,6 +14,7 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
+import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS } from "@opencode-ai/tui/startup-shared"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -155,16 +156,8 @@ export const TuiThreadCommand = cmd({
     // because we do not know which one is actually attached to the user's
     // terminal at this point (stdio could be piped, redirected, or inherited).
     const fs = await import("node:fs")
-    const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    const MESSAGES = [
-      "Loading OpenCode...",
-      "Loading OpenCode.",
-      "Loading OpenCode..",
-      "Initializing terminal...",
-      "Spawning TUI worker...",
-      "Loading configuration...",
-      "Almost there...",
-    ]
+    const FRAMES = STARTUP_FRAMES
+    const MESSAGES = STARTUP_MESSAGES
     const writeRaw = (out: string) => {
       try {
         const tty = fs.openSync("/dev/tty", "w")
@@ -194,12 +187,12 @@ export const TuiThreadCommand = cmd({
     const preSplashTimer = setInterval(() => {
       frame = (frame + 1) % FRAMES.length
       const now = Date.now()
-      if (now - lastMessageChange > 1200) {
+      if (now - lastMessageChange > STARTUP_MESSAGE_INTERVAL_MS) {
         messageIndex = (messageIndex + 1) % MESSAGES.length
         lastMessageChange = now
       }
       writeLine(`${FRAMES[frame]} ${MESSAGES[messageIndex]}`)
-    }, 100)
+    }, STARTUP_FRAME_INTERVAL_MS)
 
     const resetTerminal = () => {
       writeRaw("\x1b[?25h\x1b[0m")
