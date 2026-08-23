@@ -62,6 +62,9 @@ export const SessionTable = sqliteTable(
     index("session_project_idx").on(table.project_id),
     index("session_workspace_idx").on(table.workspace_id),
     index("session_parent_idx").on(table.parent_id),
+    // Session listings order by (time_created, id); without this index every
+    // list call sorts the whole table through a TEMP B-tree.
+    index("session_time_created_idx").on(table.time_created, table.id),
   ],
 )
 
