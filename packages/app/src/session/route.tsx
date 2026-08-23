@@ -16,6 +16,7 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { requireServerKey } from "@/shell/routes/session"
 import { useSessionModel } from "./model"
 import { SessionPanelFrame } from "./session-frame"
+import { SessionIdentityHeader } from "./session-identity-header"
 import { IncompatibleServerPanel } from "./incompatible-server-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
@@ -83,7 +84,7 @@ function ResolvedTargetSessionRoute() {
         </SessionStatePanel>
       }
     >
-      <Show when={directory()} fallback={<SessionStatePanel />}>
+      <Show when={directory()} fallback={<PendingSessionState sessionID={params.id} />}>
         {(value) => (
           <LocationProvider directory={value()}>
             <SessionUIProvider directory={value()} server={server.key}>
@@ -93,6 +94,14 @@ function ResolvedTargetSessionRoute() {
         )}
       </Show>
     </Show>
+  )
+}
+
+function PendingSessionState(props: { sessionID: string }) {
+  return (
+    <SessionStatePanel>
+      <SessionIdentityHeader sessionID={props.sessionID} />
+    </SessionStatePanel>
   )
 }
 

@@ -17,6 +17,7 @@ import { createSessionReview } from "./review/model"
 import { SessionDesktopReview, SessionMobileReview, SessionMobileTabs } from "./review/view"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
+import { SessionIdentityHeader } from "./session-identity-header"
 
 export function SessionScreen(props: { session: SessionModel }) {
   const session = props.session
@@ -73,7 +74,16 @@ export function SessionScreen(props: { session: SessionModel }) {
             <SessionMobileReview review={review} />
           </Match>
           <Match when={session.identity.params.id}>
-            <Show when={messagesReady() ? session.identity.params.id : undefined} keyed>
+            <Show when={!messagesReady()}>
+              <SessionIdentityHeader
+                sessionID={session.identity.params.id ?? ""}
+                session={session.data.info()}
+              />
+            </Show>
+            <Show
+              when={messagesReady() ? session.identity.params.id : undefined}
+              keyed
+            >
               {(_id) => (
                 <MessageTimeline
                   session={session}
