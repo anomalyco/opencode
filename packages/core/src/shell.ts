@@ -370,7 +370,9 @@ const layer = () =>
                 ),
               )
 
-              yield* bus.publish(Shell.Event.Created, { info })
+              // Publish the post-spawn Info so subscribers see the attached pid; the
+              // outer `info` object predates the spawn and never carries one.
+              yield* bus.publish(Shell.Event.Created, { info: session.info })
               yield* Deferred.succeed(ready, session)
               // Hold the handle's scope open until the command terminates; closing it earlier would
               // release (kill) the process before its exit is observed.
