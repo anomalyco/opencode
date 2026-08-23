@@ -7,9 +7,9 @@ describe("settings controllers", () => {
     expect(
       createShellOptions({
         shells: [
-          { path: "/bin/bash", name: "bash", compatible: true },
-          { path: "/opt/bash", name: "bash", compatible: false },
-          { path: "/bin/zsh", name: "zsh", compatible: true },
+          { path: "/bin/bash", name: "bash", acceptable: true },
+          { path: "/opt/bash", name: "bash", acceptable: false },
+          { path: "/bin/zsh", name: "zsh", acceptable: true },
         ],
         current: "fish",
       }),

@@ -3,7 +3,7 @@ import { onCleanup } from "solid-js"
 export type ShellOption = {
   path: string
   name: string
-  compatible: boolean
+  acceptable: boolean
 }
 
 export type ShellSelectOption = {
@@ -27,7 +27,7 @@ export function createShellOptions(input: { shells: ShellOption[]; current: stri
         id: shell.path,
         value: ambiguous ? shell.path : shell.name,
         name,
-        terminalOnly: !shell.compatible,
+        terminalOnly: !shell.acceptable,
       }
     }),
   ]

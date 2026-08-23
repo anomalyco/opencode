@@ -25,7 +25,7 @@ const META: Record<string, { deny?: boolean; login?: boolean; ps?: boolean }> = 
 export type Item = {
   path: string
   name: string
-  compatible: boolean
+  acceptable: boolean
 }
 
 export const Options = Schema.Struct({
@@ -156,7 +156,7 @@ function info(file: string, options?: Options, bin?: string): Item {
   return {
     path: item,
     name: executable(n, options, bin) ? n : item,
-    compatible: compatible(item),
+    acceptable: compatible(item),
   }
 }
 
