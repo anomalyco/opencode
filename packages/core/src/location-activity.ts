@@ -1,6 +1,6 @@
 export * as LocationActivity from "./location-activity.js"
 
-import { Clock, Context, Duration, Effect, Layer, RcMap, Schema, Stream } from "effect"
+import { Clock, Context, Duration, Effect, Layer, RcMap, Schema } from "effect"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
@@ -26,7 +26,6 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           entries.set(key(ref), { ref, expiresAt: clock.currentTimeMillisUnsafe() + timeToLive })
         })
 
-      yield* locations.booted.pipe(Stream.runForEach(touch), Effect.forkScoped({ startImmediately: true }))
       const unsubscribe = yield* bus.listen((event) => {
         if (!isSessionEvent(event)) return Effect.void
         const location = event.location
@@ -38,7 +37,13 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
       yield* Effect.addFinalizer(() => unsubscribe)
       yield* Effect.gen(function* () {
         yield* Effect.sleep(options.sweepInterval ?? "1 minute")
-        const cached = new Set(Array.from(yield* RcMap.keys(locations.rcMap)).map(key))
+        const refs = Array.from(yield* RcMap.keys(locations.rcMap))
+        const cached = new Set(refs.map(key))
+        yield* Effect.forEach(
+          refs,
+          (ref) => (entries.has(key(ref)) ? Effect.void : touch(ref)),
+          { discard: true },
+        )
         for (const id of entries.keys()) {
           if (!cached.has(id)) entries.delete(id)
         }

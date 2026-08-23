@@ -3,7 +3,7 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
-import { DateTime, Deferred, Effect, Equal, Fiber, Hash, Layer, RcMap, Schema, Stream } from "effect"
+import { DateTime, Deferred, Duration, Effect, Equal, Fiber, Hash, Layer, LayerMap, RcMap, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
 import { Agent } from "@opencode-ai/core/agent"
@@ -46,16 +46,18 @@ const itWithSdk = testEffect(
 )
 const activityLocations = Layer.effect(
   LocationServiceMap.Service,
-  LocationServiceMap.make((ref) =>
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-    Layer.succeed(
-      Location.Service,
-      Location.Service.of({
-        directory: ref.directory,
-        workspaceID: ref.workspaceID,
-        project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
-      }),
-    ) as unknown as Layer.Layer<LocationServices>,
+  LayerMap.make(
+    (ref) =>
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      Layer.succeed(
+        Location.Service,
+        Location.Service.of({
+          directory: ref.directory,
+          workspaceID: ref.workspaceID,
+          project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
+        }),
+      ) as unknown as Layer.Layer<LocationServices>,
+    { idleTimeToLive: Duration.infinity },
   ),
 )
 const itWithActivity = testEffect(
@@ -77,7 +79,7 @@ describe("LocationServiceMap", () => {
       yield* read
       yield* TestClock.adjust("59 minutes")
       yield* bus.publish(Catalog.Event.Updated, {}, { location: ref })
-      yield* TestClock.adjust("1 minute")
+      yield* TestClock.adjust("2 minutes")
       expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
 
       yield* read

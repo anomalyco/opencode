@@ -19,7 +19,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -529,7 +529,7 @@ function buildExecution(
     )
     const locations = Layer.effect(
       LocationServiceMap.Service,
-      LocationServiceMap.make(
+      LayerMap.make(
         () =>
           // The local execution test only needs the Session runner from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion

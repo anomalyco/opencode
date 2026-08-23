@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
 import { mkdtemp, rm } from "fs/promises"
 import { tmpdir } from "os"
 import path from "path"
@@ -58,7 +58,7 @@ const execution = Layer.succeed(
 )
 const locations = Layer.effect(
   LocationServiceMap.Service,
-  LocationServiceMap.make(
+  LayerMap.make(
     () =>
       // These operations resolve Location services lazily and must wait for plugin-projected state.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
