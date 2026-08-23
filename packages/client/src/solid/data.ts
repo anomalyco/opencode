@@ -1247,28 +1247,12 @@ export function createData(config: CreateDataInput) {
             timeCreated: Date.now(),
             type: "user",
             delivery: request.delivery ?? "steer",
+            // Files and skills stay off the optimistic row: their durable
+            // forms are server-loaded (content, mime, resolution), so they
+            // fill in when the echo upserts the row.
             payload: {
               text: request.text,
-              files: request.files?.flatMap((file) => {
-                if (!file.uri.startsWith("data:")) return []
-                const comma = file.uri.indexOf(",")
-                if (comma < 0) return []
-                const mime = file.uri.slice(5, comma).split(";", 1)[0]
-                if (!mime) return []
-                return [
-                  {
-                    data: "",
-                    mime,
-                    source: { type: "uri" as const, uri: file.uri },
-                    name: file.name,
-                    description: file.description,
-                    mention: file.mention,
-                  },
-                ]
-              }),
               agents: request.agents?.map((agent) => ({ ...agent })),
-              // Skills and non-inline files require server resolution and
-              // arrive when the durable echo replaces this local payload.
               metadata: request.metadata,
             },
           })

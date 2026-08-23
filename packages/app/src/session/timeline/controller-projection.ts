@@ -1,4 +1,13 @@
-import type { SessionInboxInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { SessionInboxInfo, SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+
+export function applyTimelineMessageHandoff(messages: SessionMessageInfo[], handoff?: SessionMessageUser) {
+  if (!handoff) return messages
+  const index = messages.findIndex((message) => message.id === handoff.id)
+  if (index < 0) return [...messages, handoff]
+  const message = messages[index]
+  if (message.type !== "user" || message.files?.length) return messages
+  return messages.map((item, current) => (current === index ? { ...message, files: handoff.files } : item))
+}
 
 export function visibleTimelineMessages(
   messages: SessionMessageInfo[],

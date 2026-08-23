@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ModelSelection } from "@/providers/models/selection"
+import type { SessionMessageUser } from "@opencode-ai/client/promise"
 import { Skill } from "@opencode-ai/schema/skill"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
 import { createMemoryComposerState } from "./state"
@@ -69,6 +70,7 @@ function submitInput(
 function session(input: {
   calls: string[]
   prompt: (value: Parameters<ComposerSession["data"]["session"]["prompt"]>[0]) => Promise<void>
+  handoff?: ComposerSession["handoff"]
   statuses?: ("idle" | "running")[]
   current?: ComposerSession["current"]
   admitted?: (messageID: string) => boolean
@@ -78,6 +80,7 @@ function session(input: {
   return {
     id: "session-1",
     directory: "C:/repo",
+    handoff: input.handoff,
     current: input.current ?? (() => undefined),
     admitted: input.admitted ?? (() => false),
     api: {
@@ -178,6 +181,52 @@ describe("Composer submission", () => {
     expect(request.text).toBe("first prompt")
     expect(draft.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
     expect(promoted.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+  })
+
+  test("hands off image-only first prompts before admission", async () => {
+    const draft = createMemoryComposerState().capture()
+    draft.set([
+      { type: "text", content: "", start: 0, end: 0 },
+      {
+        type: "image",
+        id: "attachment",
+        filename: "image.png",
+        mime: "image/png",
+        blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
+      },
+    ])
+    const handedOff = Promise.withResolvers<SessionMessageUser>()
+    const target = session({
+      calls: [],
+      handoff: { set: handedOff.resolve, clear() {} },
+      prompt: async () => undefined,
+    })
+    const adapter: NewSessionComposerAdapter = {
+      kind: "new-session",
+      state: draft,
+      ready: () => true,
+      controls,
+      working: () => false,
+      submitted() {},
+      async start() {
+        return { session: target, cleanupReady: Promise.resolve() }
+      },
+    }
+
+    await submitInput(adapter).submit(new Event("submit"))
+
+    expect(await handedOff.promise).toMatchObject({
+      type: "user",
+      text: "",
+      files: [
+        {
+          data: "",
+          mime: "image/png",
+          source: { type: "uri", uri: "data:image/png;base64,YQ==" },
+          name: "image.png",
+        },
+      ],
+    })
   })
 
   test("does not restore a prompt already acknowledged by the durable inbox", async () => {

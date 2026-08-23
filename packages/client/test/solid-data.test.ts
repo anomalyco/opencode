@@ -103,69 +103,6 @@ test("reports optimistic sessions as creating until the request settles", async 
   }
 })
 
-test("preserves data URL attachments in optimistic prompts", async () => {
-  const release = Promise.withResolvers<Response>()
-  const api = OpenCode.make({
-    baseUrl: "http://opencode.local",
-    fetch: async (input, init) => {
-      const request = input instanceof Request ? input : new Request(input, init)
-      if (!request.url.endsWith("/api/session/ses_refresh/prompt")) throw new Error(`Unexpected request: ${request.url}`)
-      return release.promise
-    },
-  })
-  const setup = createRoot((dispose) => ({
-    data: createData({
-      api: () => api,
-      directory: "/project",
-      event: { on: () => () => {}, listen: () => () => {} },
-    }),
-    dispose,
-  }))
-
-  try {
-    const uri = "data:image/png;base64,YQ=="
-    const prompt = setup.data.session.prompt({
-      sessionID: "ses_refresh",
-      id: "msg_inline",
-      text: "",
-      files: [{ uri, name: "pixel.png" }],
-    })
-    const file = {
-      data: "",
-      mime: "image/png",
-      source: { type: "uri", uri },
-      name: "pixel.png",
-    }
-
-    expect(setup.data.session.pending.list("ses_refresh")[0]).toMatchObject({
-      id: "msg_inline",
-      payload: { text: "", files: [file] },
-    })
-    expect(setup.data.session.message.list("ses_refresh")[0]).toMatchObject({
-      id: "msg_inline",
-      type: "user",
-      text: "",
-      files: [file],
-    })
-
-    release.resolve(
-      Response.json({
-        data: {
-          id: "msg_inline",
-          sessionID: "ses_refresh",
-          timeCreated: 1,
-          type: "user",
-          delivery: "steer",
-          payload: { text: "", files: [{ data: "YQ==", mime: "image/png", source: { type: "inline" } }] },
-        },
-      }),
-    )
-    await prompt
-  } finally {
-    setup.dispose()
-  }
-})
-
 test("loads bounded message pages", async () => {
   const requests: URL[] = []
   const api = OpenCode.make({

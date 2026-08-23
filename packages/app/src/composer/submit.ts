@@ -1,4 +1,5 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import type { SessionMessageUser } from "@opencode-ai/client/promise"
 import { Event } from "@opencode-ai/schema/event"
 import type { Accessor } from "solid-js"
 import type { PromptHistoryComment } from "./history/entry"
@@ -78,6 +79,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
       const command = value.mode === "normal" ? findCommand(session, value.text) : undefined
       if (value.mode === "normal" && !command) {
+        if (value.images.length > 0) session.handoff?.set(handoffMessage(value))
         const optimisticBusy = !input.adapter.working()
         if (optimisticBusy) session.data.session.setStatus(session.id, "running")
         const sending = sendPrompt(session, value).then(
@@ -125,6 +127,29 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
   return {
     submit,
     stop: () => (input.adapter.kind === "active-session" ? input.adapter.interrupt() : Promise.resolve()),
+  }
+}
+
+function handoffMessage(value: ComposerSubmission): SessionMessageUser {
+  return {
+    id: value.id,
+    type: "user",
+    text: value.text,
+    files: value.images.map((image) => ({
+      data: "",
+      mime: image.mime,
+      source: { type: "uri", uri: image.blob.url },
+      name: image.sourcePath ?? image.filename,
+    })),
+    metadata: {
+      displayText: value.text,
+      agent: value.selection.agent,
+      model: {
+        ...value.selection.model,
+        ...(value.selection.variant ? { variant: value.selection.variant } : {}),
+      },
+    },
+    time: { created: Date.now() },
   }
 }
 
@@ -334,6 +359,7 @@ function failSubmission(
   rollback?: () => void,
 ) {
   if (messageID && session.admitted(messageID)) return
+  if (messageID) session.handoff?.clear(messageID)
   rollback?.()
   restore()
   input.notify.failed(kind, error)

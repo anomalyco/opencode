@@ -14,6 +14,9 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useSessionKey } from "@/session/session-layout"
 import { showToast } from "@/shell/notifications/toast"
+import { usePlatform } from "@/runtime/platform/platform"
+import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
+import { clearSessionMessageHandoff, setSessionMessageHandoff } from "@/session/handoff"
 
 export function createNewSessionComposerAdapter(props: {
   draftID: string
@@ -31,6 +34,7 @@ export function createNewSessionComposerAdapter(props: {
   const tabs = useTabs()
   const location = useWorkspaceLocation()
   const language = useLanguage()
+  const platform = usePlatform()
   const model = createComposerModelSelection({ agent: () => local.agent.current() })
   const controls = createComposerControls({ sessionKey: route.sessionKey, model })
 
@@ -77,7 +81,10 @@ export function createNewSessionComposerAdapter(props: {
         if (!result.ok) throw result.error
         return run()
       }
-
+      const sessionKey = SessionStateKey.from(
+        serverSDK.scope,
+        SessionRouteKey.fromRoute(base64Encode(sessionDirectory), created.id),
+      )
       const cleanupReady = startTransition(() => {
         tabs.updateDraft(props.draftID, { worktree: undefined })
         if (permission.isAutoAcceptingDirectory(projectDirectory)) {
@@ -102,6 +109,13 @@ export function createNewSessionComposerAdapter(props: {
         session: {
           id: created.id,
           directory: sessionDirectory,
+          handoff:
+            platform.platform === "desktop"
+              ? {
+                  set: (message) => setSessionMessageHandoff(sessionKey, message),
+                  clear: (messageID) => clearSessionMessageHandoff(sessionKey, messageID),
+                }
+              : undefined,
           api: {
             command: (input) => afterCreation(() => serverSDK.api.session.command(input)),
             shell: (input) => afterCreation(() => serverSDK.api.session.shell(input)),

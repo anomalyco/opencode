@@ -1,4 +1,5 @@
 import type { Data } from "@opencode-ai/client/solid"
+import type { SessionMessageUser } from "@opencode-ai/client/promise"
 import type { Accessor } from "solid-js"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { ServerSDK } from "@/runtime/server/client"
@@ -41,6 +42,10 @@ export type ComposerSelection = {
 export type ComposerSession = {
   id: string
   directory: string
+  handoff?: {
+    set: (message: SessionMessageUser) => void
+    clear: (messageID: string) => void
+  }
   api: {
     command: (input: Parameters<ServerSDK["api"]["session"]["command"]>[0]) => Promise<unknown>
     shell: (input: Parameters<ServerSDK["api"]["session"]["shell"]>[0]) => Promise<unknown>

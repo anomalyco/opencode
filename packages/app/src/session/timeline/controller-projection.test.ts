@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
-import { visibleTimelineMessages } from "./controller-projection"
+import { applyTimelineMessageHandoff, visibleTimelineMessages } from "./controller-projection"
 
 const messages = [
   { id: "msg_1", type: "user", text: "first", time: { created: 1 } },
@@ -39,5 +39,39 @@ describe("visibleTimelineMessages", () => {
       "msg_3",
     ])
     expect(visibleTimelineMessages(messages, [], "msg_0")).toEqual([])
+  })
+})
+
+describe("applyTimelineMessageHandoff", () => {
+  const handoff = {
+    id: "msg_image",
+    type: "user",
+    text: "",
+    files: [
+      {
+        data: "",
+        mime: "image/png",
+        source: { type: "uri", uri: "blob:image" },
+        name: "image.png",
+      },
+    ],
+    time: { created: 1 },
+  } satisfies SessionMessageInfo
+
+  test("shows a promoted image-only prompt before client admission", () => {
+    expect(applyTimelineMessageHandoff([], handoff)).toEqual([handoff])
+  })
+
+  test("adds attachments to the client's optimistic row", () => {
+    const optimistic = { id: handoff.id, type: "user", text: "", time: { created: 2 } } satisfies SessionMessageInfo
+    expect(applyTimelineMessageHandoff([optimistic], handoff)).toEqual([{ ...optimistic, files: handoff.files }])
+  })
+
+  test("keeps the durable attachment payload", () => {
+    const durable = {
+      ...handoff,
+      files: [{ data: "YQ==", mime: "image/png", source: { type: "inline" } }],
+    } satisfies SessionMessageInfo
+    expect(applyTimelineMessageHandoff([durable], handoff)).toEqual([durable])
   })
 })
