@@ -41,6 +41,13 @@ const requiresThoughtSignatureFallback = (modelID: string) => {
 // so their tool-result attachments lower as a separate user turn instead.
 const routesLegacyToolMedia = (modelID: string) => /gemini-2[.-]5(?:[.-]|$)/i.test(modelID)
 
+// Blacklist: Gemini 1.x/2.x ignore or reject explicit function call ids.
+// Every other model id (Gemini 3+, gemma, anything unrecognized) gets them.
+const omitsFunctionCallIds = (modelID: string) => {
+  const match = /^gemini(?:-live)?-(\d+)/i.exec(modelID)
+  return match !== null && Number(match[1]) < 3
+}
+
 export interface OptionsInput {
   readonly [key: string]: unknown
   readonly cachedContent?: string
@@ -217,6 +224,7 @@ interface ParserState {
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignature?: string
   readonly textSignature?: string
+  readonly seenCallIds?: ReadonlySet<string>
 }
 
 // =============================================================================
@@ -274,20 +282,14 @@ const thoughtSignature = (providerMetadata: ProviderMetadata | undefined) => {
     : undefined
 }
 
-const functionCallId = (providerMetadata: ProviderMetadata | undefined) => {
-  const google = providerMetadata?.google
-  return ProviderShared.isRecord(google) && typeof google.functionCallId === "string"
-    ? google.functionCallId
-    : undefined
-}
-
-const lowerToolCall = (part: ToolCallPart) => ({
-  functionCall: { id: functionCallId(part.providerMetadata), name: part.name, args: part.input },
+const lowerToolCall = (part: ToolCallPart, omitIds: boolean) => ({
+  functionCall: { ...(omitIds ? {} : { id: part.id }), name: part.name, args: part.input },
   thoughtSignature: thoughtSignature(part.providerMetadata),
 })
 
 const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
+  const omitCallIds = omitsFunctionCallIds(request.model.id)
   const legacyToolMedia = routesLegacyToolMedia(request.model.id)
   let pendingMedia: GeminiInlineDataPart[] | undefined
   const flushMedia = () => {
@@ -336,7 +338,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           continue
         }
         if (part.type === "tool-call") {
-          const lowered = lowerToolCall(part)
+          const lowered = lowerToolCall(part, omitCallIds)
           const signature = lowered.thoughtSignature
           parts.push({
             ...lowered,
@@ -361,7 +363,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       if (part.result.type !== "content") {
         parts.push({
           functionResponse: {
-            id: functionCallId(part.providerMetadata),
+            ...(omitCallIds ? {} : { id: part.id }),
             name: part.name,
             response: {
               name: part.name,
@@ -382,7 +384,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       if (legacyToolMedia && media.length > 0) (pendingMedia ??= []).push(...media)
       parts.push({
         functionResponse: {
-          id: functionCallId(part.providerMetadata),
+          ...(omitCallIds ? {} : { id: part.id }),
           name: part.name,
           response: {
             name: part.name,
@@ -581,6 +583,8 @@ const step = (state: ParserState, event: GeminiEvent) => {
   let lifecycle = nextState.lifecycle
   let reasoningSignature = nextState.reasoningSignature
   let textSignature = nextState.textSignature
+  // Supplier ids must be tracked across chunks of the same response, not just within one event's parts.
+  const seenCallIds = new Set(nextState.seenCallIds)
 
   for (const part of candidate.content.parts) {
     const signature = "thoughtSignature" in part && part.thoughtSignature ? part.thoughtSignature : undefined
@@ -618,13 +622,13 @@ const step = (state: ParserState, event: GeminiEvent) => {
 
     if ("functionCall" in part) {
       const input = part.functionCall.args === undefined ? {} : part.functionCall.args
-      // Gemini 2.0+ and Vertex supply a unique function call ID on the part; when omitted (e.g. Gemini 1.5),
+      // Gemini 2.0+ supplies a unique function call ID on the part; when omitted (e.g. Gemini 1.5),
       // generate a globally unique ID rather than a per-request counter to prevent cross-request collisions in downstream registries.
-      const id = part.functionCall.id ?? `tool_${crypto.randomUUID().replaceAll("-", "")}`
-      const metadata = {
-        ...(part.functionCall.id === undefined ? {} : { functionCallId: part.functionCall.id }),
-        ...(part.thoughtSignature === undefined ? {} : { thoughtSignature: part.thoughtSignature }),
-      }
+      // A repeated supplier id would replay as two identical calls, so only the first occurrence keeps it.
+      const supplied = part.functionCall.id
+      const duplicate = supplied !== undefined && seenCallIds.has(supplied)
+      if (supplied !== undefined) seenCallIds.add(supplied)
+      const id = supplied !== undefined && !duplicate ? supplied : `tool_${crypto.randomUUID().replaceAll("-", "")}`
       lifecycle = Lifecycle.reasoningEnd(
         lifecycle,
         events,
@@ -637,7 +641,8 @@ const step = (state: ParserState, event: GeminiEvent) => {
           id,
           name: part.functionCall.name,
           input,
-          providerMetadata: Object.keys(metadata).length > 0 ? googleMetadata(metadata) : undefined,
+          providerMetadata:
+            part.thoughtSignature === undefined ? undefined : googleMetadata({ thoughtSignature: part.thoughtSignature }),
         }),
       )
       hasToolCalls = true
@@ -651,6 +656,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
       lifecycle,
       reasoningSignature,
       textSignature,
+      seenCallIds,
       finishReason: candidate.finishReason ?? nextState.finishReason,
     },
     events,
