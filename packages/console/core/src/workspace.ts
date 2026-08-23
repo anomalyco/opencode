@@ -105,4 +105,16 @@ export namespace Workspace {
         .where(eq(WorkspaceTable.id, Actor.workspace())),
     )
   })
+
+  export const unblock = fn(z.string().startsWith("wrk_"), async (workspaceID) => {
+    await Database.transaction(async (tx) => {
+      const workspace = await tx
+        .select({ id: WorkspaceTable.id })
+        .from(WorkspaceTable)
+        .where(eq(WorkspaceTable.id, workspaceID))
+        .then((rows) => rows[0])
+      if (!workspace) throw new Error("Workspace not found")
+      await tx.update(WorkspaceTable).set({ is_blocked: false }).where(eq(WorkspaceTable.id, workspaceID))
+    })
+  })
 }
