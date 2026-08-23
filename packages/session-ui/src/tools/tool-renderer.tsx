@@ -823,8 +823,8 @@ export function ToolDisplay(
   )
 }
 
-// The error card mirrors each tool trigger's muted subtitle so failed rows
-// read like their non-error counterparts ("Shell sleep 30", "Read index.ts").
+// Each branch must stay in sync with its tool trigger's subtitle expression so
+// failed rows read like their non-error counterparts ("Shell sleep 30").
 function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   const text = (value: unknown) => (typeof value === "string" && value ? value : undefined)
   if (props.tool === "shell") return text(props.input.command) ?? text(props.metadata.command)

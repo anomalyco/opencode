@@ -70,8 +70,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     return value
   })
 
-  // The danger summary is the message head before the first ": "; the rest is
-  // the faint detail body revealed by the open state.
   const summary = createMemo(() => {
     const head = (tail().split(": ")[0] ?? "").trim()
     if (!head) return i18n.t("ui.toolErrorCard.failed")
@@ -99,8 +97,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
           <div data-component="tool-trigger">
             <div data-slot="basic-tool-tool-trigger-content">
               <span data-slot="basic-tool-tool-indicator" data-component="tool-error-card-icon">
-                {/* Figma renders the ban glyph with a 1px stroke at 16px; the icon
-                    path lives in a 20px viewBox, so author 20/16 = 1.25. */}
+                {/* 20px-viewBox path at 16px: 1.25 renders the 1px stroke Figma specifies. */}
                 <Icon name="circle-ban-sign" style={{ "stroke-width": 1.25 }} />
               </span>
               <div data-slot="basic-tool-tool-info">
