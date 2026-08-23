@@ -61,14 +61,16 @@ class MemFS implements vscode.FileSystemProvider {
 
 const memfs = new MemFS()
 
-export function activate(context: vscode.ExtensionContext) {
-  const ipcPort = Math.floor(Math.random() * (65535 - 16384 + 1)) + 16384
-  context.environmentVariableCollection.replace("OPENCODE_VSCODE_IPC_PORT", String(ipcPort))
-  output.appendLine(`[opencode] extension activated, IPC_PORT=${ipcPort}`)
-
+export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.workspace.registerFileSystemProvider(SCHEME, memfs, { isCaseSensitive: true }))
 
-  startIpcServer(context, ipcPort)
+  const ipcPort = await startIpcServer(context)
+  if (!ipcPort) {
+    output.appendLine("[opencode] failed to start IPC server")
+    return
+  }
+  context.environmentVariableCollection.replace("OPENCODE_VSCODE_IPC_PORT", String(ipcPort))
+  output.appendLine(`[opencode] extension activated, IPC_PORT=${ipcPort}`)
 
   const openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
     await openTerminal()
@@ -185,7 +187,6 @@ export function activate(context: vscode.ExtensionContext) {
       },
       env: {
         OPENCODE_CALLER: "vscode",
-        OPENCODE_VSCODE_IPC_PORT: port.toString(),
       },
     })
 
@@ -260,9 +261,9 @@ export function activate(context: vscode.ExtensionContext) {
   }
 }
 
-function startIpcServer(context: vscode.ExtensionContext, port: number) {
-  ipcServer = http.createServer(async (req, res) => {
-    const url = new URL(req.url ?? "/", `http://localhost:${port}`)
+function startIpcServer(context: vscode.ExtensionContext): Promise<number | undefined> {
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", "http://localhost")
 
     if (req.method === "POST" && url.pathname === "/register") {
       let body = ""
@@ -340,14 +341,27 @@ function startIpcServer(context: vscode.ExtensionContext, port: number) {
     res.end()
   })
 
-  ipcServer.listen(port, () => {
-    output.appendLine(`[opencode] IPC server listening on ${port}`)
-  })
-
-  context.subscriptions.push({
-    dispose: () => {
-      ipcServer?.close()
-    },
+  return new Promise((resolve) => {
+    server.once("error", (e) => {
+      output.appendLine(`[opencode] IPC server error: ${String(e)}`)
+      resolve(undefined)
+    })
+    server.listen(0, () => {
+      ipcServer = server
+      const address = server.address()
+      if (!address || typeof address === "string") {
+        output.appendLine("[opencode] IPC server failed to resolve port")
+        resolve(undefined)
+        return
+      }
+      output.appendLine(`[opencode] IPC server listening on ${address.port}`)
+      context.subscriptions.push({
+        dispose: () => {
+          server.close()
+        },
+      })
+      resolve(address.port)
+    })
   })
 }
 
