@@ -181,6 +181,16 @@ const statsSyncConfig = new sst.Linkable("StatsSyncConfig", {
   },
 })
 
+const r2SqlAuthToken = new sst.Secret("R2SqlAuthToken")
+const r2Sql = new sst.Linkable("R2Sql", {
+  properties: {
+    accountId: "15d29c8639fd3733b1b5486a2acfd968",
+    bucket: `platform-${$app.stage}-lake`,
+    namespace: "inference",
+    table: "generation",
+  },
+})
+
 export const statSync = new sst.aws.Service("StatsSyncService", {
   cluster: lakeCluster,
   architecture: "arm64",
@@ -193,7 +203,9 @@ export const statSync = new sst.aws.Service("StatsSyncService", {
     dockerfile: "packages/stats/server/Dockerfile",
   },
   command: ["bun", "src/stat-sync.ts"],
-  link: [database, inferenceEvent, statsSyncConfig],
+  // Keep the legacy Athena link and IAM permissions during the first R2-backed
+  // release so reverting the application code remains a one-deploy rollback.
+  link: [database, inferenceEvent, r2Sql, r2SqlAuthToken, statsSyncConfig],
   permissions: lakeQueryPermissions,
   scaling: {
     min: 1,
