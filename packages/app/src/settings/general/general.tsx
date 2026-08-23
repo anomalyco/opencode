@@ -338,6 +338,20 @@ export const SettingsGeneral: Component<{
           </div>
         </SettingsRow>
 
+        <Show when={import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
+          <SettingsRow
+            title={language.t("settings.general.row.showProjectIcon.title")}
+            description={language.t("settings.general.row.showProjectIcon.description")}
+          >
+            <div data-action="settings-show-project-icon">
+              <Switch
+                checked={settings.general.showProjectIcon()}
+                onChange={(checked) => settings.general.setShowProjectIcon(checked)}
+              />
+            </div>
+          </SettingsRow>
+        </Show>
+
         <Show when={mobile() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
           <SettingsRow
             title={language.t("settings.general.row.mobileTitlebarBottom.title")}

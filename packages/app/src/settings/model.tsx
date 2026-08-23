@@ -31,6 +31,7 @@ export interface Settings {
     showNavigation: boolean
     showSearch: boolean
     showStatus: boolean
+    showProjectIcon: boolean
     showTerminal: boolean
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
@@ -117,6 +118,7 @@ const defaultSettings: Settings = {
     showNavigation: false,
     showSearch: false,
     showStatus: false,
+    showProjectIcon: false,
     showTerminal: false,
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
@@ -206,6 +208,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showStatus,
         setShowStatus(value: boolean) {
           setStore("general", "showStatus", value)
+        },
+        showProjectIcon: withFallback(() => store.general?.showProjectIcon, defaultSettings.general.showProjectIcon),
+        setShowProjectIcon(value: boolean) {
+          setStore("general", "showProjectIcon", value)
         },
         showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
         setShowTerminal(value: boolean) {
