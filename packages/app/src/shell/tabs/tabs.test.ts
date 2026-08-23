@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createRoot, getOwner, onCleanup } from "solid-js"
 import { createTabMemory } from "./memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed"
-import type { SessionTab, Tab } from "./tabs"
+import { tabHref, tabKey, type SessionTab, type Tab } from "./tabs"
 import { migrateTabs } from "./migration"
 import type { ServerConnection } from "@/runtime/server/registry"
 
@@ -27,6 +27,24 @@ describe("tab migration", () => {
     expect(migrateTabs(null)).toEqual([])
     expect(migrateTabs({})).toEqual([])
   })
+
+  test("preserves the active child route", () => {
+    expect(migrateTabs([{ ...sessionTab("root"), routeSessionId: "child", routeParentId: "parent" }])).toEqual([
+      { ...sessionTab("root"), routeSessionId: "child", routeParentId: "parent" },
+    ])
+  })
+
+  test("drops an invalid child route", () => {
+    expect(migrateTabs([{ ...sessionTab("parent"), routeSessionId: 1 }])).toEqual([])
+  })
+})
+
+test("session tab identity stays rooted while its href follows the child route", () => {
+  const parent = sessionTab("parent")
+  const child = { ...parent, routeSessionId: "child" }
+
+  expect(tabKey(child)).toBe(tabKey(parent))
+  expect(tabHref(child)).toContain("/session/child")
 })
 
 describe("tab memory", () => {

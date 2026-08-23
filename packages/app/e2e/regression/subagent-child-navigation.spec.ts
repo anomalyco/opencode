@@ -26,6 +26,32 @@ test("navigates to a subagent child session missing from the session list", asyn
   await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
 })
 
+test("shows parent lineage while the child timeline loads", async ({ page }) => {
+  await setup(page)
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  await page.route(
+    (url) =>
+      url.pathname === `/api/session/${childID}/message` &&
+      url.port === (process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"),
+    async (route) => {
+      requested.resolve()
+      await release.promise
+      await route.fallback()
+    },
+  )
+
+  await page.goto(sessionHref(parentID))
+  await expectSessionTitle(page, parentTitle)
+  await page.locator(`a[href="${sessionHref(childID)}"]`).click()
+  await Promise.all([requested.promise, expect(page).toHaveURL(sessionHref(childID))])
+  await Promise.all([
+    expect(page.locator('[data-slot="session-title-parent"]')).toHaveText(parentTitle),
+    expect(page.locator('[data-slot="session-title-child"]')).toHaveText(childTitle),
+  ]).finally(() => release.resolve())
+  await expectSessionTitle(page, taskDescription)
+})
+
 test("keeps the parent visible while the child session resolves", async ({ page }) => {
   await setup(page)
   const requested = Promise.withResolvers<void>()
@@ -48,6 +74,44 @@ test("keeps the parent visible while the child session resolves", async ({ page 
   )
 
   await expectSessionTitle(page, taskDescription)
+})
+
+test("keeps the parent tab selected while a loaded child session resolves", async ({ page }) => {
+  await setup(page)
+  await openChildFromParent(page)
+  await expectSessionTitle(page, taskDescription)
+  await page.goBack()
+  await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)])
+
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  await page.route(
+    (url) => url.pathname === `/api/session/${childID}` && url.port === (process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"),
+    async (route) => {
+      requested.resolve()
+      await release.promise
+      await route.fallback()
+    },
+  )
+
+  const parentTab = page.locator("[data-titlebar-tab-slot]", {
+    has: page.locator('[data-slot="tab-title"]', { hasText: parentTitle }),
+  })
+  await page.locator(`a[href="${sessionHref(childID)}"]`).click()
+  await Promise.all([requested.promise, expect(page).toHaveURL(sessionHref(childID))])
+  await Promise.all([
+    expect(parentTab).toHaveAttribute("data-active", "true"),
+    expect(page.locator('[data-slot="session-title-parent"]')).toHaveText(parentTitle),
+  ]).finally(() => release.resolve())
+  await expectSessionTitle(page, taskDescription)
+
+  const home = page.getByRole("button", { name: "Home" })
+  await home.click()
+  await expect(page).toHaveURL("/")
+  const childTab = page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(childID)}"]`)
+  await expect(childTab).toHaveCount(1)
+  await childTab.click()
+  await Promise.all([expect(page).toHaveURL(sessionHref(childID)), expectSessionTitle(page, taskDescription)])
 })
 
 test("shows the not found fallback when the viewed session is deleted", async ({ page }) => {
