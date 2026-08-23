@@ -985,6 +985,13 @@ export class RunFooter implements FooterApi {
       return false
     }
 
+    // A queued message means the user wants to hand off: fire immediately so
+    // the queued prompt sends right after the abort settles.
+    if (this.state().queue > 0) {
+      this.fireInterrupt()
+      return true
+    }
+
     const next = this.state().interrupt + 1
     this.patch({ interrupt: next })
 

@@ -208,15 +208,6 @@ export function RunFooterView(props: RunFooterViewProps) {
         props.tuiConfig,
       ) ?? "",
   )
-  const interruptSendShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["session.interrupt_send"] })
-          .get("session.interrupt_send")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
   const queuedFlushShortcut = useKeymapSelector(
     (keymap: OpenTuiKeymap) =>
       formatKeySequence(
@@ -431,6 +422,9 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     if (busy()) {
+      if (queue() > 0) {
+        return armed() ? "again to interrupt — queued message will send" : "esc: interrupt & send queued"
+      }
       return armed() ? "again to interrupt" : "interrupt"
     }
 
@@ -484,9 +478,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     const items: Array<{ kind: string; key: string; label: string }> = []
-    if (busy() && interruptSendShortcut()) {
-      items.push({ kind: "interrupt-send", key: interruptSendShortcut(), label: "interrupt & send" })
-    }
     if (queuedPrompts().length > 0 && queuedFlushShortcut()) {
       items.push({ kind: "flush", key: queuedFlushShortcut(), label: "send all queued" })
     }
