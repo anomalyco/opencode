@@ -1,0 +1,14 @@
+Use the memory tool to persist and recall knowledge across sessions for this project.
+
+## When to use
+
+- When you learn a durable fact worth keeping (user preferences, project decisions, environment quirks, resolved debugging root causes), write it to a memory file.
+- At the start of a task on familiar ground, `list` memories to check for relevant knowledge before rediscovering it.
+- Read a specific memory only when its name/description looks relevant.
+
+## Guidelines
+
+- One topic per file; keep files small and factual.
+- Prefer updating an existing memory over creating near-duplicates.
+- Do not store secrets, credentials, or session-specific scratch state.
+- Names may be namespaced with slashes, e.g. `architecture/decisions`.
