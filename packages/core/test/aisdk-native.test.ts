@@ -435,4 +435,13 @@ describe("AISDKNative", () => {
       settings: {},
     })
   })
+  test("treats empty-string apiKey as no credential", () => {
+    const mapped = map("@ai-sdk/openai", { apiKey: "", baseURL: "https://gateway.test/v1" })
+    expect(mapped?.settings.apiKey).toBeUndefined()
+    expect(mapped?.settings.baseURL).toBe("https://gateway.test/v1")
+  })
+
+  test("keeps non-empty apiKey", () => {
+    expect(map("@ai-sdk/openai", { apiKey: "secret" })?.settings.apiKey).toBe("secret")
+  })
 })

@@ -157,10 +157,12 @@ function mapBedrockSettings(
   settings: Readonly<Record<string, unknown>>,
   baseSettings: Readonly<Record<string, unknown>>,
 ) {
+  // Empty strings mean "no credential": forwarding one would suppress the
+  // SDK's own auth resolution for keyless setups (custom headers, gateways).
   const apiKey =
-    typeof settings.apiKey === "string"
+    typeof settings.apiKey === "string" && settings.apiKey !== ""
       ? settings.apiKey
-      : typeof settings.bearerToken === "string"
+      : typeof settings.bearerToken === "string" && settings.bearerToken !== ""
         ? settings.bearerToken
         : undefined
   const region = bedrockRegion(settings)
@@ -280,7 +282,7 @@ function mapBaseSettings(settings: Readonly<Record<string, unknown>>) {
 }
 
 function mapAPIKey(settings: Readonly<Record<string, unknown>>) {
-  return typeof settings.apiKey === "string" ? { apiKey: settings.apiKey } : {}
+  return typeof settings.apiKey === "string" && settings.apiKey !== "" ? { apiKey: settings.apiKey } : {}
 }
 
 function mapGoogleOptions(settings: Readonly<Record<string, unknown>>, extra: Readonly<Record<string, unknown>> = {}) {
