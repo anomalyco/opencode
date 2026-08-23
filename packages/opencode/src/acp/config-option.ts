@@ -201,3 +201,13 @@ function selectVariant(variant: string | undefined, variants: readonly string[])
   if (variants.includes(DEFAULT_VARIANT_VALUE)) return DEFAULT_VARIANT_VALUE
   return variants[0]
 }
+
+// v2 renames the config option identifier field from `id` to `configId`.
+// Applied at the boundary when responding to v2 clients. The v1 SDK types
+// only know `id`, so the v2 shape is cast through `unknown`.
+export function toV2ConfigOptions(options: readonly SessionConfigOption[]): SessionConfigOption[] {
+  return options.map((option) => {
+    const { id, ...rest } = option
+    return { configId: id, ...rest } as unknown as SessionConfigOption
+  })
+}
