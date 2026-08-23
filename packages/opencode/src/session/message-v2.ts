@@ -274,7 +274,15 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         if (part.type !== "reasoning") return false
         return part.metadata?.anthropic?.signature != null
       })
+      // Sessions recorded before phantom tool parts were fixed at the source can
+      // hold two parts for one call ID. Replaying both emits duplicate tool_use
+      // blocks, which providers reject or answer with a confused retry loop.
+      const seenCallIDs = new Set<string>()
       for (const part of msg.parts) {
+        if (part.type === "tool") {
+          if (seenCallIDs.has(part.callID)) continue
+          seenCallIDs.add(part.callID)
+        }
         if (part.type === "text") {
           const text = part.text === "" && hasSignedReasoning ? " " : part.text
           assistantMessage.parts.push({
