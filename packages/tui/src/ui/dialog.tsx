@@ -7,6 +7,7 @@ import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { useClipboard } from "../context/clipboard"
 import { useConfig } from "../config"
+import { copy } from "../util/selection"
 
 export type DialogSize = "medium" | "large" | "xlarge"
 
@@ -211,14 +212,7 @@ export function DialogProvider(props: ParentProps) {
     (config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select"
 
   function copySelection() {
-    const text = renderer.getSelection()?.getSelectedText()
-    if (!text) return false
-    void clipboard.write(text).then(
-      () => toast.show({ message: "Copied to clipboard", variant: "info" }),
-      (error) => toast.error(error),
-    )
-    renderer.clearSelection()
-    return true
+    return copy(renderer, toast, clipboard)
   }
 
   return (
