@@ -1985,6 +1985,48 @@ describe("SessionNs.getUsage", () => {
     expect(SessionNs.getUsage(input).cost).toBe(3 + 1.5)
   })
 
+  test("keeps applying a tier whose size is a numeric string", () => {
+    // the pre-guard comparison coerced `contextTokens > "5000"`, and a hand-written config
+    // can still produce one — the guard must not turn that into a dropped tier
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0, write: 0 },
+        tiers: [{ input: 99, output: 99, cache: { read: 0, write: 0 }, tier: { type: "context", size: "5000" } }],
+      } as unknown as Provider.Model["cost"],
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    })
+
+    // tier rates apply: 1_000_000 @ 99 + 100_000 @ 99
+    expect(result.cost).toBe(99 + 9.9)
+  })
+
+  test.each([0, -1])("drops a tier whose size is %p instead of matching every context", (size) => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0, write: 0 },
+        tiers: [{ input: 99, output: 99, cache: { read: 0, write: 0 }, tier: { type: "context", size } }],
+      } as unknown as Provider.Model["cost"],
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    })
+
+    // falls back to the base rates, not the tier's
+    expect(result.cost).toBe(3 + 1.5)
+  })
+
   test("ignores a cost.tiers that is not an array", () => {
     const model = createModel({
       context: 1_000_000,
