@@ -1237,4 +1237,26 @@ describe("ModelResolver", () => {
       expect(ModelResolver.supported(model(undefined))).toBe(false)
     }),
   )
+
+  it.effect("applies settings.maxOutputTokens as a route generation default", () =>
+    Effect.gen(function* () {
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+          settings: { baseURL: "https://gateway.test/v1", maxOutputTokens: 16384 },
+        }),
+      )
+      expect(resolved.route.defaults?.generation).toMatchObject({ maxTokens: 16384 })
+    }),
+  )
+
+  it.effect("ignores non-numeric maxOutputTokens", () =>
+    Effect.gen(function* () {
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+          settings: { baseURL: "https://gateway.test/v1", maxOutputTokens: "big" },
+        }),
+      )
+      expect(resolved.route.defaults?.generation).toBeUndefined()
+    }),
+  )
 })

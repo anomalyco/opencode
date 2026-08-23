@@ -168,12 +168,13 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   return yield* Effect.try({
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
-      return LanguageModel.update(runtime, {
+      const model = LanguageModel.update(runtime, {
         provider: resolved.providerID,
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
           : runtime.compatibility,
       })
+      return applyOutputTokenCap(model, outputTokenCapFrom(resolved.settings))
     },
     catch: () => unsupported(resolved),
   })
@@ -326,6 +327,19 @@ function hasConfiguredAuth(model: Info) {
   return [model.settings?.apiKey, model.settings?.authToken, model.settings?.accessToken].some(
     (value) => typeof value === "string" && value !== "",
   )
+}
+
+// Users can raise a provider/model's output ceiling with settings.maxOutputTokens
+// (number). Routes lower it per-API (max_tokens / maxOutputTokens); without it the
+// gateway picks its own cap, which thinking models truncate against.
+function outputTokenCapFrom(settings: Info["settings"] | undefined): number | undefined {
+  const value = settings?.maxOutputTokens
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+function applyOutputTokenCap(model: LanguageModel, cap: number | undefined): LanguageModel {
+  if (cap === undefined) return model
+  return LanguageModel.update(model, { route: model.route.with({ generation: { maxTokens: cap } }) })
 }
 
 function usesAPIKeyAuth(packageName: string | undefined) {
