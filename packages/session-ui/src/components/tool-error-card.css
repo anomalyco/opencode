@@ -1,6 +1,6 @@
 [data-component="card"][data-kind="tool-error-card"] {
-  --card-pad-y: 8px;
-  --card-line-pad: 12px;
+  --card-pad-y: 0px;
+  --card-line-pad: 4px;
 
   [data-slot="basic-tool-tool-title"] {
     color: var(--v2-text-text-base);
