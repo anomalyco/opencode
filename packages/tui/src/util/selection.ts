@@ -23,6 +23,33 @@ type SelectionKeyEvent = {
   stopPropagation: () => void
 }
 
+export function createSelectionCopy(clipboard: ClipboardService, toast: Toast) {
+  let pending: string | undefined
+  let running = false
+
+  const drain = async () => {
+    while (pending !== undefined) {
+      const text = pending
+      pending = undefined
+      const error = await clipboard.write(text).then(
+        () => undefined,
+        (error) => error,
+      )
+      if (pending !== undefined) continue
+      if (error !== undefined) toast.error(error)
+      else toast.show({ message: "Copied to clipboard", variant: "info" })
+    }
+    running = false
+  }
+
+  return (text: string) => {
+    pending = text
+    if (running) return
+    running = true
+    void drain()
+  }
+}
+
 export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
   const selection = renderer.getSelection()
   if (!selection) return false

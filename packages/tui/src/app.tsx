@@ -571,15 +571,13 @@ function App(props: { pair?: DialogPairCredentials }) {
     offSelectionKeys()
   })
 
-  // Wire up console copy-to-clipboard via opentui's onCopySelection callback
-  renderer.console.onCopySelection = async (text: string) => {
+  // Windows clipboard mutations are serialized by OpenTUI. Coalesce rapid selections here so
+  // they cannot fill its native operation queue and starve renderer polling.
+  const copySelection = Selection.createSelectionCopy(clipboard, toast)
+  renderer.console.onCopySelection = (text: string) => {
     if (!text || text.length === 0) return
 
-    await clipboard
-      .write(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-      .catch(toast.error)
-
+    copySelection(text)
     renderer.clearSelection()
   }
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
