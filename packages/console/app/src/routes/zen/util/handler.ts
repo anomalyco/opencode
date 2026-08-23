@@ -28,7 +28,13 @@ import {
   GoUsageLimitError,
   BlackUsageLimitError,
 } from "./error"
-import { buildCostChunk, createStreamPartConverter, createResponseConverter, UsageInfo } from "./provider/provider"
+import {
+  buildCostChunk,
+  createBodyConverter,
+  createStreamPartConverter,
+  createResponseConverter,
+  UsageInfo,
+} from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
 import { googleHelper } from "./provider/google"
 import { openaiHelper } from "./provider/openai"
@@ -47,10 +53,12 @@ import { createProviderBudgetTracker } from "./providerBudgetTracker"
 import { accumulateUsage, HOT_WORKSPACES } from "./usageBatcher"
 import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { countryFromRequest, isModelCountryRestricted } from "~/lib/request-country"
-import { prepareRequestBody } from "./requestBody"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
-type PreparedBody = Awaited<ReturnType<typeof prepareRequestBody>>
+type RetryOptions = {
+  excludeProviders: string[]
+  retryCount: number
+}
 type BillingSource = "anonymous" | "free" | "byok" | "subscription" | "lite" | "balance"
 
 function resolve(text: string, params?: Record<string, string | number>) {
@@ -78,6 +86,8 @@ export async function handler(
   type ProviderInfo = Awaited<ReturnType<typeof selectProvider>>
   type CostInfo = ReturnType<typeof calculateCost>
 
+  const MAX_FAILOVER_RETRIES = 3
+  const MAX_RETRYABLE_STATUS_RETRIES = 3
   const dict = i18n(localeFromRequest(input.request))
   const t = (key: Key, params?: Record<string, string | number>) => resolve(dict[key], params)
   const ADMIN_WORKSPACES = [
@@ -86,14 +96,12 @@ export async function handler(
     "wrk_01KKZDKDWCS1VTJF8QTX62DD50", // contributors
   ]
 
-  let requestBody: PreparedBody | undefined
   try {
     const url = input.request.url
-    const body = input.request.body
-    if (!body) throw new Error("Missing request body")
-    requestBody = opts.format === "google" ? undefined : await prepareRequestBody(body)
-    const model = opts.format === "google" ? opts.parseModel(url, undefined) : (requestBody?.model ?? "")
-    const googleStream = opts.format === "google" ? opts.parseIsStream(url, undefined) : undefined
+    const body = await input.request.text()
+    const model =
+      opts.format === "google" ? opts.parseModel(url, undefined) : (body.match(/"model"\s*:\s*"([^"]+)"/)?.[1] ?? "")
+    const isStream = opts.format === "google" ? opts.parseIsStream(url, undefined) : /"stream"\s*:\s*true/.test(body)
     const rawIp = input.request.headers.get("x-real-ip") ?? ""
     const ip = rawIp.includes(":") ? rawIp.split(":").slice(0, 4).join(":") : rawIp
     const rawZenApiKey = opts.parseApiKey(input.request.headers)
@@ -104,6 +112,7 @@ export async function handler(
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const userAgent = input.request.headers.get("user-agent") ?? ""
     logger.metric({
+      is_stream: isStream,
       session: sessionId,
       request: requestId,
       client: ocClient,
@@ -165,7 +174,7 @@ export async function handler(
     )
     const providerBudget = await providerBudgetTracker?.check()
 
-    const providerRequest = async () => {
+    const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
       const providerInfo = selectProvider(
         model,
         zenData,
@@ -173,6 +182,7 @@ export async function handler(
         modelInfo,
         stickyId,
         trialProviders,
+        retry,
         stickyProvider,
         modelTpmLimits,
         modelTpsLimits,
@@ -188,67 +198,95 @@ export async function handler(
       })
 
       const startTimestamp = Date.now()
-      const reqUrl = providerInfo.modifyUrl(providerInfo.api, googleStream ?? false)
-      const specialAnthropic =
-        providerInfo.format === "anthropic" &&
-        (providerInfo.model.startsWith("arn:aws:bedrock:") ||
-          providerInfo.model.startsWith("global.anthropic.") ||
-          providerInfo.model.startsWith("databricks-claude-"))
-      if (providerInfo.format !== opts.format) throw new Error("Zen provider format must match request format")
-      if (providerInfo.payloadModifier)
-        throw new Error("Zen provider payload modifiers are incompatible with streaming")
-      if (specialAnthropic) throw new Error("Anthropic provider body modifiers are incompatible with streaming")
-      const prepared = requestBody
-
-      const reqBody = (() => {
-        if (opts.format === "google") return body
-        if (!prepared) throw new Error("Missing prepared request body")
-        return prepared.stream(providerInfo.model, providerInfo.format === "oa-compat")
+      const reqUrl = providerInfo.modifyUrl(providerInfo.api, isStream)
+      const directBody = (() => {
+        const specialAnthropic =
+          providerInfo.format === "anthropic" &&
+          (providerInfo.model.startsWith("arn:aws:bedrock:") ||
+            providerInfo.model.startsWith("global.anthropic.") ||
+            providerInfo.model.startsWith("databricks-claude-"))
+        if (providerInfo.format === opts.format && !providerInfo.payloadModifier && !specialAnthropic) {
+          const patched = body.replace(/"model"\s*:\s*"[^"]+"/, `"model":${JSON.stringify(providerInfo.model)}`)
+          if (providerInfo.format !== "oa-compat" || !isStream) return patched
+          return patched.replace(/}\s*$/, ',"stream_options":{"include_usage":true}}')
+        }
+        return undefined
       })()
+      const reqBody =
+        directBody ??
+        JSON.stringify(
+          providerInfo.modifyBody({
+            ...createBodyConverter(opts.format, providerInfo.format)(JSON.parse(body)),
+            model: providerInfo.model,
+            ...(() => {
+              const replacer = (obj: Record<string, any>): Record<string, any> =>
+                Object.fromEntries(
+                  Object.entries(obj).flatMap(([k, v]) => {
+                    if (Array.isArray(v)) return [[k, v]]
+                    if (typeof v === "object") return [[k, replacer(v)]]
+                    if (typeof v === "string") {
+                      if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo.workspaceID]] : []
+                      if (v === "$org")
+                        return authInfo?.workspaceID ? [[k, authInfo.workspaceID.replace("wrk_", "org_")]] : []
+                      if (v === "$user") return stickyId ? [[k, stickyId]] : []
+                      if (v.startsWith("$header.")) {
+                        const headerValue = input.request.headers.get(v.slice(8))
+                        return headerValue ? [[k, headerValue]] : []
+                      }
+                    }
+                    return [[k, v]]
+                  }),
+                )
+              return replacer(providerInfo.payloadModifier ?? {})
+            })(),
+          }),
+        )
       logger.debug("REQUEST URL: " + reqUrl)
-      logger.debug("REQUEST: " + (requestBody?.preview ?? "") + "...")
+      logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
       const isNewInference =
         providerInfo.id.startsWith("console.") ||
         providerInfo.id.startsWith("console-go.") ||
         providerInfo.id.startsWith("inf.") ||
         providerInfo.id.startsWith("inf-go.")
-      const res = await fetch(reqUrl, {
-        method: "POST",
-        headers: (() => {
-          const headers = new Headers(input.request.headers)
-          providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
-          Object.entries(providerInfo.headerModifier ?? {}).forEach(([k, v]) => {
-            if (v === "$ip") return headers.set(k, ip)
-            if (v === "$caller") return headers.set(k, stickyId)
-            if (v === "$session") return headers.set(k, sessionId)
-            if (v === "$model") return headers.set(k, model)
-            if (v === "$request") return headers.set(k, requestId)
-            if (v === "$project") return headers.set(k, projectId)
-            if (v === "$workspace") {
-              if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
-              return
-            }
-            if (v === "$org") {
-              if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID.replace("wrk_", "org_"))
-              return
-            }
-            headers.set(k, v)
-          })
-          headers.delete("host")
-          headers.delete("content-length")
-          headers.delete("x-opencode-request")
-          if (!isNewInference) headers.delete("x-opencode-session")
-          headers.delete("x-opencode-project")
-          headers.delete("x-opencode-client")
-          return headers
-        })(),
-        body: reqBody,
-        // Propagate caller disconnects to the upstream provider request so
-        // abandoned Console requests do not leave orphaned inference work open.
-        signal: input.request.signal,
-      })
-      const isStream = res.headers.get("content-type")?.toLowerCase().includes("text/event-stream") ?? false
-      logger.metric({ is_stream: isStream })
+      const res = await fetchWithRetryableStatus(
+        reqUrl,
+        {
+          method: "POST",
+          headers: (() => {
+            const headers = new Headers(input.request.headers)
+            providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
+            Object.entries(providerInfo.headerModifier ?? {}).forEach(([k, v]) => {
+              if (v === "$ip") return headers.set(k, ip)
+              if (v === "$caller") return headers.set(k, stickyId)
+              if (v === "$session") return headers.set(k, sessionId)
+              if (v === "$model") return headers.set(k, model)
+              if (v === "$request") return headers.set(k, requestId)
+              if (v === "$project") return headers.set(k, projectId)
+              if (v === "$workspace") {
+                if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
+                return
+              }
+              if (v === "$org") {
+                if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID.replace("wrk_", "org_"))
+                return
+              }
+              headers.set(k, v)
+            })
+            headers.delete("host")
+            headers.delete("content-length")
+            headers.delete("x-opencode-request")
+            if (!isNewInference) headers.delete("x-opencode-session")
+            headers.delete("x-opencode-project")
+            headers.delete("x-opencode-client")
+            return headers
+          })(),
+          body: reqBody,
+          // Propagate caller disconnects to the upstream provider request so
+          // abandoned Console requests do not leave orphaned inference work open.
+          signal: input.request.signal,
+        },
+        { count: isNewInference ? MAX_RETRYABLE_STATUS_RETRIES : 0 },
+      )
 
       if (isNewInference) {
         const resEndpointId = res.headers.get("x-opencode-endpoint-id")
@@ -267,10 +305,29 @@ export async function handler(
         })
       }
 
-      return { providerInfo, res, startTimestamp, isStream }
+      // Try another provider => stop retrying if using fallback provider
+      if (
+        //!isNewInference &&
+        res.status !== 200 &&
+        // ie. 400 error is usually provider error like malformed request
+        res.status !== 400 &&
+        // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
+        !(modelInfo.id.startsWith("gpt-") && res.status === 404) &&
+        // ie. cannot change codex model providers mid-session
+        modelInfo.stickyProvider !== "strict" &&
+        modelInfo.fallbackProvider &&
+        providerInfo.id !== modelInfo.fallbackProvider
+      ) {
+        return retriableRequest({
+          excludeProviders: [...retry.excludeProviders, providerInfo.id],
+          retryCount: retry.retryCount + 1,
+        })
+      }
+
+      return { providerInfo, reqBody, res, startTimestamp }
     }
 
-    const { providerInfo, res, startTimestamp, isStream } = await providerRequest()
+    const { providerInfo, reqBody, res, startTimestamp } = await retriableRequest()
 
     // Store sticky provider
     if (res.status === 200) await stickyTracker?.set(providerInfo.id)
@@ -426,8 +483,6 @@ export async function handler(
       headers: resHeaders,
     })
   } catch (error: any) {
-    if (requestBody) void requestBody.cancel().catch(() => {})
-    else void input.request.body?.cancel().catch(() => {})
     // The caller disconnected before we finished. Because the outbound provider
     // request shares input.request.signal, an aborted caller surfaces here as an
     // AbortError. There is no client left to receive a body, so skip the error
@@ -552,6 +607,7 @@ export async function handler(
     modelInfo: ModelInfo,
     stickyId: string,
     trialProviders: string[] | undefined,
+    retry: RetryOptions,
     stickyProviderId: string | undefined,
     modelTpmLimits: Record<string, number> | undefined,
     modelTpsLimits: Record<string, { qualify: number; unqualify: number }> | undefined,
@@ -578,11 +634,14 @@ export async function handler(
         }))
       }
 
+      // Use fallback provider if max retries reached
       const fallbackProvider = allProviders.find((provider) => provider.id === modelInfo.fallbackProvider)
+      if (retry.retryCount === MAX_FAILOVER_RETRIES) return fallbackProvider
 
       let topPriority = Infinity
       const providers = allProviders
         .filter((provider) => provider.weight !== 0)
+        .filter((provider) => !retry.excludeProviders.includes(provider.id))
         .filter((provider) => {
           if (provider.budgetPriority === undefined) return true
           if (!providerBudget) return true
@@ -988,6 +1047,15 @@ export async function handler(
   function updateProviderKey(authInfo: AuthInfo, providerInfo: ProviderInfo) {
     if (!authInfo?.provider?.credentials) return
     providerInfo.apiKey = authInfo.provider.credentials
+  }
+
+  async function fetchWithRetryableStatus(url: string, options: RequestInit, retry = { count: 0 }) {
+    const res = await fetch(url, options)
+    if ([429, 529].includes(res.status) && retry.count < MAX_RETRYABLE_STATUS_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, Math.pow(2, retry.count) * 500))
+      return fetchWithRetryableStatus(url, options, { count: retry.count + 1 })
+    }
+    return res
   }
 
   function calculateCost(modelInfo: ModelInfo, usageInfo: UsageInfo) {
