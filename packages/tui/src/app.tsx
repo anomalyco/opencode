@@ -2,7 +2,6 @@ import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@op
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
-import * as fs from "node:fs"
 import { openSync, writeSync, closeSync } from "node:fs"
 import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -87,7 +86,7 @@ import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
-import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS, buildProgressBar, clearSplashRows } from "./startup-shared"
+import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS, buildProgressBar } from "./startup-shared"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
 registerOpencodeSpinner()
@@ -214,7 +213,8 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
   globalThis.__opencodeStopInTuiSplash = () => {
     if (stopped) return
     stopped = true
-    clearSplashRows([centerRow - 1, centerRow, centerRow + 1, centerRow + 2])
+    // Renderer manages the alt screen — exiting it on shutdown restores the
+    // main screen as it was. Nothing to clear here.
     writeAll("\x1b[?25h")
   }
 
@@ -242,7 +242,7 @@ function paintStartupSplash(renderer: { width: number; height: number }): () => 
     if (stopped) return
     stopped = true
     clearTimeout(fallbackStop)
-    clearSplashRows([centerRow - 1, centerRow, centerRow + 1, centerRow + 2])
+    // Nothing to clear — alt screen is restored by the renderer on shutdown.
     writeAll("\x1b[?25h\x1b[0m")
     if (ttyFd !== undefined) {
       try {
@@ -310,14 +310,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         }),
         (renderer) =>
           Effect.sync(() => {
+            // The renderer manages the alt screen buffer: exiting the alt
+            // screen on destroy restores the main screen exactly as it was
+            // before the TUI started (with `echo hallo`, the shell prompt,
+            // and any other pre-existing output).
             destroyRenderer(renderer)
-            const height = Math.max(1, renderer.height)
-            const centerRow = Math.max(2, Math.floor(height / 2))
-            // SolidJS StartupLoading centers 3 lines (spinner + gap + bar)
-            // around centerRow, so it occupies rows centerRow-1, centerRow, and
-            // centerRow+1. The raw ANSI splashes use centerRow and centerRow+2.
-            // Clear all four rows so neither survives the renderer exit.
-            clearSplashRows([centerRow - 1, centerRow, centerRow + 1, centerRow + 2])
           }),
       )
       globalThis.__opencodeStopPreSplash?.()

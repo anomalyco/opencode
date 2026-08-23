@@ -14,7 +14,7 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
-import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS, buildProgressBar, clearSplashRows } from "@opencode-ai/tui/startup-shared"
+import { STARTUP_FRAMES, STARTUP_MESSAGES, STARTUP_FRAME_INTERVAL_MS, STARTUP_MESSAGE_INTERVAL_MS, STARTUP_PROGRESS_BAR_WIDTH, STARTUP_EXPECTED_DURATION_MS, buildProgressBar } from "@opencode-ai/tui/startup-shared"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -177,15 +177,12 @@ export const TuiThreadCommand = cmd({
       } catch {}
     }
 
-    // Only erase the rows the splash will use, leaving prior shell output
-    // (e.g. `echo hallo`) visible above and below.
-    writeRaw(
-      `\x1b[${centerRow - 1};1H\x1b[2K` +
-      `\x1b[${centerRow};1H\x1b[2K` +
-      `\x1b[${centerRow + 1};1H\x1b[2K` +
-      `\x1b[${centerRow + 2};1H\x1b[2K` +
-      `\x1b[?25l`
-    )
+    // Enter the alt screen buffer so the main screen (with whatever the
+    // shell had on it, like `echo hallo`) stays untouched while we render
+    // the boot splash. The renderer will also enter the alt screen (a no-op
+    // since we are already there) and exit it on shutdown — restoring the
+    // main screen exactly as it was.
+    writeRaw("\x1b[?1049h\x1b[2J\x1b[?25l\x1b[H")
 
     let frame = 0
     let phase = 0
@@ -231,7 +228,8 @@ export const TuiThreadCommand = cmd({
       if (stopped) return
       stopped = true
       clearInterval(preSplashTimer)
-      clearSplashRows([centerRow - 1, centerRow, centerRow + 1, centerRow + 2])
+      // Nothing to clear on the main screen — the renderer will exit the
+      // alt screen on shutdown and restore it as it was before `bun dev`.
     }
 
     globalThis.__opencodeStopPreSplash = stopPreSplash
