@@ -17,7 +17,7 @@ import {
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
-import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
+import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
@@ -82,10 +82,15 @@ export type ProviderOptionsInput = OptionsInput
 // =============================================================================
 // Request Body Schema
 // =============================================================================
+// Gemini is known to send explicit `null` for optional streaming fields
+// (usage counts, flags, whole subtrees), so every response-side optional uses
+// `optionalNull` instead of bare `Schema.optional`. The same part/content
+// schemas lower the outbound request body; encoding drops `undefined` keys,
+// so the shared schemas stay safe there.
 const GeminiTextPart = Schema.Struct({
   text: Schema.String,
-  thought: Schema.optional(Schema.Boolean),
-  thoughtSignature: Schema.optional(Schema.String),
+  thought: optionalNull(Schema.Boolean),
+  thoughtSignature: optionalNull(Schema.String),
 })
 
 const GeminiInlineDataPart = Schema.Struct({
@@ -98,11 +103,11 @@ type GeminiInlineDataPart = Schema.Schema.Type<typeof GeminiInlineDataPart>
 
 const GeminiFunctionCallPart = Schema.Struct({
   functionCall: Schema.Struct({
-    id: Schema.optional(Schema.String),
+    id: optionalNull(Schema.String),
     name: Schema.String,
     args: Schema.optional(Schema.Unknown),
   }),
-  thoughtSignature: Schema.optional(Schema.String),
+  thoughtSignature: optionalNull(Schema.String),
 })
 
 const GeminiFunctionResponsePart = Schema.Struct({
@@ -122,8 +127,8 @@ const GeminiContentPart = Schema.Union([
 ])
 
 const GeminiContent = Schema.Struct({
-  role: Schema.Literals(["user", "model"]),
-  parts: Schema.Array(GeminiContentPart),
+  role: optionalNull(Schema.Literals(["user", "model"])),
+  parts: optionalNull(Schema.Array(GeminiContentPart)),
 })
 type GeminiContent = Schema.Schema.Type<typeof GeminiContent>
 
@@ -186,33 +191,33 @@ const GeminiBody = Schema.Struct(GeminiBodyFields)
 export type GeminiBody = Schema.Schema.Type<typeof GeminiBody>
 
 const GeminiUsage = Schema.Struct({
-  cachedContentTokenCount: Schema.optional(Schema.Number),
-  thoughtsTokenCount: Schema.optional(Schema.Number),
-  promptTokenCount: Schema.optional(Schema.Number),
-  candidatesTokenCount: Schema.optional(Schema.Number),
-  totalTokenCount: Schema.optional(Schema.Number),
+  cachedContentTokenCount: optionalNull(Schema.Number),
+  thoughtsTokenCount: optionalNull(Schema.Number),
+  promptTokenCount: optionalNull(Schema.Number),
+  candidatesTokenCount: optionalNull(Schema.Number),
+  totalTokenCount: optionalNull(Schema.Number),
 })
 type GeminiUsage = Schema.Schema.Type<typeof GeminiUsage>
 
 const GeminiCandidate = Schema.Struct({
-  content: Schema.optional(GeminiContent),
-  finishReason: Schema.optional(Schema.String),
+  content: optionalNull(GeminiContent),
+  finishReason: optionalNull(Schema.String),
 })
 
 const GeminiPromptFeedback = Schema.StructWithRest(
   Schema.Struct({
-    blockReason: Schema.optional(Schema.String),
-    blockReasonMessage: Schema.optional(Schema.String),
-    safetyRatings: Schema.optional(Schema.Unknown),
+    blockReason: optionalNull(Schema.String),
+    blockReasonMessage: optionalNull(Schema.String),
+    safetyRatings: optionalNull(Schema.Unknown),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 type GeminiPromptFeedback = Schema.Schema.Type<typeof GeminiPromptFeedback>
 
 const GeminiEvent = Schema.Struct({
-  candidates: optionalArray(GeminiCandidate),
-  promptFeedback: Schema.optional(GeminiPromptFeedback),
-  usageMetadata: Schema.optional(GeminiUsage),
+  candidates: optionalNull(Schema.Array(GeminiCandidate)),
+  promptFeedback: optionalNull(GeminiPromptFeedback),
+  usageMetadata: optionalNull(GeminiUsage),
 })
 type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 
@@ -305,8 +310,8 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       const previous = contents.at(-1)
       // Gemini rejects a continuation whose function-response turn carries extra
       // parts, so an update after a tool result starts its own user turn.
-      if (previous?.role === "user" && !previous.parts.some((item) => "functionResponse" in item))
-        contents[contents.length - 1] = { role: "user", parts: [...previous.parts, { text: part.text }] }
+      if (previous?.role === "user" && !(previous.parts ?? []).some((item) => "functionResponse" in item))
+        contents[contents.length - 1] = { role: "user", parts: [...(previous.parts ?? []), { text: part.text }] }
       else contents.push({ role: "user", parts: [{ text: part.text }] })
       continue
     }
@@ -397,8 +402,8 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     // Gemini requires every response to a parallel call batch in one user turn,
     // so consecutive tool results join the open function-response turn.
     const previous = contents.at(-1)
-    if (previous?.role === "user" && previous.parts.some((item) => "functionResponse" in item))
-      contents[contents.length - 1] = { role: "user", parts: [...previous.parts, ...parts] }
+    if (previous?.role === "user" && (previous.parts ?? []).some((item) => "functionResponse" in item))
+      contents[contents.length - 1] = { role: "user", parts: [...(previous.parts ?? []), ...parts] }
     else contents.push({ role: "user", parts })
   }
 
@@ -488,21 +493,25 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 // to produce the inclusive `outputTokens` the rest of the contract expects.
 const mapUsage = (usage: GeminiUsage | undefined) => {
   if (!usage) return undefined
-  const cached = usage.cachedContentTokenCount
-  const nonCached = ProviderShared.subtractTokens(usage.promptTokenCount, cached)
+  // Explicit provider nulls decode as `null`; normalize to `undefined` so the
+  // token arithmetic below treats them like absent counts.
+  const promptTokens = usage.promptTokenCount ?? undefined
+  const cached = usage.cachedContentTokenCount ?? undefined
+  const thoughts = usage.thoughtsTokenCount ?? undefined
+  const visible = usage.candidatesTokenCount ?? undefined
+  const nonCached = ProviderShared.subtractTokens(promptTokens, cached)
   // `candidatesTokenCount` is visible-only; sum with thoughts to produce the
   // inclusive `outputTokens` the contract expects. Only compute the total
   // when the visible component is reported — otherwise we'd fabricate an
   // inclusive number from a partial breakdown.
-  const outputTokens =
-    usage.candidatesTokenCount !== undefined ? usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0) : undefined
+  const outputTokens = visible !== undefined ? visible + (thoughts ?? 0) : undefined
   return new Usage({
-    inputTokens: usage.promptTokenCount,
+    inputTokens: promptTokens,
     outputTokens,
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cached,
-    reasoningTokens: usage.thoughtsTokenCount,
-    totalTokens: ProviderShared.totalTokens(usage.promptTokenCount, outputTokens, usage.totalTokenCount),
+    reasoningTokens: thoughts,
+    totalTokens: ProviderShared.totalTokens(promptTokens, outputTokens, usage.totalTokenCount ?? undefined),
     providerMetadata: { google: usage },
   })
 }
@@ -537,7 +546,10 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
 }
 
 const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
-  const promptBlockReason = state.finishReason === undefined ? state.promptFeedback?.blockReason : undefined
+  // `?? undefined` normalizes an explicit `null` blockReason back to absent so
+  // the "nothing to finish" check below keeps its meaning.
+  const promptBlockReason =
+    state.finishReason === undefined ? (state.promptFeedback?.blockReason ?? undefined) : undefined
   const finishReason = state.finishReason ?? promptBlockReason
   if (finishReason === undefined && state.usage === undefined) return []
 
@@ -586,7 +598,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
   // Supplier ids must be tracked across chunks of the same response, not just within one event's parts.
   const seenCallIds = new Set(nextState.seenCallIds)
 
-  for (const part of candidate.content.parts) {
+  for (const part of candidate.content.parts ?? []) {
     const signature = "thoughtSignature" in part && part.thoughtSignature ? part.thoughtSignature : undefined
     // Gemini attaches replay signatures to thought parts, visible text, or function calls;
     // each block kind must retain the signature attached to its own parts.
@@ -625,7 +637,8 @@ const step = (state: ParserState, event: GeminiEvent) => {
       // Gemini 2.0+ supplies a unique function call ID on the part; when omitted (e.g. Gemini 1.5),
       // generate a globally unique ID rather than a per-request counter to prevent cross-request collisions in downstream registries.
       // A repeated supplier id would replay as two identical calls, so only the first occurrence keeps it.
-      const supplied = part.functionCall.id
+      // A `null` supplier id normalizes to absent so the generated-id fallback applies.
+      const supplied = part.functionCall.id ?? undefined
       const duplicate = supplied !== undefined && seenCallIds.has(supplied)
       if (supplied !== undefined) seenCallIds.add(supplied)
       const id = supplied !== undefined && !duplicate ? supplied : `tool_${crypto.randomUUID().replaceAll("-", "")}`
@@ -642,7 +655,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           name: part.functionCall.name,
           input,
           providerMetadata:
-            part.thoughtSignature === undefined ? undefined : googleMetadata({ thoughtSignature: part.thoughtSignature }),
+            part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
         }),
       )
       hasToolCalls = true

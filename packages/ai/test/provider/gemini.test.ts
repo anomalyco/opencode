@@ -1492,6 +1492,73 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("survives explicit null usage counts", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { candidates: [{ content: { role: "model", parts: [{ text: "Hi" }] } }] },
+              { usageMetadata: { promptTokenCount: null, candidatesTokenCount: 5 } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hi")
+      expect(response.usage).toMatchObject({ outputTokens: 5, totalTokens: 5 })
+      expect(response.usage?.inputTokens).toBeUndefined()
+      expect(response.usage?.nonCachedInputTokens).toBeUndefined()
+      expect(response.usage?.cacheReadInputTokens).toBeUndefined()
+      expect(response.usage?.reasoningTokens).toBeUndefined()
+    }),
+  )
+
+  it.effect("survives null candidates, content, parts, and finish reason", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { candidates: null },
+              { candidates: [{ content: { role: "model", parts: null } }] },
+              { candidates: [{ content: null, finishReason: null }] },
+              {
+                candidates: [
+                  { content: { role: "model", parts: [{ text: "Hello" }] }, finishReason: "STOP" as const },
+                ],
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "STOP" })
+    }),
+  )
+
+  it.effect("treats a null thought flag on a text part as visible output", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                { content: { role: "model", parts: [{ text: "Visible", thought: null }] }, finishReason: "STOP" },
+              ],
+            }),
+          ),
+        ),
+      )
+      const reasoningStart = response.events.find((event) => event.type === "reasoning-start")
+
+      expect(reasoningStart).toBeUndefined()
+      expect(response.reasoning ?? "").toBe("")
+      expect(response.text).toBe("Visible")
+    }),
+  )
+
   it.effect("fails invalid stream events", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(

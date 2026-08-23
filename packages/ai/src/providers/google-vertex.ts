@@ -42,7 +42,7 @@ const fromRequest = Effect.fn("GoogleVertex.fromRequest")(function* (request: LL
   // unlike AI Studio, so history minted there cannot be lowered verbatim.
   const contents = body.contents.map((content) => ({
     ...content,
-    parts: content.parts.map((part) => {
+    parts: (content.parts ?? []).map((part) => {
       if ("functionCall" in part) return { ...part, functionCall: { ...part.functionCall, id: undefined } }
       if ("functionResponse" in part) return { ...part, functionResponse: { ...part.functionResponse, id: undefined } }
       return part
