@@ -90,6 +90,9 @@ export async function runNonInteractivePrompt(input: Input) {
   let finalizing = false
   let admission: AbortController | undefined
   let pendingStep: { timestamp: number; part: Record<string, unknown>; label: string } | undefined
+  // Model attribution for the in-flight step, stamped onto the JSON events so
+  // headless consumers can attribute tokens/cost per model across switches.
+  let currentStepModel: { providerID: string; modelID: string } | undefined
 
   const emit = (type: string, timestamp: number, data: Record<string, unknown>) => {
     if (input.format !== "json") return false
@@ -224,12 +227,15 @@ export async function runNonInteractivePrompt(input: Input) {
       if (finalizing && !event.type.startsWith("session.execution.")) continue
 
       if (event.type === "session.step.started") {
+        currentStepModel = { providerID: event.data.model.providerID, modelID: event.data.model.id }
         const part = {
           id: partID(event.id),
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
           type: "step-start",
           snapshot: event.data.snapshot,
+          providerID: event.data.model.providerID,
+          modelID: event.data.model.id,
         }
         if (input.compatibility === "v1") {
           pendingStep = {
@@ -463,8 +469,11 @@ export async function runNonInteractivePrompt(input: Input) {
           snapshot: event.data.snapshot,
           cost: event.data.cost,
           tokens: event.data.tokens,
+          providerID: currentStepModel?.providerID,
+          modelID: currentStepModel?.modelID,
         }
         emit("step_finish", time, { part })
+        currentStepModel = undefined
         continue
       }
       if (event.type === "session.step.failed") {
