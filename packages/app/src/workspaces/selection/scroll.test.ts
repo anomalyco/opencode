@@ -38,3 +38,15 @@ test("consumes one synthetic click after dragging", () => {
   touch.end()
   expect(touch.consumeClick()).toBeFalse()
 })
+
+test("releases the click guard when a drag does not produce a click", () => {
+  const scroller = { scrollTop: 0, scrollHeight: 1000, clientHeight: 200 }
+  const touch = createTreeTouchScrollController(() => scroller)
+
+  touch.start(300)
+  touch.move(220)
+  touch.end()
+  touch.releaseClick()
+
+  expect(touch.consumeClick()).toBeFalse()
+})

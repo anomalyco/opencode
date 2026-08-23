@@ -46,5 +46,8 @@ export function createTreeTouchScrollController(getScroller: () => TreeScrollTar
       dragged = false
       return true
     },
+    releaseClick() {
+      dragged = false
+    },
   }
 }

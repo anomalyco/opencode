@@ -374,7 +374,10 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             event.preventDefault()
             getTreeScroller()?.dispatchEvent(new Event("scroll"))
           }}
-          onTouchEnd={() => touchScroll.end()}
+          onTouchEnd={() => {
+            touchScroll.end()
+            window.setTimeout(() => touchScroll.releaseClick(), 0)
+          }}
           onTouchCancel={() => touchScroll.cancel()}
           onWheel={(event) => {
             const scroller = getTreeScroller()
