@@ -41,8 +41,12 @@ export type Draft = {
   configure: (shell: string) => void
 }
 
+export type ResolveInput = {
+  preference: "configured" | "compatible"
+}
+
 export interface Interface extends State.Transformable<Draft> {
-  readonly preferred: () => Effect.Effect<string>
+  readonly resolve: (input: ResolveInput) => Effect.Effect<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ShellSelect") {}
@@ -78,7 +82,7 @@ function rooted(file: string) {
   return path.isAbsolute(FSUtil.windowsPath(file))
 }
 
-function resolve(file: string, options?: Options, bin?: string) {
+function executable(file: string, options?: Options, bin?: string) {
   const shell = full(file, options, bin)
   if (rooted(shell)) {
     if (stat(shell)?.isFile()) return shell
@@ -110,7 +114,7 @@ async function unix() {
 
 function select(file: string | undefined, options?: Options, opts?: { acceptable?: boolean }, bin?: string) {
   if (file && (!opts?.acceptable || ok(file))) {
-    const shell = resolve(file, options, bin)
+    const shell = executable(file, options, bin)
     if (shell) return shell
   }
   if (process.platform === "win32") return win(options, bin)[0]
@@ -151,7 +155,7 @@ function info(file: string, options?: Options, bin?: string): Item {
   const n = name(item)
   return {
     path: item,
-    name: resolve(n, options, bin) ? n : item,
+    name: executable(n, options, bin) ? n : item,
     acceptable: ok(item),
   }
 }
@@ -163,38 +167,28 @@ export function args(file: string, command: string) {
   return ["-c", command]
 }
 
-let defaultPreferred: { bin?: string; value: string } | undefined
-let defaultAcceptable: { bin?: string; value: string } | undefined
+let defaultConfigured: { bin?: string; value: string } | undefined
+let defaultCompatible: { bin?: string; value: string } | undefined
 
-export function preferred(configShell?: string, options?: Options, bin?: string) {
-  if (configShell) return select(configShell, options, undefined, bin)
-  if (options?.gitbash) return select(process.env.SHELL, options, undefined, bin)
-  const cached = defaultPreferred
+export function resolve(input: ResolveInput, configShell?: string, options?: Options, bin?: string) {
+  const filter = input.preference === "compatible" ? { acceptable: true } : undefined
+  if (configShell) return select(configShell, options, filter, bin)
+  if (options?.gitbash) return select(process.env.SHELL, options, filter, bin)
+  const cached = input.preference === "compatible" ? defaultCompatible : defaultConfigured
   if (cached && cached.bin === bin) return cached.value
-  const value = select(process.env.SHELL, undefined, undefined, bin) ?? fallback(bin)
-  defaultPreferred = { bin, value }
+  const value = select(process.env.SHELL, undefined, filter, bin) ?? fallback(bin)
+  if (input.preference === "compatible") defaultCompatible = { bin, value }
+  if (input.preference === "configured") defaultConfigured = { bin, value }
   return value
 }
-preferred.reset = () => {
-  defaultPreferred = undefined
-}
-
-export function acceptable(configShell?: string, options?: Options, bin?: string) {
-  if (configShell) return select(configShell, options, { acceptable: true }, bin)
-  if (options?.gitbash) return select(process.env.SHELL, options, { acceptable: true }, bin)
-  const cached = defaultAcceptable
-  if (cached && cached.bin === bin) return cached.value
-  const value = select(process.env.SHELL, undefined, { acceptable: true }, bin) ?? fallback(bin)
-  defaultAcceptable = { bin, value }
-  return value
-}
-acceptable.reset = () => {
-  defaultAcceptable = undefined
+resolve.reset = () => {
+  defaultConfigured = undefined
+  defaultCompatible = undefined
 }
 
 export async function list(options?: Options, bin?: string): Promise<Item[]> {
   const shells = process.platform === "win32" ? win(options, bin) : await unix()
-  return shells.filter((shell) => resolve(shell, options, bin)).map((shell) => info(shell, options, bin))
+  return shells.filter((shell) => executable(shell, options, bin)).map((shell) => info(shell, options, bin))
 }
 
 const layer = (options?: Options) =>
@@ -214,7 +208,7 @@ const layer = (options?: Options) =>
       return Service.of({
         transform: state.transform,
         reload: state.reload,
-        preferred: () => Effect.sync(() => preferred(state.get().shell, options, global.bin)),
+        resolve: (input) => Effect.sync(() => resolve(input, state.get().shell, options, global.bin)),
       })
     }),
   )

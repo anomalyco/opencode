@@ -185,7 +185,7 @@ const layer = () =>
         return session.info
       })
 
-      const name = () => shell.preferred().pipe(Effect.map(ShellSelect.name))
+      const name = () => shell.resolve({ preference: "compatible" }).pipe(Effect.map(ShellSelect.name))
 
       const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
         const session = yield* require(id)
@@ -230,7 +230,7 @@ const layer = () =>
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout,
-          shell: yield* shell.preferred(),
+          shell: yield* shell.resolve({ preference: "compatible" }),
           env: {
             ...(sessionEnvironment ?? process.env),
             TERM: "xterm-256color",
