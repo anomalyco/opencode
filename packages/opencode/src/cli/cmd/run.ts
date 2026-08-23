@@ -699,7 +699,17 @@ export const RunCommand = effectCmd({
           const sessions = new Set([sessionID])
           let error: string | undefined
 
+          // session.status idle can arrive ahead of the remaining parts of an
+          // open step when event delivery lags (e.g. in containers/CI). Track
+          // open steps and keep draining until they settle rather than exiting
+          // mid-step and losing the trailing events.
+          let openSteps = 0
+          let idlePending = false
+          let drainTimedOut = false
+          let drainTimer: ReturnType<typeof setTimeout> | undefined
+
           for await (const event of events.stream) {
+            if (drainTimedOut) break
             if (event.type === "session.created" && event.properties.info.parentID) {
               if (sessions.has(event.properties.info.parentID)) sessions.add(event.properties.info.id)
             }
@@ -743,11 +753,18 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "step-start") {
+                openSteps++
                 if (emit("step_start", { part })) continue
               }
 
               if (part.type === "step-finish") {
-                if (emit("step_finish", { part })) continue
+                openSteps = Math.max(0, openSteps - 1)
+                const drained = idlePending && openSteps <= 0
+                if (emit("step_finish", { part })) {
+                  if (drained) break
+                  continue
+                }
+                if (drained) break
               }
 
               if (part.type === "text" && part.time?.end) {
@@ -786,8 +803,12 @@ export const RunCommand = effectCmd({
                 err = String(props.error.data.message)
               }
               error = error ? error + EOL + err : err
-              if (emit("error", { error: props.error })) continue
+              if (emit("error", { error: props.error })) {
+                if (idlePending) break
+                continue
+              }
               UI.error(err)
+              if (idlePending) break
             }
 
             if (
@@ -795,6 +816,11 @@ export const RunCommand = effectCmd({
               event.properties.sessionID === sessionID &&
               event.properties.status.type === "idle"
             ) {
+              if (openSteps > 0) {
+                idlePending = true
+                drainTimer = setTimeout(() => (drainTimedOut = true), 3_000)
+                continue
+              }
               break
             }
 
@@ -820,6 +846,7 @@ export const RunCommand = effectCmd({
               }
             }
           }
+          clearTimeout(drainTimer)
           return error
         }
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
