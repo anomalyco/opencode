@@ -14,6 +14,7 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AppProcess } from "@opencode-ai/core/process"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { Shell } from "@opencode-ai/core/shell"
 import { BashTool } from "@opencode-ai/core/tool/bash"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
@@ -72,16 +73,19 @@ const appProcess = Layer.succeed(
       }),
   } as unknown as AppProcess.Interface),
 )
+let configEntries: Config.Entry[] = []
+
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
-    entries: () => Effect.succeed([]),
+    entries: () => Effect.succeed(configEntries),
   }),
 )
 
 const reset = () => {
   assertions.length = 0
   runs.length = 0
+  configEntries = []
   denyAction = undefined
   runFailure = undefined
   afterPermission = () => Effect.void
@@ -413,6 +417,43 @@ describe("BashTool", () => {
           ),
         )
       },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("rejects terminal-only shells from config and $SHELL", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            const prev = process.env.SHELL
+            process.env.SHELL = "/usr/bin/fish"
+            Shell.acceptable.reset()
+            Shell.preferred.reset()
+            return prev
+          }),
+          (prev) =>
+            Effect.gen(function* () {
+              reset()
+              yield* withTool(tmp.path, (registry) => executeTool(registry, call({ command: "pwd" })))
+              expect(runs).toHaveLength(1)
+              expect(Shell.name(String(runs[0]?.shell))).not.toBe("fish")
+
+              reset()
+              configEntries = [new Config.Document({ type: "document", info: new Config.Info({ shell: "fish" }) })]
+              yield* withTool(tmp.path, (registry) => executeTool(registry, call({ command: "pwd" })))
+              expect(runs).toHaveLength(1)
+              expect(Shell.name(String(runs[0]?.shell))).not.toBe("fish")
+            }),
+          (prev) =>
+            Effect.sync(() => {
+              if (prev === undefined) delete process.env.SHELL
+              else process.env.SHELL = prev
+              Shell.acceptable.reset()
+              Shell.preferred.reset()
+            }),
+        ),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )

@@ -11,6 +11,7 @@ import { LocationMutation } from "../location-mutation"
 import { AppProcess } from "../process"
 import { PermissionV2 } from "../permission"
 import { PositiveInt } from "../schema"
+import { Shell } from "../shell"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -45,8 +46,6 @@ const Output = Schema.Struct({
 })
 
 type Output = typeof Output.Type
-
-const defaultShell = () => (process.platform === "win32" ? (process.env.COMSPEC ?? "cmd.exe") : "/bin/sh")
 
 const modelOutput = (output: Output) => {
   const warnings = output.warnings?.length
@@ -151,10 +150,7 @@ const layer = Layer.effectDiscard(
               if ((yield* fs.stat(target.canonical)).type !== "Directory")
                 return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
 
-              const entries = yield* config.entries()
-              const shell =
-                Object.assign({}, ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info] : [])))
-                  .shell ?? defaultShell()
+              const shell = Shell.acceptable(Config.latest(yield* config.entries(), "shell"))
               const command = ChildProcess.make(input.command, [], {
                 cwd: target.canonical,
                 shell,
