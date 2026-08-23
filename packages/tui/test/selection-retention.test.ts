@@ -1,3 +1,4 @@
+import { ScrollBoxRenderable, TextRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
@@ -66,4 +67,30 @@ test("a retained selection survives the leader sequence but not an unbound key",
     offKeymap()
     setup.renderer.destroy()
   }
+})
+
+// A retained highlight is anchored to each renderable's text buffer once the drag finishes,
+// so scrolling moves it with its content instead of re-reading whatever is at those coordinates.
+test("scroll does not re-target a retained selection", async () => {
+  const setup = await createTestRenderer({ width: 40, height: 6, useThread: false })
+  const scroll = new ScrollBoxRenderable(setup.renderer, { id: "scroll", width: 40, height: 6 })
+  setup.renderer.root.add(scroll)
+  for (let i = 0; i < 20; i++) {
+    scroll.add(
+      new TextRenderable(setup.renderer, { id: `l${i}`, content: `line-${i}`, selectable: true, width: 40, height: 1 }),
+    )
+  }
+  await setup.renderOnce()
+
+  await setup.mockMouse.drag(0, 0, 7, 0)
+  const before = setup.renderer.getSelection()?.getSelectedText()
+
+  await setup.mockMouse.scroll(10, 3, "down")
+  await setup.renderOnce()
+  await setup.mockMouse.scroll(10, 3, "down")
+  await setup.renderOnce()
+  const after = setup.renderer.getSelection()?.getSelectedText()
+
+  setup.renderer.destroy()
+  expect(after).toBe(before)
 })

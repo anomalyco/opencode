@@ -26,40 +26,41 @@ function createRenderer(
 const toast = { show: () => {}, error: () => {} }
 const clipboard = { write: async () => {} }
 
-test("take returns the active selection and clears it", () => {
+test("text reads the highlight without clearing it", () => {
   const renderer = createRenderer("hello\nworld")
-  expect(Selection.take(renderer)).toBe("hello\nworld")
-  expect(renderer.cleared).toBe(1)
-  expect(Selection.take(renderer)).toBeUndefined()
+  expect(Selection.text(renderer)).toBe("hello\nworld")
+  // the command clears only once the quote is in the prompt, so a failure keeps the highlight
+  expect(renderer.cleared).toBe(0)
+  expect(Selection.text(createRenderer())).toBeUndefined()
 })
 
 test("copy-on-select retains the highlight so it can still be added to the prompt", () => {
   const renderer = createRenderer("from the response")
   expect(Selection.copy(renderer, toast, clipboard, { retain: true })).toBe(true)
   expect(renderer.cleared).toBe(0)
-
-  expect(Selection.take(renderer)).toBe("from the response")
-  expect(renderer.cleared).toBe(1)
-  // nothing is highlighted anymore, so no stale text can be added
-  expect(Selection.take(renderer)).toBeUndefined()
+  expect(Selection.text(renderer)).toBe("from the response")
 })
 
 test("an explicit copy clears the highlight", () => {
   const renderer = createRenderer("from the response")
   expect(Selection.copy(renderer, toast, clipboard)).toBe(true)
   expect(renderer.getSelection()).toBeNull()
-  expect(Selection.take(renderer)).toBeUndefined()
+  expect(Selection.text(renderer)).toBeUndefined()
 })
 
-test("take trims and ignores whitespace only selections", () => {
-  expect(Selection.take(createRenderer("  spaced  "))).toBe("spaced")
-  expect(Selection.take(createRenderer("   \n  "))).toBeUndefined()
-})
-
-test("take expands placeholders when the selection is inside the focused input", () => {
+test("text expands placeholders when the selection is inside the focused input", () => {
   const focus = {
     hasSelection: () => true,
     getClipboardText: (text: string) => text.replace("[Pasted ~3 lines]", "a\nb\nc"),
   }
-  expect(Selection.take(createRenderer("look at [Pasted ~3 lines]", focus))).toBe("look at a\nb\nc")
+  expect(Selection.text(createRenderer("look at [Pasted ~3 lines]", focus))).toBe("look at a\nb\nc")
+})
+
+test("quote leaves no trailing whitespace on blank or padded lines", () => {
+  expect(Selection.quote("first\n\nsecond   ")).toBe("> first\n>\n> second\n")
+  expect(Selection.quote("   \nonly")).toBe(">\n> only\n")
+})
+
+test("quote nests an already quoted region rather than flattening it", () => {
+  expect(Selection.quote("> cited\nreply")).toBe("> > cited\n> reply\n")
 })

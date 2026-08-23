@@ -374,18 +374,17 @@ export function Prompt(props: PromptProps) {
         name: "prompt.add_selection",
         category: "Prompt",
         run: () => {
-          const selected = Selection.take(renderer)
+          const selected = Selection.text(renderer)?.trim()
           if (!selected) {
             toast.show({ message: "Select text in the conversation first", variant: "warning" })
             dialog.clear()
             return
           }
 
-          const lines = selected.split("\n")
-          pasteText(
-            lines.map((line) => `> ${line}`).join("\n") + "\n",
-            `[Quoted ${lines.length} ${lines.length === 1 ? "line" : "lines"}]`,
-          )
+          const lines = selected.split("\n").length
+          pasteText(Selection.quote(selected), `[Quoted ${lines} ${lines === 1 ? "line" : "lines"}]`)
+          // Only drop the highlight once the quote is actually in the prompt.
+          renderer.clearSelection()
           input.focus()
           dialog.clear()
         },

@@ -102,6 +102,18 @@ function init() {
     }, 1)
   }
 
+  // A retained copy-on-select highlight is dismissed first so it is never closed out from
+  // behind the dialog; the next press closes. Escape stays live either way.
+  function dismiss() {
+    const selected = renderer.getSelection()?.getSelectedText()
+    renderer.clearSelection()
+    if (selected) return
+    const current = store.stack.at(-1)
+    current?.onClose?.()
+    setStore("stack", store.stack.slice(0, -1))
+    refocus()
+  }
+
   useBindings(() => ({
     enabled: store.stack.length > 0,
     bindings: [
@@ -109,29 +121,13 @@ function init() {
         key: "escape",
         desc: "Close dialog",
         group: "Dialog",
-        cmd: () => {
-          if (renderer.getSelection()) {
-            renderer.clearSelection()
-          }
-          const current = store.stack.at(-1)
-          current?.onClose?.()
-          setStore("stack", store.stack.slice(0, -1))
-          refocus()
-        },
+        cmd: dismiss,
       },
       {
         key: "ctrl+c",
         desc: "Close dialog",
         group: "Dialog",
-        cmd: () => {
-          if (renderer.getSelection()) {
-            renderer.clearSelection()
-          }
-          const current = store.stack.at(-1)
-          current?.onClose?.()
-          setStore("stack", store.stack.slice(0, -1))
-          refocus()
-        },
+        cmd: dismiss,
       },
     ],
   }))

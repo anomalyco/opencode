@@ -33,11 +33,15 @@ export function text(renderer: Renderer) {
   return selected
 }
 
-// Consumes what is currently highlighted, so what the user sees is what gets added.
-export function take(renderer: Renderer) {
-  const selected = text(renderer)
-  renderer.clearSelection()
-  return selected?.trim() || undefined
+// Blank lines carry a bare ">" and content lines drop trailing padding, so a quoted block
+// never introduces trailing whitespace. Already-quoted lines nest, which is what they mean.
+export function quote(value: string) {
+  return (
+    value
+      .split("\n")
+      .map((line) => (line.trim() ? `> ${line.trimEnd()}` : ">"))
+      .join("\n") + "\n"
+  )
 }
 
 // `retain` keeps the highlight up after copy-on-select so it can still be acted on, for
