@@ -1,63 +1,137 @@
-import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useTheme } from "../context/theme"
-import { Spinner } from "./spinner"
+import { useSync } from "../context/sync"
+import { useTuiReady } from "../context/runtime"
+import { AnimatedSpinner } from "./spinner"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
-export function StartupLoading(props: { ready: () => boolean }) {
+const MIN_VISIBLE_MS = 250
+const FALLBACK_HIDE_TIMEOUT_MS = 15000
+
+type Stage = "boot" | "syncing" | "completing" | "finishing"
+
+export function StartupLoading() {
   const theme = useTheme().theme
-  const [show, setShow] = createSignal(false)
-  const text = createMemo(() => (props.ready() ? "Finishing startup..." : "Loading plugins..."))
-  let wait: NodeJS.Timeout | undefined
-  let hold: NodeJS.Timeout | undefined
-  let stamp = 0
+  const sync = useSync()
+  const tuiReady = useTuiReady()
+  const [show, setShow] = createSignal(true)
+  let stamp = Date.now()
+  let hideTimer: ReturnType<typeof setTimeout> | undefined
+  let fallbackTimer: ReturnType<typeof setTimeout> | undefined
+  let mounted = true
+  let lastForceHide = 0
+
+  const stage = createMemo<Stage>(() => {
+    if (tuiReady.ready()) return "finishing"
+    if (sync.status === "complete") return "completing"
+    if (sync.status === "partial") return "syncing"
+    return "boot"
+  })
+
+  const message = createMemo(() => {
+    switch (stage()) {
+      case "boot":
+        return "Booting OpenCode..."
+      case "syncing":
+        return "Loading workspace and sessions..."
+      case "completing":
+        return "Loading plugins..."
+      case "finishing":
+        return "Finishing startup..."
+      default:
+        return "Starting up..."
+    }
+  })
+
+  onMount(() => {
+    globalThis.__opencodeStopInTuiSplash?.()
+  })
+
+  const forceHide = (reason: string) => {
+    if (!mounted) return
+    lastForceHide = Date.now()
+    if (hideTimer) {
+      clearTimeout(hideTimer)
+      hideTimer = undefined
+    }
+    if (fallbackTimer) {
+      clearTimeout(fallbackTimer)
+      fallbackTimer = undefined
+    }
+    setShow(false)
+    if (process.env.OPENCODE_DEBUG_STARTUP) {
+      process.stderr.write(`[startup-loading] force hide: ${reason}\n`)
+    }
+  }
+
+  globalThis.__opencodeForceHideStartupLoading = forceHide
+
+  fallbackTimer = setTimeout(() => {
+    if (mounted && show()) {
+      forceHide("fallback timeout")
+    }
+  }, FALLBACK_HIDE_TIMEOUT_MS)
 
   createEffect(() => {
-    if (props.ready()) {
-      if (wait) {
-        clearTimeout(wait)
-        wait = undefined
-      }
-      if (!show()) return
-      if (hold) return
-
-      const left = 3000 - (Date.now() - stamp)
-      if (left <= 0) {
+    if (tuiReady.ready()) {
+      const elapsed = Date.now() - stamp
+      const remaining = MIN_VISIBLE_MS - elapsed
+      if (remaining <= 0) {
+        if (hideTimer) {
+          clearTimeout(hideTimer)
+          hideTimer = undefined
+        }
         setShow(false)
         return
       }
-
-      hold = setTimeout(() => {
-        hold = undefined
+      if (hideTimer) return
+      hideTimer = setTimeout(() => {
+        if (!mounted) return
+        hideTimer = undefined
         setShow(false)
-      }, left).unref()
+      }, remaining)
       return
     }
 
-    if (hold) {
-      clearTimeout(hold)
-      hold = undefined
+    if (hideTimer) {
+      clearTimeout(hideTimer)
+      hideTimer = undefined
     }
     if (show()) return
-    if (wait) return
-
-    wait = setTimeout(() => {
-      wait = undefined
-      stamp = Date.now()
-      setShow(true)
-    }, 500).unref()
+    stamp = Date.now()
+    setShow(true)
   })
 
   onCleanup(() => {
-    if (wait) clearTimeout(wait)
-    if (hold) clearTimeout(hold)
+    mounted = false
+    if (hideTimer) clearTimeout(hideTimer)
+    if (fallbackTimer) clearTimeout(fallbackTimer)
+    if (globalThis.__opencodeForceHideStartupLoading === forceHide) {
+      globalThis.__opencodeForceHideStartupLoading = undefined
+    }
   })
 
   return (
     <Show when={show()}>
-      <box position="absolute" zIndex={5000} left={0} right={0} bottom={1} justifyContent="center" alignItems="center">
-        <box backgroundColor={theme.backgroundPanel} paddingLeft={1} paddingRight={1}>
-          <Spinner color={theme.textMuted}>{text()}</Spinner>
+      <box
+        position="absolute"
+        zIndex={5000}
+        left={0}
+        top={0}
+        right={0}
+        bottom={0}
+        justifyContent="center"
+        alignItems="center"
+      >
+        <box flexDirection="column" alignItems="center" gap={1}>
+          <AnimatedSpinner color={theme.text ?? "#eeeeee"}>{message()}</AnimatedSpinner>
+          <text fg={theme.textMuted ?? "#808080"}>v{InstallationVersion}</text>
         </box>
       </box>
     </Show>
   )
+}
+
+declare global {
+  var __opencodeForceHideStartupLoading: ((reason: string) => void) | undefined
 }

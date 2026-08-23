@@ -17,6 +17,7 @@ import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
+  var __opencodeStopPreSplash: (() => void) | undefined
 }
 
 type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
@@ -147,6 +148,86 @@ export const TuiThreadCommand = cmd({
       process.exitCode = 1
       return
     }
+
+    // Pre-renderer splash: paint a transient status line to the controlling
+    // terminal directly. createCliRenderer will overwrite it as soon as the
+    // renderer paints its first frame. We retry on multiple output paths
+    // because we do not know which one is actually attached to the user's
+    // terminal at this point (stdio could be piped, redirected, or inherited).
+    const fs = await import("node:fs")
+    const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    const MESSAGES = [
+      "Loading OpenCode...",
+      "Loading OpenCode.",
+      "Loading OpenCode..",
+      "Initializing terminal...",
+      "Spawning TUI worker...",
+      "Loading configuration...",
+      "Almost there...",
+    ]
+    const writeRaw = (out: string) => {
+      try {
+        const tty = fs.openSync("/dev/tty", "w")
+        try {
+          fs.writeSync(tty, out)
+        } finally {
+          fs.closeSync(tty)
+        }
+      } catch {}
+      try {
+        process.stderr.write(out)
+      } catch {}
+      try {
+        process.stdout.write(out)
+      } catch {}
+    }
+    const writeLine = (text: string) => {
+      writeRaw("\r\x1b[2K\x1b[38;5;252m" + text + "\x1b[0m")
+    }
+    const clearLine = () => {
+      writeRaw("\r\x1b[2K")
+    }
+    let frame = 0
+    let messageIndex = 0
+    let lastMessageChange = Date.now()
+    writeLine(`${FRAMES[frame]} ${MESSAGES[messageIndex]}`)
+    const preSplashTimer = setInterval(() => {
+      frame = (frame + 1) % FRAMES.length
+      const now = Date.now()
+      if (now - lastMessageChange > 1200) {
+        messageIndex = (messageIndex + 1) % MESSAGES.length
+        lastMessageChange = now
+      }
+      writeLine(`${FRAMES[frame]} ${MESSAGES[messageIndex]}`)
+    }, 100)
+
+    const resetTerminal = () => {
+      writeRaw("\x1b[?25h\x1b[0m")
+      writeRaw("\x1b[2K\r")
+      writeRaw("\x1b[2K\r")
+      writeRaw("\x1b[2K\r")
+    }
+
+    const stopPreSplash = () => {
+      clearInterval(preSplashTimer)
+      resetTerminal()
+    }
+
+    globalThis.__opencodeStopPreSplash = stopPreSplash
+
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK", "SIGQUIT"] as const) {
+      try {
+        process.on(signal, () => {
+          stopPreSplash()
+        })
+      } catch {}
+    }
+    try {
+      process.on("beforeExit", stopPreSplash)
+    } catch {}
+    try {
+      process.on("exit", stopPreSplash)
+    } catch {}
     const noReplay = args.replay === false || args.noReplay === true
 
     if (args.mini) {

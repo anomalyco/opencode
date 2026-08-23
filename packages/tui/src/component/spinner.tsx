@@ -24,3 +24,16 @@ export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
     </Show>
   )
 }
+
+export function AnimatedSpinner(props: { children?: JSX.Element; color?: RGBA }) {
+  const { theme } = useTheme()
+  const color = () => props.color ?? theme.textMuted ?? "#eeeeee"
+  return (
+    <box flexDirection="row" gap={1}>
+      <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
+      <Show when={props.children}>
+        <text fg={color()}>{props.children}</text>
+      </Show>
+    </box>
+  )
+}

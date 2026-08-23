@@ -2,6 +2,7 @@ import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@op
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
+import { openSync, writeSync, closeSync } from "node:fs"
 import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -9,7 +10,7 @@ import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import * as Selection from "./util/selection"
-import { createCliRenderer, MouseButton } from "@opentui/core"
+import { CliRenderEvents, createCliRenderer, MouseButton } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
 import {
   Switch,
@@ -24,7 +25,7 @@ import {
   Show,
   on,
 } from "solid-js"
-import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider, useTuiStartup } from "./context/runtime"
+import { TuiPathsProvider, TuiReadyProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider, useTuiReady, useTuiStartup } from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
 import { DialogProvider as DialogProviderList } from "./component/dialog-provider"
 import { ErrorComponent } from "./component/error-component"
@@ -89,6 +90,11 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 
 registerOpencodeSpinner()
 
+declare global {
+  var __opencodeStopPreSplash: (() => void) | undefined
+  var __opencodeStopInTuiSplash: (() => void) | undefined
+}
+
 const appGlobalBindingCommands = [
   "session.list",
   "session.new",
@@ -151,6 +157,152 @@ export type TuiInput = {
   pluginHost: TuiPluginHost
 }
 
+const STARTUP_SPLASH_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+const STARTUP_SPLASH_MESSAGES = [
+  "Starting OpenCode...",
+  "Initializing terminal...",
+  "Loading configuration...",
+  "Resolving theme...",
+  "Preparing workspace...",
+  "Almost ready...",
+]
+const STARTUP_SPLASH_OPENCODE_ASCII = [
+  "  █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█  ",
+  "  █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀  ",
+  "  ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀  ",
+]
+
+function paintStartupSplash(renderer: { width: number; height: number }): () => void {
+  const width = Math.max(1, renderer.width)
+  const height = Math.max(1, renderer.height)
+  let frame = 0
+  let messageIndex = 0
+  let lastMessageChange = Date.now()
+  let stopped = false
+
+  let ttyFd: number | undefined
+  try {
+    ttyFd = openSync("/dev/tty", "w")
+  } catch {}
+
+  const writeAll = (out: string) => {
+    if (ttyFd !== undefined) {
+      try {
+        writeSync(ttyFd, out)
+      } catch {}
+    }
+    try {
+      process.stderr.write(out)
+    } catch {}
+    try {
+      process.stdout.write(out)
+    } catch {}
+  }
+
+  const boxWidth = Math.min(width, 60)
+  const boxHeight = 11
+  const boxLeft = Math.max(1, Math.floor((width - boxWidth) / 2) + 1)
+  const boxTop = Math.max(1, Math.floor((height - boxHeight) / 2) + 1)
+
+  const moveTo = (col: number, row: number) => `\x1b[${row};${col}H`
+
+  const drawFrame = () => {
+    if (stopped) return ""
+    const out: string[] = []
+    out.push("\x1b[?25l")
+    out.push(moveTo(boxLeft, boxTop))
+    out.push("\x1b[48;5;236m\x1b[38;5;215m")
+    const top = "┌" + "─".repeat(boxWidth - 2) + "┐"
+    out.push(top)
+    for (let i = 1; i < boxHeight - 1; i++) {
+      out.push(moveTo(boxLeft, boxTop + i))
+      out.push("│")
+      out.push(moveTo(boxLeft + boxWidth - 1, boxTop + i))
+      out.push("│")
+    }
+    out.push(moveTo(boxLeft, boxTop + boxHeight - 1))
+    out.push("└" + "─".repeat(boxWidth - 2) + "┘")
+    out.push("\x1b[0m")
+    return out.join("")
+  }
+
+  const drawContent = () => {
+    if (stopped) return ""
+    const out: string[] = []
+    out.push("\x1b[0m")
+    const logoRow = boxTop + 2
+    for (let i = 0; i < STARTUP_SPLASH_OPENCODE_ASCII.length; i++) {
+      const line = STARTUP_SPLASH_OPENCODE_ASCII[i]
+      const col = Math.max(boxLeft + 1, Math.floor((width - line.length) / 2) + 1)
+      out.push(moveTo(col, logoRow + i))
+      out.push("\x1b[1m\x1b[38;5;252m" + line + "\x1b[0m")
+    }
+    const message = `${STARTUP_SPLASH_FRAMES[frame]} ${STARTUP_SPLASH_MESSAGES[messageIndex]}`
+    const messageRow = boxTop + boxHeight - 3
+    const messageCol = Math.max(boxLeft + 2, Math.floor((width - message.length) / 2) + 1)
+    out.push(moveTo(messageCol, messageRow))
+    out.push("\x1b[1m\x1b[38;5;215m" + message + "\x1b[0m")
+    return out.join("")
+  }
+
+  let firstPaint = true
+  const paint = () => {
+    if (stopped) return
+    if (firstPaint) {
+      writeAll("\x1b[2J\x1b[H" + drawFrame() + drawContent())
+      firstPaint = false
+      return
+    }
+    const message = `${STARTUP_SPLASH_FRAMES[frame]} ${STARTUP_SPLASH_MESSAGES[messageIndex]}`
+    const messageRow = boxTop + boxHeight - 3
+    const messageCol = Math.max(boxLeft + 2, Math.floor((width - message.length) / 2) + 1)
+    writeAll(moveTo(messageCol, messageRow) + "\x1b[1m\x1b[38;5;215m" + message + "\x1b[0m")
+  }
+
+  globalThis.__opencodeStopInTuiSplash = () => {
+    if (stopped) return
+    stopped = true
+    try {
+      writeAll("\x1b[0m\x1b[2J\x1b[H")
+    } catch {}
+  }
+
+  paint()
+
+  const tick = () => {
+    if (stopped) return
+    frame = (frame + 1) % STARTUP_SPLASH_FRAMES.length
+    const now = Date.now()
+    if (now - lastMessageChange > 1500) {
+      messageIndex = (messageIndex + 1) % STARTUP_SPLASH_MESSAGES.length
+      lastMessageChange = now
+      firstPaint = true
+    }
+    paint()
+    setTimeout(tick, 16)
+  }
+  setTimeout(tick, 16)
+
+  const fallbackStop = setTimeout(() => {
+    if (!stopped) globalThis.__opencodeStopInTuiSplash?.()
+  }, 30_000)
+
+  return () => {
+    if (stopped) return
+    stopped = true
+    clearTimeout(fallbackStop)
+    try {
+      writeAll("\x1b[0m\x1b[2J\x1b[H")
+    } catch {}
+    if (ttyFd !== undefined) {
+      try {
+        closeSync(ttyFd)
+      } catch {}
+      ttyFd = undefined
+    }
+  }
+}
+
 function errorMessage(error: unknown) {
   if (
     typeof error === "object" &&
@@ -211,6 +363,18 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             destroyRenderer(renderer)
           }),
       )
+      globalThis.__opencodeStopPreSplash?.()
+      const stopStartupSplash = paintStartupSplash(renderer)
+      let frameCount = 0
+      const onFrame = () => {
+        frameCount++
+        if (frameCount >= 30) stopStartupSplash()
+      }
+      renderer.on(CliRenderEvents.FRAME, onFrame)
+      yield* Effect.addFinalizer(() => {
+        renderer.off(CliRenderEvents.FRAME, onFrame)
+        return Effect.sync(stopStartupSplash)
+      })
       win32DisableProcessedInput()
       const keymap = createDefaultOpenTuiKeymap(renderer)
       yield* Effect.acquireRelease(
@@ -239,8 +403,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       yield* Effect.tryPromise(async () => {
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
-        const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
-        if (renderer.isDestroyed) return
+        // Mount the tree immediately with "dark" so the user never sees a
+        // black screen while we wait for the terminal to report its theme.
+        // The ThemeProvider reads renderer.themeMode first and falls back to
+        // props.mode. renderer.themeMode gets updated asynchronously.
+        const mode: "dark" | "light" = "dark"
+        renderer.waitForThemeMode(2000).catch(() => undefined)
 
         await render(() => {
           return (
@@ -272,12 +440,13 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                             : undefined,
                       }}
                     >
-                      <TuiStartupProvider
-                        value={{
-                          initialRoute: process.env.OPENCODE_ROUTE ? JSON.parse(process.env.OPENCODE_ROUTE) : undefined,
-                          skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
-                        }}
-                      >
+                      <TuiReadyProvider>
+                        <TuiStartupProvider
+                          value={{
+                            initialRoute: process.env.OPENCODE_ROUTE ? JSON.parse(process.env.OPENCODE_ROUTE) : undefined,
+                            skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
+                          }}
+                        >
                         <ClipboardProvider>
                           <OpencodeKeymapProvider keymap={keymap}>
                             <ArgsProvider {...input.args}>
@@ -307,6 +476,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                               <SyncProvider>
                                                 <DataProvider>
                                                   <ThemeProvider mode={mode}>
+                                                    <Show when={!Boolean(process.env.OPENCODE_FAST_BOOT)}>
+                                                      <StartupLoading />
+                                                    </Show>
                                                     <LocalProvider>
                                                       <PromptStashProvider>
                                                         <DialogProvider>
@@ -342,6 +514,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                           </OpencodeKeymapProvider>
                         </ClipboardProvider>
                       </TuiStartupProvider>
+                      </TuiReadyProvider>
                     </TuiTerminalEnvironmentProvider>
                   </TuiPathsProvider>
                 </ErrorBoundary>
@@ -377,6 +550,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const toast = useToast()
   const themeState = useTheme()
   const { theme, mode, setMode, locked, lock, unlock } = themeState
+  const tuiReady = useTuiReady()
   const sync = useSync()
   const project = useProject()
   const exit = useExit()
@@ -404,7 +578,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       Slot: pluginRuntime.Slot,
     }),
   )
-  const [ready, setReady] = createSignal(false)
+  const ready = tuiReady.ready
+  const setReady = tuiReady.setReady
   props.pluginHost
     .start({
       api,
@@ -1125,9 +1300,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           <pluginRuntime.Slot name="app_bottom" />
         </box>
         <pluginRuntime.Slot name="app" />
-      </Show>
-      <Show when={!startup.skipInitialLoading}>
-        <StartupLoading ready={ready} />
       </Show>
     </box>
   )
