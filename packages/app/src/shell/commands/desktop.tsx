@@ -9,13 +9,21 @@ export function DesktopCommands() {
 
   command.register("desktop", () => {
     const commands: CommandOption[] = []
-    if (platform.platform !== "desktop" || !platform.exportDebugLogs) return commands
+    if (platform.platform !== "desktop") return commands
     commands.push({
-      id: "logs.export",
-      title: language.t("command.logs.export"),
-      category: language.t("command.category.settings"),
-      onSelect: () => void platform.exportDebugLogs?.(),
+      id: "window.new",
+      title: language.t("desktop.menu.newWindow"),
+      keybind: platform.os === "windows" ? "ctrl+shift+n" : undefined,
+      hidden: true,
+      onSelect: () => void platform.runDesktopMenuAction?.("window.new"),
     })
+    if (platform.exportDebugLogs)
+      commands.push({
+        id: "logs.export",
+        title: language.t("command.logs.export"),
+        category: language.t("command.category.settings"),
+        onSelect: () => void platform.exportDebugLogs?.(),
+      })
     return commands
   })
 
