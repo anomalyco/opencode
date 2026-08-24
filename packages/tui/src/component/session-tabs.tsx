@@ -27,6 +27,7 @@ import {
   seedSessionTabMotion,
   sessionTabOverflowWidth,
   type SessionTab,
+  type SessionTabMotionValues,
   type SessionTabUnread,
 } from "../context/session-tabs-model"
 import { createAnimatable, spring, tween } from "../ui/animation"
@@ -48,6 +49,15 @@ const MARQUEE_INTERVAL = 80
 const CONTEXT_MENU_WIDTH = 16
 const MIDDLE_MOUSE_BUTTON = 1
 const RIGHT_MOUSE_BUTTON = 2
+const MOUSE_CLOSE_HOLD_MS = 5_000
+
+type MouseCloseHold = {
+  ids: string[]
+  widths: number[]
+  closed: string
+  target: string
+  x: number
+}
 
 type TabContextMenuState = {
   x: number
@@ -99,6 +109,38 @@ function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: nu
   const end = index - (length - FADE_WIDTH) + 1
   const opacity = Math.max(fade(start) * leading, fade(end))
   return opacity === 0 ? color : tint(color, background, opacity)
+}
+
+function heldSessionTabMotion(
+  hold: MouseCloseHold,
+  ids: string[],
+  before: number,
+  stripX: number,
+  next: SessionTabMotionValues,
+) {
+  const expected = hold.ids.filter((id) => id !== hold.closed)
+  const unchanged = ids.length === hold.ids.length && ids.every((id, index) => id === hold.ids[index])
+  const retained = ids.filter((id) => expected.includes(id))
+  const removed =
+    !ids.includes(hold.closed) &&
+    ids.includes(hold.target) &&
+    retained.length === expected.length &&
+    retained.every((id, index) => id === expected[index])
+  if (!unchanged && !removed) return undefined
+
+  const widths = ids.map((id, index) => hold.widths[hold.ids.indexOf(id)] ?? next.widths[index] ?? 0)
+  if (widths.some((width) => width < 1)) return undefined
+  if (removed) {
+    const index = ids.indexOf(hold.target)
+    if (index === -1) return undefined
+    const leading = before > 0 ? sessionTabOverflowWidth(before) : 0
+    const preceding = widths.slice(0, index).reduce((sum, width) => sum + width, 0)
+    // The close glyph sits one cell in from the right edge: x = tab start + width - 2.
+    const width = hold.x - stripX - leading - preceding + 2
+    if (width < 1) return undefined
+    widths[index] = width
+  }
+  return { ...next, widths }
 }
 
 export function createMarquee(animations: () => boolean) {
@@ -858,7 +900,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
   // so the strip never flashes the pre-drag order while the write is in flight.
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
   const [contextMenu, setContextMenu] = createSignal<TabContextMenuState>()
-  let strip: { screenX: number; screenY: number } | undefined
+  let strip: { screenX: number; screenY: number; width: number; height: number } | undefined
   let didDrag = false
   let addPressed = false
   // A captured drag ends with a synthetic up on its drop target; do not turn that into a click.
@@ -920,6 +962,19 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
     enabled: animations,
     transition: spring({ visualDuration: 0.1 }),
   })
+  let closeHold: MouseCloseHold | undefined
+  let closeHoldTimer: ReturnType<typeof setTimeout> | undefined
+  const clearCloseHold = () => {
+    closeHold = undefined
+    if (closeHoldTimer) clearTimeout(closeHoldTimer)
+    closeHoldTimer = undefined
+  }
+  const releaseCloseHold = () => {
+    if (!closeHold) return
+    clearCloseHold()
+    motion.animate(targets())
+  }
+  onCleanup(clearCloseHold)
   const identity = createMemo(() =>
     layout()
       .tabs.map((tab) => tab.sessionID)
@@ -927,6 +982,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
   )
   let signature = ""
   let total = 0
+  let terminalWidth = dimensions().width
 
   // createComputed runs before render effects, so seeded widths are visible on the first frame
   // of a membership change instead of flashing the final layout.
@@ -935,9 +991,23 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
     const nextSignature = identity()
     const changed = Boolean(signature) && signature !== nextSignature
     const resized = Boolean(total) && total !== layout().total
+    const terminalResized = terminalWidth !== dimensions().width
     const previous = signature
     signature = nextSignature
     total = layout().total
+    terminalWidth = dimensions().width
+    if (terminalResized) clearCloseHold()
+    if (closeHold && strip) {
+      const held = heldSessionTabMotion(
+        closeHold,
+        layout().tabs.map((tab) => tab.sessionID),
+        layout().before,
+        strip.screenX,
+        next,
+      )
+      if (held) return motion.jump(held)
+      clearCloseHold()
+    }
     if (!changed && !resized) return motion.animate(next)
     // Identity-stable total changes are terminal resizes and still jump.
     if (!changed) return motion.jump(next)
@@ -954,23 +1024,50 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
 
   const activeIndex = createMemo(() => layout().tabs.findIndex((tab) => tab.sessionID === activeID()))
   const visuals = createMemo(() => {
-    const current = signature === identity() && total === layout().total ? motion.value() : targets()
+    const current = closeHold || (signature === identity() && total === layout().total) ? motion.value() : targets()
     const widths = current.widths.map((width) => Math.max(1, Math.round(width)))
     const active = activeIndex()
     const remainder = layout().total - widths.reduce((sum, width) => sum + width, 0)
     // Absorb only rounding slack; membership animations leave a real gap while widths grow into place.
-    if (active !== -1 && Math.abs(remainder) <= layout().tabs.length) widths[active]! += remainder
+    if (!closeHold && active !== -1 && Math.abs(remainder) <= layout().tabs.length) widths[active] += remainder
     return new Map(
       layout().tabs.map((tab, index) => [
         tab.sessionID,
         {
-          width: widths[index]!,
+          width: widths[index],
           selection: current.selections[index] ?? Number(tab.sessionID === activeID()),
           activity: current.activities[index] ?? Number(statuses().get(tab.sessionID)!.complete),
         },
       ]),
     )
   })
+
+  const holdCloseCell = (sessionID: string, x: number) => {
+    if (!strip) return clearCloseHold()
+    const current = layout()
+    const index = current.tabs.findIndex((tab) => tab.sessionID === sessionID)
+    const all = items()
+    const itemIndex = all.findIndex((tab) => tab.sessionID === sessionID)
+    const target = all[itemIndex + 1] ?? all[itemIndex - 1]
+    if (index === -1 || itemIndex === -1 || !target) return clearCloseHold()
+    const ids = current.tabs.map((tab) => tab.sessionID)
+    const values = ids.map((id) => visuals().get(id))
+    if (values.some((value) => !value)) return clearCloseHold()
+    closeHold = {
+      ids,
+      widths: values.map((value) => value!.width),
+      closed: sessionID,
+      target: target.sessionID,
+      x,
+    }
+    if (closeHoldTimer) clearTimeout(closeHoldTimer)
+    closeHoldTimer = setTimeout(releaseCloseHold, MOUSE_CLOSE_HOLD_MS)
+    motion.jump({
+      widths: values.map((value) => value!.width),
+      selections: values.map((value) => value!.selection),
+      activities: values.map((value) => value!.activity),
+    })
+  }
 
   // Map an absolute pointer column to the items index of the visible slot beneath it.
   const slotAt = (x: number) => {
@@ -1015,7 +1112,17 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
       position="relative"
       flexDirection="row"
       zIndex={1}
-      onMouseOut={marquee.leaveHovered}
+      onMouseOut={(event) => {
+        marquee.leaveHovered()
+        if (!strip) return
+        if (
+          event.x < strip.screenX ||
+          event.x >= strip.screenX + strip.width ||
+          event.y < strip.screenY ||
+          event.y >= strip.screenY + strip.height
+        )
+          releaseCloseHold()
+      }}
       onMouseUp={(event) => {
         if (event.button === RIGHT_MOUSE_BUTTON) return
         release()
@@ -1127,6 +1234,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
               onMouseOut={() => marquee.leave(tab.sessionID)}
               onMouseDown={(event) => {
                 if (event.button === MIDDLE_MOUSE_BUTTON) {
+                  releaseCloseHold()
                   didDrag = false
                   setDragging(undefined)
                   tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
@@ -1135,6 +1243,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   return
                 }
                 if (event.button === RIGHT_MOUSE_BUTTON) {
+                  releaseCloseHold()
                   didDrag = false
                   setDragging(undefined)
                   setContextMenu({
@@ -1148,6 +1257,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   return
                 }
                 didDrag = false
+                releaseCloseHold()
                 marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                 setDragging(tab.sessionID)
               }}
@@ -1205,6 +1315,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                     // land here first, and must select the tab instead of closing it invisibly.
                     if (hovered() !== tab.sessionID) return
                     event.stopPropagation()
+                    holdCloseCell(tab.sessionID, event.x)
                     tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
                   }}
                 >
@@ -1229,6 +1340,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           onMouseOver={() => setAddHovered(true)}
           onMouseOut={() => setAddHovered(false)}
           onMouseDown={(event) => {
+            releaseCloseHold()
             didDrag = false
             setDragging(undefined)
             addPressed = event.button !== RIGHT_MOUSE_BUTTON
