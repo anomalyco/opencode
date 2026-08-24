@@ -134,7 +134,7 @@ const GeminiContent = Schema.Struct({
 type GeminiContent = Schema.Schema.Type<typeof GeminiContent>
 
 const GeminiResponseContent = Schema.Struct({
-  role: optionalNull(Schema.Literals(["user", "model"])),
+  role: Schema.optional(Schema.String),
   parts: optionalNull(Schema.Array(Schema.Unknown)),
 })
 
