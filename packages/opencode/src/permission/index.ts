@@ -29,7 +29,7 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Permi
   return (
     rulesets
       .flat()
-      .findLast((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) ?? {
+      .findLast((rule) => Wildcard.matchPermission(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) ?? {
       action: "ask",
       permission,
       pattern: "*",
@@ -74,7 +74,7 @@ const layer = Layer.effect(
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new PermissionV1.DeniedError({
-            ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+            ruleset: ruleset.filter((rule) => Wildcard.matchPermission(request.permission, rule.permission)),
           })
         }
         if (rule.action === "allow") continue
@@ -207,7 +207,7 @@ export function disabled(tools: string[], ruleset: PermissionV1.Ruleset): Set<st
   return new Set(
     tools.filter((tool) => {
       const permission = edits.includes(tool) ? "edit" : reads.includes(tool) ? "read" : tool
-      const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
+      const rule = ruleset.findLast((rule) => Wildcard.matchPermission(permission, rule.permission))
       return rule?.pattern === "*" && rule.action === "deny"
     }),
   )

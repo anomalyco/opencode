@@ -173,6 +173,20 @@ test("fromConfig - documented fallback-first example", () => {
   expect(Permission.evaluate("read", "foo.ts", ruleset).action).toBe("ask")
 })
 
+test("evaluate - permission tool keys are case-insensitive", () => {
+  const ruleset = Permission.fromConfig({ read: "allow", glob: "deny", bash: { "*": "allow" } })
+  expect(Permission.evaluate("Read", "foo.ts", ruleset).action).toBe("allow")
+  expect(Permission.evaluate("GLOB", "src/**", ruleset).action).toBe("deny")
+  expect(Permission.evaluate("Bash", "Test-Path foo", ruleset).action).toBe("allow")
+})
+
+test("evaluate - path patterns stay case-sensitive on Unix", () => {
+  if (process.platform === "win32") return
+  const ruleset = Permission.fromConfig({ read: { "src/CaseSensitive.ts": "allow" } })
+  expect(Permission.evaluate("read", "src/CaseSensitive.ts", ruleset).action).toBe("allow")
+  expect(Permission.evaluate("read", "src/casesensitive.ts", ruleset).action).toBe("ask")
+})
+
 test("fromConfig - expands exact tilde to home directory", () => {
   const result = Permission.fromConfig({ external_directory: { "~": "allow" } })
   expect(result).toEqual([{ permission: "external_directory", pattern: os.homedir(), action: "allow" }])
