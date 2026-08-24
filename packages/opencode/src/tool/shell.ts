@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Duration, Effect, Fiber, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -25,6 +25,11 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+// After the direct child exits, allow a short bounded window for in-flight output to be
+// drained before the stream reader is interrupted. Prevents a descendant that inherited
+// the stdio pipe (e.g. a gradle daemon, adb server, dev server) from keeping the tool
+// blocked forever waiting for pipe EOF.
+const EXIT_DRAIN_GRACE_MS = Duration.millis(2_000)
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -483,7 +488,7 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
-          yield* Effect.forkScoped(
+          const reader = yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
@@ -553,6 +558,13 @@ export const ShellTool = Tool.define(
             expired = true
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
           }
+
+          if (exit.kind === "exit") {
+            // Drain any output still in flight for a short bounded window, then stop
+            // reading. The stream may never EOF if a descendant holds the pipe open.
+            yield* Fiber.join(reader).pipe(Effect.timeoutOption(EXIT_DRAIN_GRACE_MS), Effect.ignore)
+          }
+          yield* Fiber.interrupt(reader).pipe(Effect.ignore)
 
           return exit.kind === "exit" ? exit.code : null
         }),

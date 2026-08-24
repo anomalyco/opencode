@@ -252,6 +252,29 @@ describe("transcript", () => {
       expect(result).toContain("**Error:**")
       expect(result).toContain("Command failed")
     })
+
+    test("formats aborted tool with captured output", () => {
+      const part: Part = {
+        id: "part_1",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "tool",
+        callID: "call_1",
+        tool: "bash",
+        state: {
+          status: "error",
+          input: { command: "gradlew build" },
+          error: "Tool execution aborted",
+          metadata: { output: "Performing Streamed Install\nSuccess", interrupted: true },
+          time: { start: 1000, end: 1100 },
+        },
+      }
+      const result = formatPart(part, options)
+      expect(result).toContain("**Error:**")
+      expect(result).toContain("Tool execution aborted")
+      expect(result).toContain("**Output (captured before abort):**")
+      expect(result).toContain("Performing Streamed Install")
+    })
   })
 
   describe("formatMessage", () => {

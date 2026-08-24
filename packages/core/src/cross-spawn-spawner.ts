@@ -268,18 +268,25 @@ export const make = Effect.gen(function* () {
     Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
-      let end = false
+      let settled = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
+      const settle = (args: readonly [code: number | null, signal: NodeJS.Signals | null]) => {
+        if (settled) return
+        settled = true
+        Deferred.doneUnsafe(signal, Exit.succeed(args))
+      }
       proc.on("error", (err) => {
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
+      // Settle from `exit`: it fires as soon as the direct child ends, regardless of
+      // whether a descendant still holds an inherited stdio pipe open. `close` is kept
+      // as a fallback for platforms/paths where `exit` does not fire.
       proc.on("exit", (...args) => {
         exit = args
+        settle(args)
       })
       proc.on("close", (...args) => {
-        if (end) return
-        end = true
-        Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
+        settle(exit ?? args)
       })
       proc.on("spawn", () => {
         resume(Effect.succeed([proc, signal]))

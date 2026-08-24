@@ -1,7 +1,7 @@
-import { Context, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Context, Duration, Effect, Fiber, Layer, Ref, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/unstable/process"
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { ChildProcessSpawner, type ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "./cross-spawn-spawner"
 import { makeGlobalNode } from "./effect/app-node"
 
@@ -136,6 +136,44 @@ export const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, 
     },
   ).pipe(Effect.map((x) => ({ buffer: Buffer.concat(x.chunks), truncated: x.truncated })))
 
+const DRAIN_GRACE_MS = Duration.millis(2_000)
+
+/**
+ * Like collectStream, but never blocks indefinitely on stream EOF. Reads the
+ * stream concurrently (so a pipe-full child cannot deadlock), waits for the
+ * process to exit, then allows a short bounded window for in-flight output
+ * before returning whatever has been captured. A descendant that inherited the
+ * stdio pipe (e.g. a gradle daemon) can therefore no longer keep the caller
+ * waiting forever for the pipe to close.
+ */
+export const collectBounded = (
+  handle: ChildProcessHandle,
+  stream: Stream.Stream<Uint8Array, PlatformError>,
+  maxOutputBytes: number | undefined,
+) =>
+  Effect.gen(function* () {
+    const acc = yield* Ref.make({ chunks: [] as Uint8Array[], bytes: 0, truncated: false })
+    const push = (chunk: Uint8Array) =>
+      Ref.update(acc, (a) => {
+        if (maxOutputBytes === undefined) {
+          a.chunks.push(chunk)
+          a.bytes += chunk.length
+          return a
+        }
+        const remaining = maxOutputBytes - a.bytes
+        if (remaining > 0) a.chunks.push(remaining >= chunk.length ? chunk : chunk.slice(0, remaining))
+        a.bytes += chunk.length
+        a.truncated = a.truncated || a.bytes > maxOutputBytes
+        return a
+      })
+    const reader = yield* Effect.forkScoped(Stream.runForEach(stream, push))
+    yield* handle.exitCode
+    yield* Fiber.join(reader).pipe(Effect.timeoutOption(DRAIN_GRACE_MS), Effect.ignore)
+    yield* Fiber.interrupt(reader).pipe(Effect.ignore)
+    const { chunks, truncated } = yield* Ref.get(acc)
+    return { buffer: Buffer.concat(chunks), truncated }
+  })
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -148,7 +186,7 @@ const layer = Layer.effect(
           const handle = yield* spawner.spawn(command)
           if (options?.combineOutput) {
             const [output, exitCode] = yield* Effect.all(
-              [collectStream(handle.all, options.maxOutputBytes), handle.exitCode],
+              [collectBounded(handle, handle.all, options.maxOutputBytes), handle.exitCode],
               { concurrency: "unbounded" },
             )
             return {
@@ -164,8 +202,8 @@ const layer = Layer.effect(
           }
           const [stdout, stderr, exitCode] = yield* Effect.all(
             [
-              collectStream(handle.stdout, options?.maxOutputBytes),
-              collectStream(handle.stderr, options?.maxErrorBytes),
+              collectBounded(handle, handle.stdout, options?.maxOutputBytes),
+              collectBounded(handle, handle.stderr, options?.maxErrorBytes),
               handle.exitCode,
             ],
             { concurrency: "unbounded" },

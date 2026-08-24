@@ -1197,3 +1197,36 @@ describe("tool.shell truncation", () => {
     ),
   )
 })
+
+describe("tool.shell completion", () => {
+  it.live(
+    "returns after the foreground process exits even when a descendant keeps the pipe open",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          if (sh() === "cmd") return
+          const code = [
+            "const{spawn}=require(\"node:child_process\")",
+            "const c=spawn(process.execPath,[\"-e\",\"setTimeout(()=>process.exit(0),6000)\"],{stdio:[\"ignore\",\"inherit\",\"inherit\"]})",
+            "c.unref()",
+            "process.stdout.write(\"done\")",
+          ].join(";")
+          const text = `${bin} -e ${evalarg(code)}`
+          const command = PS.has(sh()) ? `& ${text}` : text
+          const start = Date.now()
+          const result = yield* run({
+            command,
+            timeout: 20_000,
+          })
+          const elapsed = Date.now() - start
+          expect(result.metadata.exit).toBe(0)
+          expect(result.output).toContain("done")
+          // The direct child exited immediately; the 6s descendant holds the pipe.
+          // The tool must not wait for pipe EOF, so it completes well before then.
+          expect(elapsed).toBeLessThan(8_000)
+        }),
+      ),
+    30_000,
+  )
+})
