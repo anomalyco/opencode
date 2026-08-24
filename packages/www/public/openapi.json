@@ -10607,6 +10607,68 @@
         "summary": "Refresh worktrees"
       }
     },
+    "/api/workspace/{workspaceID}": {
+      "delete": {
+        "tags": ["workspace"],
+        "operationId": "v2.workspace.destroy",
+        "parameters": [
+          {
+            "name": "workspaceID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^wrk"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Reports whether this request destroyed an existing workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDestroyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Make a workspace not exist. This operation is idempotent: an already-missing workspace succeeds with `destroyed: false`, while a workspace removed by this request returns `destroyed: true`.",
+        "summary": "Destroy workspace"
+      }
+    },
     "/api/vcs": {
       "get": {
         "tags": ["vcs"],
@@ -17034,6 +17096,18 @@
         "required": ["url", "time"],
         "additionalProperties": false
       },
+      "WorkspaceDestroyResult": {
+        "type": "object",
+        "properties": {
+          "destroyed": {
+            "type": "boolean",
+            "description": "True when this request transitioned the workspace from existing to destroyed."
+          }
+        },
+        "required": ["destroyed"],
+        "additionalProperties": false,
+        "description": "Reports whether this request destroyed an existing workspace."
+      },
       "Worktree.Directory": {
         "type": "object",
         "properties": {
@@ -17189,6 +17263,10 @@
     {
       "name": "worktree",
       "description": "Project worktree management routes."
+    },
+    {
+      "name": "workspace",
+      "description": "Workspace lifecycle routes."
     },
     {
       "name": "vcs",
