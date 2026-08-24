@@ -41,6 +41,11 @@ const ref = {
   modelID: ModelV2.ID.make("test-model"),
 }
 
+const openrouterRef = {
+  providerID: ProviderV2.ID.make("openrouter"),
+  modelID: ModelV2.ID.make("test-model"),
+}
+
 const cfg = {
   provider: {
     test: {
@@ -77,6 +82,22 @@ function providerCfg(url: string) {
       ...cfg.provider,
       test: {
         ...cfg.provider.test,
+        options: {
+          ...cfg.provider.test.options,
+          baseURL: url,
+        },
+      },
+    },
+  }
+}
+
+function openrouterCfg(url: string) {
+  return {
+    provider: {
+      openrouter: {
+        ...cfg.provider.test,
+        id: "openrouter",
+        npm: "@openrouter/ai-sdk-provider",
         options: {
           ...cfg.provider.test.options,
           baseURL: url,
@@ -705,6 +726,69 @@ it.live("session.processor effect tests retry network_error finish reasons", () 
         expect(handle.message.error).toBeUndefined()
       }),
     { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests retry empty successful streams", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.push(
+          raw({
+            chunks: [
+              {
+                id: "chatcmpl-empty-stop",
+                object: "chat.completion.chunk",
+                choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: "stop" }],
+              },
+              {
+                id: "chatcmpl-empty-stop",
+                object: "chat.completion.chunk",
+                choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: "stop" }],
+                usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+              },
+            ],
+          }),
+        )
+        yield* llm.text("after empty retry")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "retry empty response")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(openrouterRef.providerID, openrouterRef.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: openrouterRef.providerID, modelID: openrouterRef.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "retry empty response" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(2)
+        expect(parts.some((part) => part.type === "text" && part.text === "after empty retry")).toBe(true)
+        expect(handle.message.error).toBeUndefined()
+      }),
+    { config: (url) => openrouterCfg(url) },
   ),
 )
 

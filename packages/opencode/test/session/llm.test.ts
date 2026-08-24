@@ -9,6 +9,7 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import z from "zod"
 import { LLM } from "../../src/session/llm"
+import type { LLMEvent } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -57,6 +58,8 @@ const it = testEffect(AppNodeBuilder.build(LayerNode.group([LLM.node, Provider.n
 
 // LLM.stream returns a Stream, not an Effect, so we can't use the serviceUse proxy.
 const drain = (input: LLM.StreamInput) => LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runDrain))
+const collect = (input: LLM.StreamInput) =>
+  LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runCollect, Effect.map(Array.from)))
 
 // drainWith builds an isolated runtime so custom replacements fully own LLM and
 // its transitive deps.
@@ -362,6 +365,7 @@ describe("session.llm.ai-sdk adapter", () => {
     // telemetry distinguishes "missing" from "zero," so emitting an empty object causes
     // false positives ("usage was tracked, just empty") instead of correct nulls.
     const events = await adapt([
+      uncheckedAdapterEvent({ type: "text-delta", text: "ok" }),
       {
         type: "finish-step",
         response: { id: "response-1", timestamp: new Date(0), modelId: "gpt-test" },
@@ -380,8 +384,8 @@ describe("session.llm.ai-sdk adapter", () => {
       },
     ])
 
-    expect(events).toHaveLength(1)
-    const stepFinish = events[0]
+    expect(events).toHaveLength(2)
+    const stepFinish = events[1]
     if (stepFinish.type !== "step-finish") throw new Error("expected step-finish")
     expect(stepFinish.usage).toBeUndefined()
   })
@@ -890,6 +894,73 @@ describe("session.llm.stream", () => {
         enabled_providers: [vivgridFixture.providerID],
         provider: {
           [vivgridFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  const openrouterFixture = { providerID: "openrouter", modelID: "inclusionai/ling-2.6-1t" }
+  it.instance(
+    "preserves OX Alpha text and usage across duplicate stop chunks",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(openrouterFixture.providerID, openrouterFixture.modelID)
+        const stream = (yield* Effect.promise(() =>
+          Bun.file(path.join(import.meta.dir, "../fixtures/openrouter-ox-duplicate-stop.json")).json(),
+        )) as { chunks: unknown[] }
+        const request = waitRequest("/chat/completions", createEventResponse(stream.chunks, true))
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(openrouterFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-ox-duplicate-stop")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-ox-duplicate-stop"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(openrouterFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- LLM.Service.use erases the stream item type
+        const events = (yield* collect({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Reply with exactly OX_STREAM_OK" }],
+          tools: {},
+        })) as LLMEvent[]
+        yield* Effect.promise(() => request)
+
+        expect(
+          events
+            .filter((event) => event.type === "text-delta")
+            .map((event) => event.text)
+            .join(""),
+        ).toBe("OX_STREAM_OK")
+        expect(events.find((event) => event.type === "step-finish")?.usage).toMatchObject({
+          inputTokens: 96,
+          outputTokens: 52,
+          totalTokens: 148,
+          cacheReadInputTokens: 64,
+        })
+      }),
+    {
+      config: () => ({
+        enabled_providers: [openrouterFixture.providerID],
+        provider: {
+          [openrouterFixture.providerID]: {
             options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
           },
         },

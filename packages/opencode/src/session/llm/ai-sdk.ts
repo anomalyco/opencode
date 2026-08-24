@@ -7,8 +7,9 @@ import { ProviderError } from "@/provider/error"
 type Result = Awaited<ReturnType<typeof streamText>>
 type AISDKEvent = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
 
-export function adapterState() {
+export function adapterState(providerID?: string) {
   return {
+    providerID,
     step: 0,
     text: 0,
     reasoning: 0,
@@ -16,6 +17,7 @@ export function adapterState() {
     currentReasoningID: undefined as string | undefined,
     toolNames: {} as Record<string, string>,
     copilotTotalNanoAiu: undefined as number | undefined,
+    hasOutput: false,
   }
 }
 
@@ -88,6 +90,16 @@ export function toLLMEvents(
     case "finish-step":
       if (event.rawFinishReason === "network_error")
         return Effect.fail(new ProviderError.ResponseStreamError("Provider finish_reason: network_error"))
+      if (
+        event.finishReason === "stop" &&
+        state.providerID === "openrouter" &&
+        state.step === 0 &&
+        !state.hasOutput &&
+        !event.usage.inputTokens &&
+        !event.usage.outputTokens &&
+        !event.usage.totalTokens
+      )
+        return Effect.fail(new ProviderError.ResponseStreamError("Provider returned an empty response"))
       return Effect.sync(() => {
         const original = providerMetadata(event.providerMetadata)
         const metadata =
@@ -101,6 +113,7 @@ export function toLLMEvents(
                 },
               }
         state.copilotTotalNanoAiu = undefined
+        state.hasOutput = false
         return [
           LLMEvent.stepFinish({
             index: state.step++,
@@ -122,7 +135,7 @@ export function toLLMEvents(
         ]
         // Reset so the adapter can be reused for a follow-up stream without leaking
         // counters or block IDs. adapterState() is the single source of truth for shape.
-        Object.assign(state, adapterState())
+        Object.assign(state, adapterState(state.providerID))
         return events
       })
 
@@ -138,13 +151,16 @@ export function toLLMEvents(
       })
 
     case "text-delta":
-      return Effect.succeed([
-        LLMEvent.textDelta({
-          id: currentTextID(state, event.id),
-          text: event.text,
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-      ])
+      return Effect.sync(() => {
+        state.hasOutput ||= event.text.length > 0
+        return [
+          LLMEvent.textDelta({
+            id: currentTextID(state, event.id),
+            text: event.text,
+            providerMetadata: providerMetadata(event.providerMetadata),
+          }),
+        ]
+      })
 
     case "text-end":
       return Effect.sync(() => {
@@ -170,13 +186,16 @@ export function toLLMEvents(
       })
 
     case "reasoning-delta":
-      return Effect.succeed([
-        LLMEvent.reasoningDelta({
-          id: currentReasoningID(state, event.id),
-          text: event.text,
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-      ])
+      return Effect.sync(() => {
+        state.hasOutput ||= event.text.length > 0
+        return [
+          LLMEvent.reasoningDelta({
+            id: currentReasoningID(state, event.id),
+            text: event.text,
+            providerMetadata: providerMetadata(event.providerMetadata),
+          }),
+        ]
+      })
 
     case "reasoning-end":
       return Effect.sync(() => {
@@ -222,6 +241,7 @@ export function toLLMEvents(
 
     case "tool-call":
       return Effect.sync(() => {
+        state.hasOutput = true
         state.toolNames[event.toolCallId] = event.toolName
         return [
           LLMEvent.toolCall({

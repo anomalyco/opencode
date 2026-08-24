@@ -1,0 +1,64 @@
+{
+  "chunks": [
+    {
+      "id": "chatcmpl-ox",
+      "model": "stealth/ox-alpha",
+      "provider": "Stealth",
+      "choices": [
+        {
+          "index": 0,
+          "finish_reason": null,
+          "delta": {
+            "role": "assistant",
+            "content": "",
+            "reasoning": "thinking",
+            "reasoning_details": [{ "type": "reasoning.text", "text": "thinking" }]
+          }
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-ox",
+      "model": "stealth/ox-alpha",
+      "provider": "Stealth",
+      "choices": [
+        {
+          "index": 0,
+          "finish_reason": null,
+          "delta": { "role": "assistant", "content": "OX_STREAM_OK" }
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-ox",
+      "model": "stealth/ox-alpha",
+      "provider": "Stealth",
+      "choices": [
+        {
+          "index": 0,
+          "finish_reason": "stop",
+          "delta": { "role": "assistant", "content": "", "reasoning": "" }
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-ox",
+      "model": "stealth/ox-alpha",
+      "provider": "Stealth",
+      "choices": [
+        {
+          "index": 0,
+          "finish_reason": "stop",
+          "delta": { "role": "assistant", "content": "" }
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 96,
+        "completion_tokens": 52,
+        "total_tokens": 148,
+        "prompt_tokens_details": { "cached_tokens": 64 },
+        "completion_tokens_details": { "reasoning_tokens": 0 }
+      }
+    }
+  ]
+}
