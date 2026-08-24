@@ -374,6 +374,8 @@ export const dict = {
   "dialog.server.menu.default": "Set as default",
   "dialog.server.menu.defaultRemove": "Remove default",
   "dialog.server.menu.delete": "Delete",
+  "dialog.server.menu.hide": "Hide from project list",
+  "dialog.server.menu.show": "Show in project list",
   "dialog.server.current": "Current Server",
   "dialog.server.status.default": "Default",
   "wsl.server.add": "Add WSL server",
