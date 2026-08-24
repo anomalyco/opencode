@@ -1,9 +1,21 @@
 import type { ToolDefinition } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
-import { Effect, JsonSchema, Schema, SchemaRepresentation } from "effect"
+import { Cache, Effect, JsonSchema, Schema, SchemaRepresentation } from "effect"
 
-const jsonSchemas = new WeakMap<JsonSchema.JsonSchema, Schema.Codec<unknown>>()
+const jsonSchemas = Effect.runSync(
+  Cache.make<JsonSchema.JsonSchema, Schema.Codec<unknown>, Tool.Error>({
+    capacity: 100,
+    lookup: (schema) =>
+      Effect.try({
+        try: () => jsonSchema(schema),
+        catch: (error) =>
+          new Tool.Error({
+            message: `Invalid tool input schema: ${error instanceof Error ? error.message : String(error)}`,
+          }),
+      }),
+  }),
+)
 
 export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
   name: effectiveName(tool),
@@ -52,13 +64,7 @@ const decodeInput = (schema: Tool.ValueSchema<any>, value: unknown) => {
       Effect.mapError((error) => new Tool.Error({ message: `Invalid tool input: ${error.message}` })),
     )
   if (isStandardSchema(schema)) return validateStandard(schema, value, "Invalid tool input")
-  return Effect.try({
-    try: () => jsonSchema(schema),
-    catch: (error) =>
-      new Tool.Error({
-        message: `Invalid tool input schema: ${error instanceof Error ? error.message : String(error)}`,
-      }),
-  }).pipe(
+  return Cache.get(jsonSchemas, schema).pipe(
     Effect.flatMap((schema) => Schema.decodeUnknownEffect(schema)(value)),
     Effect.mapError((error) =>
       error instanceof Tool.Error ? error : new Tool.Error({ message: `Invalid tool input: ${error.message}` }),
@@ -67,15 +73,11 @@ const decodeInput = (schema: Tool.ValueSchema<any>, value: unknown) => {
 }
 
 const jsonSchema = (schema: JsonSchema.JsonSchema) => {
-  const cached = jsonSchemas.get(schema)
-  if (cached) return cached
   const draft =
     (typeof schema.$schema === "string" && schema.$schema.includes("draft-07")) || "definitions" in schema
       ? JsonSchema.fromSchemaDraft07(schema)
       : JsonSchema.fromSchemaDraft2020_12(schema)
-  const converted = Schema.make<Schema.Codec<unknown>>(SchemaRepresentation.fromJsonSchemaDocument(draft).ast)
-  jsonSchemas.set(schema, converted)
-  return converted
+  return Schema.make<Schema.Codec<unknown>>(SchemaRepresentation.fromJsonSchemaDocument(draft).ast)
 }
 
 const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {
