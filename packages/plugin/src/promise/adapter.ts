@@ -1,5 +1,6 @@
 import { Tool } from "@opencode-ai/schema/tool"
-import { Effect, Schema, SchemaAST, Scope, Stream } from "effect"
+import { Effect, Schema, SchemaAST, Stream } from "effect"
+import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
 import { define } from "../effect/plugin.js"
 import type { Context, Plugin } from "./plugin.js"
@@ -84,12 +85,11 @@ export function fromPromise(plugin: Plugin) {
         const SessionEndpoints = ClientApi.groups["server.session"].endpoints
         const SkillEndpoints = ClientApi.groups["server.skill"].endpoints
         const WebSearchEndpoints = ClientApi.groups["server.websearch"].endpoints
-        const scope = yield* Scope.Scope
         const context = yield* Effect.context<Scope.Scope>()
 
         // Run a hook registration on the plugin scope and resolve once it is registered.
         const register = (effect: Effect.Effect<HostRegistration, never, Scope.Scope>): Promise<Registration> =>
-          Effect.runPromiseWith(context)(Scope.provide(scope)(effect)).then((registration) => ({
+          Effect.runPromiseWith(context)(effect).then((registration) => ({
             dispose: () => Effect.runPromiseWith(context)(registration.dispose),
           }))
 

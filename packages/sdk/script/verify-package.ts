@@ -108,7 +108,6 @@ export class OpenCodeDO {
     this.opencode = state.blockConcurrencyWhile(() => OpenCodeWorkerd.create({
       storage: state.storage,
       app: { version: "packed-workerd" },
-      config: { content: "{}" },
     }))
   }
 

@@ -1,11 +1,14 @@
 export * as OpenCodeWorkerd from "./workerd"
 
-import { ServerWorkerd } from "@opencode-ai/server/workerd"
+import { WorkerdProfile } from "./internal/workerd"
 import type { LogOptions } from "./logging"
 import { PromiseSdk } from "./promise"
 
-export interface CreateOptions extends Omit<ServerWorkerd.Options, "password"> {
+export type Configuration = WorkerdProfile.Configuration
+
+export interface CreateOptions extends WorkerdProfile.Options {
   readonly log?: LogOptions
+  readonly plugins?: PromiseSdk.CreateOptions["plugins"]
 }
 
 /**
@@ -22,10 +25,9 @@ export interface CreateOptions extends Omit<ServerWorkerd.Options, "password"> {
  * session operations plus the live `events.subscribe()` stream — served over
  * an in-process fetch transport, so no request leaves the isolate.
  */
-export const create = ({ log, ...options }: CreateOptions) =>
-  PromiseSdk.create(
-    { ...ServerWorkerd.serverOptions(options), log },
-    { overrides: ServerWorkerd.replacements(options) },
-  )
+export const create = ({ log, plugins, ...options }: CreateOptions) => {
+  const profile = WorkerdProfile.make(options)
+  return PromiseSdk.create({ ...profile.options, log, plugins }, { overrides: profile.replacements })
+}
 
 export type Interface = PromiseSdk.Interface

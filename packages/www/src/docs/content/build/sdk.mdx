@@ -52,20 +52,23 @@ iteration to cancel its response body.
 
 ## Register plugins
 
-Call `opencode.plugin(...)` with a Promise plugin definition. Embedded plugins
-use the same discovery and Location-scoped activation path as configured
-plugins.
+Pass initial Promise plugins to `OpenCode.create()`. Embedded plugins use the
+same discovery and Location-scoped activation path as configured plugins.
 
 ```ts
-await opencode.plugin({
+const plugin = {
   id: "example",
   async setup(ctx) {
     await ctx.agent.transform((agents) => {
       // Modify the Location's agent catalog.
     })
   },
-})
+}
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })
 ```
+
+Call `await opencode.plugin(plugin)` to register another plugin after startup.
 
 See the [Plugins guide](/build/plugins) for the plugin context and available
 hooks.
@@ -81,6 +84,7 @@ creating one for every request:
 
 ```ts
 import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd"
+import myPlugin from "./my-plugin"
 
 export class OpenCodeDO {
   private readonly opencode: Promise<OpenCodeWorkerd.Interface>
@@ -89,7 +93,8 @@ export class OpenCodeDO {
     this.opencode = state.blockConcurrencyWhile(() =>
       OpenCodeWorkerd.create({
         storage: state.storage,
-        config: { content: "{}" },
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
       }),
     )
   }
@@ -103,7 +108,9 @@ export class OpenCodeDO {
 
 `blockConcurrencyWhile` keeps every Durable Object event out until the host is
 ready and resets the object if initialization fails. The retained Promise gives
-request handlers direct access to the same host after startup.
+request handlers direct access to the same host after startup. Configuration is
+a typed JavaScript object, and plugins are imported values bundled with the
+Worker.
 
 Wrangler selects OpenCode's Workerd-safe low-level implementations through the
 `workerd` package condition. Cloudflare may evict a Durable Object without
@@ -131,6 +138,11 @@ const program = Effect.scoped(
 
 const session = await Effect.runPromise(program)
 ```
+
+Effect applications can contribute plugins from ordinary registration layers.
+The registration layer may depend on `OpenCode.Service` and any other services
+needed to construct the plugin; `OpenCode.layer()` remains unaware of those
+features.
 
 Use `OpenCode.layer()` for dependency injection. The Effect-native Workerd
 entrypoint is `@opencode-ai/sdk/workerd/effect`.

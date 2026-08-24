@@ -5,7 +5,9 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { Effect } from "effect"
 import { EmbeddedHost } from "./internal/host"
 
-export type CreateOptions = Omit<EmbeddedHost.CreateOptions, "workspaceProviders">
+export interface CreateOptions extends Omit<EmbeddedHost.CreateOptions, "workspaceProviders"> {
+  readonly plugins?: ReadonlyArray<Plugin.Plugin>
+}
 
 export type Interface = Omit<OpenCodeClient, "plugin"> & {
   readonly sessions: OpenCodeClient["session"]
@@ -16,12 +18,14 @@ export type Interface = Omit<OpenCodeClient, "plugin"> & {
 }
 
 export async function create(options: CreateOptions = {}, embed: EmbeddedHost.EmbedOptions = {}): Promise<Interface> {
-  const host = await Effect.runPromise(EmbeddedHost.create(options, embed))
+  const { plugins, ...hostOptions } = options
+  const host = await Effect.runPromise(EmbeddedHost.create(hostOptions, embed))
   const client = OpenCode.make({ baseUrl: "http://opencode.local", fetch: host.fetch })
   const register = async (plugin: Plugin.Plugin) => {
     const { PluginPromise } = await import("@opencode-ai/core/plugin/promise")
     return host.runtime.runPromise(host.plugins.register(PluginPromise.fromPromise(plugin)))
   }
+  for (const plugin of plugins ?? []) await register(plugin)
 
   return {
     ...client,

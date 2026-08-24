@@ -8,26 +8,27 @@ test("Promise host uses the embedded router and releases plugins", async () => {
   await using directory = await tmpdir("opencode-promise-sdk-")
   const config = join(directory.path, "config")
   await mkdir(config)
-  const opencode = await OpenCode.create({
-    events: { persist: true },
-    config: { directory: config, project: false, content: "{}" },
-  })
   const ready = Promise.withResolvers<void>()
   let setup = false
   let cleanup = false
+  const opencode = await OpenCode.create({
+    events: { persist: true },
+    config: { directory: config, project: false, content: "{}" },
+    plugins: [
+      {
+        id: `promise-${crypto.randomUUID()}`,
+        setup() {
+          setup = true
+          ready.resolve()
+          return () => {
+            cleanup = true
+          }
+        },
+      },
+    ],
+  })
 
   try {
-    await opencode.plugin({
-      id: `promise-${crypto.randomUUID()}`,
-      setup() {
-        setup = true
-        ready.resolve()
-        return () => {
-          cleanup = true
-        }
-      },
-    })
-
     const location = { directory: directory.path }
     const session = await opencode.sessions.create({ location })
     await opencode.plugin.list({ location })
@@ -72,6 +73,20 @@ test("Promise event streams support cancellation", async () => {
     expect(error).toMatchObject({ name: "ClientError", reason: "Transport" })
     await events.return?.()
   }
+})
+
+test("closing cancels active Promise event streams", async () => {
+  await using directory = await tmpdir("opencode-promise-stream-close-")
+  const config = join(directory.path, "config")
+  await mkdir(config)
+  const opencode = await OpenCode.create({ config: { directory: config, project: false, content: "{}" } })
+  const events = opencode.events.subscribe()[Symbol.asyncIterator]()
+  expect(await events.next()).toMatchObject({ value: { type: "server.connected" }, done: false })
+  const pending = events.next()
+
+  await opencode.close()
+  const error = await pending.catch((error: unknown) => error)
+  expect(error).toMatchObject({ name: "ClientError", reason: "Transport" })
 })
 
 test("closing waits for pending Promise plugin setup and runs its cleanup", async () => {
