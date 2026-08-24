@@ -25,6 +25,7 @@ export type TimelineProjectionInput = {
   sessionMessages: SessionMessageInfo[]
   status: SessionStatus
   showReasoningSummaries: boolean
+  pendingUserMessageIDs?: ReadonlySet<string>
   previousRows?: TimelineRow.TimelineRow[]
 }
 
@@ -34,6 +35,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     input.sessionMessages,
     input.showReasoningSummaries,
     input.status,
+    input.pendingUserMessageIDs,
   )
   const rows = reuseTimelineRows(input.previousRows, projection.rows)
   const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row] as const))
@@ -65,6 +67,7 @@ export function createReactiveTimelineProjection(input: {
   sessionMessages: Accessor<SessionMessageInfo[]>
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
+  pendingUserMessageIDs?: Accessor<ReadonlySet<string>>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -72,7 +75,12 @@ export function createReactiveTimelineProjection(input: {
   const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
   const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
   const projection = createMemo(() =>
-    Timeline.constructSessionMessageRows(input.sessionMessages(), input.showReasoningSummaries(), input.status()),
+    Timeline.constructSessionMessageRows(
+      input.sessionMessages(),
+      input.showReasoningSummaries(),
+      input.status(),
+      input.pendingUserMessageIDs?.(),
+    ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
@@ -119,6 +127,7 @@ export namespace Timeline {
     messages: SessionMessageInfo[],
     showReasoning: boolean,
     status: SessionStatus,
+    pendingUserMessageIDs?: ReadonlySet<string>,
   ) {
     type Turn = {
       id: string
@@ -169,7 +178,7 @@ export namespace Timeline {
       current = turn
     })
 
-    const activeMessageID = turns.at(-1)?.id
+    const activeMessageID = turns.findLast((turn) => !pendingUserMessageIDs?.has(turn.id))?.id ?? turns.at(-1)?.id
     return {
       activeMessageID,
       rows: [

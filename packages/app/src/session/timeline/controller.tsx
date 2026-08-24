@@ -68,6 +68,14 @@ export function createTimelineController(input: { session: TimelineSessionSource
       input.session.data.info()?.revert?.messageID,
     )
   })
+  const pendingUserMessageIDs = createMemo(() => {
+    const id = input.session.identity.sessionID()
+    return new Set(
+      (id ? data.session.pending.list(id) : []).flatMap((item) =>
+        item.type === "user" && item.delivery === "steer" ? [item.id] : [],
+      ),
+    )
+  })
   const titleValue = createMemo(() => input.session.data.info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("command.session.new"))
   const parentMessages = createMemo(() => {
@@ -97,6 +105,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
     sessionMessages: projectedMessages,
     status: input.session.data.status,
     showReasoningSummaries: settings.general.showReasoningSummaries,
+    pendingUserMessageIDs,
   })
   const [pending, setPending] = createStore({ rename: false })
 

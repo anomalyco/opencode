@@ -166,6 +166,22 @@ describe("current session timeline rows", () => {
     ])
   })
 
+  test("renders thinking above a queued user message", () => {
+    const source = [
+      { id: "msg_active", type: "user", text: "active", time: { created: 1 } },
+      { id: "msg_queued", type: "user", text: "queued", time: { created: 2 } },
+    ] satisfies SessionMessageInfo[]
+    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" }, new Set(["msg_queued"]))
+
+    expect(result.activeMessageID).toBe("msg_active")
+    expect(result.rows.map(TimelineRow.key)).toEqual([
+      "user-message:msg_active",
+      "thinking:msg_active",
+      "turn-gap:msg_queued",
+      "user-message:msg_queued",
+    ])
+  })
+
   test("suppresses thinking while a subagent is delegating or running", () => {
     const statuses = ["streaming", "running"] as const
     statuses.forEach((status) => {
