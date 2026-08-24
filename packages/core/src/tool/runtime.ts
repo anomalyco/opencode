@@ -4,16 +4,13 @@ import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/sp
 import { Cache, Effect, JsonSchema, Schema, SchemaRepresentation } from "effect"
 
 const jsonSchemas = Effect.runSync(
-  Cache.make<JsonSchema.JsonSchema, Schema.Codec<unknown>, Tool.Error>({
+  Cache.make<JsonSchema.JsonSchema, Schema.Codec<unknown> | undefined>({
     capacity: 100,
     lookup: (schema) =>
       Effect.try({
         try: () => jsonSchema(schema),
-        catch: (error) =>
-          new Tool.Error({
-            message: `Invalid tool input schema: ${error instanceof Error ? error.message : String(error)}`,
-          }),
-      }),
+        catch: () => undefined,
+      }).pipe(Effect.catch(() => Effect.succeed(undefined))),
   }),
 )
 
@@ -65,10 +62,10 @@ const decodeInput = (schema: Tool.ValueSchema<any>, value: unknown) => {
     )
   if (isStandardSchema(schema)) return validateStandard(schema, value, "Invalid tool input")
   return Cache.get(jsonSchemas, schema).pipe(
-    Effect.flatMap((schema) => Schema.decodeUnknownEffect(schema)(value)),
-    Effect.mapError((error) =>
-      error instanceof Tool.Error ? error : new Tool.Error({ message: `Invalid tool input: ${error.message}` }),
+    Effect.flatMap((schema) =>
+      schema === undefined ? Effect.succeed(value) : Schema.decodeUnknownEffect(schema)(value),
     ),
+    Effect.mapError((error) => new Tool.Error({ message: `Invalid tool input: ${error.message}` })),
   )
 }
 

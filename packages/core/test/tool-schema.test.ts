@@ -234,6 +234,22 @@ test("raw JSON schemas resolve draft-07 definitions", async () => {
   )
 })
 
+test("raw JSON schemas pass input through when they cannot be imported", async () => {
+  const tool: Info = {
+    name: "invalid-schema",
+    description: "Invalid schema tool",
+    input: {
+      type: "object",
+      properties: { value: { $ref: "#/$defs/missing" } },
+    },
+    execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
+  }
+
+  expect(await Effect.runPromise(execute(tool, { value: 1, extra: true }, {} as Tool.Context))).toMatchObject({
+    content: [{ type: "text", text: '{"value":1,"extra":true}' }],
+  })
+})
+
 test("missing external input schemas fall back to an empty schema", () => {
   const tool = {
     name: "external",
