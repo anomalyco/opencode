@@ -161,4 +161,22 @@ describe("prompt input v2 interaction machine", () => {
     expect(result.state.popover).toEqual({ type: "context", query: "", activeID: "first" })
     expect(result.handled).toBeTrue()
   })
+
+  test("opens the context menu by appending @ without rebuilding the draft", () => {
+    const draft: PromptInputV2PersistedState = {
+      prompt: [
+        { type: "text", content: "hi ", start: 0, end: 3 },
+        { type: "file", content: "@src/index.ts", start: 3, end: 16, path: "src/index.ts" },
+        { type: "text", content: " and ", start: 16, end: 21 },
+        { type: "file", content: "@src/index.ts", start: 21, end: 34, path: "src/index.ts" },
+      ],
+      cursor: 34,
+      context: { items: [] },
+    }
+
+    const result = transitionPromptInputV2(createPromptInputV2InteractionState(), { type: "context.open" }, draft)
+
+    expect(result.commands).toContainEqual({ type: "draft.addText", value: "@" })
+    expect(result.commands.some((entry) => entry.type === "draft.setText")).toBe(false)
+  })
 })
