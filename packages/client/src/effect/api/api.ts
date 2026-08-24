@@ -1700,7 +1700,7 @@ export interface WorktreeApi<E = never> {
 }
 
 export type WorkspaceDestroyInput = { readonly workspaceID: Workspace.ID }
-export type WorkspaceDestroyOutput = { readonly destroyed: boolean }
+export type WorkspaceDestroyOutput = Workspace.DestroyResult
 export type WorkspaceDestroyOperation<E = never> = (
   input: WorkspaceDestroyInput,
 ) => Effect.Effect<WorkspaceDestroyOutput, E>

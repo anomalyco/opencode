@@ -1,22 +1,12 @@
 import { Workspace } from "@opencode-ai/schema/workspace"
-import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { UnknownError } from "../errors.js"
-
-export const DestroyResult = Schema.Struct({
-  destroyed: Schema.Boolean.annotate({
-    description: "True when this request transitioned the workspace from existing to destroyed.",
-  }),
-}).annotate({
-  identifier: "WorkspaceDestroyResult",
-  description: "Reports whether this request destroyed an existing workspace.",
-})
 
 export const WorkspaceGroup = HttpApiGroup.make("server.workspace")
   .add(
     HttpApiEndpoint.delete("workspace.destroy", "/api/workspace/:workspaceID", {
       params: { workspaceID: Workspace.ID },
-      success: DestroyResult,
+      success: Workspace.DestroyResult,
       error: UnknownError,
     }).annotateMerge(
       OpenApi.annotations({

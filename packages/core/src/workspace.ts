@@ -36,9 +36,10 @@ export interface Interface {
     workspaceID: ID,
   ) => Effect.Effect<EnvironmentDriver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
   /** Makes the workspace absent; reports whether this call destroyed an existing workspace. */
-  readonly destroy: (
-    workspaceID: ID,
-  ) => Effect.Effect<{ readonly destroyed: boolean }, WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  readonly destroy: (workspaceID: ID) => Effect.Effect<
+    Workspace.DestroyResult,
+    WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound
+  >
 }
 
 export interface Options {
@@ -80,13 +81,16 @@ const layer = (options: Options) =>
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       const idleThreshold = Duration.toMillis(options.idleThreshold ?? Duration.minutes(20))
 
-      const load = Effect.fn("Workspace.load")(function* (workspaceID: ID) {
-        const row = yield* db
+      const find = (workspaceID: ID) =>
+        db
           .select()
           .from(WorkspaceTable)
           .where(eq(WorkspaceTable.id, workspaceID))
           .get()
           .pipe(Effect.orDie)
+
+      const load = Effect.fn("Workspace.load")(function* (workspaceID: ID) {
+        const row = yield* find(workspaceID)
         if (!row) return yield* new NotFound({ workspaceID })
         return row
       })
@@ -270,12 +274,7 @@ const layer = (options: Options) =>
           }
           return yield* locks.withLock(workspaceID)(
             Effect.gen(function* () {
-              const row = yield* db
-                .select()
-                .from(WorkspaceTable)
-                .where(eq(WorkspaceTable.id, workspaceID))
-                .get()
-                .pipe(Effect.orDie)
+              const row = yield* find(workspaceID)
               if (!row) return { destroyed: false }
               const connection = connections.get(workspaceID)
               connections.delete(workspaceID)
