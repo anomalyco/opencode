@@ -206,8 +206,8 @@ describe("SessionStats", () => {
       expect(stats.subagents).toBe(1)
       expect(stats.prompts).toBe(1)
       expect(stats.steps).toBe(3)
-      expect(stats.tokens).toEqual({ input: 43, output: 23, reasoning: 11, cache: { read: 19, write: 7 } })
-      expect(stats.cost).toBe(Money.USD.make(6.75))
+      expect(stats.tokens).toEqual({ input: 42, output: 22, reasoning: 10, cache: { read: 18, write: 6 } })
+      expect(stats.cost).toBe(Money.USD.make(6.25))
       expect(stats.tools).toMatchObject({
         mode: "detail",
         totals: { calls: 2, succeeded: 1, failed: 1, unfinished: 0 },

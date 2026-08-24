@@ -275,6 +275,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
           and(
             inArray(EventTable.aggregate_id, batch),
             eq(EventTable.type, SessionEvent.UsageRecorded.type),
+            sql`json_extract(${EventTable.data}, '$.source') = 'compaction'`,
             gte(EventTable.created, from),
             lt(EventTable.created, to),
           ),
