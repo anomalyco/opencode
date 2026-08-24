@@ -127,15 +127,6 @@ const GeminiContentPart = Schema.Union([
 ])
 const decodeGeminiContentPart = Schema.decodeUnknownOption(GeminiContentPart)
 
-const GeminiUnknownResponsePart = Schema.declare(
-  (input): input is Record<string, unknown> =>
-    ProviderShared.isRecord(input) &&
-    !("text" in input) &&
-    !("inlineData" in input) &&
-    !("functionCall" in input) &&
-    !("functionResponse" in input),
-)
-
 const GeminiContent = Schema.Struct({
   role: optionalNull(Schema.Literals(["user", "model"])),
   parts: optionalNull(Schema.Array(GeminiContentPart)),
@@ -144,7 +135,7 @@ type GeminiContent = Schema.Schema.Type<typeof GeminiContent>
 
 const GeminiResponseContent = Schema.Struct({
   role: optionalNull(Schema.Literals(["user", "model"])),
-  parts: optionalNull(Schema.Array(Schema.Union([GeminiContentPart, GeminiUnknownResponsePart]))),
+  parts: optionalNull(Schema.Array(Schema.Unknown)),
 })
 
 const GeminiSystemInstruction = Schema.Struct({
@@ -237,6 +228,7 @@ const GeminiEvent = Schema.Struct({
 type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 
 interface ParserState {
+  readonly route: string
   readonly finishReason?: string
   readonly hasToolCalls: boolean
   readonly promptFeedback?: GeminiPromptFeedback
@@ -614,8 +606,19 @@ const step = (state: ParserState, event: GeminiEvent) => {
   const seenCallIds = new Set(nextState.seenCallIds)
 
   for (const input of candidate.content.parts ?? []) {
+    if (
+      ProviderShared.isRecord(input) &&
+      !("text" in input) &&
+      !("inlineData" in input) &&
+      !("functionCall" in input) &&
+      !("functionResponse" in input)
+    )
+      continue
     const decoded = decodeGeminiContentPart(input)
-    if (Option.isNone(decoded)) continue
+    if (Option.isNone(decoded))
+      return Effect.fail(
+        ProviderShared.eventError(ADAPTER, `Invalid ${state.route} stream event`, ProviderShared.encodeJson(event)),
+      )
     const part = decoded.value
     const signature = "thoughtSignature" in part && part.thoughtSignature ? part.thoughtSignature : undefined
     // Gemini attaches replay signatures to thought parts, visible text, or function calls;
@@ -709,7 +712,11 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(GeminiEvent),
-    initial: () => ({ hasToolCalls: false, lifecycle: Lifecycle.initial() }),
+    initial: (request) => ({
+      route: `${request.model.provider}/${request.model.route.id}`,
+      hasToolCalls: false,
+      lifecycle: Lifecycle.initial(),
+    }),
     step,
     onHalt: finish,
   },
