@@ -362,7 +362,7 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (
     type: "function" as const,
     name: tool.name,
     description: tool.description,
-    parameters: ToolSchemaProjection.responses(inputSchema),
+    parameters: inputSchema,
     // The common tool definition does not currently express Responses strict-schema policy.
     strict: false,
   }
@@ -582,8 +582,13 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
           flushText()
           const id = itemID(part.providerMetadata, providerMetadataKey)
           if (store !== false && id && !hostedToolReferences.has(id)) input.push({ type: "item_reference", id })
-          if (store === false && part.result.type === "content") {
-            const content: ReadonlyArray<Content> = part.result.value
+          if (store === false) {
+            // The server is not storing this exchange, so the tool outcome has to
+            // travel in the input. Non-content results degrade to their text form.
+            const content: ReadonlyArray<Content> =
+              part.result.type === "content"
+                ? part.result.value
+                : [{ type: "text", text: ProviderShared.toolResultText(part) }]
             input.push({
               role: "user",
               content: yield* Effect.forEach(content, (item) =>
@@ -628,6 +633,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
 const lowerOptions = (request: LLMRequest) => {
   const options = OpenResponsesOptions.resolve(request)
+  const cacheKey = ProviderShared.clampPromptCacheKey(request.promptCacheKey)
   return {
     ...(options.instructions ? { instructions: options.instructions } : {}),
     ...(options.store !== undefined ? { store: options.store } : {}),
@@ -637,7 +643,7 @@ const lowerOptions = (request: LLMRequest) => {
       ? { stream_options: { include_obfuscation: options.streamOptions.includeObfuscation } }
       : {}),
     ...(options.topLogprobs !== undefined ? { top_logprobs: options.topLogprobs } : {}),
-    ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
+    ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     ...(options.include ? { include: options.include } : {}),
     ...(options.reasoningEffort || options.reasoningSummary
       ? { reasoning: { effort: options.reasoningEffort, summary: options.reasoningSummary } }

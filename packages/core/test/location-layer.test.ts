@@ -140,12 +140,12 @@ describe("LocationServiceMap", () => {
           const workspaceRef = Location.Ref.make({ directory, workspaceID: Workspace.ID.make("wrk_liveness") })
           const localRef = Location.Ref.make({ directory })
 
-          // The directory only exists inside the workspace, so liveness must
-          // not consult the local filesystem. Boot outcome is not the subject
-          // here: parts of the location graph still read the host filesystem,
-          // so only assert that the entry survives release instead of being
+          // The directory only exists inside the workspace, so neither liveness
+          // nor boot may consult the local filesystem: the full location graph
+          // must construct and the entry must survive release instead of being
           // evicted by a zero idle time-to-live.
-          yield* Location.Service.pipe(Effect.provide(locations.get(workspaceRef)), Effect.scoped, Effect.exit)
+          const location = yield* Location.Service.pipe(Effect.provide(locations.get(workspaceRef)), Effect.scoped)
+          expect(location.directory).toBe(directory)
           expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([workspaceRef])
 
           // A local ref with the same missing directory keeps the existing

@@ -196,7 +196,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("flattens top-level object unions in function schemas", () =>
+  it.effect("preserves function schemas", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLMRequest.update(request, {
@@ -236,13 +236,22 @@ describe("OpenAI Responses route", () => {
           strict: false,
           parameters: {
             type: "object",
-            properties: {
-              path: { type: "string" },
-              reference: { type: "string" },
-              limit: { type: "integer", maximum: 2000 },
-              resource: { type: "string" },
-            },
-            additionalProperties: false,
+            anyOf: [
+              {
+                type: "object",
+                properties: {
+                  path: { type: "string" },
+                  reference: { anyOf: [{ type: "string" }, { type: "null" }] },
+                  limit: { type: "integer", maximum: 2000 },
+                },
+                required: ["path"],
+              },
+              {
+                type: "object",
+                properties: { resource: { type: "string" }, limit: { type: "integer", maximum: 51200 } },
+                required: ["resource"],
+              },
+            ],
           },
         },
       ])
@@ -389,6 +398,38 @@ describe("OpenAI Responses route", () => {
       expect(errors.map((error) => error.reason._tag)).toEqual(["InvalidProviderOutput", "InvalidProviderOutput"])
       expect(errors[0]?.message).toContain("before response.created")
       expect(errors[1]?.message).toContain("response ID changed")
+    }),
+  )
+
+  it.effect("tolerates keepalive frames before response.created", () =>
+    Effect.gen(function* () {
+      const webSocket = WebSocketTransport.makeDirect({
+        open: () =>
+          Effect.succeed({
+            sendText: () => Effect.void,
+            messages: Stream.fromArray([
+              ProviderShared.encodeJson({ type: "keepalive", sequence_number: 0 }),
+              ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_alive" } }),
+              ProviderShared.encodeJson({
+                type: "response.completed",
+                response: { id: "resp_alive", usage: { input_tokens: 1, output_tokens: 1 } },
+              }),
+            ]),
+            close: Effect.void,
+          }),
+      })
+      const deps = Layer.succeed(
+        RequestExecutor.Service,
+        RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
+      )
+      const model = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses(
+        "gpt-4.1-mini",
+      )
+
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "hi" }), { webSocket }).pipe(
+        Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))),
+      )
+      expect(response.finishReason?.normalized).toBe("stop")
     }),
   )
 
@@ -2265,6 +2306,44 @@ describe("OpenAI Responses route", () => {
 
       expect(prepared.body.input).toEqual([
         { type: "item_reference", id: "ws_1" },
+        { role: "user", content: [{ type: "input_text", text: "Continue." }] },
+      ])
+    }),
+  )
+
+  it.effect("continues stateless hosted tool results with their text form", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Search."),
+            Message.assistant([
+              ToolCallPart.make({
+                id: "ws_1",
+                name: "web_search",
+                input: { query: "effect 4" },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              }),
+              {
+                type: "tool-result",
+                id: "ws_1",
+                name: "web_search",
+                result: { type: "json", value: { type: "web_search_call", id: "ws_1", status: "completed" } },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              },
+            ]),
+            Message.user("Continue."),
+          ],
+          providerOptions: { store: false },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { role: "user", content: [{ type: "input_text", text: "Search." }] },
+        { role: "user", content: [{ type: "input_text", text: '{"type":"web_search_call","id":"ws_1","status":"completed"}' }] },
         { role: "user", content: [{ type: "input_text", text: "Continue." }] },
       ])
     }),
