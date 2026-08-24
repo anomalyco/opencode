@@ -50,7 +50,10 @@ function resolve(tuning?: Tuning) {
     initialDelayMs: tuning?.initialDelayMs ?? RETRY_INITIAL_DELAY,
     backoffFactor: tuning?.backoffFactor ?? RETRY_BACKOFF_FACTOR,
     jitterFactor: tuning?.jitterFactor ?? RETRY_JITTER_FACTOR,
-    maxDelayMs: tuning?.maxDelayMs ?? RETRY_MAX_DELAY,
+    // Normalized here so policy() and delay() read the same ceiling. Config
+    // validation also bounds this, but a plugin config hook mutates the loaded
+    // config without revalidation, so it cannot be the only guard.
+    maxDelayMs: Math.min(tuning?.maxDelayMs ?? RETRY_MAX_DELAY, RETRY_MAX_DELAY),
     maxDelayNoHeadersMs: tuning?.maxDelayNoHeadersMs ?? RETRY_MAX_DELAY_NO_HEADERS,
   }
 }
@@ -68,7 +71,12 @@ const RETRYABLE_MESSAGE_PATTERNS = [
 ]
 
 function cap(ms: number, limits: Limits) {
-  return Math.min(ms, limits.maxDelayMs)
+  // A tuned backoffFactor or jitterFactor can overflow the exponential to
+  // Infinity, and Infinity * 0 jitter is NaN. Duration.millis turns NaN and
+  // negatives alike into an immediate retry, so every delay is pinned to a
+  // finite, non-negative value here rather than at each return site.
+  if (!Number.isFinite(ms)) return limits.maxDelayMs
+  return Math.min(Math.max(ms, 0), limits.maxDelayMs)
 }
 
 export function delay(attempt: number, error?: SessionV1.APIError, random = Math.random(), tuning?: Tuning) {

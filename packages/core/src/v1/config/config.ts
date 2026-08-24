@@ -201,8 +201,9 @@ export const Info = Schema.Struct({
           jitterFactor: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))).annotate({
             description: "Fraction of the delay added back as random jitter (default: 0.25)",
           }),
-          maxDelayMs: Schema.optional(PositiveInt).annotate({
-            description: "Absolute ceiling on any retry delay, in milliseconds (default: 2147483647)",
+          maxDelayMs: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(2_147_483_647))).annotate({
+            description:
+              "Absolute ceiling on any retry delay, in milliseconds. Cannot exceed 2147483647, the largest value setTimeout can represent (default: 2147483647)",
           }),
           maxDelayNoHeadersMs: Schema.optional(PositiveInt).annotate({
             description:

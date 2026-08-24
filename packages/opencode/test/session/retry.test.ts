@@ -176,6 +176,36 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(1, error, 0, { maxDelayMs: 60_000 })).toBe(60_000)
   })
 
+  test("clamps a maxDelayMs that setTimeout cannot represent", () => {
+    const tuning = { maxDelayMs: 4_294_967_296, initialDelayMs: 4_294_967_296, maxDelayNoHeadersMs: 4_294_967_296 }
+    expect(SessionRetry.delay(1, undefined, 0, tuning)).toBe(SessionRetry.RETRY_MAX_DELAY)
+    expect(SessionRetry.delay(1, apiError({ "retry-after-ms": "4294967296" }), 0, tuning)).toBe(
+      SessionRetry.RETRY_MAX_DELAY,
+    )
+  })
+
+  test("never returns a non-finite delay when the exponential overflows", () => {
+    // base * jitter reaches Infinity, and Infinity * 0 jitter is NaN
+    expect(SessionRetry.delay(1, undefined, 0, { jitterFactor: 1e306 })).toBe(SessionRetry.RETRY_MAX_DELAY)
+    expect(SessionRetry.delay(320, undefined, 0, { backoffFactor: 10 })).toBe(SessionRetry.RETRY_MAX_DELAY)
+    expect(SessionRetry.delay(10, undefined, 0, { initialDelayMs: 1e300, backoffFactor: 10 })).toBe(
+      SessionRetry.RETRY_MAX_DELAY,
+    )
+  })
+
+  test("never returns a negative delay from a malformed retry-after", () => {
+    expect(SessionRetry.delay(1, apiError({ "retry-after-ms": "-5000" }), 0)).toBe(0)
+    expect(SessionRetry.delay(1, apiError({ "retry-after": "-100" }), 0)).toBe(0)
+  })
+
+  test("pins the jitter ceiling for a tuned schedule", () => {
+    const error = apiError()
+    const tuning = { initialDelayMs: 500, backoffFactor: 1, jitterFactor: 0.2 }
+    expect(SessionRetry.delay(1, error, 0, tuning)).toBe(500)
+    expect(SessionRetry.delay(1, error, 1, tuning)).toBe(600)
+    expect(SessionRetry.delay(9, error, 1, tuning)).toBe(600)
+  })
+
   it.instance("policy stops after a configured maxRetries", () =>
     Effect.gen(function* () {
       const attempts: number[] = []
