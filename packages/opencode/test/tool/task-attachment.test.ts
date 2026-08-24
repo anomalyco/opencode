@@ -715,7 +715,12 @@ describe("task attachment integration", () => {
       yield* awaitSettled(log)
 
       expect(observerClaims).toBe(2)
-      expect(exactWaits).toBe(1)
+      // Two exact waits, one observer. The first is the elected fallback observer's; the second is
+      // the lifetime-bound release of the owner attachment scope, which reads the same handle purely
+      // to learn when the child ends. Only the owner invocation opens a scope, so it contributes
+      // exactly one such read and extensions contribute none. One OBSERVER is asserted by the claim
+      // count and the single acquired/settled continuation lease below.
+      expect(exactWaits).toBe(2)
       expect(log.acquired).toHaveLength(1)
       expect(log.settled).toHaveLength(1)
       // Both answers are delivered, in conversation order, through the one elected observer.
@@ -1289,12 +1294,15 @@ describe("task attachment integration", () => {
       // rather than the first one's. The single-observer invariants below are this test's subject.
       expect(selectedText(yield* parent.result(reply(notification, "wrong fallback")))).toBe("later answer delivery")
       expect(observerClaims).toBe(2)
-      // Two exact waits, one observer. The blocking wait is the observer's; the second is the
+      // Three exact waits, one observer. The blocking wait is the observer's; the second is the
       // supplemental prompt's receipt reading the accepted lifetime's own record with a zero
       // timeout, which is what keys that receipt to the lifetime actually admitted rather than to
-      // whichever one currently holds the public id. One OBSERVER is asserted by the claim count
-      // and the single acquired/settled continuation lease below.
-      expect(exactWaits).toBe(2)
+      // whichever one currently holds the public id; the third is the lifetime-bound release of the
+      // owner attachment scope, which reads the same handle purely to learn when the child ends.
+      // Only the owner invocation opens a scope, so it contributes exactly one such read and
+      // extensions contribute none. One OBSERVER is asserted by the claim count and the single
+      // acquired/settled continuation lease below.
+      expect(exactWaits).toBe(3)
       expect(log.acquired).toHaveLength(1)
       expect(log.settled).toHaveLength(1)
       expect(parentPrompts).toHaveLength(2)

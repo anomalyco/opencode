@@ -709,9 +709,11 @@ export const TaskTool = Tool.define(
             if (Cause.hasInterruptsOnly(cause)) return target.attachment.claimCancellation("cancelled")
             return target.attachment.degrade()
           }),
-          // Observation being over means this lifetime's delivery is settled, so the owner scope's
-          // finalization rides here when the observer owns it. A no-op for extension observers,
-          // which never hold one.
+          // BACKSTOP ONLY. The owner scope is released by the lifetime-bound fork in
+          // `attachObservation`, because liveness — not delivery — is what the registration
+          // describes. This covers the exits where that fork can never fire: no invocation was ever
+          // armed, so there is no handle to wait on. `finalizeOwnerScope` dedupes, so it is a no-op
+          // after a normal release, and a no-op for extension observers, which hold none.
           Effect.ensuring(finalizeOwnerScope(Exit.void)),
           Effect.ensuring(target?.owner ? target.attachment.finishContinuation() : Effect.void),
         )
@@ -722,6 +724,38 @@ export const TaskTool = Tool.define(
       const attachObservation = Effect.fn("TaskTool.attachObservation")(function* (
         handleSource: Effect.Effect<BackgroundJob.InvocationHandle | undefined>,
       ) {
+        // THE CHILD'S REGISTRATION MEANS ONE THING: THIS CHILD IS LIVE.
+        //
+        // So it is released when the child's LIFETIME ends, on its own fiber, and nothing about
+        // delivery may gate that. Delivery is `inject` — a prompt into the PARENT — and a prompt
+        // into a running session joins that run and returns only when it ends (`prompt` reaches
+        // `SessionRunState.ensureRunning`, which awaits the active run's `done`). While the release
+        // rode the observation's `ensuring`, a finished child stayed registered for the length of a
+        // whole parent run, and every `Task(task_id=child)` in that window died on the coordinator's
+        // exclusive open.
+        //
+        // Releasing at a later point INSIDE the delivery does not fix it: the ordinary route injects
+        // each filed answer before it ever reaches the terminal branch, and `waitAnswer` reports an
+        // answer with no terminal info, so the observer is parked in the parent long before it can
+        // learn the child is done. That placement keeps the mismatch and only shrinks the window.
+        //
+        // Reading the lifetime is what makes registration and liveness the same fact. The exact
+        // handle, never the public id: after same-id replacement the id names another lifetime. This
+        // waits only — it consumes no answer, so delivery is untouched. Forked here, above the
+        // claim, so it is gated on neither the observer's election nor its continuation lease.
+        // `finalizeOwnerScope` dedupes, so the no-observer exits below and the backstop still race
+        // safely with it.
+        //
+        // OWNER-SCOPE INVOCATIONS ONLY. Extensions never open one, and a synchronous non-promoted
+        // caller still needs its scope after the terminal for the render moment at its delivery
+        // surface — that window contains no parent turn, so it does not gate resumption.
+        if (ownerScopeHolder.scope) {
+          yield* Effect.gen(function* () {
+            const handle = yield* handleSource
+            if (handle) yield* background.waitHandle({ handle })
+            yield* finalizeOwnerScope(Exit.void)
+          }).pipe(Effect.forkIn(scope, { startImmediately: true }))
+        }
         if (!parentScope || !reservation) {
           yield* notify(handleSource)
           return
