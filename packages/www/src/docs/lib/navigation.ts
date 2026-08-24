@@ -60,12 +60,12 @@ export const docsSections: DocsSection[] = [
   {
     key: "cli",
     title: "CLI",
-    landingSlug: "cli/index",
+    landingSlug: "cli",
     groups: [
       {
         title: "Intro",
         items: [
-          { title: "Intro", slug: "cli/index" },
+          { title: "Intro", slug: "cli" },
           { title: "Config", slug: "cli/config" },
         ],
       },
@@ -85,13 +85,13 @@ export const docsSections: DocsSection[] = [
   {
     key: "build",
     title: "Build",
-    landingSlug: "build/index",
+    landingSlug: "build",
     groups: [
       {
         title: "Build",
         items: [
           { title: "SDK", slug: "build/sdk" },
-          { title: "Build", slug: "build/index" },
+          { title: "Build", slug: "build" },
           { title: "Client", slug: "build/client" },
           { title: "Plugins", slug: "build/plugins" },
         ],
