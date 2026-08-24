@@ -73,7 +73,7 @@ export class Agent implements ACPAgent {
     return run(this.service.setSessionMode(params))
   }
 
-  unstable_setSessionModel(params: SetSessionModeRequest) {
+  unstable_setSessionModel(params: { sessionId: string; modelId: string }) {
     return run(this.service.setSessionModel(params))
   }
 
