@@ -24,7 +24,7 @@ describe("xAI Responses route", () => {
     }),
   )
 
-  it.effect("parses xAI reasoning text events", () =>
+  it.effect("parses xAI reasoning summaries", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think" })).pipe(
         Effect.provide(
@@ -34,8 +34,13 @@ describe("xAI Responses route", () => {
                 type: "response.output_item.added",
                 item: { type: "reasoning", id: "reasoning_1" },
               },
-              { type: "response.reasoning_text.delta", item_id: "reasoning_1", delta: "Considering." },
-              { type: "response.reasoning_text.done", item_id: "reasoning_1" },
+              // Grok streams reasoning with the standard summary event name.
+              {
+                type: "response.reasoning_summary_text.delta",
+                item_id: "reasoning_1",
+                summary_index: 0,
+                delta: "Considering.",
+              },
               {
                 type: "response.output_item.done",
                 item: { type: "reasoning", id: "reasoning_1", encrypted_content: "opaque" },
