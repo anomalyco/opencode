@@ -384,7 +384,7 @@ describe("run runtime queue", () => {
       run: async (input) => {
         turns.push(input.text)
         if (input.text === "active") await gate
-        if (input.text === "queued three") ui.api.close()
+        if (input.text.includes("queued three")) ui.api.close()
       },
     })
 
@@ -403,7 +403,7 @@ describe("run runtime queue", () => {
 
     wake?.()
     await task
-    expect(turns).toEqual(["active", "queued one", "queued three"])
+    expect(turns).toEqual(["active", "queued one\n\nqueued three"])
   })
 
   test("drains a prompt queued during an in-flight turn", async () => {

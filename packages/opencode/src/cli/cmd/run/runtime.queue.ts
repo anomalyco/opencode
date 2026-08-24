@@ -118,13 +118,35 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     draining = (async () => {
       try {
         while (!state.closed && state.queue.length > 0) {
-          const prompt = state.queue.shift()
+          let prompt = state.queue.shift()
           if (!prompt) {
             continue
           }
 
           const queued = state.queued.find((item) => item.prompt === prompt)
           if (queued) removeLocalQueued(queued)
+
+          // gemini-cli style: pending ordinary prompts ride along in one
+          // combined turn instead of serial round-trips.
+          if (prompt.mode !== "shell" && !prompt.command) {
+            const mergeable: RunPrompt[] = []
+            while (state.queue.length > 0) {
+              const nextItem = state.queue[0]
+              if (nextItem.mode === "shell" || nextItem.command || isNewCommand(nextItem.text)) break
+              mergeable.push(state.queue.shift()!)
+            }
+            if (mergeable.length > 0) {
+              for (const item of mergeable) {
+                const entry = state.queued.find((q) => q.prompt === item)
+                if (entry) removeLocalQueued(entry)
+              }
+              prompt = {
+                ...prompt,
+                text: [prompt.text, ...mergeable.map((item) => item.text)].join("\n\n"),
+                parts: [...prompt.parts, ...mergeable.flatMap((item) => item.parts)],
+              }
+            }
+          }
 
           if (prompt.mode !== "shell" && isNewCommand(prompt.text)) {
             syncQueue()
