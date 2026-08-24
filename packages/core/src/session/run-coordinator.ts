@@ -136,15 +136,15 @@ export const make = <Key, E, Reason = never>(options: {
       })
 
     const interrupt = (key: Key, reason?: Reason): Effect.Effect<boolean> =>
-      Effect.suspend(() => {
+      Effect.sync(() => {
         const execution = executions.get(key)
-        if (execution === undefined || execution.stopping) return Effect.succeed(false)
+        if (execution === undefined || execution.stopping) return false
         if (execution.owner === undefined) {
           // Settlement window: the owner exited but the settled hook has not finished. The
           // terminal outcome is already decided, so no reason attaches — but the interrupt
           // still claims the recorded wakes so settle does not start a dead-intent successor.
           execution.pendingWake = undefined
-          return Effect.succeed(false)
+          return false
         }
         execution.stopping = true
         // Wakes recorded so far belong to the interrupted intent; the interrupt claims them.
@@ -154,7 +154,7 @@ export const make = <Key, E, Reason = never>(options: {
         // Fire and forget: nobody benefits from waiting out cleanup here, and callers like
         // the interrupt endpoint must acknowledge immediately even when finalizers are slow.
         fork(Fiber.interrupt(execution.owner))
-        return Effect.succeed(true)
+        return true
       })
 
     // One execution's `done` already spans coalesced continuations; re-check after it
