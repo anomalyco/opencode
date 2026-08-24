@@ -23,8 +23,7 @@ export function apply(db: Database) {
       // keyed by SQLite's resolved path so aliases share one lock
       const main = yield* db.get<{ file: string }>(sql`SELECT file FROM pragma_database_list WHERE name = 'main'`)
       if (!main?.file) return yield* migrate(db)
-      // lowercased unconditionally: on case-insensitive filesystems different
-      // spellings are one file; elsewhere sharing a lock only over-serializes
+      // case-folded: spellings of one file share a lock; elsewhere it only over-serializes
       const key = main.file.toLowerCase()
       return yield* Effect.scoped(
         Effect.gen(function* () {
