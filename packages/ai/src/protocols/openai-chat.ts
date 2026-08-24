@@ -530,9 +530,10 @@ const hasToolHistory = (messages: ReadonlyArray<LLMRequest["messages"][number]>)
 
 const lowerOptions = (request: LLMRequest) => {
   const options = OpenAIOptions.resolve(request)
+  const cacheKey = ProviderShared.clampPromptCacheKey(request.promptCacheKey)
   return {
     ...(options.store !== undefined ? { store: options.store } : {}),
-    ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
+    ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
   }
 }

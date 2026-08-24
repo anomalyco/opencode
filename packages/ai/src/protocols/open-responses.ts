@@ -628,6 +628,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
 const lowerOptions = (request: LLMRequest) => {
   const options = OpenResponsesOptions.resolve(request)
+  const cacheKey = ProviderShared.clampPromptCacheKey(request.promptCacheKey)
   return {
     ...(options.instructions ? { instructions: options.instructions } : {}),
     ...(options.store !== undefined ? { store: options.store } : {}),
@@ -637,7 +638,7 @@ const lowerOptions = (request: LLMRequest) => {
       ? { stream_options: { include_obfuscation: options.streamOptions.includeObfuscation } }
       : {}),
     ...(options.topLogprobs !== undefined ? { top_logprobs: options.topLogprobs } : {}),
-    ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
+    ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     ...(options.include ? { include: options.include } : {}),
     ...(options.reasoningEffort || options.reasoningSummary
       ? { reasoning: { effort: options.reasoningEffort, summary: options.reasoningSummary } }
