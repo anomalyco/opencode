@@ -381,18 +381,18 @@ export function make(input: {
     )
     // v2 adds `replayFrom` — when present, replay conversation history as session/update
     // notifications before returning. The v1 SDK type doesn't have this field.
-    // When replaying, no limit is set so the full conversation is fetched.
-    // TODO: add a cap or pagination for very long sessions.
     const replayFrom = (params as unknown as { replayFrom?: { type: string } | null }).replayFrom
     const wantsReplay = replayFrom != null
-    const messages = yield* request(
-      () =>
-        input.sdk.session.messages(
-          { directory: params.cwd, sessionID: params.sessionId, ...(wantsReplay ? {} : { limit: 20 }) },
-          { throwOnError: true },
-        ),
-      "session",
-    )
+    const messages = wantsReplay
+      ? yield* fetchAllMessages(input.sdk, params.cwd, params.sessionId)
+      : yield* request(
+          () =>
+            input.sdk.session.messages(
+              { directory: params.cwd, sessionID: params.sessionId, limit: 20 },
+              { throwOnError: true },
+            ),
+          "session",
+        )
     const restored = restoreFromMessages(messages.map((item) => item.info))
     const model = restored.model ?? selectDefaultModel(snapshot)
     const state = yield* session.load({
@@ -809,6 +809,31 @@ function replayMessages(subscription: ACPEvent.Subscription | undefined, message
     for (const message of messages) {
       await subscription.replayMessage(message).catch(() => {})
     }
+  })
+}
+
+const REPLAY_PAGE_SIZE = 50
+
+function fetchAllMessages(sdk: OpencodeClient, directory: string, sessionId: string) {
+  return Effect.gen(function* () {
+    const all: SessionMessageResponse[] = []
+    let before: string | undefined
+    while (true) {
+      const response = yield* Effect.tryPromise({
+        try: () =>
+          sdk.session.messages(
+            { directory, sessionID: sessionId, limit: REPLAY_PAGE_SIZE, ...(before ? { before } : {}) },
+            { throwOnError: true },
+          ),
+        catch: (error) => fromUnknownError(error, "session"),
+      })
+      const result = response as unknown as { data: SessionMessageResponse[]; cursor?: { next?: string } }
+      const page = result.data ?? (result as unknown as SessionMessageResponse[])
+      all.push(...page)
+      before = result.cursor?.next
+      if (!before || page.length < REPLAY_PAGE_SIZE) break
+    }
+    return all
   })
 }
 
