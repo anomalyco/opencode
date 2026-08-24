@@ -479,11 +479,10 @@ it.live("configures workspace providers through the SDK facade", () =>
       const session = yield* opencode.sessions.create({ location: workspaceLocation })
       expect(session.location.workspaceID).toBe(workspace.id)
 
-      yield* opencode.workspace.destroy({ workspaceID: workspace.id })
+      expect(yield* opencode.workspace.destroy({ workspaceID: workspace.id })).toEqual({ destroyed: true })
       expect(calls.map((call) => call.operation)).toEqual(["create", "destroy"])
-      expect((yield* opencode.workspace.destroy({ workspaceID: workspace.id }).pipe(Effect.flip))._tag).toBe(
-        "Workspace.NotFound",
-      )
+      expect(yield* opencode.workspace.destroy({ workspaceID: workspace.id })).toEqual({ destroyed: false })
+      expect(calls.map((call) => call.operation)).toEqual(["create", "destroy"])
     }),
   ),
 )

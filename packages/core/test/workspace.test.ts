@@ -94,13 +94,34 @@ it.effect("destroys an unprovisioned workspace through the driver with a null bi
     const workspace = yield* Workspace.Service
     const workspaceID = yield* workspace.create("fake")
 
-    yield* workspace.destroy(workspaceID)
+    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: true })
     expect(calls).toEqual([{ operation: "destroy", binding: null }])
     expect(
       yield* Database.Service.use(({ db }) =>
         db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get(),
       ).pipe(Effect.orDie),
     ).toBeUndefined()
+  }),
+)
+
+it.effect("succeeds without calling the driver when the workspace does not exist", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const workspaceID = Workspace.ID.create()
+
+    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: false })
+    expect(calls).toEqual([])
+  }),
+)
+
+it.effect("reports whether destroy removed an existing workspace", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const workspaceID = yield* workspace.create("fake")
+
+    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: true })
+    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: false })
+    expect(calls).toEqual([{ operation: "destroy", binding: null }])
   }),
 )
 

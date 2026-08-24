@@ -35,9 +35,10 @@ export interface Interface {
   readonly connect: (
     workspaceID: ID,
   ) => Effect.Effect<EnvironmentDriver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  /** Makes the workspace absent; reports whether this call destroyed an existing workspace. */
   readonly destroy: (
     workspaceID: ID,
-  ) => Effect.Effect<void, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  ) => Effect.Effect<{ readonly destroyed: boolean }, WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
 }
 
 export interface Options {
@@ -267,9 +268,15 @@ const layer = (options: Options) =>
             attempts.delete(workspaceID)
             Deferred.doneUnsafe(attempt, Exit.fail(new NotFound({ workspaceID })))
           }
-          yield* locks.withLock(workspaceID)(
+          return yield* locks.withLock(workspaceID)(
             Effect.gen(function* () {
-              const row = yield* load(workspaceID)
+              const row = yield* db
+                .select()
+                .from(WorkspaceTable)
+                .where(eq(WorkspaceTable.id, workspaceID))
+                .get()
+                .pipe(Effect.orDie)
+              if (!row) return { destroyed: false }
               const connection = connections.get(workspaceID)
               connections.delete(workspaceID)
               if (connection) yield* Scope.close(connection.scope, Exit.void)
@@ -284,6 +291,7 @@ const layer = (options: Options) =>
                 ),
               )
               yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).run().pipe(Effect.orDie)
+              return { destroyed: true }
             }),
           )
         }),

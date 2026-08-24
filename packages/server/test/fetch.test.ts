@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { Workspace } from "@opencode-ai/core/workspace"
 import { Effect } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -49,6 +50,22 @@ it.live("serves unauthenticated and answers CORS preflight when no password is c
       ),
     )
     expect(preflight.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
+  }).pipe(Effect.scoped),
+)
+
+it.live("treats destroying a missing workspace as success", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make(options)
+    const response = yield* Effect.promise(() =>
+      handler(
+        new Request(`http://opencode.local/api/workspace/${Workspace.ID.create()}`, {
+          method: "DELETE",
+        }),
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    expect(yield* Effect.promise(() => response.json())).toEqual({ destroyed: false })
   }).pipe(Effect.scoped),
 )
 
