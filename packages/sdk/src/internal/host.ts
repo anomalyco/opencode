@@ -4,6 +4,7 @@ import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
+import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
 import { createEmbeddedRoutes } from "@opencode-ai/server/routes"
 import type { ServerOptions } from "@opencode-ai/server/options"
 import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -25,6 +26,7 @@ export interface EmbedOptions {
 export const create = Effect.fn("EmbeddedHost.create")(function* (
   options: CreateOptions = {},
   embed: EmbedOptions = {},
+  initialPlugins: ReadonlyArray<Plugin> = [],
 ) {
   const { log, workspaceProviders, ...server } = options
   const runtime = ManagedRuntime.make(
@@ -42,9 +44,13 @@ export const create = Effect.fn("EmbeddedHost.create")(function* (
 
   return yield* Effect.gen(function* () {
     const services = yield* runtime.contextEffect
-    // The sweep is a no-op when nothing is suspended. ManagedRuntime owns the
-    // fiber so recovery never delays startup but still stops with the host.
-    runtime.runFork(Context.get(services, SessionRestart.Service).resumeSuspendedSessions)
+    const plugins = Context.get(services, SdkPlugins.Service)
+    yield* Effect.forEach(initialPlugins, (plugin) => plugins.register(plugin), { discard: true })
+    const start = yield* Effect.cached(
+      Effect.sync(() => {
+        runtime.runFork(Context.get(services, SessionRestart.Service).resumeSuspendedSessions)
+      }),
+    )
     const handler = HttpEffect.toWebHandlerWith<never, HttpServerRequest.HttpServerRequest | Scope.Scope>(
       context(services),
     )(Context.get(services, HttpRouter.HttpRouter).asHttpEffect())
@@ -53,8 +59,11 @@ export const create = Effect.fn("EmbeddedHost.create")(function* (
     return {
       runtime,
       fetch: transport.fetch,
-      plugins: Context.get(services, SdkPlugins.Service),
+      plugins,
       workspace: Context.get(services, Workspace.Service),
+      // The sweep is a no-op when nothing is suspended. ManagedRuntime owns
+      // the fiber so recovery never delays startup but still stops with the host.
+      start,
       close: transport.close,
     }
   }).pipe(Effect.onError(() => runtime.disposeEffect))

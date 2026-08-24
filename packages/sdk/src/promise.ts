@@ -19,13 +19,15 @@ export type Interface = Omit<OpenCodeClient, "plugin"> & {
 
 export async function create(options: CreateOptions = {}, embed: EmbeddedHost.EmbedOptions = {}): Promise<Interface> {
   const { plugins, ...hostOptions } = options
-  const host = await Effect.runPromise(EmbeddedHost.create(hostOptions, embed))
+  const initialPlugins = plugins?.length ? plugins.map(await loadAdapter()) : []
+  const host = await Effect.runPromise(
+    EmbeddedHost.create(hostOptions, embed, initialPlugins).pipe(Effect.tap((host) => host.start)),
+  )
   const client = OpenCode.make({ baseUrl: "http://opencode.local", fetch: host.fetch })
   const register = async (plugin: Plugin.Plugin) => {
-    const { PluginPromise } = await import("@opencode-ai/core/plugin/promise")
-    return host.runtime.runPromise(host.plugins.register(PluginPromise.fromPromise(plugin)))
+    const fromPromise = await loadAdapter()
+    return host.runtime.runPromise(host.plugins.register(fromPromise(plugin)))
   }
-  for (const plugin of plugins ?? []) await register(plugin)
 
   return {
     ...client,
@@ -35,4 +37,9 @@ export async function create(options: CreateOptions = {}, embed: EmbeddedHost.Em
     close: host.close,
     [Symbol.asyncDispose]: host.close,
   }
+}
+
+async function loadAdapter() {
+  const { PluginPromise } = await import("@opencode-ai/core/plugin/promise")
+  return PluginPromise.fromPromise
 }

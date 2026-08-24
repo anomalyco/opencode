@@ -69,4 +69,21 @@ const opencode = yield * OpenCode.create()
 const session = yield * opencode.sessions.get({ sessionID })
 ```
 
-The Effect Workerd entrypoint is `@opencode-ai/sdk/workerd/effect`.
+`OpenCode.create()` and `OpenCode.layer()` start recovery automatically. Use `OpenCode.layerWith()` when plugins come from registration Layers so recovery starts only after those Layers succeed:
+
+```ts
+import { OpenCode } from "@opencode-ai/sdk/effect"
+import { Effect, Layer } from "effect"
+import myPlugin from "./my-plugin"
+
+const PluginLive = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.Service
+    yield* opencode.plugin(myPlugin)
+  }),
+)
+
+const OpenCodeLive = OpenCode.layerWith(PluginLive)
+```
+
+The Effect Workerd entrypoint is `@opencode-ai/sdk/workerd/effect`, with a matching `layerWith` export.

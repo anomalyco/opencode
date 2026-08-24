@@ -1,8 +1,97 @@
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
+import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
+import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
+import { Effect, Layer } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { OpenCode, Session } from "../src"
+import { PromiseSdk } from "../src/promise"
+
+test("registers every initial Promise plugin before recovery starts", async () => {
+  const registered: string[] = []
+  const recovered = Promise.withResolvers<readonly string[]>()
+  const opencode = await PromiseSdk.create(
+    {
+      plugins: [
+        { id: "first", setup() {} },
+        { id: "second", setup() {} },
+      ],
+    },
+    {
+      overrides: [
+        [
+          SdkPlugins.node,
+          Layer.mock(SdkPlugins.Service, {
+            register: (plugin) =>
+              Effect.sync(() => {
+                registered.push(plugin.id)
+              }),
+            all: () => [],
+          }),
+        ],
+        [
+          SessionRestart.node,
+          Layer.mock(SessionRestart.Service, {
+            resumeSuspendedSessions: Effect.sync(() => {
+              recovered.resolve([...registered])
+            }),
+          }),
+        ],
+      ],
+    },
+  )
+
+  try {
+    expect(await recovered.promise).toEqual(["first", "second"])
+  } finally {
+    await opencode.close()
+  }
+})
+
+test("disposes the host when initial Promise plugin registration fails", async () => {
+  const failure = new Error("plugin registration failed")
+  let disposed = false
+  let recovered = false
+  const error = await PromiseSdk.create(
+    { plugins: [{ id: "broken", setup() {} }] },
+    {
+      overrides: [
+        [
+          SdkPlugins.node,
+          Layer.effect(
+            SdkPlugins.Service,
+            Effect.acquireRelease(
+              Effect.succeed(
+                SdkPlugins.Service.of({
+                  register: () => Effect.die(failure),
+                  all: () => [],
+                }),
+              ),
+              () =>
+                Effect.sync(() => {
+                  disposed = true
+                }),
+            ),
+          ),
+        ],
+        [
+          SessionRestart.node,
+          Layer.mock(SessionRestart.Service, {
+            resumeSuspendedSessions: Effect.sync(() => {
+              recovered = true
+            }),
+          }),
+        ],
+      ],
+    },
+  ).catch((error: unknown) => error)
+
+  expect(error).toBeInstanceOf(Error)
+  expect(String(error)).toContain(failure.message)
+  expect(disposed).toBe(true)
+  expect(recovered).toBe(false)
+})
 
 test("Promise host uses the embedded router and releases plugins", async () => {
   await using directory = await tmpdir("opencode-promise-sdk-")

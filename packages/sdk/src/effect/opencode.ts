@@ -25,13 +25,7 @@ export type Interface = Omit<OpenCodeClient, "plugin" | "workspace"> & {
   readonly plugin: EmbeddedHost.Interface["plugins"]["register"] & OpenCodeClient["plugin"]
 }
 
-export const create: (
-  options?: CreateOptions,
-  embed?: EmbedOptions,
-) => Effect.Effect<Interface, Config.ConfigError | Error, Scope.Scope> = Effect.fn("OpenCode.create")(function* (
-  options: CreateOptions = {},
-  embed: EmbedOptions = {},
-) {
+const make = Effect.fn("OpenCode.make")(function* (options: CreateOptions = {}, embed: EmbedOptions = {}) {
   const host = yield* Effect.acquireRelease(EmbeddedHost.create(options, embed), (host) => Effect.promise(host.close))
   const client = yield* OpenCode.make({ baseUrl: "http://opencode.local" }).pipe(
     Effect.provide(
@@ -40,19 +34,51 @@ export const create: (
   )
 
   return {
-    ...client,
-    sessions: client.session,
-    events: client.event,
-    workspace: {
-      create: ({ provider }: { readonly provider: string }) => host.workspace.create(provider),
-      provision: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => host.workspace.provision(workspaceID),
-      destroy: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => host.workspace.destroy(workspaceID),
+    opencode: {
+      ...client,
+      sessions: client.session,
+      events: client.event,
+      workspace: {
+        create: ({ provider }: { readonly provider: string }) => host.workspace.create(provider),
+        provision: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => host.workspace.provision(workspaceID),
+        destroy: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => host.workspace.destroy(workspaceID),
+      },
+      plugin: Object.assign(host.plugins.register, client.plugin),
     },
-    plugin: Object.assign(host.plugins.register, client.plugin),
+    start: host.start,
   }
+})
+
+export const create: (
+  options?: CreateOptions,
+  embed?: EmbedOptions,
+) => Effect.Effect<Interface, Config.ConfigError | Error, Scope.Scope> = Effect.fn("OpenCode.create")(function* (
+  options: CreateOptions = {},
+  embed: EmbedOptions = {},
+) {
+  const host = yield* make(options, embed)
+  yield* host.start
+  return host.opencode
 })
 
 export class Service extends Context.Service<Service, Interface>()("@opencode-ai/sdk/OpenCode") {}
 
 export const layer = (options: CreateOptions = {}): Layer.Layer<Service, Config.ConfigError | Error> =>
   Layer.effect(Service, create(options))
+
+/** Builds a registration layer before starting suspended-session recovery. */
+export const layerWith = <E, R>(
+  registration: Layer.Layer<never, E, R>,
+  options: CreateOptions = {},
+  embed: EmbedOptions = {},
+): Layer.Layer<Service, Config.ConfigError | Error | E, Exclude<R, Service>> =>
+  Layer.unwrap(
+    make(options, embed).pipe(
+      Effect.map((host) =>
+        registration.pipe(
+          Layer.provideMerge(Layer.succeed(Service, host.opencode)),
+          Layer.tap(() => host.start),
+        ),
+      ),
+    ),
+  )
