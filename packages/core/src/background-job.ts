@@ -37,24 +37,6 @@ export type SequenceNote = { readonly note: string }
 /** What a run returns: a detected answer, a notice, or nothing — never a rendered string. */
 export type SequenceOutcome = Detected | SequenceNote | undefined
 
-/**
- * Per-run announcement capability, provided to each run effect by the registry's own fork.
- *
- * A run announces the instant its prompt resolves, before doing anything else, so the registry
- * knows a detection is in flight and withholds later positions from delivery until this one
- * settles. Without it, two runs whose filings arrive in the opposite order to their positions
- * would deliver out of conversation order.
- *
- * The capability closes over the announcing run's own ledger, so a run belonging to a replaced
- * lifetime can only ever mark its own ledger, never a replacement's. Announcing is advisory and
- * self-limiting: a run that never announces is simply never withheld for, and both `settle` and
- * the fork's finalizer clear the mark, so a stale announcement cannot stall delivery.
- */
-export class Announce extends Context.Service<
-  Announce,
-  (input: { readonly position: string; readonly at: number }) => Effect.Effect<void>
->()("@opencode/BackgroundJob/Announce") {}
-
 /** One filed answer at a position. */
 export type Answer = { readonly index: number; readonly detected: DetectedAnswer; readonly notes: readonly string[] }
 
@@ -88,8 +70,10 @@ export type Info = {
  *
  * The log is conversation-ordered: entries insert by `(at, position)` — the run's final assistant
  * message creation time, with the message id breaking ties — because message ids wrap and cannot
- * serve as chronology alone. Delivery order is therefore conversation order even when filings
- * arrive inverted by run scheduling, provided the earlier detection announced first.
+ * serve as chronology alone. Log order is therefore `(at, position)` by construction. Filing-ARRIVAL
+ * order is in-order too, but for a reason outside this module: runs of one child session are
+ * runner-serialized and a run's detect-to-file span contains no await, so an earlier position
+ * cannot still be unfiled when a later one arrives.
  *
  * `baseIndex` plus dense `entries`: log index i is `entries[i - baseIndex]`, and observation is
  * the only thing that releases an entry.
@@ -100,7 +84,7 @@ export namespace AnswerLog {
   export type State = { readonly baseIndex: number; readonly entries: readonly Entry[] }
 
   export type Action =
-    | { readonly _tag: "Observe"; readonly after: number; readonly floor?: Key }
+    | { readonly _tag: "Observe"; readonly after: number }
     | {
         readonly _tag: "Publish"
         readonly position: string
@@ -126,11 +110,6 @@ export namespace AnswerLog {
       const offset = clamped - state.baseIndex
       if (offset < state.entries.length) {
         const entry = state.entries[offset]
-        // Withhold while an announced, still-unfiled detection precedes this entry: delivering it
-        // would put a later position ahead of an earlier one a run has detected but not yet filed.
-        if (action.floor !== undefined && compare(action.floor, { position: entry.position, at: entry.at }) < 0) {
-          return { _tag: "miss", state }
-        }
         // Returning answer N advances baseIndex to N+1 — the only release. Entries at or below the
         // observed offset leave the queue.
         return {
@@ -325,13 +304,6 @@ type LifetimeLedger = {
   /** Position identities already filed — the run-final assistant message ids. */
   readonly filed: Set<string>
   buffered: Buffered[]
-  /**
-   * Detections announced but not yet filed, keyed by sequence. The log withholds any entry such a
-   * detection precedes, so a live observer cannot deliver a later position ahead of an earlier
-   * detected one. Cleared by that run's settle and, as a net, by the fork's finalizer. An announce
-   * on a position that is already filed is ignored when the floor is computed.
-   */
-  readonly announced: Map<number, AnswerLog.Key>
   /** Replaced on each log append; the old one is completed after the lock by its publisher. */
   gate: Deferred.Deferred<void>
   /** Undelivered notice lines, drained into the next published answer or into the terminal Info. */
@@ -433,8 +405,7 @@ export type HandleObservation = Omit<Observation, "accepted"> & {
  * registry occupant, the same construction token, still running.
  *
  * `foreign_token` is the replaced-lifetime arm — the filing or failure is dropped without touching
- * the current occupant. `not_running` is the terminalization race — nothing files, but the run's
- * in-flight announcement still has to clear.
+ * the current occupant. `not_running` is the terminalization race — nothing files.
  */
 export type SettleAdmissibility = "admit" | "foreign_token" | "not_running"
 export const settleAdmissibility = (
@@ -459,8 +430,7 @@ export type StartInput = {
    * a second filed answer that the blocked caller will not receive.
    */
   outstanding?: { readonly observer: string; readonly inline: string }
-  /** May require the announcement capability; the registry's fork provides it. */
-  run: Effect.Effect<SequenceOutcome, unknown, Announce>
+  run: Effect.Effect<SequenceOutcome, unknown>
   /** Relayed to the binder for sequence zero; omission is handled by the configured binder. */
   admission?: Admission
 }
@@ -469,16 +439,14 @@ export type StartExactResult = ArmOutcome
 
 export type ExtendInput = {
   id: string
-  /** May require the announcement capability; the registry's fork provides it. */
-  run: Effect.Effect<SequenceOutcome, unknown, Announce>
+  run: Effect.Effect<SequenceOutcome, unknown>
   /** Each extension carries separate admission; sequence zero's consumed permit cannot be reused. */
   admission?: Admission
 }
 
 export type ExtendExactInput = {
   lifetime: Lifetime
-  /** May require the announcement capability; the registry's fork provides it. */
-  run: Effect.Effect<SequenceOutcome, unknown, Announce>
+  run: Effect.Effect<SequenceOutcome, unknown>
   /** Relayed to the binder for the reserved sequence. Optional - see `ExtendInput.admission`. */
   admission?: Admission
 }
@@ -636,19 +604,12 @@ export const makeWith = (binder: Binder) =>
             const admissibility = settleAdmissibility({ token: job.token, status: job.info.status }, token)
             if (admissibility === "foreign_token") return [{}, jobs]
             if (admissibility === "not_running") {
-              // A late settle against a terminalized lifetime files nothing, but its in-flight
-              // announcement must still clear so retained entries stay deliverable. The fork's
-              // finalizer is the net for the replaced-lifetime arm, where this ledger is no longer
-              // reachable from the map.
-              job.ledger.announced.delete(sequence)
+              // A late settle against a terminalized lifetime files nothing.
               return [{ info: snapshot(job) }, jobs]
             }
             const ledger = job.ledger
             const pending = job.pending - 1
-            // This run's detection is no longer in flight: its filing, if any, commits in this same
-            // modification, so the announcement clears first. The gate swaps on every settle so
-            // parked observers re-evaluate the floor.
-            ledger.announced.delete(sequence)
+            // The gate swaps on every settle so parked observers re-evaluate the log.
             const gate: Deferred.Deferred<void> | undefined = ledger.gate
             ledger.gate = freshGate
 
@@ -720,11 +681,8 @@ export const makeWith = (binder: Binder) =>
             if (retainsSecond && ledger.outstanding) ledger.notes.push(ledger.outstanding.inline)
             const notes = ledger.notes.splice(0)
             // Filed identities are retained only until every accepted run settles, and filings are
-            // impossible past the status guard, so both identity sets clear here. Clearing the
-            // announcements also unblocks the floor: an in-flight detection can never file after
-            // this commit, so withholding for it would stall retained-answer delivery forever.
+            // impossible past the status guard, so the identity set clears here.
             ledger.filed.clear()
-            ledger.announced.clear()
             const next = {
               ...job,
               onPromote: undefined,
@@ -777,41 +735,13 @@ export const makeWith = (binder: Binder) =>
       id: string,
       token: object,
       sequence: number,
-      ledger: LifetimeLedger,
-      run: Effect.Effect<SequenceOutcome, unknown, Announce>,
+      run: Effect.Effect<SequenceOutcome, unknown>,
     ) {
-      // Closed over this run's own ledger, so a run belonging to a replaced lifetime can only ever
-      // mark its own floor. Announcing is advisory: it withholds later positions from delivery until
-      // this run settles, `settle` clears it in the same modification that files, and the finalizer
-      // below covers every path that cannot reach `settle` — a replaced lifetime, or interruption
-      // before settling — so a stale announcement can never stall delivery.
-      const announce = (input: { readonly position: string; readonly at: number }) =>
-        SynchronizedRef.update(state.jobs, (jobs) => {
-          if (ledger.state !== "terminal") ledger.announced.set(sequence, { position: input.position, at: input.at })
-          return jobs
-        })
-      const clearAnnounce = Effect.gen(function* () {
-        const freshGate = yield* Deferred.make<void>()
-        const gate = yield* SynchronizedRef.modify(
-          state.jobs,
-          (jobs): readonly [Deferred.Deferred<void> | undefined, Map<string, Active>] => {
-            if (!ledger.announced.delete(sequence)) return [undefined, jobs]
-            // Clearing an announcement can unblock the floor, so swap the gate to make parked
-            // observers re-evaluate. A spurious wake costs only one full retry.
-            const old = ledger.gate
-            ledger.gate = freshGate
-            return [old, jobs]
-          },
-        )
-        if (gate) yield* Deferred.succeed(gate, undefined).pipe(Effect.ignore)
-      })
       return yield* run.pipe(
-        Effect.provideService(Announce, announce),
         Effect.matchCauseEffect({
           onSuccess: (outcome) => settle(id, token, sequence, Exit.succeed(outcome)),
           onFailure: (cause) => settle(id, token, sequence, Exit.failCause(cause)),
         }),
-        Effect.ensuring(clearAnnounce),
         Effect.asVoid,
         Effect.forkIn(scope, { startImmediately: true }),
       )
@@ -955,7 +885,6 @@ export const makeWith = (binder: Binder) =>
                 log: AnswerLog.empty,
                 filed: new Set(),
                 buffered: [],
-                announced: new Map(),
                 gate,
                 notes: [],
                 ...(input.outstanding ? { outstanding: input.outstanding } : {}),
@@ -1034,7 +963,7 @@ export const makeWith = (binder: Binder) =>
 
           if (!armed) return yield* restore(Deferred.await(registration.arm))
 
-          yield* fork(registration.scope, id, registration.token, 0, registration.ledger, restore(input.run))
+          yield* fork(registration.scope, id, registration.token, 0, restore(input.run))
           const outcome: ArmOutcome = { info: armed.info, lifetime, handle: armed.handle }
           yield* Deferred.succeed(registration.arm, outcome).pipe(Effect.ignore)
           return outcome
@@ -1116,7 +1045,7 @@ export const makeWith = (binder: Binder) =>
           // An accepted supplemental run registers and runs without waiting for any previous run's
           // tail: the serial hold is gone, so several runs on one lifetime can be in flight at once
           // and their answers are ordered by position at delivery rather than by execution.
-          yield* fork(result.scope, input.lifetime.id, result.token, result.sequence, result.ledger, restore(input.run))
+          yield* fork(result.scope, input.lifetime.id, result.token, result.sequence, restore(input.run))
           return { extended: true as const, sequence: result.sequence, handle: accepted }
         }),
       )
@@ -1281,10 +1210,9 @@ export const makeWith = (binder: Binder) =>
         // A cancellation terminal carries no answer payload: filed answers stay retained and remain
         // retrievable by task id. Undelivered notice lines drain into the terminal Info. Identity
         // state clears at the terminal boundary, because filings are impossible past the status
-        // guard and a stale in-flight announcement must not withhold retained-answer delivery.
+        // guard.
         const notes = job.ledger.notes.splice(0)
         job.ledger.filed.clear()
-        job.ledger.announced.clear()
         const next: Active = {
           ...job,
           onPromote: undefined,
@@ -1368,18 +1296,9 @@ export const makeWith = (binder: Binder) =>
             const binding = bindings.get(input.handle)
             if (!binding) return [{}, jobs]
             const ledger = binding.ledger
-            // The floor is the earliest announced, still-unfiled detection. Entries at or beyond it
-            // are withheld, because a run has detected an earlier position whose filing is still in
-            // flight. An announce on an already-filed position is inert here.
-            let floor: AnswerLog.Key | undefined
-            for (const key of ledger.announced.values()) {
-              if (ledger.filed.has(key.position)) continue
-              if (floor === undefined || AnswerLog.compare(key, floor) < 0) floor = key
-            }
             const observed = AnswerLog.transition(ledger.log, {
               _tag: "Observe",
               after: input.after,
-              ...(floor !== undefined ? { floor } : {}),
             })
             if (observed._tag === "answer") {
               ledger.log = observed.state

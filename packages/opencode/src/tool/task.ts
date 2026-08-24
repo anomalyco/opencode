@@ -311,25 +311,24 @@ export const TaskTool = Tool.define(
       })
 
       /**
-       * Announce the detected position the instant the prompt resolves, before any further step, so
-       * the registry withholds later positions from delivery while this filing is in flight. The
-       * span from announcement to return is uninterruptible and contains no other work, so nothing
-       * can separate the announcement from the filing that follows it.
-       *
        * The detected value is the message itself, because that is what each delivery surface needs
        * in order to classify and render at the moment it delivers.
+       *
+       * `at` is the final assistant message's creation time — the chronology key that keeps ordering
+       * correct across the message-id wrap. ORDERING RESTS ON THAT KEY ALONE: the answer log inserts
+       * by `(at, position)`, and filing-ARRIVAL order is in-order too, for a reason outside this
+       * file — runs of one child session are runner-serialized (`effect/runner.ts`), and this
+       * detect-to-file span contains no await on an external event, so an earlier position cannot
+       * still be unfiled when a later one arrives. There is deliberately no detection-time announce.
+       * Putting a real await into this span would reopen the ordering window with no test failing,
+       * and would be the condition for reinstating an ordering mechanism.
        */
-      const announceDetection = (result: SessionV1.WithParts) =>
-        Effect.gen(function* () {
-          const announce = yield* BackgroundJob.Announce
-          const detected = {
-            position: result.info.id,
-            at: result.info.time.created,
-            detected: result,
-          } satisfies BackgroundJob.Detected
-          yield* Effect.uninterruptible(announce({ position: detected.position, at: detected.at }))
-          return detected
-        })
+      const toDetected = (result: SessionV1.WithParts) =>
+        ({
+          position: result.info.id,
+          at: result.info.time.created,
+          detected: result,
+        }) satisfies BackgroundJob.Detected
 
       // A run detects its answer and hands it back. No selection, no rendering and no comparison
       // happen here: a parked attachment scope affects the owner's render moment at the delivery
@@ -354,7 +353,7 @@ export const TaskTool = Tool.define(
           if (failed?.type === "tool" && failed.state.status === "error") {
             return yield* Effect.fail(new Error(`Subagent failed (task_id: ${nextSession.id}): ${failed.state.error}`))
           }
-          return yield* announceDetection(result)
+          return toDetected(result)
         })
 
       const causeReason = (cause: Cause.Cause<unknown>) => {
@@ -443,7 +442,7 @@ export const TaskTool = Tool.define(
                   ),
                 )
               if (outcome._tag === "note") return { note: outcome.note } satisfies BackgroundJob.SequenceOutcome
-              return yield* announceDetection(outcome.result)
+              return toDetected(outcome.result)
             })
           if (!flags.experimentalBackgroundSubagents) return yield* attempt()
           const located = yield* attachments.locate(nextSession.id)

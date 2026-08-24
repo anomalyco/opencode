@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { BackgroundJob } from "@opencode-ai/core/background-job"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Deferred, Effect, Exit, Fiber, Scope } from "effect"
+import { Deferred, Effect, Exit, Scope } from "effect"
 import { it } from "./lib/effect"
 
 const jobsLayer = LayerNode.compile(BackgroundJob.node)
@@ -58,23 +58,6 @@ describe("BackgroundJob.AnswerLog", () => {
     expect(second.answer.detected).toBe("m2")
   })
 
-  test("withholds an entry that an announced, still-unfiled earlier detection precedes", () => {
-    const state = publish(BackgroundJob.AnswerLog.empty, "m2", 200).state
-    const withheld = BackgroundJob.AnswerLog.transition(state, {
-      _tag: "Observe",
-      after: 0,
-      floor: { position: "m1", at: 100 },
-    })
-    expect(withheld._tag).toBe("miss")
-
-    // A floor at or after the entry does not withhold it.
-    const released = BackgroundJob.AnswerLog.transition(state, {
-      _tag: "Observe",
-      after: 0,
-      floor: { position: "m3", at: 300 },
-    })
-    expect(released._tag).toBe("answer")
-  })
 })
 
 describe("BackgroundJob.settleAdmissibility", () => {
@@ -244,39 +227,6 @@ describe("BackgroundJob", () => {
       const terminal = yield* jobs.waitAnswer({ handle, after: 2 })
       expect(terminal.answer).toBeUndefined()
       expect(terminal.info?.status).toBe("completed")
-    }).pipe(Effect.provide(jobsLayer)),
-  )
-
-  it.live("withholds a later answer from a live observer while an earlier detection is still filing", () =>
-    Effect.gen(function* () {
-      const jobs = yield* BackgroundJob.Service
-      const release = yield* Deferred.make<void>()
-      // The owner detects the EARLIER position, announces it, then parks before returning - so its
-      // filing is in flight while the supplement's later answer is already filed.
-      const started = yield* jobs.startExact({
-        id: "job_answer_floor",
-        type: "test",
-        metadata: { background: true },
-        run: Effect.gen(function* () {
-          const announce = yield* BackgroundJob.Announce
-          yield* announce({ position: "m1", at: 100 })
-          yield* Deferred.await(release)
-          return answered("m1", 100, "owner")
-        }),
-      })
-      const handle = started.handle
-      expect(handle).toBeDefined()
-      if (!handle) return
-
-      // Park an observer first, so the only way it can return the supplement is a failed floor.
-      const observer = yield* Effect.forkScoped(jobs.waitAnswer({ handle, after: 0 }))
-      yield* jobs.extend({ id: "job_answer_floor", run: Effect.succeed(answered("m2", 200, "supplement")) })
-
-      yield* Deferred.succeed(release, undefined)
-      const first = yield* Fiber.join(observer)
-      expect(first.answer?.detected).toBe("owner")
-      const second = yield* jobs.waitAnswer({ handle, after: 1 })
-      expect(second.answer?.detected).toBe("supplement")
     }).pipe(Effect.provide(jobsLayer)),
   )
 
