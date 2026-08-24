@@ -517,7 +517,7 @@ function PromptInputV2ModelControl(props: {
               data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
-              class={`min-w-0 ${promptInputV2ControlClass} group`}
+              class={`${promptInputV2ControlClass} group`}
               classList={{ "animate-in fade-in": shouldAnimate() }}
               style={{ height: "28px" }}
               onClick={props.onUnpaidClick}
@@ -534,7 +534,7 @@ function PromptInputV2ModelControl(props: {
                 variant="ghost-muted"
                 size="normal"
                 style={{ height: "28px" }}
-                class={`min-w-0 ${promptInputV2ControlClass} group`}
+                class={`${promptInputV2ControlClass} group`}
                 classList={{ "animate-in fade-in": shouldAnimate() }}
                 data-action="prompt-model"
                 data-control-type="popover"

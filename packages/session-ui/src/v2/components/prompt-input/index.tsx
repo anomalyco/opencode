@@ -34,7 +34,7 @@ export type {
 
 export type PromptInputV2Mode = "normal" | "shell"
 
-export const promptInputV2ControlClass = "max-w-[220px] shrink-0 justify-start ![font-weight:440]"
+export const promptInputV2ControlClass = "min-w-0 max-w-[220px] shrink-0 justify-start ![font-weight:440]"
 
 export type PromptInputV2Props = {
   controller: PromptInputV2Interaction
@@ -243,7 +243,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             <div
               ref={setControls}
               data-slot="prompt-controls"
-              class="flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar"
+              class="flex w-full min-w-0 items-center gap-1 overflow-x-auto no-scrollbar [&>*]:shrink-0"
               aria-hidden={state.mode === "shell"}
               inert={state.mode === "shell" ? true : undefined}
               style={buttons()}
@@ -309,7 +309,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 aria-label={i18n.t("ui.promptInput.scrollControlsLeft")}
                 onClick={() => scrollControls(-1)}
               >
-                <IconV2 name="chevron-down" class="-rotate-90" />
+                <IconV2 name="chevron-down" class="rotate-90" />
               </button>
             </Show>
             <Show when={controlsScroll().right}>
@@ -320,7 +320,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 aria-label={i18n.t("ui.promptInput.scrollControlsRight")}
                 onClick={() => scrollControls(1)}
               >
-                <IconV2 name="chevron-down" class="rotate-90" />
+                <IconV2 name="chevron-down" class="-rotate-90" />
               </button>
             </Show>
           </div>
