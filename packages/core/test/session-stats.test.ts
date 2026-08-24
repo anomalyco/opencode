@@ -132,6 +132,8 @@ describe("SessionStats", () => {
         from: Date.UTC(2026, 0, 1),
         to: Date.UTC(2026, 1, 1),
         timezone: "UTC",
+        models: true,
+        tools: true,
       })
 
       expect(stats.sessions).toBe(1)
@@ -151,6 +153,16 @@ describe("SessionStats", () => {
         { name: "read", calls: 1, succeeded: 1, failed: 0, durationP50: 250 },
         { name: "edit", calls: 1, succeeded: 0, failed: 1, durationP50: 2_000 },
       ])
+
+      const summary = yield* SessionStats.get({
+        from: Date.UTC(2026, 0, 1),
+        to: Date.UTC(2026, 1, 1),
+        timezone: "UTC",
+        toolSummary: true,
+      })
+      expect(summary.models).toEqual([])
+      expect(summary.toolUsage).toEqual([])
+      expect(summary.tools).toEqual({ calls: 2, succeeded: 1, failed: 1, unfinished: 0 })
     }),
   )
 })

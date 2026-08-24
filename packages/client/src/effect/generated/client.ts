@@ -303,7 +303,15 @@ const Endpoint5_0 = (raw: RawClient["server.session"]) => (input?: Endpoint5_0In
 const Endpoint5_1 = (raw: RawClient["server.session"]) => (input?: Endpoint5_1Input) =>
   preserveEffect<Endpoint5_1Output>()(
     raw["session.stats"]({
-      query: { from: input?.["from"], to: input?.["to"], project: input?.["project"], timezone: input?.["timezone"] },
+      query: {
+        from: input?.["from"],
+        to: input?.["to"],
+        project: input?.["project"],
+        timezone: input?.["timezone"],
+        models: input?.["models"],
+        tools: input?.["tools"],
+        toolSummary: input?.["toolSummary"],
+      },
     }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),

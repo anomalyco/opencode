@@ -1,11 +1,12 @@
 export * as SessionStats from "./stats.js"
 
 import { DateTime, Effect, Option, Schema } from "effect"
-import { and, eq, gte, inArray, lt } from "drizzle-orm"
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm"
+import { Model } from "@opencode-ai/schema/model"
 import { Money } from "@opencode-ai/schema/money"
 import { Project } from "@opencode-ai/schema/project"
+import { Provider } from "@opencode-ai/schema/provider"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Database } from "../database/database.js"
 import { EventTable } from "../event/sql.js"
 import { SessionMessageTable, SessionTable } from "./sql.js"
@@ -15,6 +16,9 @@ type Input = {
   readonly to?: number
   readonly projectID?: Project.ID
   readonly timezone?: string
+  readonly models?: boolean
+  readonly tools?: boolean
+  readonly toolSummary?: boolean
 }
 
 type Tokens = {
@@ -24,8 +28,32 @@ type Tokens = {
   cache: { read: number; write: number }
 }
 
+type MessageRow = {
+  sessionID: string
+  parentID: string | null
+  type: "user" | "assistant"
+  timeCreated: number
+  providerID: string | null
+  modelID: string | null
+  variant: string | null
+  input: number | null
+  output: number | null
+  reasoning: number | null
+  cacheRead: number | null
+  cacheWrite: number | null
+  cost: number | null
+}
+
+type ToolRow = {
+  name: string | null
+  status: string | null
+  duration: number | null
+}
+
+type ToolSummaryRow = { status: string | null; count: number }
+
 type ModelAggregate = {
-  model: SessionMessage.Assistant["model"]
+  model: Model.Ref
   steps: number
   tokens: Tokens
   cost: number
@@ -40,43 +68,187 @@ type ToolAggregate = {
   durations: number[]
 }
 
-const decodeMessage = Schema.decodeUnknownOption(SessionMessage.Info)
 const decodeUsage = Schema.decodeUnknownOption(SessionEvent.UsageRecorded.data)
+const Window = 31 * 24 * 60 * 60 * 1_000
 
 export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
   const db = (yield* Database.Service).db
-  const rows = yield* db
-    .select({
-      id: SessionMessageTable.id,
-      sessionID: SessionMessageTable.session_id,
-      parentID: SessionTable.parent_id,
-      type: SessionMessageTable.type,
-      data: SessionMessageTable.data,
-      timeCreated: SessionMessageTable.time_created,
-    })
-    .from(SessionMessageTable)
-    .innerJoin(SessionTable, eq(SessionMessageTable.session_id, SessionTable.id))
-    .where(
-      and(
-        inArray(SessionMessageTable.type, ["user", "assistant"]),
-        input.from === undefined ? undefined : gte(SessionMessageTable.time_created, input.from),
-        input.to === undefined ? undefined : lt(SessionMessageTable.time_created, input.to),
-        input.projectID === undefined ? undefined : eq(SessionTable.project_id, input.projectID),
-      ),
+  const now = Date.now()
+  const to = input.to ?? now
+  const earliest =
+    input.from ??
+    (yield* db
+      .get<{ time: number | null }>(sql`SELECT min(time_created) AS time FROM ${SessionMessageTable}`)
+      .pipe(Effect.orDie))?.time ??
+    to
+  const ranges = windows(earliest, to)
+  const sessions = new Set<string>()
+  const subagents = new Set<string>()
+  const sessionIDs = new Set<string>()
+  const activity = new Map<string, number>()
+  const models = new Map<string, ModelAggregate>()
+  const tools = new Map<string, ToolAggregate>()
+  const totals = {
+    prompts: 0,
+    steps: 0,
+    tokens: emptyTokens(),
+    cost: 0,
+    tools: { calls: 0, succeeded: 0, failed: 0, unfinished: 0 },
+  }
+  const dateKey = makeDateKey(input.timezone)
+  const project = input.projectID === undefined ? sql`` : sql`AND session.project_id = ${input.projectID}`
+
+  yield* Effect.forEach(
+    ranges,
+    (range) =>
+      db
+        .all<MessageRow>(
+          sql`
+          SELECT
+            message.session_id AS sessionID,
+            session.parent_id AS parentID,
+            message.type AS type,
+            message.time_created AS timeCreated,
+            json_extract(message.data, '$.model.providerID') AS providerID,
+            json_extract(message.data, '$.model.id') AS modelID,
+            json_extract(message.data, '$.model.variant') AS variant,
+            json_extract(message.data, '$.tokens.input') AS input,
+            json_extract(message.data, '$.tokens.output') AS output,
+            json_extract(message.data, '$.tokens.reasoning') AS reasoning,
+            json_extract(message.data, '$.tokens.cache.read') AS cacheRead,
+            json_extract(message.data, '$.tokens.cache.write') AS cacheWrite,
+            json_extract(message.data, '$.cost') AS cost
+          FROM ${SessionMessageTable} AS message
+          JOIN ${SessionTable} AS session ON session.id = message.session_id
+          WHERE message.type IN ('user', 'assistant')
+            AND message.time_created >= ${range.from}
+            AND message.time_created < ${range.to}
+            ${project}
+        `,
+        )
+        .pipe(
+          Effect.orDie,
+          Effect.tap((rows) =>
+            Effect.sync(() => {
+              rows.forEach((row) => {
+                sessionIDs.add(row.sessionID)
+                if (row.parentID === null) sessions.add(row.sessionID)
+                else subagents.add(row.sessionID)
+                if (row.type === "user") {
+                  if (row.parentID === null) totals.prompts++
+                  return
+                }
+
+                totals.steps++
+                const tokens = rowTokens(row)
+                addTokens(totals.tokens, tokens)
+                totals.cost += row.cost ?? 0
+                const day = dateKey(row.timeCreated)
+                activity.set(day, (activity.get(day) ?? 0) + 1)
+                if (!input.models || !row.providerID || !row.modelID) return
+                const key = `${row.providerID}/${row.modelID}#${row.variant ?? ""}`
+                const model = models.get(key) ?? {
+                  model: {
+                    providerID: Provider.ID.make(row.providerID),
+                    id: Model.ID.make(row.modelID),
+                    variant: row.variant ? Model.VariantID.make(row.variant) : undefined,
+                  },
+                  steps: 0,
+                  tokens: emptyTokens(),
+                  cost: 0,
+                }
+                models.set(key, model)
+                model.steps++
+                model.cost += row.cost ?? 0
+                addTokens(model.tokens, tokens)
+              })
+            }),
+          ),
+        ),
+    { concurrency: 1, discard: true },
+  )
+
+  if (input.tools || input.toolSummary)
+    yield* Effect.forEach(
+      ranges,
+      (range) => {
+        if (!input.tools)
+          return db
+            .all<ToolSummaryRow>(
+              sql`
+            SELECT json_extract(content.value, '$.state.status') AS status, count(*) AS count
+            FROM ${SessionMessageTable} AS message
+            JOIN ${SessionTable} AS session ON session.id = message.session_id,
+              json_each(message.data, '$.content') AS content
+            WHERE message.type = 'assistant'
+              AND message.time_created >= ${range.from}
+              AND message.time_created < ${range.to}
+              AND json_extract(content.value, '$.type') = 'tool'
+              ${project}
+            GROUP BY status
+          `,
+            )
+            .pipe(
+              Effect.orDie,
+              Effect.tap((rows) =>
+                Effect.sync(() => rows.forEach((row) => addToolStatus(totals.tools, row.status, row.count))),
+              ),
+              Effect.asVoid,
+            )
+        return db
+          .all<ToolRow>(
+            sql`
+          SELECT
+            json_extract(content.value, '$.name') AS name,
+            json_extract(content.value, '$.state.status') AS status,
+            CASE
+              WHEN json_extract(content.value, '$.time.completed') IS NULL THEN NULL
+              ELSE json_extract(content.value, '$.time.completed')
+                - coalesce(json_extract(content.value, '$.time.ran'), json_extract(content.value, '$.time.created'))
+            END AS duration
+          FROM ${SessionMessageTable} AS message
+          JOIN ${SessionTable} AS session ON session.id = message.session_id,
+            json_each(message.data, '$.content') AS content
+          WHERE message.type = 'assistant'
+            AND message.time_created >= ${range.from}
+            AND message.time_created < ${range.to}
+            AND json_extract(content.value, '$.type') = 'tool'
+            ${project}
+        `,
+          )
+          .pipe(
+            Effect.orDie,
+            Effect.tap((rows) =>
+              Effect.sync(() => {
+                rows.forEach((row) => {
+                  addToolStatus(totals.tools, row.status, 1)
+                  if (!row.name) return
+                  const tool = tools.get(row.name) ?? {
+                    name: row.name,
+                    calls: 0,
+                    succeeded: 0,
+                    failed: 0,
+                    unfinished: 0,
+                    durations: [],
+                  }
+                  tools.set(row.name, tool)
+                  addToolStatus(tool, row.status, 1)
+                  if (row.duration !== null) tool.durations.push(row.duration)
+                })
+              }),
+            ),
+            Effect.asVoid,
+          )
+      },
+      { concurrency: 1, discard: true },
     )
-    .all()
-    .pipe(Effect.orDie)
-  const sessionIDs = [...new Set(rows.map((row) => row.sessionID))]
+
+  const ids = [...sessionIDs]
   const events = (yield* Effect.forEach(
-    Array.from({ length: Math.ceil(sessionIDs.length / 500) }, (_, index) =>
-      sessionIDs.slice(index * 500, (index + 1) * 500),
-    ),
+    Array.from({ length: Math.ceil(ids.length / 500) }, (_, index) => ids.slice(index * 500, (index + 1) * 500)),
     (batch) =>
       db
-        .select({
-          created: EventTable.created,
-          data: EventTable.data,
-        })
+        .select({ created: EventTable.created, data: EventTable.data })
         .from(EventTable)
         .where(
           and(
@@ -90,81 +262,6 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
         .pipe(Effect.orDie),
     { concurrency: 4 },
   )).flat()
-
-  const sessions = new Set<string>()
-  const subagents = new Set<string>()
-  const activity = new Map<string, number>()
-  const models = new Map<string, ModelAggregate>()
-  const tools = new Map<string, ToolAggregate>()
-  const totals = {
-    prompts: 0,
-    steps: 0,
-    tokens: emptyTokens(),
-    cost: 0,
-    tools: { calls: 0, succeeded: 0, failed: 0, unfinished: 0 },
-  }
-  const dateKey = makeDateKey(input.timezone)
-
-  rows.forEach((row) => {
-    const decoded = decodeMessage({ ...row.data, id: row.id, type: row.type })
-    if (Option.isNone(decoded)) return
-    const message = decoded.value
-    if (row.parentID) subagents.add(row.sessionID)
-    else sessions.add(row.sessionID)
-
-    if (message.type === "user") {
-      if (!row.parentID) totals.prompts++
-      return
-    }
-    if (message.type !== "assistant") return
-
-    totals.steps++
-    const tokens = message.tokens ?? emptyTokens()
-    const cost = message.cost ?? 0
-    addTokens(totals.tokens, tokens)
-    totals.cost += cost
-    const day = dateKey(DateTime.toEpochMillis(message.time.created))
-    activity.set(day, (activity.get(day) ?? 0) + 1)
-
-    const modelKey = `${message.model.providerID}/${message.model.id}#${message.model.variant ?? ""}`
-    const model = models.get(modelKey) ?? { model: message.model, steps: 0, tokens: emptyTokens(), cost: 0 }
-    models.set(modelKey, model)
-    model.steps++
-    model.cost += cost
-    addTokens(model.tokens, tokens)
-
-    message.content
-      .filter((content): content is SessionMessage.AssistantTool => content.type === "tool")
-      .forEach((content) => {
-        const tool = tools.get(content.name) ?? {
-          name: content.name,
-          calls: 0,
-          succeeded: 0,
-          failed: 0,
-          unfinished: 0,
-          durations: [],
-        }
-        tools.set(content.name, tool)
-        tool.calls++
-        totals.tools.calls++
-        if (content.state.status === "completed") {
-          tool.succeeded++
-          totals.tools.succeeded++
-        } else if (content.state.status === "error") {
-          tool.failed++
-          totals.tools.failed++
-        } else {
-          tool.unfinished++
-          totals.tools.unfinished++
-        }
-        if (content.time.completed === undefined) return
-        tool.durations.push(
-          DateTime.toEpochMillis(content.time.completed) -
-            DateTime.toEpochMillis(content.time.ran ?? content.time.created),
-        )
-      })
-  })
-
   events.forEach((row) => {
     const decoded = decodeUsage(row.data)
     if (Option.isNone(decoded)) return
@@ -173,15 +270,8 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
   })
 
   const days = [...activity.entries()].sort(([a], [b]) => a.localeCompare(b))
-  const now = Date.now()
-  const fallback = input.to ?? now
-  const earliestMessage = rows.reduce((earliest, row) => Math.min(earliest, row.timeCreated), fallback)
-  const earliest = events.reduce((value, event) => Math.min(value, event.created), earliestMessage)
-  const from = input.from ?? earliest
-  const to = input.to ?? now
-
   return {
-    range: { from: DateTime.makeUnsafe(from), to: DateTime.makeUnsafe(to) },
+    range: { from: DateTime.makeUnsafe(earliest), to: DateTime.makeUnsafe(to) },
     sessions: sessions.size,
     subagents: subagents.size,
     prompts: totals.prompts,
@@ -208,6 +298,22 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
   }
 })
 
+function windows(from: number, to: number) {
+  return Array.from({ length: Math.max(1, Math.ceil((to - from) / Window)) }, (_, index) => ({
+    from: from + index * Window,
+    to: Math.min(to, from + (index + 1) * Window),
+  }))
+}
+
+function rowTokens(row: MessageRow): Tokens {
+  return {
+    input: row.input ?? 0,
+    output: row.output ?? 0,
+    reasoning: row.reasoning ?? 0,
+    cache: { read: row.cacheRead ?? 0, write: row.cacheWrite ?? 0 },
+  }
+}
+
 function emptyTokens(): Tokens {
   return { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 }
@@ -222,6 +328,23 @@ function addTokens(target: Tokens, source: Tokens) {
 
 function tokenTotal(tokens: Tokens) {
   return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+}
+
+function addToolStatus(
+  target: { calls: number; succeeded: number; failed: number; unfinished: number },
+  status: string | null,
+  count: number,
+) {
+  target.calls += count
+  if (status === "completed") {
+    target.succeeded += count
+    return
+  }
+  if (status === "error") {
+    target.failed += count
+    return
+  }
+  target.unfinished += count
 }
 
 function makeDateKey(timezone = "UTC") {

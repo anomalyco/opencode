@@ -31,12 +31,16 @@ export default Runtime.handler(
             client.location.get({ location: { directory: process.cwd() } }).then((location) => location.project.id),
           )
         : project
+    const details = input.models || input.tools || input.cost || input.full
     const stats = yield* Effect.promise(() =>
       client.session.stats({
         from: range.from,
         to: range.to,
         project: projectID,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        models: input.json || input.models || input.full,
+        tools: input.json || input.tools || input.full,
+        toolSummary: input.json || input.tools || input.full || !details,
       }),
     )
     const output = input.json

@@ -633,13 +633,13 @@
                     "$ref": "#/components/schemas/Union_"
                   },
                   "agent": {
-                    "$ref": "#/components/schemas/Union_3"
-                  },
-                  "model": {
                     "$ref": "#/components/schemas/Union_4"
                   },
-                  "location": {
+                  "model": {
                     "$ref": "#/components/schemas/Union_5"
+                  },
+                  "location": {
+                    "$ref": "#/components/schemas/Union_6"
                   }
                 },
                 "additionalProperties": false
@@ -698,6 +698,30 @@
             "in": "query",
             "schema": {
               "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "models",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Union_3"
+            },
+            "required": false
+          },
+          {
+            "name": "tools",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Union_3"
+            },
+            "required": false
+          },
+          {
+            "name": "toolSummary",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Union_3"
             },
             "required": false
           }
@@ -823,7 +847,7 @@
                     "$ref": "#/components/schemas/Arrays_"
                   },
                   "location": {
-                    "$ref": "#/components/schemas/Union_5"
+                    "$ref": "#/components/schemas/Union_6"
                   }
                 },
                 "required": ["info", "messages"],
@@ -857,7 +881,7 @@
             "name": "sanitize",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_8"
+              "$ref": "#/components/schemas/Union_3"
             },
             "required": false
           }
@@ -1826,10 +1850,10 @@
                     "$ref": "#/components/schemas/Union_"
                   },
                   "agent": {
-                    "$ref": "#/components/schemas/Union_3"
+                    "$ref": "#/components/schemas/Union_4"
                   },
                   "model": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   },
                   "files": {
                     "$ref": "#/components/schemas/Arrays_4"
@@ -3440,7 +3464,7 @@
             "name": "follow",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_8"
+              "$ref": "#/components/schemas/Union_3"
             },
             "required": false
           }
@@ -3595,7 +3619,7 @@
             "name": "continue",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_8"
+              "$ref": "#/components/schemas/Union_3"
             },
             "required": false
           }
@@ -4251,7 +4275,7 @@
                     "type": "string"
                   },
                   "model": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   }
                 },
                 "required": ["prompt"],
@@ -6826,7 +6850,7 @@
                     "$ref": "#/components/schemas/Permission.Source"
                   },
                   "agent": {
-                    "$ref": "#/components/schemas/Union_3"
+                    "$ref": "#/components/schemas/Union_4"
                   }
                 },
                 "required": ["action", "resources"],
@@ -10403,6 +10427,17 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "Union_3": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["true", "false"]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "SessionStats.Activity": {
         "type": "object",
         "properties": {
@@ -10635,7 +10670,7 @@
         ],
         "additionalProperties": false
       },
-      "Union_3": {
+      "Union_4": {
         "anyOf": [
           {
             "type": "string"
@@ -10645,7 +10680,7 @@
           }
         ]
       },
-      "Union_4": {
+      "Union_5": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/Model.Ref"
@@ -10655,7 +10690,7 @@
           }
         ]
       },
-      "Union_5": {
+      "Union_6": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/Location.Ref"
@@ -11048,11 +11083,11 @@
         "required": ["id", "time", "type", "skill", "name", "text"],
         "additionalProperties": false
       },
-      "Union_6": {
+      "Union_7": {
         "type": "string",
         "enum": ["running", "exited", "timeout", "killed"]
       },
-      "Union_7": {
+      "Union_8": {
         "type": "string",
         "enum": ["Infinity", "-Infinity", "NaN"]
       },
@@ -11128,7 +11163,7 @@
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "exit": {
             "anyOf": [
@@ -11136,7 +11171,7 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_7"
+                "$ref": "#/components/schemas/Union_8"
               }
             ]
           },
@@ -11726,17 +11761,6 @@
         },
         "required": ["_tag", "message"],
         "additionalProperties": false
-      },
-      "Union_8": {
-        "anyOf": [
-          {
-            "type": "string",
-            "enum": ["true", "false"]
-          },
-          {
-            "type": "null"
-          }
-        ]
       },
       "SessionTransfer.Data": {
         "type": "object",
@@ -12634,7 +12658,7 @@
             "type": "number"
           },
           {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_8"
           }
         ]
       },
@@ -12779,7 +12803,7 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_7"
+                "$ref": "#/components/schemas/Union_8"
               }
             ]
           },
@@ -12789,7 +12813,7 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_7"
+                "$ref": "#/components/schemas/Union_8"
               }
             ]
           },
@@ -12799,7 +12823,7 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_7"
+                "$ref": "#/components/schemas/Union_8"
               }
             ]
           }
@@ -12835,7 +12859,7 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_7"
+                "$ref": "#/components/schemas/Union_8"
               }
             ]
           },
@@ -12845,7 +12869,7 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_7"
+                "$ref": "#/components/schemas/Union_8"
               }
             ]
           },
@@ -12855,7 +12879,7 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_7"
+                "$ref": "#/components/schemas/Union_8"
               }
             ]
           }
@@ -14272,7 +14296,7 @@
             ]
           },
           "status": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "command": {
             "type": "string"

@@ -116,6 +116,9 @@ export type Endpoint5_1Input = {
   readonly to?: number | undefined
   readonly project?: Project.ID | undefined
   readonly timezone?: string | undefined
+  readonly models?: boolean | undefined
+  readonly tools?: boolean | undefined
+  readonly toolSummary?: boolean | undefined
 }
 export type Endpoint5_1Output = {
   readonly range: { readonly from: DateTime.Utc; readonly to: DateTime.Utc }

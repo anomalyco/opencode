@@ -2473,25 +2473,64 @@ export type SessionStatsInput = {
     readonly to?: number | undefined
     readonly project?: string | undefined
     readonly timezone?: string | undefined
+    readonly models?: boolean | undefined
+    readonly tools?: boolean | undefined
+    readonly toolSummary?: boolean | undefined
   }["from"]
   readonly to?: {
     readonly from?: number | undefined
     readonly to?: number | undefined
     readonly project?: string | undefined
     readonly timezone?: string | undefined
+    readonly models?: boolean | undefined
+    readonly tools?: boolean | undefined
+    readonly toolSummary?: boolean | undefined
   }["to"]
   readonly project?: {
     readonly from?: number | undefined
     readonly to?: number | undefined
     readonly project?: string | undefined
     readonly timezone?: string | undefined
+    readonly models?: boolean | undefined
+    readonly tools?: boolean | undefined
+    readonly toolSummary?: boolean | undefined
   }["project"]
   readonly timezone?: {
     readonly from?: number | undefined
     readonly to?: number | undefined
     readonly project?: string | undefined
     readonly timezone?: string | undefined
+    readonly models?: boolean | undefined
+    readonly tools?: boolean | undefined
+    readonly toolSummary?: boolean | undefined
   }["timezone"]
+  readonly models?: {
+    readonly from?: number | undefined
+    readonly to?: number | undefined
+    readonly project?: string | undefined
+    readonly timezone?: string | undefined
+    readonly models?: boolean | undefined
+    readonly tools?: boolean | undefined
+    readonly toolSummary?: boolean | undefined
+  }["models"]
+  readonly tools?: {
+    readonly from?: number | undefined
+    readonly to?: number | undefined
+    readonly project?: string | undefined
+    readonly timezone?: string | undefined
+    readonly models?: boolean | undefined
+    readonly tools?: boolean | undefined
+    readonly toolSummary?: boolean | undefined
+  }["tools"]
+  readonly toolSummary?: {
+    readonly from?: number | undefined
+    readonly to?: number | undefined
+    readonly project?: string | undefined
+    readonly timezone?: string | undefined
+    readonly models?: boolean | undefined
+    readonly tools?: boolean | undefined
+    readonly toolSummary?: boolean | undefined
+  }["toolSummary"]
 }
 
 export type SessionStatsOutput = { data: SessionStatsInfo }["data"]
