@@ -64,9 +64,11 @@ const baseLayer = Layer.effect(
     const location = yield* Location.Service
     const search = yield* FileSystemSearch.Service
     // Workspace-placed directories exist only inside the workspace, so a host
-    // realpath probe consults the wrong filesystem and would block boot on
-    // servers without a matching local directory. Treat the configured
-    // directory as canonical; local placements keep symlink canonicalization.
+    // realpath probe at boot consults the wrong filesystem and would block
+    // construction on servers without a matching local directory. Treat the
+    // configured directory as canonical; local placements keep symlink
+    // canonicalization. This skip is boot-only: resolve/read/list below still
+    // access the host filesystem per operation (tracked in #44568).
     const root = location.workspaceID ? location.directory : yield* fs.realPath(location.directory).pipe(Effect.orDie)
     const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
       const absolute = path.resolve(location.directory, input ?? ".")

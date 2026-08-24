@@ -63,8 +63,9 @@ describe("FileSystem", () => {
   it.live("skips host canonicalization for workspace locations at boot", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        // The directory exists only inside the workspace, so booting the
-        // service must not probe the host filesystem.
+        // The directory exists only inside the workspace, so boot must not
+        // require it to exist on the host. Operations still access the host
+        // filesystem per call (#44568); only boot canonicalization is skipped.
         const missing = path.join(directory, "workspace-only")
         const workspace = yield* FileSystem.Service.pipe(
           provide(missing, Workspace.ID.make("wrk_filesystem")),
