@@ -1,4 +1,5 @@
 import { createMemo, createSignal, Show } from "solid-js"
+import { useLocal } from "../../context/local"
 import { useRouteData } from "../../context/route"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
@@ -29,6 +30,7 @@ export function resolveSubagentVariant(
 export function SubagentFooter() {
   const route = useRouteData("session")
   const sync = useSync()
+  const local = useLocal()
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const session = createMemo(() => sync.session.get(route.sessionID))
 
@@ -87,6 +89,10 @@ export function SubagentFooter() {
   })
 
   const { theme } = useTheme()
+  const agentColor = createMemo(() => {
+    const agent = session()?.agent
+    return agent ? local.agent.color(agent) : theme.text
+  })
   const keymap = useOpencodeKeymap()
   const parentShortcut = useCommandShortcut("session.parent")
   const previousShortcut = useCommandShortcut("session.child.previous")
@@ -134,7 +140,7 @@ export function SubagentFooter() {
           </Show>
           <box flexDirection="row" justifyContent="space-between" gap={1}>
             <box flexDirection="row" gap={1}>
-              <text fg={theme.text}>
+              <text fg={agentColor()}>
                 <b>{subagentInfo().label}</b>
               </text>
               <Show when={subagentInfo().total > 0}>
