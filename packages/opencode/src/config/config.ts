@@ -225,6 +225,7 @@ const layer = Layer.effect(
         ),
       )
       const parsed = ConfigParse.jsonc(expanded, source)
+      if (isRecord(parsed) && isRecord(parsed.mcp)) parsed.mcp = ConfigMCPV1.normalizeServers(parsed.mcp)
       const data = ConfigParse.schema(ConfigV1.Info, normalizeLoadedConfig(parsed), source)
       if (!("path" in options)) return data
 
@@ -245,7 +246,8 @@ const layer = Layer.effect(
     })
 
     // .agents/mcp.json holds only MCP server definitions; contents are validated against the `mcp` record schema
-    // and merged as if they were declared under the "mcp" key of a config file.
+    // and merged as if they were declared under the "mcp" key of a config file. A "mcpServers" or "servers"
+    // wrapper (Claude Desktop / Gemini CLI style) is accepted and unwrapped.
     const loadMcpFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>) {
       yield* Effect.logInfo("loading", { path: filepath })
       const text = yield* readConfigFile(filepath)
@@ -253,12 +255,17 @@ const layer = Layer.effect(
       const expanded = yield* Effect.promise(() =>
         ConfigVariable.substitute({ text, type: "path", path: filepath, env }),
       )
-      const servers = ConfigParse.schema(
+      const parsed = ConfigParse.jsonc(expanded, filepath)
+      let servers = parsed
+      if (isRecord(parsed) && isRecord(parsed.mcpServers)) servers = parsed.mcpServers
+      else if (isRecord(parsed) && isRecord(parsed.servers)) servers = parsed.servers
+      servers = ConfigMCPV1.normalizeServers(servers)
+      const validated = ConfigParse.schema(
         Schema.Record(Schema.String, Schema.Union([ConfigMCPV1.Info, Schema.Struct({ enabled: Schema.Boolean })])),
-        ConfigParse.jsonc(expanded, filepath),
+        servers,
         filepath,
       )
-      return { mcp: servers } as Info
+      return { mcp: validated } as Info
     })
 
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {

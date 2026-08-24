@@ -1567,6 +1567,56 @@ it.instance(".agents/mcp.json overrides mcp key from .agents/opencode.json", () 
   }),
 )
 
+it.instance(".agents/mcp.json accepts vendor shorthand server formats", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      {
+        stripe: { httpUrl: "https://mcp.stripe.com" },
+        jira: {
+          command: "npx",
+          args: ["-y", "@nexus2520/jira-mcp-server"],
+          env: { JIRA_EMAIL: "test@example.com", JIRA_API_TOKEN: "{env:PATH}" },
+        },
+        supabase: { url: "https://mcp.supabase.com/mcp", enabled: false },
+      },
+      "mcp.json",
+    )
+
+    const config = yield* Config.use.get()
+    const stripe = config.mcp?.stripe
+    expect(stripe && "type" in stripe ? stripe.type : undefined).toBe("remote")
+    expect(stripe && "url" in stripe ? stripe.url : undefined).toBe("https://mcp.stripe.com")
+    const jira = config.mcp?.jira
+    expect(jira && "type" in jira ? jira.type : undefined).toBe("local")
+    expect(jira && "command" in jira ? jira.command : undefined).toEqual(["npx", "-y", "@nexus2520/jira-mcp-server"])
+    expect(jira && "environment" in jira ? jira.environment : undefined).toEqual({
+      JIRA_EMAIL: "test@example.com",
+      JIRA_API_TOKEN: process.env.PATH ?? "",
+    })
+    expect(config.mcp?.supabase?.enabled).toBe(false)
+  }),
+)
+
+it.instance(".agents/mcp.json accepts mcpServers and servers wrappers", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      { servers: { stripe: { httpUrl: "https://mcp.stripe.com" } } },
+      "mcp.json",
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.mcp?.stripe && "url" in config.mcp.stripe ? config.mcp.stripe.url : undefined).toBe(
+      "https://mcp.stripe.com",
+    )
+  }),
+)
+
 const remoteProjectOverride = wellKnown({
   config: {
     mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: false } },

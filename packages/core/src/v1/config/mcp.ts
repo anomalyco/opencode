@@ -61,3 +61,46 @@ export type Remote = Schema.Schema.Type<typeof Remote>
 
 export const Info = Schema.Union([Local, Remote]).annotate({ discriminator: "type" })
 export type Info = Schema.Schema.Type<typeof Info>
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+// Vendors publish MCP snippets in shorthand forms (Claude Desktop, VS Code, Gemini CLI):
+// `{"command": "npx", "args": [...], "env": {...}}` or `{"httpUrl": "..."}`. Expand those
+// into the canonical tagged form so users can paste vendor docs without hand-translating.
+export function normalizeServer(input: unknown): unknown {
+  if (!isRecord(input) || "type" in input) return input
+
+  if ("command" in input || "args" in input) {
+    const args = Array.isArray(input.args) ? input.args : []
+    const command = typeof input.command === "string" ? [input.command, ...args] : Array.isArray(input.command) ? [...input.command, ...args] : undefined
+    if (!command) return input
+    return {
+      type: "local",
+      command,
+      ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+      ...(input.env !== undefined ? { environment: input.env } : {}),
+      ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+      ...(input.timeout !== undefined ? { timeout: input.timeout } : {}),
+    }
+  }
+
+  const url = typeof input.url === "string" ? input.url : typeof input.httpUrl === "string" ? input.httpUrl : undefined
+  if (url) {
+    return {
+      type: "remote",
+      url,
+      ...(input.headers !== undefined ? { headers: input.headers } : {}),
+      ...(input.oauth !== undefined ? { oauth: input.oauth } : {}),
+      ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+      ...(input.timeout !== undefined ? { timeout: input.timeout } : {}),
+    }
+  }
+
+  return input
+}
+
+export function normalizeServers(servers: unknown): unknown {
+  if (!isRecord(servers)) return servers
+  return Object.fromEntries(Object.entries(servers).map(([name, spec]) => [name, normalizeServer(spec)]))
+}

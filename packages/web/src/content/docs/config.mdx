@@ -141,7 +141,12 @@ It supports two config files, both merged after root-level `opencode.json` (so t
 }
 ```
 
-Note that `mcp.json` contains the server map directly - there is no outer `"mcp"` wrapper.
+Note that `mcp.json` contains the server map directly - there is no outer `"mcp"` wrapper. A `"mcpServers"` or `"servers"` wrapper is also accepted.
+
+Shorthand server formats are expanded automatically, so snippets copied from vendor docs usually work as-is:
+
+- `{"httpUrl": "..."} ` or a bare `{"url": "..."}` is treated as a remote server
+- `{"command": "npx", "args": ["-y", "pkg"], "env": {...}}` is treated as a local server (`args` appended to `command`, `env` mapped to `environment`)
 
 Root-level `opencode.json` files continue to work and are loaded first, with `.agents` config taking precedence over them.
 
