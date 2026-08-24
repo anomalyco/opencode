@@ -344,4 +344,18 @@ describe("SessionRunnerModel", () => {
       expect(SessionRunnerModel.supported(model({ type: "native", settings: {} }))).toBe(false)
     }),
   )
+
+  it.effect("routes GitHub Copilot SDK models through OpenAI-compatible chat", () =>
+    Effect.gen(function* () {
+      const api = { type: "aisdk", package: "@ai-sdk/github-copilot", url: "https://copilot.example/api" } as const
+
+      expect(SessionRunnerModel.supported(model(api))).toBe(true)
+
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(model(api))
+      expect(resolved.route).toMatchObject({
+        id: "openai-compatible-chat",
+        endpoint: { baseURL: "https://copilot.example/api" },
+      })
+    }),
+  )
 })
