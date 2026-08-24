@@ -107,9 +107,12 @@ export const shouldRestartStalledStream = (input: {
   /** Retries consumed so far; the first attempt passes 0. */
   readonly retry: number
   readonly interrupted: boolean
+  /** A context-overflow providerError event arrived this attempt; compaction must handle it, not a resend. */
+  readonly providerOverflow: boolean
 }) =>
   !input.interrupted &&
   !input.assistantStarted &&
+  !input.providerOverflow &&
   input.retry < STREAM_IDLE_RETRIES &&
   isStreamIdleTimeout(input.failure)
 
@@ -317,6 +320,7 @@ const layer = Layer.effect(
                 assistantStarted: publisher.hasAssistantStarted(),
                 retry,
                 interrupted: stream._tag === "Failure" && Cause.hasInterrupts(stream.cause),
+                providerOverflow: overflowFailure !== undefined,
               })
             )
               return { restart: true, needsContinuation: false, step: currentStep }

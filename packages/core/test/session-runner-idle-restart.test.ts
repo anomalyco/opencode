@@ -15,6 +15,7 @@ const restart = (failure: unknown, overrides?: Partial<Parameters<typeof shouldR
     assistantStarted: false,
     retry: 0,
     interrupted: false,
+    providerOverflow: false,
     ...overrides,
   })
 
@@ -35,6 +36,10 @@ describe("shouldRestartStalledStream", () => {
 
   it("never restarts an interrupted stream", () => {
     expect(restart(idleTimeout(), { interrupted: true })).toBe(false)
+  })
+
+  it("never restarts after a provider overflow event", () => {
+    expect(restart(idleTimeout(), { providerOverflow: true })).toBe(false)
   })
 
   it("only restarts on the typed IdleTimeout transport failure", () => {
