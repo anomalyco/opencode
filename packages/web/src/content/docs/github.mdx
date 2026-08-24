@@ -70,7 +70,7 @@ Or you can set it up manually.
            with:
              model: anthropic/claude-sonnet-4-20250514
              # share: true
-             # github_token: xxxx
+             # use_github_token: true
    ```
 
 3. **Store the API keys in secrets**
@@ -85,9 +85,12 @@ Or you can set it up manually.
 - `agent`: The agent to use. Must be a primary agent. Falls back to `default_agent` from config or `"build"` if not found.
 - `share`: Whether to share the OpenCode session. Defaults to **true** for public repositories.
 - `prompt`: Optional custom prompt to override the default behavior. Use this to customize how OpenCode processes requests.
-- `token`: Optional GitHub access token for performing operations such as creating comments, committing changes, and opening pull requests. By default, OpenCode uses the installation access token from the OpenCode GitHub App, so commits, comments, and pull requests appear as coming from the app.
+- `mentions`: Comma-separated list of trigger phrases, case-insensitive. Defaults to `/opencode,/oc`.
+- `variant`: Model variant for provider-specific reasoning effort, for example `high`, `max`, or `minimal`.
+- `oidc_base_url`: Base URL for the OIDC token exchange API. Only needed when running a custom GitHub App install. Defaults to `https://api.opencode.ai`.
+- `use_github_token`: Set to `true` to use the workflow's `GITHUB_TOKEN` instead of the OpenCode App token exchange. Defaults to `false`. By default, OpenCode uses the installation access token from the OpenCode GitHub App, so commits, comments, and pull requests appear as coming from the app.
 
-  Alternatively, you can use the GitHub Action runner's [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) without installing the OpenCode GitHub App. Just make sure to grant the required permissions in your workflow:
+  This lets you use the GitHub Action runner's [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) without installing the OpenCode GitHub App. Pass the token through `env` as `GITHUB_TOKEN` (it is required when `use_github_token` is enabled) and grant the required permissions in your workflow:
 
   ```yaml
   permissions:
