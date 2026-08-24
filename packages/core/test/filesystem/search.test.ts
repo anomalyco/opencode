@@ -15,6 +15,22 @@ import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { location } from "../fixture/location"
 
+const ripgrepStub = (entry: string, onFind: (input: Ripgrep.FindInput) => void) =>
+  Layer.succeed(
+    Ripgrep.Service,
+    Ripgrep.Service.of({
+      find: (input) =>
+        Effect.gen(function* () {
+          onFind(input)
+          if (input.onEntry)
+            yield* input.onEntry(FileSystem.Entry.make({ path: RelativePath.make(entry), type: "file" }))
+          return []
+        }),
+      glob: () => Effect.succeed([]),
+      grep: () => Effect.succeed([]),
+    }),
+  )
+
 describe("FileSystemSearch", () => {
   test("honors wildcard directory rules from .gitignore", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-fff-ignore-"))
@@ -55,6 +71,8 @@ describe("FileSystemSearch", () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-search-workspace-"))
     try {
       // A local file that only an fff index of the server directory could surface.
+      // The fff-vs-ripgrep discrimination only bites where Fff.available() is
+      // true; elsewhere the layer choice already falls back to ripgrep.
       await Bun.write(path.join(directory, "server-local.ts"), "server local")
       let observed: Ripgrep.FindInput | undefined
       const ref = Location.Ref.make({
@@ -71,23 +89,7 @@ describe("FileSystemSearch", () => {
             ),
           ),
         ],
-        [
-          Ripgrep.node,
-          Layer.succeed(
-            Ripgrep.Service,
-            Ripgrep.Service.of({
-              find: (input) =>
-                Effect.gen(function* () {
-                  observed = input
-                  if (input.onEntry)
-                    yield* input.onEntry(FileSystem.Entry.make({ path: RelativePath.make("remote.ts"), type: "file" }))
-                  return []
-                }),
-              glob: () => Effect.succeed([]),
-              grep: () => Effect.succeed([]),
-            }),
-          ),
-        ],
+        [Ripgrep.node, ripgrepStub("remote.ts", (input) => (observed = input))],
       ])
 
       await Effect.runPromise(
@@ -116,23 +118,7 @@ describe("FileSystemSearch", () => {
           ),
         ),
       ],
-      [
-        Ripgrep.node,
-        Layer.succeed(
-          Ripgrep.Service,
-          Ripgrep.Service.of({
-            find: (input) =>
-              Effect.gen(function* () {
-                observed = input
-                if (input.onEntry)
-                  yield* input.onEntry(FileSystem.Entry.make({ path: RelativePath.make("src/index.ts"), type: "file" }))
-                return []
-              }),
-            glob: () => Effect.succeed([]),
-            grep: () => Effect.succeed([]),
-          }),
-        ),
-      ],
+      [Ripgrep.node, ripgrepStub("src/index.ts", (input) => (observed = input))],
     ])
 
     await Effect.runPromise(
