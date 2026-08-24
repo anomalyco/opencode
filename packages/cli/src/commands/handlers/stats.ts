@@ -5,31 +5,33 @@ import { EOL } from "node:os"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
+import { errorMessage } from "../../ui/prompt"
 
-export default Runtime.handler(
-  Commands.commands.stats,
-  Effect.fn("cli.stats")(function* (input) {
-    const days = Option.getOrUndefined(input.days)
-    const year = Option.getOrUndefined(input.year)
-    const project = Option.getOrUndefined(input.project)
-    if ([days !== undefined, year !== undefined, input.all].filter(Boolean).length > 1)
-      yield* Effect.fail(new Error("--days, --year, and --all cannot be combined"))
+const handler = Effect.fn("cli.stats")(function* (input: Runtime.Input<typeof Commands.commands.stats>) {
+  const days = Option.getOrUndefined(input.days)
+  const year = Option.getOrUndefined(input.year)
+  const project = Option.getOrUndefined(input.project)
+  if ([days !== undefined, year !== undefined, input.all].filter(Boolean).length > 1)
+    yield* Effect.fail(new Error("--days, --year, and --all cannot be combined"))
 
-    const server = yield* ServerConnection.resolve({
-      server: Option.getOrUndefined(input.server),
-      standalone: input.standalone,
-    })
-    const client = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
-    const range = statsRange({ days, year, all: input.all })
-    const projectID =
-      project === "."
-        ? yield* Effect.promise(() =>
-            client.location.get({ location: { directory: process.cwd() } }).then((location) => location.project.id),
-          )
-        : project
-    const details = input.models || input.tools || input.cost || input.full
-    const stats = yield* Effect.promise(() =>
-      client.session.stats({
+  const server = yield* ServerConnection.resolve({
+    server: Option.getOrUndefined(input.server),
+    standalone: input.standalone,
+  })
+  const client = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
+  const range = statsRange({ days, year, all: input.all })
+  const projectID =
+    project === "."
+      ? yield* request(server.endpoint.url, (signal) =>
+          client.location
+            .get({ location: { directory: process.cwd() } }, { signal })
+            .then((location) => location.project.id),
+        )
+      : project
+  const details = input.models || input.tools || input.cost || input.full
+  const stats = yield* request(server.endpoint.url, (signal) =>
+    client.session.stats(
+      {
         from: range.from,
         to: range.to,
         project: projectID,
@@ -37,23 +39,42 @@ export default Runtime.handler(
         models: input.json || input.models || input.full,
         tools: input.json || input.tools || input.full,
         toolSummary: input.json || input.tools || input.full || !details,
+      },
+      { signal },
+    ),
+  )
+  const output = input.json
+    ? JSON.stringify(stats, null, 2)
+    : renderStats(stats, {
+        label: range.label,
+        scope: project === undefined ? "all projects" : project === "." ? "current project" : "selected project",
+        models: input.models || input.full,
+        tools: input.tools || input.full,
+        cost: input.cost || input.full,
+        limit: input.limit,
+        color: process.stdout.isTTY && process.env.NO_COLOR === undefined,
+        width: process.stdout.columns ?? 80,
+      })
+  process.stdout.write(output + EOL)
+})
+
+export default Runtime.handler(Commands.commands.stats, (input) =>
+  handler(input).pipe(
+    Effect.catch((error) =>
+      Effect.sync(() => {
+        process.stderr.write(errorMessage(error) + EOL)
+        process.exitCode = 1
       }),
-    )
-    const output = input.json
-      ? JSON.stringify(stats, null, 2)
-      : renderStats(stats, {
-          label: range.label,
-          scope: project === undefined ? "all projects" : project === "." ? "current project" : "selected project",
-          models: input.models || input.full,
-          tools: input.tools || input.full,
-          cost: input.cost || input.full,
-          limit: input.limit,
-          color: process.stdout.isTTY && process.env.NO_COLOR === undefined,
-          width: process.stdout.columns ?? 80,
-        })
-    process.stdout.write(output + EOL)
-  }),
+    ),
+  ),
 )
+
+function request<A>(url: string, run: (signal: AbortSignal) => Promise<A>) {
+  return Effect.tryPromise({
+    try: () => run(AbortSignal.timeout(30_000)),
+    catch: (cause) => new Error(`Could not reach server at ${url}`, { cause }),
+  })
+}
 
 type RenderOptions = {
   label: string
