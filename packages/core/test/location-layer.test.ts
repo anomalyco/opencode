@@ -3,7 +3,20 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
-import { DateTime, Deferred, Duration, Effect, Equal, Fiber, Hash, Layer, LayerMap, RcMap, Schema, Stream } from "effect"
+import {
+  DateTime,
+  Deferred,
+  Duration,
+  Effect,
+  Equal,
+  Fiber,
+  Hash,
+  Layer,
+  LayerMap,
+  RcMap,
+  Schema,
+  Stream,
+} from "effect"
 import { TestClock } from "effect/testing"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
 import { Agent } from "@opencode-ai/core/agent"
@@ -23,6 +36,7 @@ import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
+import { Workspace } from "@opencode-ai/core/workspace"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
@@ -61,10 +75,9 @@ const activityLocations = Layer.effect(
   ),
 )
 const itWithActivity = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, LocationServiceMap.node, LocationActivity.node]),
-    [[LocationServiceMap.node, activityLocations]],
-  ),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node, LocationActivity.node]), [
+    [LocationServiceMap.node, activityLocations],
+  ]),
 )
 
 describe("LocationServiceMap", () => {
@@ -110,6 +123,35 @@ describe("LocationServiceMap", () => {
           yield* Effect.promise(() => fs.mkdir(directory))
           const location = yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
           expect(location.directory).toBe(ref.directory)
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps a workspace location admitted when its directory does not exist locally", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const locations = yield* LocationServiceMap.Service
+          const directory = AbsolutePath.make(path.join(dir.path, "workspace-only"))
+          const workspaceRef = Location.Ref.make({ directory, workspaceID: Workspace.ID.make("wrk_liveness") })
+          const localRef = Location.Ref.make({ directory })
+
+          // The directory only exists inside the workspace, so liveness must
+          // not consult the local filesystem. Boot outcome is not the subject
+          // here: parts of the location graph still read the host filesystem,
+          // so only assert that the entry survives release instead of being
+          // evicted by a zero idle time-to-live.
+          yield* Location.Service.pipe(Effect.provide(locations.get(workspaceRef)), Effect.scoped, Effect.exit)
+          expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([workspaceRef])
+
+          // A local ref with the same missing directory keeps the existing
+          // behavior: dropped as soon as it goes idle so a retry can rebuild it.
+          yield* Location.Service.pipe(Effect.provide(locations.get(localRef)), Effect.scoped, Effect.exit)
+          expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([workspaceRef])
         }),
       ),
     ),
