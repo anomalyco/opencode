@@ -1,4 +1,4 @@
-import { OpenCode, type SessionStatsInfo } from "@opencode-ai/client"
+import { ClientError, OpenCode, type SessionStatsInfo } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/effect/service"
 import { Effect, Option } from "effect"
 import { EOL } from "node:os"
@@ -67,10 +67,13 @@ export default Runtime.handler(Commands.commands.stats, (input) =>
   ),
 )
 
-function request<A>(url: string, run: (signal: AbortSignal) => Promise<A>) {
+export function request<A>(url: string, run: (signal: AbortSignal) => Promise<A>) {
   return Effect.tryPromise({
     try: () => run(AbortSignal.timeout(30_000)),
-    catch: (cause) => new Error(`Could not reach server at ${url}`, { cause }),
+    catch: (cause) =>
+      cause instanceof ClientError && cause.reason === "Transport"
+        ? new Error(`Could not reach server at ${url}`, { cause })
+        : cause,
   })
 }
 

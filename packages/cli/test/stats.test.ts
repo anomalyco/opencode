@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionStatsInfo } from "@opencode-ai/client"
-import { renderStats } from "../src/commands/handlers/stats"
+import { ClientError, type SessionStatsInfo } from "@opencode-ai/client"
+import { Effect } from "effect"
+import { renderStats, request } from "../src/commands/handlers/stats"
 
 const tools = {
   mode: "detail",
@@ -118,6 +119,26 @@ describe("stats rendering", () => {
       options({ width: 20 }),
     )
     expect(output).toContain("activity · last 16 weeks")
+  })
+})
+
+describe("stats requests", () => {
+  test("maps transport failures to the server URL", async () => {
+    const cause = new ClientError("Transport")
+    const error = await Effect.runPromise(Effect.flip(request("http://localhost:4096", () => Promise.reject(cause))))
+    expect(error).toEqual(new Error("Could not reach server at http://localhost:4096", { cause }))
+  })
+
+  test("preserves declared API errors", async () => {
+    const cause = { _tag: "InvalidRequestError", message: "Stats range must end after it starts" } as const
+    const error = await Effect.runPromise(Effect.flip(request("http://localhost:4096", () => Promise.reject(cause))))
+    expect(error).toBe(cause)
+  })
+
+  test("preserves unexpected response failures", async () => {
+    const cause = new ClientError("UnexpectedStatus", { cause: { status: 500 } })
+    const error = await Effect.runPromise(Effect.flip(request("http://localhost:4096", () => Promise.reject(cause))))
+    expect(error).toBe(cause)
   })
 })
 
