@@ -445,6 +445,8 @@ export class Subscription {
   private async toolStart(sessionId: string, part: ToolPart, cwd: string) {
     if (this.toolStarts.has(part.callID)) return
     this.toolStarts.add(part.callID)
+    // v2: the first tool_call_update for an unseen toolCallId creates the tool call.
+    // v1: a separate tool_call notification creates it, then tool_call_update patches it.
     const toolCall = pendingToolCall({
       toolCallId: part.callID,
       toolName: part.tool,
@@ -453,33 +455,12 @@ export class Subscription {
     })
     // v2: the first tool_call_update for an unseen toolCallId creates the tool call.
     // v1: a separate tool_call notification creates it, then tool_call_update patches it.
-    if (this.input.isV2?.()) {
-      await this.input.connection.sessionUpdate({
-        sessionId,
-        update: {
-          sessionUpdate: "tool_call_update",
-          ...pendingToolCall({
-            toolCallId: part.callID,
-            toolName: part.tool,
-            state: part.state,
-            cwd,
-          }),
-        },
-      })
-    } else {
-      await this.input.connection.sessionUpdate({
-        sessionId,
-        update: {
-          sessionUpdate: "tool_call",
-          ...pendingToolCall({
-            toolCallId: part.callID,
-            toolName: part.tool,
-            state: part.state,
-            cwd,
-          }),
-        },
-      })
-    }
+    await this.input.connection.sessionUpdate({
+      sessionId,
+      update: this.input.isV2?.()
+        ? { sessionUpdate: "tool_call_update", ...toolCall }
+        : { sessionUpdate: "tool_call", ...toolCall },
+    })
   }
 
   private clearTool(toolCallId: string) {
@@ -510,7 +491,9 @@ export class Subscription {
       terminalUpdate.output = { data: Buffer.from(output).toString("base64") }
     }
     if (exited) {
-      const exitCode = typeof input.exitCode === "number" ? input.exitCode : 0
+      const metadata = ("metadata" in part.state ? part.state.metadata : undefined) as
+        Record<string, unknown> | undefined
+      const exitCode = typeof metadata?.exit === "number" ? metadata.exit : 0
       terminalUpdate.exitStatus = { exitCode }
     }
     await this.input.connection.sessionUpdate({
@@ -548,11 +531,14 @@ function v2DiffContent(content: ToolCallContent): ToolCallContent {
   if (!("type" in content) || content.type !== "diff") return content
   const v1Diff = content as unknown as { type: "diff"; path: string; oldText: string; newText: string }
   if (!v1Diff.path) return content
+  if (typeof v1Diff.oldText !== "string" || typeof v1Diff.newText !== "string") return content
 
   const raw = createTwoFilesPatch(v1Diff.path, v1Diff.path, v1Diff.oldText, v1Diff.newText, undefined, undefined, {
     context: 3,
   })
-  // Strip Index: and === separator lines, prepend diff --git header for git_patch format
+  // createTwoFilesPatch emits "Index:" and a "===" separator line that are not
+  // part of git_patch format. Body lines always start with ' ', '+', or '-',
+  // so filtering "=======" is safe.
   const hunks = raw
     .split("\n")
     .filter((line) => !line.startsWith("Index: ") && !line.startsWith("======="))
