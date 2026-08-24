@@ -162,7 +162,7 @@ const HOSTED_TOOLS = {
 } as const satisfies ResponsesHostedTools.Definitions
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
-  if (event.type === "response.reasoning_text.delta" || event.type === "response.reasoning_summary.delta")
+  if (event.type === "response.reasoning_text.delta")
     return event.item_id
       ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)

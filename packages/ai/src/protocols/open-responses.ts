@@ -1186,7 +1186,6 @@ export const step = (state: ParserState, event: Event) => {
   if (
     event.type === "response.reasoning.done" ||
     event.type === "response.reasoning_summary_text.done" ||
-    event.type === "response.reasoning_summary.done" ||
     event.type === "response.reasoning_text.done"
   ) {
     if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
