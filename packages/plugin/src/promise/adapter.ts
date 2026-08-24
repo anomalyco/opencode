@@ -325,9 +325,10 @@ export function fromPromise(plugin: Plugin) {
           },
         }
 
-        const cleanup = yield* Effect.promise(() => Promise.resolve(plugin.setup(context2)))
-        if (!cleanup) return
-        yield* Effect.addFinalizer(() => Effect.promise(() => Promise.resolve(cleanup())))
+        yield* Effect.acquireRelease(
+          Effect.promise(() => Promise.resolve(plugin.setup(context2))),
+          (cleanup) => (cleanup ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
+        )
       }),
   })
 }

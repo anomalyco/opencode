@@ -17,7 +17,9 @@
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./workerd": "./src/workerd.ts"
+    "./effect": "./src/effect/index.ts",
+    "./workerd": "./src/workerd.ts",
+    "./workerd/effect": "./src/effect/workerd.ts"
   },
   "scripts": {
     "build": "bun run script/build.ts",
@@ -28,6 +30,7 @@
   "dependencies": {
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/server": "workspace:*",
     "@opencode-ai/util": "workspace:*",

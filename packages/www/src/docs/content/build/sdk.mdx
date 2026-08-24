@@ -2,16 +2,7 @@
 title: "SDK"
 ---
 
-We're working on a general-purpose SDK for embedding OpenCode directly inside
-your application. The regular SDK is coming soon.
-
-An Effect-native version is available now for applications built with Effect.
-Its current documentation is below. For other applications, run OpenCode as a
-server and use the [TypeScript client](/build/client) in the meantime.
-
-## Effect
-
-`@opencode-ai/sdk` hosts OpenCode in-process. Unlike the
+`@opencode-ai/sdk` hosts OpenCode directly inside your application. Unlike the
 [network client](/build/client), it assembles the OpenCode server and routes API
 calls through its HTTP router in memory. It opens no HTTP listener and adds no
 network hop between the client and server.
@@ -23,54 +14,119 @@ network hop between the client and server.
 
 ## Create a host
 
-`OpenCode.create()` creates a scoped host. Closing its Effect Scope releases
-the router, location services, fibers, and scoped plugin registrations.
+`OpenCode.create()` returns an explicitly owned host. Use `await using` to
+release its router, Location services, fibers, and scoped plugin registrations:
 
 ```ts
-import { AbsolutePath, Location, OpenCode } from "@opencode-ai/sdk"
+import { OpenCode } from "@opencode-ai/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+Call `await opencode.close()` explicitly when explicit resource management is
+not available.
+
+The embedded host uses the same Promise values, declared errors, request
+options, and `AsyncIterable` streams as `@opencode-ai/client`. It exposes the
+full generated client and adds the convenience aliases `sessions` and `events`
+for the session and event groups.
+
+## Stream events
+
+```ts
+for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}
+```
+
+Pass an `AbortSignal` through the generated request options, or leave an
+iteration to cancel its response body.
+
+## Register plugins
+
+Call `opencode.plugin(...)` with a Promise plugin definition. Embedded plugins
+use the same discovery and Location-scoped activation path as configured
+plugins.
+
+```ts
+await opencode.plugin({
+  id: "example",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      // Modify the Location's agent catalog.
+    })
+  },
+})
+```
+
+See the [Plugins guide](/build/plugins) for the plugin context and available
+hooks.
+
+## Workerd
+
+Use `@opencode-ai/sdk/workerd` inside a Cloudflare Durable Object. This profile
+uses the object's SQLite storage, persists durable events for eviction recovery,
+and replaces unavailable local filesystem and process services.
+
+Hold one host for the lifetime of the Durable Object instance instead of
+creating one for every request:
+
+```ts
+import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { content: "{}" },
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.health.get())
+  }
+}
+```
+
+Wrangler selects OpenCode's Workerd-safe low-level implementations through the
+`workerd` package condition. Cloudflare may evict a Durable Object without
+running cleanup, so correctness does not depend on `close()` being called.
+
+## Effect
+
+Import the Effect-native API from `@opencode-ai/sdk/effect`. Closing its Effect
+Scope releases the embedded host:
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode-ai/sdk/effect"
 import { Effect } from "effect"
 
 const program = Effect.scoped(
   Effect.gen(function* () {
     const opencode = yield* OpenCode.create()
-    const session = yield* opencode.sessions.create({
+    return yield* opencode.sessions.create({
       location: Location.Ref.make({
         directory: AbsolutePath.make("/workspace"),
       }),
     })
-
-    return yield* opencode.sessions.get({ sessionID: session.id })
   }),
 )
 
 const session = await Effect.runPromise(program)
 ```
 
-The embedded host uses the same routes, middleware, codecs, errors, and schema
-values as `@opencode-ai/client/effect`. It exposes the full generated client and
-adds the convenience aliases `sessions` and `events` for the session and event
-groups.
-
-## Use as a service
-
-Use `OpenCode.layer` when the host should be provided through Effect dependency
-injection:
-
-```ts
-import { OpenCode } from "@opencode-ai/sdk"
-import { Effect } from "effect"
-
-const program = Effect.gen(function* () {
-  const opencode = yield* OpenCode.Service
-  return yield* opencode.sessions.active()
-})
-
-const active = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer)))
-```
-
-## Register plugins
-
-Call `opencode.plugin(...)` to register an embedded V2 plugin. Embedded plugins
-use the same discovery and location-scoped activation path as configured
-plugins. The SDK also exports `Tool` for plugin-defined tools. See the
-[Plugins guide](/build/plugins) for the plugin shape and available hooks.
+Use `OpenCode.layer()` for dependency injection. The Effect-native Workerd
+entrypoint is `@opencode-ai/sdk/workerd/effect`.
