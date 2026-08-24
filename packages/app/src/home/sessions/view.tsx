@@ -1,5 +1,6 @@
 import type { SessionInfo } from "@opencode-ai/client/promise"
-import { createMemo, For, onCleanup, Show, Suspense } from "solid-js"
+import { Key } from "@solid-primitives/keyed"
+import { createMemo, For, Index, onCleanup, Show, Suspense } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -138,25 +139,29 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
             }
           >
             <div ref={props.onSetContent} class="flex flex-col pt-3 pr-3 pb-16">
-              <For each={props.groups}>
+              {/* Index keeps group subtrees mounted when the group arrays are
+                  rebuilt, so store updates cannot recreate rows mid-gesture. */}
+              <Index each={props.groups}>
                 {(group, index) => (
                   <>
                     <HomeSessionGroupHeader
-                      title={group.title}
-                      titleOpacity={props.titleOpacity(group.id)}
-                      onSetRef={(element) => props.onSetHeader(group.id, element)}
-                      elevated={index() === 0}
+                      title={group().title}
+                      titleOpacity={props.titleOpacity(group().id)}
+                      onSetRef={(element) => props.onSetHeader(group().id, element)}
+                      elevated={index === 0}
                     />
-                    <div
-                      class={`flex min-w-0 flex-col gap-px pt-4 ${index() === props.groups.length - 1 ? "" : "mb-6"}`}
-                    >
-                      <For each={group.sessions}>
-                        {(record) => <HomeSessionRow {...props} record={record} rowUI={rowUI} setRowUI={setRowUI} />}
-                      </For>
+                    <div class={`flex min-w-0 flex-col gap-px pt-4 ${index === props.groups.length - 1 ? "" : "mb-6"}`}>
+                      {/* Rows key by session ID: session.sync replaces the
+                          stored session object wholesale, so reference-keyed
+                          rows would be disposed mid-interaction whenever a
+                          sync response lands. */}
+                      <Key each={group().sessions} by={(record) => record.session.id}>
+                        {(record) => <HomeSessionRow {...props} record={record()} rowUI={rowUI} setRowUI={setRowUI} />}
+                      </Key>
                     </div>
                   </>
                 )}
-              </For>
+              </Index>
             </div>
           </Show>
         </Suspense>
@@ -442,24 +447,24 @@ function HomeSessionRow(
   const sessionID = () => props.record.session.id
   const menu = () => (props.rowUI.menu?.id === sessionID() ? props.rowUI.menu : undefined)
   const editor = () => (props.rowUI.editor?.id === sessionID() ? props.rowUI.editor : undefined)
-  let titleRef: HTMLInputElement | undefined
-  let rowRef: HTMLButtonElement | undefined
   let longPressTimer: ReturnType<typeof setTimeout> | undefined
   let longPressStart: { x: number; y: number } | undefined
   let suppressClick = false
   let menuInteractedOutside = false
 
+  // Focus targets are looked up by session ID: session store updates recreate
+  // row components, so instance refs can point at detached nodes by the time
+  // deferred focus runs.
+  const rowSelector = () => `[data-component="home-session-row-container"][data-session-id="${sessionID()}"]`
+  const rowButton = () =>
+    document.querySelector<HTMLButtonElement>(`${rowSelector()} [data-component="home-session-row"]`)
+  const renameInput = () =>
+    document.querySelector<HTMLInputElement>(`${rowSelector()} [data-component="home-session-rename"]`)
+
   const clearLongPress = () => {
     if (longPressTimer !== undefined) clearTimeout(longPressTimer)
     longPressTimer = undefined
     longPressStart = undefined
-  }
-  const finishLongPress = () => {
-    clearLongPress()
-    if (!suppressClick) return
-    setTimeout(() => {
-      suppressClick = false
-    })
   }
   onCleanup(clearLongPress)
 
@@ -471,8 +476,9 @@ function HomeSessionRow(
   const openEditor = () => {
     props.setRowUI("editor", { id: sessionID(), draft: title(), renaming: false })
     requestAnimationFrame(() => {
-      titleRef?.focus()
-      titleRef?.select()
+      const input = renameInput()
+      input?.focus()
+      input?.select()
     })
   }
   const closeEditor = () => {
@@ -486,7 +492,7 @@ function HomeSessionRow(
     const saved = await props.onRenameSession(props.server, props.record.session, current.draft)
     // Disabling the input during the request drops focus to the body; restore
     // it unless the user focused another control while the rename was pending.
-    const restore = document.activeElement === document.body || document.activeElement === titleRef
+    const restore = document.activeElement === document.body || document.activeElement === renameInput()
     props.setRowUI("editor", (value) => {
       if (value?.id !== sessionID()) return value
       return saved ? undefined : { ...value, renaming: false }
@@ -494,10 +500,10 @@ function HomeSessionRow(
     if (!restore) return
     requestAnimationFrame(() => {
       if (saved) {
-        rowRef?.focus()
+        rowButton()?.focus()
         return
       }
-      titleRef?.focus()
+      renameInput()?.focus()
     })
   }
 
@@ -525,10 +531,8 @@ function HomeSessionRow(
               revealProjectOnHover={false}
             />
             <InlineInput
-              ref={(element) => {
-                titleRef = element
-              }}
               data-component="home-session-rename"
+              aria-label={props.language.t("common.rename")}
               dir="auto"
               value={editor()?.draft ?? ""}
               disabled={editor()?.renaming ?? false}
@@ -545,8 +549,10 @@ function HomeSessionRow(
               onKeyDown={(event) => {
                 event.stopPropagation()
                 // Enter and Escape during IME composition commit or cancel
-                // the composition, not the rename.
-                if (event.isComposing) return
+                // the composition, not the rename. Safari can report the
+                // composition-confirming keydown with isComposing false but
+                // keyCode 229.
+                if (event.isComposing || event.keyCode === 229) return
                 if (event.key === "Enter") {
                   event.preventDefault()
                   void saveEditor()
@@ -555,7 +561,7 @@ function HomeSessionRow(
                 if (event.key !== "Escape") return
                 event.preventDefault()
                 closeEditor()
-                requestAnimationFrame(() => rowRef?.focus())
+                requestAnimationFrame(() => rowButton()?.focus())
               }}
               onBlur={closeEditor}
             />
@@ -566,9 +572,6 @@ function HomeSessionRow(
         }
       >
         <button
-          ref={(element) => {
-            rowRef = element
-          }}
           type="button"
           data-component="home-session-row"
           aria-haspopup="menu"
@@ -583,6 +586,7 @@ function HomeSessionRow(
             if (event.button === 1) event.preventDefault()
           }}
           onPointerDown={(event) => {
+            suppressClick = false
             if (event.pointerType !== "touch") return
             clearLongPress()
             const element = event.currentTarget
@@ -601,7 +605,7 @@ function HomeSessionRow(
               return
             clearLongPress()
           }}
-          onPointerUp={finishLongPress}
+          onPointerUp={clearLongPress}
           onPointerCancel={() => {
             clearLongPress()
             suppressClick = false
@@ -613,10 +617,15 @@ function HomeSessionRow(
             openMenu(event.currentTarget, bounds.left + 12, bounds.bottom)
           }}
           onClick={(event) => {
+            // The flag stays set until the long-press compatibility click
+            // arrives, however delayed; keyboard activation (detail 0) is
+            // never that click and passes through.
             if (suppressClick) {
               suppressClick = false
-              event.preventDefault()
-              return
+              if (event.detail !== 0) {
+                event.preventDefault()
+                return
+              }
             }
             props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })
           }}
@@ -669,7 +678,7 @@ function HomeSessionRow(
               const outside = menuInteractedOutside
               menuInteractedOutside = false
               if (outside || editor()) return
-              requestAnimationFrame(() => rowRef?.focus())
+              requestAnimationFrame(() => rowButton()?.focus())
             }}
           >
             <Menu.Item onSelect={openEditor}>{props.language.t("common.rename")}</Menu.Item>

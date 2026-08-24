@@ -149,7 +149,7 @@ export function createHomeSessionsController(home: HomeController) {
         // Rename advances time.updated server-side; re-sync the canonical
         // record so date grouping and ordering do not go stale.
         ctx.data.session.invalidate(session.id)
-        void ctx.data.session.sync(session.id)
+        void ctx.data.session.sync(session.id).catch(() => {})
         queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
           current?.map((item) => (item.id === session.id ? { ...item, title: next } : item)),
         )
@@ -206,9 +206,6 @@ export function createHomeSessionsController(home: HomeController) {
           directory: session.location.directory,
           sessionIDs: ids,
         })
-        // The pre-mutation cancel may have aborted an in-flight index fetch;
-        // refetch so the full server index is not left unloaded.
-        void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
         return true
       })
       .catch((cause) => {
@@ -217,6 +214,12 @@ export function createHomeSessionsController(home: HomeController) {
           description: errorMessage(cause, language.t("session.delete.failed.title")),
         })
         return false
+      })
+      .finally(() => {
+        // Always refetch: the pre-mutation cancel may have aborted an
+        // in-flight index fetch, and a failed delete must not leave the
+        // index unloaded either.
+        void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
       })
   }
 
