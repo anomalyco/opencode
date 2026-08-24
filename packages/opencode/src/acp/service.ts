@@ -96,11 +96,17 @@ export function make(input: {
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
   const sessionSnapshots = new Map<string, Directory.Snapshot>()
-  // v2 is negotiated per-connection in `initialize`: the flag enables it, the client must
-  // request protocolVersion 2. `v2Active` flips true only after a successful v2 handshake,
-  // so the event subscription can start emitting v2 state_update notifications.
+  // ACP over stdio is inherently single-connection-per-process: the CLI's
+  // ndJsonStream binds one stdin/stdout pair to one router.connect() call.
+  // `v2Active` is therefore connection-scoped in practice. If multi-connection
+  // transport (e.g. WebSocket) is added, this must be keyed by connection ID.
   let v2Active = false
+  // Track sessions that already have a running state_update so onBusy doesn't
+  // emit a duplicate after the eager emission on prompt acceptance.
+  const v2Running = new Set<string>()
   const onBusy = Effect.fn("ACP.v2.onBusy")(function* (sessionId: string) {
+    if (v2Running.has(sessionId)) return
+    v2Running.add(sessionId)
     yield* emitV2StateUpdate(input.connection, sessionId, "running")
   })
   const onIdle = Effect.fn("ACP.v2.onIdle")(function* (sessionId: string) {
@@ -119,6 +125,7 @@ export function make(input: {
       ? UsageService.latestAssistantMessage(messages as readonly UsageService.SessionMessage[])
       : undefined
     yield* emitV2StateUpdate(input.connection, sessionId, "idle", stopReasonForMessage(info))
+    v2Running.delete(sessionId)
   })
   const events = input.connection
     ? ACPEvent.start({
@@ -374,6 +381,8 @@ export function make(input: {
     )
     // v2 adds `replayFrom` — when present, replay conversation history as session/update
     // notifications before returning. The v1 SDK type doesn't have this field.
+    // When replaying, no limit is set so the full conversation is fetched.
+    // TODO: add a cap or pagination for very long sessions.
     const replayFrom = (params as unknown as { replayFrom?: { type: string } | null }).replayFrom
     const wantsReplay = replayFrom != null
     const messages = yield* request(
@@ -618,6 +627,7 @@ export function make(input: {
             "session",
           ).pipe(Effect.asVoid)
           yield* emitV2UserMessage(input.connection, current.id, messageId, params.prompt)
+          v2Running.add(current.id)
           yield* emitV2StateUpdate(input.connection, current.id, "running")
           return {} as unknown as PromptResponse
         }
@@ -1140,6 +1150,7 @@ function registerMcpServers(
   return Effect.all(
     servers
       .map((server) => ({ server, config: mcpConfig(server) }))
+      .filter((entry) => entry.config !== undefined)
       .filter((entry) => {
         const key = mcpRegistrationKey(entry.server.name, entry.config)
         if (current.has(key) || pending.has(key)) return false
