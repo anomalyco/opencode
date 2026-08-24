@@ -118,7 +118,12 @@ jobs:
             const query = `
               query($owner: String!, $repo: String!, $number: Int!) {
                 repository(owner: $owner, name: $repo) {
+                  defaultBranchRef {
+                    name
+                  }
                   pullRequest(number: $number) {
+                    baseRefName
+                    body
                     closingIssuesReferences(first: 1) {
                       totalCount
                     }
@@ -133,7 +138,16 @@ jobs:
               number: pr.number
             });
 
-            const linkedIssues = result.repository.pullRequest.closingIssuesReferences.totalCount;
+            // GitHub only creates closing references when a PR targets the
+            // default branch. PRs aimed at release branches like v2 fall back
+            // to an explicit closing-keyword check on the description.
+            const target = result.repository.pullRequest;
+            const defaultBranch = result.repository.defaultBranchRef?.name;
+            const revivedFromBody =
+              target.baseRefName !== defaultBranch &&
+              /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*(?::\s*)?[\w./-]*#\d+/i.test(target.body ?? "");
+            const linkedIssues =
+              target.closingIssuesReferences.totalCount > 0 || revivedFromBody ? 1 : 0;
 
             if (linkedIssues === 0) {
               await addLabel('needs:issue');
