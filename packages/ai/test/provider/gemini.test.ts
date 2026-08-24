@@ -906,7 +906,7 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("ignores unknown response parts with an arbitrary string role", () =>
+  it.effect("ignores unknown response parts", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
@@ -915,7 +915,7 @@ describe("Gemini route", () => {
               candidates: [
                 {
                   content: {
-                    role: "future-role",
+                    role: "model",
                     parts: [
                       { text: "Hello " },
                       { executableCode: { language: "PYTHON", code: "print('ignored')" } },
@@ -951,24 +951,6 @@ describe("Gemini route", () => {
       expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
       expect(error.message).toContain("Invalid google/gemini stream event")
-    }),
-  )
-
-  it.effect("rejects null response roles", () =>
-    Effect.gen(function* () {
-      const error = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents({
-              candidates: [{ content: { role: null, parts: [{ text: "Hello" }] } }],
-            }),
-          ),
-        ),
-        Effect.flip,
-      )
-
-      expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
     }),
   )
 
