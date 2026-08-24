@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
@@ -125,12 +125,27 @@ const GeminiContentPart = Schema.Union([
   GeminiFunctionCallPart,
   GeminiFunctionResponsePart,
 ])
+const decodeGeminiContentPart = Schema.decodeUnknownOption(GeminiContentPart)
+
+const GeminiUnknownResponsePart = Schema.declare(
+  (input): input is Record<string, unknown> =>
+    ProviderShared.isRecord(input) &&
+    !("text" in input) &&
+    !("inlineData" in input) &&
+    !("functionCall" in input) &&
+    !("functionResponse" in input),
+)
 
 const GeminiContent = Schema.Struct({
   role: optionalNull(Schema.Literals(["user", "model"])),
   parts: optionalNull(Schema.Array(GeminiContentPart)),
 })
 type GeminiContent = Schema.Schema.Type<typeof GeminiContent>
+
+const GeminiResponseContent = Schema.Struct({
+  role: optionalNull(Schema.Literals(["user", "model"])),
+  parts: optionalNull(Schema.Array(Schema.Union([GeminiContentPart, GeminiUnknownResponsePart]))),
+})
 
 const GeminiSystemInstruction = Schema.Struct({
   parts: Schema.Array(Schema.Struct({ text: Schema.String })),
@@ -200,7 +215,7 @@ const GeminiUsage = Schema.Struct({
 type GeminiUsage = Schema.Schema.Type<typeof GeminiUsage>
 
 const GeminiCandidate = Schema.Struct({
-  content: optionalNull(GeminiContent),
+  content: optionalNull(GeminiResponseContent),
   finishReason: optionalNull(Schema.String),
 })
 
@@ -598,7 +613,10 @@ const step = (state: ParserState, event: GeminiEvent) => {
   // Supplier ids must be tracked across chunks of the same response, not just within one event's parts.
   const seenCallIds = new Set(nextState.seenCallIds)
 
-  for (const part of candidate.content.parts ?? []) {
+  for (const input of candidate.content.parts ?? []) {
+    const decoded = decodeGeminiContentPart(input)
+    if (Option.isNone(decoded)) continue
+    const part = decoded.value
     const signature = "thoughtSignature" in part && part.thoughtSignature ? part.thoughtSignature : undefined
     // Gemini attaches replay signatures to thought parts, visible text, or function calls;
     // each block kind must retain the signature attached to its own parts.
