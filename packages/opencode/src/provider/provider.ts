@@ -846,6 +846,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           if (modelID.startsWith("openai/")) return aigateway(createOpenAI()(modelID.slice("openai/".length)))
           // models.dev lists Anthropic ids with dotted versions (claude-haiku-4.5); Anthropic's
           // Messages API expects dashed native slugs (claude-haiku-4-5), so translate before passing.
+          // No native Anthropic slug contains a dot, so the blanket replacement is lossless here -
+          // unlike OpenAI above, whose native ids (e.g. gpt-4.1) keep their dots and must not be touched.
           if (modelID.startsWith("anthropic/"))
             return aigateway(createAnthropic()(modelID.slice("anthropic/".length).replaceAll(".", "-")))
           // Workers AI is the only first-party provider whose upstream is Cloudflare itself, so it is
