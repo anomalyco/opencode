@@ -205,8 +205,11 @@ const AnthropicTool = Schema.Struct({
 type AnthropicTool = Schema.Schema.Type<typeof AnthropicTool>
 
 const AnthropicToolChoice = Schema.Union([
-  Schema.Struct({ type: Schema.Literals(["auto", "any", "none"]) }),
-  Schema.Struct({ type: Schema.tag("tool"), name: Schema.String }),
+  Schema.Struct({
+    type: Schema.Literals(["auto", "any", "none"]),
+    disable_parallel_tool_use: Schema.optional(Schema.Boolean),
+  }),
+  Schema.Struct({ type: Schema.tag("tool"), name: Schema.String, disable_parallel_tool_use: Schema.optional(Schema.Boolean) }),
 ])
 
 const AnthropicThinking = Schema.Union([
@@ -370,10 +373,26 @@ const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition, inputSc
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
   ProviderShared.matchToolChoice("Anthropic Messages", toolChoice, {
-    auto: () => ({ type: "auto" as const }),
+    auto: () => ({
+      type: "auto" as const,
+      ...(toolChoice.disableParallelToolUse === undefined
+        ? {}
+        : { disable_parallel_tool_use: toolChoice.disableParallelToolUse }),
+    }),
     none: () => ({ type: "none" as const }),
-    required: () => ({ type: "any" as const }),
-    tool: (name) => ({ type: "tool" as const, name }),
+    required: () => ({
+      type: "any" as const,
+      ...(toolChoice.disableParallelToolUse === undefined
+        ? {}
+        : { disable_parallel_tool_use: toolChoice.disableParallelToolUse }),
+    }),
+    tool: (name) => ({
+      type: "tool" as const,
+      name,
+      ...(toolChoice.disableParallelToolUse === undefined
+        ? {}
+        : { disable_parallel_tool_use: toolChoice.disableParallelToolUse }),
+    }),
   })
 
 const scrubToolCallID = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
@@ -1064,7 +1083,10 @@ export const route = Route.make({
   provider: "anthropic",
   providerMetadataKey: "anthropic",
   protocol,
-  endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
+  endpoint: Endpoint.path(
+    (input) => (input.request.model.provider === "anthropic" ? `${PATH}?beta=true` : PATH),
+    { baseURL: DEFAULT_BASE_URL },
+  ),
   auth: Auth.none,
   framing,
   headers: () => ({ "anthropic-version": "2023-06-01" }),

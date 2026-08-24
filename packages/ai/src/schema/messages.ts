@@ -255,6 +255,7 @@ export namespace ToolDefinition {
 export class ToolChoice extends Schema.Class<ToolChoice>("LLM.ToolChoice")({
   type: Schema.Literals(["auto", "none", "required", "tool"]),
   name: Schema.optional(Schema.String),
+  disableParallelToolUse: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace ToolChoice {
