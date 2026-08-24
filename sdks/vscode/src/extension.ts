@@ -3,6 +3,7 @@ export function deactivate() {}
 
 import * as vscode from "vscode"
 import http from "http"
+import { randomUUID } from "crypto"
 
 const TERMINAL_NAME = "opencode"
 const SCHEME = "opencode-diff"
@@ -64,13 +65,15 @@ const memfs = new MemFS()
 export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.workspace.registerFileSystemProvider(SCHEME, memfs, { isCaseSensitive: true }))
 
-  const ipcPort = await startIpcServer(context)
-  if (!ipcPort) {
+  const ipcToken = randomUUID()
+  const ipcPort = await startIpcServer(context, ipcToken)
+  if (ipcPort) {
+    context.environmentVariableCollection.replace("OPENCODE_VSCODE_IPC_PORT", String(ipcPort))
+    context.environmentVariableCollection.replace("OPENCODE_VSCODE_IPC_TOKEN", ipcToken)
+    output.appendLine(`[opencode] extension activated, IPC_PORT=${ipcPort}`)
+  } else {
     output.appendLine("[opencode] failed to start IPC server")
-    return
   }
-  context.environmentVariableCollection.replace("OPENCODE_VSCODE_IPC_PORT", String(ipcPort))
-  output.appendLine(`[opencode] extension activated, IPC_PORT=${ipcPort}`)
 
   const openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
     await openTerminal()
@@ -261,8 +264,14 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 }
 
-function startIpcServer(context: vscode.ExtensionContext): Promise<number | undefined> {
+function startIpcServer(context: vscode.ExtensionContext, token: string): Promise<number | undefined> {
   const server = http.createServer(async (req, res) => {
+    if (req.headers["x-opencode-token"] !== token) {
+      res.writeHead(401)
+      res.end()
+      return
+    }
+
     const url = new URL(req.url ?? "/", "http://localhost")
 
     if (req.method === "POST" && url.pathname === "/register") {
@@ -401,7 +410,7 @@ async function showDiff(
   memfs.writeFile(oldUri(requestID), Buffer.from(oldText), { create: true, overwrite: true })
   memfs.writeFile(newUri(requestID), Buffer.from(newText), { create: true, overwrite: true })
 
-  const viewColumn = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.Beside
+  const viewColumn = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.Active
 
   await vscode.commands.executeCommand("vscode.diff", oldUri(requestID), newUri(requestID), `${filepath} (Diff)`, {
     viewColumn,
@@ -414,7 +423,15 @@ async function showDiff(
 }
 
 async function cleanupDiff(requestID: string) {
-  await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor")
+  const uris = [oldUri(requestID).toString(), newUri(requestID).toString()]
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      const input = tab.input
+      if (input instanceof vscode.TabInputTextDiff && (uris.includes(input.original.toString()) || uris.includes(input.modified.toString()))) {
+        await vscode.window.tabGroups.close(tab)
+      }
+    }
+  }
   memfs.delete(oldUri(requestID))
   memfs.delete(newUri(requestID))
 }
