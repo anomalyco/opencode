@@ -374,8 +374,7 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (
     name: tool.name,
     description: tool.description,
     parameters: inputSchema,
-    // The common tool definition does not currently express Responses strict-schema policy.
-    strict: false,
+    strict: tool.strict ?? false,
   }
 })
 
@@ -666,6 +665,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 const lowerOptions = (request: LLMRequest) => {
   const options = OpenResponsesOptions.resolve(request)
   const cacheKey = ProviderShared.clampPromptCacheKey(request.promptCacheKey)
+  const parallelToolCalls = resolveParallelToolCalls(request)
   return {
     ...(options.instructions ? { instructions: options.instructions } : {}),
     ...(options.store !== undefined ? { store: options.store } : {}),
@@ -683,9 +683,16 @@ const lowerOptions = (request: LLMRequest) => {
     ...(options.textVerbosity ? { text: { verbosity: options.textVerbosity } } : {}),
     ...(options.serviceTier ? { service_tier: options.serviceTier } : {}),
     ...(options.maxToolCalls !== undefined ? { max_tool_calls: options.maxToolCalls } : {}),
-    ...(options.parallelToolCalls !== undefined ? { parallel_tool_calls: options.parallelToolCalls } : {}),
+    ...(parallelToolCalls !== undefined ? { parallel_tool_calls: parallelToolCalls } : {}),
     ...(options.truncation ? { truncation: options.truncation } : {}),
   }
+}
+
+export const resolveParallelToolCalls = (request: LLMRequest) => {
+  const configured = OpenResponsesOptions.resolve(request).parallelToolCalls
+  if (configured !== undefined) return configured
+  const disabled = request.toolChoice?.disableParallelToolUse
+  return disabled === undefined ? undefined : !disabled
 }
 
 const allowedToolChoice = (request: LLMRequest) => {

@@ -258,6 +258,76 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("passes function strictness and output schemas", () =>
+    Effect.gen(function* () {
+      const outputSchema = {
+        type: "object",
+        properties: { content: { type: "string" } },
+        required: ["content"],
+        additionalProperties: false,
+      } as const
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, {
+          tools: [
+            ToolDefinition.make({
+              name: "read",
+              description: "Read a path.",
+              inputSchema: {
+                type: "object",
+                properties: { path: { type: "string" } },
+                required: ["path"],
+                additionalProperties: false,
+              },
+              modelOutputSchema: outputSchema,
+              strict: true,
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "read",
+          description: "Read a path.",
+          parameters: {
+            type: "object",
+            properties: { path: { type: "string" } },
+            required: ["path"],
+            additionalProperties: false,
+          },
+          output_schema: outputSchema,
+          strict: true,
+        },
+      ])
+    }),
+  )
+
+  it.effect("maps the canonical parallel tool setting with provider-option precedence", () =>
+    Effect.gen(function* () {
+      const disabled = yield* compileRequest(
+        LLMRequest.update(request, {
+          toolChoice: { type: "auto", disableParallelToolUse: true },
+        }),
+      )
+      const enabled = yield* compileRequest(
+        LLMRequest.update(request, {
+          toolChoice: { type: "auto", disableParallelToolUse: false },
+        }),
+      )
+      const overridden = yield* compileRequest(
+        LLMRequest.update(request, {
+          toolChoice: { type: "auto", disableParallelToolUse: true },
+          providerOptions: { parallelToolCalls: true },
+        }),
+      )
+
+      expect(disabled.body.parallel_tool_calls).toBe(false)
+      expect(enabled.body.parallel_tool_calls).toBe(true)
+      expect(overridden.body.parallel_tool_calls).toBe(true)
+    }),
+  )
+
   it.effect("lowers chronological system updates to developer messages in order", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
