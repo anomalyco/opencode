@@ -254,8 +254,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
   "go.banner.text": "Ox Alpha Free is available on Go for a limited time",
-  "go.meta.description":
-    "Go costs $10/month, with generous usage limits and reliable access to leading coding models.",
+  "go.meta.description": "Go costs $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
   "go.hero.body":
     "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",

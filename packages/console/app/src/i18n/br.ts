@@ -309,8 +309,7 @@ export const dict = {
   "go.problem.item3": "Feito para o maior número possível de programadores",
   "go.problem.item4": "Uma seleção de modelos testados para codificação com agentes",
   "go.how.title": "Como o Go funciona",
-  "go.how.body":
-    "O Go custa $10/mês. Você pode usá-lo com o OpenCode ou qualquer agente.",
+  "go.how.body": "O Go custa $10/mês. Você pode usá-lo com o OpenCode ou qualquer agente.",
   "go.how.step1.title": "Crie uma conta",
   "go.how.step1.beforeLink": "siga as",
   "go.how.step1.link": "instruções de configuração",

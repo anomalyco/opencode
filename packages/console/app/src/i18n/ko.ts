@@ -251,8 +251,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
   "go.banner.text": "Ox Alpha Free가 한정된 기간 동안 Go에서 제공됩니다",
-  "go.meta.description":
-    "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
+  "go.meta.description": "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
   "go.hero.body":
     "Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공합니다. 가장 유능한 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공하므로, 비용이나 가용성 걱정 없이 강력한 에이전트로 빌드할 수 있습니다.",

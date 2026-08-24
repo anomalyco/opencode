@@ -267,8 +267,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go'ya abone ol",
   "go.cta.price": "Ayda 10$",
-  "go.pricing.body":
-    "Herhangi bir ajanla kullanın. Ayda 10$. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
+  "go.pricing.body": "Herhangi bir ajanla kullanın. Ayda 10$. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
   "go.graph.free": "Ücretsiz",
   "go.graph.freePill": "Big Pickle ve ücretsiz modeller",
   "go.graph.go": "Go",
@@ -309,8 +308,7 @@ export const dict = {
   "go.problem.item3": "Mümkün olduğunca çok programcı için geliştirildi",
   "go.problem.item4": "Ajan tabanlı kodlama için test edilmiş, özenle seçilmiş model seçenekleri",
   "go.how.title": "Go nasıl çalışır?",
-  "go.how.body":
-    "Go ayda 10$'dır. OpenCode veya herhangi bir ajanla kullanabilirsiniz.",
+  "go.how.body": "Go ayda 10$'dır. OpenCode veya herhangi bir ajanla kullanabilirsiniz.",
   "go.how.step1.title": "Bir hesap oluşturun",
   "go.how.step1.beforeLink": "takip edin",
   "go.how.step1.link": "kurulum talimatları",

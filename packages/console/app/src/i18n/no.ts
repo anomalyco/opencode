@@ -265,8 +265,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
-  "go.pricing.body":
-    "Bruk med hvilken som helst agent. $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
+  "go.pricing.body": "Bruk med hvilken som helst agent. $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",
@@ -306,8 +305,7 @@ export const dict = {
   "go.problem.item3": "Bygget for så mange programmerere som mulig",
   "go.problem.item4": "Et kuratert modellutvalg testet for agent-koding",
   "go.how.title": "Hvordan Go fungerer",
-  "go.how.body":
-    "Go koster $10/måned. Du kan bruke det med OpenCode eller hvilken som helst agent.",
+  "go.how.body": "Go koster $10/måned. Du kan bruke det med OpenCode eller hvilken som helst agent.",
   "go.how.step1.title": "Opprett en konto",
   "go.how.step1.beforeLink": "følg",
   "go.how.step1.link": "oppsettsinstruksjonene",
