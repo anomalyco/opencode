@@ -100,15 +100,14 @@ test("middle-click closes a session tab without selecting it", async () => {
   }
 })
 
-test("keeps consecutive close controls under a stationary pointer", async () => {
-  const [active, setActive] = createSignal("first")
+test("keeps consecutive close controls fixed across overflow window changes", async () => {
+  const [active, setActive] = createSignal("fifth")
   const [items, setItems] = createSignal([
     { sessionID: "first", title: "First" },
     { sessionID: "second", title: "Second" },
     { sessionID: "third", title: "Third" },
     { sessionID: "fourth", title: "Fourth" },
     { sessionID: "fifth", title: "Fifth" },
-    { sessionID: "sixth", title: "Sixth" },
   ])
   const closed: string[] = []
   const controller = {
@@ -118,10 +117,8 @@ test("keeps consecutive close controls under a stationary pointer", async () => 
     close: (sessionID?: string) => {
       if (!sessionID) return
       const current = items()
-      const index = current.findIndex((tab) => tab.sessionID === sessionID)
-      const target = current[index + 1] ?? current[index - 1]
       closed.push(sessionID)
-      setActive(target?.sessionID)
+      setActive("first")
       setItems(current.filter((tab) => tab.sessionID !== sessionID))
     },
     move() {},
@@ -137,20 +134,20 @@ test("keeps consecutive close controls under a stationary pointer", async () => 
         </ConfigProvider>
       </TestTuiContexts>
     ),
-    { width: 40, height: 2 },
+    { width: 46, height: 2 },
   )
 
   try {
     app.renderer.start()
-    await app.waitForFrame((frame) => frame.includes("Second"))
-    await app.mockMouse.moveTo(20, 0)
-    await app.waitForFrame((frame) => Array.from(frame.split("\n")[0] ?? "")[20] === "✕")
+    await app.waitForFrame((frame) => frame.includes("Third"))
+    await app.mockMouse.moveTo(11, 0)
+    await app.waitForFrame((frame) => Array.from(frame.split("\n")[0] ?? "")[11] === "✕")
 
-    await app.mockMouse.click(20, 0)
-    await app.waitForFrame((frame) => items().length === 5 && Array.from(frame.split("\n")[0] ?? "")[20] === "✕")
-    await app.mockMouse.click(20, 0)
+    await app.mockMouse.click(11, 0)
+    await app.waitForFrame((frame) => items().length === 4 && Array.from(frame.split("\n")[0] ?? "")[11] === "✕")
+    await app.mockMouse.click(11, 0)
 
-    expect(closed).toEqual(["first", "second"])
+    expect(closed).toEqual(["third", "fourth"])
   } finally {
     app.renderer.destroy()
   }
