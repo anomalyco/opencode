@@ -1466,6 +1466,43 @@ it.instance("cancel resumes a prompt queued mid-run", () =>
   10_000,
 )
 
+it.instance("cancel without queued input does not restart the loop", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* llm.hang
+    const a = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "only question" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* llm.wait(1)
+    yield* waitForBusy(chat.id)
+
+    yield* prompt.cancel(chat.id)
+    const exit = yield* Fiber.await(a)
+    expect(Exit.isSuccess(exit)).toBe(true)
+
+    // Negative assertion: nothing to wait on when the loop correctly stays
+    // stopped, so give a wrongly-resumed loop a window to fire its request.
+    yield* Effect.sleep("500 millis")
+    expect(yield* llm.calls).toBe(1)
+    const last = yield* sessions
+      .messages({ sessionID: chat.id })
+      .pipe(Effect.map((msgs) => msgs.findLast((msg) => msg.info.role === "assistant")))
+    if (last?.info.role !== "assistant") throw new Error("expected aborted turn")
+    expect(last.info.finish).toBeUndefined()
+  }),
+  10_000,
+)
+
 // Queue semantics
 
 noLLMServer.instance("concurrent loop callers get same result", () =>
