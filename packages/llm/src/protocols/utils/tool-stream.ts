@@ -150,7 +150,7 @@ export const appendExisting = <K extends StreamKey>(
   text: string,
   missingToolMessage: string,
 ): AppendOutcome<K> | LLMError => {
-  const current = tools[key]
+  const current = Object.hasOwn(tools, key) ? tools[key] : undefined
   if (!current) return eventError(route, missingToolMessage)
   if (text.length === 0) return { tools, tool: current, events: [] }
   return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
@@ -163,7 +163,7 @@ export const appendExisting = <K extends StreamKey>(
  */
 export const finish = <K extends StreamKey>(route: string, tools: State<K>, key: K) =>
   Effect.gen(function* () {
-    const tool = tools[key]
+    const tool = Object.hasOwn(tools, key) ? tools[key] : undefined
     if (!tool) return { tools }
     return {
       tools: withoutTool(tools, key),
@@ -181,7 +181,7 @@ export const finish = <K extends StreamKey>(route: string, tools: State<K>, key:
  */
 export const finishWithInput = <K extends StreamKey>(route: string, tools: State<K>, key: K, input: string) =>
   Effect.gen(function* () {
-    const tool = tools[key]
+    const tool = Object.hasOwn(tools, key) ? tools[key] : undefined
     if (!tool) return { tools }
     return {
       tools: withoutTool(tools, key),
