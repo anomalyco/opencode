@@ -10,6 +10,7 @@ import {
   flowchartEdgeLabelLayout,
   flowchartHorizontalLabelRankGap,
   flowchartLabelWidth,
+  flowchartRouteLabelLayout,
   flowchartVerticalBranchLabelGap,
 } from "./labels.js"
 import type { FlowchartDiagramRenderOptions } from "./options.js"
@@ -195,6 +196,17 @@ function translateRoutes(routes: readonly FlowchartEdgeRoute[], dx: number, dy: 
       point.x += dx
       point.y += dy
     }
+    if (route.labelPoint) {
+      route.labelPoint.x += dx
+      route.labelPoint.y += dy
+    }
+  }
+}
+
+function freezeRouteLabelPoints(routes: readonly FlowchartEdgeRoute[]): void {
+  for (const route of routes) {
+    if (!route.edge.label || route.labelPoint) continue
+    route.labelPoint = flowchartEdgeLabelLayout(route.points, route.edge.label, visualLength, route.labelAxis).point
   }
 }
 
@@ -317,7 +329,7 @@ function pathBounds(points: readonly { x: number; y: number }[]): FlowchartBound
 
 function labelBounds(route: FlowchartEdgeRoute): FlowchartBounds | undefined {
   if (!route.edge.label) return undefined
-  const label = flowchartEdgeLabelLayout(route.points, route.edge.label, visualLength, route.labelAxis)
+  const label = flowchartRouteLabelLayout(route, visualLength)
   const { point, width, height } = label
   return {
     left: point.x,
@@ -798,6 +810,7 @@ function layoutFlowchartWithDirection(
     routes = routeFlowchartEdges(diagram, bounds, (edge) => edgeDirection(diagram, edge), subgraphBounds)
     subgraphBounds = layoutSubgraphs(diagram, bounds, routes)
   }
+  freezeRouteLabelPoints(routes)
   const allBounds = [...bounds.values(), ...subgraphBounds.values(), ...routeRenderBounds(routes)]
   const dx = Math.max(0, -Math.min(0, ...allBounds.map((bound) => bound.left)))
   const dy = Math.max(0, -Math.min(0, ...allBounds.map((bound) => bound.top)))

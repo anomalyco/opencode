@@ -1,11 +1,21 @@
-import { translateDiagramBounds } from "../core/geometry.js"
+import { orthogonalPathPoints, translateDiagramBounds, type DiagramPoint } from "../core/geometry.js"
+import { SpatialIndex, spatialPathClaim, spatialRectClaim } from "../core/spatial.js"
 import { diagramTextWidth, measureDiagramTextBox, splitDiagramLines } from "../core/text.js"
+import { stateDiagramNoteConnector, type StateDiagramNoteConnector } from "./note.js"
 import {
+  createStateTransitionRenderPlans,
   hasReverseTransition,
   isStateHorizontalFeedback,
   measureStateTransitionLabel,
   type StateTransitionRenderPlan,
 } from "./routing.js"
+import {
+  createStateSearchBudget,
+  createStateSearchSpace,
+  findStateManhattanPath,
+  type StateSearchBudget,
+  type StateSearchSpace,
+} from "./search.js"
 import type {
   StateDiagram,
   StateDiagramCompositeState,
@@ -13,6 +23,8 @@ import type {
   StateDiagramState,
   StateDiagramTransition,
 } from "./types.js"
+
+const MAX_STRICT_NOTE_PLACEMENTS = 24
 
 export interface StateDiagramBoxBounds {
   id: string
@@ -34,10 +46,12 @@ export interface StateDiagramLayout {
 export interface StateDiagramNoteBounds extends StateDiagramBoxBounds {
   note: StateDiagramNote
   lines: string[]
+  connector?: StateDiagramNoteConnector
 }
 
 export interface StateDiagramLayoutOptions {
   minStateGap: number
+  searchBudget?: StateSearchBudget
 }
 
 function computeRanks(diagram: StateDiagram): Map<string, number> {
@@ -150,10 +164,23 @@ function emptyLayout(
   return { bounds, sizes, compositeBounds: new Map(), noteBounds: [] }
 }
 
+function isNoteBound(bound: StateDiagramBoxBounds): bound is StateDiagramNoteBounds {
+  return "note" in bound
+}
+
 function shiftBounds(bounds: Iterable<StateDiagramBoxBounds>, dx: number, dy: number): void {
   for (const bound of bounds) {
     translateDiagramBounds(bound, dx, dy)
+    if (!isNoteBound(bound) || !bound.connector) continue
+    bound.connector = {
+      connectorY: bound.connector.connectorY + dy,
+      points: bound.connector.points.map((point) => ({ x: point.x + dx, y: point.y + dy })),
+    }
   }
+}
+
+export function translateStateDiagramLayout(layout: StateDiagramLayout, dx: number, dy: number): void {
+  shiftBounds(uniqueBounds(layout.bounds.values(), layout.compositeBounds.values(), layout.noteBounds), dx, dy)
 }
 
 function uniqueBounds(...bounds: Iterable<StateDiagramBoxBounds>[]): StateDiagramBoxBounds[] {
@@ -163,8 +190,9 @@ function uniqueBounds(...bounds: Iterable<StateDiagramBoxBounds>[]): StateDiagra
 function normalizeLayout(layout: StateDiagramLayout): void {
   const allBounds = uniqueBounds(layout.bounds.values(), layout.compositeBounds.values(), layout.noteBounds)
   if (allBounds.length === 0) return
-  const minX = Math.min(0, ...allBounds.map((bound) => bound.left))
-  const minY = Math.min(0, ...allBounds.map((bound) => bound.top))
+  const connectorPoints = layout.noteBounds.flatMap((bound) => bound.connector?.points ?? [])
+  const minX = Math.min(0, ...allBounds.map((bound) => bound.left), ...connectorPoints.map((point) => point.x))
+  const minY = Math.min(0, ...allBounds.map((bound) => bound.top), ...connectorPoints.map((point) => point.y))
   if (minX === 0 && minY === 0) return
   shiftBounds(allBounds, -minX, -minY)
 }
@@ -221,21 +249,6 @@ function addCompositeBounds(diagram: StateDiagram, layout: StateDiagramLayout): 
   for (const composite of diagram.composites) addComposite(composite)
 }
 
-function addNoteBounds(diagram: StateDiagram, layout: StateDiagramLayout): void {
-  const compositeIds = new Set(diagram.composites.map((composite) => composite.id))
-  const avoidBounds = [...layout.bounds.values()].filter((bound) => !compositeIds.has(bound.id))
-  const noteBounds: StateDiagramNoteBounds[] = []
-
-  for (const [index, note] of diagram.notes.entries()) {
-    const target = layout.bounds.get(note.target)
-    if (!target) continue
-    const size = noteSize(note)
-    noteBounds.push(placeNote(note, index, target, size, avoidBounds, noteBounds))
-  }
-
-  layout.noteBounds = noteBounds
-}
-
 function intersects(
   left: number,
   top: number,
@@ -272,43 +285,65 @@ function createNoteBound(
   }
 }
 
-function placeNote(
-  note: StateDiagramNote,
-  index: number,
+function findNoteConnector(
+  search: StateSearchSpace,
+  bounds: StateDiagramNoteBounds,
   target: StateDiagramBoxBounds,
-  size: { width: number; height: number; lines: string[] },
-  avoidBounds: readonly StateDiagramBoxBounds[],
-  existingNotes: readonly StateDiagramNoteBounds[],
-): StateDiagramNoteBounds {
-  const gap = 4
-  const baseLeft = note.position === "right" ? target.left + target.width + gap : target.left - size.width - gap
-  const baseTop = target.centerY - Math.floor(size.height / 2)
-  const candidateTops = [
-    baseTop,
-    target.top - size.height - 2,
-    target.top + target.height + 2,
-    baseTop - size.height - 2,
-    baseTop + target.height + 2,
+  budget: StateSearchBudget,
+): StateDiagramNoteConnector | undefined {
+  const connectorY = Math.max(bounds.top + 1, Math.min(target.centerY, bounds.top + bounds.height - 2))
+  const end = {
+    x: bounds.note.position === "right" ? bounds.left - 1 : bounds.left + bounds.width,
+    y: connectorY,
+  }
+  const goal = { x: end.x + (bounds.note.position === "right" ? -1 : 1), y: end.y }
+  const targetX = bounds.note.position === "right" ? target.left + target.width : target.left - 1
+  const preferredStarts = [
+    { x: targetX, y: target.centerY },
+    { x: targetX, y: target.top - 1 },
+    { x: targetX, y: target.top + target.height },
   ]
-  const collides = (left: number, top: number) => {
-    for (const bound of avoidBounds) {
-      if (bound.id !== target.id && intersects(left, top, size.width, size.height, bound)) return true
-    }
-    for (const bound of existingNotes) {
-      if (intersects(left, top, size.width, size.height, bound)) return true
-    }
-    return false
+  const perimeterStarts = [
+    ...Array.from({ length: target.height }, (_, offset) => ({ x: target.left - 1, y: target.top + offset })),
+    ...Array.from({ length: target.height }, (_, offset) => ({
+      x: target.left + target.width,
+      y: target.top + offset,
+    })),
+    ...Array.from({ length: target.width }, (_, offset) => ({ x: target.left + offset, y: target.top - 1 })),
+    ...Array.from({ length: target.width }, (_, offset) => ({
+      x: target.left + offset,
+      y: target.top + target.height,
+    })),
+  ]
+  const starts = [...preferredStarts, ...perimeterStarts]
+  const isFree = (point: DiagramPoint): boolean =>
+    point.x >= 0 &&
+    !search.blocked.has(`${point.x}:${point.y}`) &&
+    !(point.x >= bounds.left && point.x < bounds.left + bounds.width && point.y >= bounds.top && point.y < bounds.top + bounds.height)
+  if (!isFree(end) || !isFree(goal)) return undefined
+
+  for (const start of starts.filter(isFree)) {
+    const directPaths = [
+      [start, { x: start.x, y: goal.y }, goal, end],
+      [start, { x: goal.x, y: start.y }, goal, end],
+    ]
+    const direct = directPaths.find((points) => orthogonalPathPoints(points).every(isFree))
+    if (direct) return { connectorY, points: direct }
   }
 
-  for (const top of candidateTops) {
-    if (!collides(baseLeft, top)) return createNoteBound(note, index, baseLeft, top, size)
-  }
-
-  const shiftedLeft =
-    note.position === "right"
-      ? Math.max(...avoidBounds.map((bound) => bound.left + bound.width), target.left + target.width) + gap
-      : Math.min(...avoidBounds.map((bound) => bound.left), target.left) - size.width - gap
-  return createNoteBound(note, index, shiftedLeft, baseTop + target.height + 1, size)
+  const margin = 8
+  const minY = Math.min(target.top, bounds.top, search.minY) - margin
+  const maxX = Math.max(target.left + target.width, bounds.left + bounds.width, search.maxX) + margin
+  const maxY = Math.max(target.top + target.height, bounds.top + bounds.height, search.maxY) + margin
+  const path = findStateManhattanPath(
+    starts,
+    goal,
+    search,
+    { minX: 0, minY, maxX, maxY },
+    budget,
+    isFree,
+  )
+  return path ? { connectorY, points: [...path, end] } : undefined
 }
 
 function belongsToComposite(
@@ -392,16 +427,42 @@ function separateExternalBoundsFromComposites(diagram: StateDiagram, layout: Sta
         if (candidateBound && candidateBound.left >= leftThreshold) boundsToShift.push(candidateBound)
       }
 
+      for (const noteBound of layout.noteBounds) {
+        const target = layout.bounds.get(noteBound.note.target)
+        if (target && boundsToShift.includes(target)) boundsToShift.push(noteBound)
+      }
+
       shiftBounds(uniqueBounds(boundsToShift), dx, 0)
     }
   }
 }
 
-function finalizeLayout(diagram: StateDiagram, layout: StateDiagramLayout): StateDiagramLayout {
+function finalizeLayout(
+  diagram: StateDiagram,
+  layout: StateDiagramLayout,
+  budget: StateSearchBudget,
+): StateDiagramLayout {
   if (diagram.composites.length === 0 && diagram.notes.length === 0) return layout
   addCompositeBounds(diagram, layout)
   normalizeLayout(layout)
-  addNoteBounds(diagram, layout)
+  if (diagram.notes.length > 0) {
+    const allBounds = [...layout.bounds.values()]
+    placeStateDiagramNotesAroundTransitions(
+      diagram,
+      layout,
+      createStateTransitionRenderPlans(
+        diagram,
+        layout.bounds,
+        Math.max(0, ...allBounds.map((bound) => bound.top + bound.height)) + 3,
+        {
+          feedbackTopY: Math.min(0, ...allBounds.map((bound) => bound.top)) - 3,
+          repairRoutes: false,
+          searchBudget: budget,
+        },
+      ),
+      budget,
+    )
+  }
   expandCompositeBoundsForNotes(diagram, layout)
   separateExternalBoundsFromComposites(diagram, layout)
   normalizeLayout(layout)
@@ -412,8 +473,9 @@ export function createStateDiagramLayout(
   diagram: StateDiagram,
   options: StateDiagramLayoutOptions,
 ): StateDiagramLayout {
+  const budget = options.searchBudget ?? createStateSearchBudget()
   if (diagram.direction === "LR" || diagram.direction === "RL") {
-    return finalizeLayout(diagram, createHorizontalLayout(diagram, options))
+    return finalizeLayout(diagram, createHorizontalLayout(diagram, options), budget)
   }
 
   const ranks = computeRanks(diagram)
@@ -466,7 +528,7 @@ export function createStateDiagramLayout(
     y += rowHeight + Math.max(4, labelRows + 3) + pseudoStateApproachClearance
   }
 
-  return finalizeLayout(diagram, emptyLayout(bounds, sizes))
+  return finalizeLayout(diagram, emptyLayout(bounds, sizes), budget)
 }
 
 function createHorizontalLayout(diagram: StateDiagram, options: StateDiagramLayoutOptions): StateDiagramLayout {
@@ -540,7 +602,13 @@ function createHorizontalLayout(diagram: StateDiagram, options: StateDiagramLayo
       if (bounds.has(branchId)) continue
       const size = sizes.get(branchId)
       if (!size) continue
-      const top = baselineY + (parallelLane ? 6 : 5)
+      const top = availableStateTop(
+        [...bounds.values()],
+        left,
+        baselineY + (parallelLane ? 6 : 5),
+        size.width,
+        size.height,
+      )
       bounds.set(branchId, {
         id: branchId,
         left,
@@ -618,6 +686,21 @@ function createHorizontalLayout(diagram: StateDiagram, options: StateDiagramLayo
   return emptyLayout(bounds, sizes)
 }
 
+function availableStateTop(
+  bounds: readonly StateDiagramBoxBounds[],
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): number {
+  let available = top
+  while (true) {
+    const collision = bounds.find((bound) => intersects(left, available, width, height, bound, 0))
+    if (!collision) return available
+    available = collision.top + collision.height + 3
+  }
+}
+
 export function expandCompositeBoundsForFeedback(
   diagram: StateDiagram,
   bounds: Map<string, StateDiagramBoxBounds>,
@@ -646,6 +729,234 @@ export function expandCompositeBoundsForFeedback(
     compositeBound.height = bottom - compositeBound.top
     compositeBound.centerY = compositeBound.top + Math.floor(compositeBound.height / 2)
   }
+}
+
+function placeStateDiagramNotesAroundTransitions(
+  diagram: StateDiagram,
+  layout: StateDiagramLayout,
+  transitionPlans: readonly StateTransitionRenderPlan[],
+  budget: StateSearchBudget,
+): void {
+  if (diagram.notes.length === 0) return
+  const compositeIds = new Set(diagram.composites.map((composite) => composite.id))
+  let noteSpace = SpatialIndex.empty().add(
+    ...[...layout.bounds.values()].flatMap((bound) =>
+      compositeIds.has(bound.id) ? [] : [spatialRectClaim(`state:${bound.id}`, `state:${bound.id}`, "body", bound)],
+    ),
+  )
+  let reserved = noteSpace.add(
+    ...transitionPlans.flatMap((plan, planIndex) => [
+      spatialPathClaim(
+        `transition-terminal:${planIndex}:source`,
+        `transition-terminal:${planIndex}:source`,
+        "route",
+        plan.path.slice(0, 2).map(([x, y]) => ({ x, y })),
+      ),
+      spatialPathClaim(
+        `transition-terminal:${planIndex}:target`,
+        `transition-terminal:${planIndex}:target`,
+        "route",
+        plan.path.slice(-2).map(([x, y]) => ({ x, y })),
+      ),
+    ]),
+  )
+  let space = reserved.add(
+    ...transitionPlans.flatMap((plan, planIndex) => [
+      spatialPathClaim(
+        `transition:${planIndex}`,
+        `transition:${planIndex}`,
+        "route",
+        plan.path.map(([x, y]) => ({ x, y })),
+      ),
+      ...(plan.label
+        ? [
+            spatialRectClaim(`transition-label:${planIndex}`, `transition-label:${planIndex}`, "label", {
+              left: plan.label.x,
+              top: plan.label.y,
+              width: Math.max(...plan.label.lines.map(diagramTextWidth)),
+              height: plan.label.lines.length,
+            }),
+          ]
+        : []),
+    ]),
+  )
+  const noteBounds: StateDiagramNoteBounds[] = []
+
+  for (const [index, note] of diagram.notes.entries()) {
+    const target = layout.bounds.get(note.target)
+    if (!target) continue
+    const size = noteSize(note)
+    const gap = 4
+    const baseLeft = note.position === "right" ? target.left + target.width + gap : target.left - size.width - gap
+    const baseTop = target.centerY - Math.floor(size.height / 2)
+    const candidates = [
+      baseTop,
+      target.top - size.height - 2,
+      target.top + target.height + 2,
+      ...Array.from({ length: 12 }, (_, distance) => [baseTop - distance - 1, baseTop + distance + 1]).flat(),
+    ]
+    const candidateBounds = Array.from({ length: 5 }, (_, outward) =>
+      candidates.map((top) =>
+        createNoteBound(
+          note,
+          index,
+          baseLeft + (note.position === "right" ? 1 : -1) * outward * (size.width + 2),
+          top,
+          size,
+        ),
+      ),
+    )
+      .flat()
+    const findPlacement = (candidateSpace: SpatialIndex, limit: number) => {
+      const connectorSearch = createStateSearchSpace(candidateSpace, (role) => (role === "label" ? 1 : 0))
+      for (const bound of candidateBounds.slice(0, limit)) {
+        if (bound.left < 0) continue
+        const owner = `note:${index}`
+        if (!candidateSpace.isFree(spatialRectClaim(`${owner}:body`, owner, "body", bound), { clearance: 1 }))
+          continue
+        const connector = findNoteConnector(connectorSearch, bound, target, budget)
+        if (connector) return { bound: { ...bound, connector }, connector }
+      }
+      return undefined
+    }
+    const placement =
+      findPlacement(space, MAX_STRICT_NOTE_PLACEMENTS) ??
+      findPlacement(reserved, candidateBounds.length) ??
+      outsideNotePlacement(noteSpace, note, index, target, size)
+    const owner = `note:${index}`
+    const claims = [
+      spatialRectClaim(`${owner}:body`, owner, "body", placement.bound),
+      spatialPathClaim(`${owner}:connector`, owner, "boundary", placement.connector.points),
+    ] as const
+    noteBounds.push(placement.bound)
+    noteSpace = noteSpace.add(...claims)
+    reserved = reserved.add(...claims)
+    space = space.add(...claims)
+  }
+
+  layout.noteBounds.splice(0, layout.noteBounds.length, ...noteBounds)
+}
+
+function outsideNotePlacement(
+  space: SpatialIndex,
+  note: StateDiagramNote,
+  index: number,
+  target: StateDiagramBoxBounds,
+  size: { width: number; height: number; lines: string[] },
+): { bound: StateDiagramNoteBounds; connector: StateDiagramNoteConnector } {
+  const search = createStateSearchSpace(space)
+  const top = search.maxY + 4
+  const owner = `note:${index}:outside`
+
+  for (const position of [note.position, note.position === "left" ? "right" : "left"] as const) {
+    const aligned = createNoteBound(
+      { ...note, position },
+      index,
+      position === "left" ? search.minX - size.width - 4 : search.maxX + 4,
+      target.centerY - Math.floor(size.height / 2),
+      size,
+    )
+    const alignedNoteX = position === "left" ? aligned.left + aligned.width : aligned.left - 1
+    const alignedConnectorY = Math.max(
+      aligned.top + 1,
+      Math.min(target.centerY, aligned.top + aligned.height - 2),
+    )
+    const alignedTargetX = position === "left" ? target.left - 1 : target.left + target.width
+    const alignedConnector = {
+      connectorY: alignedConnectorY,
+      points: [
+        { x: alignedTargetX, y: target.centerY },
+        { x: alignedNoteX, y: alignedConnectorY },
+      ],
+    }
+    if (
+      space.isFree(spatialRectClaim(`${owner}:body`, owner, "body", aligned), { clearance: 1 }) &&
+      space.isFree(spatialPathClaim(`${owner}:connector`, owner, "boundary", alignedConnector.points))
+    )
+      return { bound: { ...aligned, connector: alignedConnector }, connector: alignedConnector }
+
+    const railX = position === "left" ? search.minX - 2 : search.maxX + 2
+    const bound = createNoteBound(
+      { ...note, position },
+      index,
+      position === "left" ? railX - size.width - 2 : railX + 3,
+      top,
+      size,
+    )
+    const noteX = position === "left" ? bound.left + bound.width : bound.left - 1
+    const connectorY = bound.top + 1
+    const sideX = position === "left" ? target.left - 1 : target.left + target.width
+    const escapes = [
+      ...[target.top, target.centerY, target.top + target.height - 1].map((y) => [
+        { x: sideX, y },
+        { x: railX, y },
+      ]),
+      [
+        { x: target.centerX, y: target.top - 1 },
+        { x: railX, y: target.top - 1 },
+      ],
+      [
+        { x: target.centerX, y: target.top + target.height },
+        { x: railX, y: target.top + target.height },
+      ],
+    ]
+
+    for (const escape of escapes) {
+      const connector = {
+        connectorY,
+        points: [...escape, { x: railX, y: connectorY }, { x: noteX, y: connectorY }],
+      }
+      if (
+        space.isFree(spatialRectClaim(`${owner}:body`, owner, "body", bound), { clearance: 1 }) &&
+        space.isFree(spatialPathClaim(`${owner}:connector`, owner, "boundary", connector.points))
+      )
+        return { bound: { ...bound, connector }, connector }
+    }
+  }
+
+  for (const vertical of ["below", "above"] as const) {
+    const railY = vertical === "below" ? search.maxY + 2 : search.minY - 2
+    const bound = createNoteBound(
+      note,
+      index,
+      note.position === "left" ? search.minX - size.width - 4 : search.maxX + 4,
+      vertical === "below" ? railY + 2 : railY - size.height - 2,
+      size,
+    )
+    const noteX = note.position === "left" ? bound.left + bound.width : bound.left - 1
+    const connectorY = bound.top + 1
+    const targetY = vertical === "below" ? target.top + target.height : target.top - 1
+    const escapes = [
+      ...[target.left, target.centerX, target.left + target.width - 1].map((x) => [
+        { x, y: targetY },
+        { x, y: railY },
+      ]),
+      [
+        { x: target.left, y: targetY },
+        { x: target.left - 1, y: targetY },
+        { x: target.left - 1, y: railY },
+      ],
+      [
+        { x: target.left + target.width - 1, y: targetY },
+        { x: target.left + target.width, y: targetY },
+        { x: target.left + target.width, y: railY },
+      ],
+    ]
+
+    for (const escape of escapes) {
+      const connector = {
+        connectorY,
+        points: [...escape, { x: noteX, y: railY }, { x: noteX, y: connectorY }],
+      }
+      if (
+        space.isFree(spatialRectClaim(`${owner}:body`, owner, "body", bound), { clearance: 1 }) &&
+        space.isFree(spatialPathClaim(`${owner}:connector`, owner, "boundary", connector.points))
+      )
+        return { bound: { ...bound, connector }, connector }
+    }
+  }
+
+  throw new Error(`State ${note.target} has no exterior note corridor`)
 }
 
 export function expandCompositeBoundsForInternalTransitions(
