@@ -233,6 +233,94 @@ describe("current session timeline rows", () => {
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
   })
 
+  test("keeps assistant errors and retries before later notices", () => {
+    const result = Timeline.constructSessionMessageRows(
+      [
+        { id: "msg_user", type: "user", text: "continue", time: { created: 1 } },
+        {
+          id: "msg_blocked",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [{ type: "text", text: "partial" }],
+          error: { type: "provider.content-filter", message: "Provider blocked the response" },
+          time: { created: 2, completed: 3 },
+        },
+        {
+          id: "msg_model",
+          type: "model-switched",
+          model: { id: "next", providerID: "provider" },
+          time: { created: 4 },
+        },
+      ],
+      true,
+      { type: "idle" },
+    )
+
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart", "Error", "Notice"])
+
+    const retry = Timeline.constructSessionMessageRows(
+      [
+        { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
+        {
+          id: "msg_retry",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [],
+          error: { type: "ProviderError", message: "rate limited" },
+          retry: { attempt: 2, at: 10, error: { type: "ProviderError", message: "rate limited" } },
+          time: { created: 2 },
+        },
+        {
+          id: "msg_model",
+          type: "model-switched",
+          model: { id: "next", providerID: "provider" },
+          time: { created: 3 },
+        },
+      ],
+      true,
+      { type: "retry", attempt: 2, next: 10, message: "rate limited" },
+    )
+
+    expect(retry.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry", "Notice"])
+  })
+
+  test("suppresses an earlier error when the turn recovers across a notice", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "recover", time: { created: 1 } },
+      {
+        id: "msg_failed",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [],
+        error: { type: "ProviderError", message: "temporary failure" },
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "msg_model",
+        type: "model-switched",
+        model: { id: "next", providerID: "provider" },
+        time: { created: 4 },
+      },
+      {
+        id: "msg_recovery",
+        type: "assistant",
+        agent: "build",
+        model: { id: "next", providerID: "provider" },
+        content: [{ type: "text", text: "recovered" }],
+        time: { created: 5, completed: 6 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(Timeline.constructSessionMessageRows(source, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual([
+      "UserMessage",
+      "Notice",
+      "AssistantPart",
+    ])
+  })
+
   test("does not render the retry error twice", () => {
     const source = [
       { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
