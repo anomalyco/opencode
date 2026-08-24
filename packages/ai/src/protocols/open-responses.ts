@@ -353,6 +353,10 @@ interface ReasoningStreamItem {
   // strings, but typing the map as `Record<number, ...>` documents intent
   // and matches the wire field.
   readonly summaryParts: Readonly<Record<number, ReasoningSummaryStatus>>
+  // Summary indexes that received at least one streamed delta. The `:0` block
+  // is started eagerly when the item opens, so block existence cannot tell
+  // whether a `.done` final would duplicate streamed text.
+  readonly deltaIndexes: ReadonlySet<number>
 }
 
 // =============================================================================
@@ -805,19 +809,33 @@ const onOutputTextDone = (state: ParserState, event: Event, id: string): StepRes
 }
 
 export const onReasoningDelta = (state: ParserState, event: Event, itemID: string): StepResult => {
-  if (!event.delta || !state.reasoningItems[itemID]) return [state, NO_EVENTS]
+  const item = state.reasoningItems[itemID]
+  if (!event.delta || !item) return [state, NO_EVENTS]
+  const index = event.summary_index ?? 0
   const events: LLMEvent[] = []
-  const id = `${itemID}:${event.summary_index ?? 0}`
   return [
     {
       ...state,
-      lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, id, event.delta),
+      lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, `${itemID}:${index}`, event.delta),
+      reasoningItems: {
+        ...state.reasoningItems,
+        [itemID]: { ...item, deltaIndexes: new Set([...item.deltaIndexes, index]) },
+      },
     },
     events,
   ]
 }
 
-export const onReasoningDone = (state: ParserState, _event: Event): StepResult => [state, NO_EVENTS]
+// Some compatible gateways emit a reasoning final without streaming any
+// deltas, mirroring `response.output_text.done`. Reconcile the complete text
+// as a single delta unless that summary index already streamed one.
+export const onReasoningDone = (state: ParserState, event: Event, itemID: string): StepResult => {
+  const item = state.reasoningItems[itemID]
+  if (!item || typeof event.text !== "string") return [state, NO_EVENTS]
+  const index = event.summary_index ?? 0
+  if (item.deltaIndexes.has(index)) return [state, NO_EVENTS]
+  return onReasoningDelta(state, { ...event, delta: event.text }, itemID)
+}
 
 const reasoningMetadata = (state: ParserState, item: StreamItem & { id: string }) =>
   providerMetadata(state, { itemId: item.id, reasoningEncryptedContent: item.encrypted_content ?? null })
@@ -855,7 +873,11 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
         lifecycle: Lifecycle.reasoningStart(state.lifecycle, events, `${item.id}:0`, reasoningMetadata(state, item)),
         reasoningItems: {
           ...state.reasoningItems,
-          [item.id]: { encryptedContent: item.encrypted_content, summaryParts: { 0: "active" } },
+          [item.id]: {
+            encryptedContent: item.encrypted_content,
+            summaryParts: { 0: "active" },
+            deltaIndexes: new Set(),
+          },
         },
       },
       events,
@@ -1160,6 +1182,15 @@ export const step = (state: ParserState, event: Event) => {
   if (event.type === "response.reasoning.delta" || event.type === "response.reasoning_summary_text.delta") {
     if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(onReasoningDelta(state, event, event.item_id))
+  }
+  if (
+    event.type === "response.reasoning.done" ||
+    event.type === "response.reasoning_summary_text.done" ||
+    event.type === "response.reasoning_summary.done" ||
+    event.type === "response.reasoning_text.done"
+  ) {
+    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+    return Effect.succeed(onReasoningDone(state, event, event.item_id))
   }
   if (event.type === "response.reasoning_summary_part.added")
     return event.item_id

@@ -166,10 +166,6 @@ const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
     return event.item_id
       ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
-  if (event.type === "response.reasoning_text.done" || event.type === "response.reasoning_summary.done")
-    return event.item_id
-      ? Effect.succeed(OpenResponses.onReasoningDone(state, event))
-      : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
     return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
   return OpenResponses.step(state, event)

@@ -2196,6 +2196,105 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("reconciles reasoning summaries that arrive only as finals", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, { providerOptions: { store: false } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              // No `.delta` events at all: the gateway sends the complete
+              // summary text in the `.done` final.
+              {
+                type: "response.reasoning_summary_text.done",
+                item_id: "rs_1",
+                summary_index: 0,
+                text: "Checked the diff.",
+              },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+              {
+                type: "response.output_item.done",
+                item: {
+                  type: "reasoning",
+                  id: "rs_1",
+                  summary: [{ type: "summary_text", text: "Checked the diff." }],
+                  encrypted_content: "encrypted-state",
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Checked the diff.")
+      expect(response.events.filter((event) => event.type.startsWith("reasoning-"))).toEqual([
+        {
+          type: "reasoning-start",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:0", text: "Checked the diff.", providerMetadata: undefined },
+        {
+          type: "reasoning-end",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
+      ])
+
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [response.message],
+          providerOptions: { store: false, include: ["reasoning.encrypted_content"] },
+        }),
+      )
+      expect(prepared.body.input).toEqual([
+        {
+          type: "reasoning",
+          id: "rs_1",
+          summary: [{ type: "summary_text", text: "Checked the diff." }],
+          encrypted_content: "encrypted-state",
+        },
+      ])
+    }),
+  )
+
+  it.effect("does not duplicate reasoning finals after streamed deltas", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1", encrypted_content: null } },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "Streamed" },
+              // Repeats the complete text, as the spec allows.
+              { type: "response.reasoning_summary_text.done", item_id: "rs_1", summary_index: 0, text: "Streamed" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Streamed")
+      expect(response.events.filter((event) => event.type === "reasoning-delta")).toEqual([
+        { type: "reasoning-delta", id: "rs_1:0", text: "Streamed", providerMetadata: undefined },
+      ])
+    }),
+  )
+
   it.effect("closes reasoning summary parts when storage is not disabled", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(LLMRequest.update(request, { providerOptions: { store: true } })).pipe(

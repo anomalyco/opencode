@@ -173,6 +173,37 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("reconciles raw reasoning finals without streamed deltas", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think it through." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_raw", encrypted_content: null },
+              },
+              // Raw reasoning finals carry no summary index; they reconcile
+              // into the item's first block.
+              { type: "response.reasoning.done", item_id: "rs_raw", text: "Raw chain of thought." },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_raw", encrypted_content: "raw-state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Raw chain of thought.")
+    }),
+  )
+
   it.effect("preserves nullable phases in the forgiving Open Responses baseline", () =>
     Effect.gen(function* () {
       const model = configure({
