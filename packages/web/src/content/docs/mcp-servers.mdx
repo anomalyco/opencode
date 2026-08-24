@@ -42,6 +42,22 @@ You can define MCP servers in your [OpenCode Config](https://opencode.ai/docs/co
 
 You can also disable a server by setting `enabled` to `false`. This is useful if you want to temporarily disable a server without removing it from your config.
 
+### Project-level `.agents/mcp.json`
+
+For projects, you can keep MCP servers in a dedicated `.agents/mcp.json` file instead of nesting them inside `opencode.json`. The file contains the server map directly - no outer `"mcp"` wrapper:
+
+```json title=".agents/mcp.json"
+{
+  "jira": {
+    "type": "remote",
+    "url": "https://jira.example.com/mcp",
+    "enabled": true
+  }
+}
+```
+
+This file merges after root-level `opencode.json`, so servers declared here win on conflicts.
+
 ---
 
 ### Overriding remote defaults

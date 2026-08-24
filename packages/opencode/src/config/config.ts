@@ -23,6 +23,7 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { RemoteAuthError } from "@opencode-ai/core/v1/config/error"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
@@ -243,6 +244,23 @@ const layer = Layer.effect(
       return yield* loadConfig(text, { path: filepath }, env)
     })
 
+    // .agents/mcp.json holds only MCP server definitions; contents are validated against the `mcp` record schema
+    // and merged as if they were declared under the "mcp" key of a config file.
+    const loadMcpFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>) {
+      yield* Effect.logInfo("loading", { path: filepath })
+      const text = yield* readConfigFile(filepath)
+      if (!text) return {} as Info
+      const expanded = yield* Effect.promise(() =>
+        ConfigVariable.substitute({ text, type: "path", path: filepath, env }),
+      )
+      const servers = ConfigParse.schema(
+        Schema.Record(Schema.String, Schema.Union([ConfigMCPV1.Info, Schema.Struct({ enabled: Schema.Boolean })])),
+        ConfigParse.jsonc(expanded, filepath),
+        filepath,
+      )
+      return { mcp: servers } as Info
+    })
+
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
       let result: Info = {}
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
@@ -422,7 +440,7 @@ const layer = Layer.effect(
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+          if (dir.endsWith(".opencode") || dir.endsWith(".agents") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)
@@ -430,6 +448,11 @@ const layer = Layer.effect(
               result.agent ??= {}
               result.mode ??= {}
               result.plugin ??= []
+            }
+            if (dir.endsWith(".agents")) {
+              const mcpSource = path.join(dir, "mcp.json")
+              yield* Effect.logDebug(`loading config from ${mcpSource}`)
+              yield* merge(mcpSource, yield* loadMcpFile(mcpSource, authEnv))
             }
           }
 

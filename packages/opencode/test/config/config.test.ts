@@ -1477,6 +1477,96 @@ it.instance("local .opencode config can override MCP from project config", () =>
   }),
 )
 
+it.instance("loads MCP servers from .agents/mcp.json", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      {
+        jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: true },
+      },
+      "mcp.json",
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.mcp?.jira?.type).toBe("remote")
+    expect(config.mcp?.jira?.url).toBe("https://jira.example.com/mcp")
+    expect(config.mcp?.jira?.enabled).toBe(true)
+  }),
+)
+
+it.instance(".agents config overrides root project config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
+        docs: {
+          type: "remote",
+          url: "https://docs.example.com/mcp",
+          enabled: false,
+        },
+      },
+    })
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          docs: {
+            type: "remote",
+            url: "https://docs.example.com/mcp",
+            enabled: true,
+          },
+        },
+      },
+      "opencode.json",
+    )
+    yield* writeConfigEffect(path.join(test.directory, ".agents"), { slack: { type: "remote", url: "https://slack.example.com/mcp" } }, "mcp.json")
+
+    const config = yield* Config.use.get()
+    expect(config.mcp?.docs?.enabled).toBe(true)
+    expect(config.mcp?.slack?.url).toBe("https://slack.example.com/mcp")
+  }),
+)
+
+it.instance(".agents/mcp.json overrides mcp key from .agents/opencode.json", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          docs: {
+            type: "remote",
+            url: "https://docs.example.com/mcp",
+            enabled: false,
+          },
+        },
+      },
+      "opencode.json",
+    )
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      {
+        docs: {
+          type: "remote",
+          url: "https://docs.example.com/mcp",
+          enabled: true,
+        },
+      },
+      "mcp.json",
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.mcp?.docs?.enabled).toBe(true)
+  }),
+)
+
 const remoteProjectOverride = wellKnown({
   config: {
     mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: false } },
