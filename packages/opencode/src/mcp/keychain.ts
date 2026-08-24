@@ -12,7 +12,10 @@ const run = (cmd: string, args: string[], input?: string) =>
   Effect.promise(
     () =>
       new Promise<{ code: number; stdout: string }>((resolve) => {
-        const child = spawn(cmd, args, { stdio: input === undefined ? "ignore" : "pipe" })
+        // stdout must stay piped even for write operations so lookups can read secrets back
+        const child = spawn(cmd, args, {
+          stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+        })
         let stdout = ""
         if (input !== undefined && child.stdin) {
           child.stdin.write(input)

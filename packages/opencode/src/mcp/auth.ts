@@ -123,7 +123,9 @@ const layer = Layer.effect(
       const merged: AuthData = {}
       for (const [name, entry] of Object.entries(fileData)) {
         const fromKeychain = yield* keychainGet(name).pipe(Effect.orElseSucceed(() => undefined))
-        merged[name] = fromKeychain ?? entry
+        // The keychain holds only the secret fields; file metadata (serverUrl, codeVerifier,
+        // oauthState) layers underneath so a keychain hit doesn't erase it.
+        merged[name] = fromKeychain ? { ...entry, ...fromKeychain } : entry
       }
       return merged
     })
