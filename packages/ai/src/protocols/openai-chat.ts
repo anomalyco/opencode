@@ -51,7 +51,12 @@ const OpenAIChatFunction = Schema.Struct({
 
 const OpenAIChatTool = Schema.Struct({
   type: Schema.tag("function"),
-  function: OpenAIChatFunction,
+  function: Schema.Struct({
+    name: Schema.String,
+    description: Schema.String,
+    parameters: JsonObject,
+    strict: Schema.optional(Schema.Boolean),
+  }),
   cache_control: Schema.optional(OpenAIChatCacheControl),
 })
 type OpenAIChatTool = Schema.Schema.Type<typeof OpenAIChatTool>
@@ -133,6 +138,7 @@ export const bodyFields = {
   store: Schema.optional(Schema.Boolean),
   prompt_cache_key: Schema.optional(Schema.String),
   reasoning_effort: Schema.optional(OpenAIOptions.OpenAIReasoningEffort),
+  tool_stream: Schema.optional(Schema.Boolean),
   max_completion_tokens: Schema.optional(Schema.Number),
   max_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
@@ -264,12 +270,18 @@ interface LoweringOptions {
   ) => Schema.Schema.Type<typeof OpenAIChatCacheControl> | undefined
 }
 
-const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema, options: LoweringOptions): OpenAIChatTool => ({
+const lowerTool = (
+  tool: ToolDefinition,
+  inputSchema: JsonSchema,
+  options: LoweringOptions,
+  supportsStrictMode: boolean,
+): OpenAIChatTool => ({
   type: "function",
   function: {
     name: tool.name,
     description: tool.description,
     parameters: inputSchema,
+    ...(supportsStrictMode ? { strict: false } : {}),
   },
   cache_control: options.cacheControl?.(tool.cache),
 })
@@ -528,11 +540,125 @@ const hasToolHistory = (messages: ReadonlyArray<LLMRequest["messages"][number]>)
   return false
 }
 
-const lowerOptions = (request: LLMRequest) => {
+// Derive `max_tokens` vs `max_completion_tokens` from provider/baseURL when
+// explicit `compatibility.maxTokensField` is not set. Aligned with
+// models.dev provider naming: DeepSeek, Moonshot AI, Together AI, ZAI
+// (Zhipu + Coding Plan variants), Nvidia, Cerebras, Chutes, etc. still
+// require `max_tokens`.
+const detectMaxTokensField = (provider: string, baseURL: string | undefined): "max_tokens" | "max_completion_tokens" => {
+  const p = provider.toLowerCase()
+  const url = (baseURL ?? "").toLowerCase()
+  if (
+    p === "deepseek" ||
+    url.includes("deepseek.com") ||
+    p === "moonshotai" ||
+    url.includes("api.moonshot.ai") ||
+    p === "togetherai" ||
+    url.includes("api.together.") ||
+    p === "zai" ||
+    p === "zai-coding-plan" ||
+    p === "zhipuai" ||
+    p === "zhipuai-coding-plan" ||
+    url.includes("api.z.ai") ||
+    url.includes("open.bigmodel.cn") ||
+    p === "nvidia" ||
+    url.includes("integrate.api.nvidia.com") ||
+    p === "cerebras" ||
+    url.includes("cerebras.ai") ||
+    url.includes("llm.chutes.ai") ||
+    p === "chutes" ||
+    p === "cloudflare-ai-gateway" ||
+    url.includes("gateway.ai.cloudflare.com") ||
+    p === "cloudflare-workers-ai" ||
+    url.includes("api.cloudflare.com") ||
+    p === "vercel-ai-gateway" ||
+    url.includes("ai-gateway.vercel.sh") ||
+    url.includes("vercel.sh")
+  )
+    return "max_tokens"
+  return "max_completion_tokens"
+}
+
+const detectSupportsStore = (provider: string, baseURL: string | undefined): boolean => {
+  const p = provider.toLowerCase()
+  const url = (baseURL ?? "").toLowerCase()
+  const isNvidia = p === "nvidia" || url.includes("integrate.api.nvidia.com")
+  const isMoonshot = p === "moonshotai" || p === "moonshotai-cn" || url.includes("api.moonshot.")
+  const isTogether = p === "togetherai" || p === "together" || url.includes("api.together.")
+  const isZai =
+    p === "zai" ||
+    p === "zai-coding-plan" ||
+    p === "zhipuai" ||
+    p === "zhipuai-coding-plan" ||
+    url.includes("api.z.ai") ||
+    url.includes("open.bigmodel.cn")
+  const isDeepSeek = p === "deepseek" || url.includes("deepseek.com")
+  const isCerebras = p === "cerebras" || url.includes("cerebras.ai")
+  const isXai = p === "xai" || url.includes("api.x.ai")
+  const isChutes = p === "chutes" || url.includes("chutes.ai")
+  const isCloudflareWorkersAI = p === "cloudflare-workers-ai" || url.includes("api.cloudflare.com")
+  const isCloudflareAiGateway = p === "cloudflare-ai-gateway" || url.includes("gateway.ai.cloudflare.com")
+  const isVercelAiGateway = p === "vercel-ai-gateway" || url.includes("ai-gateway.vercel.sh") || url.includes("vercel.sh")
+  const isAntLing = p === "ant-ling" || url.includes("api.ant-ling.com")
+  const isOpencode = p === "opencode" || url.includes("opencode.ai")
+  const isNonStandard =
+    isNvidia ||
+    isCerebras ||
+    isXai ||
+    isTogether ||
+    isChutes ||
+    isDeepSeek ||
+    isZai ||
+    isMoonshot ||
+    isOpencode ||
+    isCloudflareWorkersAI ||
+    isCloudflareAiGateway ||
+    isVercelAiGateway ||
+    isAntLing
+  return !isNonStandard
+}
+
+const detectSupportsUsageInStreaming = (): boolean => true
+
+const detectSupportsStrictMode = (provider: string, baseURL: string | undefined): boolean => {
+  const p = provider.toLowerCase()
+  const url = (baseURL ?? "").toLowerCase()
+  const isMoonshot = p === "moonshotai" || p === "moonshotai-cn" || url.includes("api.moonshot.")
+  const isTogether = p === "togetherai" || p === "together" || url.includes("api.together.")
+  const isCloudflareAiGateway = p === "cloudflare-ai-gateway" || url.includes("gateway.ai.cloudflare.com")
+  const isNvidia = p === "nvidia" || url.includes("integrate.api.nvidia.com")
+  return !isMoonshot && !isTogether && !isCloudflareAiGateway && !isNvidia
+}
+
+const detectZaiToolStream = (
+  provider: string,
+  baseURL: string | undefined,
+  modelID: string | undefined,
+): boolean => {
+  const p = provider.toLowerCase()
+  const url = (baseURL ?? "").toLowerCase()
+  const isZai =
+    p === "zai" ||
+    p === "zai-coding-plan" ||
+    p === "zhipuai" ||
+    p === "zhipuai-coding-plan" ||
+    url.includes("api.z.ai") ||
+    url.includes("open.bigmodel.cn")
+  if (!isZai) return false
+  const id = (modelID ?? "").toLowerCase()
+  if (id === "glm-4.5" || id === "glm-4.5-air" || id === "glm-4.5-flash" || id === "glm-4.5v") return false
+  return true
+}
+
+const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
   const options = OpenAIOptions.resolve(request)
   const cacheKey = ProviderShared.clampPromptCacheKey(request.promptCacheKey)
   return {
-    ...(options.store !== undefined ? { store: options.store } : {}),
+    ...(supportsStore && options.store !== undefined ? { store: options.store } : {}),
+    // For providers that support `store`, ensure stateless `store:false` is sent
+    // even when no explicit `providerOptions.store` was supplied, mirroring the
+    // native OpenAI Chat default. Non-standard providers omit `store` entirely.
+    ...(supportsStore && options.store === undefined ? { store: false } : {}),
     ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
   }
@@ -551,8 +677,19 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     )
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
-  const maxTokensField = request.model.compatibility?.maxTokensField ?? "max_tokens"
+  const provider = String(request.model.provider)
+  const baseURL = request.model.route.endpoint.baseURL
+  const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
+  const maxTokensField = request.model.compatibility?.maxTokensField ?? detectedMaxTokensField
+  const supportsStore = request.model.compatibility?.supportsStore ?? detectSupportsStore(provider, baseURL)
+  const supportsUsageInStreaming =
+    request.model.compatibility?.supportsUsageInStreaming ?? detectSupportsUsageInStreaming()
+  const supportsStrictMode = request.model.compatibility?.supportsStrictMode ?? detectSupportsStrictMode(provider, baseURL)
+  const zaiToolStream =
+    request.model.compatibility?.zaiToolStream ??
+    detectZaiToolStream(provider, baseURL, String(request.model.id))
   const hasHistory = hasToolHistory(request.messages)
+  const hasActiveTools = request.tools.length > 0
   return {
     model: request.model.id,
     messages: yield* lowerMessages(request, options),
@@ -566,11 +703,13 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
               tool,
               ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
               options,
+              supportsStrictMode,
             ),
           ),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
-    stream_options: { include_usage: true },
+    ...(supportsUsageInStreaming ? { stream_options: { include_usage: true } } : {}),
+    ...(zaiToolStream && hasActiveTools ? { tool_stream: true } : {}),
     ...(maxTokensField === "max_completion_tokens"
       ? { max_completion_tokens: generation?.maxTokens }
       : { max_tokens: generation?.maxTokens }),
@@ -580,7 +719,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     presence_penalty: generation?.presencePenalty,
     seed: generation?.seed,
     stop: generation?.stop,
-    ...lowerOptions(request),
+    ...lowerOptions(request, supportsStore),
   }
 })
 

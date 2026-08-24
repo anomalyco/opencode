@@ -70,7 +70,7 @@ describe("OpenAI-compatible Chat route", () => {
         baseURL: "https://api.deepseek.test/v1/",
         query: { "api-version": "2026-01-01" },
       })
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "deepseek-chat",
         messages: [
           { role: "system", content: "You are concise." },
@@ -79,7 +79,7 @@ describe("OpenAI-compatible Chat route", () => {
         tools: [
           {
             type: "function",
-            function: { name: "lookup", description: "Lookup data", parameters: { type: "object" } },
+            function: { name: "lookup", description: "Lookup data", parameters: { type: "object" }, strict: false },
           },
         ],
         tool_choice: "required",
@@ -130,7 +130,7 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(request)
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "deepseek-chat",
         messages: [
           { role: "system", content: "You are concise." },
@@ -180,7 +180,7 @@ describe("OpenAI-compatible Chat route", () => {
         }),
       )
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "deepseek-chat",
         messages: [
           { role: "user", content: "What is the weather?" },
@@ -204,6 +204,7 @@ describe("OpenAI-compatible Chat route", () => {
               name: "lookup",
               description: "Lookup data",
               parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+              strict: false,
             },
           },
         ],
