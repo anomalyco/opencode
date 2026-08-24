@@ -51,7 +51,9 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
       throw new Error(`Unexpected clipboard MIME type: ${result.representation.mimeType}`)
     },
     async write(text) {
-      const result = await clipboard.writeText(text, {
+      // Host clipboards reject NUL characters (e.g. from shell tool output);
+      // omit them so a single stray byte cannot fail the whole copy.
+      const result = await clipboard.writeText(text.replaceAll("\0", ""), {
         destination: "all-available",
         selection: "clipboard",
       })

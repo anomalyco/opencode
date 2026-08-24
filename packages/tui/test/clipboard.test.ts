@@ -102,6 +102,18 @@ test("uses all available routes but skips the process host remotely", async () =
   expect(writes).toEqual({ host: 0, terminal: 1 })
 })
 
+test("omits NUL characters that host clipboards cannot carry", async () => {
+  const writes: [string, ClipboardWriteOptions][] = []
+  const clipboard = createClipboardAdapter(
+    coreClipboard({
+      onWrite: (text, input) => writes.push([text, input]),
+    }),
+  )
+
+  await clipboard.write("a\0b\0")
+  expect(writes).toEqual([["ab", { destination: "all-available", selection: "clipboard" }]])
+})
+
 test("rejects only when no clipboard route accepted the write", async () => {
   const writes: [string, ClipboardWriteOptions][] = []
   const failure = new Error("native clipboard failed")
