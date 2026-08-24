@@ -235,6 +235,15 @@ export namespace FSUtil {
     }
   }
 
+  /**
+   * Strip only leading/trailing CR/LF from tool path args.
+   * Local models often emit a trailing newline inside JSON string paths; spaces
+   * remain so intentional names like " draft.md" stay addressable.
+   */
+  export function sanitizeToolPath(p: string): string {
+    return p.replace(/^[\r\n]+|[\r\n]+$/g, "")
+  }
+
   export function normalizePathPattern(p: string): string {
     if (process.platform !== "win32") return p
     if (p === "*") return p

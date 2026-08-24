@@ -95,7 +95,7 @@ describe("tool.write", () => {
       }),
     )
 
-    it.instance("trims whitespace from filePath before writing", () =>
+    it.instance("strips trailing newlines from filePath before writing", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
         const filepath = path.join(test.directory, "trimmed.txt")
@@ -104,6 +104,18 @@ describe("tool.write", () => {
         const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
         expect(content).toBe("trimmed path")
         expect(yield* Effect.promise(() => fs.readdir(test.directory))).toContain("trimmed.txt")
+      }),
+    )
+
+    it.instance("keeps intentional leading spaces in file names", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, " draft.md")
+        yield* run({ filePath: filepath, content: "spaced name" })
+
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("spaced name")
+        expect(yield* Effect.promise(() => fs.readdir(test.directory))).toContain(" draft.md")
       }),
     )
   })
