@@ -572,7 +572,7 @@ function cacheKey(source: string) {
 }
 
 export function bodyDigest(text: string) {
-  return new Bun.CryptoHasher("sha256").update(text).digest("hex")
+  return Hash.sha256(text)
 }
 
 export const layer = (options?: Options) =>
