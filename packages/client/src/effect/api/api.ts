@@ -1002,7 +1002,7 @@ export type SessionLogOutput =
 export type SessionLogOperation<E = never> = (input: SessionLogInput) => Stream.Stream<SessionLogOutput, E>
 
 export type SessionInterruptInput = { readonly sessionID: Session.ID; readonly continue?: boolean | undefined }
-export type SessionInterruptOutput = void
+export type SessionInterruptOutput = { readonly interrupted: boolean }
 export type SessionInterruptOperation<E = never> = (
   input: SessionInterruptInput,
 ) => Effect.Effect<SessionInterruptOutput, E>

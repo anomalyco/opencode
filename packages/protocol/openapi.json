@@ -3832,8 +3832,15 @@
         ],
         "security": [],
         "responses": {
-          "204": {
-            "description": "<No Content>"
+          "200": {
+            "description": "SessionInterruptResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionInterruptResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "InvalidRequestError",
@@ -3873,7 +3880,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
+        "description": "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When continue=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
         "summary": "Interrupt session execution"
       }
     },
@@ -16500,6 +16507,17 @@
           }
         },
         "required": ["data"],
+        "additionalProperties": false
+      },
+      "SessionInterruptResponse": {
+        "type": "object",
+        "properties": {
+          "interrupted": {
+            "type": "boolean",
+            "description": "Whether an active execution owned by this OpenCode process was interrupted."
+          }
+        },
+        "required": ["interrupted"],
         "additionalProperties": false
       },
       "SessionLogItemEncoded": {

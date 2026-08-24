@@ -1493,7 +1493,7 @@ describe("V2 mini transport", () => {
       files: [],
       includeFiles: true,
     })
-    const interrupt = spyOn(second.session, "interrupt").mockImplementation(() => ok(undefined))
+    const interrupt = spyOn(second.session, "interrupt").mockImplementation(() => ok({ interrupted: true }))
     await transport.interruptActiveTurn()
 
     expect(prompt).toHaveBeenCalled()
@@ -2363,7 +2363,7 @@ describe("V2 mini transport", () => {
       admitted = true
       return ok({ data: promptAdmission(request) })
     })
-    const interrupted = spyOn(client.session, "interrupt").mockImplementation(() => ok(undefined))
+    const interrupted = spyOn(client.session, "interrupt").mockImplementation(() => ok({ interrupted: true }))
     const controller = new AbortController()
     const turn = transport.runPromptTurn({
       agent: undefined,
@@ -2500,7 +2500,7 @@ describe("V2 mini transport", () => {
           })
         }) as never,
     )
-    const interrupted = spyOn(client.session, "interrupt").mockImplementation(() => ok(undefined))
+    const interrupted = spyOn(client.session, "interrupt").mockImplementation(() => ok({ interrupted: true }))
 
     const turn = transport.runPromptTurn({
       agent: undefined,

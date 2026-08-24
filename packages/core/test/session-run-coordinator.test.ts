@@ -236,7 +236,7 @@ describe("SessionRunCoordinator", () => {
           drain: () => Effect.void,
           settled: (_key, _exit, reason) => Effect.sync(() => void reasons.push(reason)),
         })
-        yield* coordinator.interrupt("session", "user")
+        expect(yield* coordinator.interrupt("session", "user")).toBeFalse()
         yield* coordinator.run("session")
         expect(reasons).toEqual([undefined])
       }),
@@ -260,7 +260,7 @@ describe("SessionRunCoordinator", () => {
 
         const run = yield* coordinator.run("session").pipe(Effect.forkChild)
         yield* Deferred.await(settling)
-        yield* coordinator.interrupt("session", "user")
+        expect(yield* coordinator.interrupt("session", "user")).toBeFalse()
         yield* Deferred.succeed(release, undefined)
         yield* Fiber.join(run)
         yield* coordinator.run("session")
@@ -315,7 +315,7 @@ describe("SessionRunCoordinator", () => {
         const idle = yield* coordinator.awaitIdle("session").pipe(Effect.forkChild)
         yield* Effect.yieldNow
         yield* coordinator.wake("session")
-        yield* coordinator.interrupt("session", "user")
+        expect(yield* coordinator.interrupt("session", "user")).toBeTrue()
         yield* Deferred.await(interrupted)
 
         const exits = yield* Fiber.awaitAll([first, second, idle])
