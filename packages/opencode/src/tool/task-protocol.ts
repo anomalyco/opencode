@@ -18,7 +18,7 @@ export const ASYNC_TASK_PROTOCOL = [
   "You cannot return your result to your caller while any async Task you started from this invocation is still outstanding.",
   "While those tasks remain, ending your turn is a wait — it does not return your result.",
   "",
-  "Once every async Task started from this invocation has finished, your next turn-end response is returned to your caller.",
+  `Once every async Task started from this invocation has finished, the system reports \`${ASYNC_TASK_STATUS}\`. Your next turn-end response is then returned to your caller.`,
   "",
   "That result must be a complete, self-contained answer to the task you were given, drawing on the task, the results you collected, and your own reasoning.",
 ].join("\n")

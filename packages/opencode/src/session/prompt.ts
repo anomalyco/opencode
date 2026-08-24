@@ -10,6 +10,7 @@ import { Session } from "./session"
 import { SessionClosure } from "./closure/coordinator"
 import { SessionAdmission } from "./closure/admission"
 import { AttachmentCoordinator } from "./attachment/coordinator"
+import { AttachmentStatus } from "./attachment/status"
 import { SessionPhysical } from "./physical-interrupt"
 import { hasUnconsumedLocalTool } from "./task-return"
 import type { SessionMutation } from "./closure/mutation"
@@ -1410,6 +1411,9 @@ const layer = Layer.effect(
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            // An ordinary request-local observation, not proof of provider bytes. The status supports
+            // the model's wait/return decision; it owns no settlement authority.
+            const attachmentStatus = turnAttachment ? AttachmentStatus.observe(turnAttachment.current()) : false
             const result = yield* handle.process({
               user: lastUser,
               agent,
@@ -1428,6 +1432,7 @@ const layer = Layer.effect(
                       },
                     ]
                   : []),
+                ...(AttachmentStatus.suffix(attachmentStatus) ?? []),
               ],
               tools,
               model,

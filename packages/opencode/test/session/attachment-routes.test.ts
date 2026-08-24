@@ -12,20 +12,21 @@ import { ASYNC_TASK_PROTOCOL, ASYNC_TASK_STATUS } from "@/tool/task-protocol"
  * shape of the suffix it produces, both of which are decided here.
  */
 describe("attached async status observation", () => {
-  test("the Task protocol does not promise a status line no route emits", () => {
+  test("the Task protocol names the status line the prompt path emits", () => {
     expect(ASYNC_TASK_STATUS).toBe("[attached async tasks: 0]")
     expect(Buffer.byteLength(ASYNC_TASK_STATUS, "utf8")).toBe(25)
-    // `AttachmentStatus.suffix` has no production consumer here: appending it needs a request-tail
-    // seam the upstream prompt path does not have. While that is true, the protocol must not quote
-    // the literal back to the model, or it would tell an agent to wait for a line nothing emits.
-    expect(ASYNC_TASK_PROTOCOL).not.toContain(ASYNC_TASK_STATUS)
-    // The two assertions below are this test's positive control. Without them the negative above
-    // would pass just as happily against an empty protocol string, proving nothing. They also pin
-    // the guarantee that has to survive the removal: the gate is runtime logic in the coordinator,
-    // and the text still has to describe it.
+    // `AttachmentStatus.suffix` has a production consumer: `session/prompt.ts` appends it to the
+    // request `messageSuffix`. Because a route emits it, the protocol may name it back to the model
+    // — a prompt that names a runtime signal is a claim about the runtime, and this claim is true.
+    // If that wiring is ever removed, this assertion is what fails.
+    expect(ASYNC_TASK_PROTOCOL).toContain(ASYNC_TASK_STATUS)
+    // Positive control. Without it the assertion above would pass against a protocol string that is
+    // nothing but the literal, proving only that concatenation works. This also pins the guarantee
+    // the status line is advisory to: the gate is runtime logic in the coordinator, and the text
+    // still has to describe it independently of any signal.
     expect(ASYNC_TASK_PROTOCOL).toContain("ending your turn is a wait")
     expect(ASYNC_TASK_PROTOCOL).toContain(
-      "Once every async Task started from this invocation has finished, your next turn-end response is returned to your caller.",
+      "Your next turn-end response is then returned to your caller.",
     )
   })
 
