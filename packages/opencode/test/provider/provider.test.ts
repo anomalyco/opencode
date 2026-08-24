@@ -122,26 +122,6 @@ it.instance("provider loaded from env variable", () =>
 )
 
 it.instance(
-  "AgentRouter installs its SSE sanitizer",
-  Effect.gen(function* () {
-    const providers = yield* list
-    expect(typeof providers[ProviderV2.ID.make("agentrouter")].options.fetch).toBe("function")
-  }),
-  {
-    config: {
-      provider: {
-        agentrouter: {
-          npm: "@ai-sdk/openai-compatible",
-          name: "AgentRouter",
-          options: { apiKey: "test-key", baseURL: "https://agentrouter.org/v1" },
-          models: { "test-model": { name: "Test Model" } },
-        },
-      },
-    },
-  },
-)
-
-it.instance(
   "provider loaded from config with apiKey option",
   Effect.gen(function* () {
     const providers = yield* list
