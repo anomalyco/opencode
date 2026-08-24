@@ -759,7 +759,7 @@ const TERMINAL_TYPES = new Set(["error", "response.completed", "response.incompl
 export const terminal = (event: Event) => TERMINAL_TYPES.has(event.type)
 
 const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepResult => {
-  if (!event.delta) return [state, NO_EVENTS]
+  if (!event.delta || !state.messageItems.has(id)) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   const phase = state.messagePhases[id]
   const metadata = providerMetadata(state, { itemId: id, ...(phase === undefined ? {} : { phase }) })
@@ -777,10 +777,9 @@ const onOutputTextDone = (state: ParserState, event: Event, id: string): StepRes
 }
 
 export const onReasoningDelta = (state: ParserState, event: Event, itemID: string): StepResult => {
-  if (!event.delta) return [state, NO_EVENTS]
+  if (!event.delta || !state.reasoningItems[itemID]) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
-  const id =
-    event.summary_index !== undefined || state.reasoningItems[itemID] ? `${itemID}:${event.summary_index ?? 0}` : itemID
+  const id = `${itemID}:${event.summary_index ?? 0}`
   return [
     {
       ...state,
@@ -858,27 +857,9 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
 
 const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResult => {
   if (!event.item_id || event.summary_index === undefined) return [state, NO_EVENTS]
-  const item = state.reasoningItems[event.item_id] ?? { encryptedContent: undefined, summaryParts: {} }
-  if (event.summary_index === 0) {
-    if (state.reasoningItems[event.item_id]) return [state, NO_EVENTS]
-    const events: LLMEvent[] = []
-    return [
-      {
-        ...state,
-        lifecycle: Lifecycle.reasoningStart(
-          state.lifecycle,
-          events,
-          `${event.item_id}:0`,
-          providerMetadata(state, { itemId: event.item_id, reasoningEncryptedContent: null }),
-        ),
-        reasoningItems: {
-          ...state.reasoningItems,
-          [event.item_id]: { ...item, summaryParts: { 0: "active" } },
-        },
-      },
-      events,
-    ]
-  }
+  const item = state.reasoningItems[event.item_id]
+  if (!item) return [state, NO_EVENTS]
+  if (event.summary_index === 0) return [state, NO_EVENTS]
 
   const events: LLMEvent[] = []
   const closed = Object.entries(item.summaryParts)
@@ -957,7 +938,7 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   state: ParserState,
   event: Event,
 ) {
-  if (!event.item_id || !event.delta) return [state, NO_EVENTS] satisfies StepResult
+  if (!event.item_id || !event.delta || !state.tools[event.item_id]) return [state, NO_EVENTS] satisfies StepResult
   const result = ToolStream.appendExisting(
     state.id,
     state.tools,
@@ -1165,7 +1146,10 @@ export const step = (state: ParserState, event: Event) => {
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
     return Effect.succeed(onOutputItemAdded(state, event))
   }
-  if (event.type === "response.function_call_arguments.delta") return onFunctionCallArgumentsDelta(state, event)
+  if (event.type === "response.function_call_arguments.delta")
+    return event.item_id
+      ? onFunctionCallArgumentsDelta(state, event)
+      : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.done") {
     if (event.item?.type === "message" && !event.item.id)
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)

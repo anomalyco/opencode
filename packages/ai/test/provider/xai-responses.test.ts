@@ -30,6 +30,10 @@ describe("xAI Responses route", () => {
         Effect.provide(
           fixedResponse(
             sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "reasoning_1" },
+              },
               { type: "response.reasoning_text.delta", item_id: "reasoning_1", delta: "Considering." },
               { type: "response.reasoning_text.done", item_id: "reasoning_1" },
               {

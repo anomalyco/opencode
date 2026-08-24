@@ -321,6 +321,10 @@ describe("OpenAI Responses route", () => {
               }),
             messages: Stream.fromArray([
               ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_ws" } }),
+              ProviderShared.encodeJson({
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_1" },
+              }),
               ProviderShared.encodeJson({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
               ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_ws" } }),
             ]),
@@ -1665,6 +1669,7 @@ describe("OpenAI Responses route", () => {
   it.effect("parses text and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
+        { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
         { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello" },
         { type: "response.output_text.delta", item_id: "msg_1", delta: "!" },
         {
@@ -1926,6 +1931,67 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("ignores deltas without a matching output item", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_text.delta", item_id: "msg_missing", delta: "orphaned text" },
+              { type: "response.refusal.delta", item_id: "refusal_missing", delta: "orphaned refusal" },
+              {
+                type: "response.reasoning_summary_text.delta",
+                item_id: "rs_missing",
+                summary_index: 0,
+                delta: "orphaned reasoning",
+              },
+              {
+                type: "response.reasoning_summary_part.added",
+                item_id: "rs_still_missing",
+                summary_index: 0,
+              },
+              {
+                type: "response.reasoning_summary_text.delta",
+                item_id: "rs_still_missing",
+                summary_index: 0,
+                delta: "still orphaned reasoning",
+              },
+              {
+                type: "response.function_call_arguments.delta",
+                item_id: "fc_missing",
+                delta: '{"orphaned":true}',
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("")
+      expect(response.message.content).toEqual([])
+      expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
+    }),
+  )
+
+  it.effect("rejects function argument deltas without the spec-required item id", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.function_call_arguments.delta", delta: "{}" },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toContain("response.function_call_arguments.delta is missing item_id")
+    }),
+  )
+
   it.effect("rejects reasoning events without the spec-required item id", () =>
     Effect.gen(function* () {
       const events = [
@@ -1981,8 +2047,10 @@ describe("OpenAI Responses route", () => {
         Effect.provide(
           fixedResponse(
             sseEvents(
+              { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
               { type: "response.output_text.delta", item_id: "msg_1", delta: "First" },
-              { type: "response.output_text.done", item_id: "msg_1" },
+              { type: "response.output_item.done", item: { type: "message", id: "msg_1" } },
+              { type: "response.output_item.added", item: { type: "message", id: "msg_2" } },
               { type: "response.output_text.delta", item_id: "msg_2", delta: "Second" },
               { type: "response.output_item.done", item: { type: "message", id: "msg_2" } },
               { type: "response.completed", response: { id: "resp_1" } },
@@ -1993,10 +2061,10 @@ describe("OpenAI Responses route", () => {
 
       expect(response.events.filter((event) => event.type.startsWith("text-"))).toEqual([
         { type: "text-start", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
-        { type: "text-delta", id: "msg_1", text: "First" },
-        { type: "text-end", id: "msg_1", providerMetadata: undefined },
+        { type: "text-delta", id: "msg_1", text: "First", providerMetadata: undefined },
+        { type: "text-end", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
         { type: "text-start", id: "msg_2", providerMetadata: { openai: { itemId: "msg_2" } } },
-        { type: "text-delta", id: "msg_2", text: "Second" },
+        { type: "text-delta", id: "msg_2", text: "Second", providerMetadata: undefined },
         { type: "text-end", id: "msg_2", providerMetadata: { openai: { itemId: "msg_2" } } },
       ])
     }),
@@ -2005,7 +2073,9 @@ describe("OpenAI Responses route", () => {
   it.effect("parses reasoning summary stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
+        { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
         { type: "response.reasoning_summary_text.delta", item_id: "rs_1", delta: "thinking" },
+        { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
         { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello" },
         { type: "response.reasoning_summary_text.done", item_id: "rs_1" },
         { type: "response.completed", response: { id: "resp_1" } },
@@ -2017,18 +2087,22 @@ describe("OpenAI Responses route", () => {
       expect(response.text).toBe("Hello")
       expect(response.events).toMatchObject([
         { type: "step-start", index: 0 },
-        { type: "reasoning-start", id: "rs_1" },
-        { type: "reasoning-delta", id: "rs_1", text: "thinking" },
+        { type: "reasoning-start", id: "rs_1:0" },
+        { type: "reasoning-delta", id: "rs_1:0", text: "thinking" },
         { type: "text-start", id: "msg_1" },
         { type: "text-delta", id: "msg_1", text: "Hello" },
-        { type: "reasoning-end", id: "rs_1" },
+        { type: "reasoning-end", id: "rs_1:0" },
         { type: "text-end", id: "msg_1" },
         { type: "step-finish", index: 0, reason: { normalized: "stop", raw: undefined } },
         { type: "finish", reason: { normalized: "stop", raw: undefined } },
       ])
       expect(response.events.filter((event) => event.type === "finish")).toHaveLength(1)
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "thinking" },
+        {
+          type: "reasoning",
+          text: "thinking",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
         { type: "text", text: "Hello", providerMetadata: { openai: { itemId: "msg_1" } } },
       ])
     }),
@@ -2040,6 +2114,7 @@ describe("OpenAI Responses route", () => {
         Effect.provide(
           fixedResponse(
             sseEvents(
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
               { type: "response.reasoning_summary_text.delta", item_id: "rs_1", delta: "thinking" },
               {
                 type: "response.output_item.done",
@@ -2059,7 +2134,7 @@ describe("OpenAI Responses route", () => {
       expect(response.events).toContainEqual(
         expect.objectContaining({
           type: "reasoning-end",
-          id: "rs_1",
+          id: "rs_1:0",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         }),
       )
@@ -2200,6 +2275,7 @@ describe("OpenAI Responses route", () => {
               })
               return input.respond(
                 sseEvents(
+                  { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
                   { type: "response.output_text.delta", item_id: "msg_1", delta: "Parser now round-trips reasoning." },
                   { type: "response.completed", response: { id: "resp_1" } },
                 ),

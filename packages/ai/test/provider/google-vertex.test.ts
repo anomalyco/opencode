@@ -237,6 +237,7 @@ describe("Google Vertex providers", () => {
               })
               return input.respond(
                 sseEvents(
+                  { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
                   { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello." },
                   { type: "response.completed", response: { id: "resp_1" } },
                 ),
