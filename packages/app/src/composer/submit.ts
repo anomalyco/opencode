@@ -274,15 +274,8 @@ async function sendCommand(
   const request = await buildSubmissionRequest(session, value)
   await session.api.command({
     sessionID: session.id,
-    id: value.id,
     command: command.command,
-    arguments: command.arguments,
-    agent: value.selection.agent,
-    model: {
-      id: value.selection.model.modelID,
-      providerID: value.selection.model.providerID,
-      variant: value.selection.variant,
-    },
+    text: command.arguments,
     files: request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
     agents: request.agents,
     skills: request.skills,

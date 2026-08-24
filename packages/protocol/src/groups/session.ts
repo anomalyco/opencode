@@ -13,7 +13,7 @@ import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from 
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
   ConflictError,
-  CommandEvaluationError,
+  CommandExecutionError,
   CommandNotFoundError,
   InvalidCursorError,
   InvalidRequestError,
@@ -358,27 +358,19 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       HttpApiEndpoint.post("session.command", "/api/session/:sessionID/command", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
-          id: SessionMessage.ID.pipe(Schema.optional),
           command: Schema.String,
-          arguments: Schema.String.pipe(Schema.optional),
-          agent: Agent.ID.pipe(Schema.optional),
-          model: Model.Ref.pipe(Schema.optional),
-          files: PromptInput.Prompt.fields.files,
-          agents: PromptInput.Prompt.fields.agents,
-          skills: PromptInput.Prompt.fields.skills,
+          ...PromptInput.Prompt.fields,
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
-          resume: Schema.Boolean.pipe(Schema.optional),
         }),
-        success: Schema.Struct({ data: SessionInbox.User }),
-        error: [ConflictError, InvalidRequestError, SessionNotFoundError, CommandNotFoundError, CommandEvaluationError],
+        success: HttpApiSchema.NoContent,
+        error: [SessionNotFoundError, CommandNotFoundError, CommandExecutionError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.command",
             summary: "Run command",
-            description:
-              "Resolve a slash command into prompt input, admit it durably, and schedule execution unless resume is false.",
+            description: "Execute a slash command callback immediately.",
           }),
         ),
     )

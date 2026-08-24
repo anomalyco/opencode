@@ -2814,14 +2814,7 @@ describe("V2 mini transport", () => {
           data: { sessionID: "ses_1" },
         })
       })
-      return ok({
-        id: input.id ?? "msg_cmd",
-        sessionID: "ses_1",
-        type: "user" as const,
-        payload: { text: "evaluated template" },
-        delivery: "steer" as const,
-        timeCreated: 2,
-      })
+      return ok(undefined)
     })
 
     await transport.runPromptTurn({
@@ -2852,11 +2845,8 @@ describe("V2 mini transport", () => {
 
     expect(request).toMatchObject({
       sessionID: "ses_1",
-      id: "msg_cmd",
       command: "deploy",
-      arguments: "prod",
-      agent: "build",
-      model: { providerID: "test", id: "model" },
+      text: "prod",
       files: [
         { uri: "file:///tmp/context.txt", name: "context.txt" },
         {
@@ -2868,7 +2858,6 @@ describe("V2 mini transport", () => {
       skills: [{ id: "api-design", mention: { start: 13, end: 24, text: "/api-design" } }],
       delivery: "steer",
     })
-    // Selection rides the command payload; no separate client-side switch.
     expect(client.session.switchAgent).not.toHaveBeenCalled()
     expect(client.session.switchModel).not.toHaveBeenCalled()
     await transport.close()

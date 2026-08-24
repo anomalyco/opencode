@@ -255,18 +255,14 @@ export type SessionPromptOperation<E = never> = (input: SessionPromptInput) => E
 
 export type SessionCommandInput = {
   readonly sessionID: Session.ID
-  readonly id?: SessionMessage.ID | undefined
   readonly command: string
-  readonly arguments?: string | undefined
-  readonly agent?: Agent.ID | undefined
-  readonly model?: Model.Ref | undefined
+  readonly text: string
   readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
   readonly agents?: ReadonlyArray<AgentAttachment> | undefined
   readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined
   readonly delivery?: SessionInbox.Delivery | undefined
-  readonly resume?: boolean | undefined
 }
-export type SessionCommandOutput = SessionInbox.User
+export type SessionCommandOutput = void
 export type SessionCommandOperation<E = never> = (input: SessionCommandInput) => Effect.Effect<SessionCommandOutput, E>
 
 export type SessionSkillInput = {

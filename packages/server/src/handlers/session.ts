@@ -8,7 +8,7 @@ import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
   ConflictError,
-  CommandEvaluationError,
+  CommandExecutionError,
   CommandNotFoundError,
   InvalidRequestError,
   InvalidCursorError,
@@ -317,55 +317,36 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.command",
         Effect.fn(function* (ctx) {
-          return {
-            data: yield* session
-              .command({
-                sessionID: ctx.params.sessionID,
-                id: ctx.payload.id,
-                command: ctx.payload.command,
-                arguments: ctx.payload.arguments,
-                agent: ctx.payload.agent,
-                model: ctx.payload.model,
-                files: ctx.payload.files,
-                agents: ctx.payload.agents,
-                skills: ctx.payload.skills,
-                delivery: ctx.payload.delivery,
-                resume: ctx.payload.resume,
-              })
-              .pipe(
-                Effect.catchTag("Session.NotFoundError", missingSession),
-                Effect.catchTag("Command.NotFoundError", (error) =>
-                  Effect.fail(
-                    new CommandNotFoundError({
-                      command: error.command,
-                      message: error.message,
-                    }),
-                  ),
-                ),
-                Effect.catchTag("Command.EvaluationError", (error) =>
-                  Effect.fail(
-                    new CommandEvaluationError({
-                      command: error.command,
-                      message: error.message,
-                    }),
-                  ),
-                ),
-                Effect.catchTag("Session.PromptConflictError", (error) =>
-                  Effect.fail(
-                    new ConflictError({
-                      message: `Prompt message ID conflicts with an existing durable record: ${error.messageID}`,
-                      resource: error.messageID,
-                    }),
-                  ),
-                ),
-                Effect.catchTag("Session.AttachmentError", (error) =>
-                  Effect.fail(new InvalidRequestError({ message: error.message, field: "files" })),
-                ),
-                Effect.catchTag("Session.SkillNotFoundError", (error) =>
-                  Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
+          yield* session
+            .command({
+              sessionID: ctx.params.sessionID,
+              command: ctx.payload.command,
+              text: ctx.payload.text,
+              files: ctx.payload.files,
+              agents: ctx.payload.agents,
+              skills: ctx.payload.skills,
+              delivery: ctx.payload.delivery,
+            })
+            .pipe(
+              Effect.catchTag("Session.NotFoundError", missingSession),
+              Effect.catchTag("Command.NotFoundError", (error) =>
+                Effect.fail(
+                  new CommandNotFoundError({
+                    command: error.command,
+                    message: error.message,
+                  }),
                 ),
               ),
-          }
+              Effect.catchTag("Command.ExecutionError", (error) =>
+                Effect.fail(
+                  new CommandExecutionError({
+                    command: error.command,
+                    message: error.message,
+                  }),
+                ),
+              ),
+            )
+          return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(

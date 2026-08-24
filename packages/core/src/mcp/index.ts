@@ -2,7 +2,7 @@ export * as MCP from "./index.js"
 
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { Command } from "@opencode-ai/schema/command"
+import { ephemeral } from "@opencode-ai/schema/event"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Stream, Types } from "effect"
@@ -19,6 +19,7 @@ import { State } from "../state.js"
 import type { MCPClient } from "./client.js"
 
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
+export const PromptsChanged = ephemeral({ type: "mcp.prompts.changed", schema: { server: Schema.String } })
 export type ServerName = typeof ServerName.Type
 
 // The status union is a public wire contract, so it lives in @opencode-ai/schema and is re-exported here.
@@ -453,7 +454,7 @@ export const layer = (options?: Options) =>
           Effect.map((defs) => {
             entry.prompts = defs.map((def) => toPrompt(name, def))
           }),
-          Effect.andThen(bus.publish(Command.Event.Updated, {})),
+          Effect.andThen(bus.publish(PromptsChanged, { server: name })),
         )
 
       // Runs a connection callback under the server lock, dropping it if the connection is no longer
@@ -572,7 +573,7 @@ export const layer = (options?: Options) =>
         yield* Scope.close(scope, Exit.void)
         yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
         yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
-        yield* bus.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
+        yield* bus.publish(PromptsChanged, { server: name }).pipe(Effect.ignore)
       })
 
       const disposeServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {

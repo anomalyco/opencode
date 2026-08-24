@@ -1271,17 +1271,11 @@ export function Prompt(props: PromptProps) {
       dispatch(() => client.api.session.shell({ sessionID: target, command: inputText }))
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
-      move.startSubmit()
-      const model = { providerID: selection.providerID, id: selection.modelID, variant }
-      const cancelCommit = local.model.trackSessionCommit(target, model)
-
       const send = () =>
         client.api.session.command({
           sessionID: target,
           command: slashHead.name,
-          arguments: slashHead.arguments,
-          agent: agent.id,
-          model,
+          text: slashHead.arguments,
           files: entry.files,
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
@@ -1289,7 +1283,6 @@ export function Prompt(props: PromptProps) {
         })
       const setup = newSession
       void (setup ? setup.gate.then(send) : send()).catch((error) => {
-        cancelCommit()
         if (setup) return setup.recover(error)
         toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
         restoreEntry()
