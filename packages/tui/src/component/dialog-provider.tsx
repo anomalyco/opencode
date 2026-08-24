@@ -1,14 +1,14 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useSync } from "../context/sync"
 import { map, pipe, sortBy } from "remeda"
-import { DialogSelect } from "../ui/dialog-select"
+import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useSDK } from "../context/sdk"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
+import type { ProviderAuthAuthorization, ProviderAuthMethod, LocalInstance } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
 import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "../util/provider-origin"
@@ -26,6 +26,7 @@ const PROVIDER_PRIORITY: Record<string, number> = {
 }
 
 const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
+const LOCAL_PROVIDER_OPTION_VALUE = "__opencode_local_provider__"
 const CUSTOM_PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
 
 type ProviderOptionBase = {
@@ -42,6 +43,9 @@ type ProviderOption =
     })
   | (ProviderOptionBase & {
       type: "custom"
+    })
+  | (ProviderOptionBase & {
+      type: "local"
     })
 
 export function providerOptions(list: { id: string; name: string }[]): ProviderOption[] {
@@ -67,6 +71,13 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
       })),
     ),
+    {
+      type: "local",
+      title: "Local (LAN)",
+      value: LOCAL_PROVIDER_OPTION_VALUE,
+      description: "Scan for llama-swap on local network",
+      category: "Providers",
+    },
     {
       type: "custom",
       title: "Other",
@@ -117,6 +128,18 @@ export function createDialogProviderOptions() {
     return pipe(
       providerOptions(sync.data.provider_next.all),
       map((provider) => {
+        if (provider.type === "local") {
+          return {
+            title: provider.title,
+            value: provider.value,
+            description: provider.description,
+            category: provider.category,
+            async onSelect() {
+              dialog.replace(() => <DialogLocalScan />)
+            },
+          }
+        }
+
         if (provider.type === "custom") {
           return {
             title: provider.title,
@@ -466,4 +489,151 @@ async function PromptsMethod(props: PromptsMethodProps) {
     inputs[prompt.key] = value
   }
   return inputs
+}
+
+function DialogLocalScan() {
+  const { theme } = useTheme()
+  const sdk = useSDK()
+  const dialog = useDialog()
+  const toast = useToast()
+
+  onMount(async () => {
+    const result = await Promise.race([
+      sdk.client.local.scan({ directory: sdk.directory }),
+      new Promise<{ error: string; data?: undefined }>((resolve) =>
+        setTimeout(() => resolve({ error: "scan timed out" }), 8000),
+      ),
+    ]).catch((err: unknown) => ({ error: String(err), data: undefined }))
+    if (result.error || !result.data) {
+      const msg = typeof result.error === "string" ? result.error : (JSON.stringify(result.error) ?? "no data")
+      toast.show({ variant: "error", message: "Scan failed: " + msg })
+      dialog.clear()
+      return
+    }
+    const instances = result.data as LocalInstance[]
+    if (instances.length === 0) {
+      toast.show({ variant: "info", message: "No local llama-swap instances found on the network" })
+      dialog.clear()
+      return
+    }
+    dialog.replace(() => <DialogLocalProviders instances={instances} />)
+  })
+
+  return (
+    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
+      <text attributes={TextAttributes.BOLD} fg={theme.text}>
+        Local providers
+      </text>
+      <text fg={theme.textMuted}>Scanning local network…</text>
+    </box>
+  )
+}
+
+function DialogLocalProviders(props: { instances: LocalInstance[] }) {
+  const { theme } = useTheme()
+  const sdk = useSDK()
+  const sync = useSync()
+  const dialog = useDialog()
+  const toast = useToast()
+  const [selected, setSelected] = createSignal(
+    new Set(props.instances.filter((item) => !item.configuredProviderID).map((item) => item.baseURL)),
+  )
+  const [connecting, setConnecting] = createSignal(false)
+
+  function keyOf(instance: LocalInstance) {
+    return instance.baseURL
+  }
+
+  function toggle(instance: LocalInstance) {
+    if (instance.configuredProviderID || connecting()) return
+    setSelected((current) => {
+      const next = new Set(current)
+      const key = keyOf(instance)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  async function connectInstances(items: LocalInstance[]) {
+    if (connecting()) return
+    const picked = items.filter((item) => !item.configuredProviderID)
+    if (picked.length === 0) {
+      toast.show({ variant: "info", message: "No new local providers selected" })
+      return
+    }
+
+    setConnecting(true)
+    const failed: string[] = []
+    for (const item of picked) {
+      const result = await sdk.client.local.connect({
+        directory: sdk.directory,
+        localConnectPayload: { id: item.id, name: item.name, baseURL: item.baseURL },
+      })
+      if (result.error) failed.push(item.name)
+    }
+    setConnecting(false)
+
+    if (failed.length > 0) {
+      toast.show({ variant: "error", message: `Failed to add ${failed.join(", ")}` })
+      return
+    }
+
+    await sdk.client.instance.dispose()
+    await sync.bootstrap()
+    toast.show({
+      variant: "info",
+      message: `Added ${picked.length} local provider${picked.length === 1 ? "" : "s"}`,
+    })
+    dialog.clear()
+  }
+
+  async function connectSelected(fallback?: LocalInstance) {
+    const picked = props.instances.filter((item) => selected().has(keyOf(item)) && !item.configuredProviderID)
+    await connectInstances(picked.length > 0 ? picked : fallback ? [fallback] : [])
+  }
+
+  const options = createMemo<DialogSelectOption<LocalInstance>[]>(() =>
+    props.instances.map((instance) => {
+      const running = instance.online
+      const configured = Boolean(instance.configuredProviderID)
+      const picked = selected().has(keyOf(instance))
+      const category = configured ? (running ? "Configured · Online" : "Configured · Offline") : "Available"
+      return {
+        title: instance.name,
+        value: instance,
+        description: running
+          ? `${instance.host}:${instance.port} · ${instance.models.length} model${instance.models.length !== 1 ? "s" : ""}`
+          : `${instance.host}:${instance.port} · offline`,
+        category,
+        gutter: () => {
+          if (configured) return <text fg={running ? theme.success : theme.textMuted}>✓</text>
+          return <text fg={picked ? theme.success : theme.textMuted}>[{picked ? "✓" : " "}]</text>
+        },
+      }
+    }),
+  )
+
+  return (
+    <DialogSelect
+      title="Local providers"
+      options={options()}
+      actions={[
+        {
+          command: "dialog.local.toggle",
+          title: "toggle",
+          disabled: connecting(),
+          onTrigger: (option) => toggle(option.value as LocalInstance),
+        },
+        {
+          command: "dialog.local.connect",
+          title: connecting() ? "adding" : "add selected",
+          side: "right",
+          disabled: connecting(),
+          onTrigger: () => connectSelected(),
+        },
+      ]}
+      onSelect={(option) => connectSelected(option.value)}
+    />
+  )
 }

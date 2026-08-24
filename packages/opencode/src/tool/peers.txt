@@ -1,0 +1,23 @@
+List the other agent sessions currently working in this directory.
+
+Call this before starting work that touches shared state — a branch, the git index, a
+migration, a config file, a package manifest — and whenever you are about to begin
+something substantial in a repository you did not just create. Two agents editing one
+checkout is a real and recurring failure here, and neither one notices until the damage
+is done.
+
+It returns, for each active session: its id, its title, whether it is busy, waiting on a
+permission prompt, or stalled, which agent and model is driving it, whether an auto/loop
+run owns it, and how long since it last did anything.
+
+Your own session is never listed, and neither are subagents you spawned — everything
+returned is genuinely someone else.
+
+Only working sessions are listed. An empty result means nobody else is active here, not
+that the tool failed.
+
+Titles are the useful field. Two sessions titled "Merge five specsync worktrees into main"
+and "Finishing specsync and merging worktrees" are the same job being done twice. If a
+peer's title overlaps what you are about to do, say so and ask rather than racing it. You
+cannot read another session's messages and should not try — the title and status are all
+the shared context there is.

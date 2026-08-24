@@ -963,4 +963,6 @@ export const node = LayerNode.make({
   ],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Session.defaultLayer), Layer.provide(SessionPrompt.defaultLayer), Layer.provide(LayerNode.compile(httpClient)), Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(Vcs.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer), Layer.provide(FSUtil.defaultLayer), Layer.provide(Database.defaultLayer)))
+
 export * as Workspace from "./workspace"

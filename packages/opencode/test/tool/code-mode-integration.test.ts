@@ -8,15 +8,8 @@ import { Session } from "@/session/session"
 import { Tool } from "@/tool/tool"
 import * as Truncate from "@/tool/truncate"
 import { MessageID, SessionID } from "@/session/schema"
-import { Server } from "@modelcontextprotocol/sdk/server/index.js"
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import {
-  CallToolRequestSchema,
-  LATEST_PROTOCOL_VERSION,
-  ListToolsRequestSchema,
-  type Tool as MCPToolDef,
-} from "@modelcontextprotocol/sdk/types.js"
+import { Server } from "@modelcontextprotocol/server"
+import { Client, InMemoryTransport, LATEST_PROTOCOL_VERSION, type Tool as MCPToolDef } from "@modelcontextprotocol/client"
 import { Cause, Effect, Exit, Layer } from "effect"
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -103,17 +96,17 @@ const TOOL_DEFS: MCPToolDef[] = [
 function handleCall(name: string, args: Record<string, unknown>) {
   switch (name) {
     case "get_text":
-      return { content: [{ type: "text", text: `hello ${args.name}` }] }
+      return { content: [{ type: "text" as const, text: `hello ${args.name}` }] }
     case "add": {
       const sum = (args.a as number) + (args.b as number)
-      return { content: [{ type: "text", text: String(sum) }], structuredContent: { sum } }
+      return { content: [{ type: "text" as const, text: String(sum) }], structuredContent: { sum } }
     }
     case "screenshot":
-      return { content: [{ type: "image", data: PNG, mimeType: "image/png" }] }
+      return { content: [{ type: "image" as const, data: PNG, mimeType: "image/png" }] }
     case "boom":
-      return { content: [{ type: "text", text: "kaboom" }], isError: true }
+      return { content: [{ type: "text" as const, text: "kaboom" }], isError: true }
     default:
-      return { content: [{ type: "text", text: `unknown tool ${name}` }], isError: true }
+      return { content: [{ type: "text" as const, text: `unknown tool ${name}` }], isError: true }
   }
 }
 
@@ -122,8 +115,8 @@ let description: string
 
 async function buildTool() {
   const server = new Server({ name: SERVER, version: "1.0.0" }, { capabilities: { tools: {} } })
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }))
-  server.setRequestHandler(CallToolRequestSchema, async (req) =>
+  server.setRequestHandler("tools/list", async () => ({ tools: TOOL_DEFS }))
+  server.setRequestHandler("tools/call", async (req) =>
     handleCall(req.params.name, (req.params.arguments ?? {}) as Record<string, unknown>),
   )
 
@@ -132,10 +125,13 @@ async function buildTool() {
   const client = new RawJsonRpcClient(clientTransport)
   await client.connect()
 
-  const listed = (await client.listTools()).tools as MCPToolDef[]
+  const listed = (await client.listTools()).tools as unknown as MCPToolDef[]
   const mcpTools: Record<string, MCP.McpTool> = {}
   for (const def of listed) {
-    mcpTools[McpCatalog.toolName(SERVER, def.name)] = { def, client: client as unknown as Client }
+    mcpTools[McpCatalog.toolName(SERVER, def.name)] = {
+      def: def as unknown as MCP.McpTool["def"],
+      client: client as unknown as MCP.McpTool["client"],
+    }
   }
 
   const layer = Layer.mergeAll(

@@ -405,6 +405,42 @@ describe("session.compaction.isOverflow", () => {
   )
 
   it.live(
+    "returns false for small prompts when output limit is unknown",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const model = createModel({ context: 16_384, output: 0 })
+        const tokens = { input: 1, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+      }),
+    ),
+  )
+
+  it.live(
+    "reserves bounded headroom when output limit is unknown",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const model = createModel({ context: 16_384, output: 0 })
+        const tokens = { input: 13_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
+    "does not compact when reserved headroom consumes the usable budget",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const model = createModel({ context: 1_000, output: 32_000 })
+        const tokens = { input: 1, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+      }),
+    ),
+  )
+
+  it.live(
     "includes cache.read in token count",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
@@ -891,15 +927,17 @@ describe("session.compaction.process", () => {
         auto: false,
       })
 
-      const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const summary = all.find(
         (msg) => msg.info.role === "assistant" && msg.info.summary,
       )
 
-      expect(result).toBe("stop")
+      // With the self-healing fix, compaction overflow retries with aggressive
+      // truncation and returns "continue" with a minimal summary instead of "stop".
+      expect(result).toBe("continue")
       expect(summary?.info.role).toBe("assistant")
       if (summary?.info.role === "assistant") {
-        expect(summary.info.finish).toBe("error")
-        expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
+        expect(summary.info.finish).not.toBe("error")
       }
     }).pipe(withCompaction({ result: "compact" })),
   )

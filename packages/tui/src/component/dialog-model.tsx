@@ -1,22 +1,65 @@
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, onMount } from "solid-js"
 import { useLocal } from "../context/local"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
+import { DialogModelCtx } from "./dialog-model-ctx"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
+import { useToast } from "../ui/toast"
 import { useSync } from "../context/sync"
+import { useSDK } from "../context/sdk"
+import { useProject } from "../context/project"
+import { createClient, createConfig } from "../local/llama-skein/gen/client"
+import { LlamaSkeinClient } from "../local/llama-skein/gen/sdk.gen"
+import { extractMem, fmtGB, normalizeBaseURL } from "../local/model-fit"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
+  const sdk = useSDK()
+  const project = useProject()
   const dialog = useDialog()
+  const toast = useToast()
   const [query, setQuery] = createSignal("")
+  const [settingDefault, setSettingDefault] = createSignal(false)
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
+
+  // Total VRAM (or unified memory) per local provider, fetched once per dialog
+  // lifetime — never blocks dialog open, and a provider that doesn't answer
+  // /api/hardware (non-local, or an older backend) simply has no label.
+  const [vram, setVram] = createSignal<Record<string, string>>({})
+
+  onMount(() => {
+    void sync.refreshProviders().catch(() => undefined)
+    for (const item of sync.data.provider) {
+      const baseURL = item.options?.["baseURL"] as string | undefined
+      if (!baseURL) continue
+      const llamaClient = new LlamaSkeinClient({
+        client: createClient(createConfig({ baseUrl: normalizeBaseURL(baseURL) })),
+      })
+      llamaClient
+        .getHardware()
+        .then((res) => {
+          if (!res.data) return
+          const mem = extractMem(res.data)
+          if (!mem || mem.totalMb <= 0) return
+          setVram((prev) => ({ ...prev, [item.id]: `${fmtGB(mem.totalMb)} GB ${mem.label}` }))
+        })
+        .catch(() => {
+          // backend may not support /api/hardware — no VRAM label, nothing else changes
+        })
+    }
+  })
+
+  function providerLabel(providerID: string, name: string) {
+    const label = vram()[providerID]
+    return label ? `${name} · ${label}` : name
+  }
 
   const showExtra = createMemo(() => connected() && !props.providerID)
 
@@ -40,8 +83,14 @@ export function DialogModel(props: { providerID?: string }) {
             title: model.name ?? item.modelID,
             description: provider.name,
             category,
+            provenance: providerLabel(provider.id, provider.name),
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            // sizeBytes rides on the runtime provider Model (llama-skein
+            // size_bytes) but isn't in the generated SDK type yet — read it
+            // loosely; regen the SDK to type it properly.
+            footer:
+              formatModelSize((model as { sizeBytes?: number }).sizeBytes) ??
+              (model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined),
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -77,9 +126,12 @@ export function DialogModel(props: { providerID?: string }) {
             description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
               ? "(Favorite)"
               : undefined,
-            category: connected() ? provider.name : undefined,
+            category: connected() ? providerLabel(provider.id, provider.name) : undefined,
+            provenance: providerLabel(provider.id, provider.name),
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer:
+              formatModelSize((info as { sizeBytes?: number }).sizeBytes) ??
+              (info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined),
             onSelect() {
               onSelect(provider.id, model)
             },
@@ -173,6 +225,44 @@ export function DialogModel(props: { providerID?: string }) {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },
         },
+        {
+          command: "model.dialog.ctx",
+          title: "Set context size",
+          disabled: !connected(),
+          onTrigger: (option) => {
+            const { providerID, modelID } = option.value as { providerID: string; modelID: string }
+            const provider = sync.data.provider.find((p) => p.id === providerID)
+            if (!provider?.options?.baseURL) {
+              toast.show({ variant: "warning", message: "Context size is only available for local providers" })
+              return
+            }
+            dialog.replace(() => <DialogModelCtx providerID={providerID} modelID={modelID} />)
+          },
+        },
+        {
+          command: "model.dialog.default",
+          title: "Set as default",
+          hidden: !connected(),
+          disabled: settingDefault(),
+          onTrigger: async (option) => {
+            const { providerID, modelID } = option.value as { providerID: string; modelID: string }
+            setSettingDefault(true)
+            try {
+              const workspace = project.workspace.current()
+              await sdk.client.config.update(
+                { workspace, config: { model: `${providerID}/${modelID}` } },
+                { throwOnError: true },
+              )
+              const refreshed = await sdk.client.config.get({ workspace }, { throwOnError: true })
+              sync.set("config", refreshed.data!)
+              toast.show({ variant: "success", message: "Default model updated" })
+            } catch {
+              toast.show({ variant: "warning", message: "Failed to set default model" })
+            } finally {
+              setSettingDefault(false)
+            }
+          },
+        },
       ]}
       onFilter={setQuery}
       flat={true}
@@ -181,6 +271,16 @@ export function DialogModel(props: { providerID?: string }) {
       current={local.model.current()}
     />
   )
+}
+
+// formatModelSize renders a llama-skein size_bytes weight size as a compact
+// GB/MB string for the picker footer, so similar quantizations are told apart
+// by disk size. undefined when unknown (non-local models, size not reported).
+export function formatModelSize(bytes?: number): string | undefined {
+  if (!bytes || bytes <= 0) return undefined
+  const gb = bytes / 1024 ** 3
+  if (gb >= 1) return `${gb.toFixed(1)} GB`
+  return `${Math.round(bytes / 1024 ** 2)} MB`
 }
 
 export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(

@@ -1,15 +1,16 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import {
-  CallToolResultSchema,
-  ListToolsResultSchema,
-  ToolSchema,
-  type Tool as MCPToolDef,
-} from "@modelcontextprotocol/sdk/types.js"
+import { Client, type Tool as MCPToolDef } from "@modelcontextprotocol/client"
+import { ListToolsResultSchema, ToolSchema } from "@modelcontextprotocol/core"
 import { dynamicTool, jsonSchema, type JSONSchema7, type Tool } from "ai"
 import { Effect } from "effect"
 
 const DEFAULT_TIMEOUT = 30_000
 const MAX_LIST_PAGES = 1_000
+
+// fork: @modelcontextprotocol/core re-exports Zod schema values (the
+// "*Schema" names, needed for .extend()/.omit() below); the plain inferred
+// type lives on @modelcontextprotocol/client instead — the two packages
+// split what v1's single "@modelcontextprotocol/sdk/types.js" exported together.
+export type { MCPToolDef }
 
 const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
@@ -56,7 +57,6 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
           name: mcpTool.name,
           arguments: (args || {}) as Record<string, unknown>,
         },
-        CallToolResultSchema,
         {
           resetTimeoutOnProgress: true,
           signal: options.abortSignal,

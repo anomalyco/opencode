@@ -13,7 +13,7 @@ export interface InstanceState<A, E = never, R = never> {
 
 export const context = Effect.gen(function* () {
   const ctx = yield* InstanceRef
-  if (!ctx) return yield* Effect.die(new Error("InstanceRef not provided"))
+  if (!ctx) return yield* Effect.die(new Error("InstanceRef not provided — command requires a project instance but none was loaded (missing --instance flag or invoked without a project directory)"))
   return ctx
 })
 

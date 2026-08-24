@@ -102,7 +102,7 @@ export const ImportCommand = effectCmd({
     }),
   handler: Effect.fn("Cli.import")(function* (args) {
     const ctx = yield* InstanceRef
-    if (!ctx) return yield* Effect.die("InstanceRef not provided")
+    if (!ctx) return yield* Effect.die(new Error("InstanceRef not provided in 'import' — command requires a project instance"))
     return yield* runImport(args.file, ctx)
   }),
 })

@@ -26,7 +26,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunState") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const background = yield* BackgroundJob.Service
@@ -147,5 +147,7 @@ function busyError(sessionID: SessionID) {
 }
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [BackgroundJob.node, SessionStatus.node] })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(BackgroundJob.defaultLayer), Layer.provide(SessionStatus.defaultLayer)))
 
 export * as SessionRunState from "./run-state"

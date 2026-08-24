@@ -32,3 +32,18 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Local Skein orchestration/runtime state
+.skein/
+.opencode/agents
+
+# `.opencode/agent/*.md` used to be ignored because skein symlinked those names
+# into a `.skein/agents/` directory. That was the wrong shape — `.skein/` is
+# local per-repo state, not a shared library — and the links dangled from the
+# day this repo was renamed. The personas are tracked files now.
+# Skein's own seeded links, should they reappear, are caught here:
+.opencode/agent/_synth-*.md
+
+# Local TUI theme experiments
+packages/opencode/src/cli/cmd/tui/context/theme/knight-rider.json
+packages/opencode/src/cli/cmd/tui/context/theme/pip-boy.json

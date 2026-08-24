@@ -38,4 +38,6 @@ const layer = Layer.effect(
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [] })
 
+export const defaultLayer = Layer.suspend(() => layer)
+
 export * as Env from "."

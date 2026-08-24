@@ -8,6 +8,8 @@ import { ShellTool } from "./shell"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
+import { PeersTool } from "./peers"
+import { SessionStatus } from "@/session/status"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { Database } from "@opencode-ai/core/database/database"
@@ -88,7 +90,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -112,6 +114,7 @@ const layer = Layer.effect(
     const writetool = yield* WriteTool
     const edit = yield* EditTool
     const greptool = yield* GrepTool
+    const peerstool = yield* PeersTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
@@ -212,6 +215,7 @@ const layer = Layer.effect(
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
+          peers: Tool.init(peerstool),
           edit: Tool.init(edit),
           write: Tool.init(writetool),
           task: Tool.init(task),
@@ -441,6 +445,9 @@ export const node = LayerNode.make({
     Instruction.node,
     FSUtil.node,
     EventV2Bridge.node,
+    // fork: PeersTool reads session status and permissions.
+    SessionStatus.node,
+    Permission.node,
     httpClient,
     CrossSpawnSpawner.node,
     Format.node,
@@ -451,5 +458,33 @@ export const node = LayerNode.make({
     Ripgrep.node,
   ],
 })
+
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(
+    Layer.provide([
+      Config.defaultLayer,
+      Plugin.defaultLayer,
+      Question.defaultLayer,
+      Todo.defaultLayer,
+      Agent.defaultLayer,
+      Skill.defaultLayer,
+      Session.defaultLayer,
+      BackgroundJob.defaultLayer,
+      Provider.defaultLayer,
+      LSP.defaultLayer,
+      Instruction.defaultLayer,
+      FSUtil.defaultLayer,
+      EventV2Bridge.defaultLayer,
+      LayerNode.compile(httpClient),
+      CrossSpawnSpawner.defaultLayer,
+      Format.defaultLayer,
+      Truncate.defaultLayer,
+      RuntimeFlags.defaultLayer,
+      MCP.defaultLayer,
+      Database.defaultLayer,
+      Ripgrep.defaultLayer,
+    ]),
+  ),
+)
 
 export * as ToolRegistry from "./registry"

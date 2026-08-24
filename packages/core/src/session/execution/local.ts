@@ -1,5 +1,6 @@
 import { Cause, Effect, Layer } from "effect"
 import { LocationServiceMap } from "../../location-service-map"
+import { LayerNode } from "../../effect/layer-node"
 import { makeGlobalNode } from "../../effect/app-node"
 import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionRunner } from "../runner"

@@ -21,6 +21,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import { QueueAuthority } from "@/loop/spec-queue/authority"
 
 export { Parameters } from "./shell/prompt"
 
@@ -260,7 +261,23 @@ const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boole
   return tree
 })
 
-const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan, input: { command: string }) {
+/**
+ * The permission patterns a command string yields — one per command node in
+ * the parsed AST, exactly as `collect` derives them (same `parse`, `commands`,
+ * and `source` primitives). Exported so an authority boundary (e.g. the
+ * unattended queue loop's deny profile) can be adversarially reviewed against
+ * the real derivation rather than against an assumption about it.
+ */
+export const commandPatterns = Effect.fn("ShellTool.commandPatterns")(function* (command: string, ps = false) {
+  const tree = yield* parse(command, ps)
+  return commands(tree.rootNode).map((node) => source(node))
+})
+
+const ask = Effect.fn("ShellTool.ask")(function* (
+  ctx: Tool.Context,
+  scan: Scan,
+  input: { command: string; description?: string },
+) {
   if (scan.dirs.size > 0) {
     const directories = Array.from(scan.dirs)
     const globs = directories.map((dir) => {
@@ -273,6 +290,7 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
       always: globs,
       metadata: {
         command: input.command,
+        description: input.description ?? input.command,
         directories,
         patterns: globs,
       },
@@ -286,6 +304,7 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
     always: Array.from(scan.always),
     metadata: {
       command: input.command,
+      description: input.description ?? input.command,
     },
   })
 })
@@ -419,10 +438,13 @@ export const ShellTool = Tool.define(
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
-      return {
+      const env: Record<string, string | undefined> = {
         ...process.env,
         ...extra.env,
       }
+      // An unattended session that denies pushing must not hold the
+      // credentials a push would need (loop-spec-queue D4).
+      return ctx.extra?.["denyPush"] === true ? QueueAuthority.withoutCredentials(env) : env
     })
 
     const run = Effect.fn("ShellTool.run")(function* (
@@ -432,6 +454,9 @@ export const ShellTool = Tool.define(
         cwd: string
         env: NodeJS.ProcessEnv
         timeout: number
+        // fork: human-readable title for the permission prompt; upstream dropped
+        // `description` from the tool params, so fall back to the command itself.
+        description?: string
       },
       ctx: Tool.Context,
     ) {
@@ -475,6 +500,7 @@ export const ShellTool = Tool.define(
       yield* ctx.metadata({
         metadata: {
           output: "",
+          description: input.description ?? input.command,
         },
       })
 
@@ -515,6 +541,7 @@ export const ShellTool = Tool.define(
                       ctx.metadata({
                         metadata: {
                           output: last,
+                          description: input.description ?? input.command,
                         },
                       }),
                     ),
@@ -525,6 +552,7 @@ export const ShellTool = Tool.define(
               return ctx.metadata({
                 metadata: {
                   output: last,
+                  description: input.description ?? input.command,
                 },
               })
             }),
@@ -583,10 +611,11 @@ export const ShellTool = Tool.define(
         output += "\n\n<shell_metadata>\n" + meta.join("\n") + "\n</shell_metadata>"
       }
       return {
-        title: input.command,
+        title: input.description ?? input.command,
         metadata: {
           output: last || preview(output),
           exit: code,
+          description: input.description ?? input.command,
           truncated: cut,
           ...(cut && file ? { outputPath: file } : {}),
         },

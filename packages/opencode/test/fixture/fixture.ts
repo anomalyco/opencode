@@ -207,7 +207,16 @@ export const withTmpdirInstance =
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped(options)
-      return yield* self.pipe(Effect.provideService(TestInstance, { directory }), provideInstanceEffect(directory))
+      // Dispose this test's instance when the test ends. Without it the store
+      // holds every instance — and its :memory: SQLite, and its slice of the
+      // app graph — for the life of the process, which is the bulk of the
+      // suite's memory (measured: ~25-65 MB per instance-creating test, and
+      // 3 GB peak for test/provider alone).
+      return yield* self.pipe(
+        Effect.provideService(TestInstance, { directory }),
+        provideInstanceEffect(directory),
+        Effect.ensuring(InstanceStore.Service.use((store) => store.disposeDirectory(directory)).pipe(Effect.ignore)),
+      )
     }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)))
 
 export function provideTmpdirServer<A, E, R>(

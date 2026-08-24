@@ -480,4 +480,6 @@ export const node = LayerNode.make({
   ],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(AppProcess.defaultLayer), Layer.provide(CrossSpawnSpawner.defaultLayer), Layer.provide(ProjectV2.defaultLayer), Layer.provide(ProjectDirectories.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer), Layer.provide(Database.defaultLayer)))
+
 export * as Project from "./project"

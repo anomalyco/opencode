@@ -402,7 +402,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               title="Permission required"
               header={header()}
               body={current.body}
-              options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+              options={{ once: "Allow once", always: "Allow always", auto: "Allow + stop asking", reject: "Reject" }}
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
@@ -422,6 +422,16 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                     workspace: project.workspace.current(),
                   })
                   return
+                }
+                if (option === "auto") {
+                  // Enable permission auto-approve for the rest of the session
+                  // (independent of auto-continue) so this stops asking, then
+                  // unblock the pending request that's already in flight.
+                  void sdk.client.global.config
+                    .update({ config: { auto_mode: true } }, { throwOnError: true })
+                    .then(() => sdk.client.global.config.get({ throwOnError: true }))
+                    .then((refreshed) => sync.set("config", refreshed.data!))
+                    .catch(() => undefined)
                 }
                 void sdk.client.permission.reply({
                   reply: "once",

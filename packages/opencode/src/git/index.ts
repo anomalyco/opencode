@@ -345,4 +345,6 @@ const layer = Layer.effect(
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [AppProcess.node] })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(AppProcess.defaultLayer)))
+
 export * as Git from "."

@@ -16,6 +16,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Format } from "@/format"
 import { Git } from "@/git"
 import { Installation } from "@/installation"
+import { Loop } from "@/loop/loop"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
@@ -49,6 +50,8 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { Worktree } from "@/worktree"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { AutoMode } from "@/auto-mode/service"
+import { SideQuestion } from "@/side-question"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
@@ -83,12 +86,16 @@ import { EventApi } from "./groups/event"
 import { PtyConnectApi } from "./groups/pty"
 import { eventHandlers } from "./handlers/event"
 import { configHandlers } from "./handlers/config"
+import { agentsHandlers } from "./handlers/agents"
 import { controlHandlers } from "./handlers/control"
 import { controlPlaneHandlers } from "./handlers/control-plane"
 import { experimentalHandlers } from "./handlers/experimental"
 import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
 import { instanceHandlers } from "./handlers/instance"
+import { localHandlers } from "./handlers/local"
+import { galleryHandlers } from "./handlers/gallery"
+import { loopHandlers } from "./handlers/loop"
 import { mcpHandlers } from "./handlers/mcp"
 import { permissionHandlers } from "./handlers/permission"
 import { projectHandlers } from "./handlers/project"
@@ -153,10 +160,14 @@ const ptyConnectApiRoutes = HttpApiBuilder.layer(PtyConnectApi).pipe(
 )
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
+    agentsHandlers,
     configHandlers,
     experimentalHandlers,
     fileHandlers,
     instanceHandlers,
+    localHandlers,
+  galleryHandlers,
+    loopHandlers,
     mcpHandlers,
     projectHandlers,
     projectCopyHandlers,
@@ -245,11 +256,14 @@ const app = LayerNode.group([
   SessionSummary.node,
   SessionPrompt.node,
   Instruction.node,
+  AutoMode.node,
   LLM.node,
   LSP.node,
   MCP.node,
   McpAuth.node,
   Command.node,
+  SideQuestion.node,
+  Loop.node,
   Truncate.node,
   ToolRegistry.node,
   Format.node,

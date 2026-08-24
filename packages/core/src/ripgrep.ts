@@ -3,6 +3,7 @@ export * as Ripgrep from "./ripgrep"
 import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Entry, Match } from "@opencode-ai/schema/filesystem"
+import { LayerNode } from "./effect/layer-node"
 import { makeGlobalNode } from "./effect/app-node"
 import { AppProcess, collectStream, waitForAbort } from "./process"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
@@ -282,3 +283,5 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [RipgrepBinary.node, AppProcess.node] })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(RipgrepBinary.defaultLayer), Layer.provide(AppProcess.defaultLayer)))

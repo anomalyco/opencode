@@ -1,0 +1,13 @@
+# Skein runtime state — machine-local, never merged (skein-bqup).
+# Any two checkouts diverge on these by construction; tracking them
+# guarantees worktree merge aborts.
+*/.skein/lease-*.json
+*/.skein/last-assignment.json
+*/.skein/last-issue.json
+*/.skein/*-recovery.json
+*/.skein/*.flag
+*/.skein/priority
+*/.skein/stuck-reason.md
+*/.skein/coder-dirty
+*/.skein/intake.txt
+*/.skein/run-result.json

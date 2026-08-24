@@ -1,0 +1,75 @@
+[
+  {
+    "note": "newer version upgrades, same version skips, new family is fresh, installed file skips",
+    "installed": [
+      "qwen3-35b-a3b",
+      "qwopus3.6-27b-v2-mtp-q8-0"
+    ],
+    "recs": [
+      {
+        "repo": "unsloth/Qwen3.6-35B-A3B-GGUF"
+      },
+      {
+        "repo": "unsloth/Qwen3-30B-GGUF"
+      },
+      {
+        "repo": "unsloth/gemma-4-26B-it-GGUF"
+      },
+      {
+        "repo": "already/Have-9B",
+        "file": "have.gguf",
+        "already_have": true
+      }
+    ],
+    "upgrades": [
+      {
+        "repo": "unsloth/Qwen3.6-35B-A3B-GGUF",
+        "replaces": "qwen3-35b-a3b"
+      }
+    ],
+    "fresh": [
+      "unsloth/gemma-4-26B-it-GGUF"
+    ]
+  },
+  {
+    "note": "DEFECT: an already-installed DeepSeek-R1 model is reported as fresh, not recognised at all — modelFamilyVersion cannot parse this family from either the installed name or the recommendation",
+    "installed": [
+      "deepseek-r1-distill-qwen-32b"
+    ],
+    "recs": [
+      {
+        "repo": "unsloth/DeepSeek-R1-Distill-Qwen-32B-GGUF"
+      }
+    ],
+    "upgrades": [],
+    "fresh": [
+      "unsloth/DeepSeek-R1-Distill-Qwen-32B-GGUF"
+    ]
+  },
+  {
+    "note": "DEFECT: a genuinely larger MoE model (8x22B) silently vanishes from both lists — it ties with the installed 8x7B because both read the MoE marker as version 8",
+    "installed": [
+      "mixtral-8x7b-instruct-v0.1"
+    ],
+    "recs": [
+      {
+        "repo": "mistralai/Mixtral-8x22B-Instruct-v0.1"
+      }
+    ],
+    "upgrades": [],
+    "fresh": []
+  },
+  {
+    "note": "DEFECT: a real point-release upgrade (2_5 -> 2_6) silently vanishes from both lists — the underscore-decimal defect truncates both to version 2, so they tie",
+    "installed": [
+      "internlm2_5-20b-chat"
+    ],
+    "recs": [
+      {
+        "repo": "internlm/internlm2_6-20b-chat-gguf"
+      }
+    ],
+    "upgrades": [],
+    "fresh": []
+  }
+]

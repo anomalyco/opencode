@@ -4,6 +4,7 @@ import { WorkspaceV2 } from "../workspace"
 import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
 import { PtyID } from "./schema"
 import { Cache, Context, Duration, Effect, Layer } from "effect"
+import { LayerNode } from "../effect/layer-node"
 import { makeGlobalNode } from "../effect/app-node"
 
 const DEFAULT_TTL = Duration.seconds(60)
@@ -54,3 +55,5 @@ export const make = (ttl: Duration.Input = DEFAULT_TTL) =>
 const layer = Layer.effect(Service, make())
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })
+
+export const defaultLayer = Layer.suspend(() => layer)

@@ -7,6 +7,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath, RelativePath } from "./schema"
 import { FSUtil } from "./fs-util"
 import { AppProcess } from "./process"
+import { LayerNode } from "./effect/layer-node"
 import { makeGlobalNode } from "./effect/app-node"
 import { File } from "./file"
 import { KeyedMutex } from "./effect/keyed-mutex"
@@ -331,7 +332,13 @@ const layer = Layer.effect(
         .run(
           ChildProcess.make("git", repositoryArgs(repository, args), {
             cwd: repository.worktree,
-            env: options?.env,
+            // fork: git is parsed by message text in several places (see
+            // forceRequired below), and git localises its output — on a Swedish
+            // machine "contains modified or untracked files" arrives as
+            // "innehåller ändrade eller ospårade filer" and every such check
+            // silently reads false. Pin the locale so parsing is not a function
+            // of the user's LANG.
+            env: { LC_ALL: "C", ...options?.env },
             extendEnv: true,
           }),
           { stdin: options?.stdin },
@@ -497,6 +504,7 @@ const layer = Layer.effect(
         .run(
           ChildProcess.make("git", repositoryArgs(input.repository, ["check-ignore", "--no-index", "--stdin", "-z"]), {
             cwd: input.repository.worktree,
+            env: { LC_ALL: "C" },
             extendEnv: true,
           }),
           { stdin: input.paths.join("\0") + "\0" },
@@ -795,6 +803,7 @@ const layer = Layer.effect(
         .run(
           ChildProcess.make("git", ["apply", "-"], {
             cwd: input.path,
+            env: { LC_ALL: "C" },
             extendEnv: true,
             stdin: Stream.make(new TextEncoder().encode(input.changes)),
           }),
@@ -860,7 +869,7 @@ const layer = Layer.effect(
       cwd = repository.worktree,
     ) {
       const result = yield* proc
-        .run(ChildProcess.make("git", args, { cwd, extendEnv: true, stdin: "ignore" }))
+        .run(ChildProcess.make("git", args, { cwd, env: { LC_ALL: "C" }, extendEnv: true, stdin: "ignore" }))
         .pipe(
           Effect.mapError(
             (cause) => new WorktreeError({ operation, directory: worktreeDirectory, message: cause.message, cause }),
@@ -945,6 +954,8 @@ const layer = Layer.effect(
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [FSUtil.node, AppProcess.node] })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(AppProcess.defaultLayer)))
+
 interface Result {
   readonly exitCode: number
   readonly text: string
@@ -962,6 +973,7 @@ function execute(cwd: string, proc: AppProcess.Interface) {
       .run(
         ChildProcess.make("git", args, {
           cwd,
+          env: { LC_ALL: "C" },
           extendEnv: true,
           stdin: "ignore",
         }),

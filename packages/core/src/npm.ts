@@ -42,6 +42,19 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Np
 
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
 
+/**
+ * The installable package name for a specifier that may carry an export
+ * subpath: `@ai-sdk/amazon-bedrock/mantle` installs `@ai-sdk/amazon-bedrock`
+ * and resolves `/mantle` from it. npm has no notion of installing a subpath —
+ * npa cannot parse one, so the spec falls through to being treated as a local
+ * folder and arborist tries to read `<cwd>/@ai-sdk/amazon-bedrock/mantle/package.json`.
+ */
+export function basePackage(spec: string) {
+  const parts = spec.split("/")
+  if (spec.startsWith("@")) return parts.slice(0, 2).join("/")
+  return parts[0]
+}
+
 export function sanitize(pkg: string) {
   if (!illegal) return pkg
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
@@ -114,26 +127,29 @@ const layer = Layer.effect(
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const dir = directory(pkg)
+      const base = basePackage(pkg)
       const name = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(base).name ?? base
         } catch {
-          return pkg
+          return base
         }
       })()
 
       if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        // Resolve the full specifier so an export subpath (…/mantle) picks the
+        // subpath's entrypoint, not the package root's.
+        return resolveEntryPoint(pkg, path.join(dir, "node_modules", name))
       }
 
-      const tree = yield* reify({ dir, add: [pkg] })
+      const tree = yield* reify({ dir, add: [base] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
-        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        const result = resolveEntryPoint(pkg, path.join(dir, "node_modules", name))
         if (result.entrypoint) return result
-        return yield* new InstallFailedError({ add: [pkg], dir })
+        return yield* new InstallFailedError({ add: [base], dir })
       }
-      return resolveEntryPoint(first.name, first.path)
+      return resolveEntryPoint(pkg === base ? first.name : pkg, first.path)
     }, Effect.scoped)
 
     const install: Interface["install"] = Effect.fn("Npm.install")(function* (dir, input) {
@@ -143,7 +159,7 @@ const layer = Layer.effect(
       )
       if (!canWrite) return
 
-      const add = input?.add.map((pkg) => [pkg.name, pkg.version].filter(Boolean).join("@")) ?? []
+      const add = input?.add.map((pkg) => [basePackage(pkg.name), pkg.version].filter(Boolean).join("@")) ?? []
       if (
         yield* Effect.gen(function* () {
           const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
@@ -253,6 +269,8 @@ export const node = makeGlobalNode({
   layer: layer,
   deps: [FSUtil.node, Global.node, filesystem, EffectFlock.node],
 })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Global.defaultLayer), Layer.provide(LayerNode.compile(filesystem)), Layer.provide(EffectFlock.defaultLayer)))
 
 const { runPromise } = makeRuntime(Service, LayerNode.compile(node))
 

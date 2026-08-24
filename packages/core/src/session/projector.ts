@@ -4,6 +4,7 @@ import { and, desc, eq, gt, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
+import { LayerNode } from "../effect/layer-node"
 import { makeGlobalNode } from "../effect/app-node"
 import { SessionEvent } from "./event"
 import { SessionV1 } from "../v1/session"
@@ -453,3 +454,5 @@ const layer = Layer.effectDiscard(
 )
 
 export const node = makeGlobalNode({ name: "session-projector", layer, deps: [EventV2.node, Database.node] })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(Database.defaultLayer)))

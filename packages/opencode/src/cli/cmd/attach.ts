@@ -79,18 +79,10 @@ export const AttachCommand = cmd({
     })()
 
     if (args.mini) {
-      const { runMini } = await import("./run")
-      await runMini({
-        attach: args.url,
-        directory,
-        password: args.password,
-        username: args.username,
-        continue: args.continue,
-        session: args.session,
-        fork: args.fork,
-        replay: noReplay ? false : undefined,
-        replayLimit: args.replayLimit,
-      })
+      // TODO(--mini): the minimal interactive interface has no implementation
+      // yet — cli/cmd/run.ts never gained the runMini this called into.
+      UI.error("--mini is not implemented yet")
+      process.exitCode = 1
       return
     }
 

@@ -11,6 +11,8 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProviderAuthApiError } from "../groups/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Auth } from "@/auth"
+import { BALANCE_PROBES } from "@/provider/balance"
 
 function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R>) {
   return self.pipe(
@@ -93,6 +95,25 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       return HttpServerResponse.jsonUnsafe(result ?? null)
     })
 
+    const balance = Effect.fn("ProviderHttpApi.balance")(function* (ctx: {
+      params: { providerID: ProviderV2.ID }
+    }) {
+      const providerID = ctx.params.providerID
+      const probe = BALANCE_PROBES[providerID]
+      if (!probe) return undefined
+      // Resolve the API key: stored auth (api-key login) first, then the
+      // provider's configured options.apiKey. Keys stay server-side.
+      const info = yield* authStore.get(providerID).pipe(Effect.orElseSucceed(() => undefined))
+      const fromAuth = info?.type === "api" ? info.key : undefined
+      const config = yield* cfg.get()
+      const fromConfig = (config.provider?.[providerID] as { options?: { apiKey?: string } } | undefined)?.options
+        ?.apiKey
+      const apiKey = fromAuth ?? fromConfig
+      if (!apiKey) return undefined
+      const result = yield* Effect.tryPromise(() => probe({ apiKey })).pipe(Effect.orElseSucceed(() => null))
+      return result ?? undefined
+    })
+
     const callback = Effect.fn("ProviderHttpApi.callback")(function* (ctx: {
       params: { providerID: ProviderV2.ID }
       payload: ProviderAuth.CallbackInput
@@ -110,6 +131,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     return handlers
       .handle("list", list)
       .handle("auth", auth)
+      .handle("balance", balance)
       .handleRaw("authorize", authorizeRaw)
       .handle("callback", callback)
   }),

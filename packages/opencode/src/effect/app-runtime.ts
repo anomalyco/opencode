@@ -54,6 +54,12 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+// fork: skein-only services joined to the upstream LayerNode graph.
+import { BeadsSync } from "@/beads/sync"
+import { LocalProviderSync } from "@/local/sync"
+import { AutoMode } from "@/auto-mode/service"
+import { Loop } from "@/loop/loop"
+import { SideQuestion } from "@/side-question"
 
 export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
@@ -76,12 +82,19 @@ export const AppLayer = AppNodeBuilderV1.build(
     Question.node,
     Permission.node,
     Todo.node,
+    BeadsSync.node,
     Session.node,
     SessionProjector.node,
     SessionStatus.node,
     BackgroundJob.node,
     RuntimeFlags.node,
     EventV2Bridge.node,
+    AutoMode.node,
+    LocalProviderSync.node,
+    // fork: loop + side-question own HTTP routes and publish events; they must be
+    // in the graph or their EventV2 definitions never reach the event union.
+    Loop.node,
+    SideQuestion.node,
     SessionRunState.node,
     SessionProcessor.node,
     SessionCompaction.node,

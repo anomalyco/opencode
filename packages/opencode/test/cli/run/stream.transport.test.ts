@@ -96,7 +96,7 @@ function assistant(id: string) {
         parts: [],
       }).info,
     },
-  } satisfies SdkEvent
+  } as unknown as SdkEvent
 }
 
 const StreamClosed = undefined as never
@@ -296,7 +296,7 @@ function textUpdated(part: TextPart): SdkEvent {
       part,
       time: 1,
     },
-  }
+  } as unknown as SdkEvent
 }
 
 function reasoningPart(id: string, messageID: string, text: string): ReasoningPart {
@@ -331,7 +331,7 @@ function toolUpdated(part: SessionToolPart): SdkEvent {
       part,
       time: 1,
     },
-  }
+  } as unknown as SdkEvent
 }
 
 function textDelta(messageID: string, partID: string, delta: string, sessionID = "session-1"): SdkEvent {
@@ -363,7 +363,7 @@ function child(id: string): SessionChild {
   }
 }
 
-function globalEvent(payload: GlobalEvent["payload"]): GlobalEvent {
+function globalEvent(payload: any): GlobalEvent {
   return {
     directory: "/tmp",
     project: "project-1",

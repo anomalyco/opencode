@@ -1,0 +1,10 @@
+{
+  "github:androidand/opencode-skein": {
+    "provider": "github:androidand/opencode-skein",
+    "id": "68",
+    "url": "https://github.com/androidand/opencode-skein/issues/68",
+    "base_sha": "22bfa774f114b9ff629b37af7fb429fbb34c5581176826e9dacf4440303ef75b",
+    "base": "# Tasks — Provider Parity Checklist\n\n\u003c!-- absorbed from: packages/opencode/src/v2/provider-parity-checklist.md --\u003e\n\n- [ ] GitLab workflow model discovery.\n- [ ] Experimental alpha model filtering.\n- [ ] Deprecated model filtering.\n- [ ] Config whitelist filtering.\n- [ ] Config blacklist filtering.\n- [ ] `gpt-5-chat-latest` filtering.\n- [ ] OpenRouter `openai/gpt-5-chat` filtering.\n- [ ] Auth-derived provider API keys.\n- [ ] OpenAI OAuth/API auth distinction.\n- [ ] GitLab OAuth token selection.\n- [ ] GitLab API token selection.\n- [ ] Azure auth metadata resource name.\n- [ ] Cloudflare auth metadata account ID.\n- [ ] Cloudflare auth metadata gateway ID.\n- [ ] Legacy plugin auth loader behavior.\n- [ ] Config provider merge behavior.\n- [ ] Config model merge behavior.\n- [ ] Variant generation from model metadata.\n- [ ] Config variant merge behavior.\n- [ ] Config variant disable behavior.\n",
+    "base_closed": true
+  }
+}

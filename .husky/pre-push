@@ -18,3 +18,11 @@ if (process.versions.bun !== expectedBunVersion) {
 }
 '
 bun typecheck
+
+# Fork regressions are invisible until something happens to compile: a merge
+# drops an owned file, or reverts a patch marker, and nothing fails. Two landed
+# that way today — self-healing compaction, whose only witness was a test that
+# could never run, and the MCP exports, which surfaced only as type errors in
+# unrelated files. fork:verify already detects all three classes and exits 1;
+# it just never ran on its own.
+bun run fork:verify

@@ -8,12 +8,16 @@ import { SkillV2 } from "@opencode-ai/core/skill"
 import { InstanceDisposed } from "@/server/event"
 import { Question } from "@/question"
 import { ConfigApi } from "./groups/config"
+import { AgentsApi } from "./groups/agents"
 import { ControlApi } from "./groups/control"
 import { ControlPlaneApi } from "./groups/control-plane"
 import { EventApi } from "./groups/event"
 import { ExperimentalApi } from "./groups/experimental"
 import { FileApi } from "./groups/file"
+import { GalleryApi } from "./groups/gallery"
 import { InstanceApi } from "./groups/instance"
+import { LocalApi } from "./groups/local"
+import { LoopApi } from "./groups/loop"
 import { McpApi } from "./groups/mcp"
 import { PermissionApi } from "./groups/permission"
 import { ProjectApi } from "./groups/project"
@@ -60,9 +64,13 @@ export const RootHttpApi = HttpApi.make("opencode-root")
 
 export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(ConfigApi)
+  .addHttpApi(AgentsApi)
   .addHttpApi(ExperimentalApi)
   .addHttpApi(FileApi)
   .addHttpApi(InstanceApi)
+  .addHttpApi(LocalApi)
+  .addHttpApi(GalleryApi)
+  .addHttpApi(LoopApi)
   .addHttpApi(McpApi)
   .addHttpApi(ProjectApi)
   .addHttpApi(ProjectCopyApi)

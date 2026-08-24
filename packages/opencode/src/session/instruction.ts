@@ -234,4 +234,6 @@ export const node = LayerNode.make({
   deps: [Config.node, FSUtil.node, Global.node, RuntimeFlags.node, httpClient],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(FSUtil.defaultLayer), Layer.provide(Global.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer), Layer.provide(LayerNode.compile(httpClient))))
+
 export * as Instruction from "./instruction"

@@ -74,6 +74,16 @@ export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput
 export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
 })
+export const SideQuestionPayload = Schema.Struct({
+  question: Schema.String,
+  agent: Schema.optional(Schema.String),
+  model: Schema.optional(
+    Schema.Struct({
+      providerID: ProviderV2.ID,
+      modelID: ModelV2.ID,
+    }),
+  ),
+})
 
 export const SessionPaths = {
   list: root,
@@ -95,6 +105,7 @@ export const SessionPaths = {
   prompt: `${root}/:sessionID/message`,
   promptAsync: `${root}/:sessionID/prompt_async`,
   command: `${root}/:sessionID/command`,
+  sideQuestion: `${root}/:sessionID/side_question`,
   shell: `${root}/:sessionID/shell`,
   revert: `${root}/:sessionID/revert`,
   unrevert: `${root}/:sessionID/unrevert`,
@@ -351,6 +362,20 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.command",
             summary: "Send command",
             description: "Send a new command to a session for execution by the AI assistant.",
+          }),
+        ),
+        HttpApiEndpoint.post("sideQuestion", SessionPaths.sideQuestion, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: SideQuestionPayload,
+          success: described(SessionV1.WithParts, "Side question response"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.side_question",
+            summary: "Ask side question",
+            description:
+              "Ask a quick side question without adding to conversation history. The response has full visibility into the current conversation but does not persist to history.",
           }),
         ),
         HttpApiEndpoint.post("shell", SessionPaths.shell, {

@@ -1,0 +1,10 @@
+{
+  "github:androidand/opencode-skein": {
+    "provider": "github:androidand/opencode-skein",
+    "id": "51",
+    "url": "https://github.com/androidand/opencode-skein/issues/51",
+    "base_sha": "2ea3b21bde6fd56507315f7f4e6bdb3eeec5196b0e0b559f245fc903234569ac",
+    "base": "# Tasks\n\n- [ ] Phase 0 safety: record SHAs, create pre-sync tag, verify working tree clean\n- [ ] Add upstream remote and fetch upstream/dev\n- [ ] Create sync worktree via bun run sync-upstream:apply\n- [ ] Merge upstream/dev into sync worktree\n- [ ] Classify conflicts: owned, patched, moved, deleted\n- [ ] Resolve conflicts preserving Skein behavior, port to upstream architecture\n- [ ] Verify fork:verify passes\n- [ ] Run typecheck and behavioral smoke tests\n- [ ] Update fork/manifest.json baseline.upstreamRef, syncedAt, forkTag\n- [ ] Commit sync changes, push sync branch, open PR to dev\n- [ ] Merge PR, tag dev, clean worktree\n- [ ] Update FORK_WORKFLOW.md with lessons\n",
+    "base_closed": false
+  }
+}

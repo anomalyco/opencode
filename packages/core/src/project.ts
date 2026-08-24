@@ -6,6 +6,7 @@ import path from "path"
 import { AbsolutePath } from "./schema"
 import { FSUtil } from "./fs-util"
 import { Git } from "./git"
+import { LayerNode } from "./effect/layer-node"
 import { makeGlobalNode } from "./effect/app-node"
 import { Hash } from "./util/hash"
 import { ProjectDirectories } from "./project/directories"
@@ -134,3 +135,5 @@ export const node = makeGlobalNode({
   layer: layer,
   deps: [FSUtil.node, Git.node, ProjectDirectories.node],
 })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Git.defaultLayer), Layer.provide(ProjectDirectories.defaultLayer)))

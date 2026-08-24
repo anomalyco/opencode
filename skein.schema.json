@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://tantonet.se/skein/skein.schema.json",
+  "title": "Skein ecosystem manifest",
+  "description": "Each repo in the skein ecosystem (opencode-skein, llama-skein, skein) carries a skein.json at its root following this schema. tantonet.se/skein (the my-astro-site repo) fetches each repo's skein.json at build time and aggregates them into the ecosystem page, so the source of truth for what a project does lives with the project's code. Update a feature here, and the site reflects it on next build.",
+  "type": "object",
+  "required": ["id", "name", "tagline", "kind", "repo", "features"],
+  "properties": {
+    "id": { "type": "string", "description": "Stable slug, e.g. opencode-skein" },
+    "name": { "type": "string" },
+    "tagline": { "type": "string", "description": "One-line pitch for the ecosystem page card" },
+    "description": { "type": "string", "description": "1-3 sentence overview" },
+    "kind": {
+      "type": "string",
+      "enum": ["cli-fork", "service", "platform", "library", "tool"],
+      "description": "What sort of project this is"
+    },
+    "partOf": { "type": "string", "default": "skein" },
+    "repo": { "type": "string", "format": "uri" },
+    "homepage": { "type": "string", "format": "uri" },
+    "install": {
+      "type": "object",
+      "description": "Install one-liners by channel; omit channels that don't apply",
+      "properties": {
+        "curl": { "type": "string" },
+        "npm": { "type": "string" },
+        "brew": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "features": {
+      "type": "array",
+      "description": "The cool stuff. This is what the ecosystem page sells and what keeps you from forgetting what each repo can do.",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "summary", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "summary": { "type": "string", "description": "Plain-English, user-facing" },
+          "status": { "type": "string", "enum": ["experimental", "beta", "stable"] },
+          "since": { "type": "string", "description": "Version/tag/date the feature landed" },
+          "upstreamable": {
+            "type": "string",
+            "enum": ["yes", "partial", "no", "na"],
+            "description": "For forks: can this be proposed to upstream as-is (yes), after decoupling (partial), not without an upstream abstraction (no), or not applicable (na)"
+          },
+          "depends": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Other skein ids this feature depends on, e.g. llama-skein"
+          },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "links": {
+      "type": "object",
+      "properties": {
+        "changelog": { "type": "string" },
+        "docs": { "type": "string" },
+        "manifest": { "type": "string" }
+      }
+    },
+    "updated": { "type": "string", "description": "ISO date of last manifest update" }
+  }
+}

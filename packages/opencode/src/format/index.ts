@@ -200,4 +200,6 @@ export const node = LayerNode.make({
   deps: [Config.node, AppProcess.node, RuntimeFlags.node],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(AppProcess.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)))
+
 export * as Format from "."

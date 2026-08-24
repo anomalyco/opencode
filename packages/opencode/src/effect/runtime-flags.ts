@@ -15,6 +15,7 @@ const enabledByExperimental = (name: string) =>
 
 export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
   autoShare: bool("OPENCODE_AUTO_SHARE"),
+  autoMode: bool("OPENCODE_AUTO_MODE"),
   pure: bool("OPENCODE_PURE"),
   disableDefaultPlugins: bool("OPENCODE_DISABLE_DEFAULT_PLUGINS"),
   disableEmbeddedWebUi: bool("OPENCODE_DISABLE_EMBEDDED_WEB_UI"),
@@ -73,6 +74,8 @@ export const layer = (overrides: Partial<Info> = {}) =>
   ).pipe(Layer.provide(emptyConfigLayer))
 
 export const node = LayerNode.make({ service: Service, layer: Service.layer.pipe(Layer.orDie), deps: [] })
+
+export const defaultLayer = Layer.suspend(() => Service.layer.pipe(Layer.orDie))
 
 export * as RuntimeFlags from "./runtime-flags"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"

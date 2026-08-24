@@ -133,4 +133,6 @@ export const node = LayerNode.make({
   deps: [Session.node, Snapshot.node, Storage.node, EventV2Bridge.node, SessionSummary.node, SessionRunState.node],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Session.defaultLayer), Layer.provide(Snapshot.defaultLayer), Layer.provide(Storage.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(SessionSummary.defaultLayer), Layer.provide(SessionRunState.defaultLayer)))
+
 export * as SessionRevert from "./revert"

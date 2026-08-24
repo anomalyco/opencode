@@ -24,6 +24,10 @@ exports[`tool parameters JSON Schema (wire shape) bash 1`] = `
       "description": "The command to execute",
       "type": "string",
     },
+    "description": {
+      "description": "A brief, user-facing description of what this command does (shown while it runs)",
+      "type": "string",
+    },
     "timeout": {
       "description": "Optional timeout in milliseconds",
       "exclusiveMinimum": 0,
@@ -315,6 +319,10 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
     },
     "prompt": {
       "description": "The task for the agent to perform",
+      "type": "string",
+    },
+    "provider": {
+      "description": "Local provider (host) to run this subagent on, e.g. "rocky" or "m3". Use when the user names a host; copy the name exactly. Omit to auto-place on an idle host.",
       "type": "string",
     },
     "subagent_type": {

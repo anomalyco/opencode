@@ -63,7 +63,7 @@ const AgentCreateCommand = effectCmd({
     const { Agent } = yield* Effect.promise(() => import("../../agent/agent"))
     const { Provider } = yield* Effect.promise(() => import("@/provider/provider"))
     const maybeCtx = yield* InstanceRef
-    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    if (!maybeCtx) return yield* Effect.die(new Error("InstanceRef not provided in 'agent create' — command requires a project instance (cannot run with --attach)"))
     const ctx = maybeCtx
     const agentSvc = yield* Agent.Service
     const runLocalEffect = <A, E>(effect: Effect.Effect<A, E>) =>

@@ -1,9 +1,10 @@
+import { isRecord } from "@/util/record"
+import { McpCatalog } from "@/mcp/catalog"
 import { Agent } from "@/agent/agent"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
-import { McpCatalog } from "@/mcp/catalog"
 import { Permission } from "@/permission"
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
@@ -13,7 +14,7 @@ import { Truncate } from "@/tool/truncate"
 import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
@@ -21,8 +22,10 @@ import { PartID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { isRecord } from "@/util/record"
-import { RuntimeFlags } from "@/effect/runtime-flags"
+import { AutoMode } from "@/auto-mode/service"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { QueueAuthority } from "@/loop/spec-queue/authority"
+import { ToolActivity } from "./tool-activity"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -51,17 +54,25 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const run = yield* EffectBridge.make()
   const plugin = yield* Plugin.Service
   const permission = yield* Permission.Service
+  const autoMode = yield* AutoMode.Service
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
-  const flags = yield* RuntimeFlags.Service
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
     abort: options.abortSignal!,
     messageID: input.processor.message.id,
     callID: options.toolCallId,
-    extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
+    extra: {
+      model: input.model,
+      bypassAgentCheck: input.bypassAgentCheck,
+      promptOps: input.promptOps,
+      // Defence in depth for unattended runs (loop-spec-queue D4): a session
+      // whose ruleset denies pushing also gets a credential-less shell, so a
+      // pattern gap cannot become a successful push.
+      denyPush: QueueAuthority.deniesPush(Permission.merge(input.agent.permission, input.session.permission ?? [])),
+    },
     agent: input.agent.name,
     messages: input.messages,
     metadata: (val) =>
@@ -79,27 +90,65 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }
       }),
     ask: (req) =>
-      permission
-        .ask({
-          ...req,
-          sessionID: input.session.id,
-          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-        })
-        .pipe(Effect.orDie),
+      Effect.gen(function* () {
+        const baseRuleset = Permission.merge(input.agent.permission, input.session.permission ?? [])
+        const mergedRuleset = baseRuleset
+
+        // Deny rules are evaluated BEFORE the auto-mode skip: auto mode means
+        // "approve what would have asked", never "ignore what was explicitly
+        // denied". An unattended queue loop's authority ceiling (no push, no
+        // deploy) depends on this ordering.
+        let needsAsk = false
+        for (const pattern of req.patterns) {
+          const rule = Permission.evaluate(req.permission, pattern, mergedRuleset)
+          if (rule.action === "deny") {
+            throw new PermissionV1.DeniedError({
+              ruleset: mergedRuleset.filter((r: PermissionV1.Rule) => r.permission === req.permission),
+            })
+          }
+          if (rule.action === "allow") continue
+          needsAsk = true
+        }
+
+        if (!needsAsk) return
+
+        // Auto mode: skip the remaining permission prompts.
+        //
+        // A session that declares an authority ceiling (the queue loop's deny
+        // profile) is by definition unattended, so it auto-approves whatever
+        // that ceiling already permits regardless of the global toggle —
+        // otherwise the first prompt parks an unattended run forever with
+        // nobody there to answer it. The ceiling is the control here, not the
+        // prompt: deny rules were evaluated above and still hold, and such a
+        // session also runs with its push credentials stripped.
+        const unattended = QueueAuthority.deniesPush(mergedRuleset)
+        const autoEnabled = unattended || (yield* autoMode.isEnabled())
+        if (autoEnabled) return
+
+        yield* permission
+          .ask({
+            ...req,
+            sessionID: input.session.id,
+            tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+            ruleset: mergedRuleset,
+          })
+          .pipe(Effect.orDie)
+      }).pipe(Effect.orDie),
   })
 
   for (const item of yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
-    permission: input.session.permission,
   })) {
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
     tools[item.id] = tool({
       description: item.description,
       inputSchema: jsonSchema(schema),
       execute(args, options) {
+        // fork: the stream watchdog must not count our own tool's runtime as
+        // provider silence — see tool-activity.ts.
+        ToolActivity.begin(input.session.id)
         return run.promise(
           Effect.gen(function* () {
             const ctx = context(args, options)
@@ -127,16 +176,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               yield* input.processor.completeToolCall(options.toolCallId, output)
             }
             return output
-          }),
+          }).pipe(Effect.ensuring(Effect.sync(() => ToolActivity.end(input.session.id)))),
         )
       },
     })
   }
 
-  const hasMcpResourceServer = Object.values(yield* mcp.clients()).some(
-    (client) => !!client.getServerCapabilities()?.resources,
-  )
-  if (hasMcpResourceServer) {
     tools[MCP_RESOURCE_TOOLS.list] = tool({
       description:
         "Lists resources provided by connected MCP servers. Resources provide context such as files, database schemas, or application-specific information.",
@@ -218,7 +263,6 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         )
       },
     })
-
     tools[MCP_RESOURCE_TOOLS.listTemplates] = tool({
       description:
         "Lists resource templates provided by connected MCP servers. Resource templates are parameterized resources that can be read after filling in their URI template.",
@@ -301,7 +345,6 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         )
       },
     })
-
     tools[MCP_RESOURCE_TOOLS.read] = tool({
       description:
         "Read a specific resource from an MCP server using the server name and resource URI. The URI is an MCP identifier and does not need to be a file URL.",
@@ -383,20 +426,23 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         )
       },
     })
-  }
 
-  if (flags.experimentalCodeMode) return tools
-
-  for (const [key, entry] of Object.entries(yield* mcp.tools())) {
-    const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
+  for (const [key, mcpTool] of Object.entries(yield* mcp.tools())) {
+    // mcp.tools() hands back the cached definition plus its client; converting
+    // to an ai-sdk Tool is the caller's job so the MCP service stays free of
+    // tool-loop concerns.
+    const item = McpCatalog.convertTool(mcpTool.def, mcpTool.client, mcpTool.timeout)
     const execute = item.execute
     if (!execute) continue
 
     const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
     const transformed = ProviderTransform.schema(input.model, { ...schema, properties: schema.properties ?? {} })
     item.inputSchema = jsonSchema(transformed)
-    item.execute = (args, opts) =>
-      run.promise(
+    item.execute = (args, opts) => {
+      // fork: same as the registry tools above — an MCP call is stream silence
+      // the watchdog would otherwise blame on the provider.
+      ToolActivity.begin(input.session.id)
+      return run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
           yield* plugin.trigger(
@@ -437,24 +483,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               const { resource } = contentItem
               if (resource.text) textParts.push(resource.text)
               if (resource.blob) {
-                const mime = resource.mimeType ?? "application/octet-stream"
-                const size = base64Size(resource.blob)
-                if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
-                  textParts.push(
-                    `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
-                  )
-                  continue
-                }
-                if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
-                  textParts.push(
-                    `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
-                  )
-                  continue
-                }
                 attachments.push({
                   type: "file",
-                  mime,
-                  url: `data:${mime};base64,${resource.blob}`,
+                  mime: resource.mimeType ?? "application/octet-stream",
+                  url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
                   filename: resource.uri,
                 })
               }
@@ -484,50 +516,32 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             yield* input.processor.completeToolCall(opts.toolCallId, output)
           }
           return output
-        }),
+        }).pipe(Effect.ensuring(Effect.sync(() => ToolActivity.end(input.session.id)))),
       )
+    }
     tools[key] = item
   }
 
   return tools
 })
 
-function toRecord(value: unknown) {
-  if (isRecord(value)) return value
-  return {}
+export * as SessionTools from "./tools"
+
+function base64Size(value: string) {
+  const trimmed = value.replace(/\s/g, "")
+  const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
+  return Math.max(0, Math.floor((trimmed.length * 3) / 4) - padding)
 }
 
-function parseListMcpResourcesArgs(value: unknown) {
-  const args = toRecord(value)
-  return { server: optionalString(args, "server") }
-}
-
-function parseReadMcpResourceArgs(value: unknown) {
-  const args = toRecord(value)
-  return { server: requiredString(args, "server"), uri: requiredString(args, "uri") }
-}
-
-function optionalString(args: Record<string, unknown>, key: string) {
-  const value = args[key]
-  if (value === undefined || value === null || value === "") return undefined
-  if (typeof value !== "string") throw new Error(`${key} must be a string`)
-  return value
-}
-
-function requiredString(args: Record<string, unknown>, key: string) {
-  const value = optionalString(args, key)
-  if (value) return value
-  throw new Error(`${key} is required`)
+function formatBytes(value: number) {
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`
+  return `${Math.ceil(value / (1024 * 1024))} MB`
 }
 
 function formatMcpResource(resource: MCP.Resource) {
   const result = Object.fromEntries(Object.entries(resource).filter((entry) => entry[0] !== "client"))
   return { ...result, server: resource.client }
-}
-
-function formatMcpResourceTemplate(template: Record<string, unknown> & { client: string }) {
-  const result = Object.fromEntries(Object.entries(template).filter((entry) => entry[0] !== "client"))
-  return { ...result, server: template.client }
 }
 
 function formatMcpResourceContent(server: string, uri: string, content: { contents: unknown }) {
@@ -575,16 +589,35 @@ function formatMcpResourceContent(server: string, uri: string, content: { conten
   }
 }
 
-function base64Size(value: string) {
-  const trimmed = value.replace(/\s/g, "")
-  const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
-  return Math.max(0, Math.floor((trimmed.length * 3) / 4) - padding)
+function formatMcpResourceTemplate(template: Record<string, unknown> & { client: string }) {
+  const result = Object.fromEntries(Object.entries(template).filter((entry) => entry[0] !== "client"))
+  return { ...result, server: template.client }
 }
 
-function formatBytes(value: number) {
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`
-  return `${Math.ceil(value / (1024 * 1024))} MB`
+function optionalString(args: Record<string, unknown>, key: string) {
+  const value = args[key]
+  if (value === undefined || value === null || value === "") return undefined
+  if (typeof value !== "string") throw new Error(`${key} must be a string`)
+  return value
 }
 
-export * as SessionTools from "./tools"
+function parseListMcpResourcesArgs(value: unknown) {
+  const args = toRecord(value)
+  return { server: optionalString(args, "server") }
+}
+
+function parseReadMcpResourceArgs(value: unknown) {
+  const args = toRecord(value)
+  return { server: requiredString(args, "server"), uri: requiredString(args, "uri") }
+}
+
+function requiredString(args: Record<string, unknown>, key: string) {
+  const value = optionalString(args, key)
+  if (value) return value
+  throw new Error(`${key} is required`)
+}
+
+function toRecord(value: unknown) {
+  if (isRecord(value)) return value
+  return {}
+}

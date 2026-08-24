@@ -263,6 +263,7 @@ const scenarios: Scenario[] = [
     .status(204, undefined, "status"),
   http.protected.get("/provider", "provider.list").json(),
   http.protected.get("/provider/auth", "provider.auth").json(),
+  http.protected.get("/local/capacity", "local.capacity").json(200, array),
   http.protected
     .post("/provider/{providerID}/oauth/authorize", "provider.oauth.authorize")
     .at((ctx) => ({
@@ -1164,6 +1165,17 @@ const scenarios: Scenario[] = [
     .get("/session/status", "session.status")
     .seeded((ctx) => ctx.session({ title: "Status session" }))
     .json(200, object),
+  http.protected
+    .get("/agents", "agents.list")
+    .seeded((ctx) => ctx.session({ title: "Presence metadata must not leak this title" }))
+    .json(200, (body) => {
+      array(body)
+      for (const item of body) {
+        object(item)
+        check(!("title" in item), "Agent presence must not expose session titles")
+        check(!("prompt" in item), "Agent presence must not expose prompts")
+      }
+    }),
   http.protected
     .post("/session", "session.create")
     .mutating()

@@ -1,0 +1,12 @@
+[2026-06-05T22:35:35.402Z] Error: Error opening file "/Users/andreas/dev/llama-swap/contracts/llama-skein.openapi.json" 
+ENOENT: no such file or directory, open '/Users/andreas/dev/llama-swap/contracts/llama-skein.openapi.json'
+Stack:
+JSONParserError: Error opening file "/Users/andreas/dev/llama-swap/contracts/llama-skein.openapi.json" 
+ENOENT: no such file or directory, open '/Users/andreas/dev/llama-swap/contracts/llama-skein.openapi.json'
+    at <anonymous> (/Users/andreas/dev/opencode/node_modules/.bun/@hey-api+json-schema-ref-parser@1.2.2/node_modules/@hey-api/json-schema-ref-parser/dist/lib/resolvers/file.js:58:35)
+    at async parse (/Users/andreas/dev/opencode/node_modules/.bun/@hey-api+json-schema-ref-parser@1.2.2/node_modules/@hey-api/json-schema-ref-parser/dist/lib/index.js:225:32)
+    at async bundle (/Users/andreas/dev/opencode/node_modules/.bun/@hey-api+json-schema-ref-parser@1.2.2/node_modules/@hey-api/json-schema-ref-parser/dist/lib/index.js:132:20)
+    at async <anonymous> (/Users/andreas/dev/opencode/node_modules/.bun/@hey-api+openapi-ts@0.90.10+9d615e7f35ecb182/node_modules/@hey-api/openapi-ts/dist/src-DMQOp4DI.cjs:278:24)
+    at async <anonymous> (/Users/andreas/dev/opencode/node_modules/.bun/@hey-api+openapi-ts@0.90.10+9d615e7f35ecb182/node_modules/@hey-api/openapi-ts/dist/src-DMQOp4DI.cjs:401:18)
+    at async createClient (/Users/andreas/dev/opencode/node_modules/.bun/@hey-api+openapi-ts@0.90.10+9d615e7f35ecb182/node_modules/@hey-api/openapi-ts/dist/src-DMQOp4DI.cjs:399:35)
+    at processTicksAndRejections (native:7:39)

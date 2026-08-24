@@ -21,13 +21,15 @@ import { ToolRegistry } from "@/tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
 import { ulid } from "ulid"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess } from "effect/unstable/process"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { ConfigMarkdown } from "@/config/markdown"
+import { AutoMode } from "@/auto-mode/service"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { SessionProcessor } from "./processor"
@@ -49,27 +51,40 @@ import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
+import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AgentAttachment, FileAttachment, Prompt, Source } from "@opencode-ai/core/session/prompt"
+import * as DateTime from "effect/DateTime"
 import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+// NOT from "@/loop/loop": loop.ts imports SessionPrompt from this module, and
+// importing it back creates a cycle that leaves SessionPrompt.node undefined
+// inside loop.ts's module-scope LayerNode.make — the app graph then crashes
+// every boot ("undefined is not an object (evaluating 'e.dependencies')").
+import { similarity as outputSimilarity } from "@/loop/similarity"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
+// fork: loop detection — if consecutive assistant turns produce near-identical
+// output with no tool calls, the agent is stuck in a text loop (e.g. endlessly
+// "Thinking...").  Bigram similarity >= 0.92 means virtually the same content.
+// After 3 consecutive near-identical turns with no tools, break the loop.
+const LoopSimilarityThreshold = 0.92
+const LoopMaxStreak = 3
+
+// fork: sub-agent step limit — a sub-agent (session with parentID) gets a
+// default step cap to prevent it from running indefinitely. The agent's own
+// steps setting takes precedence if explicitly configured.
+const DefaultSubAgentSteps = 50
+
 const decodeMessageInfo = Schema.decodeUnknownExit(SessionV1.Info)
 const decodeMessagePart = Schema.decodeUnknownExit(SessionV1.Part)
-const MAX_MCP_RESOURCE_BLOB_BYTES = 10 * 1024 * 1024
-const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
-  "application/pdf",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-])
 
 const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
 
@@ -80,18 +95,6 @@ IMPORTANT:
 - This tool provides your final answer - no further actions are taken after calling it`
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
-
-function mcpResourceBase64Size(value: string) {
-  const trimmed = value.replace(/\s/g, "")
-  const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
-  return Math.max(0, Math.floor((trimmed.length * 3) / 4) - padding)
-}
-
-function formatMcpResourceBytes(value: number) {
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`
-  return `${Math.ceil(value / (1024 * 1024))} MB`
-}
 
 function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
@@ -110,7 +113,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const status = yield* SessionStatus.Service
@@ -129,7 +132,7 @@ const layer = Layer.effect(
     const registry = yield* ToolRegistry.Service
     const truncate = yield* Truncate.Service
     const image = yield* Image.Service
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const spawner = yield* ChildProcessSpawner
     const scope = yield* Scope.Scope
     const instruction = yield* Instruction.Service
     const state = yield* SessionRunState.Service
@@ -139,6 +142,7 @@ const layer = Layer.effect(
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const autoMode = yield* AutoMode.Service
     const database = yield* Database.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
@@ -516,6 +520,15 @@ const layer = Layer.effect(
               },
             }
             yield* sessions.updatePart(part)
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.Shell.Started, {
+                sessionID: input.sessionID,
+                messageID: SessionMessage.ID.create(),
+                timestamp: DateTime.makeUnsafe(started),
+                callID: part.callID,
+                command: input.command,
+              })
+            }
             return { msg, part, cwd: ctx.directory }
           }).pipe(Effect.ensuring(markReady))
 
@@ -531,6 +544,14 @@ const layer = Layer.effect(
                 output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
               }
               const completed = Date.now()
+              if (flags.experimentalEventSystem) {
+                yield* events.publish(SessionEvent.Shell.Ended, {
+                  sessionID: input.sessionID,
+                  timestamp: DateTime.makeUnsafe(completed),
+                  callID: part.callID,
+                  output,
+                })
+              }
               if (!msg.time.completed) {
                 msg.time.completed = completed
                 yield* sessions.updateMessage(msg)
@@ -541,7 +562,7 @@ const layer = Layer.effect(
                   time: { ...part.state.time, end: completed },
                   input: part.state.input,
                   title: "",
-                  metadata: { output },
+                  metadata: { output, description: "" },
                   output,
                 }
                 yield* sessions.updatePart(part)
@@ -568,7 +589,7 @@ const layer = Layer.effect(
                 Effect.gen(function* () {
                   output += chunk
                   if (part.state.status === "running") {
-                    part.state.metadata = { output }
+                    part.state.metadata = { output, description: "" }
                     yield* sessions.updatePart(part)
                   }
                 }),
@@ -643,6 +664,12 @@ const layer = Layer.effect(
         throw error
       }
 
+      const current = yield* db
+        .select({ agent: SessionTable.agent, model: SessionTable.model })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, input.sessionID))
+        .get()
+        .pipe(Effect.orDie)
       const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
@@ -669,23 +696,36 @@ const layer = Layer.effect(
         format: input.format,
       }
 
-      const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
-      if (
-        current.agent !== info.agent ||
-        current.model?.providerID !== info.model.providerID ||
-        current.model?.id !== info.model.modelID ||
-        (current.model?.variant === "default" ? undefined : current.model?.variant) !== info.model.variant
-      ) {
-        yield* sessions.setAgentModel({
-          sessionID: input.sessionID,
-          agent: info.agent,
-          model: {
-            id: info.model.modelID,
-            providerID: info.model.providerID,
-            variant: info.model.variant ?? "default",
-          },
-          time: info.time.created,
-        })
+      // fork: persist the prompt's agent/model onto the session so a later
+      // prompt that names neither inherits them. This used to ride on
+      // session.next.* events and their projector, but the legacy prompt() path
+      // must not emit v2 events at all (they belong to the v2 input path, which
+      // publishes them from core) — so write the row directly instead. Same
+      // shape the projector writes.
+      const agentChanged = current?.agent !== info.agent
+      const modelChanged =
+        current?.model?.providerID !== info.model.providerID ||
+        current.model.id !== info.model.modelID ||
+        (current.model.variant === "default" ? undefined : current.model.variant) !== info.model.variant
+      if (agentChanged || modelChanged) {
+        yield* db
+          .update(SessionTable)
+          .set({
+            ...(agentChanged ? { agent: info.agent } : {}),
+            ...(modelChanged
+              ? {
+                  model: {
+                    id: info.model.modelID,
+                    providerID: info.model.providerID,
+                    variant: info.model.variant ?? "default",
+                  },
+                }
+              : {}),
+            time_updated: info.time.created,
+          })
+          .where(eq(SessionTable.id, input.sessionID))
+          .run()
+          .pipe(Effect.orDie)
       }
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
@@ -718,8 +758,7 @@ const layer = Layer.effect(
               if (!content) throw new Error(`Resource not found: ${clientName}/${uri}`)
               const items = Array.isArray(content.contents) ? content.contents : [content.contents]
               for (const c of items) {
-                if (!c || typeof c !== "object") continue
-                if ("text" in c && typeof c.text === "string" && c.text) {
+                if ("text" in c && c.text) {
                   pieces.push({
                     messageID: info.id,
                     sessionID: input.sessionID,
@@ -727,47 +766,18 @@ const layer = Layer.effect(
                     synthetic: true,
                     text: c.text,
                   })
-                } else if ("blob" in c && typeof c.blob === "string" && c.blob) {
-                  const mime = "mimeType" in c && typeof c.mimeType === "string" ? c.mimeType : part.mime
-                  const filename = "uri" in c && typeof c.uri === "string" ? c.uri : part.filename
-                  const size = mcpResourceBase64Size(c.blob)
-                  if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
-                    pieces.push({
-                      messageID: info.id,
-                      sessionID: input.sessionID,
-                      type: "text",
-                      synthetic: true,
-                      text: `[Binary MCP resource omitted: ${filename ?? uri} (${mime}, ${formatMcpResourceBytes(size)}) is not a supported attachment type]`,
-                    })
-                    continue
-                  }
-                  if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
-                    pieces.push({
-                      messageID: info.id,
-                      sessionID: input.sessionID,
-                      type: "text",
-                      synthetic: true,
-                      text: `[Binary MCP resource omitted: ${filename ?? uri} (${mime}, ${formatMcpResourceBytes(size)}) exceeds ${formatMcpResourceBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
-                    })
-                    continue
-                  }
+                } else if ("blob" in c && c.blob) {
+                  const mime = "mimeType" in c ? c.mimeType : part.mime
                   pieces.push({
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: `[Binary MCP resource attached: ${filename ?? uri} (${mime})]`,
-                  })
-                  pieces.push({
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "file",
-                    mime,
-                    filename,
-                    url: `data:${mime};base64,${c.blob}`,
+                    text: `[Binary content: ${mime}]`,
                   })
                 }
               }
+              pieces.push({ ...part, messageID: info.id, sessionID: input.sessionID })
             } else {
               const error = Cause.squash(exit.cause)
               yield* Effect.logError("failed to read MCP resource", { error, clientName, uri })
@@ -1045,6 +1055,62 @@ const layer = Layer.effect(
 
       yield* sessions.updateMessage(info)
       for (const part of parts) yield* sessions.updatePart(part)
+      const nextPrompt = parts.reduce(
+        (result, part) => {
+          if (part.type === "text") {
+            if (part.synthetic) result.synthetic.push(part.text)
+            else result.text.push(part.text)
+          }
+          if (part.type === "file") {
+            result.files.push(
+              FileAttachment.make({
+                uri: part.url,
+                mime: part.mime,
+                name: part.filename,
+                source: part.source
+                  ? Source.make({
+                      start: part.source.text.start,
+                      end: part.source.text.end,
+                      text: part.source.text.value,
+                    })
+                  : undefined,
+              }),
+            )
+          }
+          if (part.type === "agent") {
+            result.agents.push(
+              AgentAttachment.make({
+                name: part.name,
+                source: part.source
+                  ? Source.make({
+                      start: part.source.start,
+                      end: part.source.end,
+                      text: part.source.value,
+                    })
+                  : undefined,
+              }),
+            )
+          }
+          return result
+        },
+        {
+          text: [] as string[],
+          files: [] as FileAttachment[],
+          agents: [] as AgentAttachment[],
+          synthetic: [] as string[],
+        },
+      )
+      for (const text of nextPrompt.synthetic) {
+        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+        if (flags.experimentalEventSystem) {
+          yield* events.publish(SessionEvent.Synthetic, {
+            sessionID: input.sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(info.time.created),
+            text,
+          })
+        }
+      }
 
       return { info, parts }
     }, Effect.scoped)
@@ -1083,6 +1149,13 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        // fork: loop detection state — track near-identical output across turns
+        let lastOutputText: string | undefined
+        let loopStreak = 0
+        // fork: single forced-tool-choice retry state — see the empty-turn check
+        // at the loop exit below
+        let requiredRetryFor: string | undefined
+        let forceRequiredStep = false
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1114,20 +1187,56 @@ const layer = Layer.effect(
             !hasToolCalls &&
             lastAssistant.parentID === lastUser.id
           ) {
-            const orphan = lastAssistantMsg?.parts.find(
-              (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
-            )
-            if (orphan) {
-              yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
+            // fork: an "empty" turn — the model finished without emitting any
+            // tool call or text (small local reasoning models sometimes stop
+            // after thinking without acting, or get length-cut mid-think).
+            // Instead of going idle silently, retry once per user turn with
+            // tool_choice forced to "required".
+            const emptyTurn =
+              // Only for a turn THIS loop produced. Entering a loop on a turn
+              // that already finished (a resumed session, a completed parent)
+              // is not an empty turn to retry — it is the exit condition, and
+              // retrying it re-prompts a session nobody asked to continue.
+              step > 0 &&
+              ["stop", "length"].includes(lastAssistant.finish) &&
+              !lastAssistant.error &&
+              requiredRetryFor !== lastUser.id &&
+              !(lastAssistantMsg?.parts.some((part) => part.type === "text" && part.text.trim().length > 0) ?? false)
+            if (emptyTurn) {
+              requiredRetryFor = lastUser.id
+              forceRequiredStep = true
+              yield* Effect.logWarning("empty turn with no tool calls or text — retrying with tool_choice required", {
                 "session.id": sessionID,
                 messageID: lastAssistant.id,
-                tool: orphan.tool,
-                callID: orphan.callID,
+                finish: lastAssistant.finish,
               })
             }
-            yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
-            break
+            if (!emptyTurn) {
+              const orphan = lastAssistantMsg?.parts.find(
+                (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
+              )
+              if (orphan) {
+                yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
+                  "session.id": sessionID,
+                  messageID: lastAssistant.id,
+                  tool: orphan.tool,
+                  callID: orphan.callID,
+                })
+              }
+              yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+              // force: true bypasses summary.ts's per-session throttle so the turn's
+              // final diff is always persisted accurately, even if the last few
+              // steps' calls were skipped for landing inside the throttle window.
+              yield* summary
+                .summarize({ sessionID, messageID: lastUser.id, force: true })
+                .pipe(Effect.ignore, Effect.forkIn(scope))
+              break
+            }
           }
+
+          // fork: consume the forced-tool-choice flag for exactly one step
+          const forceRequired = forceRequiredStep
+          forceRequiredStep = false
 
           step++
           if (step === 1)
@@ -1175,7 +1284,9 @@ const layer = Layer.effect(
             yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
             throw error
           }
-          const maxSteps = agent.steps ?? Infinity
+          // fork: apply default step limit for sub-agents to prevent infinite loops
+          const defaultSteps = session.parentID ? DefaultSubAgentSteps : Infinity
+          const maxSteps = agent.steps ?? defaultSteps
           const isLastStep = step >= maxSteps
           msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
             Effect.provideService(RuntimeFlags.Service, flags),
@@ -1237,7 +1348,7 @@ const layer = Layer.effect(
               Effect.provideService(ToolRegistry.Service, registry),
               Effect.provideService(MCP.Service, mcp),
               Effect.provideService(Truncate.Service, truncate),
-              Effect.provideService(RuntimeFlags.Service, flags),
+              Effect.provideService(AutoMode.Service, autoMode),
             )
 
             if (lastUser.format?.type === "json_schema") {
@@ -1251,6 +1362,24 @@ const layer = Layer.effect(
 
             if (step === 1)
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
+
+            if (step > 1 && lastFinished) {
+              for (const m of msgs) {
+                if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
+                for (const p of m.parts) {
+                  if (p.type !== "text" || p.ignored || p.synthetic) continue
+                  if (!p.text.trim()) continue
+                  p.text = [
+                    "<system-reminder>",
+                    "The user sent the following message:",
+                    p.text,
+                    "",
+                    "Please address this message and continue with your tasks.",
+                    "</system-reminder>",
+                  ].join("\n")
+                }
+              }
+            }
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
@@ -1282,7 +1411,7 @@ const layer = Layer.effect(
               ],
               tools,
               model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
+              toolChoice: format.type === "json_schema" || forceRequired ? ("required" as const) : undefined,
             })
 
             if (structured !== undefined) {
@@ -1332,6 +1461,45 @@ const layer = Layer.effect(
             Effect.onInterrupt(() => finalizeInterruptedAssistant),
           )
           if (outcome === "break") break
+          // fork: loop detection — check if this turn produced near-identical
+          // output to the previous turn with no tool calls, which means the
+          // agent is stuck in a text loop (e.g. endlessly "Thinking...")
+          {
+            const currentParts = yield* MessageV2.parts(handle.message.id).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+            const currentText = currentParts
+              .filter((p): p is Extract<SessionV1.Part, { type: "text" }> => p.type === "text")
+              .map((p) => p.text)
+              .join(" ")
+            const currentHasToolCalls = currentParts.some((p) => p.type === "tool" && !isOrphanedInterruptedTool(p))
+            if (lastOutputText !== undefined && !currentHasToolCalls) {
+              const sim = outputSimilarity(currentText, lastOutputText)
+              if (sim >= LoopSimilarityThreshold) {
+                loopStreak++
+                if (loopStreak >= LoopMaxStreak) {
+                  yield* Effect.logWarning("agent loop detected — breaking", {
+                    "session.id": sessionID,
+                    step,
+                    similarity: sim,
+                    streak: loopStreak,
+                  })
+                  handle.message.error = new NamedError.Unknown({
+                    message: `Agent appears stuck in a loop — ${loopStreak} consecutive turns produced near-identical output with no progress`,
+                  }).toObject()
+                  handle.message.time.completed = Date.now()
+                  yield* sessions.updateMessage(handle.message)
+                  yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+                  break
+                }
+              } else {
+                loopStreak = 0
+              }
+            } else {
+              loopStreak = 0
+            }
+            lastOutputText = currentText
+          }
           continue
         }
 
@@ -1597,7 +1765,7 @@ const quoteTrimRegex = /^["']|["']$/g
 
 export const node = LayerNode.make({
   service: Service,
-  layer: layer,
+  layer,
   deps: [
     SessionStatus.node,
     Session.node,
@@ -1624,8 +1792,43 @@ export const node = LayerNode.make({
     LLM.node,
     EventV2Bridge.node,
     RuntimeFlags.node,
+    AutoMode.node,
     Database.node,
   ],
 })
+
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(
+    Layer.provide([
+      SessionStatus.defaultLayer,
+      Session.defaultLayer,
+      Agent.defaultLayer,
+      Provider.defaultLayer,
+      SessionProcessor.defaultLayer,
+      SessionCompaction.defaultLayer,
+      Plugin.defaultLayer,
+      Command.defaultLayer,
+      Config.defaultLayer,
+      Permission.defaultLayer,
+      FSUtil.defaultLayer,
+      MCP.defaultLayer,
+      LSP.defaultLayer,
+      ToolRegistry.defaultLayer,
+      Truncate.defaultLayer,
+      Image.defaultLayer,
+      CrossSpawnSpawner.defaultLayer,
+      Instruction.defaultLayer,
+      SessionRunState.defaultLayer,
+      SessionRevert.defaultLayer,
+      SessionSummary.defaultLayer,
+      SystemPrompt.defaultLayer,
+      LLM.defaultLayer,
+      EventV2Bridge.defaultLayer,
+      RuntimeFlags.defaultLayer,
+      AutoMode.defaultLayer,
+      Database.defaultLayer,
+    ]),
+  ),
+)
 
 export * as SessionPrompt from "./prompt"

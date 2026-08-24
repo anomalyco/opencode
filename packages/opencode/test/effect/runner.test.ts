@@ -511,4 +511,115 @@ describe("Runner", () => {
       expect(runner.busy).toBe(false)
     }),
   )
+
+  // --- cancellation of a fiber that will not interrupt ---
+  //
+  // Regression cover for the 2026-07-25 hang: session ses_0691e2d30ffe1mwU1XPH5gr2mQ
+  // parked 18h48m on a half-open socket while the provider reported in_flight 0.
+  // Esc did nothing, and the log showed 30 cancels inside 30ms — one real and 29
+  // no-ops, because the old `cancel` committed Idle *before* awaiting
+  // Fiber.interrupt, so every later cancel matched `case "Idle"` and returned void.
+
+  // A turn that ignores interruption until `release` is resolved — a half-open
+  // socket read that the OS eventually tears down. It must be releasable, or the
+  // fiber can never be reaped and the test scope cannot close.
+  const wedgedOn = (release: Deferred.Deferred<void>) =>
+    Deferred.await(release).pipe(Effect.uninterruptible, Effect.as("never"))
+
+  // Always let the wedged fiber go, whatever the assertions did.
+  const withWedge = (body: (release: Deferred.Deferred<void>) => Effect.Effect<void, unknown, Scope.Scope>) =>
+    Effect.gen(function* () {
+      const release = yield* Deferred.make<void>()
+      yield* body(release).pipe(Effect.ensuring(Deferred.succeed(release, undefined).pipe(Effect.asVoid)))
+    })
+
+  it.live(
+    "cancel is bounded when the fiber refuses to interrupt",
+    withWedge((release) =>
+      Effect.gen(function* () {
+        const s = yield* Scope.Scope
+        const runner = Runner.make<string>(s, { interruptGrace: "150 millis" })
+
+        yield* runner.ensureRunning(wedgedOn(release)).pipe(Effect.exit, Effect.forkChild)
+        yield* waitForState(runner, "Running")
+
+        // Before the fix this never returned.
+        yield* runner.cancel.pipe(Effect.timeout("2 seconds"))
+        expect(runner.busy).toBe(false)
+      }),
+    ),
+  )
+
+  it.live(
+    "busy stays true while cancellation is in flight",
+    withWedge((release) =>
+      Effect.gen(function* () {
+        const s = yield* Scope.Scope
+        const runner = Runner.make<string>(s, { interruptGrace: "5 seconds" })
+
+        yield* runner.ensureRunning(wedgedOn(release)).pipe(Effect.exit, Effect.forkChild)
+        yield* waitForState(runner, "Running")
+
+        const stop = yield* runner.cancel.pipe(Effect.forkChild)
+        yield* waitForState(runner, "Cancelling")
+        // The turn is not over, so the session must not claim to be idle.
+        expect(runner.busy).toBe(true)
+
+        yield* runner.cancel.pipe(Effect.timeout("2 seconds"))
+        yield* Fiber.await(stop).pipe(Effect.timeout("2 seconds"))
+        expect(runner.busy).toBe(false)
+      }),
+    ),
+  )
+
+  it.live(
+    "a second cancel escalates rather than returning a silent no-op",
+    withWedge((release) =>
+      Effect.gen(function* () {
+        const s = yield* Scope.Scope
+        // Grace far longer than the test: only escalation can release this.
+        const runner = Runner.make<string>(s, { interruptGrace: "60 seconds" })
+
+        yield* runner.ensureRunning(wedgedOn(release)).pipe(Effect.exit, Effect.forkChild)
+        yield* waitForState(runner, "Running")
+
+        const stop = yield* runner.cancel.pipe(Effect.forkChild)
+        yield* waitForState(runner, "Cancelling")
+
+        yield* runner.cancel
+        yield* Fiber.await(stop).pipe(Effect.timeout("3 seconds"))
+        expect(runner.busy).toBe(false)
+      }),
+    ),
+  )
+
+  it.live(
+    "30 rapid cancels release the session — the observed Esc burst",
+    withWedge((release) =>
+      Effect.gen(function* () {
+        const s = yield* Scope.Scope
+        const runner = Runner.make<string>(s, { interruptGrace: "60 seconds" })
+
+        yield* runner.ensureRunning(wedgedOn(release)).pipe(Effect.exit, Effect.forkChild)
+        yield* waitForState(runner, "Running")
+
+        // Exactly the shape in the log: a burst of cancels in a few milliseconds.
+        const bursts = yield* Effect.forEach(Array.from({ length: 30 }), () => runner.cancel.pipe(Effect.forkChild))
+        yield* Effect.forEach(bursts, (f) => Fiber.await(f).pipe(Effect.timeout("5 seconds")), { discard: true })
+
+        expect(runner.busy).toBe(false)
+      }),
+    ),
+  )
+
+  it.live(
+    "cancelling an already-idle runner is still a no-op",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s)
+      expect(runner.busy).toBe(false)
+      yield* runner.cancel.pipe(Effect.timeout("1 second"))
+      expect(runner.busy).toBe(false)
+    }),
+  )
 })

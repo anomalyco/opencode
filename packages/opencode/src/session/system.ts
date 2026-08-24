@@ -149,4 +149,6 @@ export const node = LayerNode.make({
   deps: [Skill.node, MCP.node, locationServiceMapNode],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Skill.defaultLayer), Layer.provide(MCP.defaultLayer), Layer.provide(LayerNode.compile(locationServiceMapNode))))
+
 export * as SystemPrompt from "./system"

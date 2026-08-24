@@ -1,0 +1,176 @@
+import { describe, expect, test } from "bun:test"
+import { describePeer, resolvePeers, type ResolveInput } from "@/session/peers"
+
+const DIR = "/repo"
+const NOW = 1_000_000
+
+function session(id: string, over: Partial<ResolveInput["sessions"][number]> = {}) {
+  return {
+    id,
+    directory: DIR,
+    title: `session ${id}`,
+    updatedAt: NOW - 5_000,
+    ...over,
+  }
+}
+
+function resolve(over: Partial<ResolveInput> = {}) {
+  const base: ResolveInput = {
+    sessions: [],
+    statuses: new Map(),
+    pendingPermission: new Set(),
+    loops: [],
+    callerID: "me",
+    directory: DIR,
+    now: NOW,
+    ...over,
+  }
+  return resolvePeers(base)
+}
+
+describe("resolvePeers", () => {
+  test("a busy session in the same directory is a peer", () => {
+    const peers = resolve({
+      sessions: [session("me"), session("other", { title: "Merge five specsync worktrees into main" })],
+      statuses: new Map([["other", { type: "busy" }]]),
+    })
+    expect(peers).toHaveLength(1)
+    expect(peers[0].sessionID).toBe("other")
+    expect(peers[0].title).toBe("Merge five specsync worktrees into main")
+    expect(peers[0].status).toBe("busy")
+  })
+
+  test("a quiet repo returns nothing", () => {
+    const peers = resolve({ sessions: [session("me"), session("other")] })
+    expect(peers).toEqual([])
+  })
+
+  // A directory accumulates abandoned sessions. A warning that fires on every
+  // one of them is a warning nobody reads.
+  test("an idle session is not a peer", () => {
+    const peers = resolve({
+      sessions: [session("me"), session("stale", { updatedAt: NOW - 86_400_000 })],
+      statuses: new Map([["stale", { type: "idle" }]]),
+    })
+    expect(peers).toEqual([])
+  })
+
+  test("a session waiting on permission is a peer, distinguishably", () => {
+    const peers = resolve({
+      sessions: [session("me"), session("blocked")],
+      statuses: new Map([["blocked", { type: "idle" }]]),
+      pendingPermission: new Set(["blocked"]),
+    })
+    expect(peers).toHaveLength(1)
+    expect(peers[0].status).toBe("awaiting-permission")
+  })
+
+  test("a session in another directory is not a peer", () => {
+    const peers = resolve({
+      sessions: [session("me"), session("elsewhere", { directory: "/other-repo" })],
+      statuses: new Map([["elsewhere", { type: "busy" }]]),
+    })
+    expect(peers).toEqual([])
+  })
+
+  test("the caller is not its own peer", () => {
+    const peers = resolve({
+      sessions: [session("me")],
+      statuses: new Map([["me", { type: "busy" }]]),
+    })
+    expect(peers).toEqual([])
+  })
+
+  // Otherwise every fan-out reads as a collision, and the signal is loudest
+  // exactly when the run is doing the right thing.
+  test("the caller's own subagents are not peers, at any depth", () => {
+    const peers = resolve({
+      sessions: [
+        session("me"),
+        session("reviewer", { parentID: "me" }),
+        session("reviewers-helper", { parentID: "reviewer" }),
+      ],
+      statuses: new Map([
+        ["reviewer", { type: "busy" }],
+        ["reviewers-helper", { type: "busy" }],
+      ]),
+    })
+    expect(peers).toEqual([])
+  })
+
+  test("another lineage's subagent is still a peer", () => {
+    const peers = resolve({
+      sessions: [session("me"), session("sibling"), session("their-coder", { parentID: "sibling" })],
+      statuses: new Map([["their-coder", { type: "busy" }]]),
+    })
+    expect(peers.map((peer) => peer.sessionID)).toEqual(["their-coder"])
+  })
+
+  test("a session driven by a live loop counts even between turns", () => {
+    const peers = resolve({
+      sessions: [session("me"), session("auto", { title: "auto: openspec backlog" })],
+      statuses: new Map([["auto", { type: "idle" }]]),
+      loops: [{ id: "loop_1", sessionID: "auto", status: "running", iteration: 7 }],
+    })
+    expect(peers).toHaveLength(1)
+    expect(peers[0].loopID).toBe("loop_1")
+    expect(peers[0].loopIteration).toBe(7)
+  })
+
+  test("a finished loop does not keep a session alive", () => {
+    const peers = resolve({
+      sessions: [session("me"), session("done")],
+      statuses: new Map([["done", { type: "idle" }]]),
+      loops: [{ id: "loop_1", sessionID: "done", status: "completed", iteration: 3 }],
+    })
+    expect(peers).toEqual([])
+  })
+
+  test("what needs attention sorts above what is merely working", () => {
+    const peers = resolve({
+      sessions: [session("me"), session("busy"), session("blocked"), session("stuck")],
+      statuses: new Map([
+        ["busy", { type: "busy" }],
+        ["blocked", { type: "busy" }],
+        ["stuck", { type: "busy" }],
+      ]),
+      pendingPermission: new Set(["blocked"]),
+      loops: [{ id: "loop_1", sessionID: "stuck", status: "stalled", iteration: 2 }],
+    })
+    expect(peers.map((peer) => peer.sessionID)).toEqual(["stuck", "blocked", "busy"])
+  })
+
+  // Cycles cannot happen through the API, but an inconsistent store must not
+  // hang the resolver — a peers lookup runs on every queue iteration.
+  test("a parent cycle terminates", () => {
+    const peers = resolve({
+      sessions: [session("me"), session("a", { parentID: "b" }), session("b", { parentID: "a" })],
+      statuses: new Map([
+        ["a", { type: "busy" }],
+        ["b", { type: "busy" }],
+      ]),
+    })
+    expect(peers.map((peer) => peer.sessionID).sort()).toEqual(["a", "b"])
+  })
+})
+
+describe("describePeer", () => {
+  test("names the session, its title, and what is driving it", () => {
+    const line = describePeer({
+      sessionID: "ses_1",
+      title: "Finishing specsync and merging worktrees",
+      status: "busy",
+      agent: "build",
+      provider: "local",
+      model: "qwen3-coder",
+      loopID: "loop_1",
+      loopIteration: 4,
+      idleForMs: 90_000,
+    })
+    expect(line).toContain("ses_1")
+    expect(line).toContain("Finishing specsync and merging worktrees")
+    expect(line).toContain("busy")
+    expect(line).toContain("iteration 4")
+    expect(line).toContain("2m ago")
+  })
+})

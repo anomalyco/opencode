@@ -1,0 +1,10 @@
+{
+  "github:androidand/opencode-skein": {
+    "provider": "github:androidand/opencode-skein",
+    "id": "29",
+    "url": "https://github.com/androidand/opencode-skein/issues/29",
+    "base_sha": "24998d93e19c8c4341a64a0858d14577ab4a6ebbd4037ad855dfd00a4750fb21",
+    "base": "# Tasks: remove compat dual-writes from change state store\n\n- [ ] Remove compat writes: change NewWithCompat to New in defaults.go and all callers\n- [ ] Remove specBase field and all compat write logic from file_store.go\n- [ ] Update isInitializedChange to check .skein/changes/\u003cslug\u003e/ instead of openspec/changes/\u003cslug\u003e/.skein/\n- [ ] Remove compat reads from HasFlag and FlagMtime\n- [ ] Remove legacy file fallback from resolveStatus in openspec/load.go\n- [ ] Remove legacy file fallback from resolveStatusWithStore in auditor/auditor.go\n- [ ] Update tests to use New instead of NewWithCompat\n- [ ] Run Migrate on brick-now repo to copy compat state to primary\n- [ ] Clean up compat references in comments and documentation\n",
+    "base_closed": false
+  }
+}

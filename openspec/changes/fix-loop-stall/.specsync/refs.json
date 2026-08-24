@@ -1,0 +1,9 @@
+{
+  "github:androidand/opencode-skein": {
+    "provider": "github:androidand/opencode-skein",
+    "id": "14",
+    "url": "https://github.com/androidand/opencode-skein/issues/14",
+    "base_sha": "e983d4e938a9fbdb5d16639859272525776e88c92b8348c229e7f0ea591b2642",
+    "base": "# Tasks\n\n- [ ] 1. Audit the current no-progress stall logic in `packages/opencode/src/loop/loop.ts`\n- [ ] 2. Write failing test cases for false-positive stalls\n- [ ] 3. Calibrate the similarity threshold and default noProgressLimit\n- [ ] 4. Update the stall logic to be more robust\n- [ ] 5. Add regression tests\n- [ ] 6. Verify with real /loop usage\n"
+  }
+}

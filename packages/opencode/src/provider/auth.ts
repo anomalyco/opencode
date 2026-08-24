@@ -226,4 +226,6 @@ const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [Auth.node, Plugin.node] })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)))
+
 export * as ProviderAuth from "./auth"

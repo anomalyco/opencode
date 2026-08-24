@@ -1,0 +1,4 @@
+change: fix-loop-stall
+description: Fix /loop false-positive stall detection
+created: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+stage: intake

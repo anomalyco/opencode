@@ -804,4 +804,6 @@ export const node = LayerNode.make({
   deps: [FSUtil.node, AppProcess.node, Config.node],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(AppProcess.defaultLayer), Layer.provide(Config.defaultLayer)))
+
 export * as Snapshot from "."

@@ -1,0 +1,10 @@
+{
+  "github:androidand/opencode-skein": {
+    "provider": "github:androidand/opencode-skein",
+    "id": "22",
+    "url": "https://github.com/androidand/opencode-skein/issues/22",
+    "base_sha": "16dc5dbbf9f8a01a13cc6f7116b197bff32bab1ab2c65357ce990a4764ff5613",
+    "base": "# Tasks: ctx-display-and-overflow-correctness\n\n- [x] 1. Sidebar denominator (`context.tsx`) uses the enforced hard ceiling\n       (`limit.contextMax` = configured_ctx), falling back to `context` for\n       cloud; discovery now sets `contextMax` from fit's configured_ctx or the\n       reported context_length (never the models.dev catalog native).\n- [x] 2. `adjustLocalContextOnOverflow`: probes `/api/fit` at the target ctx and\n       only grows when `fit_level !== \"no\"`; otherwise surfaces the overflow\n       instead of patching to an unloadable native ceiling.\n- [x] 3. `setModelContextLimit` also sets `contextMax` to the new ctx_size, so\n       the set persists in the display; the next discovery re-reads it from the\n       now-patched backend (no revert to a capacity number).\n- [ ] 4. Tests: display/overflow logic is in the large discovery/provider\n       module — covered by typecheck + deploy verification for now; a focused\n       unit test is a follow-up. (REMAINING)\n- [x] 5. `bun run typecheck` green in both `opencode` and `tui` packages\n       (0 errors).\n",
+    "base_closed": false
+  }
+}
