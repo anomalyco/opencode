@@ -462,8 +462,11 @@ it.live("configures workspace providers through the SDK facade", () =>
         },
       })
       const opencode = yield* fixture.sdk.OpenCode.create({ workspaceProviders: { fake: driver } })
-      const workspaceID = yield* opencode.workspace.create({ provider: "fake" })
+      const requestedID = fixture.sdk.Workspace.ID.create()
+      const workspaceID = yield* opencode.workspace.create({ id: requestedID, provider: "fake" })
 
+      expect(workspaceID).toBe(requestedID)
+      expect(yield* opencode.workspace.create({ id: requestedID, provider: "fake" })).toBe(requestedID)
       expect(calls).toEqual([])
 
       const workspace = yield* opencode.workspace.provision({ workspaceID })

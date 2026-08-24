@@ -214,6 +214,8 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  WorkspaceCreateInput,
+  WorkspaceCreateOutput,
   WorkspaceDestroyInput,
   WorkspaceDestroyOutput,
   VcsGetInput,
@@ -1270,12 +1272,23 @@ const adaptGroupWorktree = (raw: RawClient["server.worktree"]) => ({
   refresh: EndpointWorktreeRefresh(raw),
 })
 
+const EndpointWorkspaceCreate = (raw: RawClient["server.workspace"]) => (input: WorkspaceCreateInput) =>
+  preserveEffect<WorkspaceCreateOutput>()(
+    raw["workspace.create"]({ payload: { id: input["id"], provider: input["provider"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointWorkspaceDestroy = (raw: RawClient["server.workspace"]) => (input: WorkspaceDestroyInput) =>
   preserveEffect<WorkspaceDestroyOutput>()(
     raw["workspace.destroy"]({ params: { workspaceID: input["workspaceID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupWorkspace = (raw: RawClient["server.workspace"]) => ({ destroy: EndpointWorkspaceDestroy(raw) })
+const adaptGroupWorkspace = (raw: RawClient["server.workspace"]) => ({
+  create: EndpointWorkspaceCreate(raw),
+  destroy: EndpointWorkspaceDestroy(raw),
+})
 
 const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =>
   preserveEffect<VcsGetOutput>()(

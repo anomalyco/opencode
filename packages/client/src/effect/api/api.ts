@@ -1691,6 +1691,12 @@ export interface WorktreeApi<E = never> {
   readonly refresh: WorktreeRefreshOperation<E>
 }
 
+export type WorkspaceCreateInput = { readonly id?: Workspace.ID | undefined; readonly provider: string }
+export type WorkspaceCreateOutput = Workspace.ID
+export type WorkspaceCreateOperation<E = never> = (
+  input: WorkspaceCreateInput,
+) => Effect.Effect<WorkspaceCreateOutput, E>
+
 export type WorkspaceDestroyInput = { readonly workspaceID: Workspace.ID }
 export type WorkspaceDestroyOutput = Workspace.DestroyResult
 export type WorkspaceDestroyOperation<E = never> = (
@@ -1698,6 +1704,7 @@ export type WorkspaceDestroyOperation<E = never> = (
 ) => Effect.Effect<WorkspaceDestroyOutput, E>
 
 export interface WorkspaceApi<E = never> {
+  readonly create: WorkspaceCreateOperation<E>
   readonly destroy: WorkspaceDestroyOperation<E>
 }
 

@@ -210,6 +210,8 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  WorkspaceCreateInput,
+  WorkspaceCreateOutput,
   WorkspaceDestroyInput,
   WorkspaceDestroyOutput,
   VcsGetInput,
@@ -1768,6 +1770,18 @@ export function make(options: ClientOptions) {
         ),
     },
     workspace: {
+      create: (input: WorkspaceCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkspaceCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/workspace`,
+            body: { id: input["id"], provider: input["provider"] },
+            successStatus: 200,
+            declaredStatuses: [409, 404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       destroy: (input: WorkspaceDestroyInput, requestOptions?: RequestOptions) =>
         request<WorkspaceDestroyOutput>(
           {

@@ -25,9 +25,18 @@ export class Info extends Schema.Class<Info>("Workspace.Info")({
 
 export class NotFound extends Schema.TaggedError<NotFound>()("Workspace.NotFound", { workspaceID: ID }) {}
 
+export class CreateConflict extends Schema.TaggedError<CreateConflict>()("Workspace.CreateConflict", {
+  workspaceID: ID,
+  provider: Schema.String,
+  existingProvider: Schema.String,
+}) {}
+
 export interface Interface {
   /** Instantly commits a logical workspace ID. No provider work happens here. */
-  readonly create: (provider: string) => Effect.Effect<ID, WorkspaceDriver.ProviderNotFound>
+  readonly create: (input: {
+    readonly id?: ID
+    readonly provider: string
+  }) => Effect.Effect<ID, CreateConflict | WorkspaceDriver.ProviderNotFound>
   /** Starts or joins the shared attempt that makes the backing resource real, then returns it. */
   readonly provision: (
     workspaceID: ID,
@@ -212,15 +221,37 @@ const layer = (options: Options) =>
       }).pipe(Effect.repeat(Schedule.spaced(options.pollInterval ?? Duration.minutes(1))), Effect.forkScoped)
 
       return Service.of({
-        create: Effect.fn("Workspace.create")(function* (provider) {
-          yield* registry.get(provider)
-          const workspaceID = ID.create()
+        create: Effect.fn("Workspace.create")(function* (input) {
+          const workspaceID = input.id ?? ID.create()
+          const existing = yield* db
+            .select()
+            .from(WorkspaceTable)
+            .where(eq(WorkspaceTable.id, workspaceID))
+            .get()
+            .pipe(Effect.orDie)
+          if (existing) {
+            if (existing.provider === input.provider) return workspaceID
+            return yield* new CreateConflict({
+              workspaceID,
+              provider: input.provider,
+              existingProvider: existing.provider,
+            })
+          }
+          yield* registry.get(input.provider)
           const now = yield* Clock.currentTimeMillis
           yield* db
             .insert(WorkspaceTable)
-            .values({ id: workspaceID, provider, binding: null, created_at: now, last_used_at: now })
+            .values({ id: workspaceID, provider: input.provider, binding: null, created_at: now, last_used_at: now })
+            .onConflictDoNothing()
             .run()
             .pipe(Effect.orDie)
+          const row = yield* load(workspaceID).pipe(Effect.orDie)
+          if (row.provider !== input.provider)
+            return yield* new CreateConflict({
+              workspaceID,
+              provider: input.provider,
+              existingProvider: row.provider,
+            })
           return workspaceID
         }),
         provision,
