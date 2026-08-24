@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go è un abbonamento a basso costo — **5 $ per il primo mese**, poi **10 $/mese** — che ti offre un accesso affidabile ai popolari modelli di programmazione aperti.
+OpenCode Go è un abbonamento a basso costo da **10 $/mese** che ti offre un accesso affidabile ai popolari modelli di programmazione aperti.
 
 Go funziona come qualsiasi altro provider in OpenCode. Ti abboni a OpenCode Go e
 ottieni la tua chiave API. È **completamente facoltativo** e non hai bisogno di usarlo per
@@ -37,7 +37,7 @@ Per risolvere questo problema, abbiamo fatto un paio di cose:
 3. Infine, abbiamo eseguito dei benchmark sulla combinazione modello/provider e abbiamo stilato
    un elenco che ci sentiamo di raccomandare.
 
-OpenCode Go ti dà accesso a questi modelli a **5 $ per il primo mese**, poi a **10 $/mese**.
+OpenCode Go ti dà accesso a questi modelli a **10 $/mese**.
 
 ---
 
@@ -65,6 +65,7 @@ L'elenco attuale dei modelli include:
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
+- **LongCat-2.0**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
@@ -106,6 +107,7 @@ La tabella seguente fornisce una stima del conteggio delle richieste in base a p
 | Kimi K3                      | 110                  | 250                   | 490               |
 | Kimi K2.7 Code               | 1,350                | 3,380                 | 6,750             |
 | Kimi K2.6                    | 1,150                | 2,880                 | 5,750             |
+| LongCat-2.0                  | 11,400               | 28,600                | 57,200            |
 | MiMo-V2.5                    | 30,100               | 75,200                | 150,400           |
 | MiMo-V2.5-Pro                | 3,250                | 8,150                 | 16,300            |
 | MiniMax M3                   | 3,200                | 8,000                 | 16,000            |
@@ -128,6 +130,7 @@ Le stime si basano sui pattern di richieste osservati:
 - GPT 5.6 Luna — 1.000 token di input, 50.000 in cache, 220 token di output per richiesta
 - Kimi K3 — 1.050 di input, 76.500 in cache, 300 token di output per richiesta
 - Kimi K2.7/K2.6 — 870 di input, 55.000 in cache, 200 token di output per richiesta
+- LongCat-2.0 — 920 di input, 88.900 in cache, 200 token di output per richiesta
 - DeepSeek V4 Pro — 750 di input, 82.000 in cache, 290 token di output per richiesta
 - DeepSeek V4 Flash — 410 di input, 71.300 in cache, 310 token di output per richiesta
 - DeepSeek V4 Flash Vision Exp — 410 di input, 71.300 in cache, 310 token di output per richiesta
@@ -155,6 +158,7 @@ Le stime si basano anche sui seguenti prezzi per 1M token e sull'utilizzo mensil
 | Kimi K3                                 | $3.00  | $15.00 | $0.30       | -            | $15      |
 | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | $60      |
 | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | $60      |
+| LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | $60      |
 | MiMo V2.5                               | $0.14  | $0.28  | $0.0028     | -            | $60      |
 | MiMo V2.5 Pro                           | $0.435 | $0.87  | $0.003625   | -            | $15      |
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60      |
@@ -176,7 +180,7 @@ Le stime si basano anche sui seguenti prezzi per 1M token e sull'utilizzo mensil
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60      |
 | Ox Alpha Free                           | -      | -      | -           | -            | -        |
 
-**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Gli orari Peak sono 01:00-04:00 e 06:00-10:00 UTC; tutti gli altri orari sono Off-Peak. [Scopri di più](https://api-docs.deepseek.com/quick_start/pricing/).
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Gli orari Peak sono 01:00-04:00 e 06:00-10:00 UTC, dal lunedì al venerdì; tutti gli altri orari, inclusi i fine settimana, sono Off-Peak. [Scopri di più](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** Le immagini vengono convertite in token in base alle loro dimensioni e fatturate come token di input insieme ai token di testo. [Scopri di più](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -226,6 +230,7 @@ Puoi anche accedere ai modelli Go tramite i seguenti endpoint API.
 | Kimi K3                      | kimi-k3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code               | kimi-k2.7-code               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6                    | kimi-k2.6                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat-2.0                  | longcat-2.0                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -270,6 +275,7 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K3                      | Non utilizzato            | 0 giorni               |
 | Kimi K2.7 Code               | Non utilizzato            | 0 giorni               |
 | Kimi K2.6                    | Non utilizzato            | 0 giorni               |
+| LongCat-2.0                  | Non utilizzato            | 0 giorni               |
 | MiMo-V2.5-Pro                | Non utilizzato            | 0 giorni               |
 | MiMo-V2.5                    | Non utilizzato            | 0 giorni               |
 | Qwen3.8 Max                  | Non utilizzato            | 0 giorni               |

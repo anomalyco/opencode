@@ -7353,7 +7353,7 @@ export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeRe
 
 export type GlobalUpgradeData = {
   body?: {
-    target?: string
+    target: string
   }
   path?: never
   query?: never
