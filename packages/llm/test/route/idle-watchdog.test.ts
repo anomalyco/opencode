@@ -108,4 +108,58 @@ describe("IdleWatchdog", () => {
       expect(error.reason.message).toBe("Provider stream stalled: no data received for 300ms")
     }),
   )
+
+  it.effect("does not count local tool execution toward the idle budget", () =>
+    Effect.gen(function* () {
+      // a long-running local tool (bash, subagent, MCP call) silences the
+      // event stream between tool-call and tool-result; that window must
+      // never trip the watchdog. All elements arrive on clock sleeps so the
+      // guard is always parked in exactly one awaited phase per adjustment.
+      const stream = Stream.fromEffect(Effect.as(Effect.sleep(100), { type: "text-delta" })).pipe(
+        Stream.concat(Stream.fromEffect(Effect.as(Effect.sleep(100), { type: "tool-call", name: "bash" }))),
+        Stream.concat(Stream.fromEffect(Effect.as(Effect.sleep(4_800), { type: "tool-result", name: "bash" }))),
+        Stream.concat(Stream.fromEffect(Effect.as(Effect.sleep(100), { type: "text-delta" }))),
+      )
+      const fiber = yield* IdleWatchdog.guardIdle({ idleMs: 1_000 })(stream).pipe(
+        Stream.runCollect,
+        Effect.forkChild({ startImmediately: true }),
+      )
+
+      yield* TestClock.adjust(200)
+      // 4.8s of silence inside the tool window: far past the 1s budget
+      yield* TestClock.adjust(4_800)
+      yield* TestClock.adjust(100)
+      const events = yield* Fiber.join(fiber)
+
+      expect(events).toEqual([
+        { type: "text-delta" },
+        { type: "tool-call", name: "bash" },
+        { type: "tool-result", name: "bash" },
+        { type: "text-delta" },
+      ])
+    }),
+  )
+
+  it.effect("re-arms after a step transition and still trips on generation stalls", () =>
+    Effect.gen(function* () {
+      // silence after step-finish is unbounded (next-step request), but once
+      // generation resumes, gaps are bounded again
+      const stream = Stream.make({ type: "step-finish", index: 0 }).pipe(
+        Stream.concat(Stream.fromEffect(Effect.as(Effect.sleep(2_000), { type: "text-delta" }))),
+        Stream.concat(Stream.never),
+      )
+      const fiber = yield* IdleWatchdog.guardIdle({ idleMs: 300 })(stream).pipe(
+        Stream.runCollect,
+        Effect.forkChild({ startImmediately: true }),
+      )
+
+      yield* TestClock.adjust(2_000)
+      // text-delta arrived and re-armed; the following gap now trips
+      yield* TestClock.adjust(300)
+      const error = yield* Fiber.join(fiber).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "Transport", kind: "IdleTimeout" })
+    }),
+  )
 })
