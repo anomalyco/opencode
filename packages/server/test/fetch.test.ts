@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { createServer } from "node:http"
+import { createServer, type Server } from "node:http"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { Effect } from "effect"
 import { it } from "../../core/test/lib/effect"
@@ -10,6 +10,29 @@ const options = {
   database: { path: ":memory:" },
   fs: { filewatcher: false },
 } as const
+
+type Handler = (request: Request) => Promise<Response>
+
+function occupy(server: Server, port: number) {
+  return Effect.callback<void, Error>((resume) => {
+    server.once("error", (error) => resume(Effect.fail(error)))
+    server.listen(port, "localhost", () => resume(Effect.void))
+  })
+}
+
+const ready = (handler: Handler) =>
+  Effect.promise(() => handler(new Request("http://opencode.local/api/model/default")))
+
+const connectOpenAI = (handler: Handler) =>
+  Effect.promise(() =>
+    handler(
+      new Request("http://opencode.local/api/integration/openai/connect/oauth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ methodID: "chatgpt-browser" }),
+      }),
+    ),
+  )
 
 it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
   Effect.gen(function* () {
@@ -54,32 +77,63 @@ it.live("serves unauthenticated and answers CORS preflight when no password is c
   }).pipe(Effect.scoped),
 )
 
-it.live("explains how to recover when the OpenAI OAuth callback port is busy", () =>
+it.live("cancels a stale OpenAI OAuth callback server before falling back", () =>
   Effect.gen(function* () {
-    const blocker = createServer()
-    yield* Effect.callback<void, Error>((resume) => {
-      blocker.once("error", (error) => resume(Effect.fail(error)))
-      blocker.listen(1455, "localhost", () => resume(Effect.void))
+    const requests: string[] = []
+    const blocker = createServer((request, response) => {
+      requests.push(request.url ?? "")
+      response.end("cancelled", () => blocker.close())
     })
+    yield* occupy(blocker, 1455)
     yield* Effect.addFinalizer(() => Effect.sync(() => blocker.close()))
     const handler = yield* ServerFetch.make(options)
-    yield* Effect.promise(() => handler(new Request("http://opencode.local/api/model/default")))
+    yield* ready(handler)
+    const response = yield* connectOpenAI(handler)
 
-    const response = yield* Effect.promise(() =>
-      handler(
-        new Request("http://opencode.local/api/integration/openai/connect/oauth", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ methodID: "chatgpt-browser" }),
-        }),
-      ),
-    )
+    expect(response.status).toBe(200)
+    expect(requests).toContain("/cancel")
+    const body = (yield* Effect.promise(() => response.json())) as { data: { url: string } }
+    expect(new URL(body.data.url).searchParams.get("redirect_uri")).toBe("http://localhost:1455/auth/callback")
+  }).pipe(Effect.scoped),
+)
+
+it.live("falls back to port 1457 when OpenAI OAuth port 1455 remains busy", () =>
+  Effect.gen(function* () {
+    const requests: string[] = []
+    const blocker = createServer((request, response) => {
+      requests.push(request.url ?? "")
+      response.end("still running")
+    })
+    yield* occupy(blocker, 1455)
+    yield* Effect.addFinalizer(() => Effect.sync(() => blocker.close()))
+    const handler = yield* ServerFetch.make(options)
+    yield* ready(handler)
+    const response = yield* connectOpenAI(handler)
+
+    expect(response.status).toBe(200)
+    expect(requests).toContain("/cancel")
+    const body = (yield* Effect.promise(() => response.json())) as { data: { url: string } }
+    expect(new URL(body.data.url).searchParams.get("redirect_uri")).toBe("http://localhost:1457/auth/callback")
+  }).pipe(Effect.scoped),
+)
+
+it.live("explains how to recover when both OpenAI OAuth callback ports are busy", () =>
+  Effect.gen(function* () {
+    const preferred = createServer((_request, response) => response.end("still running"))
+    const fallback = createServer()
+    yield* occupy(preferred, 1455)
+    yield* occupy(fallback, 1457)
+    yield* Effect.addFinalizer(() => Effect.sync(() => preferred.close()))
+    yield* Effect.addFinalizer(() => Effect.sync(() => fallback.close()))
+    const handler = yield* ServerFetch.make(options)
+    yield* ready(handler)
+    const response = yield* connectOpenAI(handler)
 
     expect(response.status).toBe(400)
     expect(yield* Effect.promise(() => response.json())).toEqual({
       _tag: "InvalidRequestError",
       message:
-        "OpenAI browser login needs local port 1455, but it is already in use. Stop the process using port 1455 or choose ChatGPT Pro/Plus (headless), then try again.",
+        "OpenAI browser login needs local port 1455 or 1457, but both are already in use. Stop the processes using those ports or choose ChatGPT Pro/Plus (headless), then try again.",
       kind: "integration_authorization",
     })
   }).pipe(Effect.scoped),
