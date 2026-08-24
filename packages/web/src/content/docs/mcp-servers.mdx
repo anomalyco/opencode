@@ -58,6 +58,29 @@ For projects, you can keep MCP servers in a dedicated `.agents/mcp.json` file in
 
 This file merges after root-level `opencode.json`, so servers declared here win on conflicts.
 
+### Scopes
+
+Servers can be managed at three scopes with `opencode mcp add`:
+
+| Scope     | Loads in              | Shared with team          | Stored in |
+| --------- | --------------------- | ------------------------- | --------- |
+| `local`   | Current project only  | No                        | `~/.local/share/opencode/mcp-local.json` (keyed by project path) |
+| `project` | Current project only  | Yes, via version control  | `.agents/mcp.json` in the project |
+| `user`    | All your projects     | No                        | `~/.agents/mcp.json` |
+
+```bash
+# Private to this project - credentials stay out of the repository (default)
+opencode mcp add jira --scope local -- npx -y @nexus2520/jira-mcp-server --env JIRA_API_TOKEN=...
+
+# Shared with the team via git
+opencode mcp add stripe --scope project --url https://mcp.stripe.com
+
+# Available in all your projects
+opencode mcp add supabase --scope user --url https://mcp.supabase.com/mcp
+```
+
+Use `local` scope for servers with credentials: the configuration is stored in your home directory, keyed by project path, and never committed. When the same server name exists at multiple scopes, the local entry replaces project and user definitions wholesale.
+
 ---
 
 ### Overriding remote defaults

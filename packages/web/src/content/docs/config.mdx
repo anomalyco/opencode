@@ -150,6 +150,8 @@ Shorthand server formats are expanded automatically, so snippets copied from ven
 
 Root-level `opencode.json` files continue to work and are loaded first, with `.agents` config taking precedence over them.
 
+MCP servers additionally support a per-project **local scope**: `opencode mcp add --scope local` stores the server in `~/.local/share/opencode/mcp-local.json`, keyed by project path. Local entries are private to you, never committed, and replace same-named servers from project and user config.
+
 ---
 
 ### Custom path

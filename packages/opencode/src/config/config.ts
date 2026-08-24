@@ -336,6 +336,25 @@ const layer = Layer.effect(
       }
     })
 
+    // Local-scope MCP servers: per-project, private to the user, stored in the data directory so
+    // credentials never live in the project. Keyed by project root, Claude Code's ~/.claude.json pattern.
+    const loadLocalMcp = Effect.fnUntraced(function* (projectRoot: string, env?: Record<string, string>) {
+      const filepath = path.join(Global.Path.data, "mcp-local.json")
+      if (!existsSync(filepath)) return {}
+      const text = yield* readConfigFile(filepath)
+      if (!text) return {}
+      const expanded = yield* Effect.promise(() =>
+        ConfigVariable.substitute({ text, type: "path", path: filepath, env }),
+      )
+      const parsed = ConfigParse.jsonc(expanded, filepath)
+      const projects = ConfigParse.schema(
+        Schema.Record(Schema.String, Schema.Record(Schema.String, ConfigMCPV1.Info)),
+        parsed,
+        filepath,
+      )
+      return projects[projectRoot] ?? {}
+    })
+
     const loadInstanceState = Effect.fn("Config.loadInstanceState")(
       function* (ctx: InstanceContext) {
         const auth = yield* authSvc.all().pipe(Effect.orDie)
@@ -493,6 +512,17 @@ const layer = Layer.effect(
           // returns normalized Specs and we only need to attach origin metadata here.
           const list = yield* Effect.promise(() => ConfigPlugin.load(dir))
           yield* mergePluginOrigins(dir, list)
+        }
+
+        // Local-scope MCP entries replace same-named servers from project/user config wholesale,
+        // matching Claude Code's scope semantics instead of field-level merging.
+        // Non-git projects set worktree to "/", so fall back to the working directory for the key.
+        const projectRoot = ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+        const localMcp = yield* loadLocalMcp(projectRoot, authEnv).pipe(
+          Effect.catch(() => Effect.succeed({})),
+        )
+        if (Object.keys(localMcp).length) {
+          result.mcp = { ...(result.mcp ?? {}), ...localMcp }
         }
 
         if (process.env.OPENCODE_CONFIG_CONTENT) {

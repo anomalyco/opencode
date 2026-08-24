@@ -1619,6 +1619,53 @@ it.instance(".agents/mcp.json accepts mcpServers and servers wrappers", () =>
   }),
 )
 
+it.instance("local scope MCP overrides project config and ignores other projects", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const dataDir = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-data-")))
+    const previousData = Global.Path.data
+    ;(Global.Path as { data: string }).data = dataDir
+
+    yield* Effect.gen(function* () {
+      yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+      yield* writeConfigEffect(
+        path.join(test.directory, ".agents"),
+        {
+          jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: false },
+          shared: { type: "remote", url: "https://shared.example.com/mcp" },
+        },
+        "mcp.json",
+      )
+      // Local store keyed by project root; an entry under a different project must be ignored
+      yield* FSUtil.use.writeJson(
+        path.join(dataDir, "mcp-local.json"),
+        {
+          [test.directory]: {
+            jira: { type: "remote", url: "https://private.example.com/mcp", enabled: true },
+          },
+          ["/some/other/project"]: {
+            jira: { type: "remote", url: "https://wrong.example.com/mcp" },
+          },
+        },
+        0o600,
+      )
+
+      const config = yield* Config.use.get()
+      const jira = config.mcp?.jira
+      expect(jira && "url" in jira ? jira.url : undefined).toBe("https://private.example.com/mcp")
+      expect(jira?.enabled).toBe(true)
+      const shared = config.mcp?.shared
+      expect(shared && "url" in shared ? shared.url : undefined).toBe("https://shared.example.com/mcp")
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          ;(Global.Path as { data: string }).data = previousData
+        }),
+      ),
+    )
+  }),
+)
+
 const remoteProjectOverride = wellKnown({
   config: {
     mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: false } },
