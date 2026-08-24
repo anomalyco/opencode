@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Goは低価格のサブスクリプションで、**初月は5ドル**、その後は**月額10ドル**で、人気のオープンなコーディングモデルに安定してアクセスできます。
+OpenCode Goは、人気のオープンなコーディングモデルに安定してアクセスできる、低価格の**月額10ドルのサブスクリプション**です。
 
 GoはOpenCodeの他のプロバイダーと同様に機能します。OpenCode GoをサブスクライブしてAPIキーを取得します。これは**完全に任意**であり、OpenCodeを使用するために必須ではありません。
 
@@ -31,7 +31,7 @@ OpenCodeでうまく動作する一部のモデルとプロバイダーをテス
 2. 次に、これらが正しく提供されていることを確認するために、いくつかのプロバイダーと協力しました。
 3. 最後に、モデルとプロバイダーの組み合わせをベンチマークし、自信を持ってお勧めできるリストを作成しました。
 
-OpenCode Goを使用すると、これらのモデルに**初月は5ドル**、その後は**月額10ドル**でアクセスできます。
+OpenCode Goを使用すると、これらのモデルに**月額10ドル**でアクセスできます。
 
 ---
 
@@ -57,6 +57,7 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
+- **LongCat-2.0**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
@@ -98,6 +99,7 @@ OpenCode Goには以下の制限が含まれています：
 | Kimi K3                      | 110                       | 250              | 490              |
 | Kimi K2.7 Code               | 1,350                     | 3,380            | 6,750            |
 | Kimi K2.6                    | 1,150                     | 2,880            | 5,750            |
+| LongCat-2.0                  | 11,400                    | 28,600           | 57,200           |
 | MiMo-V2.5                    | 30,100                    | 75,200           | 150,400          |
 | MiMo-V2.5-Pro                | 3,250                     | 8,150            | 16,300           |
 | MiniMax M3                   | 3,200                     | 8,000            | 16,000           |
@@ -120,6 +122,7 @@ OpenCode Goには以下の制限が含まれています：
 - GPT 5.6 Luna — リクエストあたり 入力 1,000トークン、キャッシュ 50,000トークン、出力 220トークン
 - Kimi K3 — リクエストあたり 入力 1,050トークン、キャッシュ 76,500トークン、出力 300トークン
 - Kimi K2.7/K2.6 — リクエストあたり 入力 870トークン、キャッシュ 55,000トークン、出力 200トークン
+- LongCat-2.0 — リクエストあたり 入力 920トークン、キャッシュ 88,900トークン、出力 200トークン
 - DeepSeek V4 Pro — リクエストあたり 入力 750トークン、キャッシュ 82,000トークン、出力 290トークン
 - DeepSeek V4 Flash — リクエストあたり 入力 410トークン、キャッシュ 71,300トークン、出力 310トークン
 - DeepSeek V4 Flash Vision Exp — リクエストあたり 入力 410トークン、キャッシュ 71,300トークン、出力 310トークン
@@ -147,6 +150,7 @@ OpenCode Goには以下の制限が含まれています：
 | Kimi K3                                 | $3.00  | $15.00 | $0.30       | -            | $15   |
 | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | $60   |
 | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | $60   |
+| LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | $60   |
 | MiMo V2.5                               | $0.14  | $0.28  | $0.0028     | -            | $60   |
 | MiMo V2.5 Pro                           | $0.435 | $0.87  | $0.003625   | -            | $15   |
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60   |
@@ -168,7 +172,7 @@ OpenCode Goには以下の制限が含まれています：
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
 | Ox Alpha Free                           | -      | -      | -           | -            | -     |
 
-**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak時間は01:00-04:00と06:00-10:00 UTCで、それ以外の時間はすべてOff-Peakです。[詳しく見る](https://api-docs.deepseek.com/quick_start/pricing/)。
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak時間は月曜日から金曜日の01:00-04:00と06:00-10:00 UTCで、週末を含むそれ以外の時間はすべてOff-Peakです。[詳しく見る](https://api-docs.deepseek.com/quick_start/pricing/)。
 
 **DeepSeek V4 Flash Vision Exp:** 画像はサイズに基づいてトークンに変換され、テキストトークンと合わせて入力トークンとして課金されます。 [詳しく見る](https://api-docs.deepseek.com/quick_start/pricing/)。
 
@@ -216,6 +220,7 @@ Goでは月額$10を支払い、その6倍の利用枠を提供することを�
 | Kimi K3                      | kimi-k3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code               | kimi-k2.7-code               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6                    | kimi-k2.6                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat-2.0                  | longcat-2.0                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -258,6 +263,7 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K3                      | 使用なし             | 0日         |
 | Kimi K2.7 Code               | 使用なし             | 0日         |
 | Kimi K2.6                    | 使用なし             | 0日         |
+| LongCat-2.0                  | 使用なし             | 0日         |
 | MiMo-V2.5-Pro                | 使用なし             | 0日         |
 | MiMo-V2.5                    | 使用なし             | 0日         |
 | Qwen3.8 Max                  | 使用なし             | 0日         |
