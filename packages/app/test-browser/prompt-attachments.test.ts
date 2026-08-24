@@ -3,6 +3,7 @@ import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createPromptAttachmentsCore } from "@/components/prompt-input/attachments"
 import { createPromptState } from "@/context/prompt"
+import { createBlobReference } from "@/utils/draft-store"
 import { createPromptInputV2Attachments } from "../../session-ui/src/v2/components/prompt-input/attachments"
 import type { PromptInputV2Prompt } from "../../session-ui/src/v2/components/prompt-input/types"
 
@@ -170,6 +171,55 @@ test("rejects desktop duplicates and keeps changed files in the V2 prompt store"
   })
 })
 
+describe.serial("prompt attachments in insecure contexts", () => {
+  test("creates a blob reference without Web Crypto", async () => {
+    await withoutWebCrypto(async () => {
+      const reference = await createBlobReference(new Blob(["hello"]))
+      expect(reference.id).toHaveLength(32)
+      expect(reference.url).toStartWith("blob:")
+    })
+  })
+
+  test("adds a V2 attachment without Web Crypto", async () => {
+    await withoutWebCrypto(async () => {
+      await createRoot(async (dispose) => {
+        const [state, setState] = createStore({ prompt: [] as PromptInputV2Prompt })
+        const attachments = createPromptInputV2Attachments({
+          capture: () => ({
+            current: () => state.prompt,
+            cursor: () => 0,
+            set: (prompt) => setState("prompt", prompt),
+          }),
+          editor: () => document.createElement("div"),
+          focusEditor: () => undefined,
+          addPart: () => false,
+          setDraggingType: () => undefined,
+          directory: () => "/",
+          isDialogActive: () => false,
+          warn: () => undefined,
+          duplicate: () => undefined,
+          onError: () => undefined,
+        })
+
+        await attachments.addAttachments([new File(["hello"], "hello.txt", { type: "text/plain" })])
+
+        expect(state.prompt).toHaveLength(1)
+        expect(state.prompt[0]?.type === "image" && state.prompt[0].blob.id).toHaveLength(32)
+        dispose()
+      })
+    })
+  })
+})
+
 function images(prompt: ReturnType<typeof createPromptState>) {
   return prompt.current().filter((part) => part.type === "image")
+}
+
+async function withoutWebCrypto(run: () => Promise<void>) {
+  const crypto = globalThis.crypto
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    value: { getRandomValues: crypto.getRandomValues.bind(crypto) },
+  })
+  await run().finally(() => Object.defineProperty(globalThis, "crypto", { configurable: true, value: crypto }))
 }
