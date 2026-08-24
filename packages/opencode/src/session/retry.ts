@@ -183,10 +183,15 @@ function parseJSON(value: unknown) {
 export function policy(opts: {
   provider: string
   parse: (error: unknown) => Err
+  isActive?: () => boolean
   set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
 }) {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
+      // A cancelled turn stays cancelled: the dying provider connection often
+      // surfaces a retryable-looking error (e.g. provider_unavailable) after the
+      // user aborted, and retrying would resurrect the turn.
+      if (opts.isActive && !opts.isActive()) return Cause.done(meta.attempt)
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
