@@ -31,6 +31,7 @@ const models = [
   { name: "Kimi K3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Kimi K2.7 Code", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Kimi K2.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "LongCat-2.0", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.5-Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.8 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
