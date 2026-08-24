@@ -1,11 +1,15 @@
 import { Effect, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
+import {
+  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  guardIdle,
+} from "../idle-watchdog"
 import { Auth } from "../auth"
 import { render as renderEndpoint } from "../endpoint"
 import { Framing, type Framing as FramingDef } from "../framing"
 import type { Transport, TransportPrepareInput } from "./index"
 import * as ProviderShared from "../../protocols/shared"
-import { mergeJsonRecords, type LLMRequest } from "../../schema"
+import { LLMError, mergeJsonRecords, type LLMRequest } from "../../schema"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
@@ -135,12 +139,18 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
           Effect.map((response) =>
             prepared.framing.frame(
               response.stream.pipe(
+                // Byte-level liveness: any body chunk (including SSE comments
+                // and keep-alive frames that framing later drops) resets the
+                // deadline, so only genuine transport silence can trip it.
+                guardIdle({ idleMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS }),
                 Stream.mapError((error) =>
-                  ProviderShared.eventError(
-                    `${request.model.provider}/${request.model.route.id}`,
-                    `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
-                    ProviderShared.errorText(error),
-                  ),
+                  error instanceof LLMError
+                    ? error
+                    : ProviderShared.eventError(
+                        `${request.model.provider}/${request.model.route.id}`,
+                        `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
+                        ProviderShared.errorText(error),
+                      ),
                 ),
               ),
             ),

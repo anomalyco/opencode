@@ -65,4 +65,23 @@ describe("IdleWatchdog", () => {
       expectLLMError(error)
     }),
   )
+
+  it.effect("does not arm the deadline before the first element", () =>
+    Effect.gen(function* () {
+      // silence for longer than idleMs BEFORE the stream begins is not counted
+      const stream = Stream.fromEffect(Effect.as(Effect.sleep(2_000), "first")).pipe(Stream.concat(Stream.never))
+      const fiber = yield* IdleWatchdog.guardIdle({ idleMs: 300 })(stream).pipe(
+        Stream.runCollect,
+        Effect.forkChild({ startImmediately: true }),
+      )
+
+      yield* TestClock.adjust(300)
+      yield* TestClock.adjust(1_700)
+      // first element delivered; from here every 300ms gap trips the watchdog
+      yield* TestClock.adjust(300)
+      const error = yield* Fiber.join(fiber).pipe(Effect.flip)
+
+      expect(error.reason.message).toBe("Provider stream stalled: no data received for 300ms")
+    }),
+  )
 })
