@@ -105,7 +105,6 @@ import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd"
 
 export class OpenCodeDO {
   constructor(state) {
-    this.state = state
     this.opencode = state.blockConcurrencyWhile(() => OpenCodeWorkerd.create({
       storage: state.storage,
       app: { version: "packed-workerd" },

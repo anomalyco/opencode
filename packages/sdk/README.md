@@ -52,6 +52,8 @@ export class OpenCodeDO {
 }
 ```
 
+`blockConcurrencyWhile` keeps every Durable Object event out until the host is ready and resets the object if initialization fails. The retained Promise gives request handlers direct access to the same host after startup.
+
 ## Effect
 
 The Effect-native API remains available from `@opencode-ai/sdk/effect`:

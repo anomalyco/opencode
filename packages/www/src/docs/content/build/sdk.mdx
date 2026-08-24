@@ -101,6 +101,10 @@ export class OpenCodeDO {
 }
 ```
 
+`blockConcurrencyWhile` keeps every Durable Object event out until the host is
+ready and resets the object if initialization fails. The retained Promise gives
+request handlers direct access to the same host after startup.
+
 Wrangler selects OpenCode's Workerd-safe low-level implementations through the
 `workerd` package condition. Cloudflare may evict a Durable Object without
 running cleanup, so correctness does not depend on `close()` being called.

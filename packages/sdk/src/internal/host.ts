@@ -47,8 +47,7 @@ export const create = Effect.fn("EmbeddedHost.create")(function* (
     const handler = HttpEffect.toWebHandlerWith<never, HttpServerRequest.HttpServerRequest | Scope.Scope>(
       context(services),
     )(Context.get(services, HttpRouter.HttpRouter).asHttpEffect())
-    const requests = new Set<Promise<void>>()
-    const controllers = new Set<AbortController>()
+    const requests = new Map<AbortController, Promise<void>>()
     const closed = new Error("OpenCode host is closed")
     let closePromise: Promise<void> | undefined
     const fetch = Object.assign(
@@ -60,12 +59,10 @@ export const create = Effect.fn("EmbeddedHost.create")(function* (
         const request = new Request(source, { signal: AbortSignal.any([source.signal, controller.signal]) })
         const lifetime = Promise.withResolvers<void>()
         const finish = () => {
-          controllers.delete(controller)
-          requests.delete(lifetime.promise)
+          requests.delete(controller)
           lifetime.resolve()
         }
-        controllers.add(controller)
-        requests.add(lifetime.promise)
+        requests.set(controller, lifetime.promise)
 
         const handled = handler(request)
         return rejectOnAbort(handled, request.signal).then(
@@ -81,8 +78,8 @@ export const create = Effect.fn("EmbeddedHost.create")(function* (
     const close = () => {
       if (closePromise) return closePromise
       closePromise = (async () => {
-        for (const controller of controllers) controller.abort(closed)
-        await Promise.allSettled([...requests])
+        for (const controller of requests.keys()) controller.abort(closed)
+        await Promise.allSettled(requests.values())
         await runtime.dispose()
       })()
       return closePromise
