@@ -178,8 +178,7 @@ export function createHomeSessionsController(home: HomeController) {
       showToast({
         variant: "error",
         title: language.t("toast.session.export.failed.title"),
-        description:
-          cause instanceof Error ? cause.message : language.t("toast.session.export.failed.description"),
+        description: cause instanceof Error ? cause.message : language.t("toast.session.export.failed.description"),
       })
     }
   }
@@ -194,9 +193,7 @@ export function createHomeSessionsController(home: HomeController) {
       .remove({ sessionID: session.id })
       .then(() => {
         const removedIDs = new Set(ids)
-        setRemoved("keys", (current) => [
-          ...new Set([...current, ...ids.map((id) => `${server}\0${id}`)]),
-        ])
+        setRemoved("keys", (current) => [...new Set([...current, ...ids.map((id) => `${server}\0${id}`)])])
         queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
           current?.filter((item) => !removedIDs.has(item.id)),
         )

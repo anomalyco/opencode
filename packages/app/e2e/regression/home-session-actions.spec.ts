@@ -33,9 +33,7 @@ test("renames, exports, and deletes a home session from its context menu", async
   await page.goto("/")
   const row = page.locator('[data-component="home-session-row"]').filter({ hasText: fixture.expected.targetTitle })
   await expect(row).toBeVisible()
-  const container = page.locator(
-    `[data-component="home-session-row-container"][data-session-id="${fixture.targetID}"]`,
-  )
+  const container = page.locator(`[data-component="home-session-row-container"][data-session-id="${fixture.targetID}"]`)
   const titleBox = await container.locator('[data-component="home-session-title"]').boundingBox()
   const avatarBox = await container.locator('[data-component="project-avatar-v2"]').boundingBox()
   await expect(container.getByRole("button", { name: "More options" })).toHaveCount(0)

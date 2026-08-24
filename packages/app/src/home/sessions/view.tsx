@@ -1,6 +1,6 @@
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { createMemo, For, onCleanup, Show, Suspense } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, type SetStoreFunction } from "solid-js/store"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
@@ -78,7 +78,16 @@ export type HomeSessionsViewProps = {
   onSearchSelect: (record: HomeSessionRecord, options?: OpenSessionOptions) => void
 }
 
+// Session store updates recreate row components, so row-local state would
+// close an open context menu or drop an in-progress rename. Keep both keyed
+// by session ID at the view root, like the projects list does.
+type HomeSessionRowUI = {
+  menu: { id: string; x: number; y: number } | undefined
+  editor: { id: string; draft: string; renaming: boolean } | undefined
+}
+
 export function HomeSessionsView(props: HomeSessionsViewProps) {
+  const [rowUI, setRowUI] = createStore<HomeSessionRowUI>({ menu: undefined, editor: undefined })
   return (
     <section
       ref={props.onSetHoverTarget}
@@ -141,7 +150,9 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                     <div
                       class={`flex min-w-0 flex-col gap-px pt-4 ${index() === props.groups.length - 1 ? "" : "mb-6"}`}
                     >
-                      <For each={group.sessions}>{(record) => <HomeSessionRow {...props} record={record} />}</For>
+                      <For each={group.sessions}>
+                        {(record) => <HomeSessionRow {...props} record={record} rowUI={rowUI} setRowUI={setRowUI} />}
+                      </For>
                     </div>
                   </>
                 )}
@@ -419,18 +430,18 @@ function HomeSessionGroupHeader(props: {
   )
 }
 
-function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord }) {
+function HomeSessionRow(
+  props: HomeSessionsViewProps & {
+    record: HomeSessionRecord
+    rowUI: HomeSessionRowUI
+    setRowUI: SetStoreFunction<HomeSessionRowUI>
+  },
+) {
   const title = createMemo(() => sessionLabel(props.record.session))
   const showProjectName = () => props.showProjectName && props.record.projectName
-  const [state, setState] = createStore({
-    draft: "",
-    editing: false,
-    menuX: 0,
-    menuY: 0,
-    menuOpen: false,
-    pendingAction: undefined as "rename" | "export" | "delete" | undefined,
-    renaming: false,
-  })
+  const sessionID = () => props.record.session.id
+  const menu = () => (props.rowUI.menu?.id === sessionID() ? props.rowUI.menu : undefined)
+  const editor = () => (props.rowUI.editor?.id === sessionID() ? props.rowUI.editor : undefined)
   let titleRef: HTMLInputElement | undefined
   let rowRef: HTMLButtonElement | undefined
   let longPressTimer: ReturnType<typeof setTimeout> | undefined
@@ -453,26 +464,29 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
 
   const openMenu = (element: HTMLElement, clientX: number, clientY: number) => {
     const bounds = element.getBoundingClientRect()
-    setState({ menuX: clientX - bounds.left, menuY: clientY - bounds.top, menuOpen: true })
+    props.setRowUI("menu", { id: sessionID(), x: clientX - bounds.left, y: clientY - bounds.top })
   }
 
   const openEditor = () => {
-    setState({ draft: title(), editing: true })
+    props.setRowUI("editor", { id: sessionID(), draft: title(), renaming: false })
     requestAnimationFrame(() => {
       titleRef?.focus()
       titleRef?.select()
     })
   }
   const closeEditor = () => {
-    if (state.renaming) return
-    setState("editing", false)
+    if (editor()?.renaming) return
+    props.setRowUI("editor", (value) => (value?.id === sessionID() ? undefined : value))
   }
   const saveEditor = async () => {
-    if (state.renaming) return
-    setState("renaming", true)
-    const saved = await props.onRenameSession(props.server, props.record.session, state.draft)
-    setState("renaming", false)
-    if (saved) setState("editing", false)
+    const current = editor()
+    if (!current || current.renaming) return
+    props.setRowUI("editor", { ...current, renaming: true })
+    const saved = await props.onRenameSession(props.server, props.record.session, current.draft)
+    props.setRowUI("editor", (value) => {
+      if (value?.id !== sessionID()) return value
+      return saved ? undefined : { ...value, renaming: false }
+    })
   }
 
   return (
@@ -483,12 +497,12 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
       classList={{ group: !!showProjectName() }}
       onContextMenu={(event) => {
         event.preventDefault()
-        if (state.editing) return
+        if (editor()) return
         openMenu(event.currentTarget, event.clientX, event.clientY)
       }}
     >
       <Show
-        when={!state.editing}
+        when={!editor()}
         fallback={
           <div class="flex h-10 min-w-0 w-full flex-1 items-center gap-2 py-3 pl-3 pr-10">
             <HomeSessionLeadingController
@@ -503,15 +517,18 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
               }}
               data-component="home-session-rename"
               dir="auto"
-              value={state.draft}
-              disabled={state.renaming}
+              value={editor()?.draft ?? ""}
+              disabled={editor()?.renaming ?? false}
               class={`
                 block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base
                 [font-weight:530] field-sizing-content outline-none focus:outline-none focus-visible:outline-none
                 ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
               `}
               style={{ "--inline-input-shadow": "none", "text-align": "start" }}
-              onInput={(event) => setState("draft", event.currentTarget.value)}
+              onInput={(event) => {
+                const draft = event.currentTarget.value
+                props.setRowUI("editor", (value) => (value?.id === sessionID() ? { ...value, draft } : value))
+              }}
               onKeyDown={(event) => {
                 event.stopPropagation()
                 if (event.key === "Enter") {
@@ -538,7 +555,7 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
           type="button"
           data-component="home-session-row"
           aria-haspopup="menu"
-          aria-expanded={state.menuOpen}
+          aria-expanded={!!menu()}
           class={`
             flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] border-0
             bg-transparent py-3 pl-3 pr-10 text-left text-v2-text-text-muted [font-weight:530]
@@ -608,47 +625,36 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
         modal={false}
         placement="bottom-start"
         gutter={2}
-        open={state.menuOpen}
-        onOpenChange={(open) => setState("menuOpen", open)}
+        open={!!menu()}
+        onOpenChange={(open) => {
+          if (open) return
+          props.setRowUI("menu", (value) => (value?.id === sessionID() ? undefined : value))
+        }}
       >
         <Menu.Trigger
           as="span"
           aria-hidden="true"
           tabIndex={-1}
           class="pointer-events-none absolute size-px"
-          style={{ left: `${state.menuX}px`, top: `${state.menuY}px` }}
+          style={{ left: `${menu()?.x ?? 0}px`, top: `${menu()?.y ?? 0}px` }}
         />
         <Menu.Portal>
           <Menu.Content
             onCloseAutoFocus={(event) => {
+              // The trigger is an invisible positioning span, so Kobalte's
+              // default close focus restore has no useful target. Skip the
+              // row focus while the rename editor owns focus instead.
               event.preventDefault()
-              const action = state.pendingAction
-              if (!action) {
-                requestAnimationFrame(() => rowRef?.focus())
-                return
-              }
-              setState("pendingAction", undefined)
-              if (action === "rename") {
-                openEditor()
-                return
-              }
-              requestAnimationFrame(() => {
-                if (action === "export") {
-                  void props.onExportSession(props.server, props.record.session)
-                  return
-                }
-                props.onDeleteSession(props.server, props.record.session)
-              })
+              if (editor()) return
+              requestAnimationFrame(() => rowRef?.focus())
             }}
           >
-            <Menu.Item onSelect={() => setState({ pendingAction: "rename", menuOpen: false })}>
-              {props.language.t("common.rename")}
-            </Menu.Item>
-            <Menu.Item onSelect={() => setState({ pendingAction: "export", menuOpen: false })}>
+            <Menu.Item onSelect={openEditor}>{props.language.t("common.rename")}</Menu.Item>
+            <Menu.Item onSelect={() => void props.onExportSession(props.server, props.record.session)}>
               {props.language.t("common.export")}...
             </Menu.Item>
             <Menu.Separator />
-            <Menu.Item onSelect={() => setState({ pendingAction: "delete", menuOpen: false })}>
+            <Menu.Item onSelect={() => props.onDeleteSession(props.server, props.record.session)}>
               {props.language.t("common.delete")}...
             </Menu.Item>
           </Menu.Content>
