@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
@@ -156,24 +156,47 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       }
     }
 
+    // Shared storage updates must not re-admit a tab unless this client changes route or scope.
+    createEffect(
+      on(
+        [
+          () => (enabled() && route.data.type === "session" ? route.data.sessionID : undefined),
+          () => config.tabs.scope,
+          () => paths.cwd,
+        ],
+        ([routed]) => {
+          if (!routed || routed === "dummy") return
+          const sessionID = root(routed)
+          cancelledTabs.delete(sessionID)
+          history = recordSessionTabHistory(history, sessionID)
+          const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
+          const tabs = openSessionTab(state().tabs, {
+            sessionID,
+            title: title(sessionID, state().tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
+          })
+          if (tabs === state().tabs) return
+          update((draft) => {
+            if (cancelledTabs.has(sessionID)) return
+            draft.tabs = openSessionTab(draft.tabs, {
+              sessionID,
+              title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
+            })
+          })
+        },
+      ),
+    )
+
     createEffect(() => {
-      if (!enabled()) return
-      if (route.data.type !== "session" || route.data.sessionID === "dummy") return
+      if (!enabled() || route.data.type !== "session" || route.data.sessionID === "dummy") return
       const sessionID = root(route.data.sessionID)
-      cancelledTabs.delete(sessionID)
-      history = recordSessionTabHistory(history, sessionID)
-      const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
-      const tabs = openSessionTab(state().tabs, {
-        sessionID,
-        title: title(sessionID, state().tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-      })
-      if (tabs === state().tabs) return
+      const tab = state().tabs.find((tab) => tab.sessionID === sessionID)
+      if (!tab) return
+      const nextTitle = title(sessionID, tab.title)
+      if (!nextTitle || nextTitle === tab.title) return
       update((draft) => {
-        if (cancelledTabs.has(sessionID)) return
-        draft.tabs = openSessionTab(draft.tabs, {
-          sessionID,
-          title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-        })
+        const tab = draft.tabs.find((tab) => tab.sessionID === sessionID)
+        if (!tab) return
+        draft.tabs = openSessionTab(draft.tabs, { sessionID, title: title(sessionID, tab.title) })
       })
     })
 
