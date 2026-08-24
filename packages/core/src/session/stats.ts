@@ -123,6 +123,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
           WHERE message.type IN ('user', 'assistant')
             AND message.time_created >= ${range.from}
             AND message.time_created < ${range.to}
+            AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
             ${project}
         `,
         )
@@ -183,6 +184,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             WHERE message.type = 'assistant'
               AND message.time_created >= ${range.from}
               AND message.time_created < ${range.to}
+              AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
               AND json_extract(content.value, '$.type') = 'tool'
               ${project}
             GROUP BY status
@@ -212,6 +214,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
           WHERE message.type = 'assistant'
             AND message.time_created >= ${range.from}
             AND message.time_created < ${range.to}
+            AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
             AND json_extract(content.value, '$.type') = 'tool'
             ${project}
         `,

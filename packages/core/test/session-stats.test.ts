@@ -22,6 +22,7 @@ const it = testEffect(AppNodeBuilder.build(Database.node))
 const projectID = Project.ID.make("stats-project")
 const sessionID = Session.ID.make("ses_stats_root")
 const childID = Session.ID.make("ses_stats_child")
+const forkID = Session.ID.make("ses_stats_fork")
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const encodeUsage = Schema.encodeSync(SessionEvent.UsageRecorded.data)
 
@@ -45,6 +46,15 @@ describe("SessionStats", () => {
             slug: "child",
             directory: "/stats",
             version: "test",
+          },
+          {
+            id: forkID,
+            project_id: projectID,
+            fork_session_id: sessionID,
+            slug: "fork",
+            directory: "/stats",
+            version: "test",
+            time_created: Date.UTC(2026, 0, 4),
           },
         ])
         .run()
@@ -98,6 +108,37 @@ describe("SessionStats", () => {
             ]),
           ),
           messageRow(childID, 1, assistant("msg_stats_child", Date.UTC(2026, 0, 3, 10), [], "large", 2)),
+          messageRow(
+            forkID,
+            1,
+            SessionMessage.User.make({
+              id: SessionMessage.ID.make("msg_stats_fork_copied_user"),
+              type: "user",
+              text: "copied",
+              time: { created: DateTime.makeUnsafe(Date.UTC(2026, 0, 2, 9)) },
+            }),
+          ),
+          messageRow(
+            forkID,
+            2,
+            assistant("msg_stats_fork_copied_assistant", Date.UTC(2026, 0, 2, 10), [
+              SessionMessage.AssistantTool.make({
+                type: "tool",
+                id: "call_copied",
+                name: "copied",
+                state: SessionMessage.ToolStateCompleted.make({
+                  status: "completed",
+                  input: {},
+                  content: [{ type: "text", text: "copied" }],
+                }),
+                time: {
+                  created: DateTime.makeUnsafe(Date.UTC(2026, 0, 2, 10)),
+                  completed: DateTime.makeUnsafe(Date.UTC(2026, 0, 2, 10, 0, 1)),
+                },
+              }),
+            ]),
+          ),
+          messageRow(forkID, 3, assistant("msg_stats_fork_new", Date.UTC(2026, 0, 5, 10), [], "fork-new")),
           messageRow(sessionID, 3, assistant("msg_stats_outside", Date.UTC(2025, 11, 31, 10), [])),
         ])
         .run()
@@ -136,19 +177,20 @@ describe("SessionStats", () => {
         tools: true,
       })
 
-      expect(stats.sessions).toBe(1)
+      expect(stats.sessions).toBe(2)
       expect(stats.subagents).toBe(1)
       expect(stats.prompts).toBe(1)
-      expect(stats.steps).toBe(2)
-      expect(stats.tokens).toEqual({ input: 31, output: 16, reasoning: 7, cache: { read: 13, write: 4 } })
-      expect(stats.cost).toBe(Money.USD.make(5))
+      expect(stats.steps).toBe(3)
+      expect(stats.tokens).toEqual({ input: 41, output: 21, reasoning: 9, cache: { read: 17, write: 5 } })
+      expect(stats.cost).toBe(Money.USD.make(6.5))
       expect(stats.tools).toEqual({ calls: 2, succeeded: 1, failed: 1, unfinished: 0 })
       expect(stats.activity).toEqual([
         { date: "2026-01-02", steps: 1 },
         { date: "2026-01-03", steps: 1 },
+        { date: "2026-01-05", steps: 1 },
       ])
       expect(stats.streak).toBe(2)
-      expect(stats.models.map((model) => String(model.model.id))).toEqual(["large", "sonnet"])
+      expect(stats.models.map((model) => String(model.model.id))).toEqual(["large", "sonnet", "fork-new"])
       expect(stats.toolUsage).toMatchObject([
         { name: "read", calls: 1, succeeded: 1, failed: 0, durationP50: 250 },
         { name: "edit", calls: 1, succeeded: 0, failed: 1, durationP50: 2_000 },
