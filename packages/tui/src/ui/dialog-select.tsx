@@ -448,6 +448,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         })),
       ],
       bindings: [
+        // Dialog actions take precedence over the generic select bindings so an action bound to
+        // "return" (e.g. MCP authenticate) wins over the no-op submit.
+        ...visible.flatMap((item) => tuiConfig.keybinds.get(item.command)),
         ...tuiConfig.keybinds.gather("dialog.select", [
           "dialog.select.prev",
           "dialog.select.next",
@@ -457,7 +460,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           "dialog.select.end",
           "dialog.select.submit",
         ]),
-        ...visible.flatMap((item) => tuiConfig.keybinds.get(item.command)),
         ...(visible.length
           ? [
               {
