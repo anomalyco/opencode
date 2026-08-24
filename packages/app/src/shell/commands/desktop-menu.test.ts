@@ -26,7 +26,7 @@ describe("desktop menu", () => {
     expect(item).toMatchObject({
       type: "item",
       command: "window.new",
-      accelerator: { macos: "Cmd+Shift+N", windows: "Ctrl+Shift+N" },
+      accelerator: { macos: "Cmd+Shift+N" },
     })
     expect(item).not.toHaveProperty("action")
   })

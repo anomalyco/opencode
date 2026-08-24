@@ -125,7 +125,7 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         type: "item",
         labelKey: "desktop.menu.newWindow",
         command: "window.new",
-        accelerator: { macos: "Cmd+Shift+N", windows: "Ctrl+Shift+N" },
+        accelerator: { macos: "Cmd+Shift+N" },
       },
       { type: "separator" },
       { type: "item", labelKey: "desktop.menu.closeWindow", action: "window.close", role: "close" },

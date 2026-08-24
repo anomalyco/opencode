@@ -13,7 +13,7 @@ export function DesktopCommands() {
     commands.push({
       id: "window.new",
       title: language.t("desktop.menu.newWindow"),
-      keybind: platform.os === "windows" ? "ctrl+shift+n" : undefined,
+      keybind: "mod+shift+n",
       hidden: true,
       onSelect: () => void platform.runDesktopMenuAction?.("window.new"),
     })
