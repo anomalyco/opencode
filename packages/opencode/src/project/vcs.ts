@@ -396,9 +396,11 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
         // PERF: pathological repos (e.g. a home dir that is itself a git repo
         // with hundreds of thousands of untracked files) make
         // --untracked-files=all scans take ~50s. Degrade adaptively: once a
-        // scan exceeds UNTRACKED_DEGRADE_AT entries, this instance switches to
-        // directory-level scanning (~470x faster) and per-file stat computation
-        // is capped. Normal repos never hit these limits.
+        // scan exceeds UNTRACKED_DEGRADE_AT untracked (added) entries, this
+        // instance switches to directory-level scanning (~470x faster) and
+        // per-file stat computation is capped. Normal repos never hit these
+        // limits — the gate counts only untracked entries so a big tracked
+        // changeset (rebase, mass rename) does not permanently degrade a repo.
         const compute = Effect.fnUntraced(function* (untracked: "all" | "normal") {
           const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
           const [list, stats] = yield* Effect.all(
@@ -427,7 +429,7 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
         })
 
         let value = yield* compute(knownDegraded ? "normal" : "all")
-        if (!knownDegraded && value.length > UNTRACKED_DEGRADE_AT) {
+        if (!knownDegraded && value.filter((item) => item.status === "added").length > UNTRACKED_DEGRADE_AT) {
           const set = loadDegradedRepos()
           set.add(ctx.directory)
           saveDegradedRepos(set)

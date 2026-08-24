@@ -145,8 +145,13 @@ const layer = Layer.effect(
 
         // stdin is a single-consumption stream; never share those runs
         if (opts.stdin !== undefined) return yield* exec
+        // env-varying runs are not shared: identical args could resolve to a
+        // different repository (e.g. GIT_DIR) and hand callers wrong output
+        if (opts.env !== undefined) return yield* exec
 
-        const key = `${opts.cwd}\0${args.join(" ")}`
+        // JSON.stringify keeps arg boundaries unambiguous (a literal "a b"
+        // argument must not collide with ["a", "b"] on a space-joined key)
+        const key = `${opts.cwd}\0${JSON.stringify(args)}`
         const existing = inflight.get(key)
         if (existing) return yield* Deferred.await(existing)
 
