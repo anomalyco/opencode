@@ -31,6 +31,18 @@ describe("Patch", () => {
     ).toEqual([{ type: "add", path: "add.txt", contents: "added" }])
   })
 
+  test("strips unquoted non-word heredoc delimiters", () => {
+    expect(
+      Patch.parse("cat <<PATCH-1\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nPATCH-1"),
+    ).toEqual([{ type: "add", path: "add.txt", contents: "added" }])
+  })
+
+  test("does not treat a here-string as a heredoc wrapper", () => {
+    expect(
+      Patch.parse("cat <<<EOF\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nEOF"),
+    ).toEqual([{ type: "add", path: "add.txt", contents: "added" }])
+  })
+
   test("derives fuzzy line updates while preserving BOM", () => {
     const update = Patch.derive("update.txt", [{ oldLines: ["  old   "], newLines: ["new"] }], "\uFEFFold\n")
     expect(update).toEqual({ content: "new\n", bom: true })
