@@ -113,6 +113,13 @@ describe("SessionStats", () => {
                   completed: DateTime.makeUnsafe(Date.UTC(2026, 0, 2, 10, 0, 2)),
                 },
               }),
+              SessionMessage.AssistantTool.make({
+                type: "tool",
+                id: "call_pending",
+                name: "pending",
+                state: SessionMessage.ToolStateRunning.make({ status: "running", input: {}, metadata: {} }),
+                time: { created: DateTime.makeUnsafe(Date.UTC(2026, 0, 2, 10)) },
+              }),
             ]),
           ),
           messageRow(childID, 1, assistant("msg_stats_child", Date.UTC(2026, 0, 3, 10), [], "large", 2)),
@@ -210,7 +217,7 @@ describe("SessionStats", () => {
       expect(stats.cost).toBe(Money.USD.make(6.25))
       expect(stats.tools).toMatchObject({
         mode: "detail",
-        totals: { calls: 2, succeeded: 1, failed: 1, unfinished: 0 },
+        totals: { calls: 3, succeeded: 1, failed: 1, unfinished: 1 },
       })
       expect(stats.activity).toEqual([
         { date: "2026-01-02", steps: 1 },
@@ -224,6 +231,7 @@ describe("SessionStats", () => {
       expect(stats.tools.usage).toMatchObject([
         { name: "read", calls: 1, succeeded: 1, failed: 0, durationP50: 250 },
         { name: "edit", calls: 1, succeeded: 0, failed: 1, durationP50: 2_000 },
+        { name: "pending", calls: 1, succeeded: 0, failed: 0, unfinished: 1 },
       ])
 
       const summary = yield* SessionStats.get({
@@ -234,7 +242,7 @@ describe("SessionStats", () => {
       expect(summary.models.map((model) => String(model.model.id))).toEqual(["large", "sonnet", "fork-new"])
       expect(summary.tools).toEqual({
         mode: "summary",
-        totals: { calls: 2, succeeded: 1, failed: 1, unfinished: 0 },
+        totals: { calls: 3, succeeded: 1, failed: 1, unfinished: 1 },
       })
 
       const withoutTools = yield* SessionStats.get({

@@ -49,7 +49,12 @@ type ToolRow = {
   duration: number | null
 }
 
-type ToolSummaryRow = { status: string | null; count: number }
+type ToolSummaryRow = {
+  calls: number
+  succeeded: number
+  failed: number
+  unfinished: number
+}
 
 type ModelAggregate = {
   model: Model.Ref
@@ -188,25 +193,38 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
       (range) => {
         if (toolMode === "summary")
           return db
-            .all<ToolSummaryRow>(
+            .get<ToolSummaryRow>(
               sql`
-            SELECT json_extract(content.value, '$.state.status') AS status, count(*) AS count
-            FROM ${SessionMessageTable} AS message
-            JOIN ${SessionTable} AS session ON session.id = message.session_id,
-              json_each(message.data, '$.content') AS content
-            WHERE message.type = 'assistant'
-              AND message.time_created >= ${range.from}
-              AND message.time_created < ${range.to}
-              AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
-              AND json_extract(content.value, '$.type') = 'tool'
-              ${project}
-            GROUP BY status
+            WITH calls AS MATERIALIZED (
+              SELECT json_extract(content.value, '$.state.status') AS status
+              FROM ${SessionMessageTable} AS message
+              JOIN ${SessionTable} AS session ON session.id = message.session_id,
+                json_each(message.data, '$.content') AS content
+              WHERE message.type = 'assistant'
+                AND message.time_created >= ${range.from}
+                AND message.time_created < ${range.to}
+                AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
+                AND json_extract(content.value, '$.type') = 'tool'
+                ${project}
+            )
+            SELECT
+              count(*) AS calls,
+              count(*) FILTER (WHERE status = 'completed') AS succeeded,
+              count(*) FILTER (WHERE status = 'error') AS failed,
+              count(*) FILTER (WHERE status IS NULL OR status NOT IN ('completed', 'error')) AS unfinished
+            FROM calls
           `,
             )
             .pipe(
               Effect.orDie,
-              Effect.tap((rows) =>
-                Effect.sync(() => rows.forEach((row) => addToolStatus(toolTotals, row.status, row.count))),
+              Effect.tap((row) =>
+                Effect.sync(() => {
+                  if (!row) return
+                  toolTotals.calls += row.calls
+                  toolTotals.succeeded += row.succeeded
+                  toolTotals.failed += row.failed
+                  toolTotals.unfinished += row.unfinished
+                }),
               ),
               Effect.asVoid,
             )
