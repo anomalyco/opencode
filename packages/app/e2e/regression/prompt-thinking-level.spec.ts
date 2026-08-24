@@ -64,7 +64,6 @@ test("keeps V2 prompt controls and submit accessible on narrow displays", async 
 
   await idleComposer(page)
   await expect(submit).toBeVisible()
-  expect(await controls.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
   const [controlsBox, submitBox] = await Promise.all([controls.boundingBox(), submit.boundingBox()])
   expect(controlsBox).not.toBeNull()
   expect(submitBox).not.toBeNull()

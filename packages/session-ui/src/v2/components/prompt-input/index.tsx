@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -34,6 +34,8 @@ export type {
 
 export type PromptInputV2Mode = "normal" | "shell"
 
+export const promptInputV2ControlClass = "max-w-[220px] shrink-0 justify-start ![font-weight:440]"
+
 export type PromptInputV2Props = {
   controller: PromptInputV2Interaction
   disabled?: boolean
@@ -57,11 +59,52 @@ export function PromptInputV2(props: PromptInputV2Props) {
     props.controller.onCursor(promptInputV2Cursor(editor))
   }
   const mode = createMemo(() => state.mode)
+  const [controlsScroll, setControlsScroll] = createSignal({ left: false, right: false })
   const buttons = createMemo(() => ({
     opacity: mode() === "normal" ? 1 : 0,
     "pointer-events": mode() === "normal" ? ("auto" as const) : ("none" as const),
     transition: "opacity 200ms ease",
   }))
+  let controls: HTMLDivElement | undefined
+  let controlsResizeObserver: ResizeObserver | undefined
+  let controlsMutationObserver: MutationObserver | undefined
+
+  function updateControlsScroll() {
+    if (!controls) return
+    const container = controls.getBoundingClientRect()
+    let left = false
+    let right = false
+    for (const control of controls.children) {
+      const bounds = control.getBoundingClientRect()
+      left ||= bounds.left < container.left - 1
+      right ||= bounds.right > container.right + 1
+    }
+    setControlsScroll({
+      left,
+      right,
+    })
+  }
+
+  function setControls(element: HTMLDivElement) {
+    controls = element
+    controlsResizeObserver?.disconnect()
+    controlsMutationObserver?.disconnect()
+    controlsResizeObserver = new ResizeObserver(updateControlsScroll)
+    controlsMutationObserver = new MutationObserver(updateControlsScroll)
+    controlsResizeObserver.observe(element)
+    controlsMutationObserver.observe(element, { childList: true, subtree: true, characterData: true })
+    requestAnimationFrame(updateControlsScroll)
+  }
+
+  function scrollControls(left: number) {
+    if (!controls) return
+    controls.scrollBy({ left: left * Math.max(controls.clientWidth - 32, 1), behavior: "smooth" })
+  }
+
+  onCleanup(() => {
+    controlsResizeObserver?.disconnect()
+    controlsMutationObserver?.disconnect()
+  })
 
   createEffect(() => {
     const parts = props.controller.parts()
@@ -196,63 +239,89 @@ export function PromptInputV2(props: PromptInputV2Props) {
         </div>
 
         <div class="flex h-11 min-w-0 items-center px-2">
-          <div
-            data-slot="prompt-controls"
-            class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar"
-            aria-hidden={state.mode === "shell"}
-            inert={state.mode === "shell" ? true : undefined}
-            style={buttons()}
-          >
-            <PromptInputV2AddMenu
-              disabled={state.mode === "shell"}
-              title={i18n.t("ui.promptInput.add")}
-              keybind={props.attachKeybind ?? ["Mod", "U"]}
-              attachLabel={i18n.t("ui.promptInput.attachments")}
-              attachShortcut={props.attachShortcut ?? "Mod+U"}
-              commandsLabel={i18n.t("ui.promptInput.commands")}
-              contextLabel={i18n.t("ui.promptInput.context")}
-              shellLabel={i18n.t("ui.promptInput.shell")}
-              onAttach={props.controller.attach}
-              onCommands={props.controller.openCommands}
-              onContext={props.controller.openContext}
-              onShell={props.controller.openShell}
-            />
-            <Show when={view.agent} keyed>
-              {(control) => (
-                <PromptInputV2ConfiguredSelect
-                  title={i18n.t("ui.promptInput.chooseAgent")}
-                  keybind={["Mod", "."]}
-                  control={control}
-                />
-              )}
-            </Show>
-            <Show
-              when={props.modelControl}
-              fallback={
-                <Show when={view.model} keyed>
-                  {(control) => (
-                    <PromptInputV2ConfiguredSelect
-                      title={i18n.t("ui.promptInput.chooseModel")}
-                      keybind={["Mod", "M"]}
-                      control={control}
-                      model
-                    />
-                  )}
-                </Show>
-              }
+          <div class="relative min-w-0 flex-1">
+            <div
+              ref={setControls}
+              data-slot="prompt-controls"
+              class="flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar"
+              aria-hidden={state.mode === "shell"}
+              inert={state.mode === "shell" ? true : undefined}
+              style={buttons()}
+              onScroll={updateControlsScroll}
             >
-              {props.modelControl}
-            </Show>
-            <Show when={(props.variantControlVisible ?? true) && view.variant} keyed>
-              {(control) => (
-                <Show when={control.options().length > 1}>
+              <PromptInputV2AddMenu
+                disabled={state.mode === "shell"}
+                title={i18n.t("ui.promptInput.add")}
+                keybind={props.attachKeybind ?? ["Mod", "U"]}
+                attachLabel={i18n.t("ui.promptInput.attachments")}
+                attachShortcut={props.attachShortcut ?? "Mod+U"}
+                commandsLabel={i18n.t("ui.promptInput.commands")}
+                contextLabel={i18n.t("ui.promptInput.context")}
+                shellLabel={i18n.t("ui.promptInput.shell")}
+                onAttach={props.controller.attach}
+                onCommands={props.controller.openCommands}
+                onContext={props.controller.openContext}
+                onShell={props.controller.openShell}
+              />
+              <Show when={view.agent} keyed>
+                {(control) => (
                   <PromptInputV2ConfiguredSelect
-                    title={i18n.t("ui.promptInput.chooseVariant")}
-                    keybind={["Shift", "Mod", "D"]}
+                    title={i18n.t("ui.promptInput.chooseAgent")}
+                    keybind={["Mod", "."]}
                     control={control}
                   />
-                </Show>
-              )}
+                )}
+              </Show>
+              <Show
+                when={props.modelControl}
+                fallback={
+                  <Show when={view.model} keyed>
+                    {(control) => (
+                      <PromptInputV2ConfiguredSelect
+                        title={i18n.t("ui.promptInput.chooseModel")}
+                        keybind={["Mod", "M"]}
+                        control={control}
+                        model
+                      />
+                    )}
+                  </Show>
+                }
+              >
+                {props.modelControl}
+              </Show>
+              <Show when={(props.variantControlVisible ?? true) && view.variant} keyed>
+                {(control) => (
+                  <Show when={control.options().length > 1}>
+                    <PromptInputV2ConfiguredSelect
+                      title={i18n.t("ui.promptInput.chooseVariant")}
+                      keybind={["Shift", "Mod", "D"]}
+                      control={control}
+                    />
+                  </Show>
+                )}
+              </Show>
+            </div>
+            <Show when={controlsScroll().left}>
+              <button
+                type="button"
+                class="absolute inset-y-0 left-0 z-10 flex w-10 items-center justify-start text-v2-icon-icon-muted"
+                style={{ "background-image": "linear-gradient(to right,var(--v2-background-bg-base),transparent)" }}
+                aria-label={i18n.t("ui.promptInput.scrollControlsLeft")}
+                onClick={() => scrollControls(-1)}
+              >
+                <IconV2 name="chevron-down" class="-rotate-90" />
+              </button>
+            </Show>
+            <Show when={controlsScroll().right}>
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end text-v2-icon-icon-muted"
+                style={{ "background-image": "linear-gradient(to left,var(--v2-background-bg-base),transparent)" }}
+                aria-label={i18n.t("ui.promptInput.scrollControlsRight")}
+                onClick={() => scrollControls(1)}
+              >
+                <IconV2 name="chevron-down" class="rotate-90" />
+              </button>
             </Show>
           </div>
           <PromptInputV2SubmitButton
@@ -574,7 +643,7 @@ export function PromptInputV2Select(props: {
           as={ButtonV2}
           variant="ghost-muted"
           size="normal"
-          class={`max-w-[220px] shrink-0 justify-start ![font-weight:440] ${props.class ?? ""}`}
+          class={`${promptInputV2ControlClass} ${props.class ?? ""}`}
           aria-label={props.title}
         >
           {props.currentIcon}
@@ -692,7 +761,7 @@ export function PromptInputV2SubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
         variant="primary"
-        class="relative z-10 size-7 shrink-0 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50 max-sm:size-10 max-sm:p-[12px]"
+        class="size-10 shrink-0 rounded-md p-3 text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
         style={{
           "background-image":
             "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
