@@ -18,6 +18,7 @@ const LABEL_BUS_CLEARANCE = 3
 const LABEL_NODE_CLEARANCE = 2
 const LABEL_LINE_CLEARANCE = 2
 const LABEL_PADDING = 1
+const LABEL_TERMINAL_CLEARANCE = 1
 
 export interface FlowchartEdgeLabelLayout {
   lines: string[]
@@ -61,6 +62,11 @@ function segmentLabelPoint(segment: DiagramSegment, labelWidth: number, labelHei
     }
 
     return clampPoint(shiftPoint(shiftPoint(segment.from, segment.direction, LABEL_LINE_CLEARANCE), "up", labelHeight))
+  }
+
+  const slot = insetSpan(segmentSpan(segment), LABEL_TERMINAL_CLEARANCE)
+  if (spanCapacity(slot) >= labelHeight) {
+    return clampPoint(point(segment.from.x + 1, centeredSpanStart(slot, labelHeight)))
   }
 
   const center = shiftPoint(pointOnSegment(segment, midpoint(segmentSpan(segment))), "right")

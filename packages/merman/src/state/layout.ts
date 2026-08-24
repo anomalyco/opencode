@@ -131,7 +131,8 @@ function computeMainPath(diagram: StateDiagram): string[] {
         const fromParent = statesById.get(current)?.parentId
         const toParent = statesById.get(transition.to)?.parentId
         return Boolean(fromParent && toParent && fromParent !== toParent)
-      })
+      }) ??
+      (path.length === 1 && candidates.length === 1 ? candidates[0] : undefined)
     if (!next) break
     path.push(next.to)
     visited.add(next.to)
@@ -319,7 +320,12 @@ function findNoteConnector(
   const isFree = (point: DiagramPoint): boolean =>
     point.x >= 0 &&
     !search.blocked.has(`${point.x}:${point.y}`) &&
-    !(point.x >= bounds.left && point.x < bounds.left + bounds.width && point.y >= bounds.top && point.y < bounds.top + bounds.height)
+    !(
+      point.x >= bounds.left &&
+      point.x < bounds.left + bounds.width &&
+      point.y >= bounds.top &&
+      point.y < bounds.top + bounds.height
+    )
   if (!isFree(end) || !isFree(goal)) return undefined
 
   for (const start of starts.filter(isFree)) {
@@ -335,14 +341,7 @@ function findNoteConnector(
   const minY = Math.min(target.top, bounds.top, search.minY) - margin
   const maxX = Math.max(target.left + target.width, bounds.left + bounds.width, search.maxX) + margin
   const maxY = Math.max(target.top + target.height, bounds.top + bounds.height, search.maxY) + margin
-  const path = findStateManhattanPath(
-    starts,
-    goal,
-    search,
-    { minX: 0, minY, maxX, maxY },
-    budget,
-    isFree,
-  )
+  const path = findStateManhattanPath(starts, goal, search, { minX: 0, minY, maxX, maxY }, budget, isFree)
   return path ? { connectorY, points: [...path, end] } : undefined
 }
 
@@ -375,13 +374,27 @@ function expandCompositeBoundsForNotes(diagram: StateDiagram, layout: StateDiagr
     )
     if (descendantNotes.length === 0) continue
 
-    const childBounds = [bound, ...descendantNotes]
-    const noteTop = Math.min(...childBounds.map((child) => child.top), bound.top)
-    const noteBottom = Math.max(...childBounds.map((child) => child.top + child.height), bound.top + bound.height)
-    const left = Math.min(...childBounds.map((child) => child.left)) - 2
-    const top = noteTop < bound.top ? noteTop - 1 : bound.top
-    const right = Math.max(...childBounds.map((child) => child.left + child.width)) + 2
-    const bottom = noteBottom > bound.top + bound.height ? noteBottom + 1 : bound.top + bound.height
+    const connectorPoints = descendantNotes.flatMap((note) => note.connector?.points ?? [])
+    const left = Math.min(
+      bound.left,
+      ...descendantNotes.map((note) => note.left - 2),
+      ...connectorPoints.map((point) => point.x - 1),
+    )
+    const top = Math.min(
+      bound.top,
+      ...descendantNotes.map((note) => note.top - 1),
+      ...connectorPoints.map((point) => point.y - 1),
+    )
+    const right = Math.max(
+      bound.left + bound.width,
+      ...descendantNotes.map((note) => note.left + note.width + 2),
+      ...connectorPoints.map((point) => point.x + 2),
+    )
+    const bottom = Math.max(
+      bound.top + bound.height,
+      ...descendantNotes.map((note) => note.top + note.height + 1),
+      ...connectorPoints.map((point) => point.y + 2),
+    )
 
     bound.left = left
     bound.top = top
@@ -392,13 +405,112 @@ function expandCompositeBoundsForNotes(diagram: StateDiagram, layout: StateDiagr
   }
 }
 
+function expandCompositeBoundsForInternalRouting(diagram: StateDiagram, layout: StateDiagramLayout): void {
+  if (diagram.direction === "LR" || diagram.direction === "RL") return
+  const statesById = new Map(diagram.states.map((state) => [state.id, state]))
+  const compositesById = new Map(diagram.composites.map((composite) => [composite.id, composite]))
+
+  for (const composite of [...diagram.composites].reverse()) {
+    const bound = layout.compositeBounds.get(composite.id)
+    if (!bound) continue
+    const internal = diagram.transitions.filter(
+      (transition) =>
+        transition.from !== transition.to &&
+        innermostCommonCompositeId(transition, statesById, compositesById) === composite.id,
+    )
+    const endpointOccurrences = new Map<string, number>()
+    const sideRoutes = internal.filter((transition) => {
+      const from = layout.bounds.get(transition.from)
+      const to = layout.bounds.get(transition.to)
+      if (!from || !to) return false
+      const key = `${transition.from}\u0000${transition.to}`
+      const occurrence = endpointOccurrences.get(key) ?? 0
+      endpointOccurrences.set(key, occurrence + 1)
+      const fromParent = statesById.get(transition.from)?.parentId
+      const toParent = statesById.get(transition.to)?.parentId
+      return occurrence > 0 || from.centerY > to.centerY || fromParent !== toParent
+    })
+    if (sideRoutes.length === 0) continue
+    const childRight = Math.max(
+      ...diagram.states.flatMap((state) => {
+        if (!belongsToComposite(state.id, composite.id, statesById, compositesById)) return []
+        const child = layout.bounds.get(state.id)
+        return child ? [child.left + child.width] : []
+      }),
+      ...diagram.composites.flatMap((childComposite) => {
+        if (childComposite.parentId !== composite.id) return []
+        const child = layout.compositeBounds.get(childComposite.id)
+        return child ? [child.left + child.width] : []
+      }),
+    )
+    const labelWidth = Math.max(...sideRoutes.map((transition) => measureStateTransitionLabel(transition.label).width))
+    const right = childRight + labelWidth + sideRoutes.length * 3 + 6
+    if (right <= bound.left + bound.width) continue
+    bound.width = right - bound.left
+    bound.centerX = bound.left + Math.floor(bound.width / 2)
+  }
+
+  enforceCompositeMargins(diagram, layout.compositeBounds)
+}
+
+function innermostCommonCompositeId(
+  transition: StateDiagramTransition,
+  statesById: Map<string, StateDiagramState>,
+  compositesById: Map<string, StateDiagramCompositeState>,
+): string | undefined {
+  const containers = (id: string) => {
+    const ids: string[] = []
+    let parentId = statesById.get(id)?.parentId ?? compositesById.get(id)?.parentId
+    while (parentId) {
+      ids.push(parentId)
+      parentId = compositesById.get(parentId)?.parentId
+    }
+    return ids
+  }
+  const target = new Set(containers(transition.to))
+  return containers(transition.from).find((id) => target.has(id))
+}
+
+function enforceCompositeMargins(diagram: StateDiagram, compositeBounds: Map<string, StateDiagramBoxBounds>): void {
+  const compositesByParent = new Map<string, StateDiagramCompositeState[]>()
+  for (const composite of diagram.composites) {
+    if (!composite.parentId) continue
+    const children = compositesByParent.get(composite.parentId) ?? []
+    children.push(composite)
+    compositesByParent.set(composite.parentId, children)
+  }
+
+  const expand = (composite: StateDiagramCompositeState): StateDiagramBoxBounds | undefined => {
+    const bound = compositeBounds.get(composite.id)
+    if (!bound) return undefined
+    const children = (compositesByParent.get(composite.id) ?? [])
+      .map(expand)
+      .filter((child): child is StateDiagramBoxBounds => Boolean(child))
+    if (children.length === 0) return bound
+    const left = Math.min(bound.left, ...children.map((child) => child.left - 2))
+    const top = Math.min(bound.top, ...children.map((child) => child.top - 2))
+    const right = Math.max(bound.left + bound.width, ...children.map((child) => child.left + child.width + 2))
+    const bottom = Math.max(bound.top + bound.height, ...children.map((child) => child.top + child.height + 2))
+    bound.left = left
+    bound.top = top
+    bound.width = right - left
+    bound.height = bottom - top
+    bound.centerX = left + Math.floor(bound.width / 2)
+    bound.centerY = top + Math.floor(bound.height / 2)
+    return bound
+  }
+
+  for (const composite of diagram.composites.filter((candidate) => !candidate.parentId)) expand(composite)
+}
+
 function boundsIntersect(left: StateDiagramBoxBounds, right: StateDiagramBoxBounds): boolean {
   return intersects(left.left, left.top, left.width, left.height, right, 0)
 }
 
-function separateExternalBoundsFromComposites(diagram: StateDiagram, layout: StateDiagramLayout): void {
+export function separateExternalBoundsFromComposites(diagram: StateDiagram, layout: StateDiagramLayout): boolean {
   const statesById = new Map(diagram.states.map((state) => [state.id, state]))
   const compositesById = new Map(diagram.composites.map((composite) => [composite.id, composite]))
+  let shifted = false
 
   for (const composite of diagram.composites) {
     const compositeBound = layout.compositeBounds.get(composite.id)
@@ -433,8 +545,10 @@ function separateExternalBoundsFromComposites(diagram: StateDiagram, layout: Sta
       }
 
       shiftBounds(uniqueBounds(boundsToShift), dx, 0)
+      shifted = true
     }
   }
+  return shifted
 }
 
 function finalizeLayout(
@@ -445,6 +559,7 @@ function finalizeLayout(
   if (diagram.composites.length === 0 && diagram.notes.length === 0) return layout
   addCompositeBounds(diagram, layout)
   normalizeLayout(layout)
+  expandCompositeBoundsForInternalRouting(diagram, layout)
   if (diagram.notes.length > 0) {
     const allBounds = [...layout.bounds.values()]
     placeStateDiagramNotesAroundTransitions(
@@ -464,6 +579,7 @@ function finalizeLayout(
     )
   }
   expandCompositeBoundsForNotes(diagram, layout)
+  expandCompositeBoundsForInternalRouting(diagram, layout)
   separateExternalBoundsFromComposites(diagram, layout)
   normalizeLayout(layout)
   return layout
@@ -479,9 +595,10 @@ export function createStateDiagramLayout(
   }
 
   const ranks = computeRanks(diagram)
+  const maxRank = Math.max(0, ...ranks.values())
   const byRank = new Map<number, StateDiagramState[]>()
   for (const state of diagram.states) {
-    const rank = ranks.get(state.id) ?? 0
+    const rank = diagram.direction === "BT" ? maxRank - (ranks.get(state.id) ?? 0) : (ranks.get(state.id) ?? 0)
     const list = byRank.get(rank) ?? []
     list.push(state)
     byRank.set(rank, list)
@@ -491,9 +608,13 @@ export function createStateDiagramLayout(
   const sizes = new Map(diagram.states.map((state) => [state.id, stateSize(state)]))
   const bounds = new Map<string, StateDiagramBoxBounds>()
   const outgoingLabelRows = new Map<string, number>()
+  const selfTransitionCounts = new Map<string, number>()
   for (const transition of diagram.transitions) {
     const rows = measureStateTransitionLabel(transition.label).height
     outgoingLabelRows.set(transition.from, Math.max(outgoingLabelRows.get(transition.from) ?? 0, rows))
+    if (transition.from === transition.to) {
+      selfTransitionCounts.set(transition.from, (selfTransitionCounts.get(transition.from) ?? 0) + 1)
+    }
   }
 
   const singleColumnCenter = Math.max(
@@ -524,8 +645,12 @@ export function createStateDiagramLayout(
       x += size.width + options.minStateGap + 8
     }
     const labelRows = states.reduce((rows, state) => Math.max(rows, outgoingLabelRows.get(state.id) ?? 0), 0)
+    const selfTransitionRows = states.reduce(
+      (rows, state) => Math.max(rows, (selfTransitionCounts.get(state.id) ?? 0) * 3 + 1),
+      0,
+    )
     const pseudoStateApproachClearance = states.some((state) => state.kind === "choice") ? 2 : 0
-    y += rowHeight + Math.max(4, labelRows + 3) + pseudoStateApproachClearance
+    y += rowHeight + Math.max(4, labelRows + 3, selfTransitionRows) + pseudoStateApproachClearance
   }
 
   return finalizeLayout(diagram, emptyLayout(bounds, sizes), budget)
@@ -805,21 +930,21 @@ function placeStateDiagramNotesAroundTransitions(
           size,
         ),
       ),
-    )
-      .flat()
+    ).flat()
     const findPlacement = (candidateSpace: SpatialIndex, limit: number) => {
       const connectorSearch = createStateSearchSpace(candidateSpace, (role) => (role === "label" ? 1 : 0))
       for (const bound of candidateBounds.slice(0, limit)) {
         if (bound.left < 0) continue
         const owner = `note:${index}`
-        if (!candidateSpace.isFree(spatialRectClaim(`${owner}:body`, owner, "body", bound), { clearance: 1 }))
-          continue
+        if (!candidateSpace.isFree(spatialRectClaim(`${owner}:body`, owner, "body", bound), { clearance: 1 })) continue
         const connector = findNoteConnector(connectorSearch, bound, target, budget)
         if (connector) return { bound: { ...bound, connector }, connector }
       }
       return undefined
     }
     const placement =
+      findPlacement(space, 1) ??
+      findPlacement(noteSpace, 1) ??
       findPlacement(space, MAX_STRICT_NOTE_PLACEMENTS) ??
       findPlacement(reserved, candidateBounds.length) ??
       outsideNotePlacement(noteSpace, note, index, target, size)
@@ -857,10 +982,7 @@ function outsideNotePlacement(
       size,
     )
     const alignedNoteX = position === "left" ? aligned.left + aligned.width : aligned.left - 1
-    const alignedConnectorY = Math.max(
-      aligned.top + 1,
-      Math.min(target.centerY, aligned.top + aligned.height - 2),
-    )
+    const alignedConnectorY = Math.max(aligned.top + 1, Math.min(target.centerY, aligned.top + aligned.height - 2))
     const alignedTargetX = position === "left" ? target.left - 1 : target.left + target.width
     const alignedConnector = {
       connectorY: alignedConnectorY,
@@ -975,16 +1097,30 @@ export function expandCompositeBoundsForInternalTransitions(
         belongsToComposite(plan.route.transition.from, composite.id, statesById, compositesById) &&
         belongsToComposite(plan.route.transition.to, composite.id, statesById, compositesById),
     )
-    const occupiedYs = internalPlans.flatMap((plan) => [
-      ...plan.cells.map((cell) => cell.y),
-      ...(plan.label ? plan.label.lines.map((_, index) => plan.label!.y + index) : []),
+    const occupied = internalPlans.flatMap((plan) => [
+      ...plan.cells.map((cell) => ({ x: cell.x, y: cell.y })),
+      ...(plan.label
+        ? plan.label.lines.flatMap((line, row) =>
+            Array.from({ length: diagramTextWidth(line) }, (_, column) => ({
+              x: plan.label!.x + column,
+              y: plan.label!.y + row,
+            })),
+          )
+        : []),
     ])
-    if (occupiedYs.length === 0) continue
+    if (occupied.length === 0) continue
 
-    const top = Math.min(bound.top, Math.min(...occupiedYs) - 1)
-    const bottom = Math.max(bound.top + bound.height, Math.max(...occupiedYs) + 2)
+    const left = Math.min(bound.left, Math.min(...occupied.map((point) => point.x)) - 1)
+    const top = Math.min(bound.top, Math.min(...occupied.map((point) => point.y)) - 1)
+    const right = Math.max(bound.left + bound.width, Math.max(...occupied.map((point) => point.x)) + 2)
+    const bottom = Math.max(bound.top + bound.height, Math.max(...occupied.map((point) => point.y)) + 2)
+    bound.left = left
     bound.top = top
+    bound.width = right - left
     bound.height = bottom - top
+    bound.centerX = bound.left + Math.floor(bound.width / 2)
     bound.centerY = bound.top + Math.floor(bound.height / 2)
   }
+
+  enforceCompositeMargins(diagram, compositeBounds)
 }

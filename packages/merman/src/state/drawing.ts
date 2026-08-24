@@ -1,5 +1,5 @@
 import { BorderChars, type BorderCharacters, type BorderStyle } from "@opentui/core"
-import { DiagramCanvas, type DiagramCanvasCell } from "../core/canvas.js"
+import { DiagramCanvas, DiagramCanvasSizeError, type DiagramCanvasCell } from "../core/canvas.js"
 import { directionBetween, orthogonalPathPoints, type DiagramDirection } from "../core/geometry.js"
 import {
   diagramArrowHead,
@@ -12,6 +12,7 @@ import {
   createStateDiagramLayout,
   expandCompositeBoundsForFeedback,
   expandCompositeBoundsForInternalTransitions,
+  separateExternalBoundsFromComposites,
   translateStateDiagramLayout,
   type StateDiagramBoxBounds as BoxBounds,
   type StateDiagramNoteBounds as StateNoteBounds,
@@ -67,23 +68,11 @@ function makeGrid(width: number, height: number): StateGrid {
   })
 }
 
-function setCell(
-  grid: StateGrid,
-  x: number,
-  y: number,
-  char: string,
-  style?: StateCellStyle,
-): void {
+function setCell(grid: StateGrid, x: number, y: number, char: string, style?: StateCellStyle): void {
   grid.setCell(x, y, char, style)
 }
 
-function setText(
-  grid: StateGrid,
-  x: number,
-  y: number,
-  text: string,
-  style?: StateCellStyle,
-): void {
+function setText(grid: StateGrid, x: number, y: number, text: string, style?: StateCellStyle): void {
   grid.setText(x, y, text, style)
 }
 
@@ -108,12 +97,7 @@ function drawBox(
   })
 }
 
-function drawStateFrame(
-  grid: StateGrid,
-  bounds: BoxBounds,
-  chars: BorderCharacters,
-  style: StateCellStyle,
-): void {
+function drawStateFrame(grid: StateGrid, bounds: BoxBounds, chars: BorderCharacters, style: StateCellStyle): void {
   drawDiagramFrame(bounds, chars, (x, y, char) => setCell(grid, x, y, char, style))
 }
 
@@ -125,6 +109,10 @@ function drawContainerFrame(
   style: StateCellStyle,
 ): void {
   drawDiagramFrame(bounds, chars, (x, y, char) => setCell(grid, x, y, char, style))
+  drawContainerLabel(grid, bounds, label, style)
+}
+
+function drawContainerLabel(grid: StateGrid, bounds: BoxBounds, label: string, style: StateCellStyle): void {
   if (label) setText(grid, bounds.left + 2, bounds.top, ` ${label} `, style)
 }
 
@@ -190,9 +178,7 @@ function drawTransitionRenderPlan(
     setCell(grid, cell.x, cell.y, char, departure.get(`${cell.x}:${cell.y}`) ?? "transition")
   }
   if (plan.label) {
-    plan.label.lines.forEach((line, index) =>
-      setText(grid, plan.label!.x, plan.label!.y + index, line, "label"),
-    )
+    plan.label.lines.forEach((line, index) => setText(grid, plan.label!.x, plan.label!.y + index, line, "label"))
   }
 }
 
@@ -210,8 +196,49 @@ function drawTransitionJunctionPlans(
 }
 
 export function drawStateDiagramGrid(sourceDiagram: StateDiagram, options: StateDiagramRenderOptions = {}): StateGrid {
-  const directedDiagram = options.direction ? { ...sourceDiagram, direction: options.direction } : sourceDiagram
-  const diagram = prepareVisibleStateDiagram(directedDiagram)
+  return createStateDiagramDrawing(sourceDiagram, options).grid
+}
+
+export function createStateDiagramDrawing(sourceDiagram: StateDiagram, options: StateDiagramRenderOptions = {}) {
+  const direction = options.direction ?? sourceDiagram.direction
+  if (direction !== "LR" && direction !== "RL") {
+    return createStateDiagramDrawingWithDirection(sourceDiagram, options, direction)
+  }
+  if (options.layoutMaxWidth === undefined || !Number.isFinite(options.layoutMaxWidth)) {
+    return createStateDiagramDrawingWithDirection(sourceDiagram, options, direction)
+  }
+  const fallbackDirection = direction === "RL" ? "BT" : "TB"
+  const maxWidth = Math.max(1, Math.trunc(options.layoutMaxWidth))
+  const drawing = (() => {
+    try {
+      return createStateDiagramDrawingWithDirection(sourceDiagram, options, direction)
+    } catch (error) {
+      if (error instanceof DiagramCanvasSizeError) return undefined
+      throw error
+    }
+  })()
+  if (!drawing) return createStateDiagramDrawingWithDirection(sourceDiagram, options, fallbackDirection)
+  if (drawing.grid.getTextSize({ trimTop: true, trimBottom: true }).width <= maxWidth) {
+    return drawing
+  }
+  const fallback = createStateDiagramDrawingWithDirection(sourceDiagram, options, fallbackDirection)
+  if (
+    fallback.grid.getTextSize({ trimTop: true, trimBottom: true }).width >=
+    drawing.grid.getTextSize({ trimTop: true, trimBottom: true }).width
+  ) {
+    return drawing
+  }
+  return fallback
+}
+
+function createStateDiagramDrawingWithDirection(
+  sourceDiagram: StateDiagram,
+  options: StateDiagramRenderOptions,
+  direction: StateDiagram["direction"],
+) {
+  const diagram = prepareVisibleStateDiagram(
+    direction === sourceDiagram.direction ? sourceDiagram : { ...sourceDiagram, direction },
+  )
   const borderStyle = options.borderStyle ?? DEFAULT_STATE_BORDER_STYLE
   const arrowHeadStyle = options.arrowHeadStyle ?? DEFAULT_STATE_ARROW_HEAD_STYLE
   const minStateGap = normalizeStateMinStateGap(options.minStateGap)
@@ -226,21 +253,24 @@ export function drawStateDiagramGrid(sourceDiagram: StateDiagram, options: State
   const feedbackLaneY = maxY + 3
   const feedbackTopY = Math.min(0, ...allBounds.map((bound) => bound.top)) - 3
   expandCompositeBoundsForFeedback(diagram, bounds, compositeBounds, feedbackLaneY)
-  let transitionPlans = createStateTransitionRenderPlans(diagram, bounds, feedbackLaneY, {
-    feedbackTopY,
-    noteBounds,
-    searchBudget,
-  })
-  expandCompositeBoundsForInternalTransitions(diagram, compositeBounds, transitionPlans)
+  let transitionPlans: StateTransitionRenderPlan[] = []
+  const separationAttempts = diagram.states.length + diagram.composites.length + 1
+  for (let attempt = 0; attempt < separationAttempts; attempt++) {
+    transitionPlans = createStateTransitionRenderPlans(diagram, bounds, feedbackLaneY, {
+      feedbackTopY,
+      noteBounds,
+      searchBudget,
+    })
+    expandCompositeBoundsForInternalTransitions(diagram, compositeBounds, transitionPlans)
+    if (!separateExternalBoundsFromComposites(diagram, layout)) break
+    if (attempt === separationAttempts - 1) throw new Error("State composite separation did not converge")
+  }
   const connectorPoints = noteBounds.flatMap((bound) => bound.connector?.points ?? [])
   const contentLeft = Math.min(
     0,
     ...[...bounds.values(), ...noteBounds].map((bound) => bound.left),
     ...connectorPoints.map((point) => point.x),
-    ...transitionPlans.flatMap((plan) => [
-      ...plan.cells.map((cell) => cell.x),
-      ...(plan.label ? [plan.label.x] : []),
-    ]),
+    ...transitionPlans.flatMap((plan) => [...plan.cells.map((cell) => cell.x), ...(plan.label ? [plan.label.x] : [])]),
   )
   const contentTop = Math.min(
     0,
@@ -305,10 +335,15 @@ export function drawStateDiagramGrid(sourceDiagram: StateDiagram, options: State
 
   drawTransitionJunctionPlans(grid, diagram, bounds, transitionPlans)
 
+  for (const composite of diagram.composites) {
+    const bound = compositeBounds.get(composite.id)
+    if (bound) drawContainerLabel(grid, bound, composite.label, "composite")
+  }
+
   for (const noteBound of noteBounds) {
     const target = bounds.get(noteBound.note.target)
     if (target) drawNote(grid, noteBound, target)
   }
 
-  return grid
+  return { grid, diagram, layout, transitionPlans }
 }

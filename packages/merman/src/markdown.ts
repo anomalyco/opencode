@@ -51,7 +51,7 @@ interface PreparedDiagram {
 export interface MermaidMarkdownRendererOptions {
   /** Use terminal-optimized diagram spacing. Defaults to true. */
   compact?: boolean
-  /** Fold horizontal flowcharts that exceed this width. Defaults to 120 columns. */
+  /** Fold responsive horizontal diagrams that exceed this width. Defaults to 120 columns. */
   layoutMaxWidth?: number
   /** Gantt-specific terminal rendering options. */
   gantt?: Omit<GanttDiagramRenderOptions, "layoutMaxWidth">
@@ -141,7 +141,9 @@ function prepareDiagram(
           grid,
           resolveFlowchartStyleColors({
             node: color(colors.primary),
+            nodeBorder: color(colors.muted),
             database: color(colors.primary),
+            databaseBorder: color(colors.muted),
             edge: color(colors.secondary),
             label: color(colors.text),
             group: color(colors.muted),
@@ -215,8 +217,8 @@ function prepareDiagram(
       }
     }
     case "state": {
-      const grid = drawStateDiagramGrid(parseMermaidStateDiagram(source))
-      const size = grid.getTextSize({ trimBottom: true })
+      const grid = drawStateDiagramGrid(parseMermaidStateDiagram(source), { layoutMaxWidth })
+      const size = grid.getTextSize({ trimTop: true, trimBottom: true })
       return {
         kind,
         source,
