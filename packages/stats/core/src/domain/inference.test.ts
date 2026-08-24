@@ -4,6 +4,7 @@ import { modelAuthor, normalizeInferenceModel, statModel, statProvider } from ".
 
 describe("inference stat normalization", () => {
   test("normalizes model suffixes used by router/provider variants", () => {
+    expect(normalizeInferenceModel("GPT-5-Free")).toBe("gpt-5")
     expect(normalizeInferenceModel("deepseek-v4-flash-free")).toBe("deepseek-v4-flash")
     expect(normalizeInferenceModel("deepseek-v4-flash:global")).toBe("deepseek-v4-flash")
     expect(normalizeInferenceModel("mimo-v2.5-free")).toBe("mimo-v2.5")
