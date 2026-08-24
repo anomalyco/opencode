@@ -32,6 +32,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Shell } from "@opencode-ai/core/shell"
+import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
@@ -136,6 +137,7 @@ const shellPluginSupervisor = makeLocationNode({
     Permission.node,
     PluginRuntime.node,
     Shell.node,
+    ShellSelect.node,
     Tool.node,
   ],
 })

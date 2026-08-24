@@ -13,6 +13,7 @@ import { NonNegativeInt } from "../../schema.js"
 import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
+import { ShellSelect } from "../../shell/select.js"
 import { ToolOutput } from "../../tool-output.js"
 
 export const name = "shell"
@@ -109,6 +110,7 @@ export const Plugin = {
     const environment = yield* Environment.Service
     const mutation = yield* LocationMutation.Service
     const shell = yield* Shell.Service
+    const shellSelect = yield* ShellSelect.Service
     const permission = yield* Permission.Service
     const config = yield* Config.Service
 
@@ -185,6 +187,7 @@ export const Plugin = {
                   command: input.command,
                   cwd: input.workdir,
                   timeout,
+                  shell: yield* shellSelect.resolve({ preference: "compatible" }),
                   metadata: { sessionID: context.sessionID },
                 },
                 (invocation) =>
@@ -340,7 +343,8 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
-        tool.description = description(yield* shell.name())
+        const selected = yield* shellSelect.resolve({ preference: "compatible" })
+        tool.description = description(ShellSelect.name(selected))
       }),
     )
   }),
