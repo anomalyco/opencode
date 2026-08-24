@@ -224,6 +224,7 @@ function renderCost(stats: SessionStatsInfo) {
 function renderModels(stats: SessionStatsInfo, limit: number, width: number) {
   if (stats.models.length === 0) return ["MODELS", "  no model usage"]
   const models = stats.models.slice(0, limit)
+  const more = stats.models.length - models.length
   if (width < 68)
     return [
       "MODELS",
@@ -234,6 +235,7 @@ function renderModels(stats: SessionStatsInfo, limit: number, width: number) {
         ),
         `  ${formatNumber(tokenTotal(item.tokens))} tokens · ${formatNumber(item.steps)} steps · $${item.cost.toFixed(2)}`,
       ]),
+      ...(more > 0 ? ["", `+${more.toLocaleString("en-US")} more model${more === 1 ? "" : "s"}`] : []),
     ]
   return [
     "MODELS",
@@ -246,12 +248,14 @@ function renderModels(stats: SessionStatsInfo, limit: number, width: number) {
         `$${item.cost.toFixed(2)}`,
       ),
     ),
+    ...(more > 0 ? ["", `+${more.toLocaleString("en-US")} more model${more === 1 ? "" : "s"}`] : []),
   ]
 }
 
 function renderTools(stats: SessionStatsInfo, limit: number, width: number) {
   if (stats.toolUsage.length === 0) return ["TOOL RELIABILITY", "  no tool calls"]
   const tools = stats.toolUsage.slice(0, limit)
+  const more = stats.toolUsage.length - tools.length
   if (width < 68)
     return [
       "TOOL RELIABILITY",
@@ -264,6 +268,7 @@ function renderTools(stats: SessionStatsInfo, limit: number, width: number) {
       }),
       "",
       `${formatNumber(stats.tools.succeeded + stats.tools.failed)} finished calls · ${formatNumber(stats.tools.unfinished)} unfinished`,
+      ...(more > 0 ? [`+${more.toLocaleString("en-US")} more tool${more === 1 ? "" : "s"}`] : []),
     ]
   return [
     "TOOL RELIABILITY",
@@ -279,6 +284,7 @@ function renderTools(stats: SessionStatsInfo, limit: number, width: number) {
     }),
     "",
     `${formatNumber(stats.tools.succeeded + stats.tools.failed)} finished calls · ${formatNumber(stats.tools.unfinished)} unfinished`,
+    ...(more > 0 ? [`+${more.toLocaleString("en-US")} more tool${more === 1 ? "" : "s"}`] : []),
   ]
 }
 

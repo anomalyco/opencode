@@ -54,6 +54,30 @@ describe("stats rendering", () => {
     expect(output).not.toContain("activity")
   })
 
+  test("shows when detail tables omit rows", () => {
+    const output = renderStats(
+      {
+        ...stats,
+        models: [
+          ...stats.models,
+          {
+            model: { providerID: "anthropic", id: "haiku" },
+            steps: 2,
+            tokens: { input: 2_000, output: 500, reasoning: 0, cache: { read: 1_000, write: 0 } },
+            cost: 1.25,
+          },
+        ],
+        toolUsage: [
+          ...stats.toolUsage,
+          { name: "grep", calls: 4, succeeded: 4, failed: 0, unfinished: 0, durationP50: 20 },
+        ],
+      },
+      options({ models: true, tools: true, limit: 1 }),
+    )
+    expect(output).toContain("+1 more model")
+    expect(output).toContain("+1 more tool")
+  })
+
   test("uses the OpenCode palette in color mode", () => {
     const output = renderStats(stats, options({ color: true }))
     expect(output).toContain("\x1b[1;36m")
