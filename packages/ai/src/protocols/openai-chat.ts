@@ -570,10 +570,7 @@ const detectMaxTokensField = (provider: string, baseURL: string | undefined): "m
     p === "cloudflare-ai-gateway" ||
     url.includes("gateway.ai.cloudflare.com") ||
     p === "cloudflare-workers-ai" ||
-    url.includes("api.cloudflare.com") ||
-    p === "vercel-ai-gateway" ||
-    url.includes("ai-gateway.vercel.sh") ||
-    url.includes("vercel.sh")
+    url.includes("api.cloudflare.com")
   )
     return "max_tokens"
   return "max_completion_tokens"
