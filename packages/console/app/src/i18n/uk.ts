@@ -682,8 +682,8 @@ export const dict = {
   "workspace.lite.black.message":
     "Ви вже підписані на OpenCode Black або в списку очікування. Спочатку скасуйте підписку, якщо хочете перейти на Go.",
   "workspace.lite.other.message": "Інший учасник цього робочого простору вже підписаний на OpenCode Go.",
-  "workspace.lite.promo.description": "OpenCode Go починається від {{price}}, потім $10/місяць, із щедрими лімітами.",
-  "workspace.lite.promo.price": "$5 за перший місяць",
+  "workspace.lite.promo.description": "OpenCode Go коштує {{price}} і має щедрі ліміти.",
+  "workspace.lite.promo.price": "$10/місяць",
   "workspace.lite.promo.modelsTitle": "Що включено",
   "workspace.lite.promo.footer":
     "План призначений насамперед для міжнародних користувачів і забезпечує стабільний глобальний доступ. Ціни та ліміти використання можуть змінюватися з урахуванням перших даних про використання та відгуків.",

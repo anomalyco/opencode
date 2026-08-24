@@ -687,8 +687,8 @@ export const dict = {
   "workspace.lite.other.message":
     "Ein anderes Mitglied in diesem Workspace hat OpenCode Go bereits abonniert. Nur ein Mitglied pro Workspace kann abonnieren.",
   "workspace.lite.promo.description":
-    "OpenCode Go startet bei {{price}}, danach $10/Monat, und bietet zuverlässigen Zugang zu beliebten offenen Coding-Modellen mit großzügigen Nutzungslimits.",
-  "workspace.lite.promo.price": "$5 im ersten Monat",
+    "OpenCode Go kostet {{price}} und bietet zuverlässigen Zugang zu beliebten offenen Coding-Modellen mit großzügigen Nutzungslimits.",
+  "workspace.lite.promo.price": "$10/Monat",
   "workspace.lite.promo.modelsTitle": "Was enthalten ist",
   "workspace.lite.promo.footer":
     "Der Plan richtet sich in erster Linie an internationale Nutzer und bietet stabilen weltweiten Zugriff. Preise und Nutzungslimits können sich ändern, wenn wir Erkenntnisse aus der ersten Nutzung und dem Feedback gewinnen.",

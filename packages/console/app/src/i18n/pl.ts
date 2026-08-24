@@ -687,8 +687,8 @@ export const dict = {
   "workspace.lite.other.message":
     "Inny członek tego obszaru roboczego już subskrybuje OpenCode Go. Tylko jeden członek na obszar roboczy może subskrybować.",
   "workspace.lite.promo.description":
-    "OpenCode Go zaczyna się od {{price}}, potem $10/miesiąc, i zapewnia niezawodny dostęp do popularnych otwartych modeli kodowania z hojnymi limitami użycia.",
-  "workspace.lite.promo.price": "$5 za pierwszy miesiąc",
+    "OpenCode Go kosztuje {{price}} i zapewnia niezawodny dostęp do popularnych otwartych modeli kodowania z hojnymi limitami użycia.",
+  "workspace.lite.promo.price": "$10/miesiąc",
   "workspace.lite.promo.modelsTitle": "Co zawiera",
   "workspace.lite.promo.footer":
     "Plan został opracowany przede wszystkim z myślą o użytkownikach z całego świata i zapewnia stabilny globalny dostęp. Ceny i limity użycia mogą ulec zmianie w miarę zdobywania doświadczeń na podstawie początkowego korzystania z usługi i otrzymywanych opinii.",
