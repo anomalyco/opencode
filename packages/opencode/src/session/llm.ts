@@ -8,7 +8,7 @@ import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
 import type { LLMEvent } from "@opencode-ai/llm"
-import { LLMClient } from "@opencode-ai/llm/route"
+import { LLMClient, DEFAULT_STREAM_IDLE_TIMEOUT_MS, guardIdle } from "@opencode-ai/llm/route"
 import type { LLMClientService } from "@opencode-ai/llm/route"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -365,17 +365,23 @@ const live: Layer.Layer<
 
             const result = yield* run({ ...input, abort: ctrl.signal })
 
-            if (result.type === "native") return result.stream
-
             // Adapter seam: both runtimes expose the same LLMEvent stream. Native
             // already returns one; AI SDK streams are converted here.
-            const state = LLMAISDK.adapterState()
-            return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
-              e instanceof Error ? e : new Error(String(e)),
-            ).pipe(
-              Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
-              Stream.flatMap((events) => Stream.fromIterable(events)),
-            )
+            const inner =
+              result.type === "native"
+                ? result.stream
+                : Stream.fromAsyncIterable(result.result.fullStream, (e) =>
+                      e instanceof Error ? e : new Error(String(e)),
+                    ).pipe(
+                      Stream.mapEffect((event) => LLMAISDK.toLLMEvents(LLMAISDK.adapterState(), event)),
+                      Stream.flatMap((events) => Stream.fromIterable(events)),
+                    )
+
+            // Stalled-stream watchdog: fail the stream with a typed LLMError when no event
+            // arrives within the idle window so the processor can classify it as retryable.
+            // Wrapped once here so both runtimes are covered; 0 disables the watchdog.
+            const idleMs = (yield* config.get()).experimental?.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
+            return idleMs > 0 ? inner.pipe(guardIdle({ idleMs })) : inner
           }),
         ),
       )

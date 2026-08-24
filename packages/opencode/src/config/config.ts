@@ -112,6 +112,10 @@ type Info = ConfigV1.Info & {
   // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
   // with the file and scope it came from so later runtime code can make location-sensitive decisions.
   plugin_origins?: ConfigPlugin.Origin[]
+  // streamIdleTimeoutMs is declared here because the core Config schema does not carry it yet; it configures
+  // the stalled-stream watchdog in session/llm.ts (undefined → default, 0 → disabled). Values set in config
+  // files only reach runtime once the core experimental schema declares the field.
+  experimental?: { streamIdleTimeoutMs?: number }
 }
 
 type State = {
