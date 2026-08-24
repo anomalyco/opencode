@@ -9,6 +9,7 @@ import { SessionSchema } from "../session/schema"
 import { Config } from "../config"
 import { makeLocationNode } from "../effect/app-node"
 import { harness_task, harness_subtask_feedback } from "./schema"
+import { QualityGate } from "./quality_gate"
 import { eq } from "drizzle-orm"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -77,7 +78,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 
 function fetchEmbedding(
   text: string,
-  options?: { baseURL?: string; model?: string; apiKey?: string }
+  options?: { baseURL?: string; model?: string; apiKey?: string },
 ): Effect.Effect<Float32Array | undefined> {
   const baseURL = options?.baseURL || "http://localhost:11434/api/embed"
   const model = options?.model || "nomic-embed-text"
@@ -85,7 +86,10 @@ function fetchEmbedding(
 
   return Effect.tryPromise({
     try: async () => {
-      const headers: Record<string, string> = { "Content-Type": "application/json" }
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
+
       if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`
 
       const res = await fetch(baseURL, {
@@ -94,8 +98,11 @@ function fetchEmbedding(
         body: JSON.stringify({ model, input: text }),
         signal: AbortSignal.timeout(3000),
       })
+
       if (!res.ok) return undefined
+
       const data: unknown = await res.json()
+
       if (
         typeof data === "object" &&
         data !== null &&
@@ -104,10 +111,12 @@ function fetchEmbedding(
         Array.isArray(data.embeddings[0])
       ) {
         const rawVec = data.embeddings[0] as number[]
+
         if (rawVec.every((v) => typeof v === "number")) {
           return new Float32Array(rawVec)
         }
       }
+
       return undefined
     },
     catch: () => undefined,
@@ -119,14 +128,21 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     const todosSvc = yield* SessionTodo.Service
+
+    // QUALITY GATE: added service
+    const qualityGate = yield* QualityGate.Service
+
     const configOption = yield* Effect.serviceOption(Config.Service)
 
-    // Job 1: Classify prompt dynamically via LLM structured output without hardcoded fallbacks
-    const classify = Effect.fn("JudgeAgent.classify")(function* (prompt: string, model: unknown) {
+    const classify = Effect.fn("JudgeAgent.classify")(function* (
+      prompt: string,
+      model: unknown,
+    ) {
       const res = yield* LLM.generateObject({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
         model: model as Parameters<typeof LLM.generateObject>[0]["model"],
-        system: "You are a Judge Agent. Analyze the user prompt and determine if it is an actionable task. Output taskType (e.g., 'web', 'backend', 'devops', 'refactor', 'bugfix') and taskSubTypes as a list of sub-domain tags (e.g., ['css-theme', 'ui-component', 'type-check']).",
+        system:
+          "You are a Judge Agent. Analyze the user prompt and determine if it is an actionable task. Output taskType (e.g., 'web', 'backend', 'devops', 'refactor', 'bugfix') and taskSubTypes as a list of sub-domain tags (e.g., ['css-theme', 'ui-component', 'type-check']).",
         prompt,
         schema: Classification,
         generation: { temperature: 0 },
@@ -135,30 +151,41 @@ const layer = Layer.effect(
       return res.object
     })
 
-    // Job 1 sub-step: Register task into harness_task table using official vector embedding input
-    const registerTask = Effect.fn("JudgeAgent.registerTask")(function* (input: RegisterTaskInput) {
-      const taskID = `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    const registerTask = Effect.fn("JudgeAgent.registerTask")(function* (
+      input: RegisterTaskInput,
+    ) {
+      const taskID = `task_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 7)}`
 
-      const embeddingVec = input.embedding instanceof Float32Array
-        ? input.embedding
-        : Array.isArray(input.embedding) && input.embedding.every((v) => typeof v === "number")
-        ? new Float32Array(input.embedding as number[])
-        : yield* fetchEmbedding(input.prompt)
+      const embeddingVec =
+        input.embedding instanceof Float32Array
+          ? input.embedding
+          : Array.isArray(input.embedding) &&
+              input.embedding.every((v) => typeof v === "number")
+            ? new Float32Array(input.embedding as number[])
+            : yield* fetchEmbedding(input.prompt)
 
       const subTypes = Array.isArray(input.taskSubTypes)
         ? input.taskSubTypes
         : Array.isArray(input.taskSubType)
-        ? input.taskSubType
-        : typeof input.taskSubType === "string"
-        ? [input.taskSubType]
-        : ["general-task"]
+          ? input.taskSubType
+          : typeof input.taskSubType === "string"
+            ? [input.taskSubType]
+            : ["general-task"]
 
       const taskSubTypeFormatted = JSON.stringify(subTypes)
 
       const configEntries = Option.isSome(configOption)
-        ? yield* configOption.value.entries().pipe(Effect.orElseSucceed(() => [] as Config.Entry[]))
+        ? yield* configOption.value
+            .entries()
+            .pipe(Effect.orElseSucceed(() => [] as Config.Entry[]))
         : []
-      const selectedModel = input.taskModel || Config.latest(configEntries, "model") || "local-tpu/zai-org/GLM-5.2"
+
+      const selectedModel =
+        input.taskModel ||
+        Config.latest(configEntries, "model") ||
+        "local-tpu/zai-org/GLM-5.2"
 
       yield* db
         .insert(harness_task)
@@ -179,30 +206,53 @@ const layer = Layer.effect(
       return taskID
     })
 
-    // Job 2: Evaluate multi-step, multi-file output quality using subtask trace & tool summary
-    const evaluate = Effect.fn("JudgeAgent.evaluate")(function* (input: EvaluateInput, model: unknown) {
+    const evaluate = Effect.fn("JudgeAgent.evaluate")(function* (
+      input: EvaluateInput,
+      model: unknown,
+    ) {
+      // QUALITY GATE TEST LOG
+      console.error("🔥 JUDGE EVALUATE CALLED:", input.sessionID)
+
       let subtasks = input.subtasks ?? []
+
       if (!subtasks.length && input.sessionID) {
         const fetchedTodos = yield* todosSvc
           .get(SessionSchema.ID.make(input.sessionID))
           .pipe(Effect.orElseSucceed(() => []))
-        subtasks = fetchedTodos.map((todo) => ({ content: todo.content, status: todo.status }))
+
+        subtasks = fetchedTodos.map((todo) => ({
+          content: todo.content,
+          status: todo.status,
+        }))
       }
 
       let toolTrace = input.toolTraceSummary ?? ""
+
       if (!toolTrace && input.sessionID) {
         const toolParts = yield* db
           .select()
           .from(PartTable)
-          .where(eq(PartTable.session_id, SessionSchema.ID.make(input.sessionID)))
+          .where(
+            eq(
+              PartTable.session_id,
+              SessionSchema.ID.make(input.sessionID),
+            ),
+          )
           .all()
           .pipe(Effect.orElseSucceed(() => []))
 
         toolTrace = toolParts
           .map((part) => {
             const data = part.data
+
             if (!data || data.type !== "tool") return null
-            const toolData = data as { type: "tool"; tool: string; state: { status: string } }
+
+            const toolData = data as {
+              type: "tool"
+              tool: string
+              state: { status: string }
+            }
+
             return `- Tool: ${toolData.tool} | Status: ${toolData.state.status}`
           })
           .filter(Boolean)
@@ -210,7 +260,9 @@ const layer = Layer.effect(
       }
 
       const subtaskSummary = subtasks.length
-        ? subtasks.map((st) => `- [${st.status}] ${st.content}`).join("\n")
+        ? subtasks
+            .map((st) => `- [${st.status}] ${st.content}`)
+            .join("\n")
         : "No explicit subtasks recorded."
 
       const evalRes = yield* LLM.generateObject({
@@ -256,24 +308,89 @@ ${input.userResponse ?? "None"}
         generation: { temperature: 0 },
       }).pipe(Effect.map((res) => res.object))
 
+      // ==================================================
+      // QUALITY GATE
+      // Existing Judge logic above is unchanged.
+      // ==================================================
+
+      console.error("🔥 STARTING QUALITY GATE")
+
+      const qualityResult = input.sessionID
+        ? yield* qualityGate.evaluateSession(input.sessionID)
+        : {
+            passed: false,
+            score: 0,
+            completedTodos: 0,
+            totalTodos: 0,
+            failedTools: [],
+            verificationCommands: [],
+            issues: [
+              "No session ID was provided for Quality Gate evaluation.",
+            ],
+            summary:
+              "Quality Gate could not verify execution evidence.",
+          }
+
+      console.error("🔥 QUALITY GATE RESULT:")
+      console.error(JSON.stringify(qualityResult, null, 2))
+
+      // Combine existing LLM Judge decision with Quality Gate.
+      const finalSatisfied =
+        evalRes.isSatisfied && qualityResult.passed
+
+      const finalScore =
+        Math.min(evalRes.score, qualityResult.score)
+
+      console.error(
+        `🔥 FINAL DECISION: ${
+          finalSatisfied ? "PASSED ✅" : "FAILED ❌"
+        }`,
+      )
+
+      const finalEvaluation: Evaluation = {
+        ...evalRes,
+        isSatisfied: finalSatisfied,
+        score: finalScore,
+        reasoning:
+          `${evalRes.reasoning} | Quality Gate: ${qualityResult.summary}`,
+      }
+
+      // Existing evaluation summary, extended with Quality Gate result.
       const evalSummary = [
-        `Overall: ${evalRes.score}/5`,
-        `Quality: ${evalRes.codeQualityScore ?? evalRes.score}/5`,
-        `Originality: ${evalRes.originalityScore ?? evalRes.score}/5`,
-        `Completeness: ${evalRes.completenessScore ?? evalRes.score}/5`,
-        `Efficiency: ${evalRes.efficiencyScore ?? evalRes.score}/5`,
-        `Robustness: ${evalRes.robustnessScore ?? evalRes.score}/5`,
-        evalRes.reasoning ? `Reasoning: ${evalRes.reasoning}` : "",
-        evalRes.critique ? `Critique: ${evalRes.critique}` : "",
-        evalRes.flawsIdentified?.length ? `Flaws: ${evalRes.flawsIdentified.join("; ")}` : "",
-        evalRes.originalityHighlights?.length ? `Originality Highlights: ${evalRes.originalityHighlights.join("; ")}` : "",
-      ].filter(Boolean).join(" | ")
+        `Overall: ${finalEvaluation.score}/5`,
+        `Quality: ${finalEvaluation.codeQualityScore ?? finalEvaluation.score}/5`,
+        `Originality: ${finalEvaluation.originalityScore ?? finalEvaluation.score}/5`,
+        `Completeness: ${finalEvaluation.completenessScore ?? finalEvaluation.score}/5`,
+        `Efficiency: ${finalEvaluation.efficiencyScore ?? finalEvaluation.score}/5`,
+        `Robustness: ${finalEvaluation.robustnessScore ?? finalEvaluation.score}/5`,
+        `Quality Gate: ${
+          qualityResult.passed ? "PASSED" : "FAILED"
+        }`,
+        finalEvaluation.reasoning
+          ? `Reasoning: ${finalEvaluation.reasoning}`
+          : "",
+        finalEvaluation.critique
+          ? `Critique: ${finalEvaluation.critique}`
+          : "",
+        finalEvaluation.flawsIdentified?.length
+          ? `Flaws: ${finalEvaluation.flawsIdentified.join("; ")}`
+          : "",
+        finalEvaluation.originalityHighlights?.length
+          ? `Originality Highlights: ${finalEvaluation.originalityHighlights.join("; ")}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" | ")
 
       yield* db
         .update(harness_task)
         .set({
-          task_status: evalRes.isSatisfied ? "completed" : "failed",
-          task_sub_status: evalRes.isSatisfied ? "satisfied" : "unsatisfied",
+          task_status: finalEvaluation.isSatisfied
+            ? "completed"
+            : "failed",
+          task_sub_status: finalEvaluation.isSatisfied
+            ? "satisfied"
+            : "unsatisfied",
           task_error: evalSummary,
         })
         .where(eq(harness_task.task_id, input.taskID))
@@ -281,25 +398,44 @@ ${input.userResponse ?? "None"}
         .pipe(Effect.orDie)
 
       const hasSubFive =
-        evalRes.score < 5 ||
-        (evalRes.codeQualityScore ?? 5) < 5 ||
-        (evalRes.originalityScore ?? 5) < 5 ||
-        (evalRes.completenessScore ?? 5) < 5 ||
-        (evalRes.efficiencyScore ?? 5) < 5 ||
-        (evalRes.robustnessScore ?? 5) < 5
+        finalEvaluation.score < 5 ||
+        (finalEvaluation.codeQualityScore ?? 5) < 5 ||
+        (finalEvaluation.originalityScore ?? 5) < 5 ||
+        (finalEvaluation.completenessScore ?? 5) < 5 ||
+        (finalEvaluation.efficiencyScore ?? 5) < 5 ||
+        (finalEvaluation.robustnessScore ?? 5) < 5
 
       if (hasSubFive) {
         const flawNote =
-          evalRes.flawsIdentified?.join("; ") || evalRes.critique || evalRes.reasoning || "Sub-optimal score across quality dimensions."
-        const subFiveDims = [
-          (evalRes.codeQualityScore ?? 5) < 5 ? `Quality (${evalRes.codeQualityScore}/5)` : "",
-          (evalRes.originalityScore ?? 5) < 5 ? `Originality (${evalRes.originalityScore}/5)` : "",
-          (evalRes.completenessScore ?? 5) < 5 ? `Completeness (${evalRes.completenessScore}/5)` : "",
-          (evalRes.efficiencyScore ?? 5) < 5 ? `Efficiency (${evalRes.efficiencyScore}/5)` : "",
-          (evalRes.robustnessScore ?? 5) < 5 ? `Robustness (${evalRes.robustnessScore}/5)` : "",
-        ].filter(Boolean).join(", ")
+          finalEvaluation.flawsIdentified?.join("; ") ||
+          finalEvaluation.critique ||
+          finalEvaluation.reasoning ||
+          "Sub-optimal score across quality dimensions."
 
-        const reqNote = `Refinement requested to reach 5/5: Improve ${subFiveDims || "general quality"} to meet 5-star rubric.`
+        const subFiveDims = [
+          (finalEvaluation.codeQualityScore ?? 5) < 5
+            ? `Quality (${finalEvaluation.codeQualityScore}/5)`
+            : "",
+          (finalEvaluation.originalityScore ?? 5) < 5
+            ? `Originality (${finalEvaluation.originalityScore}/5)`
+            : "",
+          (finalEvaluation.completenessScore ?? 5) < 5
+            ? `Completeness (${finalEvaluation.completenessScore}/5)`
+            : "",
+          (finalEvaluation.efficiencyScore ?? 5) < 5
+            ? `Efficiency (${finalEvaluation.efficiencyScore}/5)`
+            : "",
+          (finalEvaluation.robustnessScore ?? 5) < 5
+            ? `Robustness (${finalEvaluation.robustnessScore}/5)`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(", ")
+
+        const reqNote =
+          `Refinement requested to reach 5/5: Improve ${
+            subFiveDims || "general quality"
+          } to meet 5-star rubric.`
 
         yield* db
           .update(harness_subtask_feedback)
@@ -307,16 +443,37 @@ ${input.userResponse ?? "None"}
             user_feedback: flawNote,
             changes_requested: reqNote,
           })
-          .where(eq(harness_subtask_feedback.task_id, input.taskID))
+          .where(
+            eq(
+              harness_subtask_feedback.task_id,
+              input.taskID,
+            ),
+          )
           .run()
-          .pipe(Effect.orElseSucceed(() => undefined))
+          .pipe(
+            Effect.orElseSucceed(
+              () => undefined,
+            ),
+          )
       }
 
-      return evalRes
+      return finalEvaluation
     })
 
-    return Service.of({ classify, registerTask, evaluate })
+    return Service.of({
+      classify,
+      registerTask,
+      evaluate,
+    })
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Database.node, SessionTodo.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [
+    Database.node,
+    SessionTodo.node,
+    QualityGate.node,
+  ],
+})
