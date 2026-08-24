@@ -27,6 +27,30 @@ describe("IdleWatchdog", () => {
     }),
   )
 
+  it.effect("resets the deadline per gap, surviving consecutive sub-budget pauses", () =>
+    Effect.gen(function* () {
+      // three 800ms pauses: each is under the 1s budget, but they sum to 2.4s.
+      // Per-pull deadline reset means every resume-before-expiry keeps the
+      // stream alive; only a single gap reaching idleMs may trip it.
+      const stream = Stream.make(1).pipe(
+        Stream.concat(Stream.fromEffect(Effect.as(Effect.sleep(800), 2))),
+        Stream.concat(Stream.fromEffect(Effect.as(Effect.sleep(800), 3))),
+        Stream.concat(Stream.fromEffect(Effect.as(Effect.sleep(800), 4))),
+      )
+      const fiber = yield* IdleWatchdog.guardIdle({ idleMs: 1_000 })(stream).pipe(
+        Stream.runCollect,
+        Effect.forkChild({ startImmediately: true }),
+      )
+
+      yield* TestClock.adjust(800)
+      yield* TestClock.adjust(800)
+      yield* TestClock.adjust(800)
+      const events = yield* Fiber.join(fiber)
+
+      expect(events).toEqual([1, 2, 3, 4])
+    }),
+  )
+
   it.effect("fails with an IdleTimeout transport error when the provider stalls", () =>
     Effect.gen(function* () {
       const stream = Stream.make("first").pipe(Stream.concat(Stream.never))
