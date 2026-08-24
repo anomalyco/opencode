@@ -41,12 +41,32 @@ export function orderSelectedFields<TColumn extends Column>(
 ): SelectedFieldsOrdered {
   return Object.entries(fields).flatMap(([name, field]) => {
     const path = pathPrefix ? [...pathPrefix, name] : [name]
-    if (is(field, Column) || is(field, SQL) || is(field, SQL.Aliased) || is(field, Subquery)) {
-      return [{ path, field }] as SelectedFieldsOrdered
-    }
+    if (is(field, Column)) return [{ path, field, fieldType: "Column", column: field }] as SelectedFieldsOrdered
+    if (is(field, SQL)) return [{ path, field, fieldType: "SQL" }] as SelectedFieldsOrdered
+    if (is(field, SQL.Aliased)) return [{ path, field, fieldType: "SQL.Aliased" }] as SelectedFieldsOrdered
+    if (is(field, Subquery)) return [{ path, field, fieldType: "Subquery" }] as SelectedFieldsOrdered
     if (is(field, Table)) return orderSelectedFields(getTableColumnsRuntime(field as SQLiteTable), path)
     return orderSelectedFields(field as Record<string, unknown>, path)
   }) as SelectedFieldsOrdered
+}
+
+export function resolveNullableObjectPaths(
+  columns: SelectedFieldsOrdered,
+  joinsNotNullableMap: Record<string, boolean> | undefined,
+) {
+  if (!joinsNotNullableMap) return undefined
+  const tableOf = columns
+    .filter((column) => column.path.length > 1 && column.fieldType === "Column")
+    .reduce<Record<string, string | false>>((result, column) => {
+      const key = column.path[0]!
+      const tableName = getTableName(getColumnTable(column.field as Column))
+      const current = result[key]
+      result[key] = current === undefined ? tableName : current === tableName ? current : false
+      return result
+    }, {})
+  return Object.entries(tableOf)
+    .filter(([, tableName]) => typeof tableName === "string" && !joinsNotNullableMap[tableName])
+    .map(([key]) => key)
 }
 
 export function mapUpdateSet<TTable extends SQLiteTable>(table: TTable, values: SQLiteUpdateSetSource<TTable>) {
