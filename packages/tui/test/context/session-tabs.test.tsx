@@ -263,7 +263,11 @@ test("stores session tabs for the current working directory by default", async (
 
   try {
     const file = path.join(setup.state, "test", "tui", "tabs.json")
-    await wait(() => Bun.file(file).size > 0)
+    await wait(async () => {
+      if (!(await Bun.file(file).exists())) return false
+      const stored = await Bun.file(file).json()
+      return stored.cwd[directory]?.tabs.some((tab: { sessionID: string }) => tab.sessionID === "first")
+    })
     const stored = await Bun.file(file).json()
     expect(stored.global).toEqual({ tabs: [], unread: {} })
     expect(Object.keys(stored.cwd)).toEqual([directory])
