@@ -106,6 +106,7 @@ export const IpcServerProtocolLive = Layer.unwrap(
             supportsAck: true,
             supportsTransferables: false,
             supportsSpanPropagation: false,
+            supportsNotifications: true,
           }
         }),
       ),

@@ -151,15 +151,24 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             const tabs = useTabs()
             const tabsStore = tabs.store
             const tabsStoreActions = tabs
-            const [session] = createResource(
+            const [loadedSession] = createResource(
               () => {
                 const route = layout.route()
                 if (route.type !== "session") return undefined
                 const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
-                return conn ? { route, sdk: global.ensureServerCtx(conn).sdk } : undefined
+                return conn ? { route, ctx: global.ensureServerCtx(conn) } : undefined
               },
-              ({ route, sdk }) => sdk.api.session.get({ sessionID: route.sessionId }).catch(() => {}),
+              ({ route, ctx }) => ctx.sdk.api.session.get({ sessionID: route.sessionId }).catch(() => {}),
             )
+            const session = createMemo(() => {
+              const route = layout.route()
+              if (route.type !== "session") return
+              const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
+              const cached = conn ? global.ensureServerCtx(conn).data.session.get(route.sessionId) : undefined
+              if (cached) return cached
+              const loaded = loadedSession()
+              return loaded?.id === route.sessionId ? loaded : undefined
+            })
 
             const matchRoute = (route: LayoutRoute) => {
               if (route.type === "home") return
@@ -169,7 +178,9 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               if (route.type === "session") {
                 const main = tabsStore.find(
                   (item) =>
-                    item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
+                    item.type === "session" &&
+                    item.server === route.server &&
+                    (item.sessionId === route.sessionId || item.routeSessionId === route.sessionId),
                 )
                 if (main) return main
                 const s = session()
@@ -190,6 +201,14 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               if (!tabs.ready()) return
               const tab = currentTab()
               if (tab) {
+                const current = session()
+                if (
+                  route.type === "session" &&
+                  tab.type === "session" &&
+                  (route.sessionId === tab.sessionId || current?.id === route.sessionId)
+                ) {
+                  tabs.rememberSessionRoute(tab, route.sessionId, current?.parentID)
+                }
                 tabs.remember(tab)
                 return
               }

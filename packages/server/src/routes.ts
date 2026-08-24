@@ -20,6 +20,7 @@ import { MCP } from "@opencode-ai/core/mcp/index"
 import { Global } from "@opencode-ai/util/global"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { LocationActivity } from "@opencode-ai/core/location-activity"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
@@ -62,6 +63,7 @@ const applicationServiceNodes = [
   WellKnown.node,
   PtyEnvironment.node,
   LocationServiceMap.node,
+  LocationActivity.node,
   SessionRestart.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)

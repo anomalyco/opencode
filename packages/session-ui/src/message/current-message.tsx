@@ -6,11 +6,10 @@ import type {
 import { Match, Switch } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
-import { CurrentContextToolGroup, CurrentPatchToolGroup, ToolDisplay } from "../tools/tool-renderer"
+import { CurrentContextToolGroup, CurrentFileToolGroup, ToolDisplay } from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 
 export type { SessionUserActions, SessionUserComment } from "../actions"
-export { MessageDivider } from "./message-content"
 export { SessionShellMessage } from "../tools/tool-renderer"
 export { currentContentDefaultOpen } from "./current-tool-state"
 
@@ -41,7 +40,7 @@ export function SessionAssistantContent(props: {
   content: SessionMessageAssistant["content"][number]
   contentID: string
   showAssistantCopyPartID?: string | null
-  turnDurationMs?: number
+  turnDurationMs?: number | null
   defaultOpen?: boolean
   toolOpen?: boolean
   onToolOpenChange?: (open: boolean) => void
@@ -110,9 +109,18 @@ export function SessionContextToolGroup(props: {
   )
 }
 
-export function SessionPatchToolGroup(props: {
+export function SessionFileToolGroup(props: {
   tools: SessionMessageAssistantTool[]
+  fileOpen: (path: string) => boolean | undefined
+  onFileOpenChange: (path: string, open: boolean) => void
   onSizeChange?: () => void
 }) {
-  return <CurrentPatchToolGroup tools={props.tools} onSizeChange={props.onSizeChange} />
+  return (
+    <CurrentFileToolGroup
+      tools={props.tools}
+      fileOpen={props.fileOpen}
+      onFileOpenChange={props.onFileOpenChange}
+      onSizeChange={props.onSizeChange}
+    />
+  )
 }

@@ -1,9 +1,64 @@
 import { describe, expect, test } from "bun:test"
 import stringWidth from "string-width"
+import { spatialPathClaim } from "../core/spatial.js"
 import { expectDiagram } from "../test/diagram.js"
 import { renderStateDiagram } from "./diagram.js"
 import { drawStateDiagramGrid } from "./drawing.js"
+import { createStateDiagramLayout } from "./layout.js"
 import { parseMermaidStateDiagram } from "./parser.js"
+import { prepareVisibleStateDiagram } from "./visible-model.js"
+
+function expectCompleteStateDiagram(source: string, output = renderStateDiagram(source)): void {
+  const diagram = prepareVisibleStateDiagram(parseMermaidStateDiagram(source))
+  const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+  const states = diagram.states.filter((state) => state.kind === "state")
+  const stateBounds = states.map((state) => layout.bounds.get(state.id)!)
+
+  for (const text of [
+    ...states.map((state) => state.label),
+    ...diagram.transitions.map((transition) => transition.label),
+    ...diagram.notes.flatMap((note) => note.lines),
+  ].filter(Boolean)) {
+    expect(output).toContain(text)
+  }
+  for (const [index, bound] of stateBounds.entries()) {
+    for (const other of stateBounds.slice(index + 1)) {
+      expect(
+        bound.left < other.left + other.width &&
+          bound.left + bound.width > other.left &&
+          bound.top < other.top + other.height &&
+          bound.top + bound.height > other.top,
+        `${bound.id} overlaps ${other.id}`,
+      ).toBe(false)
+    }
+  }
+  const occupiedByNote = layout.noteBounds.map((note) => {
+    const connector = spatialPathClaim(`connector:${note.id}`, note.id, "boundary", note.connector!.points)
+    return new Set([
+      ...Array.from({ length: note.height }, (_, dy) =>
+        Array.from({ length: note.width }, (_, dx) => `${note.left + dx}:${note.top + dy}`),
+      ).flat(),
+      ...connector.spans.flatMap((span) =>
+        Array.from({ length: span.toX - span.fromX + 1 }, (_, dx) => `${span.fromX + dx}:${span.y}`),
+      ),
+    ])
+  })
+  for (const [index, occupied] of occupiedByNote.entries()) {
+    for (const bound of stateBounds) {
+      expect(
+        Array.from({ length: bound.height }, (_, dy) =>
+          Array.from({ length: bound.width }, (_, dx) => occupied.has(`${bound.left + dx}:${bound.top + dy}`)),
+        )
+          .flat()
+          .some(Boolean),
+        `${layout.noteBounds[index]!.id} overlaps ${bound.id}`,
+      ).toBe(false)
+    }
+    for (const other of occupiedByNote.slice(index + 1)) {
+      expect([...occupied].some((cell) => other.has(cell))).toBe(false)
+    }
+  }
+}
 
 describe("StateDiagram", () => {
   test("detects and parses Mermaid state diagrams", () => {
@@ -439,6 +494,17 @@ stateDiagram-v2
     `)
   })
 
+  test("renders self transitions from choice pseudo-states", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction LR
+  state Decision <<choice>>
+  Decision --> Decision: reconsider`)
+
+    expect(output).toContain("◆")
+    expect(output).toContain("reconsider")
+    expect(output.split("\n").filter((line) => line.trim())).toHaveLength(3)
+  })
+
   test("renders parallel transitions without losing labels", () => {
     const horizontal = renderStateDiagram(`stateDiagram-v2
   direction LR
@@ -453,6 +519,154 @@ stateDiagram-v2
     expect(horizontal).toContain("second")
     expect(vertical).toContain("first")
     expect(vertical).toContain("second")
+  })
+
+  test("renders cyclic same-rank vertical parallels with a note", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction TD
+  state "Node S13_0" as S13_0
+  state "Node S13_1" as S13_1
+  state "Node S13_2" as S13_2
+  state "Node S13_3" as S13_3
+  state "Node S13_4" as S13_4
+  S13_0 --> S13_1: state_edge_13_0
+  S13_1 --> S13_2: state_edge_13_1
+  S13_2 --> S13_3: state_edge_13_2
+  S13_3 --> S13_4: state_edge_13_3
+  S13_0 --> S13_2: state_edge_13_4
+  S13_4 --> S13_1: state_edge_13_5
+  S13_2 --> S13_0: state_edge_13_6
+  S13_1 --> S13_2: state_edge_13_7
+  S13_3 --> S13_2: state_edge_13_8
+  S13_3 --> S13_0: state_edge_13_9
+  S13_0 --> S13_0: state_edge_13_10
+  note left of S13_0: state_note_13_0`)
+
+    for (const index of [0, 1, 2, 3, 4]) expect(output).toContain(`Node S13_${index}`)
+    for (const index of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) expect(output).toContain(`state_edge_13_${index}`)
+    expect(output).toContain("state_note_13_0")
+  })
+
+  test("preserves every state in a routed multi-note vertical graph", () => {
+    const source = `stateDiagram-v2
+  direction TD
+  state "Node S21_0" as S21_0
+  state "Node S21_1" as S21_1
+  state "Node S21_2" as S21_2
+  state "Node S21_3" as S21_3
+  state "Node S21_4" as S21_4
+  state "Node S21_5" as S21_5
+  S21_0 --> S21_1: state_edge_21_0
+  S21_1 --> S21_2: state_edge_21_1
+  S21_2 --> S21_3: state_edge_21_2
+  S21_3 --> S21_4: state_edge_21_3
+  S21_4 --> S21_5: state_edge_21_4
+  S21_4 --> S21_5: state_edge_21_5
+  S21_2 --> S21_4: state_edge_21_6
+  S21_3 --> S21_1: state_edge_21_7
+  note right of S21_1: state_note_21_0
+  note left of S21_0: state_note_21_1
+  note left of S21_4: state_note_21_2`
+    const output = renderStateDiagram(source)
+
+    for (const index of [0, 1, 2, 3, 4, 5]) expect(output).toContain(`Node S21_${index}`)
+    for (const index of [0, 1, 2, 3, 4, 5, 6, 7]) expect(output).toContain(`state_edge_21_${index}`)
+    for (const index of [0, 1, 2]) expect(output).toContain(`state_note_21_${index}`)
+    expectCompleteStateDiagram(source, output)
+  })
+
+  test("renders every note in a cyclic vertical graph", () => {
+    const source = `stateDiagram-v2
+  direction TB
+  state "Node S27_0" as S27_0
+  state "Node S27_1" as S27_1
+  state "Node S27_2" as S27_2
+  state "Node S27_3" as S27_3
+  state "Node S27_4" as S27_4
+  state "Node S27_5" as S27_5
+  S27_0 --> S27_1: state_edge_27_0
+  S27_1 --> S27_2: state_edge_27_1
+  S27_2 --> S27_3: state_edge_27_2
+  S27_3 --> S27_4: state_edge_27_3
+  S27_4 --> S27_5: state_edge_27_4
+  S27_1 --> S27_0: state_edge_27_5
+  S27_5 --> S27_1: state_edge_27_6
+  S27_2 --> S27_1: state_edge_27_7
+  S27_1 --> S27_5: state_edge_27_8
+  note left of S27_5: state_note_27_0
+  note right of S27_0: state_note_27_1
+  note left of S27_3: state_note_27_2`
+    const output = renderStateDiagram(source)
+
+    for (const index of [0, 1, 2, 3, 4, 5]) expect(output).toContain(`Node S27_${index}`)
+    for (const index of [0, 1, 2, 3, 4, 5, 6, 7, 8]) expect(output).toContain(`state_edge_27_${index}`)
+    for (const index of [0, 1, 2]) expect(output).toContain(`state_note_27_${index}`)
+    expectCompleteStateDiagram(source, output)
+  })
+
+  test("places exhausted notes on deterministic exterior lanes", () => {
+    const source = `stateDiagram-v2
+  direction TD
+  state "Node S33_0" as S33_0
+  state "Node S33_1" as S33_1
+  state "Node S33_2" as S33_2
+  state "Node S33_3" as S33_3
+  state "Node S33_4" as S33_4
+  state "Node S33_5" as S33_5
+  state "Node S33_6" as S33_6
+  S33_0 --> S33_1: state_edge_33_0
+  S33_1 --> S33_2: state_edge_33_1
+  S33_2 --> S33_3: state_edge_33_2
+  S33_3 --> S33_4: state_edge_33_3
+  S33_4 --> S33_5: state_edge_33_4
+  S33_5 --> S33_6: state_edge_33_5
+  S33_6 --> S33_4: state_edge_33_6
+  S33_2 --> S33_4: state_edge_33_7
+  S33_3 --> S33_3: state_edge_33_8
+  note left of S33_2: state_note_33_0
+  note left of S33_6: state_note_33_1`
+    const output = renderStateDiagram(source)
+    const exhaustedBudget = { remaining: 0 }
+    const layout = createStateDiagramLayout(prepareVisibleStateDiagram(parseMermaidStateDiagram(source)), {
+      minStateGap: 5,
+      searchBudget: exhaustedBudget,
+    })
+
+    for (const index of [0, 1, 2, 3, 4, 5, 6]) expect(output).toContain(`Node S33_${index}`)
+    for (const index of [0, 1, 2, 3, 4, 5, 6, 7, 8]) expect(output).toContain(`state_edge_33_${index}`)
+    for (const index of [0, 1]) expect(output).toContain(`state_note_33_${index}`)
+    expect(layout.noteBounds).toHaveLength(2)
+    expect(exhaustedBudget.remaining).toBe(0)
+    expectCompleteStateDiagram(source, output)
+  })
+
+  test("separates reciprocal RL branches sharing a parallel lane", () => {
+    const source = `stateDiagram-v2
+  direction RL
+  state "Node S237_0" as S237_0
+  state "Node S237_1" as S237_1
+  state "Node S237_2" as S237_2
+  state "Node S237_3" as S237_3
+  state "Node S237_4" as S237_4
+  state "Node S237_5" as S237_5
+  S237_0 --> S237_1: state_edge_237_0
+  S237_1 --> S237_2: state_edge_237_1
+  S237_2 --> S237_3: state_edge_237_2
+  S237_3 --> S237_4: state_edge_237_3
+  S237_4 --> S237_5: state_edge_237_4
+  S237_1 --> S237_5: state_edge_237_5
+  S237_4 --> S237_5: state_edge_237_6
+  S237_4 --> S237_0: state_edge_237_7
+  S237_0 --> S237_4: state_edge_237_8
+  note right of S237_1: state_note_237_0
+  note left of S237_5: state_note_237_1
+  note right of S237_2: state_note_237_2`
+    const output = renderStateDiagram(source)
+
+    for (const index of [0, 1, 2, 3, 4, 5]) expect(output).toContain(`Node S237_${index}`)
+    for (const index of [0, 1, 2, 3, 4, 5, 6, 7, 8]) expect(output).toContain(`state_edge_237_${index}`)
+    for (const index of [0, 1, 2]) expect(output).toContain(`state_note_237_${index}`)
+    expectCompleteStateDiagram(source, output)
   })
 
   test("separates labels on four parallel vertical transitions", () => {
@@ -499,6 +713,24 @@ stateDiagram-v2
   D --> C: dc`)
 
     for (const state of ["A", "B", "C", "D"]) expect(output.match(new RegExp(state, "g"))).toHaveLength(1)
+  })
+
+  test("keeps dense vertical fan routes out of sibling states", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction TB
+  state "Alpha" as A
+  state "Beta" as B
+  state "Gamma store" as C
+  state "Delta notifier" as D
+  A --> B
+  A --> C
+  A --> D
+  B --> A: back
+  B --> D: across`)
+
+    for (const text of ["Alpha", "Beta", "Gamma store", "Delta notifier", "back", "across"]) {
+      expect(output).toContain(text)
+    }
   })
 
   test("routes parallel transitions around vertically offset states", () => {
@@ -564,6 +796,68 @@ stateDiagram-v2
     expect(output).toContain("reset B")
     expect(output).not.toContain("╭─║")
     expect(output).not.toContain("║──")
+  })
+
+  test("places notes away from transition routes and labels", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction LR
+  A --> B: proceed only after validation
+  note left of B: blocking note`)
+
+    expect(output).toContain("proceed only after validation")
+    expect(output).toContain("blocking note")
+    expect(output.match(/ A | B /g)).toHaveLength(2)
+    expect(output).toMatch(/[╠╣]═/)
+  })
+
+  test("keeps adjacent note connectors out of other notes", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction LR
+  A --> B: advance
+  B --> C: continue
+  note right of B: first note
+  note right of B: second note
+  note left of C: left note`)
+
+    for (const text of ["advance", "continue", "first note", "second note", "left note"]) {
+      expect(output).toContain(text)
+    }
+    expect(output).not.toContain("╝═════╗")
+  })
+
+  test("keeps note connectors out of vertical loop and transition labels", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction TB
+  state "Processing Ω<br/>phase two" as Processing
+  state "Result ≥ threshold" as Result
+  Ready --> Processing: first
+  Ready --> Processing: duplicate
+  Processing --> Ready: restore
+  Processing --> Processing: heartbeat
+  Processing --> Result: result ≥ 1
+  Result --> Ready: reopen
+  note right of Processing: Unicode note 界`)
+
+    for (const text of ["heartbeat", "result ≥ 1", "Unicode note 界"]) {
+      expect(output).toContain(text)
+    }
+    expect(output).not.toContain("hea║tbeat")
+    expect(output).not.toContain("result║≥ 1")
+  })
+
+  test("keeps nested state labels clear of note connectors", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction LR
+  state "Open document" as Open {
+    [*] --> Clean: load
+    Clean --> Dirty: edit
+    Dirty --> Clean: save
+  }
+  note right of Dirty: unsaved changes`)
+
+    for (const text of ["Open document", "Clean", "Dirty", "load", "edit", "save", "unsaved changes"]) {
+      expect(output).toContain(text)
+    }
   })
 
   test("keeps duplicate feedback labels away from an independent return path", () => {
@@ -731,6 +1025,23 @@ stateDiagram-v2
     ]) {
       expect(output).toContain(text)
     }
+  })
+
+  test("routes vertical branch feedback around sibling state bodies", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction TB
+  [*] --> Root
+  Root --> A
+  Root --> B
+  A --> Merge
+  B --> Merge
+  Merge --> A: retry`)
+
+    for (const state of ["Root", "A", "B", "Merge"]) {
+      expect(output.match(new RegExp(`\\b${state}\\b`, "g"))).toHaveLength(1)
+    }
+    expect(output).toContain("│ B │")
+    expect(output).toContain("retry")
   })
 
   test("keeps lifecycle states intact around branches and feedback", () => {

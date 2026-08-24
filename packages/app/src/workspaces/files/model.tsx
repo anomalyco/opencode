@@ -225,20 +225,23 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           },
         )
 
-    const stop = sdk().event.on("filesystem.changed", (event) => {
-      invalidateFromWatcher(event, {
-        normalize: path.normalize,
-        hasFile: (file) => Boolean(store.file[file]),
-        isOpen: (file) => tabs.all().some((tab) => path.pathFromTab(tab) === file),
-        loadFile: (file) => {
-          void load(file, { force: true })
-        },
-        node: tree.node,
-        isDirLoaded: tree.isLoaded,
-        refreshDir: (dir) => {
-          void tree.listDir(dir, { force: true })
-        },
+    createEffect(() => {
+      const stop = sdk().event.on("filesystem.changed", (event) => {
+        invalidateFromWatcher(event, {
+          normalize: path.normalize,
+          hasFile: (file) => Boolean(store.file[file]),
+          isOpen: (file) => tabs.all().some((tab) => path.pathFromTab(tab) === file),
+          loadFile: (file) => {
+            void load(file, { force: true })
+          },
+          node: tree.node,
+          isDirLoaded: tree.isLoaded,
+          refreshDir: (dir) => {
+            void tree.listDir(dir, { force: true })
+          },
+        })
       })
+      onCleanup(stop)
     })
 
     const get = (input: string) => {
@@ -266,7 +269,6 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       withPath(input, (file) => view().setSelectedLines(file, range))
 
     onCleanup(() => {
-      stop()
       viewCache.clear()
     })
 

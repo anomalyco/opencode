@@ -153,6 +153,9 @@ export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
   module: Schema.String,
   method: Schema.String,
   reason: AIErrorReason,
+  // Raw provider payload as a string, so classified failures never lose the
+  // original error detail even when the pretty message is a summary.
+  body: Schema.optional(Schema.String),
 }) {
   override readonly cause = this.reason
 

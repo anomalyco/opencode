@@ -30,13 +30,7 @@ export interface Coordinator<Key, E, Reason = never> {
  * with this execution's exit.
  */
 type Execution<E, Reason> = {
-  /**
-   * Resolves with the execution's exit as a success value. Success-valued on purpose:
-   * completing a Deferred with an interrupted exit interrupts suspended waiters as it
-   * resumes them, and can starve later waiters of their resume entirely
-   * (Effect-TS/effect#7364). Joiners flatten the exit; idleness waiters just await.
-   */
-  readonly done: Deferred.Deferred<Exit.Exit<void, E>>
+  readonly done: Deferred.Deferred<void, E>
   owner?: Fiber.Fiber<void>
   scope: Promotable
   pendingWake?: Promotable
@@ -84,7 +78,7 @@ export const make = <Key, E, Reason = never>(options: {
 
     const start = (key: Key, force: boolean, scope: Promotable) => {
       const execution: Execution<E, Reason> = {
-        done: Deferred.makeUnsafe<Exit.Exit<void, E>>(),
+        done: Deferred.makeUnsafe<void, E>(),
         scope,
         stopping: false,
       }
@@ -114,7 +108,7 @@ export const make = <Key, E, Reason = never>(options: {
     const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>) => {
       if (execution.pendingWake) start(key, false, execution.pendingWake)
       else executions.delete(key)
-      Deferred.doneUnsafe(execution.done, Exit.succeed(exit))
+      Deferred.doneUnsafe(execution.done, exit)
     }
 
     const run = (key: Key): Effect.Effect<void, E> =>
@@ -122,10 +116,11 @@ export const make = <Key, E, Reason = never>(options: {
         const execution = executions.get(key)
         if (execution !== undefined) {
           // A stopping execution refuses joiners: wait out its cleanup, then run fresh.
-          if (execution.stopping) return Deferred.await(execution.done).pipe(Effect.andThen(run(key)))
-          return Deferred.await(execution.done).pipe(Effect.flatten)
+          if (execution.stopping)
+            return Deferred.await(execution.done).pipe(Effect.ignoreCause, Effect.andThen(run(key)))
+          return Deferred.await(execution.done)
         }
-        return Deferred.await(start(key, true, "input").done).pipe(Effect.flatten)
+        return Deferred.await(start(key, true, "input").done)
       })
 
     const wake = (key: Key, scope: Promotable = "input") =>
@@ -167,7 +162,7 @@ export const make = <Key, E, Reason = never>(options: {
       Effect.suspend(() => {
         const execution = executions.get(key)
         if (execution === undefined) return Effect.void
-        return Deferred.await(execution.done).pipe(Effect.andThen(awaitIdle(key)))
+        return Deferred.await(execution.done).pipe(Effect.ignoreCause, Effect.andThen(awaitIdle(key)))
       })
 
     return { active: Effect.sync(() => new Set(executions.keys())), run, wake, interrupt, awaitIdle }

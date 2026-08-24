@@ -3,6 +3,7 @@ import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
 import { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
+import { SessionStats } from "@opencode-ai/schema/session-stats"
 import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
@@ -143,6 +144,25 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           summary: "List sessions",
           description:
             "Retrieve sessions in the requested order. Items keep that order across pages; use cursor.next or cursor.previous to move through the ordered list.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.stats", "/api/session/stats", {
+        query: Schema.Struct({
+          from: Schema.NumberFromString.pipe(Schema.optional),
+          to: Schema.NumberFromString.pipe(Schema.optional),
+          project: Project.ID.pipe(Schema.optional),
+          timezone: Schema.String.pipe(Schema.optional),
+          tools: SessionStats.ToolMode.pipe(Schema.optional),
+        }),
+        success: Schema.Struct({ data: SessionStats.Info }),
+        error: InvalidRequestError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.stats",
+          summary: "Get session statistics",
+          description: "Aggregate local session activity, usage, and tool reliability for a time range.",
         }),
       ),
     )

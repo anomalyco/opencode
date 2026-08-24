@@ -17,6 +17,11 @@ import { detectMermaidDiagram } from "./detect.js"
 import { drawFlowchartDiagramGrid } from "./flowchart/drawing.js"
 import { parseMermaidFlowchartDiagram } from "./flowchart/parser.js"
 import { renderGridStyledText, resolveFlowchartStyleColors } from "./flowchart/style.js"
+import { drawGanttDiagramGrid } from "./gantt/drawing.js"
+import { parseMermaidGanttDiagram } from "./gantt/parser.js"
+import { renderGanttGridStyledText } from "./gantt/render-grid.js"
+import { resolveGanttStyleColors } from "./gantt/style.js"
+import type { GanttDiagramRenderOptions } from "./gantt/types.js"
 import { drawGitGraphDiagramGrid } from "./gitgraph/drawing.js"
 import { parseMermaidGitGraphDiagram } from "./gitgraph/parser.js"
 import { renderGitGraphGridStyledText } from "./gitgraph/render-grid.js"
@@ -48,6 +53,8 @@ export interface MermaidMarkdownRendererOptions {
   compact?: boolean
   /** Fold horizontal flowcharts that exceed this width. Defaults to 120 columns. */
   layoutMaxWidth?: number
+  /** Gantt-specific terminal rendering options. */
+  gantt?: Omit<GanttDiagramRenderOptions, "layoutMaxWidth">
   colors?: {
     text?: ColorInput
     primary?: ColorInput
@@ -157,6 +164,28 @@ function prepareDiagram(
             muted: color(colors.muted),
             warning: color(colors.warning),
             text: color(colors.text),
+          }),
+        ),
+        height: size.height,
+      }
+    }
+    case "gantt": {
+      const grid = drawGanttDiagramGrid(parseMermaidGanttDiagram(source), { ...options.gantt, layoutMaxWidth })
+      const size = grid.getTextSize({ trimBottom: true })
+      return {
+        kind,
+        source,
+        text: renderGanttGridStyledText(
+          grid,
+          resolveGanttStyleColors({
+            title: color(colors.text),
+            axis: color(colors.muted),
+            background: color(colors.background),
+            section: color(colors.secondary),
+            task: color(colors.primary),
+            active: color(colors.primary),
+            critical: color(colors.warning),
+            done: color(colors.muted),
           }),
         ),
         height: size.height,

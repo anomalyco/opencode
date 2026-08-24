@@ -101,6 +101,10 @@ export function createActiveSessionRegion(input: {
   const focus = () => {
     if (!input.session.data.isChild()) promptRef?.focus()
   }
+  const openParent = () => {
+    const id = input.session.data.parentID()
+    if (id) navigate(sessionHref(requireServerKey(input.session.identity.params.serverKey), id))
+  }
   const editable = (target: EventTarget | null | undefined) => {
     if (!(target instanceof HTMLElement)) return false
     return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName) || target.isContentEditable
@@ -113,6 +117,7 @@ export function createActiveSessionRegion(input: {
     return current instanceof HTMLElement ? current : undefined
   }
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return
     const path = event.composedPath()
     const target = path.find((item): item is HTMLElement => item instanceof HTMLElement)
     const active = activeElement()
@@ -124,6 +129,11 @@ export function createActiveSessionRegion(input: {
     ) {
       return
     }
+    if (event.key === "Escape" && input.session.data.isChild()) {
+      event.preventDefault()
+      openParent()
+      return
+    }
     if (active === promptRef) {
       if (event.key === "Escape") promptRef?.blur()
       return
@@ -133,7 +143,7 @@ export function createActiveSessionRegion(input: {
       const scroller = input.timeline.scroller()
       if (!scroller || !isScrollKeyTarget(target ?? null, key)) return
       if (scrollKeyOwner(scroller, target ?? null, key) !== scroller) return
-      input.timeline.view.markGesture(scroller)
+      input.timeline.view.markUserScroll(scroller)
       return
     }
     if (event.key.length !== 1 || event.key === "Unidentified" || event.ctrlKey || event.metaKey) return
@@ -172,10 +182,7 @@ export function createActiveSessionRegion(input: {
     },
     region: {
       centered: input.screen.centered,
-      openParent: () => {
-        const id = input.session.data.parentID()
-        if (id) navigate(sessionHref(requireServerKey(input.session.identity.params.serverKey), id))
-      },
+      openParent,
       prompt,
       setDockRef: input.timeline.view.setDockRef,
       setPromptRef: (element: HTMLDivElement) => {
@@ -204,9 +211,7 @@ export function ActiveSessionComposerRegion(props: {
 }) {
   const region = createSessionComposerRegionController({
     state: props.model.region.state,
-    sessionKey: props.session.identity.sessionKey,
-    sessionID: () => props.session.identity.params.id,
-    prompt: props.model.region.prompt,
+    parentID: props.session.data.parentID,
     centered: props.model.region.centered,
     onResponseSubmit: props.onResponseSubmit,
     openParent: props.model.region.openParent,

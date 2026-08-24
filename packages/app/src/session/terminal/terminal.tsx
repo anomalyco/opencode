@@ -15,6 +15,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { terminalFontFamily, useSettings } from "@/settings/model"
 import type { LocalPTY } from "@/session/terminal/context"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/session/terminal/runtime-adapters"
+import { terminalKeyInput } from "@/session/terminal/terminal-key-event"
 import { terminalWriter } from "@/session/terminal/writer"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
@@ -220,6 +221,14 @@ export const Terminal = (props: TerminalProps) => {
   let drop: VoidFunction | undefined
   let reconn: ReturnType<typeof setTimeout> | undefined
   let tries = 0
+  let revealed = false
+
+  const reveal = () => {
+    if (revealed) return
+    if (!serializeAddon.serializeAsText({ trimWhitespace: true })) return
+    revealed = true
+    container.style.opacity = "1"
+  }
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -338,9 +347,9 @@ export const Terminal = (props: TerminalProps) => {
   const focusTerminal = () => {
     const t = term
     if (!t) return
-    t.focus()
-    t.textarea?.focus()
-    setTimeout(() => t.textarea?.focus(), 0)
+    const focus = () => (t.textarea ? t.textarea.focus({ preventScroll: true }) : t.focus())
+    focus()
+    setTimeout(focus, 0)
   }
   const handlePointerDown = () => {
     const activeElement = document.activeElement
@@ -407,6 +416,12 @@ export const Terminal = (props: TerminalProps) => {
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
+
+        const input = terminalKeyInput(event)
+        if (input) {
+          t.input(input, true)
+          return true
+        }
 
         if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
           document.execCommand("copy")
@@ -493,6 +508,7 @@ export const Terminal = (props: TerminalProps) => {
 
       if (restore && restoreSize) {
         await write(restore)
+        reveal()
         fit.fit()
         scheduleSize(t.cols, t.rows)
         if (scrollY !== undefined) t.scrollToLine(scrollY)
@@ -502,6 +518,7 @@ export const Terminal = (props: TerminalProps) => {
         scheduleSize(t.cols, t.rows)
         if (restore) {
           await write(restore)
+          reveal()
           if (scrollY !== undefined) t.scrollToLine(scrollY)
         }
         startResize()
@@ -598,6 +615,7 @@ export const Terminal = (props: TerminalProps) => {
           const data = typeof event.data === "string" ? event.data : ""
           if (!data) return
           output?.push(data)
+          if (!revealed) output?.flush(reveal)
           cursor += data.length
           seek = cursor
         }
@@ -678,7 +696,7 @@ export const Terminal = (props: TerminalProps) => {
       dir="ltr"
       data-prevent-autofocus
       tabIndex={-1}
-      style={{ "background-color": terminalColors().background }}
+      style={{ "background-color": terminalColors().background, "caret-color": "transparent", opacity: 0 }}
       classList={{
         ...local.classList,
         "select-text": true,

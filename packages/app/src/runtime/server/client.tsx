@@ -72,11 +72,12 @@ type ServerSDKBase = {
 
 function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
   const platform = usePlatform()
-  const api = createApiForServer({ server: server.http, fetch: platform.fetch })
-  const pty = createPtyClient(api, { url: server.http.url })
+  const transport = createServerTransport({ http: server.http, fetch: platform.fetch })
   const events = createOpenCodeEventSource()
+  const reconnect = server.type === "sidecar" && server.variant === "base" ? server.reconnect : undefined
 
-  const connection = createClientConnection(api, {
+  const connection = createClientConnection(transport.api, {
+    reconnect: reconnect ? async (signal) => transport.update(await reconnect(signal)) : undefined,
     flushInterval: 16,
     pageLifecycle: true,
     onEvent(event) {
@@ -85,7 +86,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     log: {
       info(message, data) {
         if (message !== "event stream disconnected") return
-        console.info("[global-sdk] event stream disconnected", { url: server.http.url, ...data })
+        console.info("[global-sdk] event stream disconnected", { url: transport.url, managed: !!reconnect, ...data })
       },
     },
   })
@@ -93,11 +94,45 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   return {
     server,
     scope,
-    url: server.http.url,
-    api,
-    pty,
+    get url() {
+      return transport.url
+    },
+    get api() {
+      return transport.api
+    },
+    get pty() {
+      return transport.pty
+    },
     connection,
     event: events.event,
+  }
+}
+
+export function createServerTransport(input: { http: ServerConnection.HttpBase; fetch?: typeof globalThis.fetch }): {
+  update(http: ServerConnection.HttpBase): ServerApi
+  readonly url: string
+  readonly api: ServerApi
+  readonly pty: ReturnType<typeof createPtyClient>
+} {
+  const build = (http: ServerConnection.HttpBase) => {
+    const api = createApiForServer({ server: http, fetch: input.fetch })
+    return { http, api, pty: createPtyClient(api, { url: http.url }) }
+  }
+  const state = { current: build(input.http) }
+  return {
+    update(http: ServerConnection.HttpBase) {
+      state.current = build(http)
+      return state.current.api
+    },
+    get url() {
+      return state.current.http.url
+    },
+    get api() {
+      return state.current.api
+    },
+    get pty() {
+      return state.current.pty
+    },
   }
 }
 

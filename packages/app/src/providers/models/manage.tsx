@@ -7,6 +7,7 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { TextInput } from "@opencode-ai/ui/text-input"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { For, Show, type Component } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useLocal } from "@/providers/models/selection"
 import { popularProviders } from "@/providers/catalog/providers"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -23,6 +24,7 @@ export const DialogManageModels: Component = () => {
   const local = useLocal()
   const language = useLanguage()
   const dialog = useDialog()
+  const [store, setStore] = createStore({ collapsed: {} as Record<string, boolean> })
   const directory = () => decode64(local.slug())
 
   const handleConnectProvider = () => {
@@ -120,16 +122,38 @@ export const DialogManageModels: Component = () => {
                 }
               >
                 <For each={list.grouped.latest}>
-                  {(group) => (
-                    <div class="settings-section" data-component="settings-models-provider">
-                      <div class="settings-models-group-header justify-between">
-                        <div class="flex min-w-0 items-center gap-2">
-                          <ProviderIcon id={group.category} width={16} height={16} class="ml-4 shrink-0" />
-                          <h3 class="settings-section-title">{group.items[0].provider.name}</h3>
-                        </div>
-                        <div>
+                  {(group) => {
+                    const searching = () => list.filter().length > 0
+                    const expanded = () => searching() || !store.collapsed[group.category]
+
+                    return (
+                      <div
+                        class="settings-section"
+                        data-component="settings-models-provider"
+                        data-expanded={expanded() ? "" : undefined}
+                      >
+                        <div class="settings-models-group-header justify-between">
+                          <button
+                            type="button"
+                            class="settings-models-group-trigger"
+                            aria-expanded={expanded()}
+                            disabled={searching()}
+                            onClick={() => setStore("collapsed", group.category, expanded())}
+                          >
+                            <span class="settings-models-group-chevron">
+                              <Icon
+                                name="chevron-down"
+                                size="small"
+                                classList={{ "-rotate-90 rtl:rotate-90": !expanded() }}
+                              />
+                            </span>
+                            <span class="settings-models-group-label">
+                              <ProviderIcon id={group.category} width={16} height={16} class="shrink-0" />
+                              <span class="settings-section-title">{group.items[0].provider.name}</span>
+                            </span>
+                          </button>
                           <Switch
-                            class="mr-6"
+                            class="me-6"
                             checked={providerVisible(group.category)}
                             onChange={(checked) => setProviderVisibility(group.category, checked)}
                             hideLabel
@@ -137,26 +161,28 @@ export const DialogManageModels: Component = () => {
                             {group.items[0].provider.name}
                           </Switch>
                         </div>
+                        <Show when={expanded()}>
+                          <SettingsList>
+                            <For each={group.items}>
+                              {(item) => (
+                                <SettingsRow title={item.name} description="">
+                                  <div>
+                                    <Switch
+                                      checked={local.model.visible({ modelID: item.id, providerID: item.provider.id })}
+                                      onChange={(checked) => setModelVisibility(item, checked)}
+                                      hideLabel
+                                    >
+                                      {item.name}
+                                    </Switch>
+                                  </div>
+                                </SettingsRow>
+                              )}
+                            </For>
+                          </SettingsList>
+                        </Show>
                       </div>
-                      <SettingsList>
-                        <For each={group.items}>
-                          {(item) => (
-                            <SettingsRow title={item.name} description="">
-                              <div>
-                                <Switch
-                                  checked={local.model.visible({ modelID: item.id, providerID: item.provider.id })}
-                                  onChange={(checked) => setModelVisibility(item, checked)}
-                                  hideLabel
-                                >
-                                  {item.name}
-                                </Switch>
-                              </div>
-                            </SettingsRow>
-                          )}
-                        </For>
-                      </SettingsList>
-                    </div>
-                  )}
+                    )
+                  }}
                 </For>
               </Show>
             </Show>

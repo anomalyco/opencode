@@ -1,4 +1,5 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import type { SessionMessageUser } from "@opencode-ai/client/promise"
 import { Event } from "@opencode-ai/schema/event"
 import type { Accessor } from "solid-js"
 import type { PromptHistoryComment } from "./history/entry"
@@ -65,15 +66,43 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     const comments = input.comments.capture()
 
     try {
-      const session =
+      const started =
         input.adapter.kind === "active-session"
-          ? input.adapter.session()
+          ? { session: input.adapter.session(), cleanupReady: Promise.resolve() }
           : await input.adapter.start(value.selection, submission)
-      if (!session) return
+      if (!started) return
+      const session = started.session
 
       input.addToHistory(value.prompt, value.mode)
       input.resetHistory()
       const restore = () => restoreSubmission(input, submission, value, comments)
+
+      const command = value.mode === "normal" ? findCommand(session, value.text) : undefined
+      if (value.mode === "normal" && !command) {
+        if (value.images.length > 0) session.handoff?.set(handoffMessage(value))
+        const optimisticBusy = !input.adapter.working()
+        if (optimisticBusy) session.data.session.setStatus(session.id, "running")
+        const sending = sendPrompt(session, value).then(
+          () => ({ ok: true as const }),
+          (error) => ({ ok: false as const, error }),
+        )
+        await started.cleanupReady
+        input.adapter.submitted()
+        submission.context
+          .filter((item) => !!item.comment?.trim())
+          .forEach((item) => submission.target().context.remove(item.key))
+        input.comments.clear()
+        clearSubmission(input, submission)
+        void sending.then((result) => {
+          if (!result.ok)
+            failSubmission(input, session, "prompt", result.error, restore, value.id, () => {
+              if (optimisticBusy) session.data.session.setStatus(session.id, "idle")
+            })
+        })
+        return
+      }
+
+      await started.cleanupReady
       input.adapter.submitted()
 
       if (value.mode === "shell") {
@@ -82,7 +111,6 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         return
       }
 
-      const command = findCommand(session, value.text)
       if (command) {
         clearSubmission(input, submission)
         void sendCommand(session, value, command).catch((error) =>
@@ -91,14 +119,6 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         return
       }
 
-      submission.context
-        .filter((item) => !!item.comment?.trim())
-        .forEach((item) => submission.target().context.remove(item.key))
-      input.comments.clear()
-      clearSubmission(input, submission)
-      void sendPrompt(session, value).catch((error) =>
-        failSubmission(input, session, "prompt", error, restore, value.id),
-      )
     } finally {
       submitting.delete(input.adapter.state)
     }
@@ -107,6 +127,29 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
   return {
     submit,
     stop: () => (input.adapter.kind === "active-session" ? input.adapter.interrupt() : Promise.resolve()),
+  }
+}
+
+function handoffMessage(value: ComposerSubmission): SessionMessageUser {
+  return {
+    id: value.id,
+    type: "user",
+    text: value.text,
+    files: value.images.map((image) => ({
+      data: "",
+      mime: image.mime,
+      source: { type: "uri", uri: image.blob.url },
+      name: image.sourcePath ?? image.filename,
+    })),
+    metadata: {
+      displayText: value.text,
+      agent: value.selection.agent,
+      model: {
+        ...value.selection.model,
+        ...(value.selection.variant ? { variant: value.selection.variant } : {}),
+      },
+    },
+    time: { created: Date.now() },
   }
 }
 
@@ -313,8 +356,11 @@ function failSubmission(
   error: unknown,
   restore: () => boolean,
   messageID?: string,
+  rollback?: () => void,
 ) {
   if (messageID && session.admitted(messageID)) return
+  if (messageID) session.handoff?.clear(messageID)
+  rollback?.()
   restore()
   input.notify.failed(kind, error)
 }

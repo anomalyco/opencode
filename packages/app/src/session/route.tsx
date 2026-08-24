@@ -2,12 +2,11 @@ import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from 
 import { useParams } from "@solidjs/router"
 import { CommentsProvider } from "@/composer/comments"
 import { FileProvider } from "@/workspaces/files/model"
-import { LocationProvider, useWorkspaceLocation } from "@/workspaces/location"
+import { LocationProvider } from "@/workspaces/location"
 import { ModelsProvider } from "@/providers/models/models"
 import { useNotification } from "@/shell/notifications/notification"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { useData, useServer } from "@/runtime/server/current"
-import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection } from "@/runtime/server/registry"
 import { TerminalProvider } from "@/session/terminal/context"
 import { useSettingsCommand } from "@/settings/command"
@@ -15,7 +14,8 @@ import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import { useTabs } from "@/shell/tabs/tabs"
 import { requireServerKey } from "@/shell/routes/session"
 import { useSessionModel } from "./model"
-import { SessionPanelFrame, SessionRouteFrame } from "./session-frame"
+import { SessionPanelFrame } from "./session-frame"
+import { SessionIdentityHeader } from "./session-identity-header"
 import { IncompatibleServerPanel } from "./incompatible-server-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
@@ -31,7 +31,7 @@ export function TargetSessionRouteContent() {
       <MarkSessionNotificationsViewed sessionID={() => params.id} />
       <ModelsProvider directory={directory}>
         <TargetSessionSettingsCommand />
-        <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+        <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
           <ResolvedTargetSessionRoute />
         </SessionRouteErrorBoundary>
       </ModelsProvider>
@@ -45,16 +45,14 @@ function TargetSessionSettingsCommand() {
 }
 
 function SessionRouteErrorBoundary(
-  props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key; padded?: boolean }>,
+  props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key }>,
 ) {
   return (
     <ErrorBoundary
       fallback={(error) => (
-        <SessionRouteFrame padded={props.padded}>
-          <SessionPanelFrame raised={!!props.sessionID}>
-            <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
-          </SessionPanelFrame>
-        </SessionRouteFrame>
+        <SessionStatePanel>
+          <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
+        </SessionStatePanel>
       )}
     >
       {props.children}
@@ -78,18 +76,16 @@ function ResolvedTargetSessionRoute() {
     <Show
       when={!server.health?.incompatible}
       fallback={
-        <SessionRouteFrame padded>
-          <SessionPanelFrame raised>
-            <IncompatibleServerPanel
-              onClose={() => tabs.removeSessionTab({ server: server.key, sessionId: params.id })}
-            />
-          </SessionPanelFrame>
-        </SessionRouteFrame>
+        <SessionStatePanel>
+          <IncompatibleServerPanel
+            onClose={() => tabs.removeSessionTab({ server: server.key, sessionId: params.id })}
+          />
+        </SessionStatePanel>
       }
     >
-      <Show when={directory()}>
+      <Show when={directory()} fallback={<PendingSessionState sessionID={params.id} />}>
         {(value) => (
-          <LocationProvider directory={value()}>
+          <LocationProvider directory={value}>
             <SessionUIProvider directory={value()} server={server.key}>
               <TargetSessionPage />
             </SessionUIProvider>
@@ -100,24 +96,35 @@ function ResolvedTargetSessionRoute() {
   )
 }
 
-function TargetSessionPage() {
-  const location = useWorkspaceLocation()
-  const server = useServerSDK()
-
+function PendingSessionState(props: { sessionID: string }) {
   return (
-    // Keep workspace-scoped file, prompt, comment, and terminal state alive when
-    // the user switches between Sessions in the same workspace.
-    <Show when={`${server.scope}\0${location().directory}`} keyed>
-      <TerminalProvider>
-        <FileProvider>
-          <ComposerPersistenceProvider>
-            <CommentsProvider>
-              <SessionPage />
-            </CommentsProvider>
-          </ComposerPersistenceProvider>
-        </FileProvider>
-      </TerminalProvider>
-    </Show>
+    <SessionStatePanel>
+      <SessionIdentityHeader sessionID={props.sessionID} />
+    </SessionStatePanel>
+  )
+}
+
+function SessionStatePanel(props: ParentProps) {
+  return (
+    <div class="flex min-h-0 flex-1 p-2">
+      <SessionPanelFrame raised>{props.children}</SessionPanelFrame>
+    </div>
+  )
+}
+
+function TargetSessionPage() {
+  return (
+    // These providers select their scoped state reactively and retain bounded caches,
+    // so keep their owners alive while navigating between workspaces on this server.
+    <TerminalProvider>
+      <FileProvider>
+        <ComposerPersistenceProvider>
+          <CommentsProvider>
+            <SessionPage />
+          </CommentsProvider>
+        </ComposerPersistenceProvider>
+      </FileProvider>
+    </TerminalProvider>
   )
 }
 

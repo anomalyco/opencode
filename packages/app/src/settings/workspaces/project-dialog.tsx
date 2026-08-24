@@ -96,7 +96,7 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
               </Field>
 
               <div class="flex w-full flex-col gap-2">
-                <div class="select-none text-[13px] font-[530] leading-none tracking-[-0.04px] text-v2-text-text-base">
+                <div class="select-none text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base">
                   {language.t("dialog.project.edit.icon")}
                 </div>
                 <div class="flex items-center gap-3">
@@ -150,7 +150,7 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
 
               <Show when={!model.store.iconOverride}>
                 <div class="flex w-full flex-col gap-2">
-                  <div class="select-none text-[13px] font-[530] leading-none tracking-[-0.04px] text-v2-text-text-base">
+                  <div class="select-none text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base">
                     {language.t("dialog.project.edit.color")}
                   </div>
                   <div class="-ml-1 flex gap-1.5">

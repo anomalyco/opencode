@@ -26,6 +26,8 @@ export function HomeProjects(props: { projects: HomeProjectsController; scroll: 
       onSetDefaultServer={props.projects.server.setDefault}
       canRemoveServer={props.projects.server.canRemove}
       onRemoveServer={props.projects.server.remove}
+      canHideServer={props.projects.server.canHide}
+      onHideServer={props.projects.server.hide}
       onMoveProject={props.projects.project.move}
       onSelectProject={props.projects.project.select}
       onAddProjects={props.projects.project.add}

@@ -11,6 +11,8 @@ import type {
   PluginListOutput,
   SessionListInput,
   SessionListOutput,
+  SessionStatsInput,
+  SessionStatsOutput,
   SessionCreateInput,
   SessionCreateOutput,
   SessionImportInput,
@@ -454,6 +456,24 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      stats: (input?: SessionStatsInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionStatsOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/stats`,
+            query: {
+              from: input?.["from"],
+              to: input?.["to"],
+              project: input?.["project"],
+              timezone: input?.["timezone"],
+              tools: input?.["tools"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       create: (input?: SessionCreateInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionCreateOutput }>(
           {

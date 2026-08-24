@@ -24,6 +24,7 @@ const updaterHandler = (state: UpdaterState) => {
 
 export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
+  reconnectService: () => invoke("AppReconnectService"),
   wslServers: {
     getState: () => invoke("WslGetState").then(mutable),
     subscribe: (cb) => {
@@ -86,7 +87,7 @@ export const api: ElectronAPI = {
   draftBlobPut: (data) => invoke("DraftsPutBlob", { data: new Uint8Array(data) }),
   draftBlobGet: (id) => invoke("DraftsGetBlob", { id }).then((data) => (data ? toArrayBuffer(data) : null)),
 
-  getWindowID: () => invoke("WindowGetId"),
+  getWindowID: () => window.electron.windowID,
   themeReady: () => invoke("WindowThemeReady"),
   onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
   onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb(mutable(event.urls))),
@@ -105,6 +106,7 @@ export const api: ElectronAPI = {
     invoke("FilesReadClipboardImage").then((image) =>
       image ? { ...image, buffer: toArrayBuffer(image.buffer) } : null,
     ),
+  writeClipboardText: (text) => invoke("FilesWriteClipboardText", { text }),
   getWindowFocused: () => invoke("WindowGetFocused"),
   getWindowFullscreen: () => invoke("WindowGetFullscreen"),
   onWindowFullscreenChanged: (cb) => listen("WindowFullscreenChanged", (event) => cb(event.fullscreen)),

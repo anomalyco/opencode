@@ -109,7 +109,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -162,7 +192,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -236,7 +296,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -309,7 +399,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -378,11 +498,7 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^wrk"
-                    }
-                  ]
+                  "pattern": "^wrk"
                 },
                 {
                   "type": "null"
@@ -428,7 +544,14 @@
             "name": "search",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_f090cb615c84"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false
           },
@@ -441,11 +564,7 @@
                   "anyOf": [
                     {
                       "type": "string",
-                      "allOf": [
-                        {
-                          "pattern": "^ses"
-                        }
-                      ]
+                      "pattern": "^ses"
                     },
                     {
                       "type": "string",
@@ -625,11 +744,7 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "allOf": [
-                          {
-                            "pattern": "^ses"
-                          }
-                        ]
+                        "pattern": "^ses"
                       },
                       {
                         "type": "null"
@@ -637,16 +752,44 @@
                     ]
                   },
                   "title": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "agent": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "model": {
-                    "$ref": "#/components/schemas/Union_6a162d0a021d"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Model.Ref"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "location": {
-                    "$ref": "#/components/schemas/Union_5ee94d3ca88d"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Location.Ref"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -655,6 +798,139 @@
           },
           "required": true
         }
+      }
+    },
+    "/api/session/stats": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "v2.session.stats",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "tools",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["none", "summary", "detail"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SessionStats.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Aggregate local session activity, usage, and tool reliability for a time range.",
+        "summary": "Get session statistics"
       }
     },
     "/api/session/import": {
@@ -724,10 +1000,20 @@
                     "$ref": "#/components/schemas/Session.Info"
                   },
                   "messages": {
-                    "$ref": "#/components/schemas/Arrays_fa246a9267ec"
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Session.Message.Info"
+                    }
                   },
                   "location": {
-                    "$ref": "#/components/schemas/Union_5ee94d3ca88d"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Location.Ref"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["info", "messages"],
@@ -749,11 +1035,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -761,7 +1043,15 @@
             "name": "sanitize",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_e13209ef6bf4"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false
           }
@@ -894,11 +1184,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -965,11 +1251,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -1031,11 +1313,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -1138,11 +1416,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -1221,11 +1495,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -1304,11 +1574,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -1387,11 +1653,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -1452,14 +1714,17 @@
                   },
                   "workspaceID": {
                     "type": "string",
-                    "allOf": [
-                      {
-                        "pattern": "^wrk"
-                      }
-                    ]
+                    "pattern": "^wrk"
                   },
                   "delivery": {
-                    "$ref": "#/components/schemas/Union_1f50b1b03235"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["directory"],
@@ -1481,11 +1746,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -1573,28 +1834,59 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "$ref": "#/components/schemas/Union_f8b4c9e24aa0"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "text": {
                     "type": "string"
                   },
                   "files": {
-                    "$ref": "#/components/schemas/Arrays_3ff7cb2a474f"
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PromptInput.FileAttachment"
+                    }
                   },
                   "agents": {
-                    "$ref": "#/components/schemas/Arrays_e1027de4b984"
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Prompt.AgentAttachment"
+                    }
                   },
                   "skills": {
-                    "$ref": "#/components/schemas/Arrays_c17502465996"
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PromptInput.SkillAttachment"
+                    }
                   },
                   "metadata": {
-                    "$ref": "#/components/schemas/Objects_a2c799262a3c"
+                    "type": "object"
                   },
                   "delivery": {
-                    "$ref": "#/components/schemas/Union_1f50b1b03235"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "resume": {
-                    "$ref": "#/components/schemas/Union_6a1762611a44"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["text"],
@@ -1616,11 +1908,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -1721,34 +2009,86 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "$ref": "#/components/schemas/Union_f8b4c9e24aa0"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "command": {
                     "type": "string"
                   },
                   "arguments": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "agent": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "model": {
-                    "$ref": "#/components/schemas/Union_6a162d0a021d"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Model.Ref"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "files": {
-                    "$ref": "#/components/schemas/Arrays_3ff7cb2a474f"
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PromptInput.FileAttachment"
+                    }
                   },
                   "agents": {
-                    "$ref": "#/components/schemas/Arrays_e1027de4b984"
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Prompt.AgentAttachment"
+                    }
                   },
                   "skills": {
-                    "$ref": "#/components/schemas/Arrays_c17502465996"
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PromptInput.SkillAttachment"
+                    }
                   },
                   "delivery": {
-                    "$ref": "#/components/schemas/Union_1f50b1b03235"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "resume": {
-                    "$ref": "#/components/schemas/Union_6a1762611a44"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["command"],
@@ -1770,11 +2110,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -1834,13 +2170,28 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "$ref": "#/components/schemas/Union_f8b4c9e24aa0"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "skill": {
                     "type": "string"
                   },
                   "resume": {
-                    "$ref": "#/components/schemas/Union_6a1762611a44"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["skill"],
@@ -1862,11 +2213,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -1947,22 +2294,51 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "$ref": "#/components/schemas/Union_f8b4c9e24aa0"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "text": {
                     "type": "string"
                   },
                   "description": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "metadata": {
-                    "$ref": "#/components/schemas/Objects_a2c799262a3c"
+                    "type": "object"
                   },
                   "delivery": {
-                    "$ref": "#/components/schemas/Union_1f50b1b03235"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "resume": {
-                    "$ref": "#/components/schemas/Union_6a1762611a44"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["text"],
@@ -1984,11 +2360,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -2048,11 +2420,7 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "allOf": [
-                          {
-                            "pattern": "^evt_"
-                          }
-                        ]
+                        "pattern": "^evt_"
                       },
                       {
                         "type": "null"
@@ -2082,11 +2450,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -2167,10 +2531,25 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "$ref": "#/components/schemas/Union_f8b4c9e24aa0"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "delivery": {
-                    "$ref": "#/components/schemas/Union_1f50b1b03235"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -2191,11 +2570,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -2267,11 +2642,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -2366,14 +2737,17 @@
                 "properties": {
                   "messageID": {
                     "type": "string",
-                    "allOf": [
-                      {
-                        "pattern": "^msg_"
-                      }
-                    ]
+                    "pattern": "^msg_"
                   },
                   "files": {
-                    "$ref": "#/components/schemas/Union_6a1762611a44"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["messageID"],
@@ -2395,11 +2769,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -2480,11 +2850,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -2555,11 +2921,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -2641,11 +3003,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -2717,11 +3075,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -2730,11 +3084,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^msg_"
-                }
-              ]
+              "pattern": "^msg_"
             },
             "required": true
           }
@@ -2799,11 +3149,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -2812,11 +3158,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^msg_"
-                }
-              ]
+              "pattern": "^msg_"
             },
             "required": true
           }
@@ -2881,11 +3223,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -2894,11 +3232,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^msg_"
-                }
-              ]
+              "pattern": "^msg_"
             },
             "required": true
           }
@@ -2963,11 +3297,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -3046,11 +3376,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -3143,11 +3469,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -3217,11 +3539,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -3317,11 +3635,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -3344,7 +3658,15 @@
             "name": "follow",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_e13209ef6bf4"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false
           }
@@ -3487,11 +3809,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -3499,7 +3817,15 @@
             "name": "continue",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_e13209ef6bf4"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false
           }
@@ -3561,11 +3887,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -3627,11 +3949,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -3640,11 +3958,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^msg_"
-                }
-              ]
+              "pattern": "^msg_"
             },
             "required": true
           }
@@ -3720,11 +4034,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -3799,11 +4109,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -3854,11 +4160,7 @@
                 "properties": {
                   "idle": {
                     "type": "integer",
-                    "allOf": [
-                      {
-                        "minimum": 0
-                      }
-                    ]
+                    "minimum": 0
                   }
                 },
                 "required": ["idle"],
@@ -3880,11 +4182,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -4011,7 +4309,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4087,7 +4415,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4167,7 +4525,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4236,7 +4624,14 @@
                     "type": "string"
                   },
                   "model": {
-                    "$ref": "#/components/schemas/Union_6a162d0a021d"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Model.Ref"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["prompt"],
@@ -4257,7 +4652,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4341,7 +4766,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4424,7 +4879,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4498,7 +4983,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4568,7 +5083,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4646,7 +5191,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4698,10 +5273,24 @@
                     "type": "string"
                   },
                   "answer": {
-                    "$ref": "#/components/schemas/Union_636af7bc29f5"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Form.Answer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "label": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["key"],
@@ -4730,7 +5319,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4799,10 +5418,24 @@
                     "type": "string"
                   },
                   "answer": {
-                    "$ref": "#/components/schemas/Union_636af7bc29f5"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Form.Answer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "label": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["methodID"],
@@ -4839,7 +5472,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4916,7 +5579,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -4978,7 +5671,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5027,7 +5750,14 @@
                 "type": "object",
                 "properties": {
                   "code": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -5055,7 +5785,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5124,7 +5884,14 @@
                     "type": "string"
                   },
                   "label": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["methodID"],
@@ -5161,7 +5928,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5238,7 +6035,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5284,7 +6111,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5358,7 +6215,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5434,7 +6321,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5498,7 +6415,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5562,7 +6509,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5618,7 +6595,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5689,7 +6696,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5758,7 +6795,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5849,7 +6916,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -5902,7 +6999,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -6155,11 +7282,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^frm_"
-                }
-              ]
+              "pattern": "^frm_"
             },
             "required": true
           }
@@ -6246,11 +7369,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^frm_"
-                }
-              ]
+              "pattern": "^frm_"
             },
             "required": true
           }
@@ -6337,11 +7456,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^frm_"
-                }
-              ]
+              "pattern": "^frm_"
             },
             "required": true
           }
@@ -6441,11 +7556,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^frm_"
-                }
-              ]
+              "pattern": "^frm_"
             },
             "required": true
           }
@@ -6519,7 +7630,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -6698,11 +7839,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -6721,11 +7858,7 @@
                       "properties": {
                         "id": {
                           "type": "string",
-                          "allOf": [
-                            {
-                              "pattern": "^per"
-                            }
-                          ]
+                          "pattern": "^per"
                         },
                         "effect": {
                           "$ref": "#/components/schemas/Permission.Effect"
@@ -6791,11 +7924,7 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "allOf": [
-                          {
-                            "pattern": "^per"
-                          }
-                        ]
+                        "pattern": "^per"
                       },
                       {
                         "type": "null"
@@ -6806,19 +7935,32 @@
                     "type": "string"
                   },
                   "resources": {
-                    "$ref": "#/components/schemas/Arrays_681004346c78"
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   },
                   "save": {
-                    "$ref": "#/components/schemas/Arrays_681004346c78"
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   },
                   "metadata": {
-                    "$ref": "#/components/schemas/Objects_a2c799262a3c"
+                    "type": "object"
                   },
                   "source": {
                     "$ref": "#/components/schemas/Permission.Source"
                   },
                   "agent": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["action", "resources"],
@@ -6838,11 +7980,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           }
@@ -6921,11 +8059,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -6934,11 +8068,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^per"
-                }
-              ]
+              "pattern": "^per"
             },
             "required": true
           }
@@ -7017,11 +8147,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
+              "pattern": "^ses"
             },
             "required": true
           },
@@ -7030,11 +8156,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^per"
-                }
-              ]
+              "pattern": "^per"
             },
             "required": true
           }
@@ -7097,7 +8219,14 @@
                     "$ref": "#/components/schemas/Permission.Reply"
                   },
                   "message": {
-                    "$ref": "#/components/schemas/Union_f090cb615c84"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["reply"],
@@ -7118,7 +8247,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -7172,7 +8331,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -7253,7 +8442,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -7351,7 +8570,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -7417,7 +8666,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -7606,7 +8885,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -7670,7 +8979,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -7768,11 +9107,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^pty"
-                }
-              ]
+              "pattern": "^pty"
             },
             "required": true
           },
@@ -7780,7 +9115,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -7852,11 +9217,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^pty"
-                }
-              ]
+              "pattern": "^pty"
             },
             "required": true
           },
@@ -7864,7 +9225,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -7940,19 +9331,11 @@
                     "properties": {
                       "rows": {
                         "type": "integer",
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ]
+                        "exclusiveMinimum": 0
                       },
                       "cols": {
                         "type": "integer",
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ]
+                        "exclusiveMinimum": 0
                       }
                     },
                     "required": ["rows", "cols"],
@@ -7975,11 +9358,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^pty"
-                }
-              ]
+              "pattern": "^pty"
             },
             "required": true
           },
@@ -7987,7 +9366,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -8044,11 +9453,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^pty"
-                }
-              ]
+              "pattern": "^pty"
             },
             "required": true
           },
@@ -8056,7 +9461,14 @@
             "name": "x-opencode-ticket",
             "in": "header",
             "schema": {
-              "$ref": "#/components/schemas/Union_f090cb615c84"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false
           },
@@ -8064,7 +9476,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -8148,11 +9590,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^pty"
-                }
-              ]
+              "pattern": "^pty"
             },
             "required": true
           },
@@ -8252,7 +9690,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -8316,7 +9784,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -8382,11 +9880,7 @@
                   },
                   "timeout": {
                     "type": "integer",
-                    "allOf": [
-                      {
-                        "minimum": 0
-                      }
-                    ]
+                    "minimum": 0
                   },
                   "metadata": {
                     "type": "object"
@@ -8411,11 +9905,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^sh_"
-                }
-              ]
+              "pattern": "^sh_"
             },
             "required": true
           },
@@ -8423,7 +9913,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -8495,11 +10015,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^sh_"
-                }
-              ]
+              "pattern": "^sh_"
             },
             "required": true
           },
@@ -8507,7 +10023,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -8564,11 +10110,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^sh_"
-                }
-              ]
+              "pattern": "^sh_"
             },
             "required": true
           },
@@ -8576,7 +10118,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -8646,11 +10218,7 @@
                 "properties": {
                   "timeout": {
                     "type": "integer",
-                    "allOf": [
-                      {
-                        "minimum": 0
-                      }
-                    ]
+                    "minimum": 0
                   }
                 },
                 "required": ["timeout"],
@@ -8672,11 +10240,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^sh_"
-                }
-              ]
+              "pattern": "^sh_"
             },
             "required": true
           },
@@ -8684,7 +10248,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -8695,11 +10289,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
-                }
-              ]
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
             },
             "required": false
           },
@@ -8708,11 +10298,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
-                }
-              ]
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
             },
             "required": false
           }
@@ -8730,7 +10316,25 @@
                       "$ref": "#/components/schemas/Location.InfoEncoded"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/Objects_9d53a00b1efb"
+                      "type": "object",
+                      "properties": {
+                        "output": {
+                          "type": "string"
+                        },
+                        "cursor": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "truncated": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["output", "cursor", "size", "truncated"],
+                      "additionalProperties": false
                     }
                   },
                   "required": ["location", "data"],
@@ -8783,7 +10387,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -9102,7 +10736,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -9165,7 +10829,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -9231,7 +10925,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -9363,7 +11087,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -9441,11 +11195,7 @@
                               "anyOf": [
                                 {
                                   "type": "integer",
-                                  "allOf": [
-                                    {
-                                      "minimum": 0
-                                    }
-                                  ]
+                                  "minimum": 0
                                 },
                                 {
                                   "type": "null"
@@ -9456,11 +11206,7 @@
                               "anyOf": [
                                 {
                                   "type": "integer",
-                                  "allOf": [
-                                    {
-                                      "minimum": 0
-                                    }
-                                  ]
+                                  "minimum": 0
                                 },
                                 {
                                   "type": "null"
@@ -9528,7 +11274,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -9604,7 +11380,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -9704,7 +11510,37 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Union_ffefb7e3c81d"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "required": false,
             "style": "deepObject",
@@ -9790,11 +11626,7 @@
           },
           "steps": {
             "type": "integer",
-            "allOf": [
-              {
-                "exclusiveMinimum": 0
-              }
-            ]
+            "exclusiveMinimum": 0
           },
           "permissions": {
             "$ref": "#/components/schemas/Permission.Ruleset"
@@ -9819,54 +11651,6 @@
         },
         "required": ["_tag", "agentID", "message"],
         "additionalProperties": false
-      },
-      "Arrays_042d796a7901": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/Prompt.FileAttachment"
-        }
-      },
-      "Arrays_3ff7cb2a474f": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/PromptInput.FileAttachment"
-        }
-      },
-      "Arrays_4df8e9fdc8e1": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/Form.When"
-        }
-      },
-      "Arrays_681004346c78": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "Arrays_92aa8803e81f": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/Prompt.SkillAttachment"
-        }
-      },
-      "Arrays_c17502465996": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/PromptInput.SkillAttachment"
-        }
-      },
-      "Arrays_e1027de4b984": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/Prompt.AgentAttachment"
-        }
-      },
-      "Arrays_fa246a9267ec": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/Session.Message.Info"
-        }
       },
       "Command.Info": {
         "type": "object",
@@ -9931,16 +11715,43 @@
         "type": "object",
         "properties": {
           "model": {
-            "$ref": "#/components/schemas/Union_85ca62cf1a33"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "providerID": {
+                    "type": "string",
+                    "pattern": "^[^/#]+$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "pattern": "^[^#]+$"
+                  },
+                  "variant": {
+                    "type": "string",
+                    "pattern": "^[^#]+$"
+                  }
+                },
+                "required": ["providerID", "model"],
+                "additionalProperties": false
+              }
+            ]
           },
           "request": {
             "type": "object",
             "properties": {
               "headers": {
-                "$ref": "#/components/schemas/Objects_3f161562db4a"
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
               },
               "body": {
-                "$ref": "#/components/schemas/Objects_a2c799262a3c"
+                "type": "object"
               }
             },
             "additionalProperties": false
@@ -9960,19 +11771,11 @@
           },
           "color": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^#[0-9a-fA-F]{6}$"
-              }
-            ]
+            "pattern": "^#[0-9a-fA-F]{6}$"
           },
           "steps": {
             "type": "integer",
-            "allOf": [
-              {
-                "exclusiveMinimum": 0
-              }
-            ]
+            "exclusiveMinimum": 0
           },
           "disabled": {
             "type": "boolean"
@@ -10024,7 +11827,31 @@
             "type": "string"
           },
           "model": {
-            "$ref": "#/components/schemas/Union_85ca62cf1a33"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "providerID": {
+                    "type": "string",
+                    "pattern": "^[^/#]+$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "pattern": "^[^#]+$"
+                  },
+                  "variant": {
+                    "type": "string",
+                    "pattern": "^[^#]+$"
+                  }
+                },
+                "required": ["providerID", "model"],
+                "additionalProperties": false
+              }
+            ]
           },
           "subtask": {
             "type": "boolean"
@@ -10117,7 +11944,31 @@
             "type": "string"
           },
           "model": {
-            "$ref": "#/components/schemas/Union_85ca62cf1a33"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "providerID": {
+                    "type": "string",
+                    "pattern": "^[^/#]+$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "pattern": "^[^#]+$"
+                  },
+                  "variant": {
+                    "type": "string",
+                    "pattern": "^[^#]+$"
+                  }
+                },
+                "required": ["providerID", "model"],
+                "additionalProperties": false
+              }
+            ]
           },
           "default_agent": {
             "type": "string"
@@ -10225,27 +12076,15 @@
                   },
                   "max_width": {
                     "type": "integer",
-                    "allOf": [
-                      {
-                        "exclusiveMinimum": 0
-                      }
-                    ]
+                    "exclusiveMinimum": 0
                   },
                   "max_height": {
                     "type": "integer",
-                    "allOf": [
-                      {
-                        "exclusiveMinimum": 0
-                      }
-                    ]
+                    "exclusiveMinimum": 0
                   },
                   "max_base64_bytes": {
                     "type": "integer",
-                    "allOf": [
-                      {
-                        "exclusiveMinimum": 0
-                      }
-                    ]
+                    "exclusiveMinimum": 0
                   }
                 },
                 "additionalProperties": false
@@ -10258,19 +12097,11 @@
             "properties": {
               "max_lines": {
                 "type": "integer",
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ]
+                "exclusiveMinimum": 0
               },
               "max_bytes": {
                 "type": "integer",
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ]
+                "exclusiveMinimum": 0
               }
             },
             "additionalProperties": false
@@ -10279,7 +12110,22 @@
             "type": "object",
             "properties": {
               "timeout": {
-                "$ref": "#/components/schemas/Objects_7b507c2fd81f"
+                "type": "object",
+                "properties": {
+                  "startup": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "catalog": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "execution": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "additionalProperties": false
               },
               "servers": {
                 "type": "object",
@@ -10308,22 +12154,14 @@
                 "properties": {
                   "tokens": {
                     "type": "integer",
-                    "allOf": [
-                      {
-                        "minimum": 0
-                      }
-                    ]
+                    "minimum": 0
                   }
                 },
                 "additionalProperties": false
               },
               "buffer": {
                 "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 0
-                  }
-                ]
+                "minimum": 0
               }
             },
             "additionalProperties": false
@@ -10410,11 +12248,7 @@
               },
               "subagent_depth": {
                 "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 0
-                  }
-                ]
+                "minimum": 0
               },
               "policies": {
                 "type": "array",
@@ -10532,13 +12366,16 @@
             "type": "string"
           },
           "settings": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "headers": {
-            "$ref": "#/components/schemas/Objects_3f161562db4a"
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "body": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "capabilities": {
             "$ref": "#/components/schemas/Model.Capabilities"
@@ -10552,13 +12389,16 @@
                   "type": "string"
                 },
                 "settings": {
-                  "$ref": "#/components/schemas/Objects_a2c799262a3c"
+                  "type": "object"
                 },
                 "headers": {
-                  "$ref": "#/components/schemas/Objects_3f161562db4a"
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
                 },
                 "body": {
-                  "$ref": "#/components/schemas/Objects_a2c799262a3c"
+                  "type": "object"
                 }
               },
               "required": ["id"],
@@ -10628,13 +12468,16 @@
             "type": "string"
           },
           "settings": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "headers": {
-            "$ref": "#/components/schemas/Objects_3f161562db4a"
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "body": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "models": {
             "type": "object",
@@ -10724,7 +12567,14 @@
             "type": "string"
           },
           "resource": {
-            "$ref": "#/components/schemas/Union_f090cb615c84"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["_tag", "message"],
@@ -10782,19 +12632,11 @@
           },
           "additions": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "deletions": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "status": {
             "type": "string",
@@ -10854,7 +12696,10 @@
             "type": "boolean"
           },
           "when": {
-            "$ref": "#/components/schemas/Arrays_4df8e9fdc8e1"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.When"
+            }
           },
           "type": {
             "type": "string",
@@ -10874,11 +12719,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^frm_"
-                  }
-                ]
+                "pattern": "^frm_"
               },
               {
                 "type": "null"
@@ -10984,11 +12825,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^frm_"
-              }
-            ]
+            "pattern": "^frm_"
           },
           "sessionID": {
             "type": "string"
@@ -11022,7 +12859,10 @@
             "type": "boolean"
           },
           "when": {
-            "$ref": "#/components/schemas/Arrays_4df8e9fdc8e1"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.When"
+            }
           },
           "type": {
             "type": "string",
@@ -11034,7 +12874,8 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_97d8d2942510"
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
               }
             ]
           },
@@ -11044,7 +12885,8 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_97d8d2942510"
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
               }
             ]
           },
@@ -11054,7 +12896,8 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_97d8d2942510"
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
               }
             ]
           }
@@ -11081,7 +12924,10 @@
             "type": "boolean"
           },
           "when": {
-            "$ref": "#/components/schemas/Arrays_4df8e9fdc8e1"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.When"
+            }
           },
           "type": {
             "type": "string",
@@ -11095,19 +12941,11 @@
           },
           "minItems": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "maxItems": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "custom": {
             "type": "boolean"
@@ -11138,7 +12976,10 @@
             "type": "boolean"
           },
           "when": {
-            "$ref": "#/components/schemas/Arrays_4df8e9fdc8e1"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.When"
+            }
           },
           "type": {
             "type": "string",
@@ -11150,7 +12991,8 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_97d8d2942510"
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
               }
             ]
           },
@@ -11160,7 +13002,8 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_97d8d2942510"
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
               }
             ]
           },
@@ -11170,7 +13013,8 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_97d8d2942510"
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
               }
             ]
           }
@@ -11260,7 +13104,10 @@
             "type": "boolean"
           },
           "when": {
-            "$ref": "#/components/schemas/Arrays_4df8e9fdc8e1"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.When"
+            }
           },
           "type": {
             "type": "string",
@@ -11272,19 +13119,11 @@
           },
           "minLength": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "maxLength": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "pattern": {
             "type": "string"
@@ -11314,7 +13153,15 @@
             "type": "string"
           },
           {
-            "$ref": "#/components/schemas/Union_00be4ed53f19"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
           },
           {
             "type": "boolean"
@@ -11343,7 +13190,15 @@
                 "type": "string"
               },
               {
-                "$ref": "#/components/schemas/Union_00be4ed53f19"
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
               },
               {
                 "type": "boolean"
@@ -11437,12 +13292,8 @@
       },
       "InstructionEntry.Key": {
         "type": "string",
-        "allOf": [
-          {
-            "pattern": "^[a-z0-9][a-z0-9._-]*$",
-            "description": "Instruction entry key (lowercase alphanumerics plus . _ -)"
-          }
-        ]
+        "pattern": "^[a-z0-9][a-z0-9._-]*$",
+        "description": "Instruction entry key (lowercase alphanumerics plus . _ -)"
       },
       "InstructionEntryValueTooLargeErrorEncoded": {
         "type": "object",
@@ -11481,7 +13332,33 @@
             "enum": ["auto", "code"]
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_03af97aacac9"
+            "type": "object",
+            "properties": {
+              "created": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "expires": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              }
+            },
+            "required": ["created", "expires"],
+            "additionalProperties": false
           }
         },
         "required": ["attemptID", "url", "instructions", "mode", "time"],
@@ -11497,7 +13374,33 @@
                 "enum": ["pending"]
               },
               "time": {
-                "$ref": "#/components/schemas/Objects_03af97aacac9"
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
               }
             },
             "required": ["status", "time"],
@@ -11511,7 +13414,33 @@
                 "enum": ["complete"]
               },
               "time": {
-                "$ref": "#/components/schemas/Objects_03af97aacac9"
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
               }
             },
             "required": ["status", "time"],
@@ -11528,7 +13457,33 @@
                 "type": "string"
               },
               "time": {
-                "$ref": "#/components/schemas/Objects_03af97aacac9"
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
               }
             },
             "required": ["status", "message", "time"],
@@ -11542,7 +13497,33 @@
                 "enum": ["expired"]
               },
               "time": {
-                "$ref": "#/components/schemas/Objects_03af97aacac9"
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
               }
             },
             "required": ["status", "time"],
@@ -11557,7 +13538,33 @@
             "type": "string"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_03af97aacac9"
+            "type": "object",
+            "properties": {
+              "created": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "expires": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              }
+            },
+            "required": ["created", "expires"],
+            "additionalProperties": false
           }
         },
         "required": ["attemptID", "time"],
@@ -11576,7 +13583,33 @@
                 "type": "string"
               },
               "time": {
-                "$ref": "#/components/schemas/Objects_03af97aacac9"
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
               }
             },
             "required": ["status", "time"],
@@ -11590,7 +13623,33 @@
                 "enum": ["complete"]
               },
               "time": {
-                "$ref": "#/components/schemas/Objects_03af97aacac9"
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
               }
             },
             "required": ["status", "time"],
@@ -11607,7 +13666,33 @@
                 "type": "string"
               },
               "time": {
-                "$ref": "#/components/schemas/Objects_03af97aacac9"
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
               }
             },
             "required": ["status", "message", "time"],
@@ -11621,7 +13706,33 @@
                 "enum": ["expired"]
               },
               "time": {
-                "$ref": "#/components/schemas/Objects_03af97aacac9"
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
               }
             },
             "required": ["status", "time"],
@@ -11772,10 +13883,24 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/Union_f090cb615c84"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "field": {
-            "$ref": "#/components/schemas/Union_f090cb615c84"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["_tag", "message"],
@@ -11789,11 +13914,7 @@
           },
           "workspaceID": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^wrk"
-              }
-            ]
+            "pattern": "^wrk"
           },
           "project": {
             "type": "object",
@@ -11823,11 +13944,7 @@
           },
           "workspaceID": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^wrk"
-              }
-            ]
+            "pattern": "^wrk"
           }
         },
         "required": ["directory"],
@@ -11862,7 +13979,22 @@
             "type": "boolean"
           },
           "timeout": {
-            "$ref": "#/components/schemas/Objects_7b507c2fd81f"
+            "type": "object",
+            "properties": {
+              "startup": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "catalog": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "execution": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["type", "command"],
@@ -11882,12 +14014,8 @@
           },
           "callback_port": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 1,
-                "maximum": 65535
-              }
-            ]
+            "minimum": 1,
+            "maximum": 65535
           },
           "redirect_uri": {
             "type": "string"
@@ -11929,7 +14057,22 @@
             "type": "boolean"
           },
           "timeout": {
-            "$ref": "#/components/schemas/Objects_7b507c2fd81f"
+            "type": "object",
+            "properties": {
+              "startup": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "catalog": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "execution": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["type", "url"],
@@ -12230,13 +14373,16 @@
             "type": "string"
           },
           "settings": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "headers": {
-            "$ref": "#/components/schemas/Objects_3f161562db4a"
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "body": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "capabilities": {
             "$ref": "#/components/schemas/Model.Capabilities"
@@ -12340,13 +14486,16 @@
             "type": "string"
           },
           "settings": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "headers": {
-            "$ref": "#/components/schemas/Objects_3f161562db4a"
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "body": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           }
         },
         "required": ["id"],
@@ -12357,97 +14506,6 @@
       },
       "Money.USDPerMillionTokens": {
         "type": "number"
-      },
-      "Objects_03af97aacac9": {
-        "type": "object",
-        "properties": {
-          "created": {
-            "$ref": "#/components/schemas/Union_00be4ed53f19"
-          },
-          "expires": {
-            "$ref": "#/components/schemas/Union_00be4ed53f19"
-          }
-        },
-        "required": ["created", "expires"],
-        "additionalProperties": false
-      },
-      "Objects_3f161562db4a": {
-        "type": "object",
-        "additionalProperties": {
-          "type": "string"
-        }
-      },
-      "Objects_7b507c2fd81f": {
-        "type": "object",
-        "properties": {
-          "startup": {
-            "type": "integer",
-            "allOf": [
-              {
-                "exclusiveMinimum": 0
-              }
-            ]
-          },
-          "catalog": {
-            "type": "integer",
-            "allOf": [
-              {
-                "exclusiveMinimum": 0
-              }
-            ]
-          },
-          "execution": {
-            "type": "integer",
-            "allOf": [
-              {
-                "exclusiveMinimum": 0
-              }
-            ]
-          }
-        },
-        "additionalProperties": false
-      },
-      "Objects_9d53a00b1efb": {
-        "type": "object",
-        "properties": {
-          "output": {
-            "type": "string"
-          },
-          "cursor": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
-          },
-          "size": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
-          },
-          "truncated": {
-            "type": "boolean"
-          }
-        },
-        "required": ["output", "cursor", "size", "truncated"],
-        "additionalProperties": false
-      },
-      "Objects_a2c799262a3c": {
-        "type": "object"
-      },
-      "Objects_d7bbfd8ec2f6": {
-        "type": "object",
-        "properties": {
-          "created": {
-            "type": "number"
-          }
-        },
-        "required": ["created"],
-        "additionalProperties": false
       },
       "Permission.Effect": {
         "type": "string",
@@ -12462,31 +14520,29 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^per"
-              }
-            ]
+            "pattern": "^per"
           },
           "sessionID": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^ses"
-              }
-            ]
+            "pattern": "^ses"
           },
           "action": {
             "type": "string"
           },
           "resources": {
-            "$ref": "#/components/schemas/Arrays_681004346c78"
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "save": {
-            "$ref": "#/components/schemas/Arrays_681004346c78"
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "source": {
             "$ref": "#/components/schemas/Permission.Source"
@@ -12755,27 +14811,15 @@
         "properties": {
           "created": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "updated": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "initialized": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           }
         },
         "required": ["created", "updated"],
@@ -12800,11 +14844,7 @@
       },
       "Prompt.Base64": {
         "type": "string",
-        "allOf": [
-          {
-            "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
-          }
-        ]
+        "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
       },
       "Prompt.FileAttachment": {
         "type": "object",
@@ -12944,13 +14984,16 @@
             "type": "string"
           },
           "settings": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "headers": {
-            "$ref": "#/components/schemas/Objects_3f161562db4a"
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "body": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           }
         },
         "required": ["id", "name", "activation", "package"],
@@ -13000,11 +15043,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^pty"
-              }
-            ]
+            "pattern": "^pty"
           },
           "title": {
             "type": "string"
@@ -13027,19 +15066,11 @@
           },
           "pid": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "exitCode": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           }
         },
         "required": ["id", "title", "command", "args", "cwd", "status", "pid"],
@@ -13070,11 +15101,7 @@
           },
           "expires_in": {
             "type": "integer",
-            "allOf": [
-              {
-                "exclusiveMinimum": 0
-              }
-            ]
+            "exclusiveMinimum": 0
           }
         },
         "required": ["ticket", "expires_in"],
@@ -13167,11 +15194,7 @@
           },
           "pid": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           }
         },
         "required": ["healthy", "version", "pid"],
@@ -13188,7 +15211,14 @@
             "type": "string"
           },
           "service": {
-            "$ref": "#/components/schemas/Union_f090cb615c84"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["_tag", "message"],
@@ -13205,11 +15235,7 @@
               },
               "messageID": {
                 "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^msg_"
-                  }
-                ]
+                "pattern": "^msg_"
               }
             },
             "required": ["type", "messageID"],
@@ -13224,11 +15250,7 @@
               },
               "messageID": {
                 "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^msg_"
-                  }
-                ]
+                "pattern": "^msg_"
               }
             },
             "required": ["type", "messageID"],
@@ -13247,11 +15269,7 @@
               },
               "messageID": {
                 "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^msg_"
-                  }
-                ]
+                "pattern": "^msg_"
               }
             },
             "required": ["type", "messageID"],
@@ -13275,19 +15293,11 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "sessionID": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^ses"
-              }
-            ]
+            "pattern": "^ses"
           },
           "timeCreated": {
             "type": "number"
@@ -13341,19 +15351,11 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "sessionID": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^ses"
-              }
-            ]
+            "pattern": "^ses"
           },
           "timeCreated": {
             "type": "number"
@@ -13393,19 +15395,11 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "sessionID": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^ses"
-              }
-            ]
+            "pattern": "^ses"
           },
           "timeCreated": {
             "type": "number"
@@ -13445,19 +15439,11 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "sessionID": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^ses"
-              }
-            ]
+            "pattern": "^ses"
           },
           "timeCreated": {
             "type": "number"
@@ -13483,16 +15469,25 @@
             "type": "string"
           },
           "files": {
-            "$ref": "#/components/schemas/Arrays_042d796a7901"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.FileAttachment"
+            }
           },
           "agents": {
-            "$ref": "#/components/schemas/Arrays_e1027de4b984"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.AgentAttachment"
+            }
           },
           "skills": {
-            "$ref": "#/components/schemas/Arrays_92aa8803e81f"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.SkillAttachment"
+            }
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           }
         },
         "required": ["text"],
@@ -13503,30 +15498,18 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^ses"
-              }
-            ]
+            "pattern": "^ses"
           },
           "parentID": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^ses"
-              }
-            ]
+            "pattern": "^ses"
           },
           "fork": {
             "type": "object",
             "properties": {
               "sessionID": {
                 "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^ses"
-                  }
-                ]
+                "pattern": "^ses"
               },
               "boundary": {
                 "$ref": "#/components/schemas/Session.ForkBoundary"
@@ -13597,17 +15580,20 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_d7bbfd8ec2f6"
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -13628,14 +15614,10 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
             "type": "object",
@@ -13755,11 +15737,7 @@
         "properties": {
           "attempt": {
             "type": "integer",
-            "allOf": [
-              {
-                "exclusiveMinimum": 0
-              }
-            ]
+            "exclusiveMinimum": 0
           },
           "at": {
             "type": "number"
@@ -13868,17 +15846,20 @@
           },
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_d7bbfd8ec2f6"
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "status": {
             "type": "string",
@@ -13907,17 +15888,20 @@
           },
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_d7bbfd8ec2f6"
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "status": {
             "type": "string",
@@ -13943,17 +15927,20 @@
           },
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_d7bbfd8ec2f6"
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "status": {
             "type": "string",
@@ -14012,17 +15999,20 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_d7bbfd8ec2f6"
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -14062,17 +16052,20 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_d7bbfd8ec2f6"
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -14108,14 +16101,10 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
             "type": "object",
@@ -14136,17 +16125,14 @@
           },
           "shellID": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^sh_"
-              }
-            ]
+            "pattern": "^sh_"
           },
           "command": {
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/Union_b6d68a8b3572"
+            "type": "string",
+            "enum": ["running", "exited", "timeout", "killed"]
           },
           "exit": {
             "anyOf": [
@@ -14154,12 +16140,31 @@
                 "type": "number"
               },
               {
-                "$ref": "#/components/schemas/Union_97d8d2942510"
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
               }
             ]
           },
           "output": {
-            "$ref": "#/components/schemas/Objects_9d53a00b1efb"
+            "type": "object",
+            "properties": {
+              "output": {
+                "type": "string"
+              },
+              "cursor": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "truncated": {
+                "type": "boolean"
+              }
+            },
+            "required": ["output", "cursor", "size", "truncated"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "time", "type", "shellID", "command", "status"],
@@ -14170,17 +16175,20 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_d7bbfd8ec2f6"
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -14204,17 +16212,20 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_d7bbfd8ec2f6"
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "text": {
             "type": "string"
@@ -14235,17 +16246,20 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_d7bbfd8ec2f6"
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -14358,29 +16372,41 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "metadata": {
-            "$ref": "#/components/schemas/Objects_a2c799262a3c"
+            "type": "object"
           },
           "time": {
-            "$ref": "#/components/schemas/Objects_d7bbfd8ec2f6"
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "text": {
             "type": "string"
           },
           "files": {
-            "$ref": "#/components/schemas/Arrays_042d796a7901"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.FileAttachment"
+            }
           },
           "agents": {
-            "$ref": "#/components/schemas/Arrays_e1027de4b984"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.AgentAttachment"
+            }
           },
           "skills": {
-            "$ref": "#/components/schemas/Arrays_92aa8803e81f"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.SkillAttachment"
+            }
           },
           "type": {
             "type": "string",
@@ -14395,11 +16421,7 @@
         "properties": {
           "messageID": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
+            "pattern": "^msg_"
           },
           "partID": {
             "type": "string"
@@ -14428,12 +16450,8 @@
           },
           "status": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 100,
-                "maximum": 599
-              }
-            ]
+            "minimum": 100,
+            "maximum": 599
           }
         },
         "required": ["type", "message"],
@@ -14501,10 +16519,24 @@
             "type": "object",
             "properties": {
               "previous": {
-                "$ref": "#/components/schemas/Union_f090cb615c84"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "next": {
-                "$ref": "#/components/schemas/Union_f090cb615c84"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "additionalProperties": false
@@ -14530,6 +16562,219 @@
         "required": ["_tag", "sessionID", "message"],
         "additionalProperties": false
       },
+      "SessionStats.Activity": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["date", "steps"],
+        "additionalProperties": false
+      },
+      "SessionStats.Info": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "number"
+              },
+              "to": {
+                "type": "number"
+              }
+            },
+            "required": ["from", "to"],
+            "additionalProperties": false
+          },
+          "sessions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "subagents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "prompts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/TokenUsage.Info"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "tools": {
+            "$ref": "#/components/schemas/SessionStats.Tools"
+          },
+          "activeDays": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "streak": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionStats.Activity"
+            }
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionStats.ModelUsage"
+            }
+          }
+        },
+        "required": [
+          "range",
+          "sessions",
+          "subagents",
+          "prompts",
+          "steps",
+          "tokens",
+          "cost",
+          "tools",
+          "activeDays",
+          "streak",
+          "activity",
+          "models"
+        ],
+        "additionalProperties": false
+      },
+      "SessionStats.ModelUsage": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/TokenUsage.Info"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Money.USD"
+          }
+        },
+        "required": ["model", "steps", "tokens", "cost"],
+        "additionalProperties": false
+      },
+      "SessionStats.ToolTotals": {
+        "type": "object",
+        "properties": {
+          "calls": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "succeeded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unfinished": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["calls", "succeeded", "failed", "unfinished"],
+        "additionalProperties": false
+      },
+      "SessionStats.ToolUsage": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "calls": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "succeeded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unfinished": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "durationP50": {
+            "type": "number"
+          }
+        },
+        "required": ["name", "calls", "succeeded", "failed", "unfinished"],
+        "additionalProperties": false
+      },
+      "SessionStats.Tools": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["none"]
+              }
+            },
+            "required": ["mode"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["summary"]
+              },
+              "totals": {
+                "$ref": "#/components/schemas/SessionStats.ToolTotals"
+              }
+            },
+            "required": ["mode", "totals"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["detail"]
+              },
+              "totals": {
+                "$ref": "#/components/schemas/SessionStats.ToolTotals"
+              },
+              "usage": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SessionStats.ToolUsage"
+                }
+              }
+            },
+            "required": ["mode", "totals", "usage"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "SessionTransfer.Data": {
         "type": "object",
         "properties": {
@@ -14537,7 +16782,10 @@
             "$ref": "#/components/schemas/Session.Info"
           },
           "messages": {
-            "$ref": "#/components/schemas/Arrays_fa246a9267ec"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session.Message.Info"
+            }
           }
         },
         "required": ["info", "messages"],
@@ -14587,14 +16835,11 @@
         "properties": {
           "id": {
             "type": "string",
-            "allOf": [
-              {
-                "pattern": "^sh_"
-              }
-            ]
+            "pattern": "^sh_"
           },
           "status": {
-            "$ref": "#/components/schemas/Union_b6d68a8b3572"
+            "type": "string",
+            "enum": ["running", "exited", "timeout", "killed"]
           },
           "command": {
             "type": "string"
@@ -14610,11 +16855,7 @@
           },
           "pid": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "exit": {
             "type": "number"
@@ -14754,7 +16995,14 @@
             "type": "string"
           },
           "name": {
-            "$ref": "#/components/schemas/Union_f090cb615c84"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["type", "uri", "mime"],
@@ -14788,172 +17036,6 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
-      "Union_00be4ed53f19": {
-        "anyOf": [
-          {
-            "type": "number"
-          },
-          {
-            "$ref": "#/components/schemas/Union_97d8d2942510"
-          }
-        ]
-      },
-      "Union_1f50b1b03235": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Session.Inbox.Delivery"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "Union_5ee94d3ca88d": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "Union_636af7bc29f5": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Form.Answer"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "Union_6a162d0a021d": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Model.Ref"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "Union_6a1762611a44": {
-        "anyOf": [
-          {
-            "type": "boolean"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "Union_85ca62cf1a33": {
-        "anyOf": [
-          {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
-              }
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "providerID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^[^/#]+$"
-                  }
-                ]
-              },
-              "model": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^[^#]+$"
-                  }
-                ]
-              },
-              "variant": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^[^#]+$"
-                  }
-                ]
-              }
-            },
-            "required": ["providerID", "model"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "Union_97d8d2942510": {
-        "type": "string",
-        "enum": ["Infinity", "-Infinity", "NaN"]
-      },
-      "Union_b6d68a8b3572": {
-        "type": "string",
-        "enum": ["running", "exited", "timeout", "killed"]
-      },
-      "Union_e13209ef6bf4": {
-        "anyOf": [
-          {
-            "type": "string",
-            "enum": ["true", "false"]
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "Union_f090cb615c84": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "Union_f8b4c9e24aa0": {
-        "anyOf": [
-          {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^msg_"
-              }
-            ]
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "Union_ffefb7e3c81d": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "directory": {
-                "$ref": "#/components/schemas/Union_f090cb615c84"
-              },
-              "workspace": {
-                "$ref": "#/components/schemas/Union_f090cb615c84"
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
       "UnknownErrorEncoded": {
         "type": "object",
         "properties": {
@@ -14965,7 +17047,14 @@
             "type": "string"
           },
           "ref": {
-            "$ref": "#/components/schemas/Union_f090cb615c84"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["_tag", "message"],
@@ -14995,19 +17084,11 @@
           },
           "additions": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "deletions": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0
           },
           "status": {
             "type": "string",
@@ -15128,7 +17209,14 @@
                 "type": "string"
               },
               "forceRequired": {
-                "$ref": "#/components/schemas/Union_6a1762611a44"
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": ["message"],

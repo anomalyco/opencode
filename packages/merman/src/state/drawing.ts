@@ -1,5 +1,6 @@
 import { BorderChars, type BorderCharacters, type BorderStyle } from "@opentui/core"
 import { DiagramCanvas, type DiagramCanvasCell } from "../core/canvas.js"
+import { directionBetween, orthogonalPathPoints, type DiagramDirection } from "../core/geometry.js"
 import {
   diagramArrowHead,
   diagramLineGlyph,
@@ -11,9 +12,11 @@ import {
   createStateDiagramLayout,
   expandCompositeBoundsForFeedback,
   expandCompositeBoundsForInternalTransitions,
+  translateStateDiagramLayout,
   type StateDiagramBoxBounds as BoxBounds,
   type StateDiagramNoteBounds as StateNoteBounds,
 } from "./layout.js"
+import { stateDiagramNoteConnector } from "./note.js"
 import { DEFAULT_STATE_ARROW_HEAD_STYLE, DEFAULT_STATE_BORDER_STYLE, normalizeStateMinStateGap } from "./options.js"
 import type { StateGrid } from "./render-grid.js"
 import {
@@ -22,6 +25,7 @@ import {
   measureStateTransitionLabel,
   type StateTransitionRenderPlan,
 } from "./routing.js"
+import { createStateSearchBudget } from "./search.js"
 import type {
   NoteConnectorRampStyle,
   StateCellStyle,
@@ -36,13 +40,14 @@ type StateCell = DiagramCanvasCell<StateCellStyle>
 
 function translateTransitionPlans(
   plans: readonly StateTransitionRenderPlan[],
+  dx: number,
   dy: number,
 ): StateTransitionRenderPlan[] {
   return plans.map((plan) => ({
     ...plan,
-    cells: plan.cells.map((cell) => ({ ...cell, y: cell.y + dy })),
-    path: plan.path.map(([x, y]) => [x, y + dy]),
-    label: plan.label ? { ...plan.label, y: plan.label.y + dy } : undefined,
+    cells: plan.cells.map((cell) => ({ ...cell, x: cell.x + dx, y: cell.y + dy })),
+    path: plan.path.map(([x, y]) => [x + dx, y + dy]),
+    label: plan.label ? { ...plan.label, x: plan.label.x + dx, y: plan.label.y + dy } : undefined,
   }))
 }
 
@@ -62,22 +67,24 @@ function makeGrid(width: number, height: number): StateGrid {
   })
 }
 
-function setCell(grid: StateGrid, x: number, y: number, char: string, style?: StateCellStyle): void {
-  grid.setCell(x, y, char, style)
-}
-
-function setText(grid: StateGrid, x: number, y: number, text: string, style?: StateCellStyle): void {
-  grid.setText(x, y, text, style)
-}
-
-function setTransitionLabel(
+function setCell(
   grid: StateGrid,
   x: number,
   y: number,
-  lines: readonly string[],
-  style: StateCellStyle,
+  char: string,
+  style?: StateCellStyle,
 ): void {
-  lines.forEach((line, index) => setText(grid, x, y + index, line, style))
+  grid.setCell(x, y, char, style)
+}
+
+function setText(
+  grid: StateGrid,
+  x: number,
+  y: number,
+  text: string,
+  style?: StateCellStyle,
+): void {
+  grid.setText(x, y, text, style)
 }
 
 function drawBox(
@@ -101,7 +108,12 @@ function drawBox(
   })
 }
 
-function drawStateFrame(grid: StateGrid, bounds: BoxBounds, chars: BorderCharacters, style: StateCellStyle): void {
+function drawStateFrame(
+  grid: StateGrid,
+  bounds: BoxBounds,
+  chars: BorderCharacters,
+  style: StateCellStyle,
+): void {
   drawDiagramFrame(bounds, chars, (x, y, char) => setCell(grid, x, y, char, style))
 }
 
@@ -116,56 +128,46 @@ function drawContainerFrame(
   if (label) setText(grid, bounds.left + 2, bounds.top, ` ${label} `, style)
 }
 
-function drawHorizontalNoteConnector(grid: StateGrid, fromX: number, toX: number, y: number, char: string): void {
-  const step = fromX <= toX ? 1 : -1
-  for (let x = fromX; step === 1 ? x <= toX : x >= toX; x += step) {
-    const distanceFromNote = Math.abs(toX - x)
-    const style: StateCellStyle =
-      distanceFromNote < 3 ? (`noteConnectorRamp${3 - distanceFromNote}` as NoteConnectorRampStyle) : "noteConnector"
-    setCell(grid, x, y, char, style)
-  }
+function noteConnectorGlyph(directions: ReadonlySet<DiagramDirection>): string {
+  const chars = BorderChars.double
+  const up = directions.has("up")
+  const down = directions.has("down")
+  const left = directions.has("left")
+  const right = directions.has("right")
+  if (up && down && left && right) return chars.cross
+  if (up && down && right) return chars.leftT
+  if (up && down && left) return chars.rightT
+  if (left && right && down) return chars.topT
+  if (left && right && up) return chars.bottomT
+  if (up && right) return chars.bottomLeft
+  if (up && left) return chars.bottomRight
+  if (down && right) return chars.topLeft
+  if (down && left) return chars.topRight
+  if (up || down) return chars.vertical
+  return chars.horizontal
 }
 
 function drawNote(grid: StateGrid, bounds: StateNoteBounds, target: BoxBounds): void {
   const chars = BorderChars.double
-  const connectorChars = BorderChars.double
-  const noteX = bounds.note.position === "right" ? bounds.left - 1 : bounds.left + bounds.width
-  const targetX = bounds.note.position === "right" ? target.left + target.width : target.left - 1
-  const targetBottom = target.top + target.height - 1
-  const noteBottom = bounds.top + bounds.height - 1
-  const noteAbove = noteBottom < target.top
-  const noteBelow = bounds.top > targetBottom
-  let connectorY: number
-
-  if (noteAbove || noteBelow) {
-    const targetY = noteAbove ? target.top - 1 : targetBottom + 1
-    connectorY = bounds.centerY
-    const verticalStep = targetY <= connectorY ? 1 : -1
-
-    for (let y = targetY; verticalStep === 1 ? y <= connectorY : y >= connectorY; y += verticalStep) {
-      setCell(grid, targetX, y, connectorChars.vertical, "noteConnector")
-    }
-
-    drawHorizontalNoteConnector(grid, targetX, noteX, connectorY, connectorChars.horizontal)
-    const connectorTurnsRight = targetX <= noteX
-    const corner = noteAbove
-      ? connectorTurnsRight
-        ? connectorChars.topLeft
-        : connectorChars.topRight
-      : connectorTurnsRight
-        ? connectorChars.bottomLeft
-        : connectorChars.bottomRight
-    setCell(grid, targetX, connectorY, corner, "noteConnector")
-  } else {
-    connectorY = Math.max(bounds.top + 1, Math.min(target.centerY, bounds.top + bounds.height - 2))
-    drawHorizontalNoteConnector(grid, targetX, noteX, connectorY, connectorChars.horizontal)
+  const connector = stateDiagramNoteConnector(bounds, target)
+  const points = orthogonalPathPoints(connector.points)
+  for (const [index, point] of points.entries()) {
+    const directions = new Set<DiagramDirection>()
+    const previous = points[index - 1]
+    const next = points[index + 1]
+    if (previous) directions.add(directionBetween(point, previous)!)
+    if (next) directions.add(directionBetween(point, next)!)
+    const distanceFromNote = points.length - index - 1
+    const style: StateCellStyle =
+      distanceFromNote < 3 ? (`noteConnectorRamp${3 - distanceFromNote}` as NoteConnectorRampStyle) : "noteConnector"
+    setCell(grid, point.x, point.y, noteConnectorGlyph(directions), style)
   }
 
   drawContainerFrame(grid, bounds, "", chars, "noteBorder")
   setCell(
     grid,
     bounds.note.position === "right" ? bounds.left : bounds.left + bounds.width - 1,
-    connectorY,
+    connector.connectorY,
     bounds.note.position === "right" ? chars.rightT : chars.leftT,
     "noteBorder",
   )
@@ -188,7 +190,9 @@ function drawTransitionRenderPlan(
     setCell(grid, cell.x, cell.y, char, departure.get(`${cell.x}:${cell.y}`) ?? "transition")
   }
   if (plan.label) {
-    setTransitionLabel(grid, plan.label.x, plan.label.y, plan.label.lines, "label")
+    plan.label.lines.forEach((line, index) =>
+      setText(grid, plan.label!.x, plan.label!.y + index, line, "label"),
+    )
   }
 }
 
@@ -211,46 +215,55 @@ export function drawStateDiagramGrid(sourceDiagram: StateDiagram, options: State
   const borderStyle = options.borderStyle ?? DEFAULT_STATE_BORDER_STYLE
   const arrowHeadStyle = options.arrowHeadStyle ?? DEFAULT_STATE_ARROW_HEAD_STYLE
   const minStateGap = normalizeStateMinStateGap(options.minStateGap)
-  const { bounds, sizes, compositeBounds, noteBounds } = createStateDiagramLayout(diagram, {
+  const searchBudget = createStateSearchBudget()
+  const layout = createStateDiagramLayout(diagram, {
     minStateGap,
+    searchBudget,
   })
+  const { bounds, sizes, compositeBounds, noteBounds } = layout
   let allBounds = [...bounds.values(), ...noteBounds]
   let maxY = Math.max(0, ...allBounds.map((bound) => bound.top + bound.height))
-  let feedbackLaneY = maxY + 3
-  let feedbackTopY = Math.min(0, ...allBounds.map((bound) => bound.top)) - 3
+  const feedbackLaneY = maxY + 3
+  const feedbackTopY = Math.min(0, ...allBounds.map((bound) => bound.top)) - 3
   expandCompositeBoundsForFeedback(diagram, bounds, compositeBounds, feedbackLaneY)
-  let transitionPlans = createStateTransitionRenderPlans(diagram, bounds, feedbackLaneY, feedbackTopY)
-  const transitionTop = Math.min(
-    0,
-    ...transitionPlans.flatMap((plan) => [...plan.cells.map((cell) => cell.y), ...(plan.label ? [plan.label.y] : [])]),
-  )
-  if (transitionTop < 0) {
-    const dy = -transitionTop
-    for (const bound of new Set([...bounds.values(), ...noteBounds])) {
-      bound.top += dy
-      bound.centerY += dy
-    }
-    feedbackLaneY += dy
-    feedbackTopY += dy
-    transitionPlans = createStateTransitionRenderPlans(diagram, bounds, feedbackLaneY, feedbackTopY)
-  }
+  let transitionPlans = createStateTransitionRenderPlans(diagram, bounds, feedbackLaneY, {
+    feedbackTopY,
+    noteBounds,
+    searchBudget,
+  })
   expandCompositeBoundsForInternalTransitions(diagram, compositeBounds, transitionPlans)
+  const connectorPoints = noteBounds.flatMap((bound) => bound.connector?.points ?? [])
+  const contentLeft = Math.min(
+    0,
+    ...[...bounds.values(), ...noteBounds].map((bound) => bound.left),
+    ...connectorPoints.map((point) => point.x),
+    ...transitionPlans.flatMap((plan) => [
+      ...plan.cells.map((cell) => cell.x),
+      ...(plan.label ? [plan.label.x] : []),
+    ]),
+  )
   const contentTop = Math.min(
     0,
     ...[...bounds.values(), ...noteBounds].map((bound) => bound.top),
+    ...connectorPoints.map((point) => point.y),
     ...transitionPlans.flatMap((plan) => [...plan.cells.map((cell) => cell.y), ...(plan.label ? [plan.label.y] : [])]),
   )
-  if (contentTop < 0) {
-    const dy = -contentTop
-    for (const bound of new Set([...bounds.values(), ...noteBounds])) {
-      bound.top += dy
-      bound.centerY += dy
-    }
-    transitionPlans = translateTransitionPlans(transitionPlans, dy)
+  if (contentLeft < 0 || contentTop < 0) {
+    translateStateDiagramLayout(layout, -contentLeft, -contentTop)
+    transitionPlans = translateTransitionPlans(transitionPlans, -contentLeft, -contentTop)
   }
   allBounds = [...bounds.values(), ...noteBounds]
-  const maxX = Math.max(0, ...allBounds.map((bound) => bound.left + bound.width))
-  maxY = Math.max(0, ...allBounds.map((bound) => bound.top + bound.height))
+  const translatedConnectorPoints = noteBounds.flatMap((bound) => bound.connector?.points ?? [])
+  const maxX = Math.max(
+    0,
+    ...allBounds.map((bound) => bound.left + bound.width),
+    ...translatedConnectorPoints.map((point) => point.x + 1),
+  )
+  maxY = Math.max(
+    0,
+    ...allBounds.map((bound) => bound.top + bound.height),
+    ...translatedConnectorPoints.map((point) => point.y + 1),
+  )
   const transitionLabelSizes = diagram.transitions.map((transition) => measureStateTransitionLabel(transition.label))
   const maxTransitionLabelWidth = Math.max(0, ...transitionLabelSizes.map((size) => size.width))
   const maxTransitionLabelLines = Math.max(0, ...transitionLabelSizes.map((size) => size.height))

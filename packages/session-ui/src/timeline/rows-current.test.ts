@@ -29,10 +29,10 @@ describe("current session timeline rows", () => {
     expect(result.activeMessageID).toBe("msg_3")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_1",
-      "assistant-part:msg_1:part:msg_2:msg_2:text:0",
+      "assistant-part:part:msg_2:msg_2:text:0",
       "turn-gap:msg_3",
       "user-message:msg_3",
-      "assistant-part:msg_3:part:msg_4:msg_4:reasoning:0",
+      "assistant-part:part:msg_4:msg_4:reasoning:0",
     ])
   })
 
@@ -79,7 +79,7 @@ describe("current session timeline rows", () => {
     expect(result.activeMessageID).toBe("msg_assistant")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "notice:msg_notice",
-      "assistant-part:msg_assistant:part:msg_assistant:msg_assistant:text:0",
+      "assistant-part:part:msg_assistant:msg_assistant:text:0",
     ])
   })
 
@@ -140,10 +140,10 @@ describe("current session timeline rows", () => {
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_user",
       "notice:msg_agent",
-      "assistant-part:msg_user:part:msg_assistant_1:msg_assistant_1:text:0",
+      "assistant-part:part:msg_assistant_1:msg_assistant_1:text:0",
       "notice:msg_background",
       "notice:msg_model",
-      "assistant-part:msg_user:part:msg_assistant_2:msg_assistant_2:text:0",
+      "assistant-part:part:msg_assistant_2:msg_assistant_2:text:0",
       "notice:msg_restart",
       "notice:msg_skill",
       "notice:msg_compaction",
@@ -163,6 +163,22 @@ describe("current session timeline rows", () => {
       "turn-gap:msg_a",
       "user-message:msg_a",
       "thinking:msg_a",
+    ])
+  })
+
+  test("renders thinking above a queued user message", () => {
+    const source = [
+      { id: "msg_active", type: "user", text: "active", time: { created: 1 } },
+      { id: "msg_queued", type: "user", text: "queued", time: { created: 2 } },
+    ] satisfies SessionMessageInfo[]
+    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" }, new Set(["msg_queued"]))
+
+    expect(result.activeMessageID).toBe("msg_active")
+    expect(result.rows.map(TimelineRow.key)).toEqual([
+      "user-message:msg_active",
+      "thinking:msg_active",
+      "turn-gap:msg_queued",
+      "user-message:msg_queued",
     ])
   })
 
@@ -213,6 +229,123 @@ describe("current session timeline rows", () => {
     ] satisfies SessionMessageInfo[]
 
     const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
+
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
+  })
+
+  test("keeps assistant errors and retries before later notices", () => {
+    const result = Timeline.constructSessionMessageRows(
+      [
+        { id: "msg_user", type: "user", text: "continue", time: { created: 1 } },
+        {
+          id: "msg_blocked",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [{ type: "text", text: "partial" }],
+          error: { type: "provider.content-filter", message: "Provider blocked the response" },
+          time: { created: 2, completed: 3 },
+        },
+        {
+          id: "msg_model",
+          type: "model-switched",
+          model: { id: "next", providerID: "provider" },
+          time: { created: 4 },
+        },
+      ],
+      true,
+      { type: "idle" },
+    )
+
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart", "Error", "Notice"])
+
+    const retry = Timeline.constructSessionMessageRows(
+      [
+        { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
+        {
+          id: "msg_retry",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [],
+          error: { type: "ProviderError", message: "rate limited" },
+          retry: { attempt: 2, at: 10, error: { type: "ProviderError", message: "rate limited" } },
+          time: { created: 2 },
+        },
+        {
+          id: "msg_model",
+          type: "model-switched",
+          model: { id: "next", providerID: "provider" },
+          time: { created: 3 },
+        },
+      ],
+      true,
+      { type: "retry", attempt: 2, next: 10, message: "rate limited" },
+    )
+
+    expect(retry.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry", "Notice"])
+  })
+
+  test("suppresses an earlier error when the turn recovers across a notice", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "recover", time: { created: 1 } },
+      {
+        id: "msg_failed",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [],
+        error: { type: "ProviderError", message: "temporary failure" },
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "msg_model",
+        type: "model-switched",
+        model: { id: "next", providerID: "provider" },
+        time: { created: 4 },
+      },
+      {
+        id: "msg_recovery",
+        type: "assistant",
+        agent: "build",
+        model: { id: "next", providerID: "provider" },
+        content: [{ type: "text", text: "recovered" }],
+        time: { created: 5, completed: 6 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(Timeline.constructSessionMessageRows(source, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual([
+      "UserMessage",
+      "Notice",
+      "AssistantPart",
+    ])
+  })
+
+  test("does not render the retry error twice", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [],
+        error: { type: "ProviderError", message: "The provider response ended unexpectedly." },
+        retry: {
+          attempt: 2,
+          at: 10,
+          error: { type: "ProviderError", message: "The provider response ended unexpectedly." },
+        },
+        time: { created: 2 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = Timeline.constructSessionMessageRows(source, true, {
+      type: "retry",
+      attempt: 2,
+      next: 10,
+      message: "The provider response ended unexpectedly.",
+    })
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
   })
@@ -385,9 +518,9 @@ describe("current session timeline rows", () => {
 
     expect(keys).toEqual([
       "user-message:msg_user",
-      "assistant-part:msg_user:context:msg_assistant_1:tool_0",
-      "assistant-part:msg_user:part:msg_assistant_2:tool_0",
-      "assistant-part:msg_user:context:msg_assistant_3:tool_0",
+      "assistant-part:context:msg_assistant_1:tool_0",
+      "assistant-part:part:msg_assistant_2:tool_0",
+      "assistant-part:context:msg_assistant_3:tool_0",
     ])
   })
 
@@ -404,7 +537,12 @@ describe("current session timeline rows", () => {
             type: "tool",
             id: "tool_patch_1",
             name: "patch",
-            state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }], metadata: { files: [] } },
+            state: {
+              status: "completed",
+              input: {},
+              content: [{ type: "text", text: "done" }],
+              metadata: { files: [] },
+            },
             time: { created: 2, completed: 3 },
           },
           {
@@ -430,8 +568,27 @@ describe("current session timeline rows", () => {
             type: "tool",
             id: "tool_patch_3",
             name: "patch",
-            state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }], metadata: { files: [] } },
+            state: {
+              status: "completed",
+              input: {},
+              content: [{ type: "text", text: "done" }],
+              metadata: { files: [] },
+            },
             time: { created: 7, completed: 8 },
+          },
+          {
+            type: "tool",
+            id: "tool_edit_1",
+            name: "edit",
+            state: { status: "running", input: {}, metadata: { files: [] } },
+            time: { created: 9 },
+          },
+          {
+            type: "tool",
+            id: "tool_edit_2",
+            name: "edit",
+            state: { status: "running", input: {}, metadata: { files: [] } },
+            time: { created: 10 },
           },
         ],
         time: { created: 2, completed: 8 },
@@ -443,7 +600,7 @@ describe("current session timeline rows", () => {
 
     expect(groups).toEqual([
       {
-        type: "patch",
+        type: "file",
         key: "part:msg_assistant:tool_patch_1",
         refs: [
           { messageID: "msg_assistant", partID: "tool_patch_1" },
@@ -456,9 +613,17 @@ describe("current session timeline rows", () => {
         ref: { messageID: "msg_assistant", partID: "tool_patch_failed" },
       },
       {
-        type: "part",
+        type: "file",
         key: "part:msg_assistant:tool_patch_3",
-        ref: { messageID: "msg_assistant", partID: "tool_patch_3" },
+        refs: [{ messageID: "msg_assistant", partID: "tool_patch_3" }],
+      },
+      {
+        type: "file",
+        key: "part:msg_assistant:tool_edit_1",
+        refs: [
+          { messageID: "msg_assistant", partID: "tool_edit_1" },
+          { messageID: "msg_assistant", partID: "tool_edit_2" },
+        ],
       },
     ])
   })

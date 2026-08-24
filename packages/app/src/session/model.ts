@@ -15,6 +15,8 @@ import {
 } from "./session-domain"
 import { useSessionLayout } from "./session-layout"
 import { createSessionOwnership } from "./session-ownership"
+import { useTabs } from "@/shell/tabs/tabs"
+import { useServer } from "@/runtime/server/current"
 
 const emptyMessages: SessionMessageInfo[] = []
 const emptyUserMessages: SessionMessageUser[] = []
@@ -23,6 +25,8 @@ const idle = { type: "idle" as const }
 export function useSessionModel() {
   const file = useFile()
   const data = useData()
+  const server = useServer()
+  const shellTabs = useTabs()
   const layout = useSessionLayout()
   const location = useWorkspaceLocation()
   const isDesktop = createMediaQuery("(min-width: 768px)")
@@ -31,7 +35,16 @@ export function useSessionModel() {
     const id = sessionID()
     return id ? data.session.get(id) : undefined
   })
-  const parentID = createMemo(() => info()?.parentID)
+  const parentID = createMemo(() => {
+    const current = info()?.parentID
+    if (current) return current
+    const id = sessionID()
+    if (!id) return
+    const tab = shellTabs.store.find(
+      (item) => item.type === "session" && item.server === server.key && item.routeSessionId === id,
+    )
+    return tab?.type === "session" ? (tab.routeParentId ?? tab.sessionId) : undefined
+  })
   const parent = createMemo(() => {
     const id = parentID()
     return id ? data.session.get(id) : undefined

@@ -386,7 +386,7 @@
   padding: 48px 24px;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-muted);
   text-align: center;
 }

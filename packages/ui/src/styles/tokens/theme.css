@@ -131,6 +131,10 @@
 
     --font-family-text: "Inter", sans-serif;
     --v2-font-family-sans: "Inter", sans-serif;
+    --v2-font-family-code: "IBM Plex Mono", var(--font-family-mono);
+    --line-height-tight: 12px;
+    --line-height-compact: 16px;
+    --line-height-base: 20px;
   }
 
   /* OS preference fallback (no JS needed) */

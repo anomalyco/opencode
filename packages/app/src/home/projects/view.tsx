@@ -49,6 +49,8 @@ export type HomeProjectsViewProps = {
   onSetDefaultServer: (server: ServerConnection.Any | undefined) => void
   canRemoveServer: (server: ServerConnection.Any) => boolean
   onRemoveServer: (server: ServerConnection.Any) => void
+  canHideServer: (server: ServerConnection.Any) => boolean
+  onHideServer: (server: ServerConnection.Any) => void
   onMoveProject: (server: ServerConnection.Any, worktree: string, index: number) => void
   onSelectProject: (server: ServerConnection.Any, directory: string) => void
   onAddProjects: (server: ServerConnection.Any, directories: string[]) => void
@@ -188,6 +190,8 @@ function HomeServerRow(props: {
   onSetDefaultServer: HomeProjectsViewProps["onSetDefaultServer"]
   canRemoveServer: HomeProjectsViewProps["canRemoveServer"]
   onRemoveServer: HomeProjectsViewProps["onRemoveServer"]
+  canHideServer: HomeProjectsViewProps["canHideServer"]
+  onHideServer: HomeProjectsViewProps["onHideServer"]
   onSetContextMenuOpen: HomeProjectsContextMenuProps["onSetContextMenuOpen"]
   onChooseProject: HomeProjectsViewProps["onChooseProject"]
   server: ServerConnection.Any
@@ -212,11 +216,11 @@ function HomeServerRow(props: {
       value={props.language.t("server.row.incompatible", { version: props.health?.version ?? "1" })}
     >
       <div class="group/server relative flex h-7 w-full min-w-0 items-center rounded-[6px]">
-      <HomeProjectNavButton
-        type="button"
-        class="pr-16"
-        classList={{ "opacity-60": !healthy() && !incompatible() }}
-        data-selected={props.selected ? "" : undefined}
+        <HomeProjectNavButton
+          type="button"
+          class="pr-16"
+          classList={{ "opacity-60": !healthy() && !incompatible() }}
+          data-selected={props.selected ? "" : undefined}
           disabled={!healthy()}
           onClick={() => props.onFocusServer(props.server)}
         >
@@ -284,10 +288,12 @@ function HomeServerRow(props: {
             canDefault={props.canDefaultServer}
             isDefault={props.defaultServerKey === ServerConnection.key(props.server)}
             canRemove={props.canRemoveServer(props.server)}
+            canHide={props.canHideServer(props.server)}
             onEdit={props.onEditServer}
             onSetDefault={() => props.onSetDefaultServer(props.server)}
             onRemoveDefault={() => props.onSetDefaultServer(undefined)}
             onRemove={() => props.onRemoveServer(props.server)}
+            onHide={() => props.onHideServer(props.server)}
             open={props.contextMenuOpen(contextMenuID())}
             onOpenChange={(open) => props.onSetContextMenuOpen(contextMenuID(), open)}
           />

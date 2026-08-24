@@ -25,6 +25,7 @@ export type TimelineProjectionInput = {
   sessionMessages: SessionMessageInfo[]
   status: SessionStatus
   showReasoningSummaries: boolean
+  pendingUserMessageIDs?: ReadonlySet<string>
   previousRows?: TimelineRow.TimelineRow[]
 }
 
@@ -34,6 +35,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     input.sessionMessages,
     input.showReasoningSummaries,
     input.status,
+    input.pendingUserMessageIDs,
   )
   const rows = reuseTimelineRows(input.previousRows, projection.rows)
   const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row] as const))
@@ -65,6 +67,7 @@ export function createReactiveTimelineProjection(input: {
   sessionMessages: Accessor<SessionMessageInfo[]>
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
+  pendingUserMessageIDs?: Accessor<ReadonlySet<string>>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -72,7 +75,12 @@ export function createReactiveTimelineProjection(input: {
   const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
   const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
   const projection = createMemo(() =>
-    Timeline.constructSessionMessageRows(input.sessionMessages(), input.showReasoningSummaries(), input.status()),
+    Timeline.constructSessionMessageRows(
+      input.sessionMessages(),
+      input.showReasoningSummaries(),
+      input.status(),
+      input.pendingUserMessageIDs?.(),
+    ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
@@ -119,6 +127,7 @@ export namespace Timeline {
     messages: SessionMessageInfo[],
     showReasoning: boolean,
     status: SessionStatus,
+    pendingUserMessageIDs?: ReadonlySet<string>,
   ) {
     type Turn = {
       id: string
@@ -169,7 +178,7 @@ export namespace Timeline {
       current = turn
     })
 
-    const activeMessageID = turns.at(-1)?.id
+    const activeMessageID = turns.findLast((turn) => !pendingUserMessageIDs?.has(turn.id))?.id ?? turns.at(-1)?.id
     return {
       activeMessageID,
       rows: [
@@ -212,39 +221,33 @@ export namespace Timeline {
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
+    const lastAssistant = assistantMessages.at(-1)
     const previousUserMessage = index > 0
     const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
-    const error = assistantMessages.at(-1)?.error
-    const retry = assistantMessages.at(-1)?.retry
-    const interrupted = error?.type.toLowerCase().includes("abort") || error?.type.toLowerCase().includes("interrupt")
-    const assistantPartRefs = assistantMessages.flatMap((message, messageIndex) =>
-      contentEntries(message)
-        .filter((entry) => renderable(entry.content, showReasoning))
-        .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
-    )
-    const delegating = assistantPartRefs.some(
-      (entry) =>
-        entry.content.type === "tool" &&
-        entry.content.name === "subagent" &&
-        (entry.content.state.status === "streaming" || entry.content.state.status === "running"),
+    const delegating = assistantMessages.some((message) =>
+      message.content.some(
+        (content) =>
+          content.type === "tool" &&
+          content.name === "subagent" &&
+          (content.state.status === "streaming" || content.state.status === "running"),
+      ),
     )
 
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: turnID }))
     if (userMessage) rows.push(new TimelineRow.UserMessage({ userMessageID: turnID }))
 
     let assistantGroupIndex = 0
-    const appendAssistants = (messages: SessionMessageAssistant[]) => {
-      const ids = new Set(messages.map((message) => message.id))
-      const refs = assistantPartRefs.filter((ref) => ids.has(ref.messageID))
-      const interruptedAt = messages.findIndex(
-        (message) =>
-          message.error?.type.toLowerCase().includes("abort") ||
-          message.error?.type.toLowerCase().includes("interrupt"),
+    // An assistant message can produce several rows because its content parts are
+    // rendered separately. Notices end a segment so none of those rows cross it.
+    const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
+      const refs = messages.flatMap((message, messageIndex) =>
+        contentEntries(message)
+          .filter((entry) => renderable(entry.content, showReasoning))
+          .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
       )
-      const interruptedID = messages[interruptedAt]?.id
-      const interruptedIndex = assistantMessages.findIndex((message) => message.id === interruptedID)
-      const before = interruptedID ? refs.filter((ref) => ref.messageIndex <= interruptedIndex) : refs
-      const after = interruptedID ? refs.filter((ref) => ref.messageIndex > interruptedIndex) : []
+      const interruptedAt = messages.findIndex((message) => isInterrupted(message.error))
+      const before = interruptedAt < 0 ? refs : refs.filter((ref) => ref.messageIndex <= interruptedAt)
+      const after = interruptedAt < 0 ? [] : refs.filter((ref) => ref.messageIndex > interruptedAt)
       const appendGroups = (items: typeof refs) =>
         groupContent(items).forEach((group) => {
           rows.push(
@@ -258,29 +261,42 @@ export namespace Timeline {
         })
 
       appendGroups(before)
-      if (interruptedAt >= 0 && !compaction) rows.push(new TimelineRow.TurnDivider({ userMessageID: turnID }))
-      appendGroups(after)
+      if (interruptedAt >= 0) {
+        if (!compaction) rows.push(new TimelineRow.TurnDivider({ userMessageID: turnID }))
+        appendGroups(after)
+      }
+
+      if (messages.at(-1) !== lastAssistant) return
+      if (isActive && lastAssistant?.retry) rows.push(new TimelineRow.Retry({ userMessageID: turnID }))
+      else if (lastAssistant?.error && !isInterrupted(lastAssistant.error))
+        rows.push(
+          new TimelineRow.Error({ userMessageID: turnID, text: unwrapErrorMessage(lastAssistant.error.message) }),
+        )
     }
 
     let assistantSegment: SessionMessageAssistant[] = []
     entries.forEach((entry) => {
-      if (entry.type === "assistant") {
-        assistantSegment.push(entry.message)
-        return
+      switch (entry.type) {
+        case "assistant":
+          assistantSegment.push(entry.message)
+          return
+        case "notice":
+          appendAssistantSegment(assistantSegment)
+          assistantSegment = []
+          rows.push(new TimelineRow.Notice({ userMessageID: turnID, messageID: entry.message.id }))
       }
-      appendAssistants(assistantSegment)
-      assistantSegment = []
-      rows.push(new TimelineRow.Notice({ userMessageID: turnID, messageID: entry.message.id }))
     })
-    appendAssistants(assistantSegment)
+    appendAssistantSegment(assistantSegment)
 
     if (
       isActive &&
       status.type === "busy" &&
-      !error &&
-      !retry &&
+      !lastAssistant?.error &&
+      !lastAssistant?.retry &&
       !delegating &&
-      (showReasoning ? assistantPartRefs.length === 0 : true)
+      (showReasoning
+        ? !assistantMessages.some((message) => message.content.some((content) => renderable(content, true)))
+        : true)
     ) {
       const heading = assistantMessages
         .flatMap((message) => message.content)
@@ -288,12 +304,6 @@ export namespace Timeline {
         .find((value): value is string => !!value)
 
       rows.push(new TimelineRow.Thinking({ userMessageID: turnID, reasoningHeading: heading }))
-    }
-
-    if (isActive && retry) rows.push(new TimelineRow.Retry({ userMessageID: turnID }))
-
-    if (error && !interrupted) {
-      rows.push(new TimelineRow.Error({ userMessageID: turnID, text: unwrapErrorMessage(error.message) }))
     }
 
     return rows
@@ -313,13 +323,17 @@ export namespace Timeline {
   }
 }
 
+function isInterrupted(error: SessionMessageAssistant["error"]) {
+  return error?.type.toLowerCase().includes("abort") || error?.type.toLowerCase().includes("interrupt")
+}
+
 export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
   if (!previous?.length) return rows
   const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
   const groupByPart = new Map<string, PriorGroup>()
   previous.forEach((row, index) => {
     if (row._tag !== "AssistantPart" || row.group.type === "part") return
-    row.group.refs.forEach((ref) => groupByPart.set(groupPartKey(row.userMessageID, ref), { index, row }))
+    row.group.refs.forEach((ref) => groupByPart.set(groupPartKey(ref), { index, row }))
   })
   const reserved = new Map<string, number>()
   rows.forEach((row, index) => {
@@ -393,7 +407,8 @@ function indexAssistantMessages(messages: SessionMessageInfo[]) {
   messages.forEach((message) => {
     if (message.type === "user") userID = message.id
     if (message.type === "shell") userID = undefined
-    if (message.type !== "assistant" || !userID) return
+    if (message.type !== "assistant") return
+    if (!userID) userID = message.id
     const existing = result.get(userID)
     if (existing) {
       existing.push(message)
@@ -414,7 +429,7 @@ function stabilizeGroupKey(
 ) {
   if (row._tag !== "AssistantPart" || row.group.type === "part") return row
   const existing = row.group.refs.reduce<PriorGroup | undefined>((result, ref) => {
-    const candidate = groupByPart.get(groupPartKey(row.userMessageID, ref))
+    const candidate = groupByPart.get(groupPartKey(ref))
     if (!candidate) return result
     const key = TimelineRow.key(candidate.row)
     if (claimed.has(key)) return result
@@ -433,8 +448,10 @@ function stabilizeGroupKey(
   })
 }
 
-function groupPartKey(userMessageID: string, ref: PartRef) {
-  return `${userMessageID}:${ref.messageID}:${ref.partID}`
+// Part refs are globally unique; keying by the turn would break reuse when a
+// page-boundary turn regroups under its real user message after a history prepend.
+function groupPartKey(ref: PartRef) {
+  return `${ref.messageID}:${ref.partID}`
 }
 
 function renderable(content: Content, showReasoning: boolean) {
@@ -447,20 +464,15 @@ function renderable(content: Content, showReasoning: boolean) {
 
 function groupContent(items: { messageID: string; partID: string; content: Content }[]): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "patch"; refs: PartRef[] } | undefined
+  let adjacent: { type: "context" | "patch" | "edit"; refs: PartRef[] } | undefined
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
     if (!first) return
-    if (current.type === "patch" && current.refs.length === 1) {
-      groups.push({ type: "part", key: `part:${first.messageID}:${first.partID}`, ref: first })
-      adjacent = undefined
-      return
-    }
     groups.push({
-      type: current.type,
+      type: current.type === "context" ? "context" : "file",
       key:
-        current.type === "patch"
+        current.type !== "context"
           ? `part:${first.messageID}:${first.partID}`
           : `context:${first.messageID}:${first.partID}`,
       refs: current.refs,
@@ -474,7 +486,9 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
         ? "context"
         : item.content.type === "tool" && item.content.name === "patch" && item.content.state.status !== "error"
           ? "patch"
-          : undefined
+          : item.content.type === "tool" && item.content.name === "edit" && item.content.state.status !== "error"
+            ? "edit"
+            : undefined
     if (type) {
       if (adjacent?.type !== type) flush()
       adjacent ??= { type, refs: [] }
@@ -534,7 +548,7 @@ function cleanHeading(value: string) {
     .trim()
 }
 
-function unwrapErrorMessage(message: string) {
+export function unwrapErrorMessage(message: string) {
   const text = message.replace(/^Error:\s*/, "").trim()
   const parse = (value: string) => Option.getOrUndefined(decodeJson(value))
   const read = (value: string) => {

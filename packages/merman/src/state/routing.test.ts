@@ -92,6 +92,28 @@ describe("createStateTransitionRoutePlans", () => {
     ])
   })
 
+  test("uses a bottom lane for same-rank parallel transitions in vertical diagrams", () => {
+    const diagram: StateVisibleDiagram = {
+      direction: "TB",
+      states: ["A", "B"].map((id) => ({ id, label: id, kind: "state" })),
+      transitions: [
+        { from: "A", to: "B", label: "first" },
+        { from: "A", to: "B", label: "second" },
+      ],
+      composites: [],
+      notes: [],
+    }
+    const placements = new Map([
+      ["A", bounds("A", 4, 4)],
+      ["B", bounds("B", 18, 4)],
+    ])
+
+    expect(createStateTransitionRoutePlans(diagram, placements, 12).map((plan) => plan.kind)).toEqual([
+      "horizontal-forward",
+      "bottom-parallel",
+    ])
+  })
+
   test("routes interleaving independent feedback transitions on opposite sides", () => {
     const diagram: StateVisibleDiagram = {
       direction: "LR",
@@ -226,6 +248,67 @@ describe("createStateTransitionRenderPlans", () => {
   Merge --> Root: branch-feedback`),
     )
     const layout = createStateDiagramLayout(diagram, { minStateGap: 4 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+
+    for (const plan of plans) {
+      const unrelated = diagram.states
+        .filter((state) => state.id !== plan.route.transition.from && state.id !== plan.route.transition.to)
+        .map((state) => layout.bounds.get(state.id)!)
+      expect(
+        plan.path.some(([x, y]) =>
+          unrelated.some(
+            (bound) =>
+              x >= bound.left && x < bound.left + bound.width && y >= bound.top && y < bound.top + bound.height,
+          ),
+        ),
+        `${plan.route.transition.from} -> ${plan.route.transition.to}`,
+      ).toBe(false)
+    }
+  })
+
+  test("keeps vertical feedback routes out of compact sibling state bounds", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  [*] --> Root
+  Root --> A
+  Root --> B
+  A --> Merge
+  B --> Merge
+  Merge --> A: retry`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 12 })
+    const plan = createStateTransitionRenderPlans(diagram, layout.bounds, 30).find(
+      (plan) => plan.route.transition.label === "retry",
+    )!
+    const sibling = layout.bounds.get("B")!
+
+    expect(
+      plan.path.some(
+        ([x, y]) =>
+          x >= sibling.left &&
+          x < sibling.left + sibling.width &&
+          y >= sibling.top &&
+          y < sibling.top + sibling.height,
+      ),
+    ).toBe(false)
+  })
+
+  test("keeps every dense vertical fan route out of unrelated state bounds", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  state "Alpha" as A
+  state "Beta" as B
+  state "Gamma store" as C
+  state "Delta notifier" as D
+  A --> B
+  A --> C
+  A --> D
+  B --> A: back
+  B --> D: across`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
     const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
 
     for (const plan of plans) {

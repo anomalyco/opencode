@@ -43,11 +43,15 @@
     align-self: stretch;
   }
 
+  [data-slot="session-turn-thinking-row"] {
+    width: 100%;
+    margin-top: 12px;
+  }
+
   [data-slot="session-turn-thinking"] {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 12px;
     width: 100%;
     min-width: 0;
     color: var(--text-weak);

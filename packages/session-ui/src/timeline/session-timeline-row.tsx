@@ -11,17 +11,20 @@ import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
+import { BasicTool } from "../components/basic-tool"
+import { useData } from "../context"
+import { TimelineSeparator } from "../components/timeline-separator"
 import {
-  MessageDivider,
   SessionAssistantContent,
   SessionContextToolGroup,
-  SessionPatchToolGroup,
+  SessionFileToolGroup,
   SessionShellMessage,
   SessionUserMessage,
   currentContentDefaultOpen,
 } from "../message/current-message"
+import { SessionCompactionMessage } from "../message/message-content"
 import { SessionRetry } from "../components/session-retry"
-import { createReactiveTimelineProjection, Timeline, TimelineRow } from "./projection"
+import { createReactiveTimelineProjection, Timeline, TimelineRow, unwrapErrorMessage } from "./projection"
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 type Projection = ReturnType<typeof createReactiveTimelineProjection>
@@ -50,11 +53,12 @@ export function createSessionTimelineRowRenderer(input: {
   anchor?: (messageID: string) => string | undefined
 }) {
   const i18n = useI18n()
+  const data = useData()
   const workingTurn = (messageID: string) =>
     input.status().type !== "idle" && input.projection.activeMessageID() === messageID
   const duration = (messageID: string) => {
     const user = input.projection.messageByID().get(messageID)
-    if (user?.type !== "user") return undefined
+    if (user?.type !== "user") return null
     const completed = (input.projection.assistantMessagesByParent().get(messageID) ?? emptyAssistantMessages).reduce<
       number | undefined
     >((latest, message) => {
@@ -99,19 +103,36 @@ export function createSessionTimelineRowRenderer(input: {
       )
     }
 
-    if (row().group.type === "patch") {
+    if (row().group.type === "file") {
       const tools = createMemo(() => {
         const group = row().group
-        if (group.type !== "patch") return []
+        if (group.type !== "file") return []
         return group.refs.flatMap((ref) => {
           const message = input.projection.messageByID().get(ref.messageID)
           const content = Timeline.resolveContent(message, ref.partID)
           return message?.type === "assistant" && content?.type === "tool" ? [content] : []
         })
       })
+      const firstPath = createMemo(() => {
+        const tool = tools()[0]
+        if (!tool || !("metadata" in tool.state)) return undefined
+        const files = tool.state.metadata?.files
+        if (!Array.isArray(files)) return undefined
+        const file = files[0]
+        return file && typeof file === "object" && "file" in file && typeof file.file === "string"
+          ? file.file
+          : undefined
+      })
       return (
-        <SessionPatchToolGroup
+        <SessionFileToolGroup
           tools={tools()}
+          fileOpen={(path) => {
+            const open = input.disclosure.value(`${row().group.key}:file:${path}`)
+            if (open !== undefined) return open
+            if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
+            return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
+          }}
+          onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
           onSizeChange={onSizeChange}
         />
       )
@@ -164,16 +185,16 @@ export function createSessionTimelineRowRenderer(input: {
         label: i18n.t("ui.tool.agent.default"),
         data: message.previous ? `${message.previous} → ${message.agent}` : message.agent,
       }
-    if (message.type === "model-switched")
-      return {
-        label: i18n.t("ui.sessionTimeline.notice.model"),
-        data: `${message.model.providerID}/${message.model.id}`,
-      }
+    if (message.type === "model-switched") return undefined
     if (message.type === "skill") return { label: i18n.t("ui.tool.skill"), data: message.name }
     if (message.type === "system") {
       const prefix = "Instructions updated: "
       if (message.description?.startsWith(prefix)) {
-        const keys = message.description.slice(prefix.length).split(",").map((s) => s.trim()).filter(Boolean)
+        const keys = message.description
+          .slice(prefix.length)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
         return {
           label: i18n.t("ui.sessionTimeline.notice.instructionsUpdated"),
           items: keys,
@@ -181,7 +202,6 @@ export function createSessionTimelineRowRenderer(input: {
       }
       return { label: message.description ?? message.text }
     }
-    if (message.type === "compaction") return { label: i18n.t("ui.messagePart.compaction"), data: message.status }
     if (message.type !== "synthetic") return undefined
     if (message.description === "Continuing after restart") return { label: message.description }
     const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
@@ -211,7 +231,7 @@ export function createSessionTimelineRowRenderer(input: {
       data-timeline-row={props.row._tag}
       classList={{
         "min-w-0 w-full max-w-full": true,
-        "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": input.centered?.(),
+        "md:max-w-[1000px] md:mx-auto": input.centered?.(),
         "pt-3": props.row._tag === "AssistantPart" && props.row.previousAssistantPart,
       }}
     >
@@ -293,9 +313,30 @@ export function createSessionTimelineRowRenderer(input: {
         return value
       }
       const message = createMemo(() => input.projection.messageByID().get(current().messageID))
+      const compaction = createMemo(() => {
+        const value = message()
+        return value?.type === "compaction" ? value : undefined
+      })
+      const compactionError = createMemo(() => {
+        const value = compaction()
+        if (value?.status !== "failed") return ""
+        return unwrapErrorMessage(value.error.message)
+      })
       const moved = createMemo(() => {
         const value = message()
         return value?.type === "location-switched" ? value : undefined
+      })
+      const model = createMemo(() => {
+        const value = message()
+        if (value?.type !== "model-switched") return undefined
+        const match = data.store.provider?.all?.get(value.model.providerID)
+        return {
+          providerID: value.model.providerID,
+          variant: value.model.variant,
+          label: i18n.t("ui.sessionTimeline.notice.modelSwitched", {
+            model: match?.models?.[value.model.id]?.name ?? value.model.id,
+          }),
+        }
       })
       const content = createMemo(() => {
         const value = message()
@@ -303,53 +344,81 @@ export function createSessionTimelineRowRenderer(input: {
       })
       return (
         <Frame row={current()}>
+          <Show when={compaction()}>
+            {(message) => (
+              <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
+                <div data-slot="session-turn-compaction">
+                  <SessionCompactionMessage message={message()} error={compactionError()} />
+                </div>
+              </div>
+            )}
+          </Show>
           <Show
             when={moved()}
             fallback={
-              <Show when={content()}>
-                {(content) => (
-                  <Show
-                    when={content().items?.length}
-                    fallback={
-                      <div
-                        data-slot="session-timeline-notice"
-                        class={`w-full pt-3 pb-1 text-13-regular text-text-weak ${padding()}`}
+              <Show
+                when={model()}
+                fallback={
+                  <Show when={content()}>
+                    {(content) => (
+                      <Show
+                        when={content().items?.length}
+                        fallback={
+                          <div
+                            data-slot="session-timeline-notice"
+                            class={`w-full pt-3 pb-1 text-13-regular text-text-weak ${padding()}`}
+                          >
+                            <bdi dir="auto" class="text-13-medium">
+                              {content().label}
+                            </bdi>
+                            <Show when={content().data}>
+                              {(data) => (
+                                <span>
+                                  {" "}
+                                  · <bdi dir="auto">{data()}</bdi>
+                                </span>
+                              )}
+                            </Show>
+                          </div>
+                        }
                       >
-                        <bdi dir="auto" class="text-13-medium">
-                          {content().label}
-                        </bdi>
-                        <Show when={content().data}>
-                          {(data) => (
-                            <span>
-                              {" "}
-                              · <bdi dir="auto">{data()}</bdi>
-                            </span>
-                          )}
-                        </Show>
-                      </div>
-                    }
-                  >
-                    <div data-slot="session-timeline-notice" class={`w-full py-1 ${padding()}`}>
-                      <div class="flex min-h-5 min-w-0 items-center gap-2 overflow-hidden">
-                        <bdi
-                          dir="auto"
-                          class="shrink-0 text-[13px] font-[530] leading-none tracking-[-0.04px] text-v2-text-text-faint"
-                        >
-                          {content().label}
-                        </bdi>
-                        <For each={content().items}>
-                          {(item) => (
+                        <div data-slot="session-timeline-notice" class={`w-full py-1 ${padding()}`}>
+                          <div class="flex min-h-5 min-w-0 items-center gap-2 overflow-hidden">
                             <bdi
                               dir="auto"
-                              class="min-w-0 truncate text-[13px] font-[440] leading-none tracking-[-0.04px] text-v2-text-text-faint"
+                              class="shrink-0 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint"
                             >
-                              {item}
+                              {content().label}
                             </bdi>
-                          )}
-                        </For>
-                      </div>
-                    </div>
+                            <For each={content().items}>
+                              {(item) => (
+                                <bdi
+                                  dir="auto"
+                                  class="min-w-0 truncate text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint"
+                                >
+                                  {item}
+                                </bdi>
+                              )}
+                            </For>
+                          </div>
+                        </div>
+                      </Show>
+                    )}
                   </Show>
+                }
+              >
+                {(model) => (
+                  <div
+                    data-slot="session-timeline-notice"
+                    data-type="model-switched"
+                    class={`w-full py-2 ${padding()}`}
+                  >
+                    <TimelineSeparator
+                      label={model().label}
+                      providerID={model().providerID}
+                      variant={model().variant}
+                    />
+                  </div>
                 )}
               </Show>
             }
@@ -358,7 +427,7 @@ export function createSessionTimelineRowRenderer(input: {
               <div
                 data-slot="session-timeline-notice"
                 data-type="location-switched"
-                class={`flex h-7 w-full min-w-0 items-center gap-2 py-1 text-[13px] leading-none tracking-[-0.04px] text-v2-text-text-faint ${padding()}`}
+                class={`flex h-7 w-full min-w-0 items-center gap-2 py-1 text-[13px] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint ${padding()}`}
               >
                 <Tooltip
                   appearance="compact"
@@ -390,7 +459,9 @@ export function createSessionTimelineRowRenderer(input: {
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <div data-slot="session-turn-compaction">
-              <MessageDivider label={i18n.t("ui.message.interrupted")} />
+              <div class="py-2">
+                <TimelineSeparator label={i18n.t("ui.message.interrupted")} />
+              </div>
             </div>
           </div>
         </Frame>
@@ -418,19 +489,39 @@ export function createSessionTimelineRowRenderer(input: {
         if (value._tag !== "Thinking") throw new Error("Expected a thinking timeline row")
         return value
       }
+      const animateHeading = createMemo<boolean>((previous) => previous ?? !current().reasoningHeading)
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-thinking">
-              <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-              <Show when={!input.showReasoningSummaries()}>
-                <TextReveal
-                  text={current().reasoningHeading}
-                  class="session-turn-thinking-heading"
-                  travel={25}
-                  duration={700}
-                />
-              </Show>
+            <div data-slot="session-turn-thinking-row">
+              <BasicTool
+                icon="mcp"
+                status="running"
+                compact
+                locked
+                hideDetails
+                trigger={
+                  <div data-slot="session-turn-thinking">
+                    <div data-slot="basic-tool-tool-info-structured">
+                      <div data-slot="basic-tool-tool-info-main">
+                        <span data-slot="basic-tool-tool-title">
+                          <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                        </span>
+                        <Show when={!input.showReasoningSummaries()}>
+                          <span data-slot="basic-tool-tool-subtitle">
+                            <TextReveal
+                              text={current().reasoningHeading}
+                              class="session-turn-thinking-heading"
+                              travel={animateHeading() ? 25 : 0}
+                              duration={animateHeading() ? 700 : 0}
+                            />
+                          </span>
+                        </Show>
+                      </div>
+                    </div>
+                  </div>
+                }
+              />
             </div>
           </div>
         </Frame>

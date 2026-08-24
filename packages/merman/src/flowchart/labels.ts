@@ -12,7 +12,7 @@ import {
   type DiagramSegment,
 } from "../core/geometry.js"
 import { splitDiagramLines } from "../core/text.js"
-import type { FlowchartPoint } from "./types.js"
+import type { FlowchartEdgeRoute, FlowchartPoint } from "./types.js"
 
 const LABEL_BUS_CLEARANCE = 3
 const LABEL_NODE_CLEARANCE = 2
@@ -71,11 +71,13 @@ function bestLabelSegment(
   points: readonly FlowchartPoint[],
   labelWidth: number,
   preferredAxis?: DiagramSegment["axis"],
+  preferredSegment?: number,
 ): DiagramSegment | undefined {
   const segments = points.slice(1).flatMap((to, index) => {
     const segment = segmentBetween(points[index]!, to)
     return segment ? [segment] : []
   })
+  if (preferredSegment !== undefined && segments[preferredSegment]) return segments[preferredSegment]
   const preferred = preferredAxis ? segments.find((segment) => segment.axis === preferredAxis) : undefined
   if (preferred) return preferred
 
@@ -97,8 +99,9 @@ function flowchartLabelPoint(
   labelWidth: number,
   labelHeight: number,
   preferredAxis?: DiagramSegment["axis"],
+  preferredSegment?: number,
 ): FlowchartPoint {
-  const segment = bestLabelSegment(points, labelWidth, preferredAxis)
+  const segment = bestLabelSegment(points, labelWidth, preferredAxis, preferredSegment)
   return segment ? segmentLabelPoint(segment, labelWidth, labelHeight) : (points[0] ?? point(0, 0))
 }
 
@@ -107,9 +110,30 @@ export function flowchartEdgeLabelLayout(
   label: string,
   measure: (text: string) => number,
   preferredAxis?: DiagramSegment["axis"],
+  preferredSegment?: number,
 ): FlowchartEdgeLabelLayout {
   const lines = splitDiagramLines(label).map(flowchartLabelText)
   const width = flowchartLabelWidth(label, measure)
   const height = lines.length
-  return { lines, point: flowchartLabelPoint(points, width, height, preferredAxis), width, height }
+  return {
+    lines,
+    point: flowchartLabelPoint(points, width, height, preferredAxis, preferredSegment),
+    width,
+    height,
+  }
+}
+
+export function flowchartRouteLabelLayout(
+  route: Pick<FlowchartEdgeRoute, "edge" | "points" | "labelAxis" | "labelPoint">,
+  measure: (text: string) => number,
+): FlowchartEdgeLabelLayout {
+  const lines = splitDiagramLines(route.edge.label).map(flowchartLabelText)
+  const width = flowchartLabelWidth(route.edge.label, measure)
+  const height = lines.length
+  return {
+    lines,
+    point: route.labelPoint ?? flowchartLabelPoint(route.points, width, height, route.labelAxis),
+    width,
+    height,
+  }
 }

@@ -35,8 +35,10 @@ export function currentContentDefaultOpen(
   editExpanded: boolean,
 ) {
   if (content.type !== "tool") return undefined
+  // Errored tools render the error card, which starts collapsed.
+  if (content.state.status === "error") return false
   if (content.name === "shell" || content.name === "execute") return shellExpanded
-  if (content.name === "patch") return content.state.status !== "error"
+  if (content.name === "patch") return true
   if (content.name !== "edit" && content.name !== "write") return undefined
   if (!editExpanded) return false
   const files = currentToolMetadata(content).files

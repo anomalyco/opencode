@@ -6,6 +6,7 @@ import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
 export type WorkspaceDefaultDestination = "last-used" | "local" | "new"
 export type WorkspaceLastUsed = "local" | "workspace"
+export type TerminalPlacement = "side" | "bottom"
 
 export interface NotificationSettings {
   agent: boolean
@@ -30,12 +31,14 @@ export interface Settings {
     showNavigation: boolean
     showSearch: boolean
     showStatus: boolean
+    showProjectIcon: boolean
     showTerminal: boolean
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
+    terminalPlacement: TerminalPlacement
   }
   appearance: {
     fontSize: number
@@ -115,12 +118,14 @@ const defaultSettings: Settings = {
     showNavigation: false,
     showSearch: false,
     showStatus: false,
+    showProjectIcon: false,
     showTerminal: false,
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
+    terminalPlacement: "side",
   },
   appearance: {
     fontSize: 14,
@@ -204,6 +209,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowStatus(value: boolean) {
           setStore("general", "showStatus", value)
         },
+        showProjectIcon: withFallback(() => store.general?.showProjectIcon, defaultSettings.general.showProjectIcon),
+        setShowProjectIcon(value: boolean) {
+          setStore("general", "showProjectIcon", value)
+        },
         showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
         setShowTerminal(value: boolean) {
           setStore("general", "showTerminal", value)
@@ -239,6 +248,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setMobileTitlebarPosition(value: "top" | "bottom") {
           setStore("general", "mobileTitlebarPosition", value)
+        },
+        terminalPlacement: withFallback(
+          () => store.general?.terminalPlacement,
+          defaultSettings.general.terminalPlacement,
+        ),
+        setTerminalPlacement(value: TerminalPlacement) {
+          setStore("general", "terminalPlacement", value)
         },
       },
       visibility: {

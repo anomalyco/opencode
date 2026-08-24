@@ -1,4 +1,5 @@
 import { Session } from "@opencode-ai/core/session"
+import { SessionStats } from "@opencode-ai/core/session/stats"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
 import { DateTime, Effect, Stream } from "effect"
@@ -83,6 +84,27 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   })
                 : undefined,
             },
+          }
+        }),
+      )
+      .handle(
+        "session.stats",
+        Effect.fn(function* (ctx) {
+          const timezone = ctx.query.timezone ?? "UTC"
+          yield* Effect.try({
+            try: () => new Intl.DateTimeFormat("en-US", { timeZone: timezone }),
+            catch: () => new InvalidRequestError({ message: `Invalid time zone: ${timezone}` }),
+          })
+          return {
+            data: yield* SessionStats.get({
+              from: ctx.query.from,
+              to: ctx.query.to,
+              projectID: ctx.query.project,
+              timezone,
+              tools: ctx.query.tools,
+            }).pipe(
+              Effect.mapError(() => new InvalidRequestError({ message: "Stats range must end after it starts" })),
+            ),
           }
         }),
       )

@@ -9,10 +9,10 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { decode64 } from "@/runtime/persistence/base64"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { playSoundById } from "@/shell/notifications/sound"
+import { playSoundByIdOnce } from "@/shell/notifications/sound"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { type DraftTab, useTabs } from "@/shell/tabs/tabs"
+import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import type { ServerScope } from "@/runtime/server/scope"
 import { useServer } from "@/runtime/server/current"
@@ -112,6 +112,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
   const platform = usePlatform()
   const settings = useSettings()
   const language = useLanguage()
+  const tabs = useTabs()
   const empty: Notification[] = []
 
   const [store, setStore, _, ready] = persisted(
@@ -215,18 +216,21 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
     dispatchEvent(new PopStateEvent("popstate"))
   }
 
-  const handleSessionIdle = (directory: string, sessionID: string, time: number) => {
+  const handleSessionIdle = (sessionID: string, eventID: string, time: number) => {
     void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (!session) return
       if (session.parentID) return
 
-      if (settings.sounds.agentEnabled()) {
-        void playSoundById(settings.sounds.agent())
+      if (
+        sessionIDHasOpenTab(tabs.store, input.key, sessionID) &&
+        settings.sounds.agentEnabled()
+      ) {
+        void playSoundByIdOnce(settings.sounds.agent(), `${input.key}\0${eventID}`)
       }
 
       append({
-        directory,
+        directory: session.location.directory,
         time,
         viewed: viewedInCurrentSession(sessionID),
         type: "turn-complete",
@@ -243,21 +247,24 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
   }
 
   const handleSessionError = (
-    directory: string,
     sessionID: string,
     error: ErrorNotification["error"],
+    eventID: string,
     time: number,
   ) => {
     void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (session?.parentID) return
 
-      if (settings.sounds.errorsEnabled()) {
-        void playSoundById(settings.sounds.errors())
+      if (
+        sessionIDHasOpenTab(tabs.store, input.key, sessionID) &&
+        settings.sounds.errorsEnabled()
+      ) {
+        void playSoundByIdOnce(settings.sounds.errors(), `${input.key}\0${eventID}`)
       }
 
       append({
-        directory,
+        directory: session?.location.directory,
         time,
         viewed: viewedInCurrentSession(sessionID),
         type: "error",
@@ -275,21 +282,14 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
   }
 
   const unsub = input.sdk.event.listen((event) => {
-    if (
-      event.type !== "session.execution.succeeded" &&
-      event.type !== "session.execution.interrupted" &&
-      event.type !== "session.execution.failed"
-    )
-      return
+    if (event.type !== "session.execution.succeeded" && event.type !== "session.execution.failed") return
 
-    const directory = event.location?.directory
-    if (!directory) return
     const time = Date.now()
     if (event.type === "session.execution.failed") {
-      handleSessionError(directory, event.data.sessionID, event.data.error, time)
+      handleSessionError(event.data.sessionID, event.data.error, event.id, time)
       return
     }
-    handleSessionIdle(directory, event.data.sessionID, time)
+    handleSessionIdle(event.data.sessionID, event.id, time)
   })
   onCleanup(() => {
     meta.disposed = true

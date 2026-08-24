@@ -1,7 +1,7 @@
 import { Platform, usePlatform } from "@/runtime/platform/platform"
-import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
+import { makePersisted, messageSync, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode-ai/util/encode"
-import { createResource, type Accessor } from "solid-js"
+import { createResource, onCleanup, type Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 import { pathKey } from "@/workspaces/path-key"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
@@ -16,6 +16,7 @@ type PersistedWithReady<T> = [
 
 type PersistTarget = {
   draft?: boolean
+  sync?: boolean
   storage?: string
   scope?: "window"
   workspaceStorageAliases?: string[]
@@ -637,7 +638,17 @@ export function persisted<T>(
     return api
   })()
 
-  const [state, setState, init] = makePersisted(store, { name: config.key, storage })
+  const channel =
+    config.sync && typeof BroadcastChannel !== "undefined"
+      ? new BroadcastChannel(`opencode.persist:${config.storage ?? "default"}:${config.key}`)
+      : undefined
+  if (channel) onCleanup(() => channel.close())
+
+  const [state, setState, init] = makePersisted(store, {
+    name: config.key,
+    storage,
+    sync: channel ? messageSync(channel) : undefined,
+  })
 
   const isAsync = init instanceof Promise
   const [ready] = createResource(

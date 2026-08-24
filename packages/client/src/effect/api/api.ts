@@ -10,6 +10,7 @@ import type { Project } from "@opencode-ai/schema/project"
 import type { RelativePath } from "@opencode-ai/schema/schema"
 import type { Brand } from "effect"
 import type { Model } from "@opencode-ai/schema/model"
+import type { DateTime } from "effect"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import type { PromptInput } from "@opencode-ai/schema/prompt-input"
@@ -110,6 +111,71 @@ export type SessionListOutput = {
   }
 }
 export type SessionListOperation<E = never> = (input?: SessionListInput) => Effect.Effect<SessionListOutput, E>
+
+export type SessionStatsInput = {
+  readonly from?: number | undefined
+  readonly to?: number | undefined
+  readonly project?: Project.ID | undefined
+  readonly timezone?: string | undefined
+  readonly tools?: "none" | "summary" | "detail" | undefined
+}
+export type SessionStatsOutput = {
+  readonly range: { readonly from: DateTime.Utc; readonly to: DateTime.Utc }
+  readonly sessions: number
+  readonly subagents: number
+  readonly prompts: number
+  readonly steps: number
+  readonly tokens: {
+    readonly input: number
+    readonly output: number
+    readonly reasoning: number
+    readonly cache: { readonly read: number; readonly write: number }
+  }
+  readonly cost: number & Brand.Brand<"Money.USD">
+  readonly tools:
+    | { readonly mode: "none" }
+    | {
+        readonly mode: "summary"
+        readonly totals: {
+          readonly calls: number
+          readonly succeeded: number
+          readonly failed: number
+          readonly unfinished: number
+        }
+      }
+    | {
+        readonly mode: "detail"
+        readonly totals: {
+          readonly calls: number
+          readonly succeeded: number
+          readonly failed: number
+          readonly unfinished: number
+        }
+        readonly usage: ReadonlyArray<{
+          readonly name: string
+          readonly calls: number
+          readonly succeeded: number
+          readonly failed: number
+          readonly unfinished: number
+          readonly durationP50?: number | undefined
+        }>
+      }
+  readonly activeDays: number
+  readonly streak: number
+  readonly activity: ReadonlyArray<{ readonly date: string; readonly steps: number }>
+  readonly models: ReadonlyArray<{
+    readonly model: Model.Ref
+    readonly steps: number
+    readonly tokens: {
+      readonly input: number
+      readonly output: number
+      readonly reasoning: number
+      readonly cache: { readonly read: number; readonly write: number }
+    }
+    readonly cost: number & Brand.Brand<"Money.USD">
+  }>
+}
+export type SessionStatsOperation<E = never> = (input?: SessionStatsInput) => Effect.Effect<SessionStatsOutput, E>
 
 export type SessionCreateInput = {
   readonly id?: Session.ID | undefined
@@ -966,6 +1032,7 @@ export type SessionViewOperation<E = never> = (input: SessionViewInput) => Effec
 
 export interface SessionApi<E = never> {
   readonly list: SessionListOperation<E>
+  readonly stats: SessionStatsOperation<E>
   readonly create: SessionCreateOperation<E>
   readonly import: SessionImportOperation<E>
   readonly export: SessionExportOperation<E>

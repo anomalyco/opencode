@@ -1,6 +1,15 @@
 import { expect, test } from "@playwright/test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
-import { event, session, sessionID, setupTimeline, toolPart } from "../performance/timeline-stability/fixture"
+import {
+  compactionDelta,
+  compactionEnded,
+  compactionFailed,
+  compactionStarted,
+  event,
+  session,
+  sessionID,
+  setupTimeline,
+} from "../performance/timeline-stability/fixture"
 
 const user = { id: "msg_user", type: "user", text: "Run it", time: { created: 1 } } satisfies SessionMessageInfo
 
@@ -73,23 +82,102 @@ test("renders current protocol notices in CLI order", async ({ page }) => {
   expect(ownerWarnings).toEqual([])
 })
 
+test("renders a compaction summary while it streams and after completion", async ({ page }) => {
+  const timeline = await setupTimeline(page, { sessionMessages: [user, assistant(true)] })
+
+  await timeline.send(
+    compactionStarted({
+      sessionID,
+      reason: "manual",
+      recent: "",
+    }),
+  )
+
+  const compaction = page.locator('[data-component="session-compaction-message"]')
+  await expect(compaction.getByText("Session compacted", { exact: true })).toBeVisible()
+
+  await timeline.send(
+    compactionDelta({
+      sessionID,
+      text: "## Checkpoint\n\nStreamed implementation details.",
+    }),
+  )
+  await expect(compaction.getByRole("heading", { name: "Checkpoint" })).toBeVisible()
+  await expect(compaction).toContainText("Streamed implementation details.")
+
+  await timeline.send(
+    compactionEnded({
+      sessionID,
+      reason: "manual",
+      text: "## Checkpoint\n\nFinal implementation details.",
+      recent: "",
+    }),
+  )
+  await expect(compaction).toContainText("Final implementation details.")
+  await expect(compaction).not.toContainText("Streamed implementation details.")
+})
+
+test("updates running compactions to failed and cancelled boundaries", async ({ page }) => {
+  const timeline = await setupTimeline(page, { sessionMessages: [user, assistant(true)] })
+
+  await timeline.send(compactionStarted({ sessionID, reason: "auto", recent: "" }))
+  await timeline.send(compactionDelta({ sessionID, text: "Partial summary that should be discarded." }))
+  await timeline.send(
+    compactionFailed({
+      sessionID,
+      reason: "auto",
+      error: {
+        type: "compaction.failed",
+        message: 'Error: {"error":{"type":"ProviderError","message":"The provider rejected the summary."}}',
+      },
+    }),
+  )
+
+  const compactions = page.locator('[data-component="session-compaction-message"]')
+  const failed = compactions.filter({ hasText: "The provider rejected the summary." })
+  await expect(failed.getByText("Session compacted", { exact: true })).toBeVisible()
+  await expect(failed.getByText("ProviderError: The provider rejected the summary.", { exact: true })).toBeVisible()
+  await expect(failed).not.toContainText("Partial summary that should be discarded.")
+
+  await timeline.send(compactionStarted({ sessionID, reason: "manual", recent: "" }))
+  await timeline.send(
+    compactionFailed({
+      sessionID,
+      reason: "manual",
+      error: { type: "aborted", message: "Cancellation detail should stay hidden." },
+    }),
+  )
+
+  await expect(compactions).toHaveCount(2)
+  const cancelled = compactions.filter({ hasNotText: "The provider rejected the summary." })
+  await expect(cancelled.getByText("Session compacted", { exact: true })).toBeVisible()
+  await expect(cancelled).not.toContainText("Cancellation detail should stay hidden.")
+})
+
 test("shows a delegating row while subagent input streams", async ({ page }) => {
   await setupTimeline(page, {
     sessionMessages: [
       user,
       {
         ...assistant(false),
-        content: [toolPart("call_subagent", "subagent", "streaming", {})],
+        content: [
+          {
+            type: "tool",
+            id: "call_subagent",
+            name: "subagent",
+            state: { status: "streaming", input: "" },
+            time: { created: 2 },
+          },
+        ],
       },
     ],
   })
 
   const delegating = page.locator('[data-component="task-tool-delegating"]')
   await expect(delegating).toBeVisible()
-  await expect(delegating.locator('[data-component="text-shimmer"]')).toHaveAttribute(
-    "aria-label",
-    "Delegating agent...",
-  )
+  const shimmer = delegating.locator('[data-component="text-shimmer"]')
+  await expect(shimmer).toHaveAttribute("aria-label", "Delegating agent...")
+  await expect(shimmer).toHaveCSS("line-height", "16px")
   const icon = delegating.locator('[data-slot="icon-svg"]')
   await expect(icon.locator('use[href="#opencode-v2-icon-subagent"]')).toBeVisible()
   await expect(icon).toHaveCSS("color", "rgb(174, 174, 174)")
@@ -127,11 +215,11 @@ test("renders the moved location notice in its compact timeline style", async ({
   await expect(notice).toHaveCSS("padding-bottom", "4px")
   await expect(label).toHaveCSS("font-size", "13px")
   await expect(label).toHaveCSS("font-weight", "530")
-  await expect(label).toHaveCSS("line-height", "13px")
+  await expect(label).toHaveCSS("line-height", "16px")
   await expect(label).toHaveCSS("color", "rgb(128, 128, 128)")
   await expect(value).toHaveCSS("font-size", "13px")
   await expect(value).toHaveCSS("font-weight", "440")
-  await expect(value).toHaveCSS("line-height", "13px")
+  await expect(value).toHaveCSS("line-height", "16px")
   await expect(value).toHaveCSS("color", "rgb(128, 128, 128)")
   await expect(value).toHaveCSS("text-overflow", "ellipsis")
   await expect(value).toHaveCSS("white-space", "nowrap")

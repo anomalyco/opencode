@@ -23,6 +23,16 @@ type SelectionKeyEvent = {
   stopPropagation: () => void
 }
 
+export function copyOnSelectRelease(
+  event: { isDragging?: boolean },
+  renderer: Renderer,
+  toast: Toast,
+  clipboard: ClipboardService,
+): boolean {
+  if (!event.isDragging) return false
+  return copy(renderer, toast, clipboard)
+}
+
 export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
   const selection = renderer.getSelection()
   if (!selection) return false
@@ -39,7 +49,8 @@ export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardServi
     .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
     .catch(toast.error)
 
-  renderer.clearSelection()
+  // Keep the highlight. clearSelection() also resets OpenTUI's click
+  // counter, so clearing here would turn a triple-click into a new single-click.
   return true
 }
 

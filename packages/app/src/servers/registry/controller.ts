@@ -66,7 +66,19 @@ export function useServerActionsController() {
     }
   }
 
-  return { defaults, connection: { canRemove: server.canRemove, remove } }
+  return {
+    defaults,
+    connection: {
+      canRemove: server.canRemove,
+      remove,
+      canHide: (key: ServerConnection.Key) => {
+        const conn = server.list.find((item) => ServerConnection.key(item) === key)
+        return server.visible.length > 1 && !!conn && ServerConnection.builtin(conn)
+      },
+      isHidden: server.isHidden,
+      setHidden: server.setHidden,
+    },
+  }
 }
 
 export type ServerActionsController = ReturnType<typeof useServerActionsController>

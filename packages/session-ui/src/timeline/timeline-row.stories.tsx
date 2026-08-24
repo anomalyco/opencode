@@ -3,7 +3,10 @@ import { CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
   attachmentsAndCommentsDocument,
   attachmentsAndCommentsPresentation,
+  compactionCancelledDocument,
   compactionDocument,
+  compactionFailedDocument,
+  compactionRunningDocument,
   instructionsUpdatedMultipleDocument,
   instructionsUpdatedSingleDocument,
   requestHistoryDocument,
@@ -61,12 +64,45 @@ export const ProviderRetry = {
   ),
 }
 
+export const CompactionInProgress = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Compaction in progress"
+      description="The production divider remains stable while the context summary streams below it."
+      document={compactionRunningDocument}
+      width="600px"
+    />
+  ),
+}
+
 export const CompactionAndContinuation = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Compaction and continuation"
       description="The context summary separates earlier output from the continued response."
       document={compactionDocument}
+      width="600px"
+    />
+  ),
+}
+
+export const CompactionFailed = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Compaction failed"
+      description="A failed compaction keeps the production divider and shows the provider error."
+      document={compactionFailedDocument}
+      width="600px"
+    />
+  ),
+}
+
+export const CompactionCancelled = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Compaction cancelled"
+      description="An interrupted compaction keeps the production divider without an empty error block."
+      document={compactionCancelledDocument}
       width="600px"
     />
   ),

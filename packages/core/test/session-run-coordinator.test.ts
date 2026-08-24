@@ -309,14 +309,20 @@ describe("SessionRunCoordinator", () => {
           settled: (_key, _exit, reason) => Effect.sync(() => void reasons.push(reason)),
         })
 
-        const resumed = yield* coordinator.run("session").pipe(Effect.forkChild)
+        const first = yield* coordinator.run("session").pipe(Effect.forkChild)
         yield* Deferred.await(started)
+        const second = yield* coordinator.run("session").pipe(Effect.forkChild)
+        const idle = yield* coordinator.awaitIdle("session").pipe(Effect.forkChild)
+        yield* Effect.yieldNow
         yield* coordinator.wake("session")
         yield* coordinator.interrupt("session", "user")
         yield* Deferred.await(interrupted)
 
-        const exit = yield* Fiber.await(resumed)
-        expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
+        const exits = yield* Fiber.awaitAll([first, second, idle])
+        expect(
+          exits.slice(0, 2).every((exit) => Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)),
+        ).toBeTrue()
+        expect(exits.slice(2).every(Exit.isSuccess)).toBeTrue()
         expect(Array.from(yield* coordinator.active)).toEqual([])
         expect(runs).toBe(1)
         expect(reasons).toEqual(["user"])

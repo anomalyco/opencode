@@ -7,10 +7,12 @@ import {
   DEFAULT_MIN_RANK_GAP,
   DEFAULT_MIN_VERTICAL_RANK_GAP,
   layoutFlowchartDiagram as layoutParsedFlowchartDiagram,
+  visualLength,
 } from "./layout.js"
-import { flowchartEdgeLabelLayout } from "./labels.js"
+import { flowchartEdgeLabelLayout, flowchartRouteLabelLayout } from "./labels.js"
 import { parseMermaidFlowchartDiagram } from "./parser.js"
 import { renderFlowchartDiagram } from "./render.js"
+import { flowchartSourceConnector } from "./routing.js"
 import { renderGridStyledText, resolveFlowchartStyleColors } from "./style.js"
 
 function drawFlowchartDiagramGrid(content: string, options?: Parameters<typeof drawParsedFlowchartDiagramGrid>[1]) {
@@ -110,6 +112,66 @@ function boundsIntersect(
     left.top <= right.top + right.height - 1 &&
     left.top + left.height - 1 >= right.top
   )
+}
+
+function expectFlowchartRoutesAvoidUnrelatedNodes(layout: ReturnType<typeof layoutFlowchartDiagram>): void {
+  for (const route of layout.routes) {
+    for (const [id, bounds] of layout.bounds) {
+      if (id === route.edge.from || id === route.edge.to) continue
+      expect(routeIntersectsBounds(route, bounds)).toBe(false)
+    }
+  }
+}
+
+function expectFinalFlowchartLabelLayoutUnobstructed(layout: ReturnType<typeof layoutFlowchartDiagram>) {
+  const labels = layout.routes.map((route) => {
+    const label = flowchartRouteLabelLayout(route, visualLength)
+    return {
+      route,
+      label,
+      bounds: { left: label.point.x, top: label.point.y, width: label.width, height: label.height },
+    }
+  })
+
+  for (const [index, label] of labels.entries()) {
+    for (const bounds of layout.bounds.values()) expect(boundsIntersect(label.bounds, bounds)).toBe(false)
+    for (const [otherIndex, other] of labels.entries()) {
+      if (otherIndex !== index) expect(boundsIntersect(label.bounds, other.bounds)).toBe(false)
+    }
+    const textBounds = { ...label.bounds, left: label.bounds.left + 1, width: label.bounds.width - 2 }
+    for (const other of layout.routes) {
+      if (other === label.route) continue
+      expect(routeIntersectsBounds(other, textBounds)).toBe(false)
+      const source = layout.bounds.get(other.edge.from)
+      const sourcePoint = other.points[0]
+      if (!source || !sourcePoint) continue
+      const connector = flowchartSourceConnector(source, sourcePoint)
+      expect(boundsIntersect(label.bounds, { left: connector.x, top: connector.y, width: 1, height: 1 })).toBe(false)
+      expect(boundsIntersect(label.bounds, { left: sourcePoint.x, top: sourcePoint.y, width: 1, height: 1 })).toBe(
+        false,
+      )
+    }
+  }
+  return labels
+}
+
+function expectFlowchartLabelsUnobstructed(content: string): ReturnType<typeof layoutFlowchartDiagram> {
+  const output = renderFlowchartDiagram(content)
+  const layout = layoutFlowchartDiagram(content)
+  const labels = expectFinalFlowchartLabelLayoutUnobstructed(layout)
+  const grid = drawFlowchartDiagramGrid(content)
+
+  for (const label of labels) {
+    const escaped = label.route.edge.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    expect(output.match(new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, "gu")) ?? []).toHaveLength(1)
+    for (const [lineIndex, line] of label.label.lines.entries()) {
+      for (let offset = 0; offset < visualLength(line); offset++) {
+        expect(grid.getCell(label.label.point.x + offset, label.label.point.y + lineIndex)?.style).toBe("label")
+      }
+    }
+  }
+  expectFlowchartRoutesAvoidUnrelatedNodes(layout)
+  return layout
 }
 
 describe("FlowchartDiagram", () => {
@@ -331,11 +393,248 @@ describe("FlowchartDiagram", () => {
   A[Source] -->|first| B[Target]
   A -->|second| B`
     const output = renderFlowchartDiagram(content)
+    const parallel = layoutFlowchartDiagram(content).routes
 
     expect(output).toContain("first")
     expect(output).toContain("second")
-    expect(output.match(/▶/g)).toHaveLength(1)
-    expect(output.match(/▲/g)).toHaveLength(1)
+    expect(output).toMatch(/[▲▼◀▶]/)
+    expect(new Set(parallel.map((route) => JSON.stringify(route.points))).size).toBe(2)
+  })
+
+  test("keeps reciprocal edge labels disjoint from nodes, labels, and other routes", () => {
+    const content = `flowchart TD
+  A[A] -->|forward_label| B[B]
+  B -->|backward_label| A`
+
+    expectFlowchartLabelsUnobstructed(content)
+  })
+
+  test("keeps labeled parallel BT edges on distinct unobstructed routes", () => {
+    const content = `flowchart BT
+  F3_1[Node F3_1]
+  F3_4[Node F3_4]
+  F3_3[Node F3_3]
+  F3_2[Node F3_2]
+  F3_3 -->|flow_edge_3_0| F3_4
+  F3_2 -->|flow_edge_3_1| F3_3
+  F3_1 -->|flow_edge_3_5| F3_4
+  F3_1 -->|flow_edge_3_6| F3_4
+  F3_2 -->|flow_edge_3_7| F3_1
+  F3_1 -->|flow_edge_3_8| F3_4`
+    const layout = expectFlowchartLabelsUnobstructed(content)
+    const parallel = layout.routes.filter((route) => route.edge.from === "F3_1" && route.edge.to === "F3_4")
+
+    expect(parallel).toHaveLength(3)
+    expect(new Set(parallel.map((route) => JSON.stringify(route.points))).size).toBe(3)
+  })
+
+  test("keeps every label in the cyclic parallel BT fuzz fixture", () => {
+    const content = `flowchart BT
+  F3_0[Node F3_0]
+  F3_1[Node F3_1]
+  F3_2[Node F3_2]
+  F3_3[Node F3_3]
+  F3_4[Node F3_4]
+  F3_0 -->|flow_edge_3_0| F3_1
+  F3_1 -->|flow_edge_3_1| F3_2
+  F3_2 -->|flow_edge_3_2| F3_3
+  F3_3 -->|flow_edge_3_3| F3_4
+  F3_0 -->|flow_edge_3_4| F3_4
+  F3_0 -->|flow_edge_3_5| F3_0
+  F3_1 -->|flow_edge_3_6| F3_4
+  F3_3 -->|flow_edge_3_7| F3_0
+  F3_1 -->|flow_edge_3_8| F3_4
+  F3_3 -->|flow_edge_3_9| F3_0`
+
+    expectFlowchartLabelsUnobstructed(content)
+  })
+
+  test("keeps every label in the cyclic parallel TB fuzz fixture", () => {
+    const content = `flowchart TB
+  F9_0[Node F9_0]
+  F9_1[Node F9_1]
+  F9_2[Node F9_2]
+  F9_3[Node F9_3]
+  F9_4[Node F9_4]
+  F9_5[Node F9_5]
+  F9_6[Node F9_6]
+  F9_0 -->|flow_edge_9_0| F9_1
+  F9_1 -->|flow_edge_9_1| F9_2
+  F9_2 -->|flow_edge_9_2| F9_3
+  F9_3 -->|flow_edge_9_3| F9_4
+  F9_4 -->|flow_edge_9_4| F9_5
+  F9_5 -->|flow_edge_9_5| F9_6
+  F9_2 -->|flow_edge_9_6| F9_3
+  F9_1 -->|flow_edge_9_7| F9_0
+  F9_5 -->|flow_edge_9_8| F9_6
+  F9_6 -->|flow_edge_9_9| F9_3
+  F9_0 -->|flow_edge_9_10| F9_1
+  F9_1 -->|flow_edge_9_11| F9_5`
+
+    expectFlowchartLabelsUnobstructed(content)
+  })
+
+  test("keeps routes outside unrelated nodes in the cyclic TB fuzz fixture", () => {
+    const content = `flowchart TB
+  F7_0[Node F7_0]
+  F7_1[Node F7_1]
+  F7_2[Node F7_2]
+  F7_3[Node F7_3]
+  F7_4[Node F7_4]
+  F7_5[Node F7_5]
+  F7_6[Node F7_6]
+  F7_7[Node F7_7]
+  F7_0 -->|flow_edge_7_0| F7_1
+  F7_1 -->|flow_edge_7_1| F7_2
+  F7_2 -->|flow_edge_7_2| F7_3
+  F7_3 -->|flow_edge_7_3| F7_4
+  F7_4 -->|flow_edge_7_4| F7_5
+  F7_5 -->|flow_edge_7_5| F7_6
+  F7_6 -->|flow_edge_7_6| F7_7
+  F7_7 -->|flow_edge_7_7| F7_2
+  F7_3 -->|flow_edge_7_8| F7_3
+  F7_0 -->|flow_edge_7_9| F7_4
+  F7_5 -->|flow_edge_7_10| F7_6
+  F7_4 -->|flow_edge_7_11| F7_2`
+
+    expectFlowchartLabelsUnobstructed(content)
+  })
+
+  test("keeps every label clear in the cyclic BT fuzz fixture", () => {
+    const content = `flowchart BT
+  F130_0[Node F130_0]
+  F130_1[Node F130_1]
+  F130_2[Node F130_2]
+  F130_3[Node F130_3]
+  F130_4[Node F130_4]
+  F130_5[Node F130_5]
+  F130_0 -->|flow_edge_130_0| F130_1
+  F130_1 -->|flow_edge_130_1| F130_2
+  F130_2 -->|flow_edge_130_2| F130_3
+  F130_3 -->|flow_edge_130_3| F130_4
+  F130_4 -->|flow_edge_130_4| F130_5
+  F130_2 -->|flow_edge_130_5| F130_1
+  F130_4 -->|flow_edge_130_6| F130_3
+  F130_3 -->|flow_edge_130_7| F130_1
+  F130_5 -->|flow_edge_130_8| F130_5
+  F130_2 -->|flow_edge_130_9| F130_0
+  F130_4 -->|flow_edge_130_10| F130_0
+  F130_4 -->|flow_edge_130_11| F130_0`
+
+    expectFlowchartLabelsUnobstructed(content)
+  })
+
+  test("keeps translated top feedback labels distinct in the cyclic BT fuzz fixture", () => {
+    const content = `flowchart BT
+  F141_0[Node F141_0]
+  F141_1[Node F141_1]
+  F141_2[Node F141_2]
+  F141_3[Node F141_3]
+  F141_4[Node F141_4]
+  F141_5[Node F141_5]
+  F141_6[Node F141_6]
+  F141_7[Node F141_7]
+  F141_0 -->|flow_edge_141_0| F141_1
+  F141_1 -->|flow_edge_141_1| F141_2
+  F141_2 -->|flow_edge_141_2| F141_3
+  F141_3 -->|flow_edge_141_3| F141_4
+  F141_4 -->|flow_edge_141_4| F141_5
+  F141_5 -->|flow_edge_141_5| F141_6
+  F141_6 -->|flow_edge_141_6| F141_7
+  F141_7 -->|flow_edge_141_7| F141_1
+  F141_4 -->|flow_edge_141_8| F141_4
+  F141_3 -->|flow_edge_141_9| F141_0
+  F141_3 -->|flow_edge_141_10| F141_2
+  F141_7 -->|flow_edge_141_11| F141_6
+  F141_7 -->|flow_edge_141_12| F141_2
+  F141_7 -->|flow_edge_141_13| F141_5`
+
+    expectFlowchartLabelsUnobstructed(content)
+  })
+
+  test("keeps feedback labels outside their endpoint nodes in the cyclic BT fuzz fixture", () => {
+    const content = `flowchart BT
+  F223_0[Node F223_0]
+  F223_1[Node F223_1]
+  F223_2[Node F223_2]
+  F223_3[Node F223_3]
+  F223_4[Node F223_4]
+  F223_5[Node F223_5]
+  F223_6[Node F223_6]
+  F223_0 -->|flow_edge_223_0| F223_1
+  F223_1 -->|flow_edge_223_1| F223_2
+  F223_2 -->|flow_edge_223_2| F223_3
+  F223_3 -->|flow_edge_223_3| F223_4
+  F223_4 -->|flow_edge_223_4| F223_5
+  F223_5 -->|flow_edge_223_5| F223_6
+  F223_5 -->|flow_edge_223_6| F223_2
+  F223_2 -->|flow_edge_223_7| F223_6
+  F223_3 -->|flow_edge_223_8| F223_6`
+
+    expectFlowchartLabelsUnobstructed(content)
+  })
+
+  test("keeps self-loop labels outside their node in the cyclic TB fuzz fixture", () => {
+    const content = `flowchart TB
+  F238_0[Node F238_0]
+  F238_1[Node F238_1]
+  F238_2[Node F238_2]
+  F238_3[Node F238_3]
+  F238_4[Node F238_4]
+  F238_5[Node F238_5]
+  F238_0 -->|flow_edge_238_0| F238_1
+  F238_1 -->|flow_edge_238_1| F238_2
+  F238_2 -->|flow_edge_238_2| F238_3
+  F238_3 -->|flow_edge_238_3| F238_4
+  F238_4 -->|flow_edge_238_4| F238_5
+  F238_1 -->|flow_edge_238_5| F238_2
+  F238_3 -->|flow_edge_238_6| F238_3
+  F238_2 -->|flow_edge_238_7| F238_0
+  F238_1 -->|flow_edge_238_8| F238_5
+  F238_1 -->|flow_edge_238_9| F238_1
+  F238_4 -->|flow_edge_238_10| F238_4
+  F238_4 -->|flow_edge_238_11| F238_0
+  F238_2 -->|flow_edge_238_12| F238_2`
+
+    expectFlowchartLabelsUnobstructed(content)
+  })
+
+  test.each(["LR", "RL", "TD", "TB", "BT"] as const)(
+    "keeps multiple %s self-loop labels clear amid surrounding cycles",
+    (direction) => {
+      const content = `flowchart ${direction}
+  A[Alpha] -->|entry_${direction}| B[Beta]
+  B -->|loop_${direction}_0| B
+  B -->|loop_${direction}_1| B
+  B -->|loop_${direction}_2| B
+  B -->|exit_${direction}| C[Gamma]
+  C -->|cycle_${direction}| A`
+      const layout = expectFlowchartLabelsUnobstructed(content)
+      const loops = layout.routes.filter((route) => route.edge.from === "B" && route.edge.to === "B")
+
+      expect(loops).toHaveLength(3)
+    },
+  )
+
+  test.each(
+    (["LR", "RL", "TD", "TB", "BT"] as const).flatMap((direction) =>
+      ([2, 3, 4] as const).map((count) => ({ direction, count })),
+    ),
+  )("keeps $count parallel $direction labels clear amid surrounding cycles", ({ direction, count }) => {
+    const parallel = Array.from({ length: count }, (_, index) => `  A -->|parallel_${direction}_${count}_${index}| B`)
+    const content = [
+      `flowchart ${direction}`,
+      "  S[Source] -->|entry| A[Alpha]",
+      ...parallel,
+      "  B[Beta] -->|exit| T[Target]",
+      "  B -->|reciprocal| A",
+      "  T -->|cycle| S",
+    ].join("\n")
+    const layout = expectFlowchartLabelsUnobstructed(content)
+    const parallelRoutes = layout.routes.filter((route) => route.edge.from === "A" && route.edge.to === "B")
+
+    expect(parallelRoutes).toHaveLength(count)
+    expect(new Set(parallelRoutes.map((route) => JSON.stringify(route.points))).size).toBe(count)
   })
 
   test("keeps three parallel multiline edges legible in both orientations", () => {
@@ -646,6 +945,49 @@ flowchart TD
     expect(route.points.length).toBeGreaterThan(1)
     expect(grid.getCell(end.x, end.y)?.char).not.toMatch(/[▶▼◀▲]/)
     expectDiagram(output).toContainInOrder("Sandbox #1", "apt-get installs,", "~/.cache, /tmp")
+  })
+
+  test.each(["LR", "RL", "TD", "BT"] as const)(
+    "keeps undirected %s routes continuous up to the target",
+    (direction) => {
+      const content = `flowchart ${direction}\n  A[Alpha] --- B[(Store)]`
+      const diagram = parseMermaidFlowchartDiagram(content)
+      const layout = layoutParsedFlowchartDiagram(diagram)
+      const grid = drawParsedFlowchartDiagramGrid(diagram)
+      const route = layout.routes[0]!
+
+      expect(terminalPointsTowardBounds(route, layout.bounds.get("B")!)).toBe(true)
+      for (let index = 1; index < route.points.length; index++) {
+        const from = route.points[index - 1]!
+        const to = route.points[index]!
+        const length = Math.abs(to.x - from.x) + Math.abs(to.y - from.y)
+        for (let offset = 0; offset <= length; offset++) {
+          const x = from.x + Math.sign(to.x - from.x) * offset
+          const y = from.y + Math.sign(to.y - from.y) * offset
+          expect(grid.getCell(x, y)?.char).not.toBe(" ")
+        }
+      }
+      expect(grid.getCell(route.points.at(-1)!.x, route.points.at(-1)!.y)?.char).toMatch(/[─│]/)
+    },
+  )
+
+  test("keeps independent horizontal fan-out groups on distinct routes", () => {
+    const content = `flowchart LR
+  A[A] -->|A to X| X[X]
+  A -->|A to Y| Y[Y]
+  B[B] -->|B to Y| Y
+  B -->|B to Z| Z[Z]`
+    const output = renderFlowchartDiagram(content)
+    const routes = layoutFlowchartDiagram(content).routes
+    const routeByLabel = new Map(routes.map((route) => [route.edge.label, route]))
+
+    for (const label of ["A to X", "A to Y", "B to Y", "B to Z"]) {
+      expect(output.match(new RegExp(label, "g"))).toHaveLength(1)
+    }
+    expect(routeByLabel.get("A to X")!.points[1]!.x).toBe(routeByLabel.get("A to Y")!.points[1]!.x)
+    expect(routeByLabel.get("B to Y")!.points[1]!.x).toBe(routeByLabel.get("B to Z")!.points[1]!.x)
+    expect(routeByLabel.get("A to Y")!.points[1]!.x).not.toBe(routeByLabel.get("B to Y")!.points[1]!.x)
+    expect(routeByLabel.get("A to Y")!.points.at(-1)).not.toEqual(routeByLabel.get("B to Y")!.points.at(-1))
   })
 
   test("parses and renders inline dashed edge labels", () => {
@@ -1051,7 +1393,45 @@ graph LR
     expect(output).toContain("API")
     expect(output).toContain("DB")
     expect(output).toContain("╭─ Web App ")
-    expect(output.split("\n").find((line) => line.includes("API") && line.includes("DB"))).not.toContain("┼")
+    expect(output.split("\n").find((line) => line.includes("API") && line.includes("DB"))).toContain("┼")
+  })
+
+  test("merges horizontal routes through vertical subgraph borders", () => {
+    const content = `flowchart LR
+  Outside[Outside] --> Inside
+  subgraph Group
+    Inside[Inside]
+  end`
+    const diagram = parseMermaidFlowchartDiagram(content)
+    const layout = layoutParsedFlowchartDiagram(diagram)
+    const grid = drawParsedFlowchartDiagramGrid(diagram)
+    const group = layout.subgraphBounds.get("Group")!
+    const crossing = { x: group.left, y: layout.routes[0]!.points.at(-1)!.y }
+
+    expect(grid.getCell(crossing.x, crossing.y)?.char).toBe("┼")
+    expect(grid.getCell(crossing.x - 1, crossing.y)?.char).toBe("─")
+    expect(grid.getCell(crossing.x, crossing.y - 1)?.char).toBe("│")
+    expect(grid.getCell(crossing.x, crossing.y + 1)?.char).toBe("│")
+  })
+
+  test("merges vertical routes through horizontal subgraph borders", () => {
+    const content = `flowchart TD
+  Outside[Outside] --> Inside
+  subgraph Outer [O]
+    subgraph Inner
+      Inside[Inside]
+    end
+  end`
+    const diagram = parseMermaidFlowchartDiagram(content)
+    const layout = layoutParsedFlowchartDiagram(diagram)
+    const grid = drawParsedFlowchartDiagramGrid(diagram)
+    const outer = layout.subgraphBounds.get("Outer")!
+    const crossing = { x: layout.routes[0]!.points[0]!.x, y: outer.top }
+
+    expect(grid.getCell(crossing.x, crossing.y)?.char).toBe("┼")
+    expect(grid.getCell(crossing.x - 1, crossing.y)?.char).toBe("─")
+    expect(grid.getCell(crossing.x + 1, crossing.y)?.char).toBe("─")
+    expect(grid.getCell(crossing.x, crossing.y - 1)?.char).toBe("│")
   })
 
   test("reserves frame rows for br-delimited subgraph labels", () => {
@@ -1086,7 +1466,7 @@ graph LR
     expect(output).not.toContain("<br")
   })
 
-  test("draws transition lines over subgraph frames without joining them", () => {
+  test("merges transition lines through subgraph frame borders", () => {
     const output = renderFlowchartDiagram(`
 flowchart TD
   subgraph Verse [verse]
@@ -1100,7 +1480,7 @@ flowchart TD
     const crossingLines = output.split("\n").filter((line) => line.includes("Join") || line.includes("├"))
 
     expect(output).toContain(" verse ")
-    expect(crossingLines.join("\n")).not.toContain("┼")
+    expect(crossingLines.join("\n").match(/┼/g)).toHaveLength(2)
   })
 
   test("lays out subgraph-local directions independently from the outer flow", () => {
@@ -1190,6 +1570,23 @@ flowchart TD
       expect(terminalPointsTowardBounds(entry, layout.bounds.get("A")!)).toBe(true)
     },
   )
+
+  test("keeps labels on nested routes that pass translated outer siblings", () => {
+    const output = renderFlowchartDiagram(`flowchart TD
+  Input --> Parse
+  subgraph Outer
+    direction LR
+    subgraph Inner
+      direction BT
+      Parse[Parse] --> Validate{Valid?}
+      Validate -->|yes| Cache[(Cache)]
+      Cache --> Validate
+    end
+    Validate --> Dispatch[Dispatch]
+  end`)
+
+    expect(output).toContain("yes")
+  })
 
   test("routes nested RL local edges around outer siblings", () => {
     const layout = layoutFlowchartDiagram(
