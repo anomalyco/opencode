@@ -591,7 +591,7 @@ export const makeWith = (binder: Binder) =>
     })
 
     const settle = Effect.fn("BackgroundJob.settle")(
-      function* (id: string, token: object, sequence: number, exit: Exit.Exit<SequenceOutcome, unknown>) {
+      function* (id: string, token: object, exit: Exit.Exit<SequenceOutcome, unknown>) {
         const completed_at = yield* Clock.currentTimeMillis
         // Publishing swaps the ledger gate; the fresh gate is made before the lock so the committed
         // modification stays pure.
@@ -734,13 +734,12 @@ export const makeWith = (binder: Binder) =>
       scope: Scope.Scope,
       id: string,
       token: object,
-      sequence: number,
       run: Effect.Effect<SequenceOutcome, unknown>,
     ) {
       return yield* run.pipe(
         Effect.matchCauseEffect({
-          onSuccess: (outcome) => settle(id, token, sequence, Exit.succeed(outcome)),
-          onFailure: (cause) => settle(id, token, sequence, Exit.failCause(cause)),
+          onSuccess: (outcome) => settle(id, token, Exit.succeed(outcome)),
+          onFailure: (cause) => settle(id, token, Exit.failCause(cause)),
         }),
         Effect.asVoid,
         Effect.forkIn(scope, { startImmediately: true }),
@@ -785,19 +784,6 @@ export const makeWith = (binder: Binder) =>
       if (result.scope) yield* Scope.close(result.scope, Exit.void).pipe(Effect.ignore)
       return result.info
     }, Effect.uninterruptible)
-
-    /**
-     * Releases a reserved-but-unarmed extension coordinate. Pending is returned to its prior value
-     * so the lifetime can still settle. The sequence number itself is spent - coordinates are
-     * monotonic and gaps are legitimate.
-     */
-    const unreserve = Effect.fn("BackgroundJob.unreserve")(function* (id: string, token: object) {
-      yield* SynchronizedRef.update(state.jobs, (jobs) => {
-        const job = jobs.get(id)
-        if (!job || job.token !== token) return jobs
-        return new Map(jobs).set(id, { ...job, pending: Math.max(0, job.pending - 1) })
-      })
-    })
 
     const list: Interface["list"] = Effect.fn("BackgroundJob.list")(function* () {
       return Array.from((yield* SynchronizedRef.get(state.jobs)).values())
@@ -963,7 +949,7 @@ export const makeWith = (binder: Binder) =>
 
           if (!armed) return yield* restore(Deferred.await(registration.arm))
 
-          yield* fork(registration.scope, id, registration.token, 0, restore(input.run))
+          yield* fork(registration.scope, id, registration.token, restore(input.run))
           const outcome: ArmOutcome = { info: armed.info, lifetime, handle: armed.handle }
           yield* Deferred.succeed(registration.arm, outcome).pipe(Effect.ignore)
           return outcome
@@ -1036,7 +1022,25 @@ export const makeWith = (binder: Binder) =>
             Effect.onExit((exit) =>
               Exit.isSuccess(exit) && exit.value !== undefined
                 ? Effect.void
-                : unreserve(input.lifetime.id, result.token).pipe(Effect.ignore),
+                : // This reserved coordinate lost admission, so nothing will ever run for it.
+                  // Returning `pending` alone left the lifetime `armed`/`running` at `pending: 0`
+                  // with nothing remaining to settle it whenever the owner sequence had already
+                  // settled successfully — a permanent strand. It hung any blocked synchronous
+                  // caller (`done` resolves only at disposition), discarded the owner's completed
+                  // answer (moving it into the terminal Info is itself a disposition step), and
+                  // withheld the terminal that releases a child Task session's attachment scope.
+                  // The refusal therefore settles as a sequence with NO outcome: `undefined` is a
+                  // legal SequenceOutcome, so nothing files, an already-successful owner answer
+                  // still disposes through its inline slot, and the status is `completed` — the
+                  // FOLLOW-UP was refused and its own caller learns that from its own result,
+                  // while the run's own work demonstrably succeeded; marking the job `error` would
+                  // emit an error envelope for a lifetime that did not fail.
+                  // `settleAdmissibility` covers the hazards for free: a replaced lifetime is
+                  // `foreign_token`, an already-terminal one `not_running`, and a concurrent second
+                  // refusal `not_running` — each a no-op. With other sequences still registered,
+                  // settle's `pending > 0` branch keeps the lifetime alive exactly as the bare
+                  // decrement did.
+                  settle(input.lifetime.id, result.token, Exit.succeed(undefined)).pipe(Effect.ignore),
             ),
           )
 
@@ -1045,7 +1049,7 @@ export const makeWith = (binder: Binder) =>
           // An accepted supplemental run registers and runs without waiting for any previous run's
           // tail: the serial hold is gone, so several runs on one lifetime can be in flight at once
           // and their answers are ordered by position at delivery rather than by execution.
-          yield* fork(result.scope, input.lifetime.id, result.token, result.sequence, restore(input.run))
+          yield* fork(result.scope, input.lifetime.id, result.token, restore(input.run))
           return { extended: true as const, sequence: result.sequence, handle: accepted }
         }),
       )

@@ -1,10 +1,32 @@
 import { describe, expect, test } from "bun:test"
 import { BackgroundJob } from "@opencode-ai/core/background-job"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Deferred, Effect, Exit, Scope } from "effect"
+import { Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import { it } from "./lib/effect"
 
 const jobsLayer = LayerNode.compile(BackgroundJob.node)
+
+const admission = { lease: "lease_synthetic_core", epoch: 0n }
+
+/**
+ * Arms sequence zero and refuses every later one, parking inside `bind` first so a test can hold a
+ * supplemental sequence in the registered-but-unarmed window and release it deliberately.
+ */
+const refusingBinder = (input: {
+  readonly entered: Deferred.Deferred<void>
+  readonly release: Deferred.Deferred<void>
+}): BackgroundJob.Binder => ({
+  bind: (request) =>
+    request.sequence === 0
+      ? BackgroundJob.makePermit(request.lifetime, request.sequence).pipe(
+          Effect.map((made) => ({ kind: "arm_allowed" as const, permit: made.permit })),
+        )
+      : Deferred.succeed(input.entered, undefined).pipe(
+          Effect.andThen(Deferred.await(input.release)),
+          Effect.as({ kind: "rejected" as const, reason: "refused after reserving" }),
+        ),
+  terminal: () => Effect.void,
+})
 
 /**
  * A run reports the position it answered at plus an opaque payload. Tests use the position string
@@ -420,5 +442,122 @@ describe("BackgroundJob", () => {
       // The abandoned in-memory registry is not a durable observation channel.
       expect((yield* jobs.get(job.id))?.status).toBe("running")
     }),
+  )
+
+  it.live("dispositions when a refused extension returns pending to zero", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        // THE STRAND. `reserve` raises `pending` for a supplement that then LOSES admission. The
+        // owner sequence has already succeeded, so its settle saw `pending > 0` and correctly kept
+        // the lifetime running. When the refusal returns `pending` to zero there is nothing left
+        // running to call `settle` again — so without a disposition on this path the lifetime sits
+        // `running` at `pending: 0` forever, and two things break: a blocked SYNCHRONOUS caller
+        // never receives its answer (`done` is resolved only at disposition), and the owner's
+        // completed answer is silently discarded, because moving it into the terminal Info is
+        // itself a disposition step.
+        const holdOwner = yield* Deferred.make<void>()
+        const entered = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const jobs = yield* BackgroundJob.makeWith(refusingBinder({ entered, release }))
+        const started = yield* jobs.startExact({
+          admission,
+          id: "job_unreserve_strand",
+          type: "test",
+          run: Deferred.await(holdOwner).pipe(Effect.as({ position: "p_a", at: 1, detected: "owner answer" })),
+        })
+        if (!started.lifetime || !started.handle) return yield* Effect.die("did not arm")
+
+        // A blocked synchronous caller — the shape a synchronously started task takes.
+        const blocked = yield* jobs.wait({ id: "job_unreserve_strand" }).pipe(Effect.forkScoped)
+
+        // The supplement RESERVES (pending 2) and parks inside bind.
+        const extension = yield* jobs
+          .extendWithHandle({ id: "job_unreserve_strand", admission, run: Effect.succeed(undefined) })
+          .pipe(Effect.forkScoped)
+        yield* Deferred.await(entered)
+
+        // The owner settles successfully inside that window: pending 2 → 1, answer buffered,
+        // correctly no disposition because a supplement is still registered.
+        yield* Deferred.succeed(holdOwner, undefined)
+        yield* Effect.yieldNow
+        yield* Effect.yieldNow
+
+        // The parked bind now REFUSES: pending 1 → 0 with nothing left running.
+        yield* Deferred.succeed(release, undefined)
+        expect(yield* Fiber.join(extension)).toBeUndefined()
+
+        // The lifetime MUST dispose, and as `completed` rather than `error`/`cancelled`: the
+        // FOLLOW-UP was refused — its own caller learns that from its own result — while the run's
+        // own work demonstrably succeeded.
+        const settled = yield* jobs.wait({ id: "job_unreserve_strand", timeout: 1000 })
+        // Bounded-negative: before the fix this fiber parks forever.
+        const delivered = yield* Effect.raceFirst(
+          Fiber.join(blocked).pipe(Effect.as("released" as const)),
+          Effect.sleep("500 millis").pipe(Effect.as("hung" as const)),
+        )
+
+        // Gathered before any assertion, and asserted together, so one failing run reports every
+        // consequence at once rather than stopping at the first.
+        expect({
+          status: settled.info?.status,
+          output: settled.info?.output,
+          blockedCaller: delivered,
+        }).toEqual({
+          status: "completed",
+          output: "owner answer",
+          blockedCaller: "released",
+        })
+      }),
+    ),
+  )
+
+  it.live("releases the lifetime waiter when a refused extension ends a background job", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        // The consequence that motivated the fix. A caller can park on `waitHandle` — that is, on
+        // the job's TERMINAL — to learn when the lifetime ends; the task tool does exactly this to
+        // release a child session's attachment scope. While a refused extension could leave the
+        // lifetime running at `pending: 0`, that terminal never arrived and the waiter was held
+        // indefinitely.
+        const holdOwner = yield* Deferred.make<void>()
+        const entered = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const jobs = yield* BackgroundJob.makeWith(refusingBinder({ entered, release }))
+        const started = yield* jobs.startExact({
+          admission,
+          id: "job_unreserve_observer",
+          type: "test",
+          metadata: { background: true },
+          run: Deferred.await(holdOwner).pipe(Effect.as({ position: "p_a", at: 1, detected: "owner answer" })),
+        })
+        if (!started.lifetime || !started.handle) return yield* Effect.die("did not arm")
+
+        const waiter = yield* jobs.waitHandle({ handle: started.handle }).pipe(Effect.forkScoped)
+
+        const extension = yield* jobs
+          .extendWithHandle({ id: "job_unreserve_observer", admission, run: Effect.succeed(undefined) })
+          .pipe(Effect.forkScoped)
+        yield* Deferred.await(entered)
+
+        yield* Deferred.succeed(holdOwner, undefined)
+        yield* Effect.yieldNow
+        yield* Effect.yieldNow
+
+        yield* Deferred.succeed(release, undefined)
+        expect(yield* Fiber.join(extension)).toBeUndefined()
+
+        // Bounded-negative: before the fix this waiter is held forever.
+        const released = yield* Effect.raceFirst(
+          Fiber.join(waiter).pipe(Effect.as("released" as const)),
+          Effect.sleep("500 millis").pipe(Effect.as("held" as const)),
+        )
+        expect(released).toBe("released")
+
+        // And the work that DID complete is still delivered: ending the lifetime is not the same as
+        // discarding the answer the run already produced.
+        const first = yield* jobs.waitAnswer({ handle: started.handle, after: 0 })
+        expect(first.answer?.detected).toBe("owner answer")
+      }),
+    ),
   )
 })
