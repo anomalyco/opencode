@@ -146,6 +146,10 @@ export function createHomeSessionsController(home: HomeController) {
       .rename({ sessionID: session.id, title: next })
       .then(() => {
         ctx.data.session.remember({ ...(ctx.data.session.get(session.id) ?? session), title: next })
+        // Rename advances time.updated server-side; re-sync the canonical
+        // record so date grouping and ordering do not go stale.
+        ctx.data.session.invalidate(session.id)
+        void ctx.data.session.sync(session.id)
         queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
           current?.map((item) => (item.id === session.id ? { ...item, title: next } : item)),
         )
@@ -202,6 +206,9 @@ export function createHomeSessionsController(home: HomeController) {
           directory: session.location.directory,
           sessionIDs: ids,
         })
+        // The pre-mutation cancel may have aborted an in-flight index fetch;
+        // refetch so the full server index is not left unloaded.
+        void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
         return true
       })
       .catch((cause) => {

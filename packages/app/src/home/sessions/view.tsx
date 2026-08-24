@@ -447,6 +447,7 @@ function HomeSessionRow(
   let longPressTimer: ReturnType<typeof setTimeout> | undefined
   let longPressStart: { x: number; y: number } | undefined
   let suppressClick = false
+  let menuInteractedOutside = false
 
   const clearLongPress = () => {
     if (longPressTimer !== undefined) clearTimeout(longPressTimer)
@@ -483,9 +484,20 @@ function HomeSessionRow(
     if (!current || current.renaming) return
     props.setRowUI("editor", { ...current, renaming: true })
     const saved = await props.onRenameSession(props.server, props.record.session, current.draft)
+    // Disabling the input during the request drops focus to the body; restore
+    // it unless the user focused another control while the rename was pending.
+    const restore = document.activeElement === document.body || document.activeElement === titleRef
     props.setRowUI("editor", (value) => {
       if (value?.id !== sessionID()) return value
       return saved ? undefined : { ...value, renaming: false }
+    })
+    if (!restore) return
+    requestAnimationFrame(() => {
+      if (saved) {
+        rowRef?.focus()
+        return
+      }
+      titleRef?.focus()
     })
   }
 
@@ -496,8 +508,9 @@ function HomeSessionRow(
       class="group/session relative flex h-10 min-w-0 items-center rounded-[6px] outline-none focus:outline-none focus-visible:outline-none"
       classList={{ group: !!showProjectName() }}
       onContextMenu={(event) => {
-        event.preventDefault()
+        // While renaming, keep the native menu so paste and spelling work.
         if (editor()) return
+        event.preventDefault()
         openMenu(event.currentTarget, event.clientX, event.clientY)
       }}
     >
@@ -531,6 +544,9 @@ function HomeSessionRow(
               }}
               onKeyDown={(event) => {
                 event.stopPropagation()
+                // Enter and Escape during IME composition commit or cancel
+                // the composition, not the rename.
+                if (event.isComposing) return
                 if (event.key === "Enter") {
                   event.preventDefault()
                   void saveEditor()
@@ -539,6 +555,7 @@ function HomeSessionRow(
                 if (event.key !== "Escape") return
                 event.preventDefault()
                 closeEditor()
+                requestAnimationFrame(() => rowRef?.focus())
               }}
               onBlur={closeEditor}
             />
@@ -640,12 +657,18 @@ function HomeSessionRow(
         />
         <Menu.Portal>
           <Menu.Content
+            onInteractOutside={() => {
+              menuInteractedOutside = true
+            }}
             onCloseAutoFocus={(event) => {
               // The trigger is an invisible positioning span, so Kobalte's
               // default close focus restore has no useful target. Skip the
-              // row focus while the rename editor owns focus instead.
+              // row focus when the rename editor owns focus or the user
+              // dismissed the menu by interacting elsewhere.
               event.preventDefault()
-              if (editor()) return
+              const outside = menuInteractedOutside
+              menuInteractedOutside = false
+              if (outside || editor()) return
               requestAnimationFrame(() => rowRef?.focus())
             }}
           >
