@@ -10,6 +10,7 @@ export type {
   Service as LLMClientService,
 } from "./client"
 export * from "./executor"
+export * from "./idle-watchdog"
 export { Auth } from "./auth"
 export { AuthOptions } from "./auth-options"
 export { Endpoint } from "./endpoint"
