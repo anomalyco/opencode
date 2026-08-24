@@ -58,6 +58,7 @@ export type ElectronAPI = {
   openPath(path: string, app?: string): Promise<string | undefined>
   revealPath(path: string): Promise<boolean>
   readClipboardImage(): Promise<ClipboardImage | null>
+  writeClipboardText(text: string): Promise<void>
   getWindowFocused(): Promise<boolean>
   getWindowFullscreen(): Promise<boolean>
   onWindowFullscreenChanged(cb: (fullscreen: boolean) => void): () => void

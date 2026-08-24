@@ -106,6 +106,7 @@ export const api: ElectronAPI = {
     invoke("FilesReadClipboardImage").then((image) =>
       image ? { ...image, buffer: toArrayBuffer(image.buffer) } : null,
     ),
+  writeClipboardText: (text) => invoke("FilesWriteClipboardText", { text }),
   getWindowFocused: () => invoke("WindowGetFocused"),
   getWindowFullscreen: () => invoke("WindowGetFullscreen"),
   onWindowFullscreenChanged: (cb) => listen("WindowFullscreenChanged", (event) => cb(event.fullscreen)),
