@@ -22,7 +22,8 @@
   "scripts": {
     "build": "bun run script/build.ts",
     "test": "bun test --timeout 5000",
-    "typecheck": "tsgo -b"
+    "typecheck": "tsgo -b",
+    "verify:package": "bun run script/verify-package.ts"
   },
   "dependencies": {
     "@opencode-ai/client": "workspace:*",

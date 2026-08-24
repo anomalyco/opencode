@@ -89,6 +89,12 @@ jobs:
         working-directory: packages/codemode
         run: bun run script/publish.ts --dry-run
 
+      - name: Verify packed workerd SDK
+        if: runner.os == 'Linux'
+        timeout-minutes: 15
+        working-directory: packages/sdk
+        run: bun run verify:package
+
       - name: Verify compiled service lifecycle
         if: always()
         timeout-minutes: 10
