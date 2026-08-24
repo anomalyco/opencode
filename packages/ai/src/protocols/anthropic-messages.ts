@@ -157,7 +157,7 @@ type AnthropicDocumentBlock = Schema.Schema.Type<typeof AnthropicDocumentBlock>
 const AnthropicThinkingBlock = Schema.Struct({
   type: Schema.tag("thinking"),
   thinking: Schema.String,
-  signature: Schema.optional(Schema.String),
+  signature: Schema.String,
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 
@@ -701,6 +701,26 @@ const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
+const requireThinkingSignature = (request: LLMRequest) => {
+  if (request.model.compatibility?.requireSignature !== undefined)
+    return request.model.compatibility.requireSignature
+  const provider = request.model.provider.toLowerCase()
+  const model = request.model.id.toLowerCase()
+  const baseURL = (request.model.route.endpoint.baseURL ?? "").toLowerCase()
+  if (
+    provider === "kimi-for-coding" ||
+    provider === "moonshotai" ||
+    provider === "moonshotai-cn" ||
+    model.startsWith("kimi-") ||
+    baseURL.includes("api.kimi.com/coding") ||
+    baseURL.includes("api.moonshot.ai/anthropic") ||
+    baseURL.includes("api.moonshot.cn/anthropic")
+  )
+    return false
+  if (provider.includes("xiaomi") || model.includes("mimo") || baseURL.includes("xiaomimimo.com")) return false
+  return true
+}
+
 // Mid-conversation system messages became available with Opus 4.8 and version
 // 5 of the other supported Claude families. Treat later family versions as
 // compatible without assuming that every Anthropic Messages model is Claude.
@@ -807,13 +827,28 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "reasoning") {
-          // Mirrors Vercel's @ai-sdk/anthropic: a signature marks visible
-          // thinking; only signature-less parts carrying redactedData
-          // round-trip as opaque redacted_thinking blocks.
+          // A signature marks visible thinking; only signature-less parts carrying
+          // redactedData round-trip as opaque redacted_thinking blocks.
           const signature = part.encrypted ?? signatureFromMetadata(part.providerMetadata)
           const redactedData = redactedDataFromMetadata(part.providerMetadata)
           if (signature === undefined && redactedData !== undefined) {
             content.push({ type: "redacted_thinking", data: redactedData })
+            continue
+          }
+          if (typeof signature !== "string" || signature.trim().length === 0) {
+            if (part.text.trim().length === 0) continue
+            if (!requireThinkingSignature(request)) {
+              content.push({ type: "thinking", thinking: part.text, signature: "" })
+              continue
+            }
+            // Without a signature this cannot be a valid thinking block per
+            // the SDK ThinkingBlockParam:3217 — demote to text so the
+            // conversation remains sendable.
+            content.push({
+              type: "text",
+              text: part.text,
+              cache_control: cacheControl(breakpoints, part.cache),
+            })
             continue
           }
           content.push({ type: "thinking", thinking: part.text, signature })
