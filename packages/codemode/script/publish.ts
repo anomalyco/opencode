@@ -60,8 +60,8 @@ try {
         dependencies: { [pkg.name]: `file:${join(process.cwd(), tarball)}` },
       }),
     )
-    await $`bun install --ignore-scripts`.cwd(consumer)
-    await $`bun -e ${`await import(${JSON.stringify(pkg.name)})`}`.cwd(consumer)
+    await $`npm install --ignore-scripts --no-audit --no-fund`.cwd(consumer)
+    await $`node --input-type=module -e ${`await import(${JSON.stringify(pkg.name)})`}`.cwd(consumer)
     await $`bun --conditions=workerd -e ${`await import(${JSON.stringify(pkg.name)})`}`.cwd(consumer)
   } finally {
     await rm(consumer, { recursive: true, force: true })

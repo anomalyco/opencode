@@ -84,6 +84,11 @@ jobs:
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
+      - name: Verify published codemode package
+        if: runner.os == 'Linux'
+        working-directory: packages/codemode
+        run: bun run script/publish.ts --dry-run
+
       - name: Verify compiled service lifecycle
         if: always()
         timeout-minutes: 10
