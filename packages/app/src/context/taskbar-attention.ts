@@ -2,6 +2,12 @@ export function taskbarAttentionReady(states: Iterable<{ ready(): boolean }>) {
   return [...states].every((state) => state.ready())
 }
 
+export function taskbarUnreadSessions(unseen: Record<string, readonly unknown[]>) {
+  return Object.entries(unseen).flatMap(([session, notifications]) =>
+    session !== "global" && notifications.length ? [session] : [],
+  )
+}
+
 export function createTaskbarAttentionState() {
   const pending = new Map<string, Set<string>>()
   const synced = new Map<string, string>()

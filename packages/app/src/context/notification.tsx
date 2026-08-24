@@ -19,7 +19,7 @@ import { ServerConnection, useServer } from "./server"
 import { type DraftTab, useTabs } from "./tabs"
 import { requireServerKey } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
-import { createTaskbarAttentionState, taskbarAttentionReady } from "./taskbar-attention"
+import { createTaskbarAttentionState, taskbarAttentionReady, taskbarUnreadSessions } from "./taskbar-attention"
 
 type NotificationBase = {
   directory?: string
@@ -287,9 +287,7 @@ function createServerNotificationState(input: {
   )
   const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.list))
   const taskbarAttentionSessions = () => {
-    const unread = Object.entries(index.session.unseen).flatMap(([session, notifications]) =>
-      notifications.length ? [session] : [],
-    )
+    const unread = taskbarUnreadSessions(index.session.unseen)
     const pending = new Map<string, string>()
     Object.entries(input.sync.session.data.permission).forEach(([sessionID, requests]) => {
       const active = requests.filter(

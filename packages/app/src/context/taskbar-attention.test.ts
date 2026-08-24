@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { createTaskbarAttentionState, taskbarAttentionReady } from "./taskbar-attention"
+import { createTaskbarAttentionState, taskbarAttentionReady, taskbarUnreadSessions } from "./taskbar-attention"
 
 describe("taskbar attention state", () => {
   test("waits for every server state before publishing attention", () => {
     expect(taskbarAttentionReady([{ ready: () => true }, { ready: () => false }])).toBe(false)
     expect(taskbarAttentionReady([{ ready: () => true }, { ready: () => true }])).toBe(true)
+  })
+
+  test("excludes global errors that have no session to open", () => {
+    expect(taskbarUnreadSessions({ global: [{}], "session-1": [{}], "session-2": [] })).toEqual(["session-1"])
   })
 
   test("counts each session once across unread and pending attention", () => {
