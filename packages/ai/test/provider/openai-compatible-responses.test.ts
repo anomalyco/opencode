@@ -132,6 +132,47 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("keeps foreign item id grammars but drops malformed ids", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              // The baseline does not enforce a provider id grammar, so a
+              // non-OpenAI but well-formed token is resent as-is.
+              { type: "text", text: "Kept.", providerMetadata: { openresponses: { itemId: "history_1" } } },
+              // Shape violations are dropped even without a grammar policy.
+              {
+                type: "text",
+                text: "Dropped.",
+                providerMetadata: { openresponses: { itemId: `m${"a".repeat(64)}` } },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "message",
+          id: "history_1",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Kept." }],
+        },
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Dropped." }],
+        },
+      ])
+    }),
+  )
+
   it.effect("preserves nullable phases in the forgiving Open Responses baseline", () =>
     Effect.gen(function* () {
       const model = configure({

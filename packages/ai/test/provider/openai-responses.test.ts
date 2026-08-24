@@ -2343,9 +2343,99 @@ describe("OpenAI Responses route", () => {
 
       expect(prepared.body.input).toEqual([
         { role: "user", content: [{ type: "input_text", text: "Search." }] },
-        { role: "user", content: [{ type: "input_text", text: '{"type":"web_search_call","id":"ws_1","status":"completed"}' }] },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: '{"type":"web_search_call","id":"ws_1","status":"completed"}' }],
+        },
         { role: "user", content: [{ type: "input_text", text: "Continue." }] },
       ])
+    }),
+  )
+
+  it.effect("drops replayed item ids outside the server's grammar", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              // Fails the message id prefix.
+              {
+                type: "text",
+                text: "Hello",
+                providerMetadata: { openai: { itemId: "history_1" } },
+              },
+              // Oversized for the Responses item id limit.
+              {
+                type: "text",
+                text: "World",
+                providerMetadata: { openai: { itemId: `m${"a".repeat(64)}` } },
+              },
+              // Fails the reasoning id prefix, so the whole item is unreplayable
+              // statelessly and is skipped rather than sent malformed.
+              {
+                type: "reasoning",
+                text: "Checked the diff.",
+                providerMetadata: { openai: { itemId: "thinking_1", reasoningEncryptedContent: "encrypted-state" } },
+              },
+              ToolCallPart.make({
+                id: "call_1",
+                name: "lookup",
+                input: { query: "weather" },
+                providerMetadata: { openai: { itemId: "toolu_01A" } },
+              }),
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            { type: "output_text", text: "Hello" },
+            { type: "output_text", text: "World" },
+          ],
+        },
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "lookup",
+          arguments: '{"query":"weather"}',
+        },
+      ])
+    }),
+  )
+
+  it.effect("keeps well-formed hosted references and drops malformed ones under storage", () =>
+    Effect.gen(function* () {
+      const hostedResult = (itemId: string) => [
+        ToolCallPart.make({
+          id: itemId,
+          name: "web_search",
+          input: { query: "effect 4" },
+          providerExecuted: true,
+          providerMetadata: { openai: { itemId } },
+        }),
+        {
+          type: "tool-result" as const,
+          id: itemId,
+          name: "web_search",
+          result: { type: "json" as const, value: { status: "completed" } },
+          providerExecuted: true as const,
+          providerMetadata: { openai: { itemId } },
+        },
+      ]
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.assistant(hostedResult("ws_1")), Message.assistant(hostedResult("bad ref"))],
+          providerOptions: { store: true },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([{ type: "item_reference", id: "ws_1" }])
     }),
   )
 
@@ -2472,15 +2562,15 @@ describe("OpenAI Responses route", () => {
       const body = sseEvents(
         {
           type: "response.output_item.added",
-          item: { type: "function_call", id: "item_1", call_id: "call_1", name: "lookup", arguments: "" },
+          item: { type: "function_call", id: "fc_item_1", call_id: "call_1", name: "lookup", arguments: "" },
         },
-        { type: "response.function_call_arguments.delta", item_id: "item_1", delta: '{"query"' },
-        { type: "response.function_call_arguments.delta", item_id: "item_1", delta: ':"weather"}' },
+        { type: "response.function_call_arguments.delta", item_id: "fc_item_1", delta: '{"query"' },
+        { type: "response.function_call_arguments.delta", item_id: "fc_item_1", delta: ':"weather"}' },
         {
           type: "response.output_item.done",
           item: {
             type: "function_call",
-            id: "item_1",
+            id: "fc_item_1",
             call_id: "call_1",
             name: "lookup",
             arguments: '{"query":"weather"}',
@@ -2509,7 +2599,7 @@ describe("OpenAI Responses route", () => {
           type: "tool-input-start",
           id: "call_1",
           name: "lookup",
-          providerMetadata: { openai: { itemId: "item_1" } },
+          providerMetadata: { openai: { itemId: "fc_item_1" } },
         },
         {
           type: "tool-input-delta",
@@ -2527,7 +2617,7 @@ describe("OpenAI Responses route", () => {
           type: "tool-input-end",
           id: "call_1",
           name: "lookup",
-          providerMetadata: { openai: { itemId: "item_1" } },
+          providerMetadata: { openai: { itemId: "fc_item_1" } },
         },
         {
           type: "tool-call",
@@ -2535,7 +2625,7 @@ describe("OpenAI Responses route", () => {
           name: "lookup",
           input: { query: "weather" },
           providerExecuted: undefined,
-          providerMetadata: { openai: { itemId: "item_1" } },
+          providerMetadata: { openai: { itemId: "fc_item_1" } },
         },
         {
           type: "step-finish",
@@ -2556,7 +2646,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.input).toEqual([
         {
           type: "function_call",
-          id: "item_1",
+          id: "fc_item_1",
           call_id: "call_1",
           name: "lookup",
           arguments: '{"query":"weather"}',
@@ -2570,7 +2660,7 @@ describe("OpenAI Responses route", () => {
       const body = sseEvents(
         {
           type: "response.output_item.added",
-          item: { type: "function_call", id: "item_1", call_id: "call_1", name: "lookup", arguments: "" },
+          item: { type: "function_call", id: "fc_item_1", call_id: "call_1", name: "lookup", arguments: "" },
         },
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
@@ -2582,7 +2672,7 @@ describe("OpenAI Responses route", () => {
             type: "tool-input-end",
             id: "call_1",
             name: "lookup",
-            providerMetadata: { openai: { itemId: "item_1" } },
+            providerMetadata: { openai: { itemId: "fc_item_1" } },
           },
           {
             type: "tool-call",
@@ -2590,7 +2680,7 @@ describe("OpenAI Responses route", () => {
             name: "lookup",
             input: {},
             providerExecuted: undefined,
-            providerMetadata: { openai: { itemId: "item_1" } },
+            providerMetadata: { openai: { itemId: "fc_item_1" } },
           },
         ],
       )
@@ -2603,14 +2693,14 @@ describe("OpenAI Responses route", () => {
       const body = sseEvents(
         {
           type: "response.output_item.added",
-          item: { type: "function_call", id: "item_1", call_id: "call_1", name: "lookup", arguments: "" },
+          item: { type: "function_call", id: "fc_item_1", call_id: "call_1", name: "lookup", arguments: "" },
         },
-        { type: "response.function_call_arguments.delta", item_id: "item_1", delta: '{"query":"streamed"}' },
+        { type: "response.function_call_arguments.delta", item_id: "fc_item_1", delta: '{"query":"streamed"}' },
         {
           type: "response.output_item.done",
           item: {
             type: "function_call",
-            id: "item_1",
+            id: "fc_item_1",
             call_id: "call_1",
             name: "lookup",
             arguments: '{"query":"partial',
@@ -2642,7 +2732,7 @@ describe("OpenAI Responses route", () => {
           type: "response.output_item.done",
           item: {
             type: "function_call",
-            id: "item_1",
+            id: "fc_item_1",
             call_id: "call_1",
             name: "lookup",
             arguments: '{"query":"partial',
@@ -2671,7 +2761,7 @@ describe("OpenAI Responses route", () => {
                 type: "response.output_item.done",
                 item: {
                   type: "function_call",
-                  id: "item_1",
+                  id: "fc_item_1",
                   call_id: "call_1",
                   name: "lookup",
                   arguments: '{"query":"weather"}',
@@ -2685,7 +2775,7 @@ describe("OpenAI Responses route", () => {
 
       expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({
         id: "call_1",
-        providerMetadata: { openai: { itemId: "item_1" } },
+        providerMetadata: { openai: { itemId: "fc_item_1" } },
       })
     }),
   )

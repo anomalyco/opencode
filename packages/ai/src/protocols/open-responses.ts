@@ -313,6 +313,9 @@ export const Event = Schema.StructWithRest(
 )
 export type Event = Schema.Schema.Type<typeof Event>
 
+// Which lowered input item a persisted item id is about to be attached to.
+export type ItemKind = "message" | "reasoning" | "function-call" | "reference"
+
 export interface Extension {
   readonly id: string
   readonly name: string
@@ -321,6 +324,10 @@ export interface Extension {
     readonly media: ProviderShared.NormalizedMedia
     readonly request: LLMRequest
   }) => MediaInput | undefined
+  // Optional grammar check applied before a persisted item id is resent as
+  // part of replayed history. Returning false drops the id; every lowered
+  // item treats a dropped id the same as an absent one.
+  readonly acceptsItemID?: (kind: ItemKind, id: string) => boolean
 }
 
 const BASE: Extension = { id: ADAPTER, name: NAME }
@@ -376,28 +383,46 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
     tool: (toolName) => ({ type: "function" as const, name: toolName }),
   })
 
+// Servers validate item ids on replayed history, and a malformed or oversized
+// id can fail an otherwise valid request. Only server-issued tokens are worth
+// resending; anything else is treated as absent so the item is resent without
+// an id (or skipped, for items that cannot be expressed without one).
+const ITEM_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
   const metadata = providerMetadata?.[providerMetadataKey]
-  return ProviderShared.isRecord(metadata) && typeof metadata.itemId === "string" && metadata.itemId.length > 0
+  return ProviderShared.isRecord(metadata) &&
+    typeof metadata.itemId === "string" &&
+    ITEM_ID_PATTERN.test(metadata.itemId)
     ? metadata.itemId
     : undefined
 }
 
-const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {
+const acceptsItemID = (extension: Extension, kind: ItemKind, id: string | undefined): id is string =>
+  id !== undefined && (extension.acceptsItemID?.(kind, id) ?? true)
+
+const lowerToolCall = (
+  part: ToolCallPart,
+  providerMetadataKey: string,
+  extension: Extension,
+): OpenResponsesInputItem => {
   const id = itemID(part.providerMetadata, providerMetadataKey)
   return {
     type: "function_call",
-    ...(id ? { id } : {}),
+    ...(acceptsItemID(extension, "function-call", id) ? { id } : {}),
     call_id: part.id,
     name: part.name,
     arguments: ProviderShared.encodeJson(part.input),
   }
 }
 
-const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
+const lowerReasoning = (
+  part: ReasoningPart,
+  providerMetadataKey: string,
+  extension: Extension,
+): OpenResponsesReasoningInput | undefined => {
   const metadata = part.providerMetadata?.[providerMetadataKey]
   const id = itemID(part.providerMetadata, providerMetadataKey)
-  if (!ProviderShared.isRecord(metadata) || !id) return undefined
+  if (!ProviderShared.isRecord(metadata) || !acceptsItemID(extension, "reasoning", id)) return undefined
   const encryptedContent =
     typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
       ? metadata.reasoningEncryptedContent
@@ -529,7 +554,8 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
           Array<{ id: string | undefined; phase: MessagePhase | null | undefined; parts: TextPart[] }>
         >((groups, part) => {
           const metadata = part.providerMetadata?.[providerMetadataKey]
-          const id = itemID(part.providerMetadata, providerMetadataKey)
+          const rawID = itemID(part.providerMetadata, providerMetadataKey)
+          const id = acceptsItemID(extension, "message", rawID) ? rawID : undefined
           const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase) : undefined
           const group = groups.at(-1)
           if (group && group.id === id && group.phase === phase) group.parts.push(part)
@@ -554,7 +580,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         }
         if (part.type === "reasoning") {
           flushText()
-          const reasoning = lowerReasoning(part, providerMetadataKey)
+          const reasoning = lowerReasoning(part, providerMetadataKey, extension)
           if (!reasoning) continue
           if (store !== false) {
             if (!reasoningReferences.has(reasoning.id)) input.push({ type: "item_reference", id: reasoning.id })
@@ -575,13 +601,15 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part, providerMetadataKey))
+          input.push(lowerToolCall(part, providerMetadataKey, extension))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
           flushText()
           const id = itemID(part.providerMetadata, providerMetadataKey)
-          if (store !== false && id && !hostedToolReferences.has(id)) input.push({ type: "item_reference", id })
+          const reference = acceptsItemID(extension, "reference", id) ? id : undefined
+          if (store !== false && reference && !hostedToolReferences.has(reference))
+            input.push({ type: "item_reference", id: reference })
           if (store === false) {
             // The server is not storing this exchange, so the tool outcome has to
             // travel in the input. Non-content results degrade to their text form.
@@ -596,7 +624,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
               ),
             })
           }
-          if (id) hostedToolReferences.add(id)
+          if (reference) hostedToolReferences.add(reference)
           continue
         }
         return yield* ProviderShared.unsupportedContent(extension.name, "assistant", [
