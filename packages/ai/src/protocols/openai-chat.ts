@@ -8,6 +8,8 @@ import { Protocol } from "../route/protocol.js"
 import {
   AIError,
   LLMEvent,
+  ProviderInternalReason,
+  UnknownProviderReason,
   Usage,
   type FinishReason,
   type FinishReasonDetails,
@@ -224,16 +226,22 @@ const OpenAIChatChoice = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 
-const OpenAIChatError = Schema.Struct({
-  code: optionalNull(Schema.Union([Schema.String, Schema.Number])),
-  message: Schema.String,
-})
+const OpenAIChatError = Schema.StructWithRest(
+  Schema.Struct({
+    code: optionalNull(Schema.Union([Schema.String, Schema.Number])),
+    message: Schema.String,
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 
-export const OpenAIChatEvent = Schema.Struct({
-  choices: optionalNull(Schema.Array(OpenAIChatChoice)),
-  usage: optionalNull(OpenAIChatUsage),
-  error: optionalNull(OpenAIChatError),
-})
+export const OpenAIChatEvent = Schema.StructWithRest(
+  Schema.Struct({
+    choices: optionalNull(Schema.Array(OpenAIChatChoice)),
+    usage: optionalNull(OpenAIChatUsage),
+    error: optionalNull(OpenAIChatError),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 export type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
 type OpenAIChatRequestMessage = LLMRequest["messages"][number]
 
@@ -727,21 +735,39 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
 // Streaming parsers are small state machines: every event returns a new state
 // plus the common `LLMEvent`s produced by that event. Tool calls are accumulated
 // because OpenAI streams JSON arguments across multiple deltas.
-const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (reason: string) {
-  if (reason === "error" || reason === "network_error")
-    return yield* new AIError({
-      module: ADAPTER,
-      method: "stream",
-      reason: classifyProviderFailure({
-        message: `Provider finish_reason: ${reason}`,
-        code: reason,
-      }),
-    })
-  if (reason === "stop" || reason === "end") return "stop" as const
-  if (reason === "length") return "length" as const
-  if (reason === "content_filter") return "content-filter" as const
-  if (reason === "function_call" || reason === "tool_calls") return "tool-calls" as const
-  return "unknown" as const
+const finishReasonError = (event: OpenAIChatEvent, reason: AIError["reason"]) =>
+  new AIError({
+    module: ADAPTER,
+    method: "stream",
+    body: ProviderShared.encodeJson(event),
+    reason,
+  })
+
+const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (event: OpenAIChatEvent, reason: string) {
+  switch (reason) {
+    case "error":
+      return yield* finishReasonError(
+        event,
+        new UnknownProviderReason({ message: "Provider reported an error (finish_reason: error)" }),
+      )
+    case "network_error":
+      return yield* finishReasonError(
+        event,
+        new ProviderInternalReason({ message: "Provider reported a network error (finish_reason: network_error)" }),
+      )
+    case "stop":
+    case "end":
+      return "stop" as const
+    case "length":
+      return "length" as const
+    case "content_filter":
+      return "content-filter" as const
+    case "function_call":
+    case "tool_calls":
+      return "tool-calls" as const
+    default:
+      return "unknown" as const
+  }
 })
 
 // OpenAI Chat reports `prompt_tokens` (inclusive total) with a
@@ -855,16 +881,20 @@ const reasoningMetadata = (field: ParserState["reasoningField"], details?: Reado
 
 const step = (state: ParserState, event: OpenAIChatEvent) =>
   Effect.gen(function* () {
-    if (event.error)
+    if (event.error) {
+      const body = ProviderShared.encodeJson(event)
       return yield* new AIError({
         module: ADAPTER,
         method: "stream",
+        body,
         reason: classifyProviderFailure({
           message: event.error.message,
           code: event.error.code === undefined || event.error.code === null ? undefined : String(event.error.code),
           status: typeof event.error.code === "number" ? event.error.code : undefined,
+          rawBody: body,
         }),
       })
+    }
     const events: LLMEvent[] = []
     const choice = event.choices?.[0]
     // Moonshot (and a few other OpenAI-compatible providers) attach usage to
@@ -875,7 +905,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const finishReason =
       rawFinishReason
         ? {
-            normalized: yield* mapFinishReason(rawFinishReason),
+            normalized: yield* mapFinishReason(event, rawFinishReason),
             raw: choice?.native_finish_reason ?? rawFinishReason,
           }
         : state.finishReason
