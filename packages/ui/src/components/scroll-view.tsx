@@ -69,6 +69,56 @@ export function isScrollKeyTarget(target: EventTarget | null, key: NonNullable<R
   return true
 }
 
+export function createKeyboardScroll(
+  element: Pick<HTMLElement, "scrollTop" | "scrollHeight" | "clientHeight">,
+  options: {
+    now?: () => number
+    requestFrame?: (callback: FrameRequestCallback) => number
+    cancelFrame?: (handle: number) => void
+    duration?: number
+  } = {},
+) {
+  const now = options.now ?? (() => performance.now())
+  const requestFrame = options.requestFrame ?? ((callback) => requestAnimationFrame(callback))
+  const cancelFrame = options.cancelFrame ?? ((handle) => cancelAnimationFrame(handle))
+  const duration = options.duration ?? 120
+  let frame: number | undefined
+  let start = 0
+  let from = element.scrollTop
+  let target = element.scrollTop
+  let direction = 0
+
+  const tick = (time: number) => {
+    const progress = Math.min(1, (time - start) / duration)
+    element.scrollTop = from + (target - from) * (1 - Math.pow(1 - progress, 3))
+    if (progress < 1) {
+      frame = requestFrame(tick)
+      return
+    }
+    frame = undefined
+  }
+
+  const move = (amount: number) => {
+    const nextDirection = Math.sign(amount)
+    const base = frame !== undefined && direction === nextDirection ? target : element.scrollTop
+    if (frame !== undefined) cancelFrame(frame)
+    from = element.scrollTop
+    target = Math.max(0, Math.min(base + amount, element.scrollHeight - element.clientHeight))
+    direction = nextDirection
+    start = now()
+    frame = requestFrame(tick)
+  }
+
+  const cancel = () => {
+    if (frame !== undefined) cancelFrame(frame)
+    frame = undefined
+    target = element.scrollTop
+    direction = 0
+  }
+
+  return { move, cancel }
+}
+
 export function scrollTopFromThumbPointer(input: {
   pointer: number
   viewportTop: number
@@ -138,6 +188,7 @@ export function ScrollView(props: ScrollViewProps) {
   const showThumb = () => state.showThumb
 
   let scrollIdleTimer: ReturnType<typeof setTimeout> | undefined
+  let keyboardScroll: ReturnType<typeof createKeyboardScroll> | undefined
 
   const markScrolling = () => {
     setState("isScrolling", true)
@@ -153,6 +204,7 @@ export function ScrollView(props: ScrollViewProps) {
 
   onCleanup(() => {
     if (scrollIdleTimer !== undefined) clearTimeout(scrollIdleTimer)
+    keyboardScroll?.cancel()
   })
 
   const updateThumb = () => {
@@ -187,6 +239,7 @@ export function ScrollView(props: ScrollViewProps) {
   }
 
   onMount(() => {
+    keyboardScroll = createKeyboardScroll(viewportRef)
     if (local.viewportRef) {
       local.viewportRef(viewportRef)
     }
@@ -291,26 +344,30 @@ export function ScrollView(props: ScrollViewProps) {
     switch (next) {
       case "page-down":
         e.preventDefault()
-        viewportRef.scrollBy({ top: scrollAmount, behavior: "smooth" })
+        keyboardScroll?.move(scrollAmount)
         break
       case "page-up":
         e.preventDefault()
-        viewportRef.scrollBy({ top: -scrollAmount, behavior: "smooth" })
+        keyboardScroll?.move(-scrollAmount)
         break
       case "home":
         e.preventDefault()
+        keyboardScroll?.cancel()
         viewportRef.scrollTo({ top: 0, behavior: "smooth" })
         break
       case "end":
         e.preventDefault()
+        keyboardScroll?.cancel()
         viewportRef.scrollTo({ top: viewportRef.scrollHeight, behavior: "smooth" })
         break
       case "up":
         e.preventDefault()
+        keyboardScroll?.cancel()
         viewportRef.scrollBy({ top: -lineAmount, behavior: "smooth" })
         break
       case "down":
         e.preventDefault()
+        keyboardScroll?.cancel()
         viewportRef.scrollBy({ top: lineAmount, behavior: "smooth" })
         break
     }
@@ -340,6 +397,7 @@ export function ScrollView(props: ScrollViewProps) {
           if (typeof events.onScroll === "function") events.onScroll(e as any)
         }}
         onWheel={(e) => {
+          keyboardScroll?.cancel()
           markScrolling()
           const handler = events.onWheel
           if (typeof handler === "function") handler(e as any)
