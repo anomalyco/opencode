@@ -1,3 +1,6 @@
+import type { FlowchartDirection } from "../../flowchart/types.js"
+import type { StateDiagramDirection } from "../../state/types.js"
+
 export type LayoutFixture = {
   id: string
   kind: "flowchart" | "state"
@@ -8,8 +11,6 @@ export type LayoutFixture = {
 }
 
 type LabelProfile = "short" | "long" | "unicode"
-type FlowDirection = "TB" | "TD" | "BT" | "LR" | "RL"
-type StateDirection = "TB" | "TD" | "BT" | "LR" | "RL"
 
 const flowVariants = [
   ["TB", "short"],
@@ -27,7 +28,7 @@ const flowVariants = [
   ["TB", "long"],
   ["BT", "short"],
   ["RL", "unicode"],
-] as const satisfies readonly (readonly [FlowDirection, LabelProfile])[]
+] as const satisfies readonly (readonly [FlowchartDirection, LabelProfile])[]
 
 const stateVariants = [
   ["TB", "short"],
@@ -45,7 +46,7 @@ const stateVariants = [
   ["BT", "short"],
   ["BT", "long"],
   ["BT", "unicode"],
-] as const satisfies readonly (readonly [StateDirection, LabelProfile])[]
+] as const satisfies readonly (readonly [StateDiagramDirection, LabelProfile])[]
 
 function nodeLabel(id: string, profile: LabelProfile): string {
   if (profile === "long") return `${id} deliberate deployment stage with a long descriptive label`
@@ -68,7 +69,7 @@ function flowEdge(from: string, to: string, id: string, profile: LabelProfile): 
 }
 
 function flowSource(
-  direction: FlowDirection,
+  direction: FlowchartDirection,
   profile: LabelProfile,
   nodes: readonly string[],
   edges: readonly [from: string, to: string, id: string][],
@@ -83,7 +84,7 @@ function flowSource(
 }
 
 const flowFamilies = {
-  chain(direction: FlowDirection, profile: LabelProfile) {
+  chain(direction: FlowchartDirection, profile: LabelProfile) {
     return flowSource(
       direction,
       profile,
@@ -97,7 +98,7 @@ const flowFamilies = {
       ],
     )
   },
-  fork(direction: FlowDirection, profile: LabelProfile) {
+  fork(direction: FlowchartDirection, profile: LabelProfile) {
     return flowSource(
       direction,
       profile,
@@ -110,7 +111,7 @@ const flowFamilies = {
       ],
     )
   },
-  join(direction: FlowDirection, profile: LabelProfile) {
+  join(direction: FlowchartDirection, profile: LabelProfile) {
     return flowSource(
       direction,
       profile,
@@ -123,7 +124,7 @@ const flowFamilies = {
       ],
     )
   },
-  cycle(direction: FlowDirection, profile: LabelProfile) {
+  cycle(direction: FlowchartDirection, profile: LabelProfile) {
     return flowSource(
       direction,
       profile,
@@ -137,7 +138,7 @@ const flowFamilies = {
       ],
     )
   },
-  crossing(direction: FlowDirection, profile: LabelProfile) {
+  crossing(direction: FlowchartDirection, profile: LabelProfile) {
     return flowSource(
       direction,
       profile,
@@ -152,7 +153,7 @@ const flowFamilies = {
       ],
     )
   },
-  parallel(direction: FlowDirection, profile: LabelProfile) {
+  parallel(direction: FlowchartDirection, profile: LabelProfile) {
     return flowSource(
       direction,
       profile,
@@ -166,7 +167,7 @@ const flowFamilies = {
       ],
     )
   },
-  self(direction: FlowDirection, profile: LabelProfile) {
+  self(direction: FlowchartDirection, profile: LabelProfile) {
     return flowSource(
       direction,
       profile,
@@ -179,7 +180,7 @@ const flowFamilies = {
       ],
     )
   },
-  subgraph(direction: FlowDirection, profile: LabelProfile) {
+  subgraph(direction: FlowchartDirection, profile: LabelProfile) {
     return [
       `flowchart ${direction}`,
       `  subgraph Left["Left ${nodeLabel("SG1", profile)}"]`,
@@ -196,7 +197,7 @@ const flowFamilies = {
       flowEdge("C", "D", "E04", profile),
     ].join("\n")
   },
-  "nested-subgraph"(direction: FlowDirection, profile: LabelProfile) {
+  "nested-subgraph"(direction: FlowchartDirection, profile: LabelProfile) {
     const local = direction === "LR" || direction === "RL" ? "TB" : "LR"
     return [
       `flowchart ${direction}`,
@@ -215,7 +216,7 @@ const flowFamilies = {
       flowEdge("C", "D", "E04", profile),
     ].join("\n")
   },
-} satisfies Record<string, (direction: FlowDirection, profile: LabelProfile) => string>
+} satisfies Record<string, (direction: FlowchartDirection, profile: LabelProfile) => string>
 
 function stateDeclaration(id: string, profile: LabelProfile, indent = "  "): string {
   return `${indent}state "${nodeLabel(id, profile)}" as ${id}`
@@ -226,7 +227,7 @@ function stateTransition(from: string, to: string, id: string, profile: LabelPro
 }
 
 function stateSource(
-  direction: StateDirection,
+  direction: StateDiagramDirection,
   profile: LabelProfile,
   states: readonly string[],
   transitions: readonly [from: string, to: string, id: string][],
@@ -242,7 +243,7 @@ function stateSource(
 }
 
 const stateFamilies = {
-  chain(direction: StateDirection, profile: LabelProfile) {
+  chain(direction: StateDiagramDirection, profile: LabelProfile) {
     return stateSource(
       direction,
       profile,
@@ -256,7 +257,7 @@ const stateFamilies = {
       ["  [*] --> A", "  E --> [*]"],
     )
   },
-  fork(direction: StateDirection, profile: LabelProfile) {
+  fork(direction: StateDiagramDirection, profile: LabelProfile) {
     return stateSource(
       direction,
       profile,
@@ -268,7 +269,7 @@ const stateFamilies = {
       ],
     )
   },
-  join(direction: StateDirection, profile: LabelProfile) {
+  join(direction: StateDiagramDirection, profile: LabelProfile) {
     return stateSource(
       direction,
       profile,
@@ -280,7 +281,7 @@ const stateFamilies = {
       ],
     )
   },
-  cycle(direction: StateDirection, profile: LabelProfile) {
+  cycle(direction: StateDiagramDirection, profile: LabelProfile) {
     return stateSource(
       direction,
       profile,
@@ -294,7 +295,7 @@ const stateFamilies = {
       ],
     )
   },
-  crossing(direction: StateDirection, profile: LabelProfile) {
+  crossing(direction: StateDiagramDirection, profile: LabelProfile) {
     return stateSource(
       direction,
       profile,
@@ -307,7 +308,7 @@ const stateFamilies = {
       ],
     )
   },
-  parallel(direction: StateDirection, profile: LabelProfile) {
+  parallel(direction: StateDiagramDirection, profile: LabelProfile) {
     return stateSource(
       direction,
       profile,
@@ -320,7 +321,7 @@ const stateFamilies = {
       ],
     )
   },
-  self(direction: StateDirection, profile: LabelProfile) {
+  self(direction: StateDiagramDirection, profile: LabelProfile) {
     return stateSource(
       direction,
       profile,
@@ -333,7 +334,7 @@ const stateFamilies = {
       ],
     )
   },
-  choice(direction: StateDirection, profile: LabelProfile) {
+  choice(direction: StateDiagramDirection, profile: LabelProfile) {
     return stateSource(
       direction,
       profile,
@@ -347,7 +348,7 @@ const stateFamilies = {
       ["  state Choice <<choice>>"],
     )
   },
-  notes(direction: StateDirection, profile: LabelProfile) {
+  notes(direction: StateDiagramDirection, profile: LabelProfile) {
     return stateSource(
       direction,
       profile,
@@ -364,7 +365,7 @@ const stateFamilies = {
       ],
     )
   },
-  composite(direction: StateDirection, profile: LabelProfile) {
+  composite(direction: StateDiagramDirection, profile: LabelProfile) {
     return [
       "stateDiagram-v2",
       `  direction ${direction}`,
@@ -380,7 +381,7 @@ const stateFamilies = {
       `  note right of B: ${edgeLabel("N01", profile)}`,
     ].join("\n")
   },
-  "nested-composite"(direction: StateDirection, profile: LabelProfile) {
+  "nested-composite"(direction: StateDiagramDirection, profile: LabelProfile) {
     return [
       "stateDiagram-v2",
       `  direction ${direction}`,
@@ -401,7 +402,7 @@ const stateFamilies = {
       `  note right of Dirty: ${edgeLabel("N01", profile)}`,
     ].join("\n")
   },
-} satisfies Record<string, (direction: StateDirection, profile: LabelProfile) => string>
+} satisfies Record<string, (direction: StateDiagramDirection, profile: LabelProfile) => string>
 
 export const deploymentArchitectureSource = `flowchart LR
     Client[OpenCode client]

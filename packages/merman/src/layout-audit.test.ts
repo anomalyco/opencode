@@ -14,9 +14,7 @@ test("audits deterministic flowchart and state layout families", () => {
   const audits = auditAllFixtures()
   const elapsedMs = performance.now() - startedAt
   const violations = audits.flatMap((audit) =>
-    audit.violations.map(
-      (violation) => `${audit.fixture.id}${audit.viewport ? ` @${audit.viewport}` : ""}: ${violation}`,
-    ),
+    audit.violations.map((violation) => `${audit.fixture.id} @${audit.viewport}: ${violation}`),
   )
   const summary = summarizeAudits(audits)
 

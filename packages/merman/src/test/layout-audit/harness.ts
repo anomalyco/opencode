@@ -1,4 +1,4 @@
-import { orthogonalPathPoints, type DiagramPoint } from "../../core/geometry.js"
+import { orthogonalPathPoints, segmentBetween, type DiagramPoint } from "../../core/geometry.js"
 import { SpatialIndex, spatialPathClaim, spatialRectClaim } from "../../core/spatial.js"
 import { diagramTextWidth } from "../../core/text.js"
 import { splitDiagramLines } from "../../core/text-lines.js"
@@ -29,7 +29,7 @@ export type LayoutMetrics = {
 
 export type LayoutAudit = {
   fixture: LayoutFixture
-  viewport?: (typeof auditViewports)[number]
+  viewport: (typeof auditViewports)[number]
   output: string
   metrics: LayoutMetrics
   violations: string[]
@@ -109,10 +109,7 @@ function expandedPath(points: readonly DiagramPoint[]): DiagramPoint[] {
 }
 
 function routeLength(points: readonly DiagramPoint[]): number {
-  return points.slice(1).reduce((total, point, index) => {
-    const previous = points[index]
-    return total + Math.abs(point.x - previous.x) + Math.abs(point.y - previous.y)
-  }, 0)
+  return routeSegments(points).reduce((total, segment) => total + segment.length, 0)
 }
 
 function routeBends(points: readonly DiagramPoint[]): number {
@@ -126,17 +123,7 @@ function routeBends(points: readonly DiagramPoint[]): number {
 }
 
 function routeSegments(points: readonly DiagramPoint[]) {
-  return points.slice(1).flatMap((point, index) => {
-    const previous = points[index]
-    if (point.x === previous.x && point.y === previous.y) return []
-    return [
-      {
-        from: previous,
-        to: point,
-        axis: point.x === previous.x ? ("y" as const) : ("x" as const),
-      },
-    ]
-  })
+  return points.slice(1).flatMap((point, index) => segmentBetween(points[index]!, point) ?? [])
 }
 
 function crossingCount(routes: readonly AuditedRoute[]): number {
@@ -178,7 +165,7 @@ function metrics(
   width: number,
   height: number,
   routes: readonly AuditedRoute[],
-  viewport?: (typeof auditViewports)[number],
+  viewport: (typeof auditViewports)[number],
 ): LayoutMetrics {
   return {
     width,
@@ -188,7 +175,7 @@ function metrics(
     bends: routes.reduce((total, route) => total + routeBends(route.points), 0),
     crossings: crossingCount(routes),
     sharedRouteCells: sharedRouteCellCount(routes),
-    overflow: viewport ? Math.max(0, width - viewport) : Math.max(0, width - 120),
+    overflow: Math.max(0, width - viewport),
   }
 }
 

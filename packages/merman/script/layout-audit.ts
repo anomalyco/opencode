@@ -15,7 +15,7 @@ const elapsedMs = performance.now() - startedAt
 const summary = summarizeAudits(audits)
 
 function label(audit: LayoutAudit): string {
-  return `${audit.fixture.id}${audit.viewport ? ` @${audit.viewport}` : ""}`
+  return `${audit.fixture.id} @${audit.viewport}`
 }
 
 function metricTable(items: readonly LayoutAudit[]): string {
@@ -24,7 +24,7 @@ function metricTable(items: readonly LayoutAudit[]): string {
     "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ...items.map(
       (audit) =>
-        `| \`${audit.fixture.id}\` | ${audit.viewport ?? "-"} | ${audit.metrics.width}x${audit.metrics.height} | ${audit.metrics.area} | ${audit.metrics.routeLength} | ${audit.metrics.bends} | ${audit.metrics.crossings} | ${audit.metrics.sharedRouteCells} | ${audit.metrics.overflow} |`,
+        `| \`${audit.fixture.id}\` | ${audit.viewport} | ${audit.metrics.width}x${audit.metrics.height} | ${audit.metrics.area} | ${audit.metrics.routeLength} | ${audit.metrics.bends} | ${audit.metrics.crossings} | ${audit.metrics.sharedRouteCells} | ${audit.metrics.overflow} |`,
     ),
   ].join("\n")
 }

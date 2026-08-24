@@ -4,6 +4,7 @@ import stringWidth from "string-width"
 import { diagramArrowHeadBetween } from "../core/drawing.js"
 import { orthogonalPathPoints } from "../core/geometry.js"
 import { expectDiagram } from "../test/diagram.js"
+import { deploymentArchitectureSource } from "../test/layout-audit/fixtures.js"
 import { drawFlowchartDiagramGrid as drawParsedFlowchartDiagramGrid } from "./drawing.js"
 import {
   DEFAULT_MIN_RANK_GAP,
@@ -190,46 +191,6 @@ function expectResponsiveFlowchartValid(content: string, layoutMaxWidth: number)
   )
   return { dimensions, layout, output }
 }
-
-const REAL_DEPLOYMENT_FLOWCHART = `flowchart LR
-    Client[OpenCode client]
-
-    subgraph CF[Cloudflare]
-      DNS[opencode.ai]
-      Web[Console frontend Worker]
-      Proxy[Console API proxy Worker]
-      Infer[inference-next Worker]
-      KV[Model registry KV]
-      Redis[Upstash Redis]
-      Logs[Axiom / Cloudflare logs]
-      Lake[Pipeline to R2 data lake]
-    end
-
-    subgraph AWS[AWS]
-      EKS[EKS cluster]
-      API[Console API pod<br/>1 replica]
-      OTEL[OTel collector]
-      ECR[ECR]
-    end
-
-    DB[(PlanetScale)]
-    Models[Anthropic / OpenAI / other providers]
-
-    Client -->|/inference/*| DNS --> Infer
-    Client -->|/console/*| DNS --> Web
-    Web -->|/console/api, /auth, etc.| Proxy
-    Proxy -->|Cloudflare VPC service| API
-
-    Infer -->|public DATABASE_URL| DB
-    Infer --> KV
-    Infer --> Redis
-    Infer --> Models
-    Infer --> Logs
-    Infer --> Lake
-
-    API -->|private DATABASE_AWS_URL| DB
-    API --> OTEL
-    ECR --> API`
 
 function generatedWideRankFlowchart(count: number): string {
   const labels = [
@@ -1013,7 +974,7 @@ describe("FlowchartDiagram", () => {
       [160, { width: 163, height: 69 }],
     ])
     const results = [...expected].map(([budget, dimensions]) => {
-      const result = expectResponsiveFlowchartValid(REAL_DEPLOYMENT_FLOWCHART, budget)
+      const result = expectResponsiveFlowchartValid(deploymentArchitectureSource, budget)
       expect(result.dimensions).toEqual(dimensions)
       for (const frame of result.layout.subgraphBounds.values()) {
         for (const other of result.layout.subgraphBounds.values()) {
