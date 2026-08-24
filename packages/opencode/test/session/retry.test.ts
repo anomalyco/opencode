@@ -3,6 +3,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
+import { LLMError, TransportReason } from "@opencode-ai/llm"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Effect, Schedule, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -146,6 +147,38 @@ describe("session.retry.delay", () => {
       expect(attempts).toStrictEqual([1, 2, 3, 4, 5])
     }),
   )
+
+  it.instance("policy retries provider stream idle timeouts", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionID.make("session-retry-idle-timeout")
+      const status = yield* SessionStatus.Service
+      const error = new LLMError({
+        module: "route",
+        method: "stream",
+        reason: new TransportReason({ message: "No stream elements within 1000ms", kind: "IdleTimeout" }),
+      })
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: retryProvider,
+          parse: (e) => MessageV2.fromError(e, { providerID }),
+          set: (info) =>
+            status.set(sessionID, {
+              type: "retry",
+              attempt: info.attempt,
+              message: info.message,
+              next: info.next,
+            }),
+        }),
+      )
+      yield* step(error)
+
+      expect(yield* status.get(sessionID)).toMatchObject({
+        type: "retry",
+        attempt: 1,
+        message: "Provider stream stalled",
+      })
+    }),
+  )
 })
 
 describe("session.retry.retryable", () => {
@@ -260,6 +293,36 @@ describe("session.retry.retryable", () => {
     expect(SessionV1.APIError.isInstance(request)).toBe(true)
     expect(SessionRetry.retryable(request, retryProvider)).toEqual({
       message: "WebSocket closed before response.completed (code 1006: Connection ended)",
+    })
+  })
+
+  test("retries LLM stream idle timeout errors", () => {
+    const error = new LLMError({
+      module: "route",
+      method: "stream",
+      reason: new TransportReason({ message: "No stream elements within 120000ms", kind: "IdleTimeout" }),
+    })
+    const request = MessageV2.fromError(error, { providerID })
+    expect(SessionV1.APIError.isInstance(request)).toBe(true)
+    if (!SessionV1.APIError.isInstance(request)) throw new Error("expected APIError")
+    expect(request.data.message).toBe("Provider stream stalled")
+    expect(SessionRetry.retryable(request, retryProvider)).toEqual({ message: "Provider stream stalled" })
+  })
+
+  test("does not retry other LLM transport errors", () => {
+    const error = new LLMError({
+      module: "route",
+      method: "stream",
+      reason: new TransportReason({ message: "transport failed mid-response" }),
+    })
+    const request = MessageV2.fromError(error, { providerID })
+    expect(SessionRetry.retryable(request, retryProvider)).toBeUndefined()
+  })
+
+  test("retries raw stalled stream messages", () => {
+    const error = wrap("route.stream: Provider stream stalled")
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "route.stream: Provider stream stalled",
     })
   })
 

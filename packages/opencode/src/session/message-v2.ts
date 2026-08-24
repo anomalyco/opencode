@@ -18,6 +18,7 @@ import {
 
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
+import { LLMError } from "@opencode-ai/llm"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { NotFoundError } from "@/storage/storage"
@@ -676,6 +677,19 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    case isIdleTimeoutError(e):
+      // The stalled-stream watchdog fails the LLM stream with this typed error;
+      // surface it as retryable so the processor schedules another attempt.
+      return new APIError(
+        {
+          message: "Provider stream stalled",
+          isRetryable: true,
+          metadata: {
+            code: "IdleTimeout",
+          },
+        },
+        { cause: e },
+      ).toObject()
     case APICallError.isInstance(e):
       const parsed = ProviderError.parseAPICallError({
         providerID: ctx.providerID,
@@ -731,6 +745,10 @@ export function fromError(
       } catch {}
       return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
   }
+}
+
+function isIdleTimeoutError(e: unknown): e is LLMError {
+  return e instanceof LLMError && e.reason._tag === "Transport" && e.reason.kind === "IdleTimeout"
 }
 
 export * as MessageV2 from "./message-v2"
