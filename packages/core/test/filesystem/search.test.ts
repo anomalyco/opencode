@@ -12,6 +12,7 @@ import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
 import { Location } from "@opencode-ai/core/location"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
+import { Workspace } from "@opencode-ai/core/workspace"
 import { location } from "../fixture/location"
 
 describe("FileSystemSearch", () => {
@@ -45,6 +46,58 @@ describe("FileSystemSearch", () => {
       )
 
       expect(entries.every((entry) => !entry.path.startsWith("rust/target/"))).toBe(true)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test("selects the ripgrep layer for workspace-backed locations even when vcs would pick fff", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-search-workspace-"))
+    try {
+      // A local file that only an fff index of the server directory could surface.
+      await Bun.write(path.join(directory, "server-local.ts"), "server local")
+      let observed: Ripgrep.FindInput | undefined
+      const ref = Location.Ref.make({
+        directory: AbsolutePath.make(directory),
+        workspaceID: Workspace.ID.make("wrk_test"),
+      })
+      const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+        [
+          Location.node,
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location(ref, { vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) } }),
+            ),
+          ),
+        ],
+        [
+          Ripgrep.node,
+          Layer.succeed(
+            Ripgrep.Service,
+            Ripgrep.Service.of({
+              find: (input) =>
+                Effect.gen(function* () {
+                  observed = input
+                  if (input.onEntry)
+                    yield* input.onEntry(FileSystem.Entry.make({ path: RelativePath.make("remote.ts"), type: "file" }))
+                  return []
+                }),
+              glob: () => Effect.succeed([]),
+              grep: () => Effect.succeed([]),
+            }),
+          ),
+        ],
+      ])
+
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const search = yield* FileSystemSearch.Service
+          const entries = yield* search.find({ query: "ts", type: "file" })
+          expect(observed?.cwd).toBe(directory)
+          expect(entries.map((entry) => entry.path)).toEqual([RelativePath.make("remote.ts")])
+        }).pipe(Effect.provide(layer), Effect.scoped),
+      )
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
