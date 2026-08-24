@@ -223,6 +223,10 @@ export interface Hooks {
   dispose?: () => Promise<void>
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
+  "session.stopping"?: (
+    input: { sessionID: string },
+    output: { stop: boolean; message?: string },
+  ) => Promise<void>
   tool?: {
     [key: string]: ToolDefinition
   }
