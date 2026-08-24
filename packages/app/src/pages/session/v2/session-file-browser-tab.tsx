@@ -1,5 +1,5 @@
 import { createMemo, createSignal, createUniqueId, Show } from "solid-js"
-import { createQuery } from "@tanstack/solid-query"
+import { createQuery, keepPreviousData } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode-ai/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar } from "@opencode-ai/session-ui/v2/session-review-v2"
@@ -11,7 +11,6 @@ import { useSDK } from "@/context/sdk"
 import { displayName } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileView } from "@/pages/session/file-tabs"
-import type { RenderDiff } from "@/pages/session/v2/review-diff-kinds"
 import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 import { pathKey } from "@/utils/path-key"
 
@@ -31,10 +30,6 @@ export function SessionFileBrowserTab(props: {
   active?: string
   kinds: ReadonlyMap<string, Kind>
   state: SessionFileBrowserState
-  diff?: RenderDiff
-  diffVersion?: number
-  loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
-  expandUnchanged?: boolean
   onSelect: (path: string) => void
   onSelectPermanent: (path: string) => void
   filterRef?: (element: HTMLInputElement) => void
@@ -55,6 +50,7 @@ export function SessionFileBrowserTab(props: {
       queryKey: ["session-open-file", workspaceKey(), value] as const,
       enabled: value.length > 0,
       queryFn: ({ signal }) => file.searchFiles(value, { limit: 200, signal }),
+      placeholderData: keepPreviousData,
     }
   })
   const files = createMemo(() => {
@@ -177,15 +173,7 @@ export function SessionFileBrowserTab(props: {
       >
         <div class="min-h-0 flex-1">
           <Show when={props.tab} keyed>
-            {(tab) => (
-              <SessionFileView
-                tab={tab}
-                diff={props.diff}
-                diffVersion={props.diffVersion}
-                loadDiff={props.loadDiff}
-                expandUnchanged={props.expandUnchanged}
-              />
-            )}
+            {(tab) => <SessionFileView tab={tab} />}
           </Show>
         </div>
       </Show>

@@ -1,8 +1,8 @@
 import { query } from "@solidjs/router"
 
-export const modelCatalogSourceUrl = "https://models.dev/catalog.json"
-export const modelCatalogPricingUrl = "https://models.dev/api.json"
-export const modelCatalogLabSourceUrl = "https://models.dev/labs"
+export const modelCatalogSourceUrl = "https://models.opencode.ai/catalog.json"
+export const modelCatalogPricingUrl = "https://models.opencode.ai/api.json"
+export const modelCatalogLabSourceUrl = "https://models.opencode.ai/labs"
 
 export type ModelCatalogCost = {
   input: number

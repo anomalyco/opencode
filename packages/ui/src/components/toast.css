@@ -1,7 +1,7 @@
 [data-component="toast-region"] {
   position: fixed;
   bottom: 48px;
-  right: 32px;
+  inset-inline-end: 32px;
   z-index: 1000;
   display: flex;
   flex-direction: column;

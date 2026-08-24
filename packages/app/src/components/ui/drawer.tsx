@@ -55,7 +55,7 @@ const DrawerContent = <T extends ValidComponent = "div">(props: DynamicProps<T, 
       <DrawerPrimitive.Content
         class={props.class}
         classList={{
-          "group/drawer-content fixed inset-y-[6px] right-[6px] left-auto z-[100] flex h-auto max-h-[calc(100vh-12px)] w-[560px] max-w-[calc(100vw-12px)] flex-col items-start rounded-[8px] bg-v2-background-bg-base p-0 shadow-[var(--v2-elevation-overlay)] data-[transitioning]:transition-transform data-[transitioning]:duration-300 md:select-none": true,
+          "group/drawer-content fixed inset-y-[6px] end-[6px] start-auto z-[100] flex h-auto max-h-[calc(100vh-12px)] w-[560px] max-w-[calc(100vw-12px)] flex-col items-start rounded-[8px] bg-v2-background-bg-base p-0 shadow-[var(--v2-elevation-overlay)] data-[transitioning]:transition-transform data-[transitioning]:duration-300 md:select-none": true,
         }}
         {...rest}
       >

@@ -13,6 +13,7 @@ test.use({ viewport: { width: 1440, height: 900 } })
 
 test.beforeEach(async ({ page }) => {
   await mockOpenCodeServer(page, {
+    protocol: "v2",
     directory,
     project: {
       id: projectID,
@@ -46,25 +47,30 @@ test.beforeEach(async ({ page }) => {
     ],
     pageMessages: () => ({ items: [] }),
   })
-  await page.route("**/pty", (route) =>
+  await page.route("**/api/pty*", (route) => {
+    expect(new URL(route.request().url()).searchParams.get("location[directory]")).toBe(directory)
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ location: ptyLocation(), data: ptyInfo(ptyID, "Terminal 1") }),
+    })
+  })
+  await page.route(`**/api/pty/${ptyID}*`, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ id: ptyID, title: "Terminal 1" }),
+      body: JSON.stringify({ location: ptyLocation(), data: ptyInfo(ptyID, "Terminal 1") }),
     }),
   )
-  await page.route(`**/pty/${ptyID}`, (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
-  )
-  await page.route(`**/pty/${ptyID}/connect-token*`, (route) =>
+  await page.route(`**/api/pty/${ptyID}/connect-token*`, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       headers: { "access-control-allow-origin": "*" },
-      body: JSON.stringify({ ticket: "e2e-ticket" }),
+      body: JSON.stringify({ location: ptyLocation(), data: { ticket: "e2e-ticket", expires_in: 60 } }),
     }),
   )
-  await page.routeWebSocket(new RegExp(`/pty/${ptyID}/connect`), () => undefined)
+  await page.routeWebSocket(new RegExp(`/api/pty/${ptyID}/connect`), () => undefined)
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
   })
@@ -95,12 +101,12 @@ test("keeps composer focus when a cached terminal finishes mounting", async ({ p
   const ghostty = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
   const created = { count: 0 }
-  await page.route("**/pty", (route) => {
+  await page.route("**/api/pty*", (route) => {
     created.count += 1
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ id: ptyID, title: "Terminal 1" }),
+      body: JSON.stringify({ location: ptyLocation(), data: ptyInfo(ptyID, "Terminal 1") }),
     })
   })
   await page.route(/ghostty-web/, async (route) => {
@@ -155,27 +161,31 @@ test("keeps newer composer focus while an explicit terminal open finishes", asyn
 
 test("focuses a terminal created from the new-terminal button", async ({ page }) => {
   const created = { count: 0 }
-  await page.route("**/pty", (route) => {
+  await page.route("**/api/pty*", (route) => {
     created.count += 1
-    const next = created.count === 1 ? { id: ptyID, title: "Terminal 1" } : { id: newPtyID, title: "Terminal 2" }
+    const next = created.count === 1 ? ptyInfo(ptyID, "Terminal 1") : ptyInfo(newPtyID, "Terminal 2")
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(next),
+      body: JSON.stringify({ location: ptyLocation(), data: next }),
     })
   })
-  await page.route(`**/pty/${newPtyID}`, (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  await page.route(`**/api/pty/${newPtyID}*`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ location: ptyLocation(), data: ptyInfo(newPtyID, "Terminal 2") }),
+    }),
   )
-  await page.route(`**/pty/${newPtyID}/connect-token*`, (route) =>
+  await page.route(`**/api/pty/${newPtyID}/connect-token*`, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       headers: { "access-control-allow-origin": "*" },
-      body: JSON.stringify({ ticket: "e2e-ticket" }),
+      body: JSON.stringify({ location: ptyLocation(), data: { ticket: "e2e-ticket", expires_in: 60 } }),
     }),
   )
-  await page.routeWebSocket(new RegExp(`/pty/${newPtyID}/connect`), () => undefined)
+  await page.routeWebSocket(new RegExp(`/api/pty/${newPtyID}/connect`), () => undefined)
 
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await expectSessionTitle(page, "Terminal composer focus")
@@ -206,4 +216,12 @@ function seedCachedTerminal(page: Page) {
     },
     { terminalKey: `${base64Encode(directory)}/terminal.v1`, ptyID },
   )
+}
+
+function ptyLocation() {
+  return { directory, project: { id: projectID, directory } }
+}
+
+function ptyInfo(id: string, title: string) {
+  return { id, title, command: "cmd.exe", args: [], cwd: directory, status: "running", pid: 1 }
 }
