@@ -630,7 +630,7 @@ const detectSupportsStrictMode = (provider: string, baseURL: string | undefined)
 const detectZaiToolStream = (
   provider: string,
   baseURL: string | undefined,
-  modelID: string | undefined,
+  modelID: string,
 ): boolean => {
   const p = provider.toLowerCase()
   const url = (baseURL ?? "").toLowerCase()
@@ -642,7 +642,7 @@ const detectZaiToolStream = (
     url.includes("api.z.ai") ||
     url.includes("open.bigmodel.cn")
   if (!isZai) return false
-  const id = (modelID ?? "").toLowerCase()
+  const id = modelID.toLowerCase()
   if (id === "glm-4.5" || id === "glm-4.5-air" || id === "glm-4.5-flash" || id === "glm-4.5v") return false
   return true
 }
@@ -684,7 +684,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const supportsStrictMode = request.model.compatibility?.supportsStrictMode ?? detectSupportsStrictMode(provider, baseURL)
   const zaiToolStream =
     request.model.compatibility?.zaiToolStream ??
-    detectZaiToolStream(provider, baseURL, String(request.model.id))
+    detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
   const hasActiveTools = request.tools.length > 0
   return {
