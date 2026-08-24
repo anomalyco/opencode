@@ -292,3 +292,64 @@ describe("acp v2 event routing", () => {
     expect(terminalUpdates).toHaveLength(0)
   })
 })
+
+describe("acp v2 content blocks and extensibility", () => {
+  it("preserves _meta on resource_link content chunks output", async () => {
+    const { partToContentChunks } = await import("@/acp/content")
+    const chunks = partToContentChunks({
+      type: "file",
+      url: "file:///workspace/file.ts",
+      mime: "text/typescript",
+      filename: "file.ts",
+      _meta: { custom: "data" },
+    })
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]._meta).toEqual({ custom: "data" })
+  })
+
+  it("preserves _meta on text content chunks output", async () => {
+    const { partToContentChunks } = await import("@/acp/content")
+    const chunks = partToContentChunks({
+      type: "text",
+      text: "hello",
+      _meta: { source: "test" },
+    })
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]._meta).toEqual({ source: "test" })
+  })
+
+  it("renders unknown content block types as text fallback when _meta is present", async () => {
+    const { contentBlockToParts } = await import("@/acp/content")
+    const parts = contentBlockToParts({
+      type: "_custom_block",
+      data: "custom data",
+      _meta: { extension: "mycompany" },
+    } as unknown as import("@agentclientprotocol/sdk").ContentBlock)
+    expect(parts).toHaveLength(1)
+    expect(parts[0].type).toBe("text")
+    expect((parts[0] as { text?: string }).text).toContain("_custom_block")
+  })
+
+  it("drops unknown content block types without _meta silently", async () => {
+    const { contentBlockToParts } = await import("@/acp/content")
+    const parts = contentBlockToParts({
+      type: "_custom_block",
+      data: "custom data",
+    } as unknown as import("@agentclientprotocol/sdk").ContentBlock)
+    expect(parts).toHaveLength(0)
+  })
+
+  it("preserves _meta from incoming resource_link as metadata on text parts", async () => {
+    const { contentBlockToParts } = await import("@/acp/content")
+    const parts = contentBlockToParts({
+      type: "resource_link",
+      uri: "https://example.com/doc",
+      name: "doc",
+      _meta: { origin: "client" },
+    } as unknown as import("@agentclientprotocol/sdk").ContentBlock)
+    expect(parts).toHaveLength(1)
+    expect(parts[0].type).toBe("text")
+    // _meta should be preserved in the metadata field of the text part
+    expect((parts[0] as { metadata?: { _meta?: unknown } }).metadata?._meta).toEqual({ origin: "client" })
+  })
+})

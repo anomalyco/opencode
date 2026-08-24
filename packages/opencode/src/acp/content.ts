@@ -11,16 +11,19 @@ export type ReplayPart =
       text: string
       synthetic?: boolean
       ignored?: boolean
+      _meta?: Record<string, unknown> | null
     }
   | {
       type: "file"
       url: string
       mime: string
       filename?: string
+      _meta?: Record<string, unknown> | null
     }
   | {
       type: "reasoning"
       text: string
+      _meta?: Record<string, unknown> | null
     }
 
 export function promptContentToParts(content: readonly ContentBlock[]): PromptPart[] {
@@ -28,6 +31,7 @@ export function promptContentToParts(content: readonly ContentBlock[]): PromptPa
 }
 
 export function contentBlockToParts(block: ContentBlock): PromptPart[] {
+  const meta = "_meta" in block && block._meta ? block._meta : undefined
   switch (block.type) {
     case "text":
       return [
@@ -112,6 +116,9 @@ export function contentBlockToParts(block: ContentBlock): PromptPart[] {
       return []
 
     default:
+      // v2 extensibility: unknown content block types are rendered as a text
+      // fallback so the user's message content is not silently lost.
+      if (meta) return [{ type: "text", text: JSON.stringify(block) }]
       return []
   }
 }
@@ -131,6 +138,7 @@ export function partToContentChunks(part: ReplayPart): ContentChunk[] {
             text: part.text,
             ...partAudience(part),
           },
+          ...(part._meta ? { _meta: part._meta } : {}),
         },
       ]
 
@@ -145,6 +153,7 @@ export function partToContentChunks(part: ReplayPart): ContentChunk[] {
             type: "text",
             text: part.text,
           },
+          ...(part._meta ? { _meta: part._meta } : {}),
         },
       ]
   }
@@ -153,7 +162,11 @@ export function partToContentChunks(part: ReplayPart): ContentChunk[] {
 function resourceLinkToPart(link: ResourceLink): PromptPart {
   const parsed = uriToFilePart(link.uri, link.mimeType ?? "text/plain", link.name)
   if (parsed.type === "file") return parsed
-  return { type: "text", text: parsed.text }
+  return {
+    type: "text",
+    text: parsed.text,
+    ...(link._meta ? { metadata: { _meta: link._meta } } : {}),
+  }
 }
 
 function uriToFilePart(
@@ -197,6 +210,7 @@ function filePartToContentChunks(part: Extract<ReplayPart, { type: "file" }>): C
           name: part.filename ?? "file",
           mimeType: part.mime,
         },
+        ...(part._meta ? { _meta: part._meta } : {}),
       },
     ]
   }
