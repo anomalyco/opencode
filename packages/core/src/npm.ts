@@ -2,6 +2,7 @@ export * as Npm from "./npm"
 
 import path from "path"
 import npa from "npm-package-arg"
+import semver from "semver"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "./fs-util"
@@ -117,19 +118,20 @@ const layer = Layer.effect(
     // so compare the cached version against the registry before reusing it.
     // Returns true when the cache is stale and a reinstall is needed; any
     // registry or read failure conservatively keeps the cached copy.
-    const isDistTagOutdated = Effect.fn("Npm.isDistTagOutdated")(function* (name: string, target: string) {
-      const cached = yield* afs.readJson(path.join(target, "package.json")).pipe(
-        Effect.orElseSucceed(() => undefined),
-      )
-      const cachedVersion =
-        typeof cached === "object" && cached !== null && typeof (cached as any).version === "string"
-          ? ((cached as any).version as string)
-          : undefined
+    const isDistTagOutdated = Effect.fn("Npm.isDistTagOutdated")(function* (dir: string, name: string, target: string) {
+      const decodePackage = Schema.decodeUnknownOption(Schema.Struct({ version: Schema.String }))
+      const json = yield* afs.readJson(path.join(target, "package.json")).pipe(Effect.option)
+      if (Option.isNone(json)) return true
+      const decoded = decodePackage(json.value)
+      const cachedVersion = Option.isSome(decoded) ? decoded.value.version : undefined
       if (!cachedVersion) return true
 
+      // Resolve the registry from the same npm config `reify` uses so custom
+      // registries and enterprise mirrors are honored.
+      const base = yield* NpmConfig.registry(dir)
       const encoded = name.includes("/") ? name.replace("/", "%2f") : name
       const res = yield* Effect.promise(() =>
-        fetch(`https://registry.npmjs.org/${encoded}/latest`, {
+        fetch(`${base}/${encoded}/latest`, {
           headers: { Accept: "application/vnd.npm.install-v1+json" },
           signal: AbortSignal.timeout(10_000),
         }).catch(() => undefined),
@@ -143,6 +145,11 @@ const layer = Layer.effect(
       )
       const latestVersion = data?.version
       if (!latestVersion) return false
+      // Semver-equivalent spellings ("v1.0.0", "1.0.0+build") must not trigger
+      // pointless reinstalls.
+      if (semver.valid(latestVersion) && semver.valid(cachedVersion)) {
+        return !semver.eq(latestVersion, cachedVersion)
+      }
       return latestVersion !== cachedVersion
     })
 
@@ -160,7 +167,7 @@ const layer = Layer.effect(
 
       if (yield* afs.existsSafe(target)) {
         if (parsed?.type === "tag") {
-          if (!(yield* isDistTagOutdated(name, target))) return resolveEntryPoint(name, target)
+          if (!(yield* isDistTagOutdated(dir, name, target))) return resolveEntryPoint(name, target)
         } else {
           return resolveEntryPoint(name, target)
         }

@@ -83,7 +83,7 @@ describe("Npm.add", () => {
     global.fetch = (() => {
       registryCalls++
       throw new Error("registry must not be contacted for exact versions")
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     try {
       const entry = await addWithCache(cache, spec)
@@ -105,7 +105,7 @@ describe("Npm.add", () => {
       new Response(JSON.stringify({ version: "1.0.0" }), {
         status: 200,
         headers: { "content-type": "application/json" },
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
     try {
       const entry = await addWithCache(cache, "acme@latest")
@@ -124,10 +124,31 @@ describe("Npm.add", () => {
     const originalFetch = global.fetch
     global.fetch = (async () => {
       throw new Error("offline")
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     try {
-      const entry = await addWithCache(cache, "acme@latest")
+      const entry = await addWithCache(cache, spec)
+      expect(entry.entrypoint).toBeDefined()
+    } finally {
+      global.fetch = originalFetch
+    }
+  })
+
+  test("treats semver-equivalent registry versions as up to date", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const spec = "acme@latest"
+    await seedCachedPackage(cache, spec, "acme", "1.0.0")
+
+    const originalFetch = global.fetch
+    global.fetch = (async () =>
+      new Response(JSON.stringify({ version: "v1.0.0+build.1" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch
+
+    try {
+      const entry = await addWithCache(cache, spec)
       expect(entry.entrypoint).toBeDefined()
     } finally {
       global.fetch = originalFetch
