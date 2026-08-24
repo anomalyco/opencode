@@ -1245,6 +1245,11 @@ describe("OpenAI Chat route", () => {
       ).pipe(Effect.provide(fixedResponse(body)), Effect.flip)
 
       expect(error.message).toContain("OpenAI Chat tool call delta is missing id or name")
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      if (error.reason._tag !== "InvalidProviderOutput") return
+      expect(decodeJson(error.reason.raw ?? "")).toMatchObject({
+        choices: [{ finish_reason: "tool_calls" }],
+      })
     }),
   )
 

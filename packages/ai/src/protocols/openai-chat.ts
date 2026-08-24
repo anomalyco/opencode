@@ -927,7 +927,11 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       toolDeltas.some((tool) => Boolean(tool.id) || Boolean(tool.function?.name) || Boolean(tool.function?.arguments))
     if (state.finishReason !== undefined) {
       if (hasLateContent)
-        return yield* ProviderShared.eventError(ADAPTER, "OpenAI Chat received content after the finish reason")
+        return yield* ProviderShared.eventError(
+          ADAPTER,
+          "OpenAI Chat received content after the finish reason",
+          ProviderShared.encodeJson(event),
+        )
       return [{ ...state, usage }, events] as const
     }
 
@@ -999,14 +1003,19 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         { id: id || undefined, name: name || undefined, text },
         "OpenAI Chat tool call delta is missing id or name",
       )
-      if (ToolStream.isError(result)) return yield* result
+      if (ToolStream.isError(result))
+        return yield* ProviderShared.eventError(ADAPTER, result.reason.message, ProviderShared.encodeJson(event))
       tools = result.tools
       if (result.events.length) lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(...result.events)
     }
 
     if (finishReason !== undefined && state.finishReason === undefined && Object.keys(pendingTools).length > 0)
-      return yield* ProviderShared.eventError(ADAPTER, "OpenAI Chat tool call delta is missing id or name")
+      return yield* ProviderShared.eventError(
+        ADAPTER,
+        "OpenAI Chat tool call delta is missing id or name",
+        ProviderShared.encodeJson(event),
+      )
 
     // Finalize accumulated tool inputs eagerly when finish_reason arrives so
     // valid calls and malformed local calls settle independently.

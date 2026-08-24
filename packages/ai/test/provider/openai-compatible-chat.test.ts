@@ -417,6 +417,30 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("preserves explicit provider error events", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              id: "chatcmpl_error",
+              error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
+              trace_id: "trace_1",
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Provider disconnected", status: 502 })
+      expect(decodeJson(error.body ?? "")).toMatchObject({
+        id: "chatcmpl_error",
+        error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
+        trace_id: "trace_1",
+      })
+    }),
+  )
+
   it.effect("preserves provider finish outcomes in the common reason algebra", () =>
     Effect.gen(function* () {
       const filtered = yield* LLMClient.generate(request).pipe(
@@ -447,6 +471,11 @@ describe("OpenAI-compatible Chat route", () => {
       )
 
       expect(error.message).toContain("OpenAI Chat received content after the finish reason")
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      if (error.reason._tag !== "InvalidProviderOutput") return
+      expect(decodeJson(error.reason.raw ?? "")).toMatchObject({
+        choices: [{ delta: { tool_calls: [{ id: "call_1" }] } }],
+      })
     }),
   )
 })
