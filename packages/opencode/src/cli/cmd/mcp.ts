@@ -505,7 +505,8 @@ async function detectScope(name: string, projectRoot: string): Promise<McpScope>
     const mcpJson = path.join(base, ".agents", "mcp.json")
     if (await Filesystem.exists(mcpJson)) {
       const parsed = (await Filesystem.readJson(mcpJson)) as Record<string, unknown>
-      if (parsed[name]) return scope
+      const servers = (parsed.mcpServers ?? parsed.servers ?? parsed) as Record<string, unknown>
+      if (servers[name]) return scope
     }
   }
   return "config"
