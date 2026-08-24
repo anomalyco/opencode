@@ -73,10 +73,10 @@ export const WriteTool = Tool.define(
 
           let output = "Wrote file successfully."
           yield* lsp.touchFile(filepath, "document")
-          const diagnostics = yield* lsp.diagnostics()
+          const allDiagnostics = yield* lsp.diagnostics()
           const normalizedFilepath = FSUtil.normalizePath(filepath)
           let projectDiagnosticsCount = 0
-          for (const [file, issues] of Object.entries(diagnostics)) {
+          for (const [file, issues] of Object.entries(allDiagnostics)) {
             const current = file === normalizedFilepath
             if (!current && projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
             const block = LSP.Diagnostic.report(current ? filepath : file, issues)
@@ -89,10 +89,18 @@ export const WriteTool = Tool.define(
             output += `\n\nLSP errors detected in other files:\n${block}`
           }
 
+          // Persist only the touched file's diagnostics in metadata so the session
+          // transcript does not balloon with workspace-wide diagnostics. The full
+          // map is kept in-memory above for the per-call output computation.
+          const touchedFileDiagnostics = allDiagnostics[normalizedFilepath] ?? []
+          const persistedDiagnostics = {
+            [normalizedFilepath]: touchedFileDiagnostics,
+          }
+
           return {
             title: path.relative(instance.worktree, filepath),
             metadata: {
-              diagnostics,
+              diagnostics: persistedDiagnostics,
               filepath,
               exists: exists,
             },

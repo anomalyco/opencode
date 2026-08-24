@@ -195,14 +195,21 @@ export const EditTool = Tool.define(
 
           let output = "Edit applied successfully."
           yield* lsp.touchFile(filePath, "document")
-          const diagnostics = yield* lsp.diagnostics()
+          const allDiagnostics = yield* lsp.diagnostics()
           const normalizedFilePath = FSUtil.normalizePath(filePath)
-          const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
+          const block = LSP.Diagnostic.report(filePath, allDiagnostics[normalizedFilePath] ?? [])
           if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+
+          // Persist only the touched file's diagnostics in metadata so the session
+          // transcript does not balloon with workspace-wide diagnostics.
+          const touchedFileDiagnostics = allDiagnostics[normalizedFilePath] ?? []
+          const persistedDiagnostics = {
+            [normalizedFilePath]: touchedFileDiagnostics,
+          }
 
           return {
             metadata: {
-              diagnostics,
+              diagnostics: persistedDiagnostics,
               diff,
               filediff,
             },
