@@ -1,6 +1,9 @@
 import type { Plugin } from "@opencode-ai/plugin/tui"
+import { createMermaidCodeBlockRenderer } from "@opencode-ai/merman/markdown"
+import { createOpenCodeDiagramPalette } from "@opencode-ai/merman/palette"
+import { RGBA } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { createMemo, createSignal, Show } from "solid-js"
+import { createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useTheme, useThemes } from "../../../context/theme"
 import { usePlugin } from "../../../plugin/context"
 import type { Story } from "./index"
@@ -25,6 +28,7 @@ const fixtures = [
   end
 
   subgraph AWS[AWS]
+    direction TB
     EKS[EKS cluster]
     API[Console API pod<br/>1 replica]
     OTEL[OTel collector]
@@ -49,40 +53,30 @@ const fixtures = [
   ECR --> API`,
   },
   {
-    id: "nested-flow",
-    title: "Nested directed groups",
+    id: "grouped-flow",
+    title: "Grouped request pipeline",
     source: `flowchart LR
-  Input([Input]) --> Parse
-  subgraph Outer[Outer orchestration]
-    direction RL
-    subgraph Inner[Inner pipeline]
-      direction TD
-      Parse[Parse request] --> Validate{Valid?}
-      Validate -->|yes| Cache[(Cache)]
-      Cache -->|stale| Validate
-    end
-    Validate --> Dispatch[[Dispatch work]]
-    Dispatch -->|requeue| Parse
+  Input([Input]) --> Gateway[API gateway]
+  subgraph Platform[Platform]
+    Gateway --> Auth[Authenticate]
+    Auth -->|accepted| Queue[(Work queue)]
+    Queue --> Worker[Worker] --> Store[(Result store)]
   end
-  Dispatch -. result .-> Output([Output])
-  Output -->|audit| Cache`,
+  Store --> Output([Output])`,
   },
   {
-    id: "state-feedback",
-    title: "Dense state feedback",
+    id: "state-lifecycle",
+    title: "Review lifecycle",
     source: `stateDiagram-v2
   direction TB
-  [*] --> Root
-  Root --> Alpha: dispatch alpha
-  Root --> Beta: dispatch beta
-  Alpha --> Merge: alpha complete
-  Beta --> Merge: beta complete
-  Merge --> Alpha: retry alpha
-  Merge --> Beta: retry beta
-  Merge --> [*]: finish
-  note right of Merge
-    Retries preserve the original request
-    and remain visible after compaction
+  [*] --> Ready
+  Ready --> Running: start
+  Running --> Review: submit
+  Review --> Done: approve
+  Done --> [*]: finish
+  note right of Review
+    Review preserves the original request
+    and records the final decision
   end note`,
   },
   {
@@ -107,17 +101,191 @@ const fixtures = [
   },
 ] as const
 
+const components = [
+  { id: "lines", label: "lines", dimmable: true },
+  { id: "boxes", label: "boxes", dimmable: true },
+  { id: "boxText", label: "box text", dimmable: false },
+  { id: "labels", label: "labels", dimmable: true },
+  { id: "notes", label: "notes", dimmable: true },
+  { id: "groups", label: "groups", dimmable: true },
+  { id: "markers", label: "markers", dimmable: true },
+] as const
+const dimness = ["dim", "muted", "soft", "clear"] as const
+type DiagramComponent = (typeof components)[number]["id"]
+type DiagramComponentOption = (typeof components)[number]
+type ComponentSettings = Readonly<Record<DiagramComponent, Readonly<{ color: number; tone: number }>>>
+
+const neutralSettings = {
+  lines: { color: 0, tone: 2 },
+  boxes: { color: 0, tone: 1 },
+  boxText: { color: 0, tone: 3 },
+  labels: { color: 0, tone: 0 },
+  notes: { color: 0, tone: 2 },
+  groups: { color: 0, tone: 1 },
+  markers: { color: 0, tone: 2 },
+} as const satisfies ComponentSettings
+
+const palettes = [
+  {
+    id: "neutral",
+    title: "Monochrome",
+    description: "Restrained neutral hierarchy",
+    styles: neutralSettings,
+  },
+  {
+    id: "routes",
+    title: "Colored routes",
+    description: "Neutral entities with a categorical signal color",
+    styles: {
+      ...neutralSettings,
+      lines: { color: 1, tone: 2 },
+      labels: { color: 1, tone: 0 },
+    },
+  },
+  {
+    id: "notes",
+    title: "Colored notes",
+    description: "Route and note accents with neutral structure",
+    styles: {
+      ...neutralSettings,
+      lines: { color: 1, tone: 2 },
+      labels: { color: 1, tone: 0 },
+      notes: { color: 2, tone: 2 },
+    },
+  },
+  {
+    id: "cool-groups",
+    title: "Cool groups",
+    description: "Color 4 groups and notes with restrained neutral routes",
+    styles: {
+      ...neutralSettings,
+      lines: { color: 0, tone: 0 },
+      notes: { color: 4, tone: 2 },
+      groups: { color: 4, tone: 2 },
+    },
+  },
+] as const satisfies readonly {
+  id: string
+  title: string
+  description: string
+  styles: ComponentSettings
+}[]
+
 function MermanLayoutsStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const themes = useThemes()
   const plugins = usePlugin()
   const [selected, setSelected] = createSignal(0)
+  const [selectedPalette, setSelectedPalette] = createSignal<number | undefined>(3)
+  const [selectedComponent, setSelectedComponent] = createSignal(0)
+  const [settings, setSettings] = createSignal<ComponentSettings>(palettes[3].styles)
   const [generation, setGeneration] = createSignal(0)
   const fixture = createMemo(() => fixtures[selected()]!)
-  const rendered = createMemo(() => ({ fixture: fixture(), generation: generation() }))
-  const markdown = createMemo(() => `\`\`\`mermaid\n${fixture().source}\n\`\`\``)
-  const move = (offset: number) => setSelected((current) => (current + offset + fixtures.length) % fixtures.length)
+  const component = createMemo(() => components[selectedComponent()]!)
+  const componentSetting = createMemo(() => settings()[component().id])
+  const paletteOption = createMemo(() => {
+    const index = selectedPalette()
+    if (index !== undefined) return palettes[index]!
+    return {
+      id: "custom",
+      title: "Custom",
+      description: `Editing ${component().label} · ${componentSetting().color === 0 ? "neutral" : `color ${componentSetting().color}`}${component().dimmable ? ` · ${dimness[componentSetting().tone]}` : " · full brightness"}`,
+    }
+  })
+  const presentation = createMemo(() => {
+    const accent = theme.categorical[3] ?? theme.categorical[0]!
+    const accentSteps = themes.mode() === "light" ? ([700, 800] as const) : ([300, 200] as const)
+    const base = createOpenCodeDiagramPalette({
+      text: theme.text.default,
+      subdued: theme.text.subdued,
+      info: theme.text.feedback.info.default,
+      success: theme.text.feedback.success.default,
+      warning: theme.text.feedback.warning.default,
+      background: theme.background.default,
+      accent: {
+        soft: accent[accentSteps[0]],
+        clear: accent[accentSteps[1]],
+      },
+    })
+    const neutral = [theme.text.subdued, base.muted, base.secondary, theme.text.default]
+    const steps = themes.mode() === "light" ? ([400, 500, 700, 800] as const) : ([600, 500, 300, 200] as const)
+    const color = (id: DiagramComponent, tone = settings()[id].tone) => {
+      const value = settings()[id]
+      if (value.color === 0) return neutral[tone] ?? neutral[2]!
+      return theme.categorical[(value.color - 1) % theme.categorical.length]![steps[tone] ?? steps[2]]
+    }
+    const labelAccent = color("labels", 3)
+    const labelAlpha = [0.08, 0.12, 0.18, 0.24][settings().labels.tone] ?? 0.12
+
+    const colors = {
+      ...base,
+      text: theme.text.default,
+      boxText: color("boxText", 3),
+      boxBorder: color("boxes"),
+      line: color("lines"),
+      labelBackground: RGBA.fromValues(labelAccent.r, labelAccent.g, labelAccent.b, labelAlpha),
+      group: color("groups"),
+      groupText: color("groups"),
+      marker: color("markers"),
+      noteBorder: color("notes"),
+      noteText: color("notes", 3),
+      noteConnector: color("notes"),
+    }
+    return {
+      colors,
+      swatches: {
+        lines: colors.line,
+        boxes: colors.boxBorder,
+        boxText: colors.boxText,
+        labels: labelAccent,
+        notes: colors.noteBorder,
+        groups: colors.group,
+        markers: colors.marker,
+      },
+    }
+  })
+  const rendered = createMemo(() => ({ fixture: fixture(), colors: presentation().colors, generation: generation() }))
+  const markdown = createMemo(() => `\`\`\`mermaid-story\n${fixture().source}\n\`\`\``)
+  const moveFixture = (offset: number) =>
+    setSelected((current) => (current + offset + fixtures.length) % fixtures.length)
+  const applyPalette = (index: number) => {
+    setSelectedPalette(index)
+    setSettings(palettes[index]!.styles)
+  }
+  const movePalette = (offset: number) => {
+    const current = selectedPalette() ?? (offset > 0 ? -1 : 0)
+    applyPalette((current + offset + palettes.length) % palettes.length)
+  }
+  const cycleColor = () => {
+    const selected = component().id
+    setSettings((current) => ({
+      ...current,
+      [selected]: { ...current[selected], color: (current[selected].color + 1) % (theme.categorical.length + 1) },
+    }))
+    setSelectedPalette(undefined)
+  }
+  const cycleDimness = () => {
+    if (!component().dimmable) return
+    const selected = component().id
+    setSettings((current) => ({
+      ...current,
+      [selected]: { ...current[selected], tone: (current[selected].tone + 1) % dimness.length },
+    }))
+    setSelectedPalette(undefined)
+  }
+  const settingDescription = (item: DiagramComponentOption, separator = "/") => {
+    const value = settings()[item.id]
+    const color = value.color === 0 ? "neutral" : `color ${value.color}`
+    return item.dimmable ? `${color}${separator}${dimness[value.tone]}` : color
+  }
+
+  onCleanup(
+    props.context.markdown.registerCodeBlockRenderer(
+      "mermaid-story",
+      createMermaidCodeBlockRenderer(props.context.renderer, () => ({ colors: presentation().colors })),
+    ),
+  )
 
   props.context.keymap.layer(() => ({
     commands: [
@@ -128,23 +296,67 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
         run: () => props.context.ui.router.navigate({ type: "plugin", name: "storybook" }),
       },
       {
-        bind: "left,k",
+        bind: "up,k",
         title: "Previous fixture",
         group: "Storybook",
-        run: () => move(-1),
+        run: () => moveFixture(-1),
       },
       {
-        bind: "right,j",
+        bind: "down,j",
         title: "Next fixture",
         group: "Storybook",
-        run: () => move(1),
+        run: () => moveFixture(1),
       },
+      {
+        bind: "left,h",
+        title: "Previous palette",
+        group: "Storybook",
+        run: () => movePalette(-1),
+      },
+      {
+        bind: "right,l",
+        title: "Next palette",
+        group: "Storybook",
+        run: () => movePalette(1),
+      },
+      {
+        bind: "tab",
+        title: "Next diagram component",
+        group: "Storybook",
+        run: () => setSelectedComponent((current) => (current + 1) % components.length),
+      },
+      {
+        bind: "shift+tab",
+        title: "Previous diagram component",
+        group: "Storybook",
+        run: () => setSelectedComponent((current) => (current + components.length - 1) % components.length),
+      },
+      {
+        bind: "c",
+        title: "Cycle component color",
+        group: "Storybook",
+        run: cycleColor,
+      },
+      {
+        bind: "d",
+        title: "Cycle component dimness",
+        group: "Storybook",
+        run: cycleDimness,
+      },
+      ...palettes.map((item, index) => ({
+        bind: String(index + 1),
+        title: `Use ${item.title}`,
+        group: "Storybook",
+        run: () => applyPalette(index),
+      })),
       {
         bind: "r",
         title: "Reset fixture",
         group: "Storybook",
         run: () => {
           setSelected(0)
+          setSelectedComponent(0)
+          applyPalette(3)
           setGeneration((current) => current + 1)
         },
       },
@@ -165,6 +377,28 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
               <text fg={theme.text.default}>{item.fixture.title}</text>
               <text fg={theme.text.subdued}>{item.fixture.id}</text>
               <box height={1} />
+              <text fg={theme.text.default}>{paletteOption().title}</text>
+              <text fg={theme.text.subdued}>{paletteOption().description}</text>
+              <For each={[components.slice(0, 4), components.slice(4)]}>
+                {(row) => (
+                  <text>
+                    <For each={row}>
+                      {(value, index) => (
+                        <>
+                          <Show when={index() > 0}>
+                            <span style={{ fg: theme.text.subdued }}> · </span>
+                          </Show>
+                          <span style={{ fg: presentation().swatches[value.id] }}>
+                            {value.id === component().id ? "›" : ""}
+                            {value.label} {settingDescription(value)}
+                          </span>
+                        </>
+                      )}
+                    </For>
+                  </text>
+                )}
+              </For>
+              <box height={1} />
               <markdown
                 width="100%"
                 syntaxStyle={themes.currentSyntax()}
@@ -182,10 +416,22 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
       </Show>
       <StoryFooter
         context={props.context}
-        title="storybook / Mermaid layouts"
-        details={[`${selected() + 1}/${fixtures.length}`, fixture().id, `${dimensions().width}x${dimensions().height}`]}
+        title="storybook / Mermaid color lab"
+        details={[
+          `${selected() + 1}/${fixtures.length}`,
+          fixture().id,
+          selectedPalette() === undefined ? "custom" : `${selectedPalette()! + 1}/${palettes.length}`,
+          paletteOption().id,
+          `${dimensions().width}x${dimensions().height}`,
+        ]}
+        status={`Editing ${component().label}`}
+        message={`${componentSetting().color === 0 ? "neutral" : `color ${componentSetting().color}`}${component().dimmable ? ` · ${dimness[componentSetting().tone]}` : " · full brightness"}`}
         controls={[
-          { shortcut: "j/k or ←/→", label: "fixture" },
+          { shortcut: "↑/↓", label: "fixture" },
+          { shortcut: "←/→", label: "preset" },
+          { shortcut: "tab", label: "component" },
+          { shortcut: "c", label: "color" },
+          ...(component().dimmable ? [{ shortcut: "d", label: "dim" }] : []),
           { shortcut: "r", label: "reset" },
           { shortcut: "esc", label: "back" },
         ]}
@@ -196,6 +442,6 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
 
 export const mermanLayoutsStory: Story = {
   id: "merman-layouts",
-  title: "Mermaid layouts",
+  title: "Mermaid color lab",
   render: (context) => <MermanLayoutsStory context={context} />,
 }

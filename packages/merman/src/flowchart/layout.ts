@@ -738,9 +738,15 @@ function separateTopLevelItems(
     (subgraph) => subgraph.direction && subgraph.direction !== diagram.direction,
   )
   const coveredNodeIds = new Set<string>()
-  const items: { id: string; bounds: FlowchartBounds; nodeIds: Set<string>; rank: number }[] = []
+  const items: {
+    id: string
+    bounds: FlowchartBounds
+    nodeIds: Set<string>
+    rank: number
+  }[] = []
   const itemByEndpoint = new Map<string, string>()
   const subgraphs = diagram.subgraphs ?? []
+  const topLevelIds = new Set(subgraphs.filter((subgraph) => !subgraph.parentId).map((subgraph) => subgraph.id))
   const subgraphById = new Map(subgraphs.map((subgraph) => [subgraph.id, subgraph]))
   const topLevelSubgraphId = (id: string): string => {
     let current = subgraphById.get(id)
@@ -776,9 +782,15 @@ function separateTopLevelItems(
       const bounds = nodeBounds.get(nodeId)
       if (bounds) translateBounds(bounds, dx, dy)
     }
+    if (!topLevelIds.has(item.id)) return
+    for (const subgraph of subgraphs) {
+      if (topLevelSubgraphId(subgraph.id) !== item.id) continue
+      const bounds = subgraphBounds.get(subgraph.id)
+      if (bounds) translateBounds(bounds, dx, dy)
+    }
   }
   if (hasLocalDirection) {
-    items.sort((a, b) => (horizontal ? a.bounds.left - b.bounds.left : a.bounds.top - b.bounds.top))
+    items.sort((a, b) => (horizontal ? a.bounds.centerX - b.bounds.centerX : a.bounds.centerY - b.bounds.centerY))
     let cursor: number | undefined
     let moved = false
     for (const item of items) {
@@ -796,7 +808,6 @@ function separateTopLevelItems(
     return moved
   }
 
-  const topLevelIds = new Set(subgraphs.filter((subgraph) => !subgraph.parentId).map((subgraph) => subgraph.id))
   const rankedItems = items.filter((item) => topLevelIds.has(item.id))
   if (rankedItems.length < 2) return false
 
@@ -956,28 +967,16 @@ function layoutFlowchartWithDirection(
   const bounds = ranked.bounds
   const responsive = layoutLocalSubgraphDirections(diagram, bounds, minNodeGap, requestedMinRankGap, targetWidth)
   const directionAligned = responsiveFallback || responsive || ranked.wrapped
+  const route = (frames?: ReadonlyMap<string, FlowchartSubgraphBounds>) =>
+    routeFlowchartEdges(diagram, bounds, (edge) => edgeDirection(diagram, edge), frames, targetWidth, directionAligned)
 
   const subgraphs = diagram.subgraphs ?? []
   let subgraphBounds = new Map<string, FlowchartSubgraphBounds>()
   let routes: FlowchartEdgeRoute[]
   if (subgraphs.length === 0) {
-    routes = routeFlowchartEdges(
-      diagram,
-      bounds,
-      (edge) => edgeDirection(diagram, edge),
-      undefined,
-      targetWidth,
-      directionAligned,
-    )
+    routes = route()
   } else {
-    routes = routeFlowchartEdges(
-      diagram,
-      bounds,
-      (edge) => edgeDirection(diagram, edge),
-      undefined,
-      targetWidth,
-      directionAligned,
-    )
+    routes = route()
     subgraphBounds = layoutSubgraphs(diagram, bounds, routes)
     const moved = separateTopLevelItems(
       diagram,
@@ -987,25 +986,21 @@ function layoutFlowchartWithDirection(
       targetWidth,
     )
     if (moved) {
-      routes = routeFlowchartEdges(
-        diagram,
-        bounds,
-        (edge) => edgeDirection(diagram, edge),
-        undefined,
-        targetWidth,
-        directionAligned,
-      )
+      routes = route()
       subgraphBounds = layoutSubgraphs(diagram, bounds, routes)
     }
-    routes = routeFlowchartEdges(
+    routes = route(subgraphBounds)
+    subgraphBounds = layoutSubgraphs(diagram, bounds, routes)
+    // Frame-aware routes can expand a group after initial separation. Move the expanded frame rigidly
+    // before rerouting so external edges cannot grow it back across neighboring top-level items.
+    const expanded = separateTopLevelItems(
       diagram,
       bounds,
-      (edge) => edgeDirection(diagram, edge),
       subgraphBounds,
+      Math.max(1, Math.floor(requestedMinRankGap / 2)),
       targetWidth,
-      directionAligned,
     )
-    subgraphBounds = layoutSubgraphs(diagram, bounds, routes)
+    if (expanded) routes = route(subgraphBounds)
     avoidFlowchartFrameBorders(routes, bounds, subgraphBounds)
   }
   freezeRouteLabelPoints(routes)

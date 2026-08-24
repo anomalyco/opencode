@@ -35,6 +35,10 @@ describe("OpenCode diagram palette", () => {
     const success = RGBA.fromInts(80, 180, 120)
     const warning = RGBA.fromInts(220, 160, 80)
     const background = RGBA.fromInts(10, 20, 30)
+    const accent = {
+      soft: RGBA.fromInts(180, 100, 40),
+      clear: RGBA.fromInts(240, 160, 80),
+    }
     const palette = createOpenCodeDiagramPalette({
       text: primary,
       subdued: rgb(subdued),
@@ -42,6 +46,7 @@ describe("OpenCode diagram palette", () => {
       success,
       warning,
       background,
+      accent,
     })
 
     expect(palette.text).toBe(primary)
@@ -54,5 +59,15 @@ describe("OpenCode diagram palette", () => {
     expect(palette.response).toBe(warning)
     expect(palette.note).toBe(primary)
     expect(palette.noteBackground.equals(blendColor(background, rgb(subdued), 0.25))).toBe(true)
+    expect(palette.boxText).toBe(primary)
+    expect(palette.boxBorder.equals(rgb(muted))).toBe(true)
+    expect(palette.line.equals(rgb(subdued))).toBe(true)
+    expect(palette.labelBackground.toInts()[3]).toBe(20)
+    expect(palette.group).toBe(accent.soft)
+    expect(palette.groupText).toBe(accent.soft)
+    expect(palette.marker.equals(rgb(secondary))).toBe(true)
+    expect(palette.noteBorder).toBe(accent.soft)
+    expect(palette.noteText).toBe(accent.clear)
+    expect(palette.noteConnector).toBe(accent.soft)
   })
 })

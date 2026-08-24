@@ -26,6 +26,29 @@ function layoutFlowchartDiagram(content: string, options?: Parameters<typeof lay
   return layoutParsedFlowchartDiagram(parseMermaidFlowchartDiagram(content), options)
 }
 
+test("separates subgraph labels from their frame style", () => {
+  const grid = drawFlowchartDiagramGrid(`flowchart LR
+  subgraph Group
+    A[Node]
+  end`)
+  const styles = grid.rows.flatMap((row) => row.map((cell) => cell.style))
+
+  expect(styles).toContain("group")
+  expect(styles).toContain("groupLabel")
+})
+
+test("keeps every branch connected at a shared source junction", () => {
+  const source = `flowchart TB
+  A --> B
+  A --> C`
+  const layout = layoutFlowchartDiagram(source, { compact: true })
+  const grid = drawFlowchartDiagramGrid(source, { compact: true })
+  const sourcePoint = layout.routes[0]!.points[0]!
+
+  expect(layout.routes[1]!.points[0]).toEqual(sourcePoint)
+  expect(grid.getCell(sourcePoint.x, sourcePoint.y)?.char).toBe("┴")
+})
+
 function routeRunsAlongHorizontalBorder(
   route: { points: readonly { x: number; y: number }[] },
   bounds: { left: number; top: number; width: number; height: number },
@@ -333,12 +356,12 @@ describe("FlowchartDiagram", () => {
                                ╭──────────────────────╮
                                │ DEPLOYMENT - Anomaly │
                                ╰───────────┬──────────╯
-                      ╭────────────────────╰────────────────────╮
+                      ╭────────────────────┴────────────────────╮
                       ▼                                         ▼
        ╭────────────────────────────╮            ╭────────────────────────────╮
        │ ClientApps: google, github │            │ ORG acme = guild/workspace │
        ╰────────────────────────────╯            ╰──────────────┬─────────────╯
-                            ╭───────────────────────────────────╰───────╮
+                            ╭───────────────────────────────────┴───────╮
                             ▼                                           ▼
       ╭───────────────────────────────────────────╮            ╭────────────────╮
       │ org grant: google, authed as bot@acme.com │            │ MEMBER juliana │
@@ -1029,6 +1052,31 @@ describe("FlowchartDiagram", () => {
     }
   })
 
+  test("keeps external nodes outside local-direction subgraph frames", () => {
+    const layout = layoutFlowchartDiagram(
+      `flowchart LR
+  Input([Input]) --> Parse
+  subgraph Outer[Outer orchestration]
+    direction RL
+    subgraph Inner[Inner pipeline]
+      direction TD
+      Parse[Parse request] --> Validate{Valid?}
+      Validate -->|yes| Cache[(Cache)]
+      Cache -->|stale| Validate
+    end
+    Validate --> Dispatch[[Dispatch work]]
+    Dispatch -->|requeue| Parse
+  end
+  Dispatch -. result .-> Output([Output])
+  Output -->|audit| Cache`,
+      { compact: true, layoutMaxWidth: 120 },
+    )
+    const outer = layout.subgraphBounds.get("Outer")!
+
+    expect(boundsIntersect(outer, layout.bounds.get("Input")!)).toBe(false)
+    expect(boundsIntersect(outer, layout.bounds.get("Output")!)).toBe(false)
+  })
+
   test("keeps responsive sibling subgraph frames and long titles disjoint", () => {
     const layout = layoutFlowchartDiagram(
       `flowchart TD
@@ -1534,6 +1582,19 @@ flowchart LR
     expect(output).toContain("second line")
     expect(output.indexOf("first")).toBeLessThan(output.indexOf("second line"))
     expect(output).not.toContain("<br")
+  })
+
+  test("renders edge labels with an independent background", () => {
+    const background = parseColor("#334455")
+    const styled = renderGridStyledText(
+      drawFlowchartDiagramGrid(`flowchart LR
+  A[Start] -->|route label| B[Finish]`),
+      resolveFlowchartStyleColors(),
+      { label: background },
+    )
+
+    expect(styled.chunks.some((chunk) => chunk.text.includes("route label") && chunk.bg === background)).toBe(true)
+    expect(styled.chunks.some((chunk) => chunk.text.includes("Start") && chunk.bg !== undefined)).toBe(false)
   })
 
   test("keeps quoted multiline labels compact and renders italic node text", () => {
