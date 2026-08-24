@@ -52,6 +52,16 @@ export type Error = ACPError.Error
 export type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
 
+// SDK 1.3.0 removed the unstable SetSessionModelRequest type. This is an
+// opencode-specific extension method for LLM model selection (distinct from
+// session mode selection). The modelId field carries a provider/model string
+// like "anthropic/claude-3.5-sonnet".
+type SetSessionModelRequest = {
+  sessionId: string
+  modelId: string
+}
+type SetSessionModelResponse = Record<string, never>
+
 export type Interface = {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse, Error>
   readonly authenticate: (input: AuthenticateRequest) => Effect.Effect<AuthenticateResponse, Error>
@@ -65,7 +75,7 @@ export type Interface = {
     input: SetSessionConfigOptionRequest,
   ) => Effect.Effect<SetSessionConfigOptionResponse, Error>
   readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, Error>
-  readonly setSessionModel: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, Error>
+  readonly setSessionModel: (input: SetSessionModelRequest) => Effect.Effect<SetSessionModelResponse, Error>
   readonly prompt: (input: PromptRequest) => Effect.Effect<PromptResponse, Error>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void, Error>
   readonly logout: () => Effect.Effect<void, Error>
@@ -544,10 +554,10 @@ export function make(input: {
     return {}
   })
 
-  const setSessionModel = Effect.fn("ACP.setSessionModel")(function* (params: SetSessionModeRequest) {
+  const setSessionModel = Effect.fn("ACP.setSessionModel")(function* (params: SetSessionModelRequest) {
     const current = yield* session.get(params.sessionId)
     const snapshot = yield* configSnapshot(current)
-    const selected = yield* parseSelectedModel(snapshot, params.modeId)
+    const selected = yield* parseSelectedModel(snapshot, params.modelId)
     yield* session
       .setVariant(
         params.sessionId,
