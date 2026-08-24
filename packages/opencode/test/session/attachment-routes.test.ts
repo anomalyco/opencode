@@ -12,12 +12,21 @@ import { ASYNC_TASK_PROTOCOL, ASYNC_TASK_STATUS } from "@/tool/task-protocol"
  * shape of the suffix it produces, both of which are decided here.
  */
 describe("attached async status observation", () => {
-  test("the runtime literal and Task protocol remain byte-aligned", () => {
+  test("the Task protocol does not promise a status line no route emits", () => {
     expect(ASYNC_TASK_STATUS).toBe("[attached async tasks: 0]")
     expect(Buffer.byteLength(ASYNC_TASK_STATUS, "utf8")).toBe(25)
-    // The protocol text quotes the literal back to the model, so a change to one that misses the
-    // other would tell an agent to wait for a line the runtime never emits.
-    expect(ASYNC_TASK_PROTOCOL).toContain(`\`${ASYNC_TASK_STATUS}\``)
+    // `AttachmentStatus.suffix` has no production consumer here: appending it needs a request-tail
+    // seam the upstream prompt path does not have. While that is true, the protocol must not quote
+    // the literal back to the model, or it would tell an agent to wait for a line nothing emits.
+    expect(ASYNC_TASK_PROTOCOL).not.toContain(ASYNC_TASK_STATUS)
+    // The two assertions below are this test's positive control. Without them the negative above
+    // would pass just as happily against an empty protocol string, proving nothing. They also pin
+    // the guarantee that has to survive the removal: the gate is runtime logic in the coordinator,
+    // and the text still has to describe it.
+    expect(ASYNC_TASK_PROTOCOL).toContain("ending your turn is a wait")
+    expect(ASYNC_TASK_PROTOCOL).toContain(
+      "Once every async Task started from this invocation has finished, your next turn-end response is returned to your caller.",
+    )
   })
 
   test("zero is observed from attachment lifetime facts, not provider coverage", () => {
