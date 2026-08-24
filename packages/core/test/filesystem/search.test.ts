@@ -86,6 +86,8 @@ describe("FileSystemSearch", () => {
       Effect.gen(function* () {
         const search = yield* FileSystemSearch.Service
         yield* Effect.sleep("10 millis")
+        expect(observed).toBeUndefined()
+        yield* search.find({ query: "src", type: "directory" })
         expect(observed?.limit).toBe(100_000)
         expect(observed?.exclude).toEqual([...Protected.names()].map((name) => `${name}/**`))
         expect((yield* search.find({ query: "src", type: "directory" }))[0]?.path).toBe(
@@ -97,7 +99,6 @@ describe("FileSystemSearch", () => {
 
   test("refreshes a stale ripgrep index atomically without blocking search", async () => {
     let scans = 0
-    const initial = Effect.runSync(Deferred.make<void>())
     const started = Effect.runSync(Deferred.make<void>())
     const release = Effect.runSync(Deferred.make<void>())
     const layer = AppNodeBuilder.build(FileSystemSearch.node, [
@@ -127,7 +128,6 @@ describe("FileSystemSearch", () => {
                   type: "file",
                 })
                 if (input.onEntry) yield* input.onEntry(entry)
-                if (scans === 1) yield* Deferred.succeed(initial, undefined)
                 return [entry]
               }),
             glob: () => Effect.succeed([]),
@@ -140,7 +140,7 @@ describe("FileSystemSearch", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const search = yield* FileSystemSearch.Service
-        yield* Deferred.await(initial)
+        yield* search.find({ query: "old", type: "file" })
         expect((yield* search.find({ query: "old", type: "file" }))[0]?.path).toBe(RelativePath.make("src/old.ts"))
         expect(scans).toBe(1)
 
@@ -163,7 +163,6 @@ describe("FileSystemSearch", () => {
 
   test("reuses location-owned fuzzy targets across index refreshes", async () => {
     let scans = 0
-    const first = Effect.runSync(Deferred.make<void>())
     const second = Effect.runSync(Deferred.make<void>())
     const prepare = spyOn(fuzzysort, "prepare")
     const cleanup = spyOn(fuzzysort, "cleanup")
@@ -187,7 +186,7 @@ describe("FileSystemSearch", () => {
                 scans++
                 const entry = FileSystem.Entry.make({ path: RelativePath.make("src/index.ts"), type: "file" })
                 if (input.onEntry) yield* input.onEntry(entry)
-                yield* Deferred.succeed(scans === 1 ? first : second, undefined)
+                if (scans > 1) yield* Deferred.succeed(second, undefined)
                 return [entry]
               }),
             glob: () => Effect.succeed([]),
@@ -200,7 +199,6 @@ describe("FileSystemSearch", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const search = yield* FileSystemSearch.Service
-        yield* Deferred.await(first)
         yield* search.find({ query: "index", type: "file" })
         yield* TestClock.adjust("10 seconds")
         yield* search.find({ query: "index", type: "file" })

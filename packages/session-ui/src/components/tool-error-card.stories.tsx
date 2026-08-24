@@ -12,7 +12,18 @@ Tool call failure summary styled like a tool trigger.
 - Collapsible; click header to expand/collapse.
 `
 
-const samples = [
+const samples: { tool: string; error: string; subtitle?: string; defaultOpen?: boolean }[] = [
+  {
+    tool: "shell",
+    subtitle: "sleep 30",
+    error: "Tool execution interrupted",
+  },
+  {
+    tool: "shell",
+    subtitle: "sleep 30",
+    error: "Tool execution interrupted",
+    defaultOpen: true,
+  },
   {
     tool: "patch",
     error:
@@ -62,8 +73,9 @@ export default {
     },
   },
   args: {
-    tool: "patch",
+    tool: samples[0].tool,
     error: samples[0].error,
+    subtitle: samples[0].subtitle,
   },
   argTypes: {
     tool: {
@@ -73,9 +85,12 @@ export default {
     error: {
       control: "text",
     },
+    subtitle: {
+      control: "text",
+    },
   },
-  render: (props: { tool: string; error: string }) => {
-    return <ToolErrorCard tool={props.tool} error={props.error} />
+  render: (props: { tool: string; error: string; subtitle?: string }) => {
+    return <ToolErrorCard tool={props.tool} error={props.error} subtitle={props.subtitle} />
   },
 }
 
@@ -83,7 +98,16 @@ export const All = {
   render: () => {
     return (
       <div style="display: flex; flex-direction: column; gap: 12px; max-width: 720px;">
-        <For each={samples}>{(item) => <ToolErrorCard tool={item.tool} error={item.error} />}</For>
+        <For each={samples}>
+          {(item) => (
+            <ToolErrorCard
+              tool={item.tool}
+              error={item.error}
+              subtitle={item.subtitle}
+              defaultOpen={item.defaultOpen}
+            />
+          )}
+        </For>
       </div>
     )
   },

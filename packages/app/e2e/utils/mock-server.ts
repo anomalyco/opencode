@@ -501,7 +501,7 @@ function currentModels(value: unknown) {
         return [
           {
             id: model.id,
-            modelID: model.id,
+            modelID: record(model.api) && typeof model.api.id === "string" ? model.api.id : model.id,
             providerID: provider.id,
             name: model.name,
             capabilities: { tools: true, input: ["text"], output: ["text"] },
