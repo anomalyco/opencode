@@ -86,7 +86,7 @@ export type LocalProject = Partial<Project> & { worktree: string; expanded: bool
 export type HomeProjectSelection = { server: ServerConnection.Key; directory?: string }
 
 export type ReviewDiffStyle = "unified" | "split"
-export type ReviewChangeMode = "git" | "branch" | "turn"
+export type ReviewChangeMode = "git" | "branch" | "turn" | "all"
 export type ReviewPanelSource = "context-button" | "other"
 
 export type LayoutRoute =
@@ -811,7 +811,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const reviewMode = createMemo(() => {
           const mode = s().reviewMode
-          if (mode === "git" || mode === "branch" || mode === "turn") return mode
+          if (mode === "git" || mode === "branch" || mode === "turn" || mode === "all") return mode
         })
         const reviewFile = createMemo(() => {
           const file = s().reviewFile
