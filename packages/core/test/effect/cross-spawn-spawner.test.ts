@@ -423,4 +423,29 @@ describe("cross-spawn spawner", () => {
       }),
     )
   })
+
+  describe("descendant holds stdio pipe", () => {
+    fx.effect(
+      "resolves exitCode on direct child exit while a descendant keeps the pipe open",
+      Effect.gen(function* () {
+        const script = [
+          "const { spawn } = require('node:child_process')",
+          "const child = spawn(process.execPath, ['-e', 'setTimeout(()=>process.exit(0), 6000)'], { stdio: ['ignore', 'inherit', 'inherit'] })",
+          "child.unref()",
+        ].join(";")
+        const handle = yield* ChildProcess.make(process.execPath, ["-e", script], {
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+        })
+        const start = Date.now()
+        const code = yield* handle.exitCode
+        const elapsed = Date.now() - start
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+        // Settles from the direct child's `exit`, not from pipe EOF, which the
+        // still-alive descendant keeps open for 6 seconds.
+        expect(elapsed).toBeLessThan(4_000)
+      }),
+    )
+  })
 })

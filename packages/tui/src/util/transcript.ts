@@ -105,6 +105,13 @@ export function formatPart(part: Part, options: TranscriptOptions): string {
     }
     if (options.toolDetails && part.state.status === "error" && part.state.error) {
       result += `\n**Error:**\n\`\`\`\n${part.state.error}\n\`\`\`\n`
+      const captured =
+        "metadata" in part.state && part.state.metadata && typeof part.state.metadata.output === "string"
+          ? part.state.metadata.output
+          : undefined
+      if (captured) {
+        result += `\n**Output (captured before abort):**\n\`\`\`\n${captured}\n\`\`\`\n`
+      }
     }
     result += `\n`
     return result
