@@ -25,4 +25,7 @@ export const dict = {
     "CLI встановлено за шляхом {{path}}\n\nПерезапустіть термінал, щоб використовувати команду 'opencode'.",
   "desktop.cli.failed.title": "Не вдалося встановити",
   "desktop.cli.failed.message": "Не вдалося встановити CLI: {{error}}",
+
+  "desktop.error.dev.rootNotFound":
+    "Кореневий елемент не знайдено. Ви забули додати його до index.html? Або, можливо, атрибут id було написано з помилкою?",
 }

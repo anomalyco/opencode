@@ -25,4 +25,7 @@ export const dict = {
     "CLI terinstal di {{path}}\n\nMulai ulang terminal Anda untuk menggunakan perintah 'opencode'.",
   "desktop.cli.failed.title": "Instalasi gagal",
   "desktop.cli.failed.message": "Gagal menginstal CLI: {{error}}",
+
+  "desktop.error.dev.rootNotFound":
+    "Elemen root tidak ditemukan. Apakah Anda lupa menambahkannya ke index.html? Atau mungkin atribut id salah eja?",
 }
