@@ -19,6 +19,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Env } from "../../src/env"
 import {
   provideTmpdirInstance,
+  reloadInstance,
   TestInstance,
   tmpdir,
   tmpdirScoped,
@@ -358,15 +359,14 @@ it.instance(
 it.instance("updates config and preserves empty shell sentinel", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
-    yield* writeConfigEffect(
-      test.directory,
-      { $schema: "https://opencode.ai/config.json", shell: "bash" },
-      "config.json",
-    )
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      shell: "bash",
+    })
 
     yield* Config.Service.use((svc) => svc.update(ConfigParse.schema(ConfigV1.Info, { shell: "" }, "test:config")))
 
-    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "config.json"))
+    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "opencode.json"))
     expect(writtenConfig).toMatchObject({ shell: "" })
   }),
 )
@@ -897,9 +897,237 @@ it.instance("updates config and writes to file", () =>
       svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
     )
 
-    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "config.json"))
+    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "opencode.json"))
     expect(writtenConfig).toMatchObject({ model: "updated/model" })
   }),
+)
+
+// Config.update is the write path behind the SDK's PATCH /config endpoint.
+// The server disposes the instance after a PATCH, so the next GET reloads
+// config from disk. The mutation must land in a file the loader reads
+// (opencode.json / opencode.jsonc).
+
+it.instance("update writes to opencode.json, the file the loader reads", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      model: "base/model",
+      username: "testuser",
+    })
+
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
+    )
+
+    // The mutation must be persisted to opencode.json
+    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "opencode.json"))
+    expect(writtenConfig).toMatchObject({ model: "updated/model" })
+    // merging pre-existing keys from that same file
+    expect(writtenConfig).toMatchObject({ username: "testuser" })
+  }),
+)
+
+it.instance("update survives instance reload, matching the server PATCH flow", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      model: "base/model",
+    })
+
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
+    )
+
+    // The server disposes the instance after a PATCH, so the next GET reads
+    // config from disk again and must observe the mutation.
+    yield* reloadInstance({ directory: test.directory })
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("updated/model")
+  }),
+)
+
+it.instance("update targets opencode.jsonc when that is the project config file", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, "opencode.jsonc"),
+      `{
+        // project config with comments
+        "$schema": "https://opencode.ai/config.json",
+        "model": "base/model"
+      }`,
+    )
+
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
+    )
+
+    // The mutation must be applied to the existing jsonc file
+    const writtenConfig = yield* FSUtil.use.readFileString(path.join(test.directory, "opencode.jsonc"))
+    expect(writtenConfig).toContain('"model": "updated/model"')
+    // keeping the file readable and its comments intact
+    expect(writtenConfig).toContain("// project config with comments")
+    const parsed = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(writtenConfig, path.join(test.directory, "opencode.jsonc")), path.join(test.directory, "opencode.jsonc"))
+    expect(parsed.model).toBe("updated/model")
+  }),
+)
+
+it.instance("update preserves env tokens in the target file", () =>
+  withProcessEnv(
+    "TEST_MODEL",
+    "token/model",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* writeConfigEffect(test.directory, {
+        $schema: "https://opencode.ai/config.json",
+        model: "{env:TEST_MODEL}",
+        username: "testuser",
+      })
+
+      yield* Config.Service.use((svc) =>
+        svc.update(ConfigParse.schema(ConfigV1.Info, { username: "patched" }, "test:config")),
+      )
+
+      // The update rewrites the user-maintained file, so env tokens must
+      // survive as literals instead of being baked to their resolved values.
+      const writtenConfig = yield* FSUtil.use.readFileString(path.join(test.directory, "opencode.json"))
+      expect(writtenConfig).toContain("{env:TEST_MODEL}")
+      expect(writtenConfig).not.toContain("token/model")
+      expect(writtenConfig).toContain('"username": "patched"')
+
+      // The token still resolves on the next load.
+      yield* reloadInstance({ directory: test.directory })
+      const config = yield* Config.use.get()
+      expect(config.model).toBe("token/model")
+      expect(config.username).toBe("patched")
+    }),
+  ),
+)
+
+// The loader also reads project configs from .opencode/opencode.json(c) at
+// each level of the directory walk, after the plain opencode.json(c) files.
+// The last file the loader merges is the one an update must touch, otherwise
+// the mutation is shadowed once the instance reloads from disk.
+
+it.instance("update targets .opencode/opencode.json when that is the project config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".opencode"))
+    yield* writeConfigEffect(path.join(test.directory, ".opencode"), {
+      $schema: "https://opencode.ai/config.json",
+      model: "base/model",
+    })
+
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
+    )
+
+    // The mutation must be persisted to the .opencode config…
+    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, ".opencode", "opencode.json"))
+    expect(writtenConfig).toMatchObject({ model: "updated/model" })
+    // …and must not create a plain opencode.json or legacy config.json.
+    expect(yield* FSUtil.use.existsSafe(path.join(test.directory, "opencode.json"))).toBe(false)
+    expect(yield* FSUtil.use.existsSafe(path.join(test.directory, "config.json"))).toBe(false)
+
+    yield* reloadInstance({ directory: test.directory })
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("updated/model")
+  }),
+)
+
+it.instance("update prefers .opencode/opencode.jsonc over .opencode/opencode.json", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".opencode"))
+    yield* writeConfigEffect(path.join(test.directory, ".opencode"), {
+      $schema: "https://opencode.ai/config.json",
+      model: "base/model",
+    })
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "opencode.jsonc"),
+      JSON.stringify({ $schema: "https://opencode.ai/config.json", model: "base/model" }, null, 2),
+    )
+
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
+    )
+
+    // The loader merges jsonc after json within a directory, so the mutation
+    // must land in the jsonc file and leave the json file untouched.
+    const writtenConfig = yield* FSUtil.use.readFileString(path.join(test.directory, ".opencode", "opencode.jsonc"))
+    expect(writtenConfig).toContain('"model": "updated/model"')
+    const untouched = yield* FSUtil.use.readJson(path.join(test.directory, ".opencode", "opencode.json"))
+    expect(untouched).toMatchObject({ model: "base/model" })
+
+    yield* reloadInstance({ directory: test.directory })
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("updated/model")
+  }),
+)
+
+it.instance("update targets .opencode config over the plain project opencode.json", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      model: "root/model",
+    })
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".opencode"))
+    yield* writeConfigEffect(path.join(test.directory, ".opencode"), {
+      $schema: "https://opencode.ai/config.json",
+      model: "local/model",
+    })
+
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
+    )
+
+    // The .opencode config is merged after the plain file, so it must receive
+    // the mutation; the plain opencode.json must stay untouched.
+    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, ".opencode", "opencode.json"))
+    expect(writtenConfig).toMatchObject({ model: "updated/model" })
+    const untouched = yield* FSUtil.use.readJson(path.join(test.directory, "opencode.json"))
+    expect(untouched).toMatchObject({ model: "root/model" })
+
+    yield* reloadInstance({ directory: test.directory })
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("updated/model")
+  }),
+)
+
+it.effect("update targets the worktree-level .opencode config the loader merges last", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped({ git: true })
+    const sub = path.join(root, "sub")
+    yield* FSUtil.use.ensureDir(sub)
+    yield* FSUtil.use.ensureDir(path.join(root, ".opencode"))
+    yield* writeConfigEffect(path.join(root, ".opencode"), {
+      $schema: "https://opencode.ai/config.json",
+      model: "root/model",
+    })
+    yield* FSUtil.use.ensureDir(path.join(sub, ".opencode"))
+    yield* writeConfigEffect(path.join(sub, ".opencode"), {
+      $schema: "https://opencode.ai/config.json",
+      model: "sub/model",
+    })
+
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
+    ).pipe(provideInstanceEffect(sub))
+
+    // The loader walks .opencode dirs nearest first and merges later entries
+    // on top, so the worktree-level config wins; the mutation must land there.
+    const writtenConfig = yield* FSUtil.use.readJson(path.join(root, ".opencode", "opencode.json"))
+    expect(writtenConfig).toMatchObject({ model: "updated/model" })
+    const untouched = yield* FSUtil.use.readJson(path.join(sub, ".opencode", "opencode.json"))
+    expect(untouched).toMatchObject({ model: "sub/model" })
+
+    yield* reloadInstance({ directory: sub })
+    const config = yield* Config.use.get().pipe(provideInstanceEffect(sub))
+    expect(config.model).toBe("updated/model")
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
 it.instance("gets config directories", () =>
