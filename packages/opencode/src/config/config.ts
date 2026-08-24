@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { createHash } from "crypto"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
@@ -113,6 +114,10 @@ type Info = ConfigV1.Info & {
   // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
   // with the file and scope it came from so later runtime code can make location-sensitive decisions.
   plugin_origins?: ConfigPlugin.Origin[]
+  // mcp_project_scope maps server names defined in project-owned config files (checked-into-git territory)
+  // to a hash of their definition. Derived state like plugin_origins; the MCP service uses it to require
+  // approval before connecting project-supplied servers, so a cloned repo can't auto-connect its own servers.
+  mcp_project_scope?: Record<string, string>
 }
 
 type State = {
@@ -162,7 +167,7 @@ function patchJsonc(input: string, patch: unknown, path: string[] = []): string 
 }
 
 function writable(info: Info) {
-  const { plugin_origins: _plugin_origins, ...next } = info
+  const { plugin_origins: _plugin_origins, mcp_project_scope: _mcp_project_scope, ...next } = info
   return next
 }
 
@@ -397,6 +402,20 @@ const layer = Layer.effect(
           return mergePluginOrigins(source, next.plugin, kind)
         }
 
+        // Track MCP servers defined by project-owned config so the MCP service can require approval
+        // before connecting them. A hash of each winning definition is kept so edited entries
+        // re-trigger the approval prompt.
+        const projectMcp: Record<string, string> = {}
+        const snapshotMcp = () => JSON.stringify(result.mcp ?? {})
+        const markProjectMcp = (before: string) => {
+          const previous = JSON.parse(before) as Record<string, unknown>
+          for (const [name, entry] of Object.entries(result.mcp ?? {})) {
+            if (JSON.stringify(previous[name]) !== JSON.stringify(entry)) {
+              projectMcp[name] = createHash("sha256").update(JSON.stringify(entry)).digest("hex")
+            }
+          }
+        }
+
         for (const [key, value] of Object.entries(auth)) {
           if (value.type === "wellknown") {
             const url = key.replace(/\/+$/, "")
@@ -449,7 +468,9 @@ const layer = Layer.effect(
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+            const before = snapshotMcp()
             yield* merge(file, yield* loadFile(file, authEnv), "local")
+            markProjectMcp(before)
           }
         }
 
@@ -469,16 +490,20 @@ const layer = Layer.effect(
           if (dir.endsWith(".opencode") || dir.endsWith(".agents") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
+              const before = snapshotMcp()
               yield* Effect.logDebug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source, authEnv))
+              if (containsPath(dir, ctx)) markProjectMcp(before)
               result.agent ??= {}
               result.mode ??= {}
               result.plugin ??= []
             }
             if (dir.endsWith(".agents")) {
               const mcpSource = path.join(dir, "mcp.json")
+              const before = snapshotMcp()
               yield* Effect.logDebug(`loading config from ${mcpSource}`)
               yield* merge(mcpSource, yield* loadMcpFile(mcpSource, authEnv))
+              if (containsPath(dir, ctx)) markProjectMcp(before)
             }
           }
 
@@ -523,7 +548,12 @@ const layer = Layer.effect(
         )
         if (Object.keys(localMcp).length) {
           result.mcp = { ...(result.mcp ?? {}), ...localMcp }
+          // Local entries are user-private; they win over project definitions and need no approval.
+          for (const name of Object.keys(localMcp)) {
+            delete projectMcp[name]
+          }
         }
+        result.mcp_project_scope = projectMcp
 
         if (process.env.OPENCODE_CONFIG_CONTENT) {
           const source = "OPENCODE_CONFIG_CONTENT"

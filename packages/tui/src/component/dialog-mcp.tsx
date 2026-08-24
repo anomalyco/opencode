@@ -8,10 +8,17 @@ import { TextAttributes } from "@opentui/core"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 
-function Status(props: { enabled: boolean; loading: boolean; needsAuth: boolean }) {
+function Status(props: { enabled: boolean; loading: boolean; needsAuth: boolean; needsApproval: boolean }) {
   const { theme } = useTheme()
   if (props.loading) {
     return <span style={{ fg: theme.textMuted }}>⋯ Loading</span>
+  }
+  if (props.needsApproval) {
+    return (
+      <span style={{ fg: theme.warning, attributes: TextAttributes.BOLD }}>
+        ⚠ Approval required (opencode mcp approve)
+      </span>
+    )
   }
   if (props.needsAuth) {
     return (
@@ -54,9 +61,21 @@ export function DialogMcp() {
       map(([name, status]) => ({
         value: name,
         title: name,
-        description: status.status === "needs_auth" ? "authentication required" : status.status === "failed" ? "failed" : status.status,
+        description:
+          status.status === "needs_approval"
+            ? "approval required"
+            : status.status === "needs_auth"
+              ? "authentication required"
+              : status.status === "failed"
+                ? "failed"
+                : status.status,
         footer: (
-          <Status enabled={local.mcp.isEnabled(name)} loading={loadingMcp === name} needsAuth={status.status === "needs_auth"} />
+          <Status
+            enabled={local.mcp.isEnabled(name)}
+            loading={loadingMcp === name}
+            needsAuth={status.status === "needs_auth"}
+            needsApproval={status.status === "needs_approval"}
+          />
         ),
         category: undefined,
       })),

@@ -1,5 +1,7 @@
 import path from "node:path"
+import fs from "node:fs/promises"
 import { pathToFileURL } from "node:url"
+import { Global } from "@opencode-ai/core/global"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -96,6 +98,9 @@ const StatusNeedsClientRegistration = Schema.Struct({
   status: Schema.Literal("needs_client_registration"),
   error: Schema.String,
 }).annotate({ identifier: "MCPStatusNeedsClientRegistration" })
+const StatusNeedsApproval = Schema.Struct({ status: Schema.Literal("needs_approval") }).annotate({
+  identifier: "MCPStatusNeedsApproval",
+})
 
 export const Status = Schema.Union([
   StatusConnected,
@@ -103,8 +108,45 @@ export const Status = Schema.Union([
   StatusFailed,
   StatusNeedsAuth,
   StatusNeedsClientRegistration,
+  StatusNeedsApproval,
 ]).annotate({ identifier: "MCPStatus", discriminator: "status" })
 export type Status = Schema.Schema.Type<typeof Status>
+
+// Project-scope servers require approval before first connect (and again whenever their definition
+// changes), so a cloned repository can't silently connect its own MCP servers. Choices are stored
+// in the data directory, never in the project.
+const approvalsFilepath = () => path.join(Global.Path.data, "mcp-approvals.json")
+
+const readApprovals = Effect.fn("MCP.readApprovals")(function* () {
+  const text = yield* Effect.promise(() =>
+    fs
+      .readFile(approvalsFilepath(), "utf8")
+      .then((text) => JSON.parse(text) as Record<string, Record<string, string>>)
+      .catch(() => ({}) as Record<string, Record<string, string>>),
+  )
+  return text
+})
+
+const writeApproval = Effect.fn("MCP.writeApproval")(function* (
+  root: string,
+  name: string,
+  hash: string | undefined,
+) {
+  const data = { ...(yield* readApprovals()) }
+  if (hash) {
+    data[root] = { ...(data[root] ?? {}), [name]: hash }
+  } else {
+    const entry = {...(data[root] ?? {}) }
+    delete entry[name]
+    if (Object.keys(entry).length) data[root] = entry
+    else delete data[root]
+  }
+  yield* Effect.promise(() =>
+    fs
+      .mkdir(Global.Path.data, { recursive: true })
+      .then(() => fs.writeFile(approvalsFilepath(), JSON.stringify(data, null, 2), { mode: 0o600 })),
+  )
+})
 
 // Store transports for OAuth servers to allow finishing auth
 type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
@@ -195,6 +237,8 @@ export interface Interface {
   readonly supportsOAuth: (mcpName: string) => Effect.Effect<boolean, NotFoundError>
   readonly hasStoredTokens: (mcpName: string) => Effect.Effect<boolean>
   readonly getAuthStatus: (mcpName: string) => Effect.Effect<AuthStatus>
+  readonly approve: (name: string) => Effect.Effect<void, NotFoundError>
+  readonly revokeApproval: (name: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
@@ -369,10 +413,26 @@ const layer = Layer.effect(
       )
     })
 
+    const cfgSvc = yield* Config.Service
+
     const create = Effect.fn("MCP.create")(
       function* (key: string, mcp: ConfigMCPV1.Info) {
         if (mcp.enabled === false) {
           return DISABLED_RESULT
+        }
+
+        // Project-supplied servers need explicit approval (and re-approval when edited) before
+        // they may connect. Local-scope and user config are exempt.
+        const projectScope = (yield* cfgSvc.get()).mcp_project_scope
+        const expected = projectScope?.[key]
+        if (expected) {
+          const ctx = yield* InstanceState.context
+          const root = ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+          const approvals = yield* readApprovals()
+          if (approvals[root]?.[key] !== expected) {
+            yield* Effect.logWarning("project MCP server requires approval", { server: key })
+            return { status: { status: "needs_approval" } } satisfies CreateResult
+          }
         }
 
         const { client: mcpClient, status } =
@@ -413,7 +473,6 @@ const layer = Layer.effect(
         })
       }),
     )
-    const cfgSvc = yield* Config.Service
 
     const descendants = Effect.fnUntraced(
       function* (pid: number) {
@@ -969,6 +1028,21 @@ const layer = Layer.effect(
       return "authenticated"
     })
 
+    const projectRoot = Effect.fn("MCP.projectRoot")(function* () {
+      const ctx = yield* InstanceState.context
+      return ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+    })
+
+    const approve = Effect.fn("MCP.approve")(function* (name: string) {
+      const hash = (yield* cfgSvc.get()).mcp_project_scope?.[name]
+      if (!hash) return yield* new NotFoundError({ name })
+      yield* writeApproval(yield* projectRoot(), name, hash)
+    })
+
+    const revokeApproval = Effect.fn("MCP.revokeApproval")(function* (name: string) {
+      yield* writeApproval(yield* projectRoot(), name, undefined)
+    })
+
     return Service.of({
       status,
       clients,
@@ -989,6 +1063,8 @@ const layer = Layer.effect(
       supportsOAuth,
       hasStoredTokens,
       getAuthStatus,
+      approve,
+      revokeApproval,
     })
   }),
 )

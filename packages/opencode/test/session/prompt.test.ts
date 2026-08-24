@@ -132,6 +132,8 @@ function makeMcp(instructions: MCP.ServerInstructions[] = []) {
       supportsOAuth: () => Effect.succeed(false),
       hasStoredTokens: () => Effect.succeed(false),
       getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+      approve: () => Effect.void,
+      revokeApproval: () => Effect.void,
     }),
   )
 }

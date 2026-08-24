@@ -1922,6 +1922,7 @@ export type Config = {
       ]
   >
   share?: "manual" | "auto" | "disabled"
+  title_style?: "descriptive" | "funny"
   autoshare?: boolean
   /**
    * Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications
@@ -2017,6 +2018,7 @@ export type Config = {
     tail_turns?: number
     preserve_recent_tokens?: number
     reserved?: number
+    threshold?: number
   }
   experimental?: {
     disable_paste_summary?: boolean
@@ -2404,12 +2406,17 @@ export type McpStatusNeedsClientRegistration = {
   error: string
 }
 
+export type McpStatusNeedsApproval = {
+  status: "needs_approval"
+}
+
 export type McpStatus =
   | McpStatusConnected
   | McpStatusDisabled
   | McpStatusFailed
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
+  | McpStatusNeedsApproval
 
 export type McpUnsupportedOAuthError = {
   error: string

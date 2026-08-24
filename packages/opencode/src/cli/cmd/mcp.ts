@@ -100,6 +100,7 @@ export const McpCommand = cmd({
       .command(McpAddCommand)
       .command(McpListCommand)
       .command(McpAuthCommand)
+      .command(McpApproveCommand)
       .command(McpLogoutCommand)
       .command(McpDebugCommand)
       .demandCommand(),
@@ -152,6 +153,10 @@ export const McpListCommand = effectCmd({
       } else if (status.status === "needs_auth") {
         statusIcon = "⚠"
         statusText = "needs authentication"
+      } else if (status.status === "needs_approval") {
+        statusIcon = "⚠"
+        statusText = "needs approval"
+        hint = "\n    " + UI.Style.TEXT_DIM + "review the definition, then run: opencode mcp approve " + name
       } else if (status.status === "needs_client_registration") {
         statusIcon = "✗"
         statusText = "needs client registration"
@@ -336,6 +341,38 @@ export const McpAuthListCommand = effectCmd({
     }
 
     prompts.outro(`${servers.length} OAuth-capable server(s)`)
+  }),
+})
+
+export const McpApproveCommand = effectCmd({
+  command: "approve <name>",
+  describe: "approve a project-scoped MCP server for connection",
+  builder: (yargs) =>
+    yargs
+      .positional("name", {
+        describe: "name of the MCP server",
+        type: "string",
+        demandOption: true,
+      })
+      .option("revoke", {
+        describe: "revoke a previously granted approval",
+        type: "boolean",
+        default: false,
+      }),
+  handler: Effect.fn("Cli.mcp.approve")(function* (args) {
+    UI.empty()
+    if (args.revoke) {
+      yield* MCP.Service.use((mcp) => mcp.revokeApproval(args.name!))
+      prompts.log.success(`Approval revoked for "${args.name}"`)
+      return
+    }
+    yield* MCP.Service.use((mcp) => mcp.approve(args.name!)).pipe(
+      Effect.orElseSucceed(() => {
+        prompts.log.error(`"${args.name}" is not a project-scoped MCP server`)
+        throw new UI.CancelledError()
+      }),
+    )
+    prompts.log.success(`"${args.name}" approved for connection in this project`)
   }),
 })
 

@@ -29,6 +29,7 @@ import {
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
+import { createHash } from "crypto"
 import path from "path"
 import fs from "fs/promises"
 import os from "os"
@@ -1619,6 +1620,23 @@ it.instance(".agents/mcp.json accepts mcpServers and servers wrappers", () =>
   }),
 )
 
+it.instance("project mcp servers are marked for approval", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      { stripe: { httpUrl: "https://mcp.stripe.com" } },
+      "mcp.json",
+    )
+
+    const config = yield* Config.use.get()
+    const hash = config.mcp_project_scope?.stripe
+    expect(hash).toBeDefined()
+    expect(hash).toBe(createHash("sha256").update(JSON.stringify(config.mcp?.stripe)).digest("hex"))
+  }),
+)
+
 it.instance("local scope MCP overrides project config and ignores other projects", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
@@ -1654,6 +1672,8 @@ it.instance("local scope MCP overrides project config and ignores other projects
       const jira = config.mcp?.jira
       expect(jira && "url" in jira ? jira.url : undefined).toBe("https://private.example.com/mcp")
       expect(jira?.enabled).toBe(true)
+      // Local scope replaced the project definition, so no approval should be required
+      expect(config.mcp_project_scope?.jira).toBeUndefined()
       const shared = config.mcp?.shared
       expect(shared && "url" in shared ? shared.url : undefined).toBe("https://shared.example.com/mcp")
     }).pipe(
