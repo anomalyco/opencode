@@ -64,6 +64,19 @@ export interface OptionsInput {
   readonly [key: string]: unknown
   readonly thinking?: ThinkingInput
   readonly effort?: string
+  readonly service_tier?: "auto" | "standard_only"
+  readonly serviceTier?: "auto" | "standard_only"
+  // SDK Metadata:2649 {user_id?: string | null}
+  readonly metadata?: { readonly user_id?: string | null }
+  // SDK MessageCreateParamsContainer:2596 ContainerParams|string
+  readonly container?: string | { readonly id?: string | null; readonly skills?: ReadonlyArray<Record<string, unknown>> | null }
+  readonly inference_geo?: string | null
+  readonly inferenceGeo?: string | null
+  readonly cache_control?: { readonly type: "ephemeral"; readonly ttl?: "5m" | "1h" }
+  readonly cacheControl?: { readonly type: "ephemeral"; readonly ttl?: "5m" | "1h" }
+  // SDK OutputConfig:2684 {effort, format: JSONOutputFormat}
+  readonly output_config?: { readonly effort?: string | null; readonly format?: { readonly type: "json_schema"; readonly schema: Record<string, unknown> } | null }
+  readonly outputConfig?: { readonly effort?: string | null; readonly format?: { readonly type: "json_schema"; readonly schema: Record<string, unknown> } | null }
 }
 
 export type ProviderOptionsInput = OptionsInput
@@ -264,9 +277,27 @@ const AnthropicThinking = Schema.Union([
   }),
 ])
 
+// SDK OutputConfig:2684 {effort?: "low"|"medium"|"high"|"xhigh"|"max"|null, format?: JSONOutputFormat:2399}
+const AnthropicJsonOutputFormat = Schema.Struct({
+  type: Schema.Literal("json_schema"),
+  schema: JsonObject,
+})
 const AnthropicOutputConfig = Schema.Struct({
   effort: Schema.optional(Schema.String),
+  format: Schema.optional(Schema.NullOr(AnthropicJsonOutputFormat)),
 })
+
+// SDK Metadata:2649 {user_id?: string|null}
+const AnthropicMetadata = Schema.Struct({ user_id: optionalNull(Schema.String) })
+
+// SDK MessageCreateParamsContainer:2596 ContainerParams|string; ContainerParams:2172 {id?, skills?}
+const AnthropicContainer = Schema.Union([
+  Schema.String,
+  Schema.Struct({
+    id: optionalNull(Schema.String),
+    skills: optionalNull(Schema.Array(JsonObject)),
+  }),
+])
 
 const AnthropicBodyFields = {
   model: Schema.String,
@@ -282,6 +313,12 @@ const AnthropicBodyFields = {
   stop_sequences: optionalArray(Schema.String),
   thinking: Schema.optional(AnthropicThinking),
   output_config: Schema.optional(AnthropicOutputConfig),
+  // SDK top-level passthrough: cache_control:4638, container:4643, inference_geo:4649, metadata:4654, service_tier:4670
+  cache_control: Schema.optional(AnthropicCacheControl),
+  container: Schema.optional(Schema.NullOr(AnthropicContainer)),
+  inference_geo: Schema.optional(Schema.NullOr(Schema.String)),
+  metadata: Schema.optional(AnthropicMetadata),
+  service_tier: Schema.optional(Schema.Literals(["auto", "standard_only"])),
 }
 export const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
 export type AnthropicMessagesBody = Schema.Schema.Type<typeof AnthropicMessagesBody>
@@ -820,10 +857,63 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 })
 
 const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (request: LLMRequest) {
-  const input = request.providerOptions
+  const input = request.providerOptions as Record<string, unknown> | undefined
+  const rawServiceTier = (input as Record<string, unknown> | undefined)?.service_tier ?? (input as Record<string, unknown> | undefined)?.serviceTier
+  const service_tier =
+    rawServiceTier === "auto" || rawServiceTier === "standard_only"
+      ? (rawServiceTier as "auto" | "standard_only")
+      : undefined
+  const rawMetadata = (input as Record<string, unknown> | undefined)?.metadata
+  const metadata =
+    ProviderShared.isRecord(rawMetadata) &&
+    (typeof rawMetadata.user_id === "string" || rawMetadata.user_id === null)
+      ? { user_id: rawMetadata.user_id as string | null }
+      : undefined
+  const container =
+    typeof (input as Record<string, unknown> | undefined)?.container === "string" ||
+    ProviderShared.isRecord((input as Record<string, unknown> | undefined)?.container)
+      ? ((input as Record<string, unknown>).container as string | { id?: string | null; skills?: ReadonlyArray<Record<string, unknown>> | null })
+      : undefined
+  const rawInferenceGeo =
+    (input as Record<string, unknown> | undefined)?.inference_geo ??
+    (input as Record<string, unknown> | undefined)?.inferenceGeo
+  const inference_geo = typeof rawInferenceGeo === "string" ? rawInferenceGeo : undefined
+  const rawCacheControl =
+    (input as Record<string, unknown> | undefined)?.cache_control ??
+    (input as Record<string, unknown> | undefined)?.cacheControl
+  const cache_control =
+    ProviderShared.isRecord(rawCacheControl) && rawCacheControl.type === "ephemeral"
+      ? (rawCacheControl as { type: "ephemeral"; ttl?: "5m" | "1h" })
+      : undefined
+  const rawOutputConfig =
+    (input as Record<string, unknown> | undefined)?.output_config ??
+    (input as Record<string, unknown> | undefined)?.outputConfig
+  const outputConfigEffort =
+    typeof (input as Record<string, unknown> | undefined)?.effort === "string"
+      ? ((input as Record<string, unknown>).effort as string)
+      : ProviderShared.isRecord(rawOutputConfig) && typeof rawOutputConfig.effort === "string"
+        ? (rawOutputConfig.effort as string)
+        : undefined
+  const outputConfigFormat =
+    ProviderShared.isRecord(rawOutputConfig) && ProviderShared.isRecord(rawOutputConfig.format)
+      ? (rawOutputConfig.format as { type: "json_schema"; schema: Record<string, unknown> })
+      : undefined
+  const output_config =
+    outputConfigEffort === undefined && outputConfigFormat === undefined
+      ? undefined
+      : {
+          ...(outputConfigEffort === undefined ? {} : { effort: outputConfigEffort }),
+          ...(outputConfigFormat === undefined ? {} : { format: outputConfigFormat }),
+        }
   return {
     thinking: yield* resolveThinking(input?.thinking),
-    effort: typeof input?.effort === "string" ? input.effort : undefined,
+    effort: outputConfigEffort,
+    output_config,
+    service_tier,
+    metadata,
+    container,
+    inference_geo,
+    cache_control,
   }
 })
 
@@ -895,7 +985,13 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     top_k: generation?.topK,
     stop_sequences: generation?.stop,
     thinking: options.thinking,
-    output_config: options.effort === undefined ? undefined : { effort: options.effort },
+    output_config: options.output_config,
+    // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670
+    cache_control: options.cache_control,
+    container: options.container,
+    inference_geo: options.inference_geo,
+    metadata: options.metadata,
+    service_tier: options.service_tier,
   }
 })
 
