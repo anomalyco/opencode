@@ -1,7 +1,7 @@
 export * as Watcher from "./watcher.js"
 
 // @ts-ignore
-import { createWrapper } from "@parcel/watcher/wrapper"
+import { createWrapper } from "@parcel/watcher/wrapper.js"
 import type ParcelWatcher from "@parcel/watcher"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"

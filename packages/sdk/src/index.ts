@@ -1,5 +1,5 @@
-export * as OpenCode from "./opencode"
-export * as Tool from "./tool"
+export * as OpenCode from "./opencode.js"
+export * as Tool from "./tool.js"
 
 export { ClientError } from "@opencode-ai/client/effect"
 export type { OpenCodeEvent } from "@opencode-ai/client/effect"

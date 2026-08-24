@@ -72,6 +72,34 @@ try {
   )
   await Promise.all([
     Bun.write(
+      join(consumer, "node-import.mjs"),
+      'await import("@opencode-ai/sdk")\nawait import("@opencode-ai/simulation/backend")\n',
+    ),
+    Bun.write(
+      join(consumer, "consumer.ts"),
+      `import { OpenCode, Tool } from "@opencode-ai/sdk"
+import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd"
+
+OpenCode.create satisfies Function
+OpenCodeWorkerd.create satisfies Function
+Tool.Error satisfies Function
+`,
+    ),
+    Bun.write(
+      join(consumer, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          target: "ES2022",
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          strict: true,
+          noEmit: true,
+          lib: ["ES2022", "DOM", "ESNext.Disposable"],
+        },
+        include: ["consumer.ts"],
+      }),
+    ),
+    Bun.write(
       join(consumer, "wrangler.jsonc"),
       JSON.stringify({
         name: "opencode-sdk-packed-consumer",
@@ -148,7 +176,10 @@ try {
 
   const sdk = archives.get("@opencode-ai/sdk")
   if (!sdk) throw new Error("Packed SDK archive was not created")
-  await $`npm install --ignore-scripts --no-audit --no-fund --package-lock=false ${sdk} wrangler@4.110.0`.cwd(consumer)
+  await $`npm install --ignore-scripts --no-audit --no-fund --package-lock=false ${sdk} @types/json-schema@7.0.15 typescript@5.8.2 wrangler@4.110.0`.cwd(consumer)
+  await $`node node-import.mjs`.cwd(consumer)
+  await $`node_modules/.bin/tsc --noEmit`.cwd(consumer)
+
   await $`node_modules/.bin/wrangler deploy --dry-run --config wrangler.jsonc --outdir dist`.cwd(consumer)
 
   const transpiler = new Bun.Transpiler({ loader: "js" })

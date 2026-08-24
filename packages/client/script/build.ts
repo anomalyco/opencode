@@ -95,7 +95,7 @@ await Effect.runPromise(
       ),
       write(
         emitEffectImported(effectContract, {
-          module: "../../contract",
+          module: "../../contract.js",
           api: "ClientApi",
           shapeModule: "../api/api.js",
         }),

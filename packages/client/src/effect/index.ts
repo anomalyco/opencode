@@ -2,7 +2,7 @@
 // Core or Server. Preserve these datatype exports so internal model reorganizations do not require caller migrations.
 import type { Effect } from "effect"
 
-export * from "./generated/index"
+export * from "./generated/index.js"
 export type {
   AgentApi,
   AppApi,
@@ -47,4 +47,4 @@ export { Skill } from "@opencode-ai/schema/skill"
 export { Prompt } from "@opencode-ai/schema/prompt"
 export { PromptInput } from "@opencode-ai/schema/prompt-input"
 export type { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
-export type OpenCodeClient = Effect.Success<ReturnType<typeof import("./generated/client").make>>
+export type OpenCodeClient = Effect.Success<ReturnType<typeof import("./generated/client.js").make>>

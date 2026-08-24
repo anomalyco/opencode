@@ -1,9 +1,9 @@
-export * as OpenCodeWorkerd from "./workerd"
+export * as OpenCodeWorkerd from "./workerd.js"
 
 import type { DurableObjectStorage } from "@opencode-ai/core/database/sqlite.workerd"
 import { ServerWorkerd } from "@opencode-ai/server/workerd"
 import { Config, Effect, Layer, Scope } from "effect"
-import * as OpenCode from "./opencode"
+import * as OpenCode from "./opencode.js"
 
 export interface CreateOptions extends Pick<OpenCode.CreateOptions, "log" | "workspaceProviders"> {
   readonly storage: DurableObjectStorage

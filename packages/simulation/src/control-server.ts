@@ -1,5 +1,5 @@
 import { Effect, Fiber, FiberSet, Queue, Stream } from "effect"
-import { SimulationProtocol } from "./protocol"
+import { SimulationProtocol } from "./protocol/index.js"
 
 export interface Server {
   readonly url: string
@@ -181,4 +181,4 @@ function send(socket: Socket, response: SimulationProtocol.JsonRpc.Response | un
   return socket.send(JSON.stringify(response))
 }
 
-export * as SimulationControlServer from "./control-server"
+export * as SimulationControlServer from "./control-server.js"

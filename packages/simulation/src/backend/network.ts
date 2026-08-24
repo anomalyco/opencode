@@ -2,7 +2,7 @@ import { Clock, Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse, type HttpMethod } from "effect/unstable/http"
 import { HttpClientError, TransportError } from "effect/unstable/http/HttpClientError"
 import type { HttpClientRequest } from "effect/unstable/http"
-import { SimulationProtocol } from "../protocol"
+import { SimulationProtocol } from "../protocol/index.js"
 
 /**
  * Simulated network.
@@ -82,4 +82,4 @@ export const make = Effect.fn("SimulationNetwork.make")(function* (routes: reado
 export const layer = (routes: readonly Route[] = []) =>
   Layer.effect(HttpClient.HttpClient, make(routes).pipe(Effect.map((run) => run.client)))
 
-export * as SimulationNetwork from "./network"
+export * as SimulationNetwork from "./network.js"

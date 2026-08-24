@@ -107,4 +107,4 @@ export const resolve = Effect.fn("DriveManifest.resolve")(function* () {
   )
 })
 
-export * as DriveManifest from "./manifest"
+export * as DriveManifest from "./manifest.js"

@@ -2,8 +2,8 @@ import { Effect, Schema, Stream } from "effect"
 import { HttpClientResponse } from "effect/unstable/http"
 import { HttpClientError, TransportError } from "effect/unstable/http/HttpClientError"
 import { OpenAIChatEvent, DEFAULT_BASE_URL, PATH } from "@opencode-ai/ai/protocols/openai-chat"
-import { SimulationNetwork } from "./network"
-import { SimulatedProvider } from "./simulated-provider"
+import { SimulationNetwork } from "./network.js"
+import { SimulatedProvider } from "./simulated-provider.js"
 
 /**
  * Driver-answered OpenAI endpoint for the simulated network.
@@ -130,4 +130,4 @@ export const route = (provider: SimulatedProvider.Interface): SimulationNetwork.
   },
 })
 
-export * as SimulationOpenAI from "./openai"
+export * as SimulationOpenAI from "./openai.js"

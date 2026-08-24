@@ -4,10 +4,10 @@ import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { Config, Effect, FileSystem, Layer } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import { DriveManifest } from "../manifest"
-import { SimulationNetwork } from "./network"
-import { SimulationOpenAI } from "./openai"
-import { SimulatedProvider } from "./simulated-provider"
+import { DriveManifest } from "../manifest.js"
+import { SimulationNetwork } from "./network.js"
+import { SimulationOpenAI } from "./openai.js"
+import { SimulatedProvider } from "./simulated-provider.js"
 
 /**
  * Layer replacements applied when the server is built in simulation mode.
@@ -56,4 +56,4 @@ export const simulationReplacements: (app: {
   return [[httpClient, networkNode]] satisfies LayerNode.Replacements
 })
 
-export * as Simulation from "./index"
+export * as Simulation from "./index.js"

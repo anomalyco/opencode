@@ -3,7 +3,7 @@ import { Effect, Stream, Schema } from "effect"
 import { Sse } from "effect/unstable/encoding"
 import { HttpClientError } from "effect/unstable/http"
 import { HttpApiClient } from "effect/unstable/httpapi"
-import { ClientApi } from "../../contract"
+import { ClientApi } from "../../contract.js"
 import type {
   HealthGetOutput,
   ServerGetOutput,

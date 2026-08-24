@@ -20,8 +20,8 @@ import {
   Semaphore,
   Stream,
 } from "effect"
-import { SimulationControlServer } from "../control-server"
-import { SimulationProtocol } from "../protocol"
+import { SimulationControlServer } from "../control-server.js"
+import { SimulationProtocol } from "../protocol/index.js"
 
 export interface ProviderRequest {
   readonly url: string
@@ -916,4 +916,4 @@ function releaseController(
   )
 }
 
-export * as SimulatedProvider from "./simulated-provider"
+export * as SimulatedProvider from "./simulated-provider.js"

@@ -9,10 +9,10 @@ import { createEmbeddedRoutes } from "@opencode-ai/server/routes"
 import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Config, Context, Effect, Layer, ManagedRuntime, Scope } from "effect"
 import { FetchHttpClient, HttpEffect, HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
-import * as Logging from "./logging"
+import * as Logging from "./logging.js"
 
-export type { LogEntry, LogLevel, LogOptions, LogWriter } from "./logging"
-import type { LogOptions } from "./logging"
+export type { LogEntry, LogLevel, LogOptions, LogWriter } from "./logging.js"
+import type { LogOptions } from "./logging.js"
 
 export interface CreateOptions {
   readonly app?: {
