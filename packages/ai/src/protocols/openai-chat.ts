@@ -269,7 +269,7 @@ const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema, options: Lower
   function: {
     name: tool.name,
     description: tool.description,
-    parameters: ToolSchemaProjection.openAI(inputSchema),
+    parameters: inputSchema,
   },
   cache_control: options.cacheControl?.(tool.cache),
 })

@@ -772,6 +772,7 @@ export function ToolDisplay(
     if (typeof value === "string" && value) return value
     return taskId()
   })
+  const errorSubtitle = createMemo(() => toolErrorSubtitle(props, i18n))
   const error = createMemo(() => toolDisplayError(props, i18n.t("ui.toolErrorCard.failed")))
   const render = createMemo(() => ToolRegistry.render(props.tool) ?? GenericTool)
 
@@ -799,7 +800,7 @@ export function ToolDisplay(
                   defaultOpen={props.defaultOpen}
                   open={props.open}
                   onOpenChange={props.onOpenChange}
-                  subtitle={taskSubtitle()}
+                  subtitle={taskSubtitle() ?? errorSubtitle()}
                   href={taskHref()}
                   onSubtitleClick={(event) => {
                     if (!data.navigateToSession) return
@@ -820,6 +821,32 @@ export function ToolDisplay(
       </div>
     </Show>
   )
+}
+
+// Each branch must stay in sync with its tool trigger's subtitle expression so
+// failed rows read like their non-error counterparts ("Shell sleep 30").
+function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
+  const text = (value: unknown) => (typeof value === "string" && value ? value : undefined)
+  if (props.tool === "shell") return text(props.input.command) ?? text(props.metadata.command)
+  if (props.tool === "execute") return text(props.input.code)
+  if (props.tool === "read") return getFilename(readToolPath(props.input) ?? "")
+  if (props.tool === "edit" || props.tool === "write") return getFilename(text(props.input.path) ?? "")
+  if (props.tool === "list" || props.tool === "glob" || props.tool === "grep")
+    return displayDirectory(text(props.input.path) ?? "/")
+  if (props.tool === "webfetch") return text(props.input.url)
+  if (props.tool === "websearch") return text(props.input.query)
+  if (props.tool === "skill") return skillToolName(props.input, props.metadata)
+  if (props.tool === "patch") {
+    const count = patchFileGroups(props.metadata.files).length
+    if (count === 0) return undefined
+    return `${count} ${i18n.plural("ui.common.file", count)}`
+  }
+  if (props.tool === "question") {
+    const count = Array.isArray(props.input.questions) ? props.input.questions.filter(questionInfo).length : 0
+    if (count === 0) return undefined
+    return `${count} ${i18n.plural("ui.common.question", count)}`
+  }
+  return undefined
 }
 
 function toolDisplayError(props: ToolProps & { error?: string }, fallback: string) {

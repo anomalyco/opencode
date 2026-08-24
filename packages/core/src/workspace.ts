@@ -3,7 +3,7 @@ export * as Workspace from "./workspace.js"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { eq } from "drizzle-orm"
-import { Clock, Context, Duration, Effect, Exit, Layer, Ref, Schedule, Schema, Scope } from "effect"
+import { Clock, Context, Deferred, Duration, Effect, Exit, FiberSet, Layer, Ref, Schedule, Schema, Scope } from "effect"
 import { systemError } from "effect/PlatformError"
 import { make } from "effect/unstable/process/ChildProcessSpawner"
 import type { Driver as EnvironmentDriver } from "./environment/driver.js"
@@ -26,7 +26,12 @@ export class Info extends Schema.Class<Info>("Workspace.Info")({
 export class NotFound extends Schema.TaggedError<NotFound>()("Workspace.NotFound", { workspaceID: ID }) {}
 
 export interface Interface {
-  readonly create: (provider: string) => Effect.Effect<Info, WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  /** Instantly commits a logical workspace ID. No provider work happens here. */
+  readonly create: (provider: string) => Effect.Effect<ID, WorkspaceDriver.ProviderNotFound>
+  /** Starts or joins the shared attempt that makes the backing resource real, then returns it. */
+  readonly provision: (
+    workspaceID: ID,
+  ) => Effect.Effect<Info, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
   readonly connect: (
     workspaceID: ID,
   ) => Effect.Effect<EnvironmentDriver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
@@ -51,6 +56,8 @@ interface Connection {
   readonly scope: Scope.Closeable
 }
 
+type ReadinessError = NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound
+
 export const configured = (options: Options = {}) =>
   makeGlobalNode({
     service: Service,
@@ -66,7 +73,10 @@ const layer = (options: Options) =>
       const registry = yield* WorkspaceDriver.RegistryService
       const lifetime = yield* Scope.Scope
       const connections = new Map<ID, Connection>()
+      // Destroy cancels the racing provision body by settling the deferred.
+      const attempts = new Map<ID, Deferred.Deferred<Info, ReadinessError>>()
       const locks = KeyedMutex.makeUnsafe<ID>()
+      const fork = yield* FiberSet.makeRuntime<never, void, never>()
       const idleThreshold = Duration.toMillis(options.idleThreshold ?? Duration.minutes(20))
 
       const load = Effect.fn("Workspace.load")(function* (workspaceID: ID) {
@@ -80,29 +90,75 @@ const layer = (options: Options) =>
         return row
       })
 
+      const saveBinding = (workspaceID: ID, binding: WorkspaceDriver.Binding) =>
+        db.update(WorkspaceTable).set({ binding }).where(eq(WorkspaceTable.id, workspaceID)).run().pipe(Effect.orDie)
+
+      const info = (row: typeof WorkspaceTable.$inferSelect, binding: WorkspaceDriver.Binding) =>
+        new Info({
+          id: row.id,
+          provider: row.provider,
+          binding,
+          createdAt: row.created_at,
+          lastUsedAt: row.last_used_at,
+        })
+
+      const provision = Effect.fn("Workspace.provision")((workspaceID: ID) =>
+        Effect.suspend(() => {
+          const existing = attempts.get(workspaceID)
+          if (existing) return Deferred.await(existing)
+
+          const attempt = Deferred.makeUnsafe<Info, ReadinessError>()
+          attempts.set(workspaceID, attempt)
+          fork(
+            locks
+              .withLock(workspaceID)(
+                Effect.gen(function* () {
+                  const row = yield* load(workspaceID)
+                  if (row.binding) return info(row, row.binding)
+                  const driver = yield* registry.get(row.provider)
+                  const result = yield* driver.create({ workspaceID })
+                  yield* saveBinding(workspaceID, result.binding)
+                  return info(row, result.binding)
+                }),
+              )
+              .pipe(
+                Effect.raceFirst(Deferred.await(attempt)),
+                Effect.onExit((exit) =>
+                  Effect.sync(() => {
+                    if (attempts.get(workspaceID) === attempt) attempts.delete(workspaceID)
+                    Deferred.doneUnsafe(attempt, exit)
+                  }),
+                ),
+                Effect.exit,
+                Effect.asVoid,
+              ),
+          )
+          return Deferred.await(attempt)
+        }),
+      )
+
       const open = Effect.fn("Workspace.open")(function* (workspaceID: ID) {
         const existing = connections.get(workspaceID)
         if (existing) return existing
 
         const row = yield* load(workspaceID)
+        // Bindings are persisted before provision resolves and never nulled; a raced
+        // destroy deletes the whole row and surfaces as NotFound from load above.
+        if (!row.binding) return yield* Effect.die(`workspace ${workspaceID} has no binding after provision`)
         const driver = yield* registry.get(row.provider)
-        const saveBinding = (value: WorkspaceDriver.Binding) =>
-          db
-            .update(WorkspaceTable)
-            .set({ binding: value })
-            .where(eq(WorkspaceTable.id, workspaceID))
-            .run()
-            .pipe(Effect.orDie)
+        const persistBinding = (binding: WorkspaceDriver.Binding) => saveBinding(workspaceID, binding)
         const scope = yield* Scope.fork(lifetime)
-        const environment = yield* driver.connect({ workspaceID, binding: row.binding, saveBinding }).pipe(
-          Effect.provideService(Scope.Scope, scope),
-          Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
-        )
+        const environment = yield* driver
+          .connect({ workspaceID, binding: row.binding, saveBinding: persistBinding })
+          .pipe(
+            Effect.provideService(Scope.Scope, scope),
+            Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
+          )
         const now = yield* Clock.currentTimeMillis
         const connection: Connection = {
           driver,
           environment,
-          saveBinding,
+          saveBinding: persistBinding,
           lastActivity: yield* Ref.make(now),
           active: yield* Ref.make(0),
           scope,
@@ -129,6 +185,7 @@ const layer = (options: Options) =>
                 const lastActivity = yield* Ref.get(connection.lastActivity)
                 if (now - lastActivity < idleThreshold) return
                 const row = yield* load(workspaceID)
+                if (!row.binding) return
                 // Deliberate: a racing spawn blocks, then wakes cleanly. Unlocking mid-suspend could reattach a sandbox being terminated.
                 yield* connection.driver.suspendForIdle({
                   workspaceID,
@@ -151,37 +208,41 @@ const layer = (options: Options) =>
 
       return Service.of({
         create: Effect.fn("Workspace.create")(function* (provider) {
-          const driver = yield* registry.get(provider)
+          yield* registry.get(provider)
           const workspaceID = ID.create()
-          const result = yield* driver.create({ workspaceID })
           const now = yield* Clock.currentTimeMillis
           yield* db
             .insert(WorkspaceTable)
-            .values({ id: workspaceID, provider, binding: result.binding, created_at: now, last_used_at: now })
+            .values({ id: workspaceID, provider, binding: null, created_at: now, last_used_at: now })
             .run()
             .pipe(Effect.orDie)
-          return new Info({ id: workspaceID, provider, binding: result.binding, createdAt: now, lastUsedAt: now })
+          return workspaceID
         }),
+        provision,
         connect: Effect.fn("Workspace.connect")(function* (workspaceID) {
           const spawner = make((command) =>
             Effect.acquireRelease(
-              locks.withLock(workspaceID)(
-                Effect.gen(function* () {
-                  const connection = yield* open(workspaceID).pipe(
-                    Effect.mapError((cause) =>
-                      systemError({
-                        _tag: "Unknown",
-                        module: "Workspace",
-                        method: "spawn",
-                        description: `Failed to wake workspace ${workspaceID}`,
-                        cause,
-                      }),
-                    ),
-                  )
-                  yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
-                  yield* Ref.update(connection.active, (active) => active + 1)
-                  return connection
-                }),
+              // A live connection implies the binding is already persisted, so skip the provision hop.
+              Effect.suspend(() => (connections.has(workspaceID) ? Effect.void : provision(workspaceID))).pipe(
+                Effect.andThen(
+                  locks.withLock(workspaceID)(
+                    Effect.gen(function* () {
+                      const connection = yield* open(workspaceID)
+                      yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
+                      yield* Ref.update(connection.active, (active) => active + 1)
+                      return connection
+                    }),
+                  ),
+                ),
+                Effect.mapError((cause) =>
+                  systemError({
+                    _tag: "Unknown",
+                    module: "Workspace",
+                    method: "spawn",
+                    description: `Failed to wake workspace ${workspaceID}`,
+                    cause,
+                  }),
+                ),
               ),
               (connection) =>
                 locks.withLock(workspaceID)(
@@ -196,14 +257,32 @@ const layer = (options: Options) =>
           return { spawner }
         }),
         destroy: Effect.fn("Workspace.destroy")(function* (workspaceID) {
+          // Settling the shared attempt cancels its racing provision body and fails
+          // waiters with NotFound before teardown commits. Accepted tradeoffs: if the
+          // locked teardown below fails, those waiters saw NotFound for a workspace
+          // that still exists (the next provision retries it), and a provision racing
+          // this window may briefly succeed before teardown destroys its fresh binding.
+          const attempt = attempts.get(workspaceID)
+          if (attempt) {
+            attempts.delete(workspaceID)
+            Deferred.doneUnsafe(attempt, Exit.fail(new NotFound({ workspaceID })))
+          }
           yield* locks.withLock(workspaceID)(
             Effect.gen(function* () {
               const row = yield* load(workspaceID)
               const connection = connections.get(workspaceID)
               connections.delete(workspaceID)
               if (connection) yield* Scope.close(connection.scope, Exit.void)
-              const driver = yield* registry.get(row.provider)
-              yield* driver.destroy({ workspaceID, binding: row.binding })
+              // Null binding still reaches the driver: an interrupted or crashed
+              // provision may have created a resource that was never persisted. A
+              // provider missing from the registry cannot block deleting a
+              // never-provisioned row.
+              yield* registry.get(row.provider).pipe(
+                Effect.flatMap((driver) => driver.destroy({ workspaceID, binding: row.binding })),
+                Effect.catchTag("WorkspaceDriver.ProviderNotFound", (error) =>
+                  row.binding ? Effect.fail(error) : Effect.void,
+                ),
+              )
               yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).run().pipe(Effect.orDie)
             }),
           )
@@ -216,4 +295,8 @@ export const node = configured()
 
 // TODO(workspace-plan): add the boot janitor and ~23h safety snapshot rotation in a later PR.
 // TODO(workspace-plan): make cold wake interruptible with a re-pin loop against janitor races.
-// TODO(workspace-plan): consider RcMap at end-of-series consolidation; idle suspend and destroy need distinct finalizers.
+// TODO(workspace-plan): consider extracting a keyed shared-attempt helper (join/cancel, drop-on-settle) beside
+// KeyedMutex at end-of-series consolidation; filesystem/search.ts and session/run-coordinator.ts hand-roll the same
+// shape. Audited stdlib alternatives (rc.111): RcMap fails twice (refcount release cancels in-flight work when the
+// last waiter leaves, and one finalizer path cannot express idle-suspend vs destroy); Cache interrupts the shared
+// lookup when its last awaiter is interrupted and cannot fail waiters with NotFound on invalidation.

@@ -12,8 +12,9 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
 import { BasicTool } from "../components/basic-tool"
+import { useData } from "../context"
+import { TimelineSeparator } from "../components/timeline-separator"
 import {
-  MessageDivider,
   SessionAssistantContent,
   SessionContextToolGroup,
   SessionFileToolGroup,
@@ -52,6 +53,7 @@ export function createSessionTimelineRowRenderer(input: {
   anchor?: (messageID: string) => string | undefined
 }) {
   const i18n = useI18n()
+  const data = useData()
   const workingTurn = (messageID: string) =>
     input.status().type !== "idle" && input.projection.activeMessageID() === messageID
   const duration = (messageID: string) => {
@@ -183,11 +185,7 @@ export function createSessionTimelineRowRenderer(input: {
         label: i18n.t("ui.tool.agent.default"),
         data: message.previous ? `${message.previous} → ${message.agent}` : message.agent,
       }
-    if (message.type === "model-switched")
-      return {
-        label: i18n.t("ui.sessionTimeline.notice.model"),
-        data: `${message.model.providerID}/${message.model.id}`,
-      }
+    if (message.type === "model-switched") return undefined
     if (message.type === "skill") return { label: i18n.t("ui.tool.skill"), data: message.name }
     if (message.type === "system") {
       const prefix = "Instructions updated: "
@@ -328,6 +326,18 @@ export function createSessionTimelineRowRenderer(input: {
         const value = message()
         return value?.type === "location-switched" ? value : undefined
       })
+      const model = createMemo(() => {
+        const value = message()
+        if (value?.type !== "model-switched") return undefined
+        const match = data.store.provider?.all?.get(value.model.providerID)
+        return {
+          providerID: value.model.providerID,
+          variant: value.model.variant,
+          label: i18n.t("ui.sessionTimeline.notice.modelSwitched", {
+            model: match?.models?.[value.model.id]?.name ?? value.model.id,
+          }),
+        }
+      })
       const content = createMemo(() => {
         const value = message()
         return value ? notice(value) : undefined
@@ -346,50 +356,69 @@ export function createSessionTimelineRowRenderer(input: {
           <Show
             when={moved()}
             fallback={
-              <Show when={content()}>
-                {(content) => (
-                  <Show
-                    when={content().items?.length}
-                    fallback={
-                      <div
-                        data-slot="session-timeline-notice"
-                        class={`w-full pt-3 pb-1 text-13-regular text-text-weak ${padding()}`}
+              <Show
+                when={model()}
+                fallback={
+                  <Show when={content()}>
+                    {(content) => (
+                      <Show
+                        when={content().items?.length}
+                        fallback={
+                          <div
+                            data-slot="session-timeline-notice"
+                            class={`w-full pt-3 pb-1 text-13-regular text-text-weak ${padding()}`}
+                          >
+                            <bdi dir="auto" class="text-13-medium">
+                              {content().label}
+                            </bdi>
+                            <Show when={content().data}>
+                              {(data) => (
+                                <span>
+                                  {" "}
+                                  · <bdi dir="auto">{data()}</bdi>
+                                </span>
+                              )}
+                            </Show>
+                          </div>
+                        }
                       >
-                        <bdi dir="auto" class="text-13-medium">
-                          {content().label}
-                        </bdi>
-                        <Show when={content().data}>
-                          {(data) => (
-                            <span>
-                              {" "}
-                              · <bdi dir="auto">{data()}</bdi>
-                            </span>
-                          )}
-                        </Show>
-                      </div>
-                    }
-                  >
-                    <div data-slot="session-timeline-notice" class={`w-full py-1 ${padding()}`}>
-                      <div class="flex min-h-5 min-w-0 items-center gap-2 overflow-hidden">
-                        <bdi
-                          dir="auto"
-                          class="shrink-0 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint"
-                        >
-                          {content().label}
-                        </bdi>
-                        <For each={content().items}>
-                          {(item) => (
+                        <div data-slot="session-timeline-notice" class={`w-full py-1 ${padding()}`}>
+                          <div class="flex min-h-5 min-w-0 items-center gap-2 overflow-hidden">
                             <bdi
                               dir="auto"
-                              class="min-w-0 truncate text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint"
+                              class="shrink-0 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint"
                             >
-                              {item}
+                              {content().label}
                             </bdi>
-                          )}
-                        </For>
-                      </div>
-                    </div>
+                            <For each={content().items}>
+                              {(item) => (
+                                <bdi
+                                  dir="auto"
+                                  class="min-w-0 truncate text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint"
+                                >
+                                  {item}
+                                </bdi>
+                              )}
+                            </For>
+                          </div>
+                        </div>
+                      </Show>
+                    )}
                   </Show>
+                }
+              >
+                {(model) => (
+                  <div
+                    data-slot="session-timeline-notice"
+                    data-type="model-switched"
+                    class={`w-full py-2 ${padding()}`}
+                  >
+                    <TimelineSeparator
+                      label={model().label}
+                      providerID={model().providerID}
+                      variant={model().variant}
+                    />
+                  </div>
                 )}
               </Show>
             }
@@ -430,7 +459,9 @@ export function createSessionTimelineRowRenderer(input: {
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <div data-slot="session-turn-compaction">
-              <MessageDivider label={i18n.t("ui.message.interrupted")} />
+              <div class="py-2">
+                <TimelineSeparator label={i18n.t("ui.message.interrupted")} />
+              </div>
             </div>
           </div>
         </Frame>

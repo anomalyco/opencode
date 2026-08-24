@@ -52,6 +52,9 @@ export type Interface = Omit<OpenCodeClient, "plugin" | "workspace"> & {
   readonly events: OpenCodeClient["event"]
   readonly workspace: {
     readonly create: (options: { readonly provider: string }) => ReturnType<Workspace.Interface["create"]>
+    readonly provision: (options: {
+      readonly workspaceID: Workspace.ID
+    }) => ReturnType<Workspace.Interface["provision"]>
     readonly destroy: (options: { readonly workspaceID: Workspace.ID }) => ReturnType<Workspace.Interface["destroy"]>
   }
   readonly plugin: SdkPlugins.Interface["register"] & OpenCodeClient["plugin"]
@@ -106,6 +109,7 @@ export const create: (
     events: client.event,
     workspace: {
       create: ({ provider }: { readonly provider: string }) => workspace.create(provider),
+      provision: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => workspace.provision(workspaceID),
       destroy: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => workspace.destroy(workspaceID),
     },
     // The embedded host contributes plugins through the ordinary discovery flow:
