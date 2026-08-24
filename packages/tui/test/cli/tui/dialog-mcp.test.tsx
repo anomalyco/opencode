@@ -7,6 +7,7 @@ import { ConfigProvider } from "../../../src/config"
 import { ClientProvider } from "../../../src/context/client"
 import { DataProvider, useData } from "../../../src/context/data"
 import { Keymap } from "../../../src/context/keymap"
+import { LocationProvider } from "../../../src/context/location"
 import { ThemeProvider } from "../../../src/context/theme"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
@@ -99,11 +100,13 @@ async function renderMcp() {
             <ToastProvider>
               <ClientProvider api={createApi(calls.fetch)}>
                 <DataProvider>
-                  <ThemeProvider mode="dark" source={emptyThemeSource}>
-                    <DialogProvider>
-                      <Probe />
-                    </DialogProvider>
-                  </ThemeProvider>
+                  <LocationProvider>
+                    <ThemeProvider mode="dark" source={emptyThemeSource}>
+                      <DialogProvider>
+                        <Probe />
+                      </DialogProvider>
+                    </ThemeProvider>
+                  </LocationProvider>
                 </DataProvider>
               </ClientProvider>
             </ToastProvider>
