@@ -156,6 +156,7 @@ export function createActiveSessionRegion(input: {
     session: input.session,
     setActiveMessage: input.timeline.actions.setActiveMessage,
   })
+  const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
   useComposerCommands()
   useSessionCommands({
     session: input.session,
@@ -178,7 +179,13 @@ export function createActiveSessionRegion(input: {
 
   return {
     actions: {
-      timeline: { revert: ({ messageID }) => revert.to(messageID), openAttachment } satisfies SessionUserActions,
+      timeline: {
+        get revert() {
+          if (input.session.data.isChild()) return
+          return revertMessage
+        },
+        openAttachment,
+      } satisfies SessionUserActions,
     },
     region: {
       centered: input.screen.centered,
