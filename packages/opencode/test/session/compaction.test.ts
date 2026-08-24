@@ -337,6 +337,13 @@ function reply(
   }
 }
 
+function userPrompt(input: LLM.StreamInput) {
+  const message = input.messages.at(-1)
+  if (message?.role !== "user") return ""
+  if (typeof message.content === "string") return message.content
+  return message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+}
+
 function plugin(ready: Deferred.Deferred<void>) {
   return Layer.mock(Plugin.Service)({
     trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
@@ -371,6 +378,20 @@ function compactionContext(context: string) {
       if (name !== "experimental.session.compacting") return Effect.succeed(output)
       return Effect.sync(() => {
         ;(output as { context: string[] }).context.push(context)
+        return output
+      })
+    },
+    list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  })
+}
+
+function compactionPrompt(prompt: string) {
+  return Layer.mock(Plugin.Service)({
+    trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
+      if (name !== "experimental.session.compacting") return Effect.succeed(output)
+      return Effect.sync(() => {
+        ;(output as { prompt?: string }).prompt = prompt
         return output
       })
     },
@@ -1055,8 +1076,8 @@ describe("session.compaction.process", () => {
     "retains a split turn suffix when a later message fits the preserve token budget",
     () => {
       const stub = llm()
-      let captured = ""
-      stub.push(reply("summary", (input) => (captured = JSON.stringify(input.messages))))
+      let prompt = ""
+      stub.push(reply("summary", (input) => (prompt = userPrompt(input))))
       return Effect.gen(function* () {
         const test = yield* TestInstance
         const ssn = yield* SessionNs.Service
@@ -1089,8 +1110,10 @@ describe("session.compaction.process", () => {
         const part = yield* readCompactionPart(session.id)
         expect(part?.type).toBe("compaction")
         expect(part?.tail_start_id).toBe(keep.id)
-        expect(captured).toContain("zzzz")
-        expect(captured).not.toContain("keep tail")
+        const auditStart = prompt.indexOf("<recent-preserved-tail-audit>")
+        expect(auditStart).toBeGreaterThan(0)
+        expect(prompt.slice(0, auditStart)).toContain("zzzz")
+        expect(prompt.slice(auditStart)).toContain("keep tail")
 
         const filtered = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
         expect(filtered.map((msg) => msg.info.id).slice(0, 3)).toEqual([parent!, expect.any(String), keep.id])
@@ -1377,9 +1400,11 @@ describe("session.compaction.process", () => {
     () => {
       const stub = llm()
       let messages: LLM.StreamInput["messages"] = []
+      let prompt = ""
       stub.push(
         reply("summary", (input) => {
           messages = input.messages
+          prompt = userPrompt(input)
         }),
       )
       return Effect.gen(function* () {
@@ -1408,9 +1433,14 @@ describe("session.compaction.process", () => {
         expect(captured.indexOf("[User]: older context")).toBeLessThan(
           captured.indexOf("Create a new anchored summary"),
         )
-        expect(captured).toContain("[User]: older context")
-        expect(captured).not.toContain("keep this turn")
-        expect(captured).not.toContain("and this one too")
+        const conversation = prompt.match(/<conversation>\n([\s\S]*?)\n<\/conversation>/)?.[1] ?? ""
+        const audit = prompt.match(/<recent-preserved-tail-audit>[\s\S]*?<\/recent-preserved-tail-audit>/)?.[0] ?? ""
+        const history = conversation.slice(0, conversation.indexOf("<recent-preserved-tail-audit>"))
+        expect(history).toContain("[User]: older context")
+        expect(history).not.toContain("keep this turn")
+        expect(history).not.toContain("and this one too")
+        expect(audit).toContain("keep this turn")
+        expect(audit).toContain("and this one too")
         expect(captured).not.toContain("What did we do so far?")
       }).pipe(
         withCompaction({
@@ -1418,6 +1448,312 @@ describe("session.compaction.process", () => {
           config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }),
         }),
       )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "reconciles stale Next Move with the preserved recent tail audit",
+    () => {
+      const stub = llm()
+      const stale = `## Objective
+- Fix compaction summaries
+
+## Important Details
+- (none)
+
+## Work State
+### Completed
+- Implemented the fix
+
+### Active
+- (none)
+
+### Blocked
+- (none)
+
+## Next Move
+1. run tests
+2. (none)
+
+## Relevant Files
+- (none)`
+      const reconciled = `## Objective
+- Fix compaction summaries
+
+## Important Details
+- (none)
+
+## Work State
+### Completed
+- Implemented the fix
+- tests were run and passed
+
+### Active
+- (none)
+
+### Blocked
+- (none)
+
+## Next Move
+1. (none)
+2. (none)
+
+## Relevant Files
+- (none)`
+      let prompt = ""
+      stub.push((input) => {
+        prompt = userPrompt(input)
+        return reply(prompt.includes("tests were run and passed") ? reconciled : stale)(input)
+      })
+
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "implement a compaction fix")
+        yield* createCompactionMarker(session.id)
+        const previousParent = (yield* ssn.messages({ sessionID: session.id })).at(-1)?.info.id
+        expect(previousParent).toBeTruthy()
+        yield* createSummaryAssistantMessage(session.id, previousParent!, test.directory, stale)
+
+        const runTests = yield* createUserMessage(session.id, "run tests")
+        const passed = yield* createAssistantMessage(session.id, runTests.id, test.directory)
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: passed.id,
+          sessionID: session.id,
+          type: "text",
+          text: "tests were run and passed",
+        })
+        yield* createUserMessage(session.id, "prepare final response")
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+          (item) => item.info.role === "assistant" && item.info.parentID === parent!,
+        )
+        const text =
+          summary?.parts
+            .filter((part): part is SessionV1.TextPart => part.type === "text")
+            .map((part) => part.text)
+            .join("\n") ?? ""
+        const audit = prompt.match(/<recent-preserved-tail-audit>[\s\S]*?<\/recent-preserved-tail-audit>/)?.[0] ?? ""
+        const history = prompt.slice(0, prompt.indexOf("<recent-preserved-tail-audit>"))
+        expect(audit).toContain("tests were run and passed")
+        expect(history).not.toContain("tests were run and passed")
+        expect(text).toContain("## Next Move")
+        expect(text.match(/## Next Move\n([\s\S]*?)(?:\n## |$)/)?.[1]?.toLowerCase() ?? "").not.toContain("run tests")
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "includes only visible user and assistant text in the preserved recent tail audit",
+    () => {
+      const stub = llm()
+      let prompt = ""
+      stub.push(reply("summary", (input) => (prompt = userPrompt(input))))
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "older context")
+        const recent = yield* createUserMessage(session.id, "VISIBLE_USER_TAIL")
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: recent.id,
+          sessionID: session.id,
+          type: "text",
+          text: "IGNORED_TAIL_TEXT",
+          ignored: true,
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: recent.id,
+          sessionID: session.id,
+          type: "text",
+          text: "SYNTHETIC_TAIL_TEXT",
+          synthetic: true,
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: recent.id,
+          sessionID: session.id,
+          type: "file",
+          mime: "image/png",
+          filename: "PRIVATE_TAIL_MEDIA.png",
+          url: "data:image/png;base64,AAAA",
+        })
+        const assistant = yield* createAssistantMessage(session.id, recent.id, test.directory)
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "reasoning",
+          text: "PRIVATE_TAIL_REASONING",
+          time: { start: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: {},
+            output: "PRIVATE_TAIL_TOOL_OUTPUT",
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "text",
+          text: "VISIBLE_ASSISTANT_TAIL",
+        })
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        const audit = prompt.match(/<recent-preserved-tail-audit>[\s\S]*?<\/recent-preserved-tail-audit>/)?.[0] ?? ""
+        expect(audit).toContain("VISIBLE_USER_TAIL")
+        expect(audit).toContain("VISIBLE_ASSISTANT_TAIL")
+        expect(audit).not.toContain("IGNORED_TAIL_TEXT")
+        expect(audit).not.toContain("SYNTHETIC_TAIL_TEXT")
+        expect(audit).not.toContain("PRIVATE_TAIL_MEDIA.png")
+        expect(audit).not.toContain("PRIVATE_TAIL_REASONING")
+        expect(audit).not.toContain("PRIVATE_TAIL_TOOL_OUTPUT")
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 10_000 }) }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "applies message transforms to the preserved recent tail audit",
+    () => {
+      const stub = llm()
+      let prompt = ""
+      let transforms = 0
+      const redactingPlugin = Layer.succeed(
+        Plugin.Service,
+        Plugin.Service.of({
+          trigger: (<Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
+            if (name === "experimental.chat.messages.transform") {
+              transforms++
+              const transformed = output as { messages: Array<{ parts: SessionV1.Part[] }> }
+              transformed.messages = transformed.messages.map((message) => ({
+                ...message,
+                parts: message.parts.map((part) =>
+                  part.type === "text" ? { ...part, text: part.text.replaceAll("raw secret", "[redacted]") } : part,
+                ),
+              }))
+            }
+            return Effect.succeed(output)
+          }) as Plugin.Interface["trigger"],
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        }),
+      )
+      stub.push(reply("summary", (input) => (prompt = userPrompt(input))))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "older context")
+        yield* createUserMessage(session.id, "raw secret")
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        expect(transforms).toBe(1)
+        expect(prompt).toContain("[redacted]")
+        expect(prompt).not.toContain("raw secret")
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          plugin: redactingPlugin,
+          config: cfg({ tail_turns: 1, preserve_recent_tokens: 10_000 }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "includes the preserved recent tail audit with a custom compaction prompt",
+    () => {
+      const stub = llm()
+      let prompt = ""
+      stub.push(reply("summary", (input) => (prompt = userPrompt(input))))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "older context")
+        yield* createUserMessage(session.id, "recent completion evidence")
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        expect(prompt).toContain("CUSTOM COMPACTION PROMPT")
+        expect(prompt).toContain("The following is the conversation history:")
+        expect(prompt).toContain("[User]: older context")
+        expect(prompt).toContain("<recent-preserved-tail-audit>")
+        expect(prompt).toContain("recent completion evidence")
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          plugin: compactionPrompt("CUSTOM COMPACTION PROMPT"),
+          config: cfg({ tail_turns: 1, preserve_recent_tokens: 10_000 }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "retains the newest completion evidence when the tail audit is truncated",
+    () => {
+      const stub = llm()
+      let prompt = ""
+      const completion = "COMPLETION_MARKER"
+      stub.push(reply("summary", (input) => (prompt = userPrompt(input))))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "older context")
+        for (let index = 0; index < 5; index++) {
+          yield* createUserMessage(session.id, `${"x".repeat(1_200)}${index === 4 ? completion : `old-${index}`}`)
+        }
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        const audit = prompt.match(/<recent-preserved-tail-audit>[\s\S]*?<\/recent-preserved-tail-audit>/)?.[0] ?? ""
+        expect(audit).toContain(completion)
+        expect(audit.length).toBeLessThanOrEqual(4_000)
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 5, preserve_recent_tokens: 10_000 }) }))
     },
     { git: true },
   )
