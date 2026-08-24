@@ -185,8 +185,13 @@ test("canonical results carry metadata with typed output", async () => {
   })
 })
 
-test("raw JSON schemas are render-only and omitted output means model-only", async () => {
-  const input = { type: "object", properties: { value: { type: "string" } } }
+test("raw JSON schemas validate and decode tool input", async () => {
+  const input = {
+    type: "object",
+    properties: { value: { type: "string" } },
+    required: ["value"],
+    additionalProperties: false,
+  }
   const tool: Info = {
     name: "raw",
     description: "Raw tool",
@@ -197,12 +202,36 @@ test("raw JSON schemas are render-only and omitted output means model-only", asy
   expect(definition(tool)).toEqual({
     name: "raw",
     description: "Raw tool",
-    inputSchema: { type: "object", properties: { value: { type: "string" } } },
+    inputSchema: input,
   })
-  expect(await Effect.runPromise(execute(tool, { value: 1 }, {} as Tool.Context))).toEqual({
+  expect(await Effect.runPromise(execute(tool, { value: "ok", extra: true }, {} as Tool.Context))).toEqual({
     output: undefined,
-    content: [{ type: "text", text: '{"value":1}' }],
+    content: [{ type: "text", text: '{"value":"ok"}' }],
   })
+  expect((await Effect.runPromiseExit(execute(tool, { value: 1 }, {} as Tool.Context))).toString()).toContain(
+    "Invalid tool input",
+  )
+})
+
+test("raw JSON schemas resolve draft-07 definitions", async () => {
+  const tool: Info = {
+    name: "draft-07",
+    description: "Draft-07 tool",
+    input: {
+      type: "object",
+      properties: { value: { $ref: "#/definitions/value" } },
+      required: ["value"],
+      definitions: { value: { type: "string" } },
+    },
+    execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
+  }
+
+  expect(await Effect.runPromise(execute(tool, { value: "ok" }, {} as Tool.Context))).toMatchObject({
+    content: [{ type: "text", text: '{"value":"ok"}' }],
+  })
+  expect((await Effect.runPromiseExit(execute(tool, { value: 1 }, {} as Tool.Context))).toString()).toContain(
+    "Invalid tool input",
+  )
 })
 
 test("missing external input schemas fall back to an empty schema", () => {
