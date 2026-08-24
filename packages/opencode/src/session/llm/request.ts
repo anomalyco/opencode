@@ -256,9 +256,9 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         : {
             "x-session-affinity": input.sessionID,
             "X-Session-Id": input.sessionID,
-            ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
             "User-Agent": USER_AGENT,
           }),
+      ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
       // D2 telemetry: the engine's own context arithmetic for this request so
       // proxies/routers gate on a header comparison instead of re-tokenizing
       // the payload. est-input = history + baseline; baseline includes tools.
