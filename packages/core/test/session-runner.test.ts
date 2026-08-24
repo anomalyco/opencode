@@ -345,6 +345,13 @@ const providerUnavailable = () =>
     reason: new TransportReason({ message: "Provider unavailable" }),
   })
 
+const providerIdleTimeout = () =>
+  new LLMError({
+    module: "test",
+    method: "stream",
+    reason: new TransportReason({ message: "Provider stream stalled", kind: "IdleTimeout" }),
+  })
+
 const setupOverflowRecovery = Effect.gen(function* () {
   yield* setup
   const session = yield* SessionV2.Service
@@ -555,11 +562,75 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  it.live("restarts a stalled first attempt before any assistant output", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      requests.length = 0
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Stall then answer" }), resume: false })
+      responseStream = Stream.fail(providerIdleTimeout())
+      responses = [fragmentFixture("text", "text-recovered", ["Recovered"]).completeEvents]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Stall then answer" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-recovered", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.live("fails without restart when a stall lands after assistant output started", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const fixture = fragmentFixture("text", "text-partial", ["Partial"])
+      const failure = providerIdleTimeout()
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Fail late" }), resume: false })
+      requests.length = 0
+      responseStream = Stream.concat(Stream.fromIterable(fixture.partialEvents), Stream.fail(failure))
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Fail late" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "unknown", message: "Provider stream stalled" },
+          content: [fixture.expectedContent],
+        },
+      ])
+    }),
+  )
+
+  it.live("surfaces the stall after exhausting the restart budget", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const failure = providerIdleTimeout()
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Always stalls" }), resume: false })
+      requests.length = 0
+      streamFailure = failure
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+
+      expect(requests).toHaveLength(SessionRunnerLLM.STREAM_IDLE_RETRIES + 1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Always stalls" },
+        { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider stream stalled" } },
+      ])
+    }),
+  )
+
   it.effect("advertises and executes a globally attached application tool", () =>
     Effect.gen(function* () {
       yield* setup
       const applicationTools = yield* ApplicationTools.Service
       const session = yield* SessionV2.Service
+      requests.length = 0
       const contexts: Tool.Context[] = []
       yield* applicationTools.register({
         application_context: Tool.make({
