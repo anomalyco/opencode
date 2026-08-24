@@ -1,0 +1,3 @@
+[data-component="composer-editor"]:empty::before {
+  content: "\200B";
+}

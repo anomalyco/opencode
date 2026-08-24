@@ -1,6 +1,6 @@
 import { ServerConnection, useServers, useTabs } from "@opencode-ai/app/desktop"
 import { onMount } from "solid-js"
-import type { ElectronAPI } from "../../preload/types"
+import type { ElectronAPI } from "../api-types"
 
 export function DesktopFirstLaunchOnboarding(props: {
   api: ElectronAPI

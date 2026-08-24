@@ -109,7 +109,7 @@ const layer = Layer.effect(
           const next = Bom.split(input.content)
           const current = yield* environment.files.read(input.target.absolute, { offset: 0, length: 3 }).pipe(
             Effect.map((result) => result.bytes),
-            Effect.catchTag("Environment.NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("Environment.NotFound", () => Effect.undefined),
           )
           yield* environment.files.write(
             input.target.absolute,

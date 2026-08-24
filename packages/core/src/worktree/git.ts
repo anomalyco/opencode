@@ -31,7 +31,7 @@ export const make = Effect.gen(function* () {
       return yield* Effect.forEach(entries, (entry) =>
         canonical(fs, entry.directory).pipe(
           Effect.map((directory) => ({ directory, type: entry.kind === "main" ? "root" : "worktree" }) as const),
-          Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.succeed(undefined)),
+          Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.undefined),
         ),
       ).pipe(Effect.map((items) => items.filter((item): item is ListEntry => item !== undefined)))
     }),

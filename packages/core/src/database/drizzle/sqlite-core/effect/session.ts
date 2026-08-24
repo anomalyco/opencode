@@ -21,12 +21,12 @@ import type {
 import { makeJitRqbMapper } from "drizzle-orm/relations"
 import type { PreparedQuery } from "drizzle-orm/session"
 import { fillPlaceholders, type Query, type SQL, sql } from "drizzle-orm/sql/sql"
-import type { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
+import type { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
 import type { SelectedFieldsOrdered } from "drizzle-orm/sqlite-core/query-builders/select.types"
 import type { PreparedQueryConfig, SQLiteExecuteMethod, SQLiteTransactionConfig } from "drizzle-orm/sqlite-core/session"
 import { upgradeIfNeeded } from "../../up-migrations/effect-sqlite.js"
 import { assertUnreachable, makeJitQueryMapper, type RowsMapper } from "drizzle-orm/utils"
-import { mapResultRow } from "../../internal/drizzle-utils.js"
+import { mapResultRow, resolveNullableObjectPaths } from "../../internal/drizzle-utils.js"
 import { SQLiteEffectDatabase } from "./db.js"
 
 type MigrationConfigWithInit = MigrationConfig & { init?: boolean }
@@ -155,7 +155,10 @@ export class SQLiteEffectPreparedQuery<
     return this.useJitMappers
       ? (this.jitMapper =
           (this.jitMapper as RowsMapper<T["all"]>) ??
-          makeJitQueryMapper<T["all"]>(this.fields!, this.joinsNotNullableMap))(rows as unknown[][])
+          makeJitQueryMapper<T["all"]>(
+            this.fields!,
+            resolveNullableObjectPaths(this.fields!, this.joinsNotNullableMap),
+          ))(rows as unknown[][])
       : (rows as unknown[][]).map((row) => mapResultRow(this.fields!, row, this.joinsNotNullableMap))
   }
 
@@ -187,7 +190,10 @@ export class SQLiteEffectPreparedQuery<
     return this.useJitMappers
       ? (this.jitMapper =
           (this.jitMapper as RowsMapper<T["get"][]>) ??
-          makeJitQueryMapper<T["get"][]>(this.fields!, this.joinsNotNullableMap))([row as unknown[]])[0]
+          makeJitQueryMapper<T["get"][]>(
+            this.fields!,
+            resolveNullableObjectPaths(this.fields!, this.joinsNotNullableMap),
+          ))([row as unknown[]])[0]
       : mapResultRow(this.fields!, row as unknown[], this.joinsNotNullableMap)
   }
 
@@ -311,7 +317,7 @@ export abstract class SQLiteEffectSession<
 > {
   static readonly [entityKind]: string = "SQLiteEffectSession"
 
-  constructor(readonly dialect: SQLiteAsyncDialect) {}
+  constructor(readonly dialect: SQLiteDialect) {}
 
   abstract prepareQuery<T extends PreparedQueryConfig = PreparedQueryConfig>(
     query: Query,
@@ -412,7 +418,7 @@ export abstract class SQLiteEffectTransaction<
   static override readonly [entityKind]: string = "SQLiteEffectTransaction"
 
   constructor(
-    dialect: SQLiteAsyncDialect,
+    dialect: SQLiteDialect,
     session: SQLiteEffectSession<TEffectHKT, TRunResult, TRelations>,
     protected relations: TRelations,
   ) {

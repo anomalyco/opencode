@@ -49,7 +49,6 @@ describe("SystemPromptPlugin", () => {
   test("uses granular IDs with a common prefix", () => {
     expect(SystemPromptPlugin.Plugins.map((plugin) => plugin.id)).toEqual([
       "opencode.prompt.openai",
-      "opencode.prompt.google",
       "opencode.prompt.anthropic",
       "opencode.prompt.kimi",
       "opencode.prompt.arcee",
@@ -69,7 +68,7 @@ describe("SystemPromptPlugin", () => {
         ["gpt-4.1", "You are OpenCode, You and the user share the same workspace"],
         ["o3", "You are OpenCode, You and the user share the same workspace"],
         ["gpt-5-codex", "## Editing constraints"],
-        ["gemini-2.5-pro", "# Core Mandates"],
+        ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", "# Professional objectivity"],
         ["kimi-k2", "# Prompt and Tool Use"],
         ["trinity", "what command should I run to list files"],
@@ -160,15 +159,15 @@ describe("SystemPromptPlugin", () => {
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* SystemPromptPlugin.GooglePlugin.effect(pluginHost)
+      yield* SystemPromptPlugin.AnthropicPlugin.effect(pluginHost)
       const gemini = context("gemini-2.5-pro")
       const claude = context("claude-sonnet-4")
 
       yield* hooks.trigger("session", "context", gemini)
       yield* hooks.trigger("session", "context", claude)
 
-      expect(gemini.system[0]?.text).toContain("# Core Mandates")
-      expect(claude.system[0]?.text).toBe(fallback)
+      expect(gemini.system[0]?.text).toBe(fallback)
+      expect(claude.system[0]?.text).toContain("# Professional objectivity")
     }),
   )
 

@@ -6,6 +6,7 @@ import { ServerProcess } from "../src/process"
 
 it.live("allows browser preflight requests without credentials", () =>
   Effect.gen(function* () {
+    const fallback = "fallback".repeat(256)
     const server = yield* ServerProcess.start<never, never>(
       {
         hostname: "127.0.0.1",
@@ -19,7 +20,7 @@ it.live("allows browser preflight requests without credentials", () =>
         api.pipe(
           Effect.catchIf(
             (error) => error instanceof HttpServerError.HttpServerError && error.reason._tag === "RouteNotFound",
-            () => Effect.succeed(HttpServerResponse.text("fallback")),
+            () => Effect.succeed(HttpServerResponse.raw(fallback, { contentType: "text/plain" })),
           ),
         ),
     )
@@ -51,12 +52,30 @@ it.live("allows browser preflight requests without credentials", () =>
     expect(health.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
     expect(yield* Effect.promise(() => health.json())).toMatchObject({ version: "test-version" })
 
+    const event = yield* Effect.promise(() =>
+      fetch(new URL("/api/event", HttpServer.formatAddress(server.address)), {
+        headers: {
+          "accept-encoding": "br",
+          authorization: `Basic ${btoa("opencode:secret")}`,
+        },
+      }),
+    )
+    expect(event.status).toBe(200)
+    expect(event.headers.get("content-encoding")).toBeNull()
+    yield* Effect.promise(() => event.body?.cancel() ?? Promise.resolve())
+
     const missing = yield* Effect.promise(() =>
       fetch(new URL("/missing", HttpServer.formatAddress(server.address)), {
-        headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+        headers: {
+          "accept-encoding": "br",
+          authorization: `Basic ${btoa("opencode:secret")}`,
+        },
       }),
     )
     expect(missing.status).toBe(200)
-    expect(yield* Effect.promise(() => missing.text())).toBe("fallback")
+    expect(missing.headers.get("content-encoding")).toBe("br")
+    expect(missing.headers.get("content-type")).toBe("text/plain")
+    expect(missing.headers.get("vary")?.toLowerCase()).toContain("accept-encoding")
+    expect(yield* Effect.promise(() => missing.text())).toBe(fallback)
   }),
 )

@@ -1,9 +1,11 @@
 import { BrowserWindow } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
-import { createMainWindow, updateTitlebar } from "../windows"
+import { updateTitlebar } from "../windows"
 
 export type DesktopMenuActionHandlers = Partial<{
   checkForUpdates: () => void
+  installCli: () => void
+  createWindow: () => void
   relaunch: () => void
 }>
 
@@ -16,11 +18,14 @@ export function runDesktopMenuAction(
     case "app.checkForUpdates":
       handlers.checkForUpdates?.()
       return
+    case "app.installCli":
+      handlers.installCli?.()
+      return
     case "app.relaunch":
       handlers.relaunch?.()
       return
     case "window.new":
-      createMainWindow()
+      handlers.createWindow?.()
       return
     case "window.close":
       win?.close()

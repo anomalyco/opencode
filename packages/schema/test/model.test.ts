@@ -58,3 +58,13 @@ describe("Model.Info", () => {
     expect(model.limit).toEqual({ context: 200_000, output: 32_000 })
   })
 })
+
+describe("Model.Capabilities", () => {
+  test("decodes optional Responses WebSocket support", () => {
+    const decode = Schema.decodeUnknownSync(Model.Capabilities)
+    const base = { tools: true, input: ["text"], output: ["text"] }
+
+    expect(decode(base)).toEqual(base)
+    expect(decode({ ...base, responsesWebsockets: true })).toEqual({ ...base, responsesWebsockets: true })
+  })
+})

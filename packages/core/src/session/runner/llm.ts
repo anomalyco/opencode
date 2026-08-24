@@ -3,13 +3,14 @@ export * as SessionRunnerLLM from "./llm.js"
 import {
   LLMClient,
   AIError,
+  InvalidProviderOutputReason,
   LLMEvent,
   Message,
   isContextOverflowFailure,
   type ProviderErrorEvent,
   type ToolCall,
 } from "@opencode-ai/ai"
-import { Cause, Config, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Stream } from "effect"
+import { Cause, Config, Data, Effect, Exit, Fiber, FiberMap, Layer, Option, Pull, Schedule, Stream } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
@@ -60,6 +61,13 @@ const isDecline = (
 ): error is Permission.DeclinedError | QuestionTool.CancelledError =>
   error._tag === "Permission.DeclinedError" || error._tag === "QuestionTool.CancelledError"
 
+const isInterruptedStream = (failure: AIError) => {
+  if (failure.reason._tag === "InvalidProviderOutput")
+    return failure.reason.classification === "incomplete-stream"
+  if (failure.reason._tag === "Transport") return failure.reason.operation === "read"
+  return false
+}
+
 /**
  * Classifies how the owned tool fibers ended. Interrupts abort the step; a user decline
  * settles its own call and then aborts the step; a defect from a tool implementation
@@ -89,7 +97,15 @@ const classifyToolExits = (
     .flatMap((cause) => {
       if (Cause.hasInterrupts(cause)) return []
       const reasons = cause.reasons.flatMap(
-        (reason): Array<Cause.Reason<never>> => (Cause.isFailReason(reason) ? [] : [reason]),
+        (reason): Array<Cause.Reason<never>> =>
+          Cause.isFailReason(reason)
+            ? isDecline(reason.error)
+              ? []
+              : // A typed failure here broke the ExecuteError contract (the per-fiber
+                // `catchTag("Tool.Error")` consumes honest ones). Surfacing it as a defect
+                // keeps it from being dropped, which would leave its call unsettled forever.
+                [Cause.makeDieReason(reason.error)]
+            : [reason],
       )
       return reasons.length > 0 ? [Cause.fromReasons(reasons)] : []
     })
@@ -149,9 +165,7 @@ const layer = Layer.effect(
       )
     })
     // Title generation starts once input is visible and must not delay model execution.
-    // The in-flight set coalesces overlapping prompts while title presence records success durably.
-    const titlesRunning = new Set<SessionSchema.ID>()
-    const forkTitle = yield* FiberSet.makeRuntime<never, void, never>()
+    const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
     /**
      * Drains eligible manual compaction and user input until the Session becomes idle.
      * Execution lifecycle is published per busy period by SessionExecution, not here.
@@ -171,8 +185,9 @@ const layer = Layer.effect(
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
         // Between-turn control items run under any drain scope: scope gates which user
-        // input may promote, not whether admitted housekeeping runs. Enqueue order still
-        // holds — a control item behind a queued prompt is not the next eligible item.
+        // input may promote, not whether admitted housekeeping runs. Steered control
+        // items go ahead of any queued input; only a queue-delivered control item
+        // parked behind a queued prompt is not the next eligible item.
         if (yield* runPendingCompaction(input.sessionID, "input")) {
           force = false
           continue
@@ -208,15 +223,23 @@ const layer = Layer.effect(
       let promotable: SessionInbox.Promotable = continuation ? "steer" : drainPromotable
       let step = continuation?.step ?? 1
       let next = continuation
+      // The drain admitted this work, so the first step always runs — even after a
+      // control item consumed at this boundary (unlike drain's one-shot force).
+      let first = true
+      // Every boundary has the same shape: control items first, then one exit decision,
+      // then the model. The turn continues only while the first step, a continuation, or
+      // steer input is owed. Deciding after control items means consuming the last
+      // steered compaction ends the turn instead of issuing an input-free model call.
       while (true) {
         if (yield* runPendingCompaction(sessionID, "steer")) continue
         if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
-        const result = yield* runStep(sessionID, promotable, step)
-        next = result.needsContinuation ? { step: result.step + 1 } : undefined
-        if (!result.needsContinuation && !(yield* SessionInbox.has(db, sessionID, "steer")))
+        if (!first && !next && !(yield* SessionInbox.has(db, sessionID, "steer")))
           return { type: "complete" as const }
+        const result = yield* runStep(sessionID, promotable, step)
+        first = false
         promotable = "steer"
         step = result.step + 1
+        next = result.needsContinuation ? { step } : undefined
       }
     })
 
@@ -309,13 +332,15 @@ const layer = Layer.effect(
       // a blocked first step leaves pending inputs untouched.
       yield* InstructionState.prepare(db, bus, selected.instructions, selected.session.id)
       const promoted = promotable ? yield* SessionInbox.promote(db, bus, selected.session.id, promotable) : 0
-      if (promoted > 0) yield* startTitle(sessionID)
+      if (promoted > 0)
+        yield* FiberMap.run(titles, sessionID, title.generateForFirstPrompt(sessionID).pipe(Effect.ignore), {
+          onlyIfMissing: true,
+        })
       // Promoted input opens a fresh step allowance.
       const currentStep = promoted > 0 ? 1 : step
       const loaded = yield* context.load(selected)
       const { session, agent } = loaded
       const resolved = loaded.model
-      const model = resolved.model
       // Make room: history must fit the context window before the call. A pending manual
       // compaction owns this instead; the runner executes it between steps.
       const compactionInput = { session, messages: loaded.messages, resolved }
@@ -377,9 +402,11 @@ const layer = Layer.effect(
         const snapshot = yield* snapshots.capture()
         const files =
           startSnapshot && snapshot
-            ? yield* snapshots
-                .files({ from: startSnapshot, to: snapshot })
-                .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            ? startSnapshot === snapshot
+              ? []
+              : yield* snapshots
+                  .files({ from: startSnapshot, to: snapshot })
+                  .pipe(Effect.orElseSucceed(() => undefined))
             : undefined
         return { snapshot, files }
       })
@@ -414,11 +441,13 @@ const layer = Layer.effect(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
-            if (LLMEvent.is.providerError(event)) {
-              if (isContextOverflowFailure(event) && !publisher.record().outputStarted) {
-                overflowFailure = event
-                return
-              }
+            if (
+              LLMEvent.is.providerError(event) &&
+              isContextOverflowFailure(event) &&
+              !publisher.record().outputStarted
+            ) {
+              overflowFailure = event
+              return
             }
             yield* publisher.publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
@@ -489,7 +518,18 @@ const layer = Layer.effect(
           if (overflowFailure) yield* publisher.publish(overflowFailure)
           // A thrown LLM failure not already recorded as the provider error either
           // escapes as a scheduled retry or fails the assistant durably.
-          const llmFailure = streamFailure instanceof AIError ? streamFailure : undefined
+          const unknownFinish =
+            stream._tag === "Success" && publisher.record().finish?.finish === "unknown"
+              ? new AIError({
+                  module: "session",
+                  method: "stream",
+                  reason: new InvalidProviderOutputReason({
+                    classification: "incomplete-stream",
+                    message: "The provider response ended with an unknown finish reason.",
+                  }),
+                })
+              : undefined
+          const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
           const llmError = llmFailure && !publisher.record().providerFailed ? toSessionError(llmFailure) : undefined
           if (
             recoverContinuation &&
@@ -555,11 +595,14 @@ const layer = Layer.effect(
             })
           }
 
-          const incompleteStream =
-            llmFailure?.reason._tag === "InvalidProviderOutput" &&
-            llmFailure.reason.classification === "incomplete-stream"
-          const toolsAllowContinuation = tools.declines.length === 0 && !tools.interrupted
-          if (llmError && incompleteStream && record.outputStarted && toolsAllowContinuation)
+          if (
+            llmFailure &&
+            llmError &&
+            isInterruptedStream(llmFailure) &&
+            record.outputStarted &&
+            tools.declines.length === 0 &&
+            !tools.interrupted
+          )
             return CallOutcome.Continue({
               cause: llmFailure,
               error: llmError,
@@ -671,22 +714,6 @@ const layer = Layer.effect(
           })
         }
       }
-    })
-
-    /** Starts one title request at a time after a successful step makes user input visible. */
-    const startTitle = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
-      if (titlesRunning.has(sessionID)) return
-      titlesRunning.add(sessionID)
-      forkTitle(
-        title.generateForFirstPrompt(sessionID).pipe(
-          Effect.ignore,
-          Effect.ensuring(
-            Effect.sync(() => {
-              titlesRunning.delete(sessionID)
-            }),
-          ),
-        ),
-      )
     })
 
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {

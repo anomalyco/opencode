@@ -1,0 +1,38 @@
+id: no-effect-catch-succeed-tsx
+snapshots:
+  const view = <Widget value={Effect.catch(effect, () => Effect.succeed(fallback))} />:
+    labels:
+      - source: Effect.catch(effect, () => Effect.succeed(fallback))
+        style: primary
+        start: 28
+        end: 80
+  const view = <Widget value={effect.pipe(Effect.catch(() => Effect.succeed(fallback)))} />:
+    labels:
+      - source: Effect.catch(() => Effect.succeed(fallback))
+        style: primary
+        start: 40
+        end: 84
+  const view = <Widget value={effect.pipe(Effect.catch((_error) => Effect.succeed(fallback)))} />:
+    labels:
+      - source: Effect.catch((_error) => Effect.succeed(fallback))
+        style: primary
+        start: 40
+        end: 90
+  "const view = <Widget value={effect.pipe(Effect.catch((_error: Error) => Effect.succeed(fallback)))} />":
+    labels:
+      - source: "Effect.catch((_error: Error) => Effect.succeed(fallback))"
+        style: primary
+        start: 40
+        end: 97
+  const view = <Widget value={effect.pipe(Effect.catch(_error => { return Effect.succeed(fallback) }))} />:
+    labels:
+      - source: Effect.catch(_error => { return Effect.succeed(fallback) })
+        style: primary
+        start: 40
+        end: 99
+  const view = <Widget value={effect.pipe(Effect.catch(function (_error) { return Effect.succeed(fallback) }))} />:
+    labels:
+      - source: Effect.catch(function (_error) { return Effect.succeed(fallback) })
+        style: primary
+        start: 40
+        end: 107

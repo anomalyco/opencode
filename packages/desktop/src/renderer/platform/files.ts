@@ -1,5 +1,5 @@
-import type { Platform } from "@opencode-ai/app"
-import type { ElectronAPI } from "../../preload/types"
+import type { Platform } from "@opencode-ai/app/desktop"
+import type { ElectronAPI } from "../api-types"
 
 type DesktopOS = Extract<Platform, { platform: "desktop" }>["os"]
 type DesktopFileAPI = Pick<
@@ -16,6 +16,7 @@ type DesktopFileAPI = Pick<
   | "openPath"
   | "revealPath"
   | "readClipboardImage"
+  | "writeClipboardText"
 >
 
 export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedExtensions: string[]) {
@@ -73,6 +74,9 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedE
       return new File([new Blob([image.buffer], { type: "image/png" })], `pasted-image-${Date.now()}.png`, {
         type: "image/png",
       })
+    },
+    writeClipboardText(text: string) {
+      return api.writeClipboardText(text)
     },
   }
 }

@@ -85,12 +85,12 @@ export const withVariant = (
 ): Effect.Effect<Info, VariantUnavailableError> => {
   const id = variantID === "default" ? undefined : variantID
   const variant = model.variants?.find((item) => item.id === id)
-  if (!variant && variantID !== undefined && variantID !== "default")
+  if (!variant && id !== undefined)
     return Effect.fail(
       new VariantUnavailableError({
         providerID: model.providerID,
         modelID: model.id,
-        variant: variantID,
+        variant: id,
       }),
     )
   return Effect.succeed(

@@ -3,6 +3,7 @@ export * as Provider from "./provider.js"
 import { Effect, Schema } from "effect"
 import { Provider } from "@opencode-ai/schema/provider"
 import type { ProviderPackageDefinition } from "@opencode-ai/ai"
+import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Npm } from "@opencode-ai/util/npm"
 import type { DeepMutable } from "./schema.js"
 import { importModule, resolveModule } from "@opencode-ai/util/runtime-import"
@@ -108,18 +109,7 @@ export function mergeOverlay(
         const left = base[key]
         const right = overlay[key]
         if (right === undefined) return [key, left]
-        if (
-          typeof left === "object" &&
-          left !== null &&
-          !Array.isArray(left) &&
-          typeof right === "object" &&
-          right !== null &&
-          !Array.isArray(right)
-        )
-          return [
-            key,
-            mergeOverlay(left as Readonly<Record<string, unknown>>, right as Readonly<Record<string, unknown>>) ?? {},
-          ]
+        if (isRecord(left) && isRecord(right)) return [key, mergeOverlay(left, right) ?? {}]
         return [key, right]
       }),
     ),

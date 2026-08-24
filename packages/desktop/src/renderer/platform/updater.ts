@@ -1,6 +1,6 @@
-import type { UpdaterPlatform, UpdaterState } from "@opencode-ai/app"
+import type { UpdaterPlatform, UpdaterState } from "@opencode-ai/app/desktop"
 import { createSignal } from "solid-js"
-import type { ElectronAPI } from "../../preload/types"
+import type { ElectronAPI } from "../api-types"
 
 export function startDesktopUpdater(api: ElectronAPI): UpdaterPlatform {
   const [state, setState] = createSignal<UpdaterState>({ status: "disabled" })

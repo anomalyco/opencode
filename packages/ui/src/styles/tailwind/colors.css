@@ -252,6 +252,7 @@
   --color-v2-text-text-code-accent: var(--v2-text-text-code-accent);
   --color-v2-icon-icon-base: var(--v2-icon-icon-base);
   --color-v2-icon-icon-muted: var(--v2-icon-icon-muted);
+  --color-v2-icon-icon-faint: var(--v2-icon-icon-faint);
   --color-v2-icon-icon-inverse: var(--v2-icon-icon-inverse);
   --color-v2-icon-icon-contrast: var(--v2-icon-icon-contrast);
   --color-v2-icon-icon-accent: var(--v2-icon-icon-accent);

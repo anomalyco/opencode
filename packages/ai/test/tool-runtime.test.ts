@@ -191,7 +191,7 @@ describe("LLMClient tools", () => {
         success: Schema.String,
         execute: () => Effect.succeed("hello"),
       })
-      const providerMetadata = { google: { functionCallId: "provider_call" } }
+      const providerMetadata = { google: { thoughtSignature: "provider_sig" } }
       const dispatched = yield* ToolRuntime.dispatch(
         { tool },
         LLMEvent.toolCall({ id: "call_1", name: "tool", input: {}, providerMetadata }),

@@ -54,11 +54,10 @@ export interface Cell {
 
 export const makeCell = (): Cell => ({})
 
-const unavailable = <A, E, R>() => Effect.die(new Error("Plugin runtime is unavailable")) as Effect.Effect<A, E, R>
 const require = <A, E, R>(cell: Cell, f: (runtime: Interface) => Effect.Effect<A, E, R>) =>
   Effect.suspend(() => {
     const runtime = cell.runtime
-    if (runtime === undefined) return unavailable<A, E, R>()
+    if (runtime === undefined) return Effect.die(new Error("Plugin runtime is unavailable"))
     return f(runtime)
   })
 

@@ -72,8 +72,7 @@ const layer = Layer.effect(
       load: Effect.fn("SkillInstructions.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return Instructions.empty
-        const permitted = Skill.available(yield* skills.list(), agent)
-        const available = permitted
+        const available = Skill.available(yield* skills.list(), agent)
           .flatMap((skill) =>
             skill.description === undefined || skill.autoinvoke === false
               ? []

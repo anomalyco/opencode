@@ -8,7 +8,7 @@ import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
 import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
-import { sseEvents } from "../lib/sse.js"
+import { sseEvents, sseNamedEvent, sseRaw } from "../lib/sse.js"
 
 const model = AnthropicMessages.route
   .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
@@ -327,6 +327,29 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("scrubs outbound tool call IDs without truncating them", () =>
+    Effect.gen(function* () {
+      const id = `functions.lookup:1|${"x".repeat(64)}`
+      const scrubbed = `functions_lookup_1_${"x".repeat(64)}`
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id, name: "lookup", input: {} })]),
+            Message.tool({ id, name: "lookup", result: "done" }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toMatchObject([
+        { role: "assistant", content: [{ type: "tool_use", id: scrubbed, name: "lookup", input: {} }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: scrubbed }] },
+      ])
+      expect(scrubbed.length).toBeGreaterThan(64)
+    }),
+  )
+
   it.effect("batches parallel tool results into one Anthropic user message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -640,7 +663,60 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("maps thinking tokens and preserves unknown Anthropic usage fields", () =>
+  it.effect("ignores unknown named SSE events", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseRaw(
+              sseNamedEvent("message_start", {
+                type: "message_start",
+                message: { usage: { input_tokens: 5 } },
+              }),
+              sseNamedEvent("proxy.stats", "not json"),
+              sseNamedEvent("content_block_start", {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "text", text: "" },
+              }),
+              sseNamedEvent("content_block_delta", {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "text_delta", text: "Hello" },
+              }),
+              sseNamedEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+              sseNamedEvent("message_delta", {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn" },
+                usage: { output_tokens: 1 },
+              }),
+              sseNamedEvent("message_stop", { type: "message_stop" }),
+              sseNamedEvent("proxy.done", "still not json"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([{ type: "text", text: "Hello" }])
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("rejects malformed recognized SSE events", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseRaw(sseNamedEvent("message_start", "[DONE]")))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "Invalid anthropic/anthropic-messages stream event",
+      })
+    }),
+  )
+
+  it.effect("maps nullable input tokens and preserves unknown Anthropic usage fields", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
@@ -663,6 +739,7 @@ describe("Anthropic Messages route", () => {
                 type: "message_delta",
                 delta: { stop_reason: "end_turn" },
                 usage: {
+                  input_tokens: null,
                   output_tokens: 8,
                   server_tool_use: { web_search_requests: 2, terminal_counter: 3 },
                   output_tokens_details: { terminal_detail: "preserved" },
@@ -682,7 +759,7 @@ describe("Anthropic Messages route", () => {
         totalTokens: 15,
         providerMetadata: {
           anthropic: {
-            input_tokens: 5,
+            input_tokens: null,
             cache_read_input_tokens: 2,
             service_tier: "standard",
             cache_creation: { ephemeral_5m_input_tokens: 1 },
@@ -1339,14 +1416,14 @@ describe("Anthropic Messages route", () => {
             Message.assistant([
               {
                 type: "tool-call",
-                id: "srvtoolu_abc",
+                id: "srvtoolu.abc",
                 name: "web_search",
                 input: { query: "effect 4" },
                 providerExecuted: true,
               },
               {
                 type: "tool-result",
-                id: "srvtoolu_abc",
+                id: "srvtoolu.abc",
                 name: "web_search",
                 result: { type: "json", value: [{ url: "https://example.com" }] },
                 providerExecuted: true,

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createSignal } from "solid-js"
+import { api } from "../api"
 
 const OS_NAME = (() => {
   if (navigator.userAgent.includes("Mac")) return "macos"
@@ -33,7 +34,7 @@ const clamp = (value: number) => Math.min(Math.max(value, MIN_ZOOM_LEVEL), MAX_Z
 
 const applyZoom = (next: number) => {
   requestedZoom = next
-  void window.api
+  void api
     .setZoomFactor(next)
     .then(() => {
       if (requestedZoom !== next) return
@@ -45,16 +46,16 @@ const applyZoom = (next: number) => {
     })
 }
 
-window.api.onZoomFactorChanged((factor) => {
+api.onZoomFactorChanged((factor) => {
   requestedZoom = clamp(factor)
   setWebviewZoom(requestedZoom)
 })
 
-void window.api.getPinchZoomEnabled().then((enabled) => {
+void api.getPinchZoomEnabled().then((enabled) => {
   pinchZoomEnabled = enabled
 })
 
-window.api.onPinchZoomEnabledChanged((enabled) => {
+api.onPinchZoomEnabledChanged((enabled) => {
   pinchZoomEnabled = enabled
   resetWheelPinch()
 })
@@ -62,7 +63,7 @@ window.api.onPinchZoomEnabledChanged((enabled) => {
 const setPinchZoomEnabled = (enabled: boolean) => {
   pinchZoomEnabled = enabled
   resetWheelPinch()
-  return window.api.setPinchZoomEnabled(enabled)
+  return api.setPinchZoomEnabled(enabled)
 }
 
 const resetZoom = () => applyZoom(1)

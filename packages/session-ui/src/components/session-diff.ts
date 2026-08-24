@@ -70,7 +70,7 @@ function fileDiffFromPatch(file: string, patch: string) {
   return value
 }
 
-function completePatchContents(patch: string) {
+export function completePatchContents(patch: string) {
   try {
     const parsed = parsePatch(patch)[0]
     if (!parsed || (!parsed.index && !parsed.oldFileName && !parsed.newFileName)) return

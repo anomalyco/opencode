@@ -9,9 +9,7 @@ import { ServiceConfig } from "../../../services/service-config"
 export default Runtime.handler(
   Commands.commands.mcp.commands.list,
   Effect.fn("cli.mcp.list")(function* () {
-    const options = yield* ServiceConfig.options()
-    const found = yield* Service.discover(options)
-    const endpoint = found ?? (yield* Service.ensure(options))
+    const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const response = yield* Effect.promise(() => client.mcp.list({ location: { directory: process.cwd() } }))
     const servers = response.data.toSorted((a, b) => a.name.localeCompare(b.name))

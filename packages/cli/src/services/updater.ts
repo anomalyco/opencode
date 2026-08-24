@@ -44,7 +44,7 @@ export const layer = Layer.effect(
       const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
         fs.readFileString(path.join(global.config, name)).pipe(
           Effect.map(decodePolicy),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         ),
       )
       return values.findLast((value) => value !== undefined) ?? true
@@ -63,7 +63,7 @@ export const layer = Layer.effect(
             stdout: result.stdout.toString("utf8"),
             stderr: result.stderr.toString("utf8"),
           })),
-          Effect.catch(() => Effect.succeed({ code: 1, stdout: "", stderr: "" })),
+          Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
         )
     })
 

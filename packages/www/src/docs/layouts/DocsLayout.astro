@@ -1,0 +1,73 @@
+---
+import type { MarkdownHeading } from "astro"
+import { ClientRouter } from "astro:transitions"
+import DocsHeader from "../components/DocsHeader.astro"
+import DocsSidebar from "../components/DocsSidebar.astro"
+import DocsTableOfContents from "../components/DocsTableOfContents.astro"
+import { getDocsSection } from "../lib/navigation"
+import "../styles/global.css"
+
+interface Props {
+  title: string
+  description?: string
+  currentSlug: string
+  headings: MarkdownHeading[]
+  showTableOfContents?: boolean
+}
+
+const section = getDocsSection(Astro.props.currentSlug)
+const description = Astro.props.description ?? `${Astro.props.title} documentation for OpenCode.`
+const canonical = new URL(Astro.url.pathname, "https://opencode.ai").href
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#000000" />
+    <ClientRouter fallback="swap" />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL}favicon.svg`} />
+    <title>{Astro.props.title} | OpenCode</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#docs-content">Skip to content</a>
+    <DocsHeader currentSlug={Astro.props.currentSlug} />
+    <details class="mobile-navigation">
+      <summary>{section.title} navigation</summary>
+      <DocsSidebar groups={section.groups} currentSlug={Astro.props.currentSlug} />
+    </details>
+    <div class="docs-frame">
+      <aside class="sidebar-column">
+        <DocsSidebar groups={section.groups} currentSlug={Astro.props.currentSlug} />
+      </aside>
+      <main id="docs-content">
+        <article class="prose" data-pagefind-body data-pagefind-meta={`title:${Astro.props.title}`}>
+          <h1>{Astro.props.title}</h1>
+          <slot />
+        </article>
+      </main>
+      <aside class="toc-column">
+        {Astro.props.showTableOfContents !== false && <DocsTableOfContents headings={Astro.props.headings} />}
+      </aside>
+    </div>
+    <script is:inline>
+      const addHeadingAnchors = () => {
+        for (const heading of document.querySelectorAll(".prose :is(h2, h3)[id]")) {
+          if (heading.querySelector(".heading-anchor")) continue
+          const anchor = document.createElement("a")
+          anchor.className = "heading-anchor"
+          anchor.href = `#${heading.id}`
+          anchor.setAttribute("aria-label", `Link to ${heading.textContent ?? "section"}`)
+          anchor.textContent = "#"
+          heading.append(anchor)
+        }
+      }
+
+      addHeadingAnchors()
+      document.addEventListener("astro:page-load", addHeadingAnchors)
+    </script>
+  </body>
+</html>

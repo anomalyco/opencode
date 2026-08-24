@@ -24,4 +24,10 @@ export interface Definition<Frame> {
 /** Server-Sent Events framing. Used by every JSON-streaming HTTP provider. */
 export const sse: Definition<string> = { id: "sse", frame: ProviderShared.sseFraming }
 
+/** SSE framing restricted to protocol-recognized event names. */
+export const sseEvents = (events: ReadonlySet<string>): Definition<string> => ({
+  id: "sse",
+  frame: (bytes) => ProviderShared.sseFraming(bytes, events),
+})
+
 export * as Framing from "./framing.js"

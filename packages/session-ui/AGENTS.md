@@ -7,3 +7,10 @@
 - NEVER change existing English text or English keys to facilitate translation. English is intentional, designer-written source copy; adapt locale-specific translations and i18n mechanics around it.
 - Do not translate from model knowledge alone. Verify terminology and grammar with Unicode CLDR locale/plural data, Microsoft Localization Style Guides and terminology, Apple localization/style guidance and localized platform UI, Mozilla localization style guides, Mozilla Pontoon, and the Firefox localization corpus at `github.com/mozilla-l10n/firefox-l10n`.
 - Also use the relevant language authority or official dictionary for the locale (for example RAE/Fundéu, FranceTerme, Duden, TDK, Kotus/Kielitoimiston sanakirja, Språkrådet/Bokmålsordboka, Rada Języka Polskiego/PWN, the Russian and Arabic language academies, the Ukrainian Orthography, Taiwan MOE dictionaries, or the Royal Society of Thailand). Treat the English dictionary as the semantic source of truth and preserve placeholders, code identifiers, product names, and keyboard labels.
+
+## Typography
+
+- Use `--line-height-compact` (`16px`) for `13px` transcript, tool, notice, and truncation text. Use `--line-height-base` (`20px`) for body text.
+- Never copy Figma's generated `leading-none` onto text. Inter descenders clip when a solid `13px` line box meets `overflow: hidden`, `overflow: clip`, or truncation.
+- Keep fixed row dimensions explicit; correct inner line metrics do not require transforms, negative margins, or paint-space compensation.
+- `TextShimmer` inherits font metrics, so put typography overrides on its parent.

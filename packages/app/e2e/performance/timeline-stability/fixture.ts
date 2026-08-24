@@ -259,6 +259,34 @@ export function event(
   return makeEvent(type, data)
 }
 
+export function compactionStarted(data: Extract<OpenCodeEvent, { type: "session.compaction.started" }>["data"]) {
+  return makeEvent("session.compaction.started", data)
+}
+
+export function compactionDelta(data: Extract<OpenCodeEvent, { type: "session.compaction.delta" }>["data"]) {
+  return makeEvent("session.compaction.delta", data)
+}
+
+export function compactionEnded(data: Extract<OpenCodeEvent, { type: "session.compaction.ended" }>["data"]) {
+  return makeEvent("session.compaction.ended", data)
+}
+
+export function compactionFailed(data: Extract<OpenCodeEvent, { type: "session.compaction.failed" }>["data"]) {
+  return makeEvent("session.compaction.failed", data)
+}
+
+export function toolInputStarted(data: Extract<OpenCodeEvent, { type: "session.tool.input.started" }>["data"]) {
+  return makeEvent("session.tool.input.started", data)
+}
+
+export function toolInputEnded(data: Extract<OpenCodeEvent, { type: "session.tool.input.ended" }>["data"]) {
+  return makeEvent("session.tool.input.ended", data)
+}
+
+export function toolCalled(data: Extract<OpenCodeEvent, { type: "session.tool.called" }>["data"]) {
+  return makeEvent("session.tool.called", data)
+}
+
 export function validateTimelineEvent(input: unknown): OpenCodeEvent {
   if (!input || typeof input !== "object") throw new Error("Timeline event must be an object")
   if (!("type" in input) || typeof input.type !== "string") throw new Error("Timeline event requires a type")
@@ -871,8 +899,26 @@ function provider() {
         name: "OpenCode",
         models: { "claude-opus-4-6": { id: "claude-opus-4-6", name: "Claude Opus 4.6", limit: { context: 200_000 } } },
       },
+      {
+        id: "company-gateway",
+        name: "Company Gateway",
+        models: {
+          "fast-nano": {
+            id: "fast-nano",
+            api: { id: "openai/gpt-5.4-nano" },
+            name: "GPT-5.4 nano",
+            limit: { context: 128_000 },
+          },
+          "long-context": {
+            id: "long-context",
+            api: { id: "company/long-context" },
+            name: "Company Gateway Extra Long Context Model for Narrow Timeline Layouts",
+            limit: { context: 128_000 },
+          },
+        },
+      },
     ],
-    connected: ["opencode"],
+    connected: ["opencode", "company-gateway"],
     default: { providerID: "opencode", modelID: "claude-opus-4-6" },
   }
 }

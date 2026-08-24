@@ -1,89 +1,106 @@
 import { app, autoUpdater } from "electron"
 import pkg from "electron-updater"
-import { getLogger } from "../native/logging"
+import { Effect } from "effect"
 import { setAppQuitting } from "../windows"
-import type { UpdaterPlatform } from "./controller"
+import type { Platform } from "./index"
 
 const updateClient = pkg.autoUpdater
 const restartTimeout = 10_000
 
-export function createUpdaterPlatform(logger: ReturnType<typeof getLogger>): UpdaterPlatform {
-  configureUpdater(logger)
-  autoUpdater.on("before-quit-for-update", () => setAppQuitting())
-
-  return {
-    async checkForUpdate() {
-      const result = await updateClient.checkForUpdates()
-      if (!result?.isUpdateAvailable) return
-      return result.updateInfo.version
-    },
-    stageUpdate,
-    installAndRestart: () => installAndRestart(logger),
+export const make = Effect.gen(function* () {
+  const runFork = Effect.runForkWith(yield* Effect.context())
+  updateClient.logger = {
+    info: (...args) => runFork(Effect.logInfo(...args)),
+    warn: (...args) => runFork(Effect.logWarning(...args)),
+    error: (...args) => runFork(Effect.logError(...args)),
+    debug: (...args) => runFork(Effect.logDebug(...args)),
   }
-}
-
-function configureUpdater(logger: ReturnType<typeof getLogger>) {
-  updateClient.logger = logger
   updateClient.channel = "latest"
   updateClient.allowPrerelease = false
   updateClient.allowDowngrade = true
   updateClient.autoDownload = false
   updateClient.autoInstallOnAppQuit = process.platform === "darwin"
-  logger.log("auto updater configured", {
+  yield* Effect.logInfo("auto updater configured", {
     channel: updateClient.channel,
     allowPrerelease: updateClient.allowPrerelease,
     allowDowngrade: updateClient.allowDowngrade,
     currentVersion: app.getVersion(),
   })
-}
+  const beforeQuit = () => setAppQuitting()
+  autoUpdater.on("before-quit-for-update", beforeQuit)
+
+  return {
+    checkForUpdate: Effect.tryPromise({
+      try: async () => {
+        const result = await updateClient.checkForUpdates()
+        return result?.isUpdateAvailable ? result.updateInfo.version : undefined
+      },
+      catch: (error) => error,
+    }),
+    stageUpdate: stageUpdate(),
+    installAndRestart,
+    dispose: () => autoUpdater.off("before-quit-for-update", beforeQuit),
+  } satisfies Platform
+})
 
 function stageUpdate() {
-  if (process.platform !== "darwin") return updateClient.downloadUpdate()
+  if (process.platform !== "darwin")
+    return Effect.tryPromise({
+      try: () => updateClient.downloadUpdate(),
+      catch: (error) => error,
+    }).pipe(Effect.asVoid)
 
-  return new Promise<void>((resolve, reject) => {
+  return Effect.callback<void, Error>((resume) => {
     const cleanup = () => {
       autoUpdater.removeListener("update-downloaded", complete)
       updateClient.removeListener("error", fail)
     }
     const complete = () => {
       cleanup()
-      resolve()
+      resume(Effect.void)
     }
     const fail = (error: Error) => {
       cleanup()
-      reject(error)
+      resume(Effect.fail(error))
     }
 
     autoUpdater.once("update-downloaded", complete)
     updateClient.once("error", fail)
     void updateClient.downloadUpdate().catch(fail)
+    return Effect.sync(cleanup)
   })
 }
 
-function installAndRestart(logger: ReturnType<typeof getLogger>) {
-  return new Promise<never>((_resolve, reject) => {
-    const timeout = setTimeout(() => {
-      logger.error("update restart did not start")
-      fail(new Error())
-    }, restartTimeout)
-    const started = () => {
-      clearTimeout(timeout)
-      autoUpdater.removeListener("before-quit-for-update", started)
-    }
-    const fail = (error: Error) => {
-      clearTimeout(timeout)
-      autoUpdater.removeListener("before-quit-for-update", started)
-      updateClient.removeListener("error", fail)
-      setAppQuitting(false)
-      reject(error)
-    }
+const installAndRestart = Effect.callback<void, Error>((resume) => {
+  const cleanup = () => {
+    autoUpdater.removeListener("before-quit-for-update", started)
+    updateClient.removeListener("error", fail)
+  }
+  const started = () => {
+    cleanup()
+    resume(Effect.void)
+  }
+  const fail = (error: Error) => {
+    cleanup()
+    resume(Effect.fail(error))
+  }
 
-    autoUpdater.once("before-quit-for-update", started)
-    updateClient.once("error", fail)
-    try {
-      updateClient.quitAndInstall()
-    } catch (error) {
-      fail(error instanceof Error ? error : new Error(String(error)))
-    }
-  })
-}
+  autoUpdater.once("before-quit-for-update", started)
+  updateClient.once("error", fail)
+  try {
+    updateClient.quitAndInstall()
+  } catch (error) {
+    fail(error instanceof Error ? error : new Error(String(error)))
+  }
+  return Effect.sync(cleanup)
+}).pipe(
+  Effect.timeoutOrElse({
+    duration: restartTimeout,
+    orElse: () =>
+      Effect.logError("update restart did not start").pipe(
+        Effect.andThen(Effect.fail(new Error("Update restart did not start"))),
+      ),
+  }),
+  Effect.tapError(() => Effect.sync(() => setAppQuitting(false))),
+  Effect.andThen(Effect.never),
+)

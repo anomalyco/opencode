@@ -17,6 +17,7 @@ import {
   Event,
 } from "@opencode-ai/schema/config"
 import { Integration } from "@opencode-ai/schema/integration"
+import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Credential } from "./credential.js"
 import { Bus } from "./bus.js"
 import { Watcher } from "./filesystem/watcher.js"
@@ -29,9 +30,8 @@ import { ConfigNormalize } from "./config/normalize.js"
 import { WellKnown } from "./wellknown.js"
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
-  return entries
-    .filter((entry): entry is Document => entry.type === "document")
-    .findLast((entry) => entry.info[key] !== undefined)?.info[key]
+  return entries.findLast((entry): entry is Document => entry.type === "document" && entry.info[key] !== undefined)
+    ?.info[key]
 }
 
 export interface Interface {
@@ -156,6 +156,37 @@ export const layer = (options?: Options) =>
         return new Document({ type: "document", path: AbsolutePath.make(filepath), info })
       })
 
+      const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
+        const auth = entry.manifest.auth
+        if (!auth) return []
+        const credential = (yield* credentials.list(entry.integrationID)).findLast(
+          (credential) => credential.value.type === "key",
+        )
+        if (!credential || credential.value.type !== "key") return []
+        const variables = { [auth.env]: credential.value.key }
+        const configs = yield* wellknown
+          .resolve(entry, variables)
+          .pipe(
+            Effect.catch(() =>
+              Effect.logWarning("failed to load wellknown config", { source: entry.origin }).pipe(
+                Effect.as([] as const),
+              ),
+            ),
+          )
+        return yield* Effect.forEach(configs, (config) =>
+          ConfigVariable.substitute({
+            type: "virtual",
+            source: entry.origin,
+            dir: entry.origin,
+            text: JSON.stringify(config),
+            env: variables,
+          }).pipe(
+            Effect.flatMap((text) => parseInfo(text, entry.origin)),
+            Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
+          ),
+        ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
+      })
+
       const loadWellknown = Effect.fn("Config.loadWellknown")(function* () {
         const entries = yield* wellknown
           .entries()
@@ -164,38 +195,7 @@ export const layer = (options?: Options) =>
               Effect.logWarning("failed to discover wellknown config", { error }).pipe(Effect.as([] as const)),
             ),
           )
-        return yield* Effect.forEach(entries, (entry) =>
-          Effect.gen(function* () {
-            const auth = entry.manifest.auth
-            if (!auth) return []
-            const credential = (yield* credentials.list(entry.integrationID)).findLast(
-              (credential) => credential.value.type === "key",
-            )
-            if (!credential || credential.value.type !== "key") return []
-            const variables = { [auth.env]: credential.value.key }
-            const configs = yield* wellknown
-              .resolve(entry, variables)
-              .pipe(
-                Effect.catch(() =>
-                  Effect.logWarning("failed to load wellknown config", { source: entry.origin }).pipe(
-                    Effect.as([] as const),
-                  ),
-                ),
-              )
-            return yield* Effect.forEach(configs, (config) =>
-              ConfigVariable.substitute({
-                type: "virtual",
-                source: entry.origin,
-                dir: entry.origin,
-                text: JSON.stringify(config),
-                env: variables,
-              }).pipe(
-                Effect.flatMap((text) => parseInfo(text, entry.origin)),
-                Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
-              ),
-            ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
-          }),
-        ).pipe(Effect.map((documents) => documents.flat()))
+        return yield* Effect.forEach(entries, loadWellknownEntry).pipe(Effect.map((documents) => documents.flat()))
       })
 
       const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
@@ -347,7 +347,7 @@ export const layer = (options?: Options) =>
         Stream.filterEffect((event) =>
           wellknown.entries().pipe(
             Effect.map((entries) => entries.some((entry) => entry.integrationID === event.data.integrationID)),
-            Effect.catch(() => Effect.succeed(false)),
+            Effect.orElseSucceed(() => false),
           ),
         ),
         Stream.runForEach(() =>
@@ -449,20 +449,11 @@ type Edit = { readonly path: (string | number)[]; readonly value: unknown }
 
 function changes(before: unknown, after: unknown, path: (string | number)[] = []): Edit[] {
   if (Object.is(before, after)) return []
-  if (
-    before !== null &&
-    after !== null &&
-    typeof before === "object" &&
-    typeof after === "object" &&
-    !Array.isArray(before) &&
-    !Array.isArray(after)
-  ) {
-    const previous = before as Record<string, unknown>
-    const next = after as Record<string, unknown>
-    return [...new Set([...Object.keys(previous), ...Object.keys(next)])].flatMap((key) => {
-      if (!(key in next)) return [{ path: [...path, key], value: undefined }]
-      if (!(key in previous)) return [{ path: [...path, key], value: next[key] }]
-      return changes(previous[key], next[key], [...path, key])
+  if (isRecord(before) && isRecord(after)) {
+    return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap((key) => {
+      if (!(key in after)) return [{ path: [...path, key], value: undefined }]
+      if (!(key in before)) return [{ path: [...path, key], value: after[key] }]
+      return changes(before[key], after[key], [...path, key])
     })
   }
   return [{ path, value: after }]

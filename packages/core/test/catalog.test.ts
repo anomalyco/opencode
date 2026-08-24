@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test"
-import { Money } from "@opencode-ai/schema/money"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -322,45 +321,50 @@ describe("Catalog", () => {
     }),
   )
 
-  it.effect("small model prefers small keyword candidates before cost scoring", () =>
+  it.effect("small model uses the newest release in the first matching family", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.make("test")
       yield* catalog.transform((catalog) => {
         catalog.provider.update(providerID, () => {})
-        catalog.model.update(providerID, Model.ID.make("cheap-large"), (model) => {
+        catalog.model.update(providerID, Model.ID.make("newer-flash"), (model) => {
+          model.family = Model.Family.make("gemini-flash")
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
-          model.cost = [
-            {
-              input: Money.USDPerMillionTokens.make(1),
-              output: Money.USDPerMillionTokens.make(1),
-              cache: {
-                read: Money.USDPerMillionTokens.zero,
-                write: Money.USDPerMillionTokens.zero,
-              },
-            },
-          ]
-          model.time.released = Date.now()
+          model.time.released = 3000
         })
-        catalog.model.update(providerID, Model.ID.make("expensive-mini"), (model) => {
+        catalog.model.update(providerID, Model.ID.make("older-luna"), (model) => {
+          model.family = Model.Family.make("gpt-luna")
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
-          model.cost = [
-            {
-              input: Money.USDPerMillionTokens.make(10),
-              output: Money.USDPerMillionTokens.make(10),
-              cache: {
-                read: Money.USDPerMillionTokens.zero,
-                write: Money.USDPerMillionTokens.zero,
-              },
-            },
-          ]
-          model.time.released = Date.now()
+          model.time.released = 1000
+        })
+        catalog.model.update(providerID, Model.ID.make("newer-luna"), (model) => {
+          model.family = Model.Family.make("gpt-luna")
+          model.capabilities.input = ["text"]
+          model.capabilities.output = ["text"]
+          model.time.released = 2000
         })
       })
 
-      expect((yield* catalog.model.small(providerID))?.id).toMatch("expensive-mini")
+      expect((yield* catalog.model.small(providerID))?.id).toBe(Model.ID.make("newer-luna"))
+    }),
+  )
+
+  it.effect("small model returns undefined without a matching family", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("test")
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(providerID, () => {})
+        catalog.model.update(providerID, Model.ID.make("large"), (model) => {
+          model.family = Model.Family.make("gpt")
+          model.capabilities.input = ["text"]
+          model.capabilities.output = ["text"]
+        })
+      })
+
+      expect(yield* catalog.model.small(providerID)).toBeUndefined()
     }),
   )
 })

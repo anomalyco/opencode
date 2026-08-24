@@ -1,4 +1,4 @@
-import type { ElectronAPI } from "../../preload/types"
+import type { ElectronAPI } from "../api-types"
 
 const deepLinkEvent = "opencode:deep-link"
 

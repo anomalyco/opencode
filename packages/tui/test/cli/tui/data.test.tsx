@@ -3197,6 +3197,58 @@ test("admits prompts optimistically and reconciles with the durable echo", async
   }
 })
 
+test("hydrates durable pending prompts into the visible transcript", async () => {
+  const sessionID = "session-1"
+  const item = {
+    id: "msg_pending_1",
+    sessionID,
+    timeCreated: 5,
+    type: "user" as const,
+    payload: { text: "waiting" },
+    delivery: "steer" as const,
+  }
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [item] })
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+  })
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    await sync.session.pending.sync(sessionID)
+    expect(sync.session.message.list(sessionID)).toEqual([
+      { id: item.id, type: "user", text: "waiting", time: { created: 5 } },
+    ])
+
+    await sync.session.message.sync(sessionID)
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([item.id])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("keeps the row when the response lands before the echo", async () => {
   const events = createEventStream()
   const sessionID = "session-1"

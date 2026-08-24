@@ -1,18 +1,15 @@
 import { randomUUID } from "node:crypto"
-import { mkdirSync, rmSync } from "node:fs"
 import http from "node:http"
 import { homedir, tmpdir } from "node:os"
-import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app } from "electron"
 import contextMenu from "electron-context-menu"
-import { Effect } from "effect"
-import { CHANNEL, VERSION } from "../constants"
-import { initCrashReporter, initLogging, type DesktopLogger } from "../native/logging"
+import { Effect, FileSystem, Path } from "effect"
+import { CHANNEL } from "../constants"
+import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { cleanupStoreFiles } from "../storage/cleanup"
 import { registerRendererProtocol, setDockIcon } from "../windows"
-import { initializeFirstLaunchOnboarding } from "./onboarding"
 
 const appNames: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -27,7 +24,8 @@ const appIDs: Record<string, string> = {
 const testOnboarding = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
-export function configureApplication() {
+export const configureApplication = Effect.fn("Application.configure")(function* () {
+  const path = yield* Path.Path
   contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
   try {
     process.chdir(homedir())
@@ -35,30 +33,18 @@ export function configureApplication() {
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
   const appID = app.isPackaged ? appIDs[CHANNEL] : "ai.opencode.desktop.dev"
-  const testRoot = createTestRoot()
   app.setName(app.isPackaged ? appNames[CHANNEL] : "OpenCode Dev")
   app.setAppUserModelId(appID)
-  app.setPath("userData", testRoot ? join(testRoot, "desktop") : join(app.getPath("appData"), appID))
-  if (testRoot) app.setPath("sessionData", join(testRoot, "session"))
-
-  initializeFirstLaunchOnboarding(app.getPath("userData"))
-  const logger = initLogging()
-  initCrashReporter()
-  loadSystemCertificates(logger)
-  logger.log("app starting", {
-    version: VERSION,
-    packaged: app.isPackaged,
-    onboardingTest: testOnboarding,
-  })
-
-  loadProxyEnvironment(logger)
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
   if (!app.isPackaged)
     app.commandLine.appendSwitch("remote-debugging-port", process.env.OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT ?? "9222")
-  return logger
-}
+
+  const testRoot = yield* createTestRoot()
+  app.setPath("userData", testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), appID))
+  if (testRoot) app.setPath("sessionData", path.join(testRoot, "session"))
+})
 
 export function acquireApplicationLock() {
   if (app.requestSingleInstanceLock()) return true
@@ -66,73 +52,80 @@ export function acquireApplicationLock() {
   return false
 }
 
-export function preferApplicationEnvironment(logger: DesktopLogger) {
+export const prepareApplicationEnvironment = Effect.gen(function* () {
+  yield* loadSystemCertificates
+  yield* loadProxyEnvironment
+})
+
+export const preferApplicationEnvironment = Effect.gen(function* () {
   const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? loadShellEnv(shell, logger) : null
-  if (!shellEnv?.XDG_STATE_HOME) delete process.env.XDG_STATE_HOME
-  Object.assign(process.env, {
-    ...shellEnv,
-    OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
-    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
-    OPENCODE_CLIENT: "desktop",
+  const shellEnv = shell ? yield* loadShellEnv(shell) : null
+  yield* Effect.sync(() => {
+    if (!shellEnv?.XDG_STATE_HOME) delete process.env.XDG_STATE_HOME
+    Object.assign(process.env, {
+      ...shellEnv,
+      OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
+      OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+      OPENCODE_CLIENT: "desktop",
+    })
   })
-}
+})
 
-export function prepareDesktop(logger: DesktopLogger) {
-  return Effect.gen(function* () {
-    yield* Effect.promise(() => cleanupStoreFiles(app.getPath("userData"))).pipe(
-      Effect.tap((result) =>
-        Effect.sync(() => {
-          if (result.deleted.length === 0) return
-          logger.log("cleaned scoped store files", { count: result.deleted.length, scanned: result.scanned })
-        }),
-      ),
-      Effect.catch((error) => Effect.sync(() => logger.warn("failed to clean scoped store files", error))),
-    )
-    if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
-      app.setAsDefaultProtocolClient("opencode")
-    registerRendererProtocol()
-    setDockIcon()
-  })
-}
+export const prepareDesktop = Effect.gen(function* () {
+  const path = yield* Path.Path
+  const paths = yield* DesktopPaths.resolve
+  yield* cleanupStoreFiles(app.getPath("userData")).pipe(
+    Effect.tap((result) =>
+      result.deleted.length === 0
+        ? Effect.void
+        : Effect.logInfo("cleaned scoped store files", { count: result.deleted.length, scanned: result.scanned }),
+    ),
+    Effect.catch((error) => Effect.logWarning("failed to clean scoped store files", { error })),
+  )
+  if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
+    app.setAsDefaultProtocolClient("opencode")
+  yield* registerRendererProtocol()
+  setDockIcon(path, paths)
+})
 
-export function loadProxyEnvironment(logger: DesktopLogger) {
-  ensureLoopbackNoProxy()
-  try {
+export const loadProxyEnvironment = Effect.gen(function* () {
+  yield* Effect.try(() => {
+    ensureLoopbackNoProxy()
     // Electron 41.2 has a newer Node API than the current @types/node package.
     const proxyAwareHttp = http as typeof http & { setGlobalProxyFromEnv(): void }
     proxyAwareHttp.setGlobalProxyFromEnv()
-  } catch (error) {
-    logger.warn("failed to load proxy environment", error)
-  }
-}
+  }).pipe(Effect.catch((error) => Effect.logWarning("failed to load proxy environment", { error })))
+})
 
-function createTestRoot() {
+const createTestRoot = Effect.fn("Application.createTestRoot")(function* () {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
   const root = testOnboarding
-    ? join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+    ? path.join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
     : app.isPackaged
       ? undefined
       : process.env.OPENCODE_DESKTOP_TEST_ROOT
   if (!root) return undefined
-  if (testOnboarding) rmSync(root, { recursive: true, force: true })
-  ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
-    mkdirSync(join(root, dir), { recursive: true }),
+  if (testOnboarding) yield* fs.remove(root, { recursive: true, force: true })
+  yield* Effect.forEach(
+    ["data", "config", "cache", "state", "desktop", "session"],
+    (dir) => fs.makeDirectory(path.join(root, dir), { recursive: true }),
+    { discard: true },
   )
   if (testOnboarding) process.env.OPENCODE_DB = ":memory:"
-  process.env.XDG_DATA_HOME = join(root, "data")
-  process.env.XDG_CONFIG_HOME = join(root, "config")
-  process.env.XDG_CACHE_HOME = join(root, "cache")
-  process.env.XDG_STATE_HOME = join(root, "state")
+  process.env.XDG_DATA_HOME = path.join(root, "data")
+  process.env.XDG_CONFIG_HOME = path.join(root, "config")
+  process.env.XDG_CACHE_HOME = path.join(root, "cache")
+  process.env.XDG_STATE_HOME = path.join(root, "state")
   return root
-}
+})
 
-function loadSystemCertificates(logger: DesktopLogger) {
-  try {
+const loadSystemCertificates = Effect.try({
+  try: () => {
     setDefaultCACertificates([...new Set([...getCACertificates("default"), ...getCACertificates("system")])])
-  } catch (error) {
-    logger.warn("failed to load system certificates", error)
-  }
-}
+  },
+  catch: (error) => error,
+}).pipe(Effect.catch((error) => Effect.logWarning("failed to load system certificates", { error })))
 
 function ensureLoopbackNoProxy() {
   const loopback = ["127.0.0.1", "localhost", "::1"]

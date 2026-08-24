@@ -31,8 +31,11 @@ interface PendingRecordings {
 }
 type Frame = string | Uint8Array
 
-const normalizeProtocols = (protocols?: string | Array<string>): Array<string> =>
-  protocols === undefined ? [] : typeof protocols === "string" ? [protocols] : [...protocols]
+const normalizeProtocols = (protocols: unknown): Array<string> => {
+  if (typeof protocols === "string") return [protocols]
+  if (Array.isArray(protocols)) return protocols.filter((protocol): protocol is string => typeof protocol === "string")
+  return []
+}
 const frameFromWebSocketData = async (data: unknown): Promise<Frame> => {
   if (typeof data === "string") return data
   if (data instanceof Blob) return new Uint8Array(await data.arrayBuffer())
@@ -371,7 +374,7 @@ const makeRecordingWebSocketConstructor = (
   return (url, protocols) => {
     const sequence = nextSequence++
     const requestedProtocols = normalizeProtocols(protocols)
-    const native = upstream(url, requestedProtocols)
+    const native = Reflect.apply(upstream, undefined, [url, protocols])
     const events: WebSocketEvent[] = []
     let opened = false
     let failed = false

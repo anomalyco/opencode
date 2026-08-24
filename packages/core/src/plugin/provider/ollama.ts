@@ -148,7 +148,7 @@ export function make(origin = "http://127.0.0.1:11434", interval: Duration.Input
                         )
                   shows.set(model.model, { digest: model.digest, info })
                   return { ...model, show: info }
-                }).pipe(Effect.catch(() => Effect.succeed(undefined))),
+                }).pipe(Effect.orElseSucceed(() => undefined)),
               { concurrency: 4 },
             )
             const filtered = models.filter(

@@ -760,10 +760,52 @@ describe("ShellTool", () => {
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
             expect((yield* shell.wait(id)).status).toBe("timeout")
             expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
+              text: expect.stringContaining("Command timed out before completion."),
               description: idleCommand,
               metadata: {
                 source: "shell",
+                shellID,
                 state: "completed",
+                timeout: true,
+                truncated: false,
+              },
+            })
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  it.live("preserves a background command's non-zero exit", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const bus = yield* Bus.Service
+            const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+              Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+              Stream.runHead,
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            const settled = yield* executeTool(
+              registry,
+              call({ command: bodyExitCommand, background: true }, "call-background-nonzero"),
+            )
+            const shellID = settled.metadata?.shellID
+            expect(typeof shellID).toBe("string")
+            expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
+              text: expect.stringContaining("Command exited with code 7."),
+              description: bodyExitCommand,
+              metadata: {
+                source: "shell",
+                jobID: "call-background-nonzero",
+                shellID,
+                state: "completed",
+                exit: 7,
+                truncated: false,
               },
             })
           }),
@@ -812,6 +854,30 @@ describe("ShellTool", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
       ),
     { timeout: 15_000 },
+  )
+
+  it.live("does not retain removed running shells in exit order", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        withSession(tmp.path, () =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            yield* Effect.forEach(Array.from({ length: 26 }), () =>
+              Effect.gen(function* () {
+                const info = yield* shell.create({ command: idleCommand, timeout: 0 })
+                yield* shell.remove(info.id)
+                yield* Effect.sleep(Duration.millis(10))
+              }),
+            )
+
+            const info = yield* shell.create({ command: helloCommand, timeout: 0 })
+            const settled = yield* shell.wait(info.id).pipe(Effect.timeoutOption(Duration.seconds(2)))
+            expect(settled._tag).toBe("Some")
+          }),
+        ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
   )
 
   if (!isWindows) {

@@ -90,6 +90,7 @@ const layer = Layer.effect(
     ) {
       const beforeEvent: PluginHooks.Domains["tool"]["execute.before"] = {
         tool: name,
+        inputSchema: definition(tool).inputSchema,
         sessionID: context.sessionID,
         agent: context.agent,
         messageID: context.messageID,

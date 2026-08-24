@@ -47,7 +47,6 @@ const acceptHeader = (format: Format) => {
     case "html":
       return "text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1"
   }
-  return "*/*"
 }
 
 const headers = (format: Format, userAgent: string) => ({

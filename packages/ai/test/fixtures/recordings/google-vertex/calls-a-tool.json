@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:google-vertex",
+      "provider:google-vertex",
+      "protocol:gemini"
+    ],
+    "name": "google-vertex/calls-a-tool",
+    "recordedAt": "2026-08-23T17:21:51.036Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"What is the weather in Paris? Use the lookup_weather tool.\"}]}],\"tools\":[{\"functionDeclarations\":[{\"name\":\"lookup_weather\",\"description\":\"Look up the current weather for a city\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}]}]}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"role\": \"model\",\"parts\": [{\"functionCall\": {\"name\": \"lookup_weather\",\"args\": {\"city\": \"Paris\"},\"id\": \"call_425130\"},\"thoughtSignature\": \"AY89a1+1fXnLgYhHMuN3Ak6LBhT6PcrYOW7iPav4LfsacvG/Z6l1yJ+AsU7vWhFj/JyPIbsJJQ+GjohM9sCIZ6nqUOIg3reo/7osmrCvFrVHedTHQcwiPzoz2Kp3gb+uWjFAXxk1EX4IRAKcu0ox1W/Z9PpuZvHkTerGO2a82e02N6MAF1YhhtbXFvSdqLRih2Os68rdOk5/Bcld7ol8qUgeyIZ3CtI3OJ5jwRcD8LjvK33A7ZFzH5Bxp/peUmXvqnu5iNhnGBxZaJy/vupCtxRZxjaS+ojG0/UhyrnRiKIpbzQ0FBkxePPn8GCX/LOe2y3GUc98co8lN8OOuCd9ZmEdx5AjHmQkPO9fAV9SxG6Bda6SDWVL8o/Uz3WSQYoUEfAdoajEWIBvcisoeCJjb7zgmRRZ9VQSPl3RXj5LFRvX8jn0YKV1CahYbc24jA==\"}]}}],\"usageMetadata\": {\"trafficType\": \"ON_DEMAND\"},\"modelVersion\": \"gemini-3.5-flash\",\"createTime\": \"2026-08-23T17:21:50.308576Z\",\"responseId\": \"LiyLauDqErCErb8Pj8aWkAs\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"role\": \"model\",\"parts\": [{\"text\": \"\"}]},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 39,\"candidatesTokenCount\": 16,\"totalTokenCount\": 102,\"trafficType\": \"ON_DEMAND\",\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 39}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 16}],\"thoughtsTokenCount\": 47},\"modelVersion\": \"gemini-3.5-flash\",\"createTime\": \"2026-08-23T17:21:50.308576Z\",\"responseId\": \"LiyLauDqErCErb8Pj8aWkAs\"}\r\n\r\n"
+      }
+    }
+  ]
+}

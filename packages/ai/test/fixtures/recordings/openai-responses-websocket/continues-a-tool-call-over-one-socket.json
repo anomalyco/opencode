@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "metadata": {
+    "provider": "openai",
+    "protocol": "openai-responses",
+    "transport": "websocket",
+    "model": "gpt-5.5",
+    "tags": [
+      "prefix:openai-responses-websocket",
+      "provider:openai",
+      "protocol:openai-responses",
+      "transport:websocket",
+      "tool",
+      "continuation"
+    ],
+    "name": "openai-responses-websocket/continues-a-tool-call-over-one-socket",
+    "recordedAt": "2026-08-20T00:00:00.000Z"
+  },
+  "interactions": [
+    {
+      "transport": "websocket",
+      "connection": {
+        "sequence": 0,
+        "url": "wss://api.openai.com/v1/responses",
+        "protocols": [],
+        "close": {
+          "code": 1000,
+          "reason": ""
+        }
+      },
+      "events": [
+        {
+          "direction": "client",
+          "kind": "text",
+          "body": "{\"type\":\"response.create\",\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Call get_weather once, then reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"What is the weather in Paris?\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}],\"store\":false,\"max_output_tokens\":50,\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"text\":{\"verbosity\":\"low\"}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.created\",\"response\":{\"id\":\"resp_ws_tool_1\"}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"id\":\"fc_ws_weather\",\"call_id\":\"call_ws_weather\",\"name\":\"get_weather\",\"arguments\":\"\"}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.function_call_arguments.delta\",\"item_id\":\"fc_ws_weather\",\"delta\":\"{\\\"city\\\":\\\"Paris\\\"}\"}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"id\":\"fc_ws_weather\",\"call_id\":\"call_ws_weather\",\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ws_tool_1\"}}"
+        },
+        {
+          "direction": "client",
+          "kind": "text",
+          "body": "{\"type\":\"response.create\",\"model\":\"gpt-5.5\",\"input\":[{\"type\":\"function_call_output\",\"call_id\":\"call_ws_weather\",\"output\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}],\"store\":false,\"max_output_tokens\":50,\"previous_response_id\":\"resp_ws_tool_1\",\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"text\":{\"verbosity\":\"low\"}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.created\",\"response\":{\"id\":\"resp_ws_tool_2\"}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\",\"id\":\"msg_ws_tool_2\",\"role\":\"assistant\",\"content\":[]}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_text.delta\",\"item_id\":\"msg_ws_tool_2\",\"delta\":\"Paris is sunny.\"}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_text.done\",\"item_id\":\"msg_ws_tool_2\",\"text\":\"Paris is sunny.\"}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\",\"id\":\"msg_ws_tool_2\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Paris is sunny.\"}]}}"
+        },
+        {
+          "direction": "server",
+          "kind": "text",
+          "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ws_tool_2\"}}"
+        }
+      ]
+    }
+  ]
+}

@@ -71,10 +71,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
     })
 
-    const [store, setStore] = createStore({
-      index: 0,
-      history: [] as PromptInfo[],
-    })
+    const [store, setStore] = createStore({ index: 0, history: [] as PromptInfo[] })
 
     return {
       move(direction: 1 | -1, input: string) {

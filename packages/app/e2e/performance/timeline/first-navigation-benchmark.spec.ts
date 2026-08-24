@@ -11,7 +11,7 @@ import {
 } from "./timeline-test-helpers"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 
-const contentSelector = '[data-message-id], [data-component="prompt-input"]'
+const contentSelector = '[data-message-id], [data-component="composer-editor"]'
 const draftID = "draft_first_navigation"
 
 benchmark.describe("performance: first navigation paint", () => {
@@ -41,11 +41,42 @@ benchmark.describe("performance: first navigation paint", () => {
       href,
       destinationPath: href,
       sourceSelector: messageSelector(fixture.expected.sourceMessageIDs.at(-1)!),
-      destinationSelector: '[data-component="prompt-input"]',
+      destinationSelector: '[data-component="composer-editor"]',
       contentSelector,
       navigate: async () => {
         await page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first().click()
-        await expect(page.locator('[data-component="prompt-input"]')).toBeVisible()
+        await expect(page.locator('[data-component="composer-editor"]')).toBeVisible()
+      },
+    })
+    report(result)
+    expect(result.summary.blankSamples).toBe(0)
+    expect(result.summary.unknownSamples).toBe(0)
+  })
+
+  benchmark("opens a session from the new session page without a blank frame", async ({ page, report }) => {
+    await mockStressTimeline(page)
+    await installTimelineSettings(page)
+    await installStressSessionTabs(page, { draftID })
+    await page.goto("/")
+
+    const draftHref = stressDraftHref(draftID)
+    const draftTab = page.locator(`[data-slot="titlebar-tabs"] a[href="${draftHref}"]`)
+    await expect(draftTab).toHaveCount(1)
+    await draftTab.click()
+    await expect(page.locator('[data-component="new-session"]')).toBeVisible()
+
+    const href = stressSessionHref(fixture.targetID)
+    const sessionTab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`)
+    await expect(sessionTab).toHaveCount(1)
+    const result = await measureFirstNavigation(page, {
+      href,
+      destinationPath: href,
+      sourceSelector: '[data-component="new-session"]',
+      destinationSelector: messageSelector(fixture.expected.targetMessageIDs.at(-1)!),
+      contentSelector,
+      navigate: async () => {
+        await sessionTab.click()
+        await expectSessionTitle(page, fixture.expected.targetTitle)
       },
     })
     report(result)

@@ -5,7 +5,7 @@ import { EOL } from "node:os"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
-import { errorMessage } from "../../ui/prompt"
+import { errorMessage } from "../../util/error"
 
 const handler = Effect.fn("cli.stats")(function* (input: Runtime.Input<typeof Commands.commands.stats>) {
   const days = Option.getOrUndefined(input.days)

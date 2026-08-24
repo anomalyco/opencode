@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import type { Project } from "@/types"
+import type { Project } from "@/runtime/server/types"
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
@@ -24,6 +24,10 @@ export function getProjectAvatarVariant(key?: string) {
 const [all, setAll] = createSignal<string[]>([])
 const [active, setActive] = createSignal<string | undefined>(undefined)
 const [reviewOpen, setReviewOpen] = createSignal(false)
+
+export function useCurrentRoute() {
+  return () => ({ type: "home" as const })
+}
 
 const tabs = {
   all,

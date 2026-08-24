@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import type { WslServerConfig } from "@opencode-ai/app/wsl/types"
+import { Effect } from "effect"
 import { wslCliInstallCommand } from "./runtime"
 import { createWslServersController } from "./servers"
 
@@ -16,13 +17,15 @@ test("passes a local CLI path directly to the V2 installer", () => {
 test("installs and verifies the bundled CLI version", async () => {
   persistedServers = []
   const installs: string[][] = []
-  const controller = createWslServersController(
-    testControllerOptions({
-      installCli: async (distro, cli) => {
-        installs.push([distro, cli.version])
-      },
-      resolveCli: async () => "/home/me/.opencode/bin/opencode2",
-    }),
+  const controller = await Effect.runPromise(
+    createWslServersController(
+      testControllerOptions({
+        installCli: async (distro, cli) => {
+          installs.push([distro, cli.version])
+        },
+        resolveCli: async () => "/home/me/.opencode/bin/opencode2",
+      }),
+    ),
   )
 
   await controller.installOpencode("Debian")
@@ -33,12 +36,14 @@ test("installs and verifies the bundled CLI version", async () => {
 
 test("rejects a WSL CLI version that differs from the bundled version", async () => {
   persistedServers = []
-  const controller = createWslServersController(
-    testControllerOptions({
-      installCli: async () => undefined,
-      resolveCli: async () => "/home/me/.opencode/bin/opencode2",
-      readCliVersion: async () => "0.0.0-dev-older",
-    }),
+  const controller = await Effect.runPromise(
+    createWslServersController(
+      testControllerOptions({
+        installCli: async () => undefined,
+        resolveCli: async () => "/home/me/.opencode/bin/opencode2",
+        readCliVersion: async () => "0.0.0-dev-older",
+      }),
+    ),
   )
 
   await expect(controller.installOpencode("Debian")).rejects.toThrow(
@@ -49,24 +54,26 @@ test("rejects a WSL CLI version that differs from the bundled version", async ()
 test("stops a running WSL server before replacing its CLI", async () => {
   persistedServers = [{ id: "wsl:Debian", distro: "Debian" }]
   const events: string[] = []
-  const controller = createWslServersController(
-    testControllerOptions({
-      spawnSidecar: async () => {
-        events.push("start")
-        return {
-          stop: async () => {
-            events.push("stop")
-          },
-          onExit: () => undefined,
-          url: "http://127.0.0.1:4096",
-          username: "opencode",
-          password: "secret",
-        }
-      },
-      installCli: async () => {
-        events.push("install")
-      },
-    }),
+  const controller = await Effect.runPromise(
+    createWslServersController(
+      testControllerOptions({
+        spawnSidecar: async () => {
+          events.push("start")
+          return {
+            stop: async () => {
+              events.push("stop")
+            },
+            onExit: () => undefined,
+            url: "http://127.0.0.1:4096",
+            username: "opencode",
+            password: "secret",
+          }
+        },
+        installCli: async () => {
+          events.push("install")
+        },
+      }),
+    ),
   )
   controller.startConfiguredServers()
   await waitFor(() => controller.getState().servers[0]?.runtime.kind === "ready")
@@ -77,24 +84,55 @@ test("stops a running WSL server before replacing its CLI", async () => {
   await controller.stopServers()
 })
 
+test("stops a sidecar that finishes starting after shutdown", async () => {
+  persistedServers = [{ id: "wsl:Debian", distro: "Debian" }]
+  const stopped: string[] = []
+  let resolveSidecar: ((sidecar: Awaited<ReturnType<ControllerOptions["spawnSidecar"]>>) => void) | undefined
+  const controller = await Effect.runPromise(
+    createWslServersController(
+      testControllerOptions({
+        spawnSidecar: () => new Promise((resolve) => (resolveSidecar = resolve)),
+      }),
+    ),
+  )
+  controller.startConfiguredServers()
+  await waitFor(() => controller.getState().servers[0]?.runtime.kind === "starting")
+
+  await controller.stopServers()
+  resolveSidecar?.({
+    stop: async () => {
+      stopped.push("stop")
+    },
+    onExit: () => undefined,
+    url: "http://127.0.0.1:4096",
+    username: "opencode",
+    password: "secret",
+  })
+  await waitFor(() => stopped.length === 1)
+
+  expect(stopped).toEqual(["stop"])
+})
+
 test("probes addable distros in parallel before checking OpenCode", async () => {
   persistedServers = []
   const started: string[] = []
   const release = new Map<string, () => void>()
   const opencode: string[] = []
-  const controller = createWslServersController(
-    testControllerOptions({
-      spawnSidecar: pendingSidecar,
-      probeDistro: async (distro) => {
-        started.push(distro)
-        await new Promise<void>((resolve) => release.set(distro, resolve))
-        return { name: distro, canExecute: true, hasBash: true, hasCurl: true, error: null }
-      },
-      resolveCli: async (distro) => {
-        opencode.push(distro)
-        return "/home/me/.opencode/bin/opencode2"
-      },
-    }),
+  const controller = await Effect.runPromise(
+    createWslServersController(
+      testControllerOptions({
+        spawnSidecar: pendingSidecar,
+        probeDistro: async (distro) => {
+          started.push(distro)
+          await new Promise<void>((resolve) => release.set(distro, resolve))
+          return { name: distro, canExecute: true, hasBash: true, hasCurl: true, error: null }
+        },
+        resolveCli: async (distro) => {
+          opencode.push(distro)
+          return "/home/me/.opencode/bin/opencode2"
+        },
+      }),
+    ),
   )
 
   const task = controller.probeAddable(["Debian", "Ubuntu"])
@@ -113,21 +151,23 @@ test("probes addable distros in parallel before checking OpenCode", async () => 
 test("does not check OpenCode in addable distros that cannot execute commands", async () => {
   persistedServers = []
   const opencode: string[] = []
-  const controller = createWslServersController(
-    testControllerOptions({
-      spawnSidecar: pendingSidecar,
-      probeDistro: async (distro) => ({
-        name: distro,
-        canExecute: distro === "Debian",
-        hasBash: distro === "Debian",
-        hasCurl: distro === "Debian",
-        error: distro === "Debian" ? null : "Open Ubuntu once to finish setup",
+  const controller = await Effect.runPromise(
+    createWslServersController(
+      testControllerOptions({
+        spawnSidecar: pendingSidecar,
+        probeDistro: async (distro) => ({
+          name: distro,
+          canExecute: distro === "Debian",
+          hasBash: distro === "Debian",
+          hasCurl: distro === "Debian",
+          error: distro === "Debian" ? null : "Open Ubuntu once to finish setup",
+        }),
+        resolveCli: async (distro) => {
+          opencode.push(distro)
+          return "/home/me/.opencode/bin/opencode2"
+        },
       }),
-      resolveCli: async (distro) => {
-        opencode.push(distro)
-        return "/home/me/.opencode/bin/opencode2"
-      },
-    }),
+    ),
   )
 
   await controller.probeAddable(["Debian", "Ubuntu"])
@@ -148,6 +188,8 @@ async function waitFor(check: () => boolean) {
 function testControllerOptions(overrides: Partial<ControllerOptions> = {}): ControllerOptions {
   return {
     cli: { version: "0.0.0-dev-16365" },
+    installCli: async () => undefined,
+    installDistro: async () => undefined,
     spawnSidecar: async () => ({
       stop: async () => undefined,
       onExit: () => undefined,

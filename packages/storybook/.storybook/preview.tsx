@@ -1,6 +1,4 @@
-import "@opencode-ai/ui/styles/tailwind"
-import "@opencode-ai/session-ui/styles"
-import "@opencode-ai/ui/styles/tokens"
+import "../../app/src/index.css"
 
 import { createEffect, onCleanup, onMount } from "solid-js"
 import addonA11y from "@storybook/addon-a11y"
@@ -13,7 +11,7 @@ import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { ThemeProvider, useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { Font } from "@opencode-ai/ui/font"
-import { LanguageProvider, UiI18nBridge, useLanguage } from "../../app/src/context/language"
+import { LanguageProvider, UiI18nBridge, useLanguage } from "@/runtime/i18n/language"
 
 function resolveScheme(value: unknown): ColorScheme {
   if (value === "light" || value === "dark" || value === "system") return value

@@ -52,6 +52,7 @@ export function mapV2Foreground(
     "v2-text-text-faint": shift(body, { l: isDark ? -0.2 : 0.21, c: isDark ? 0.78 : 0.72 }),
     "v2-icon-icon-base": greyRef(pickGrey(primitives, bgBase, 7, isDark ? 400 : 800)),
     "v2-icon-icon-muted": greyRef(pickGrey(primitives, bgBase, 3, 600)),
+    "v2-icon-icon-faint": greyRef(pickGrey(primitives, bgBase, 1.5, 500)),
     "v2-icon-icon-inverse": greyRef(pickGrey(primitives, bgInverse, 7, inverseTarget)),
     "v2-icon-icon-contrast": greyRef(pickGrey(primitives, bgContrast, 7, 100)),
     "v2-icon-icon-accent": isDark ? "var(--v2-blue-400)" : "var(--v2-blue-600)",

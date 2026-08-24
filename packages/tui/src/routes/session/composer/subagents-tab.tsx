@@ -63,10 +63,7 @@ export function SubagentsTab(props: { sessionID: string }) {
   let wasActive = false
   let scroll: ScrollBoxRenderable | undefined
 
-  const selected = createMemo(() => {
-    return store.selected
-  })
-  const selectedEntry = createMemo(() => entries()[selected()])
+  const selectedEntry = createMemo(() => entries()[store.selected])
 
   createEffect(() => {
     const active = composer.active("subagents")
@@ -95,11 +92,7 @@ export function SubagentsTab(props: { sessionID: string }) {
 
   function moveTo(next: number, center = false) {
     setStore("selected", next)
-    scrollToSelection(center)
-  }
-
-  function scrollToSelection(center: boolean) {
-    scrollToIndex(selected(), center)
+    scrollToIndex(next, center)
   }
 
   function scrollToIndex(index: number, center: boolean) {
@@ -209,7 +202,7 @@ export function SubagentsTab(props: { sessionID: string }) {
         >
           <For each={entries()}>
             {(entry, index) => {
-              const active = createMemo(() => index() === selected())
+              const active = createMemo(() => index() === store.selected)
               const status = createMemo(() => {
                 if (entry.status === "running") return "Running"
                 return ""

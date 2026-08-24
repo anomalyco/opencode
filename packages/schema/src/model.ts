@@ -64,6 +64,7 @@ export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
+  responsesWebsockets: Schema.Boolean.pipe(optional),
 }).annotate({ identifier: "Model.Capabilities" })
 
 export interface Cost extends Schema.Schema.Type<typeof Cost> {}

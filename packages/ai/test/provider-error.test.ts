@@ -82,6 +82,14 @@ describe("provider error classification", () => {
     ])
   })
 
+  test("classifies network error text as provider internal", () => {
+    expect(
+      ["network error", "network-error", "network_error"].map(
+        (message) => classifyProviderFailure({ message })._tag,
+      ),
+    ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
+  })
+
   test("classifies nested provider codes when a top-level code is also present", () => {
     expect(
       [
@@ -96,5 +104,22 @@ describe("provider error classification", () => {
     expect(classifyProviderFailure({ message: '{"error":{"message":"no_kv_space"}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: '{"type":"error","error":{"code":123}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: "not-json" })._tag).toBe("UnknownProvider")
+  })
+})
+
+describe("provider error rawBody classification", () => {
+  test("classifies overflow signals buried in the raw payload when the summary is vague", () => {
+    const reason = classifyProviderFailure({
+      message: "Request failed",
+      rawBody: '{"error":{"message":"This model\'s maximum context length is 40960 tokens"}}',
+    })
+    expect(reason._tag).toBe("InvalidRequest")
+    expect(reason).toMatchObject({ classification: "context-overflow" })
+  })
+
+  test("extracts nested codes from the raw payload", () => {
+    expect(
+      classifyProviderFailure({ message: "Request failed", rawBody: '{"error":{"code":"insufficient_quota"}}' })._tag,
+    ).toBe("QuotaExceeded")
   })
 })

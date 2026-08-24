@@ -10,7 +10,7 @@ export const parseResponse = <F extends Schema.Struct.Fields>(body: string, resu
   const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ result })))
   const parse = (payload: string) => {
     const trimmed = payload.trim()
-    if (!trimmed.startsWith("{")) return Effect.succeed(undefined)
+    if (!trimmed.startsWith("{")) return Effect.undefined
     return decode(trimmed).pipe(Effect.map((response) => response.result))
   }
   return Effect.gen(function* () {
@@ -45,9 +45,9 @@ export const call = <F extends Schema.Struct.Fields, R extends Schema.Struct.Fie
           params: Schema.Struct({ name: Schema.String, arguments: schema.input }),
         }),
       )({
-        jsonrpc: "2.0" as const,
-        id: 1 as const,
-        method: "tools/call" as const,
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
         params: { name: tool, arguments: value },
       }),
     )

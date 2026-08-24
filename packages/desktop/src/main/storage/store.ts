@@ -1,7 +1,6 @@
 import Store from "electron-store"
 import electron from "electron"
-import { rmSync } from "node:fs"
-import { join } from "node:path"
+import { Effect } from "effect"
 
 import { deleteStoreFileIfEmpty } from "./cleanup"
 import { SETTINGS_STORE } from "./keys"
@@ -25,11 +24,10 @@ export function getStore(name = SETTINGS_STORE) {
   return next
 }
 
-export async function removeStoreFileIfEmpty(name: string) {
-  if (await deleteStoreFileIfEmpty(electron.app.getPath("userData"), name)) cache.delete(name)
-}
+export const removeStoreFileIfEmpty = Effect.fn("DesktopStorage.removeStoreFileIfEmpty")(function* (name: string) {
+  if (yield* deleteStoreFileIfEmpty(electron.app.getPath("userData"), name)) cache.delete(name)
+})
 
-export function removeStoreFile(name: string) {
-  rmSync(join(electron.app.getPath("userData"), name), { force: true })
+export function forgetStore(name: string) {
   cache.delete(name)
 }

@@ -10,3 +10,10 @@
 - Translate whole UI phrases in context rather than substituting glossary words. Audit recurring concepts for consistency and review every exact-English value; retain it only when it is an intentional product/provider/tool name, URL, code token, keyboard legend, acronym, asset name, or established borrowing.
 - Record the corpora used and flag uncertain or regional terminology in review notes.
 - Also use the relevant language authority or official dictionary for the locale (for example RAE/Fundéu, FranceTerme, Duden, TDK, Kotus/Kielitoimiston sanakirja, Språkrådet/Bokmålsordboka, Rada Języka Polskiego/PWN, the Russian and Arabic language academies, the Ukrainian Orthography, Taiwan MOE dictionaries, or the Royal Society of Thailand). Treat the English dictionary as the semantic source of truth and preserve placeholders, code identifiers, product names, and keyboard labels.
+
+## Typography
+
+- Use the shared typography metrics instead of copying solid line heights from design exports: `--line-height-tight` is `12px`, `--line-height-compact` is `16px`, and `--line-height-base` is `20px`.
+- Inter text at `13px` must use at least the compact `16px` line height. A `13px` solid line box can clip `g`, `j`, `p`, `q`, and `y` when the text or an ancestor truncates or hides overflow.
+- Reserve `line-height: 1` and `leading-none` for non-text glyphs, icons, or deliberately reviewed display marks. Do not compensate text with transforms, negative margins, or clip-padding hacks.
+- `TextShimmer` inherits font metrics. Put typography overrides on its parent when they must supersede the component defaults.

@@ -52,6 +52,53 @@ it.live("serves unauthenticated and answers CORS preflight when no password is c
   }).pipe(Effect.scoped),
 )
 
+it.live("serves the session view operation and missing-session error", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make(options)
+    const created = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        }),
+      ).then((response) => response.json()),
+    )
+    if (typeof created !== "object" || created === null || !("data" in created))
+      return yield* Effect.die(new Error("Expected a session response"))
+    const data = created.data
+    if (typeof data !== "object" || data === null || !("id" in data) || typeof data.id !== "string")
+      return yield* Effect.die(new Error("Expected a session ID"))
+
+    const viewed = yield* Effect.promise(() =>
+      handler(
+        new Request(`http://opencode.local/api/session/${data.id}/view`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ idle: 0 }),
+        }),
+      ),
+    )
+    expect(viewed.status).toBe(204)
+
+    const invalid = yield* Effect.promise(() =>
+      handler(new Request(`http://opencode.local/api/session/${data.id}/view`, { method: "POST" })),
+    )
+    expect(invalid.status).toBe(400)
+
+    const missing = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/session/ses_missing_view/view", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ idle: 0 }),
+        }),
+      ),
+    )
+    expect(missing.status).toBe(404)
+  }).pipe(Effect.scoped),
+)
+
 // Pins the eager-boot guarantee: the application layer is built before the handler returns, so
 // an aborted first request cannot interrupt layer construction and wedge every later request
 // (the Effect-TS/effect#6319 failure class that lazy first-request builds are prone to).

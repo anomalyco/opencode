@@ -57,4 +57,4 @@ export function useServerSDK() {
     client,
   }
 }
-import { ServerScope } from "@/utils/server-scope"
+import { ServerScope } from "@/runtime/server/scope"

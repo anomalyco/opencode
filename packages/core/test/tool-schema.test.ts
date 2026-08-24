@@ -47,7 +47,7 @@ test("Effect tool schemas use exact optional keys and flatten compatible constra
     type: "object",
     properties: {
       offset: { type: "integer", minimum: 0 },
-      code: { type: "string", allOf: [{ pattern: "^a" }, { pattern: "z$" }] },
+      code: { type: "string", pattern: "^a", allOf: [{ pattern: "z$" }] },
     },
     required: ["code"],
     additionalProperties: false,

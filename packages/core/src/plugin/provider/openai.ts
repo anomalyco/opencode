@@ -175,7 +175,7 @@ export const OpenAIPlugin = define({
     const load = Effect.fn("OpenAIPlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("openai")
       const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
       chatgpt =
         credential?.type === "oauth" &&
@@ -190,9 +190,14 @@ export const OpenAIPlugin = define({
     })
     yield* load()
     yield* ctx.catalog.transform((evt) => {
-      if (!chatgpt) return
       const item = evt.provider.get(Provider.ID.openai)
       if (!item) return
+      for (const model of item.models.values()) {
+        evt.model.update(item.provider.id, model.id, (draft) => {
+          draft.capabilities.responsesWebsockets = true
+        })
+      }
+      if (!chatgpt) return
       item.provider.settings = Provider.mergeOverlay(item.provider.settings, { baseURL: codexBaseURL })
       const account = chatgpt.metadata?.accountID
       item.provider.headers = Provider.mergeHeaders(item.provider.headers, {

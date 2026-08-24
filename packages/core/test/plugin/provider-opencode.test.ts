@@ -105,7 +105,7 @@ describe("OpencodePlugin", () => {
               return Response.json({
                 device_code: "device",
                 user_code: "user",
-                verification_uri_complete: `${url.origin}/verify`,
+                verification_uri_complete: "/console/device?user_code=user&client_id=opencode-cli",
                 expires_in: 60,
                 interval: 0,
               })
@@ -130,7 +130,7 @@ describe("OpencodePlugin", () => {
             methodID: Integration.MethodID.make("device"),
             answer: { server: `${server.url.origin}/console///?ignored=true#ignored` },
           })
-          expect(attempt.url).toBe(`${server.url.origin}/verify`)
+          expect(attempt.url).toBe(`${server.url.origin}/console/device?user_code=user&client_id=opencode-cli`)
           yield* eventually(
             integrations.oauth.status({ integrationID, attemptID: attempt.attemptID }),
             (status) => status.status === "complete",
@@ -145,6 +145,38 @@ describe("OpencodePlugin", () => {
           })
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("rejects malformed device verification URLs", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: () =>
+            Response.json({
+              device_code: "device",
+              user_code: "user",
+              verification_uri_complete: "http://[::1",
+              expires_in: 60,
+              interval: 0,
+            }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          yield* addPlugin()
+          const error = yield* (yield* Integration.Service).oauth
+            .connect({
+              integrationID: Integration.ID.make("opencode"),
+              methodID: Integration.MethodID.make("device"),
+              answer: { server: server.url.origin },
+            })
+            .pipe(Effect.flip)
+          expect(error).toBeInstanceOf(Integration.AuthorizationError)
+          expect(String(error.cause)).toContain("Invalid device verification URL")
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
     ),
   )
 
@@ -500,32 +532,5 @@ describe("OpencodePlugin", () => {
         expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("paid"))).enabled).toBe(true)
       }),
     ),
-  )
-
-  it.effect("prefers gpt-5-nano as the opencode small model", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      const providerID = Provider.ID.opencode
-
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(providerID, () => {})
-        catalog.model.update(providerID, Model.ID.make("cheap-mini"), (model) => {
-          model.capabilities.input = ["text"]
-          model.capabilities.output = ["text"]
-          model.cost = [...cost(1, 1)]
-          model.time.released = Date.now()
-        })
-        catalog.model.update(providerID, Model.ID.make("gpt-5-nano"), (model) => {
-          model.capabilities.input = ["text"]
-          model.capabilities.output = ["text"]
-          model.cost = [...cost(10, 10)]
-          model.time.released = Date.now()
-        })
-      })
-
-      const selected = yield* catalog.model.small(providerID)
-
-      expect(selected?.id).toBe(Model.ID.make("gpt-5-nano"))
-    }),
   )
 })

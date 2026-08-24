@@ -24,6 +24,17 @@ export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
 
+export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
+
+// OpenAI limits `prompt_cache_key` to 64 chars; DeepSeek and Zai inherit the same
+// limit via their OpenAI-compatible APIs. Clamp with unicode-aware slicing.
+export const clampPromptCacheKey = (key: string | undefined): string | undefined => {
+  if (key === undefined) return undefined
+  const chars = Array.from(key)
+  if (chars.length <= OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH) return key
+  return chars.slice(0, OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH).join("")
+}
+
 /**
  * Streaming tool-call accumulator. Adapters that build a tool call across
  * multiple `tool-input-delta` chunks store the partial JSON input string here
@@ -197,19 +208,28 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, and drops empty / `[DONE]` keep-alive events so the protocol event
- * schema sees one JSON string per element. The SSE channel emits a
+ * decoder, optionally filters named events, and drops empty / `[DONE]`
+ * keep-alive events so the protocol event schema sees one JSON string per
+ * element. The SSE channel emits a
  * `Retry` control event on its error channel; we drop it here (we don't
  * implement client-driven retries). Decoder failures become provider output
  * errors so the public error channel stays `AIError`.
  */
-export const sseFraming = (bytes: Stream.Stream<Uint8Array, AIError>): Stream.Stream<string, AIError> =>
+export const sseFraming = (
+  bytes: Stream.Stream<Uint8Array, AIError>,
+  events?: ReadonlySet<string>,
+): Stream.Stream<string, AIError> =>
   bytes.pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode()),
     Stream.catchTag("Retry", () => Stream.empty),
     Stream.catchTag("SseError", (error) => Stream.fail(eventError("sse", error.message))),
-    Stream.filter((event) => event.data.length > 0 && event.data !== "[DONE]"),
+    Stream.filter(
+      (event) =>
+        (events === undefined || events.has(event.event)) &&
+        event.data.length > 0 &&
+        (event.data !== "[DONE]" || (events !== undefined && event.event !== "message")),
+    ),
     Stream.map((event) => event.data),
   )
 

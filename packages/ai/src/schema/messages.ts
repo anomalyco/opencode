@@ -51,6 +51,7 @@ export const MediaPart = Schema.Struct({
   mediaType: Schema.String,
   data: Schema.Union([Schema.String, Schema.Uint8Array]),
   filename: Schema.optional(Schema.String),
+  cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
@@ -255,6 +256,7 @@ export namespace ToolDefinition {
 export class ToolChoice extends Schema.Class<ToolChoice>("LLM.ToolChoice")({
   type: Schema.Literals(["auto", "none", "required", "tool"]),
   name: Schema.optional(Schema.String),
+  disableParallelToolUse: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace ToolChoice {

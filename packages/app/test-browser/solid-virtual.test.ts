@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createVirtualizer, defaultRangeExtractor, Virtualizer } from "@tanstack/solid-virtual"
 import { createRoot, createSignal } from "solid-js"
-import { filterVirtualIndexes } from "@/pages/session/timeline/virtual-items"
+import { filterVirtualIndexes } from "@/session/timeline/virtual-items"
 
 test("end anchoring survives consecutive resizes when the first scroll write is clamped", () => {
   const writes: { offset: number; adjustments?: number }[] = []
@@ -25,6 +25,68 @@ test("end anchoring survives consecutive resizes when the first scroll write is 
 
   virtualizer.resizeItem(4, 200)
   expect(writes).toEqual([{ offset: 120, adjustments: 80 }])
+})
+
+test("start anchoring preserves a stable visible item across prepends", () => {
+  const root = document.createElement("div")
+  const writes: number[] = []
+  const options = (keys: string[]) => ({
+    count: keys.length,
+    estimateSize: () => 50,
+    initialOffset: 50,
+    initialRect: { width: 400, height: 100 },
+    anchorTo: "start" as const,
+    getItemKey: (index: number) => keys[index]!,
+    getScrollElement: () => root,
+    scrollToFn: (offset: number) => writes.push(offset),
+    observeElementRect: () => {},
+    observeElementOffset: (_element: HTMLDivElement, callback: (offset: number, isScrolling: boolean) => void) => {
+      callback(50, false)
+    },
+  })
+  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options(["c", "d", "e"]))
+  virtualizer._willUpdate()
+  virtualizer.getVirtualItems()
+
+  virtualizer.setOptions(options(["a", "b", "c", "d", "e"]))
+  virtualizer._willUpdate()
+
+  expect(virtualizer.getScrollOffset()).toBe(150)
+  expect(writes.at(-1)).toBe(150)
+})
+
+// A pagination boundary can re-key the row at the viewport top when the truncated
+// leading turn regroups under its freshly loaded user message. The anchor must fall
+// back to the next surviving key instead of leaving the offset on the new content.
+test("prepend anchoring survives when the nearest keys are re-keyed", () => {
+  const root = document.createElement("div")
+  const writes: number[] = []
+  const options = (keys: string[]) => ({
+    count: keys.length,
+    estimateSize: () => 50,
+    initialOffset: 50,
+    initialRect: { width: 400, height: 100 },
+    anchorTo: "start" as const,
+    getItemKey: (index: number) => keys[index]!,
+    getScrollElement: () => root,
+    scrollToFn: (offset: number) => writes.push(offset),
+    observeElementRect: () => {},
+    observeElementOffset: (_element: HTMLDivElement, callback: (offset: number, isScrolling: boolean) => void) => {
+      callback(50, false)
+    },
+  })
+  // Viewport sits at offset 50: rows "orphan-c" (anchor) and "d" visible.
+  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options(["orphan-c", "d", "e"]))
+  virtualizer._willUpdate()
+  virtualizer.getVirtualItems()
+
+  // Prepend re-keys the boundary row ("orphan-c" -> "c") while "d" and "e" survive.
+  virtualizer.setOptions(options(["a", "b", "c", "d", "e"]))
+  virtualizer._willUpdate()
+
+  // "d" was 50px below the anchor at old start 50; restored at new start 150 => offset 150.
+  expect(virtualizer.getScrollOffset()).toBe(150)
+  expect(writes.at(-1)).toBe(150)
 })
 
 test("reactive count updates preserve measured row sizes", () => {

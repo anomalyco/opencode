@@ -21,8 +21,18 @@ export interface Adapter {
   readonly appendMessage: (message: SessionMessage.Info) => Effect.Effect<void, never, never>
 }
 
+type DraftAssistant = WritableDraft<SessionMessage.Assistant>
+
+const projectTerminalSnapshot = (draft: DraftAssistant, event: SessionEvent.Step.Ended | SessionEvent.Step.Failed) => {
+  if (event.data.snapshot || event.data.files)
+    draft.snapshot = {
+      ...draft.snapshot,
+      end: event.data.snapshot,
+      files: event.data.files ? Array.from(event.data.files) : undefined,
+    }
+}
+
 export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
-  type DraftAssistant = WritableDraft<SessionMessage.Assistant>
   type DraftTool = WritableDraft<SessionMessage.AssistantTool>
   type DraftText = WritableDraft<SessionMessage.AssistantText>
   type DraftReasoning = WritableDraft<SessionMessage.AssistantReasoning>
@@ -42,27 +52,28 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
   const updateOwnedAssistant = (messageID: SessionMessage.ID, recipe: (draft: DraftAssistant) => void) =>
     Effect.gen(function* () {
       const assistant = yield* adapter.getAssistant(messageID)
-      if (assistant) yield* adapter.updateAssistant(produce(assistant, recipe))
+      if (!assistant) return
+      yield* adapter.updateAssistant(produce(assistant, recipe))
     })
 
   const clearCurrentRetry = Effect.gen(function* () {
     const assistant = yield* adapter.getCurrentAssistant()
-    if (assistant?.retry) {
-      yield* adapter.updateAssistant(
-        produce(assistant, (draft) => {
-          draft.retry = undefined
-        }),
-      )
-    }
+    if (!assistant?.retry) return
+    yield* adapter.updateAssistant(
+      produce(assistant, (draft) => {
+        draft.retry = undefined
+      }),
+    )
   })
 
   const project = pipe(
     Match.type<SessionEvent.DurableEvent>(),
     Match.discriminatorsExhaustive("type")({
       "session.created": () => Effect.void,
+      "session.viewed": () => Effect.void,
       "session.usage.recorded": () => Effect.void,
-      "session.agent.selected": (event) => {
-        return Effect.gen(function* () {
+      "session.agent.selected": (event) =>
+        Effect.gen(function* () {
           const previous = event.data.previous ?? (yield* adapter.getAgent())
           yield* adapter.appendMessage(
             SessionMessage.AgentSelected.make({
@@ -74,10 +85,9 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               time: { created },
             }),
           )
-        })
-      },
-      "session.model.selected": (event) => {
-        return Effect.gen(function* () {
+        }),
+      "session.model.selected": (event) =>
+        Effect.gen(function* () {
           const previous = event.data.previous ?? (yield* adapter.getModel())
           yield* adapter.appendMessage(
             SessionMessage.ModelSelected.make({
@@ -89,10 +99,9 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               time: { created },
             }),
           )
-        })
-      },
-      "session.moved": (event) => {
-        return Effect.gen(function* () {
+        }),
+      "session.moved": (event) =>
+        Effect.gen(function* () {
           yield* adapter.appendMessage(
             SessionMessage.LocationSwitched.make({
               id: SessionMessage.ID.fromEvent(event.id),
@@ -105,8 +114,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               time: { created },
             }),
           )
-        })
-      },
+        }),
       "session.renamed": () => Effect.void,
       "session.deleted": () => Effect.void,
       "session.forked": () => Effect.void,
@@ -169,8 +177,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           }),
         )
       },
-      "session.shell.ended": (event) => {
-        return Effect.gen(function* () {
+      "session.shell.ended": (event) =>
+        Effect.gen(function* () {
           const currentShell = yield* adapter.getShell(event.data.shell.id)
           if (currentShell) {
             yield* adapter.updateShell(
@@ -182,10 +190,9 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               }),
             )
           }
-        })
-      },
-      "session.step.started": (event) => {
-        return Effect.gen(function* () {
+        }),
+      "session.step.started": (event) =>
+        Effect.gen(function* () {
           const existing = yield* adapter.getAssistant(event.data.assistantMessageID)
           if (existing) {
             yield* adapter.updateAssistant(
@@ -224,8 +231,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
             }),
           )
-        })
-      },
+        }),
       "session.step.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.time.completed = created
@@ -234,12 +240,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           draft.providerState = castDraft(event.data.providerState)
           draft.cost = event.data.cost
           draft.tokens = event.data.tokens
-          if (event.data.snapshot || event.data.files)
-            draft.snapshot = {
-              ...draft.snapshot,
-              end: event.data.snapshot,
-              files: event.data.files ? Array.from(event.data.files) : undefined,
-            }
+          projectTerminalSnapshot(draft, event)
         })
       },
       "session.step.failed": (event) => {
@@ -254,12 +255,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             draft.cost = event.data.cost
             draft.tokens = castDraft(event.data.tokens)
           }
-          if (event.data.snapshot || event.data.files)
-            draft.snapshot = {
-              ...draft.snapshot,
-              end: event.data.snapshot,
-              files: event.data.files ? Array.from(event.data.files) : undefined,
-            }
+          projectTerminalSnapshot(draft, event)
         })
       },
       "session.text.started": (event) => {
@@ -399,8 +395,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             time: { created },
           }),
         ),
-      "session.compaction.ended": (event) => {
-        return Effect.gen(function* () {
+      "session.compaction.ended": (event) =>
+        Effect.gen(function* () {
           const current = yield* adapter.getCompaction()
           if (current?.status === "running") {
             yield* adapter.updateCompaction({
@@ -424,8 +420,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               time: { created },
             }),
           )
-        })
-      },
+        }),
       "session.compaction.failed": (event) =>
         Effect.gen(function* () {
           const current = yield* adapter.getCompaction()

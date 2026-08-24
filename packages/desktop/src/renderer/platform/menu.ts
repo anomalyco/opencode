@@ -1,5 +1,5 @@
-import type { Platform } from "@opencode-ai/app"
-import type { ElectronAPI } from "../../preload/types"
+import type { Platform } from "@opencode-ai/app/desktop"
+import type { ElectronAPI } from "../api-types"
 import { resetZoom, zoomIn, zoomOut } from "../window/zoom"
 
 let trigger: ((id: string) => void) | null = null

@@ -54,17 +54,29 @@ describe("contract hygiene", () => {
       }),
     ).toEqual({ text: "completed" })
 
+    const info = Session.Info.make({
+      id: Session.ID.make("ses_untitled"),
+      projectID: Project.ID.make("global"),
+      cost: Money.USD.zero,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: {
+        created: DateTime.makeUnsafe(0),
+        updated: DateTime.makeUnsafe(0),
+        idle: undefined,
+        viewed: undefined,
+      },
+      title: undefined,
+      location: { directory: AbsolutePath.make("/project") },
+    })
+    const encoded = Schema.encodeSync(Session.Info)(info)
+    expect(encoded).not.toHaveProperty("title")
+    expect(encoded.time).toEqual({ created: 0, updated: 0 })
     expect(
       Schema.encodeSync(Session.Info)({
-        id: Session.ID.make("ses_untitled"),
-        projectID: Project.ID.make("global"),
-        cost: Money.USD.zero,
-        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
-        title: undefined,
-        location: { directory: AbsolutePath.make("/project") },
-      }),
-    ).not.toHaveProperty("title")
+        ...info,
+        time: { ...info.time, idle: DateTime.makeUnsafe(2), viewed: DateTime.makeUnsafe(1) },
+      }).time,
+    ).toEqual({ created: 0, updated: 0, idle: 2, viewed: 1 })
   })
 
   test("session inbox items omit the internal enqueue sequence", () => {

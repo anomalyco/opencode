@@ -108,6 +108,8 @@ import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
+import { isRecord } from "../../util/record"
+import { createHistoryPrepend } from "./history"
 
 addDefaultParsers(parsers.parsers)
 
@@ -121,10 +123,16 @@ const TRANSCRIPT_BACKFILL_CHUNK = 60
 type PendingAction = "steer" | "queue" | "cancel"
 
 const context = createContext<{
+  /** Content width: terminal width minus vertical tabs, sidebar, and padding. */
   width: number
+  /**
+   * Shared reactive terminal size. Transcript-row components must read this
+   * instead of calling useTerminalDimensions(), which registers one renderer
+   * resize listener per mounted component and grows with transcript length.
+   */
+  terminal: { width: number; height: number }
   sessionID: string
   thinkingMode: () => ThinkingMode
-  showThinking: () => boolean
   markdownMode: () => "source" | "rendered"
   groupExploration: () => boolean
   diffWrapMode: () => "word" | "none"
@@ -221,7 +229,6 @@ export function Session(props: { verticalTabsWidth: number }) {
   const sidebar = createMemo(() => config.session?.sidebar ?? "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
-  const showThinking = createMemo(() => true)
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
@@ -377,17 +384,23 @@ export function Session(props: { verticalTabsWidth: number }) {
   const hidden = createMemo(() => Math.max(0, Math.min(hiddenRows() ?? Infinity, rows.length - TRANSCRIPT_TAIL_ROWS)))
   const visibleEnd = createMemo(() => Math.max(hidden(), Math.min(visibleRowsEnd() ?? rows.length, rows.length)))
   const visibleRows = createMemo(() => rows.slice(hidden(), visibleEnd()))
+  const prependHistory = createHistoryPrepend({
+    sessionID: () => route.sessionID,
+    more: (id) => data.session.message.more(id),
+    loadMore: (id) => data.session.message.loadMore(id),
+    height: () => scroll.scrollHeight,
+    afterLayout,
+    active: (id) => route.sessionID === id && Boolean(scroll && !scroll.isDestroyed),
+    scrollBy: (amount) => {
+      scroll.scrollBy(amount)
+      updateAwayFromBottom()
+    },
+  })
   let revealingOlderRows = false
   const revealOlderRows = (scrollBy = 0) => {
     const current = hidden()
-    if (
-      revealingOlderRows ||
-      current === 0 ||
-      !scroll ||
-      scroll.isDestroyed ||
-      scroll.scrollTop > scroll.viewport.height
-    )
-      return false
+    if (revealingOlderRows || !scroll || scroll.isDestroyed || scroll.scrollTop > scroll.viewport.height) return false
+    if (current === 0) return prependHistory(scrollBy)
     revealingOlderRows = true
     const before = scroll.scrollHeight
     setHiddenRows(Math.max(0, current - TRANSCRIPT_BACKFILL_CHUNK))
@@ -588,7 +601,15 @@ export function Session(props: { verticalTabsWidth: number }) {
         userOnly,
       })
 
-      if (target) alignMessage(target.id, target.top)
+      if (target) {
+        alignMessage(target.id, target.top)
+        dialog.clear()
+        return
+      }
+      if (direction === "prev" && data.session.message.more(route.sessionID)) {
+        prependHistory(0, () => scrollToMessage(direction, dialog, userOnly))
+        return
+      }
       dialog.clear()
     })
 
@@ -684,10 +705,17 @@ export function Session(props: { verticalTabsWidth: number }) {
       palette: undefined,
       run: () => {
         clearMessageNavigation()
-        ensureAllRows(() => {
-          scroll.scrollTo(0)
-          updateAwayFromBottom()
-        })
+        const first = () => {
+          if (data.session.message.more(route.sessionID)) {
+            prependHistory(0, first)
+            return
+          }
+          ensureAllRows(() => {
+            scroll.scrollTo(0)
+            updateAwayFromBottom()
+          })
+        }
+        first()
         dialog.clear()
       },
     },
@@ -989,7 +1017,7 @@ export function Session(props: { verticalTabsWidth: number }) {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const transcript = formatSessionTranscript(sessionData, messages(), showThinking())
+          const transcript = formatSessionTranscript(sessionData, messages(), true)
           await clipboard.write(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         } catch {
@@ -1010,7 +1038,7 @@ export function Session(props: { verticalTabsWidth: number }) {
           const sessionData = session()
           if (!sessionData) return
 
-          const options = await DialogExportOptions.show(dialog, showThinking())
+          const options = await DialogExportOptions.show(dialog, true)
 
           if (options === null) return
 
@@ -1124,15 +1152,27 @@ export function Session(props: { verticalTabsWidth: number }) {
     ),
   )
 
+  // Memoized per axis so width readers do not re-run on height-only resizes
+  // (dimensions() is one object signal with identity equality) and vice versa.
+  const terminalWidth = createMemo(() => dimensions().width)
+  const terminalHeight = createMemo(() => dimensions().height)
+
   return (
     <context.Provider
       value={{
         get width() {
           return contentWidth()
         },
+        terminal: {
+          get width() {
+            return terminalWidth()
+          },
+          get height() {
+            return terminalHeight()
+          },
+        },
         sessionID: route.sessionID,
         thinkingMode,
-        showThinking,
         markdownMode,
         groupExploration,
         diffWrapMode,
@@ -1805,7 +1845,6 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const ctx = use()
   const data = useData()
   const local = useLocal()
-  const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
   const model = createMemo(
     () =>
@@ -1829,10 +1868,10 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <span style={{ fg: props.message.error ? theme.text.subdued : local.agent.color(props.message.agent) }}>
             {Locale.titlecase(props.message.agent)}
           </span>
-          <Show when={dimensions().width >= 28}>
+          <Show when={ctx.terminal.width >= 28}>
             <span style={{ fg: theme.text.subdued }}> · {model()}</span>
           </Show>
-          <Show when={duration() && (dimensions().width < 28 || dimensions().width >= 36)}>
+          <Show when={duration() && (ctx.terminal.width < 28 || ctx.terminal.width >= 36)}>
             <span style={{ fg: theme.text.subdued }}> · {Locale.duration(duration())}</span>
           </Show>
           <Show when={interrupted()}>
@@ -2521,9 +2560,8 @@ function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
 function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?: number }) {
   const ctx = use()
   const dialog = useDialog()
-  const dimensions = useTerminalDimensions()
   const images = createMemo(() => (ctx.config.session?.image_preview ? props.images : []))
-  const height = createMemo(() => Math.max(4, Math.min(8, Math.floor(dimensions().height / 4))))
+  const height = createMemo(() => Math.max(4, Math.min(8, Math.floor(ctx.terminal.height / 4))))
   const visible = createMemo(() => images().slice(0, 3))
 
   return (
@@ -3606,8 +3644,7 @@ export function toolDisplay(tool: string) {
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return
-  return value as Record<string, unknown>
+  return isRecord(value) ? value : undefined
 }
 
 function formatSessionTranscript(session: SessionInfo, messages: SessionMessageInfo[], thinking: boolean) {

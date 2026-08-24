@@ -42,8 +42,7 @@ export { createID as create }
 export function timestamp(id: string): number {
   const prefix = id.split("_")[0]
   const hex = id.slice(prefix.length + 1, prefix.length + 13)
-  const encoded = BigInt("0x" + hex)
-  return Number(encoded / BigInt(0x1000))
+  return Number(BigInt(`0x${hex}`) / 0x1000n)
 }
 
 export * as Identifier from "./id.js"

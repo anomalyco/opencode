@@ -309,7 +309,7 @@ describe("ModelResolver", () => {
     })
     const integrations = Layer.mock(Integration.Service, {
       connection: {
-        active: () => Effect.succeed(undefined),
+        active: () => Effect.undefined,
         resolve: () => Effect.die("unused"),
         key: () => Effect.die("unused"),
         update: () => Effect.die("unused"),
