@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/enterprise",
+  "name": "@pencode-ai/enterprise",
   "version": "1.18.22",
   "private": true,
   "type": "module",
@@ -8,14 +8,14 @@
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev",
     "build": "vite build",
-    "build:cloudflare": "OPENCODE_DEPLOYMENT_TARGET=cloudflare vite build",
+    "build:cloudflare": "PENCODE_DEPLOYMENT_TARGET=cloudflare vite build",
     "start": "vite start",
     "shell-prod": "sst shell --target Teams --stage production"
   },
   "dependencies": {
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/session-ui": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@pencode-ai/core": "workspace:*",
+    "@pencode-ai/session-ui": "workspace:*",
+    "@pencode-ai/ui": "workspace:*",
     "aws4fetch": "^1.0.20",
     "@pierre/diffs": "catalog:",
     "@solidjs/router": "catalog:",

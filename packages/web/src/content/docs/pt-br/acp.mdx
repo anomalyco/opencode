@@ -1,9 +1,9 @@
 ---
 title: Suporte ACP
-description: Use o opencode em qualquer editor compatível com ACP.
+description: Use o pencode em qualquer editor compatível com ACP.
 ---
 
-O opencode suporta o [Agent Client Protocol](https://agentclientprotocol.com) ou (ACP), permitindo que você o utilize diretamente em editores e IDEs compatíveis.
+O pencode suporta o [Agent Client Protocol](https://agentclientprotocol.com) ou (ACP), permitindo que você o utilize diretamente em editores e IDEs compatíveis.
 
 :::tip
 Para uma lista de editores e ferramentas que suportam ACP, confira o [relatório de progresso do ACP](https://zed.dev/blog/acp-progress-report#available-now).
@@ -15,9 +15,9 @@ O ACP é um protocolo aberto que padroniza a comunicação entre editores de có
 
 ## Configuração
 
-Para usar opencode via ACP, configure seu editor para executar o comando `opencode acp`.
+Para usar pencode via ACP, configure seu editor para executar o comando `pencode acp`.
 
-Este comando inicia o opencode como um subprocesso compatível com ACP que se comunica com seu editor via JSON-RPC através do stdio.
+Este comando inicia o pencode como um subprocesso compatível com ACP que se comunica com seu editor via JSON-RPC através do stdio.
 
 Abaixo estão exemplos para editores populares que suportam ACP.
 
@@ -25,16 +25,16 @@ Abaixo estão exemplos para editores populares que suportam ACP.
 
 ### Zed
 
-Instale o OpenCode pelo [Registro ACP do Zed](https://zed.dev/docs/ai/external-agents#registry) executando `zed: acp registry` na Paleta de Comandos.
+Instale o Pencode pelo [Registro ACP do Zed](https://zed.dev/docs/ai/external-agents#registry) executando `zed: acp registry` na Paleta de Comandos.
 
-Para usar um executável personalizado do OpenCode, adicione-o à configuração do [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+Para usar um executável personalizado do Pencode, adicione-o à configuração do [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "Pencode": {
       "type": "custom",
-      "command": "opencode",
+      "command": "pencode",
       "args": ["acp"]
     }
   }
@@ -54,9 +54,9 @@ Você também pode vincular um atalho de teclado editando seu `keymap.json`:
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "Pencode",
               "command": {
-                "command": "opencode",
+                "command": "pencode",
                 "args": ["acp"]
               }
             }
@@ -77,15 +77,15 @@ Adicione ao seu acp.json do [JetBrains IDE](https://www.jetbrains.com/) de acord
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "Pencode": {
+      "command": "/absolute/path/bin/pencode",
       "args": ["acp"]
     }
   }
 }
 ```
 
-Para abri-lo, use o novo agente 'opencode' no seletor de agentes do AI Chat.
+Para abri-lo, use o novo agente 'pencode' no seletor de agentes do AI Chat.
 
 ---
 
@@ -96,8 +96,8 @@ Adicione à sua configuração do [Avante.nvim](https://github.com/yetone/avante
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["pencode"] = {
+      command = "pencode",
       args = { "acp" }
     }
   }
@@ -109,11 +109,11 @@ Se você precisar passar variáveis de ambiente:
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["pencode"] = {
+      command = "pencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        PENCODE_API_KEY = os.getenv("PENCODE_API_KEY")
       }
     }
   }
@@ -124,14 +124,14 @@ Se você precisar passar variáveis de ambiente:
 
 ### CodeCompanion.nvim
 
-Para usar opencode como um agente ACP no [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), adicione o seguinte à sua configuração do Neovim:
+Para usar pencode como um agente ACP no [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), adicione o seguinte à sua configuração do Neovim:
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "pencode",
         model = "claude-sonnet-4",
       },
     },
@@ -139,13 +139,13 @@ require("codecompanion").setup({
 })
 ```
 
-Esta configuração configura o CodeCompanion para usar opencode como o agente ACP para chat.
+Esta configuração configura o CodeCompanion para usar pencode como o agente ACP para chat.
 
-Se você precisar passar variáveis de ambiente (como `OPENCODE_API_KEY`), consulte [Configurando Adaptadores: Variáveis de Ambiente](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) na documentação do CodeCompanion.nvim para detalhes completos.
+Se você precisar passar variáveis de ambiente (como `PENCODE_API_KEY`), consulte [Configurando Adaptadores: Variáveis de Ambiente](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) na documentação do CodeCompanion.nvim para detalhes completos.
 
 ## Suporte
 
-O opencode funciona da mesma forma via ACP como funciona no terminal. Todos os recursos são suportados:
+O pencode funciona da mesma forma via ACP como funciona no terminal. Todos os recursos são suportados:
 
 :::note
 Alguns comandos de barra integrados, como `/undo` e `/redo`, atualmente não são suportados.
@@ -153,7 +153,7 @@ Alguns comandos de barra integrados, como `/undo` e `/redo`, atualmente não sã
 
 - Ferramentas integradas (operações de arquivo, comandos de terminal, etc.)
 - Ferramentas personalizadas e comandos de barra
-- Servidores MCP configurados na sua configuração do opencode
+- Servidores MCP configurados na sua configuração do pencode
 - Regras específicas do projeto do `AGENTS.md`
 - Formatadores e linters personalizados
 - Sistema de agentes e permissões

@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: OpenCode CLI muligheder og kommandoer.
+description: Pencode CLI muligheder og kommandoer.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI starter som standard [TUI](/docs/tui), når den kører uden nogen argumenter.
+Pencode CLI starter som standard [TUI](/docs/tui), når den kører uden nogen argumenter.
 
 ```bash
-opencode
+pencode
 ```
 
-Men den accepterer også kommandoer som dokumenteret på denne side. Dette giver dig mulighed for at interagere med OpenCode programmatisk.
+Men den accepterer også kommandoer som dokumenteret på denne side. Dette giver dig mulighed for at interagere med Pencode programmatisk.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+pencode run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-Start OpenCode terminalbrugergrænsefladen.
+Start Pencode terminalbrugergrænsefladen.
 
 ```bash
-opencode [project]
+pencode [project]
 ```
 
 #### Flag
@@ -44,36 +44,36 @@ opencode [project]
 
 ## Kommandoer
 
-OpenCode CLI har også følgende kommandoer.
+Pencode CLI har også følgende kommandoer.
 
 ---
 
 ### agent
 
-Administrer agenter i OpenCode.
+Administrer agenter i Pencode.
 
 ```bash
-opencode agent [command]
+pencode agent [command]
 ```
 
 ---
 
 ### attach
 
-Tilslut en terminal til en allerede kørende OpenCode backend-server startet via `serve` eller `web` kommandoer.
+Tilslut en terminal til en allerede kørende Pencode backend-server startet via `serve` eller `web` kommandoer.
 
 ```bash
-opencode attach [url]
+pencode attach [url]
 ```
 
-Dette gør det muligt at bruge TUI med en ekstern OpenCode backend. For eksempel:
+Dette gør det muligt at bruge TUI med en ekstern Pencode backend. For eksempel:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+pencode web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+pencode attach http://10.20.30.40:4096
 ```
 
 #### Flag
@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsæt den seneste session                                                       |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | Sessions-id for at fortsætte                                                      |
 | <nobr><code>{"--fork"}</code></nobr>     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`)      |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `OPENCODE_SERVER_PASSWORD`)                 |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `PENCODE_SERVER_PASSWORD`)                 |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `PENCODE_SERVER_USERNAME` eller `pencode`) |
 
 ---
 
@@ -94,7 +94,7 @@ opencode attach http://10.20.30.40:4096
 Opret en ny agent med brugerdefineret konfiguration.
 
 ```bash
-opencode agent create
+pencode agent create
 ```
 
 Denne kommando vil guide dig gennem oprettelse af en ny agent med en brugerdefineret systemprompt og værktøjskonfiguration.
@@ -106,7 +106,7 @@ Denne kommando vil guide dig gennem oprettelse af en ny agent med en brugerdefin
 Liste over alle tilgængelige agenter.
 
 ```bash
-opencode agent list
+pencode agent list
 ```
 
 ---
@@ -116,20 +116,20 @@ opencode agent list
 Kommando til at administrere legitimationsoplysninger og login for udbydere.
 
 ```bash
-opencode auth [command]
+pencode auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode drives af udbyderlisten på [Models.dev](https://models.dev), så du kan bruge `opencode auth login` til at konfigurere API-nøgler for enhver udbyder, du vil bruge. Dette er gemt i `~/.local/share/opencode/auth.json`.
+Pencode drives af udbyderlisten på [Models.dev](https://models.dev), så du kan bruge `pencode auth login` til at konfigurere API-nøgler for enhver udbyder, du vil bruge. Dette er gemt i `~/.local/share/pencode/auth.json`.
 
 ```bash
-opencode auth login
+pencode auth login
 ```
 
-Når OpenCode starter op, indlæser den udbyderne fra legitimationsfilen. Og hvis der er nogen nøgler defineret i dine miljøer eller en `.env` fil i dit projekt.
+Når Pencode starter op, indlæser den udbyderne fra legitimationsfilen. Og hvis der er nogen nøgler defineret i dine miljøer eller en `.env` fil i dit projekt.
 
 ---
 
@@ -138,13 +138,13 @@ Når OpenCode starter op, indlæser den udbyderne fra legitimationsfilen. Og hvi
 Viser alle de godkendte udbydere som gemt i legitimationsfilen.
 
 ```bash
-opencode auth list
+pencode auth list
 ```
 
 Eller den korte version.
 
 ```bash
-opencode auth ls
+pencode auth ls
 ```
 
 ---
@@ -154,7 +154,7 @@ opencode auth ls
 Logger dig ud af en udbyder ved at rydde den fra legitimationsfilen.
 
 ```bash
-opencode auth logout
+pencode auth logout
 ```
 
 ---
@@ -164,7 +164,7 @@ opencode auth logout
 Administrator GitHub-agenten til lagerautomatisering.
 
 ```bash
-opencode github [command]
+pencode github [command]
 ```
 
 ---
@@ -174,7 +174,7 @@ opencode github [command]
 Installatør GitHub-agenten i dit lager.
 
 ```bash
-opencode github install
+pencode github install
 ```
 
 Dette opsætter det nødvendige GitHub Actions workflow og guider dig gennem konfigurationsprocessen. [Learn more](/docs/github).
@@ -186,7 +186,7 @@ Dette opsætter det nødvendige GitHub Actions workflow og guider dig gennem kon
 Kør GitHub-agenten. Dette bruges typisk i GitHub Actions.
 
 ```bash
-opencode github run
+pencode github run
 ```
 
 ##### Flag
@@ -203,7 +203,7 @@ opencode github run
 Administrator Model Context Protocol-servere.
 
 ```bash
-opencode mcp [command]
+pencode mcp [command]
 ```
 
 ---
@@ -213,7 +213,7 @@ opencode mcp [command]
 Tilføj en MCP-server til din konfiguration.
 
 ```bash
-opencode mcp add
+pencode mcp add
 ```
 
 Denne kommando vil guide dig gennem tilføjelse af enten en lokal eller ekstern MCP-server.
@@ -225,13 +225,13 @@ Denne kommando vil guide dig gennem tilføjelse af enten en lokal eller ekstern 
 Liste over alle konfigurerede MCP-servere og deres forbindelsesstatus.
 
 ```bash
-opencode mcp list
+pencode mcp list
 ```
 
 Eller brug den korte version.
 
 ```bash
-opencode mcp ls
+pencode mcp ls
 ```
 
 ---
@@ -241,7 +241,7 @@ opencode mcp ls
 Godkendt med en OAuth-aktiveret MCP-server.
 
 ```bash
-opencode mcp auth [name]
+pencode mcp auth [name]
 ```
 
 Hvis du ikke angiver et servernavn, bliver du bedt om at vælge blandt tilgængelige OAuth-kompatible servere.
@@ -249,13 +249,13 @@ Hvis du ikke angiver et servernavn, bliver du bedt om at vælge blandt tilgænge
 Du kan også angive OAuth-kompatible servere og deres godkendelsesstatus.
 
 ```bash
-opencode mcp auth list
+pencode mcp auth list
 ```
 
 Eller brug den korte version.
 
 ```bash
-opencode mcp auth ls
+pencode mcp auth ls
 ```
 
 ---
@@ -265,7 +265,7 @@ opencode mcp auth ls
 Fjern OAuth-legitimationsoplysninger for en MCP-server.
 
 ```bash
-opencode mcp logout [name]
+pencode mcp logout [name]
 ```
 
 ---
@@ -275,7 +275,7 @@ opencode mcp logout [name]
 Fejlfinding af OAuth-forbindelsesproblemer for en MCP-server.
 
 ```bash
-opencode mcp debug <name>
+pencode mcp debug <name>
 ```
 
 ---
@@ -285,7 +285,7 @@ opencode mcp debug <name>
 Liste over alle tilgængelige modeller fra konfigurerede udbydere.
 
 ```bash
-opencode models [provider]
+pencode models [provider]
 ```
 
 Denne kommando viser alle tilgængelige modeller på tværs af dine konfigurerede udbydere i formatet `provider/model`.
@@ -295,7 +295,7 @@ Dette er nyttigt til at finde ud af det nøjagtige modelnavn, der skal bruges i 
 Du kan eventuelt videregive et udbyder-id for at filtrere modeller efter den udbyder.
 
 ```bash
-opencode models anthropic
+pencode models anthropic
 ```
 
 #### Flag
@@ -305,36 +305,36 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | Opdater modelcachen fra models.dev                                      |
 | <nobr><code>{"--verbose"}</code></nobr> | Brug mere detaljeret modeloutput (inkluderer metadata som omkostninger) |
 
-Brug flaget `--refresh` til at opdatere den cachelagrede modelliste. Dette er nyttigt, når nye modeller er blevet tilføjet til en udbyder, og du vil se dem i OpenCode.
+Brug flaget `--refresh` til at opdatere den cachelagrede modelliste. Dette er nyttigt, når nye modeller er blevet tilføjet til en udbyder, og du vil se dem i Pencode.
 
 ```bash
-opencode models --refresh
+pencode models --refresh
 ```
 
 ---
 
 ### run
 
-Kør opencode i ikke-interaktiv tilstand ved at sende en prompt direkte.
+Kør pencode i ikke-interaktiv tilstand ved at sende en prompt direkte.
 
 ```bash
-opencode run [message..]
+pencode run [message..]
 ```
 
 Dette er nyttigt til scripting, automatisering, eller når du vil have et hurtigt svar uden at starte hele TUI. F.eks.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "pencode run"
+pencode run Explain the use of context in Go
 ```
 
-Du kan også vedhæfte til en kørende `opencode serve`-instans for at undgå MCP serverens kolde opstartstider ved hver kørsel:
+Du kan også vedhæfte til en kørende `pencode serve`-instans for at undgå MCP serverens kolde opstartstider ved hver kørsel:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+pencode serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+pencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Flag
@@ -351,9 +351,9 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | Fil(er), der skal vedhæftes til meddelelsen                                         |
 | <nobr><code>{"--format"}</code></nobr>   |      | Format: standard (formateret) eller json (rå JSON hændelser)                        |
 | <nobr><code>{"--title"}</code></nobr>    |      | Titel for sessionen (bruger trunkeret prompt, hvis der ikke er angivet nogen værdi) |
-| <nobr><code>{"--attach"}</code></nobr>   |      | Tilslut til en kørende opencode-server (f.eks. http://localhost:4096)               |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `OPENCODE_SERVER_PASSWORD`)                   |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`)   |
+| <nobr><code>{"--attach"}</code></nobr>   |      | Tilslut til en kørende pencode-server (f.eks. http://localhost:4096)               |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `PENCODE_SERVER_PASSWORD`)                   |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `PENCODE_SERVER_USERNAME` eller `pencode`)   |
 | <nobr><code>{"--dir"}</code></nobr>      |      | Mappe at køre i, eller sti på fjernserveren ved tilkobling                          |
 | <nobr><code>{"--variant"}</code></nobr>  |      | Modelvariant (udbyder-specifik ræsonneringsindsats)                                 |
 | <nobr><code>{"--thinking"}</code></nobr> |      | Vis tænkeblokke                                                                     |
@@ -363,13 +363,13 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-Start en hovedløs OpenCode-server til API-adgang. Tjek [server docs](/docs/server) for den fulde HTTP-grænseflade.
+Start en hovedløs Pencode-server til API-adgang. Tjek [server docs](/docs/server) for den fulde HTTP-grænseflade.
 
 ```bash
-opencode serve
+pencode serve
 ```
 
-Dette starter en HTTP-server, der giver API-adgang til opencode-funktionalitet uden TUI-grænsefladen. Indstil `OPENCODE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `opencode`).
+Dette starter en HTTP-server, der giver API-adgang til pencode-funktionalitet uden TUI-grænsefladen. Indstil `PENCODE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `pencode`).
 
 #### Flag
 
@@ -384,20 +384,20 @@ Dette starter en HTTP-server, der giver API-adgang til opencode-funktionalitet u
 
 ### session
 
-Administrator OpenCode sessionsholder.
+Administrator Pencode sessionsholder.
 
 ```bash
-opencode session [command]
+pencode session [command]
 ```
 
 ---
 
 #### list
 
-Liste over alle OpenCode sessioner.
+Liste over alle Pencode sessioner.
 
 ```bash
-opencode session list
+pencode session list
 ```
 
 ##### Flag
@@ -411,10 +411,10 @@ opencode session list
 
 ### stats
 
-Vis tokenbrug og omkostningsstatistikker for dine OpenCode-sessioner.
+Vis tokenbrug og omkostningsstatistikker for dine Pencode-sessioner.
 
 ```bash
-opencode stats
+pencode stats
 ```
 
 #### Flag
@@ -433,7 +433,7 @@ opencode stats
 Eksporter sessionsdata som JSON.
 
 ```bash
-opencode export [sessionID]
+pencode export [sessionID]
 ```
 
 Hvis du ikke angiver et sessions-id, bliver du bedt om at vælge mellem tilgængelige sessioner.
@@ -442,30 +442,30 @@ Hvis du ikke angiver et sessions-id, bliver du bedt om at vælge mellem tilgæng
 
 ### import
 
-Importer sessionsdata fra en JSON fil eller OpenCode del URL.
+Importer sessionsdata fra en JSON fil eller Pencode del URL.
 
 ```bash
-opencode import <file>
+pencode import <file>
 ```
 
-Du kan importere fra en lokal fil eller en OpenCode share URL.
+Du kan importere fra en lokal fil eller en Pencode share URL.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+pencode import session.json
+pencode import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Start en hovedløs OpenCode-server med en webgrænseflade.
+Start en hovedløs Pencode-server med en webgrænseflade.
 
 ```bash
-opencode web
+pencode web
 ```
 
-Dette starter en HTTP-server og åbner en webbrowser for at få adgang til OpenCode via en webgrænseflade. Indstil `OPENCODE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `opencode`).
+Dette starter en HTTP-server og åbner en webbrowser for at få adgang til Pencode via en webgrænseflade. Indstil `PENCODE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `pencode`).
 
 #### Flag
 
@@ -483,7 +483,7 @@ Dette starter en HTTP-server og åbner en webbrowser for at få adgang til OpenC
 Start en ACP-server (Agent Client Protocol).
 
 ```bash
-opencode acp
+pencode acp
 ```
 
 Denne kommando starter en ACP-server, der kommunikerer via stdin/stdout ved hjælp af nd-JSON.
@@ -500,10 +500,10 @@ Denne kommando starter en ACP-server, der kommunikerer via stdin/stdout ved hjæ
 
 ### uninstall
 
-Afinstaller OpenCode og fjern alle relaterede filer.
+Afinstaller Pencode og fjern alle relaterede filer.
 
 ```bash
-opencode uninstall
+pencode uninstall
 ```
 
 #### Flag
@@ -519,22 +519,22 @@ opencode uninstall
 
 ### upgrade
 
-Opdaterer OpenCode til den nyeste version eller en specifik version.
+Opdaterer Pencode til den nyeste version eller en specifik version.
 
 ```bash
-opencode upgrade [target]
+pencode upgrade [target]
 ```
 
 For at opgradere til den nyeste version.
 
 ```bash
-opencode upgrade
+pencode upgrade
 ```
 
 For at opgradere til en bestemt version.
 
 ```bash
-opencode upgrade v0.1.48
+pencode upgrade v0.1.48
 ```
 
 #### upgrade
@@ -547,7 +547,7 @@ opencode upgrade v0.1.48
 
 ## Globale flag
 
-opencode CLI tager følgende globale flag.
+pencode CLI tager følgende globale flag.
 
 | Flag                                       | Kort | Beskrivelse                          |
 | ------------------------------------------ | ---- | ------------------------------------ |
@@ -560,34 +560,34 @@ opencode CLI tager følgende globale flag.
 
 ## Miljøvariabler
 
-OpenCode kan konfigureres ved hjælp af miljøvariabler.
+Pencode kan konfigureres ved hjælp af miljøvariabler.
 
 | Variabel                              | Skriv   | Beskrivelse                                                           |
 | ------------------------------------- | ------- | --------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Del automatisk session                                                |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Sti til Git Bash eksekverbar på Windows                               |
-| `OPENCODE_CONFIG`                     | string  | Sti til konfigurationsfil                                             |
-| `OPENCODE_TUI_CONFIG`                 | string  | Sti til TUI-konfigurationsfil                                         |
-| `OPENCODE_CONFIG_DIR`                 | string  | Sti til konfigurationsmappe                                           |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Indbygget json-konfigurationsindhold                                  |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Deaktiver automatisk opdateringskontrol                               |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Deaktiver beskæring af gamle data                                     |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Deaktiver automatisk opdatering af terminaltitel                      |
-| `OPENCODE_PERMISSION`                 | string  | Indbygget json-tilladelseskonfiguration                               |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Deaktiver standard plugins                                            |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Deaktiver automatisk LSP-serverdownloads                              |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Aktive eksperimentelle modeller                                       |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Deaktiver automatisk kontekstkomprimering                             |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Deaktiver læsning fra `.claude` (prompt + færdigheder)                |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Deaktiver læsning `~/.claude/CLAUDE.md`                               |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Deaktiver indlæsning af `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Deaktivering af modeller fra eksterne kilder                          |
-| `OPENCODE_FAKE_VCS`                   | string  | Falsk VCS-udbyder til testformål                                      |
-| `OPENCODE_CLIENT`                     | string  | Klient-id (standard til `cli`)                                        |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Aktiver Exa-websøgeværktøjer                                          |
-| `OPENCODE_SERVER_PASSWORD`            | string  | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
-| `OPENCODE_SERVER_USERNAME`            | string  | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | Brugerdefineret URL til hentning af modelkonfiguration                |
+| `PENCODE_AUTO_SHARE`                 | boolean | Del automatisk session                                                |
+| `PENCODE_GIT_BASH_PATH`              | string  | Sti til Git Bash eksekverbar på Windows                               |
+| `PENCODE_CONFIG`                     | string  | Sti til konfigurationsfil                                             |
+| `PENCODE_TUI_CONFIG`                 | string  | Sti til TUI-konfigurationsfil                                         |
+| `PENCODE_CONFIG_DIR`                 | string  | Sti til konfigurationsmappe                                           |
+| `PENCODE_CONFIG_CONTENT`             | string  | Indbygget json-konfigurationsindhold                                  |
+| `PENCODE_DISABLE_AUTOUPDATE`         | boolean | Deaktiver automatisk opdateringskontrol                               |
+| `PENCODE_DISABLE_PRUNE`              | boolean | Deaktiver beskæring af gamle data                                     |
+| `PENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Deaktiver automatisk opdatering af terminaltitel                      |
+| `PENCODE_PERMISSION`                 | string  | Indbygget json-tilladelseskonfiguration                               |
+| `PENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Deaktiver standard plugins                                            |
+| `PENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Deaktiver automatisk LSP-serverdownloads                              |
+| `PENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Aktive eksperimentelle modeller                                       |
+| `PENCODE_DISABLE_AUTOCOMPACT`        | boolean | Deaktiver automatisk kontekstkomprimering                             |
+| `PENCODE_DISABLE_CLAUDE_CODE`        | boolean | Deaktiver læsning fra `.claude` (prompt + færdigheder)                |
+| `PENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Deaktiver læsning `~/.claude/CLAUDE.md`                               |
+| `PENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Deaktiver indlæsning af `.claude/skills`                              |
+| `PENCODE_DISABLE_MODELS_FETCH`       | boolean | Deaktivering af modeller fra eksterne kilder                          |
+| `PENCODE_FAKE_VCS`                   | string  | Falsk VCS-udbyder til testformål                                      |
+| `PENCODE_CLIENT`                     | string  | Klient-id (standard til `cli`)                                        |
+| `PENCODE_ENABLE_EXA`                 | boolean | Aktiver Exa-websøgeværktøjer                                          |
+| `PENCODE_SERVER_PASSWORD`            | string  | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
+| `PENCODE_SERVER_USERNAME`            | string  | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `pencode`) |
+| `PENCODE_MODELS_URL`                 | string  | Brugerdefineret URL til hentning af modelkonfiguration                |
 
 ---
 
@@ -597,21 +597,21 @@ Disse miljøvariabler muliggør eksperimentelle funktioner, der kan ændres elle
 
 | Variabel                                        | Skriv   | Beskrivelse                                          |
 | ----------------------------------------------- | ------- | ---------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | Aktiver eksperimentelle funktioner under samleflaget |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Aktiver ikonopdagelse                                |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Deaktiver kopi ved valg i TUI                        |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer  | Standard timeout for bash-kommandoer i ms            |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer  | Maks. output-tokens for LLM-svar                     |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Aktiver filovervågning for hele dir                  |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Aktiver oxfmt formatter                              |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Aktive eksperimenter LSP værktøj                     |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Deaktiver filovervågning                             |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Aktive eksperimenter Exa-funktioner                  |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Aktiver TY LSP for python-filer                      |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Aktiver plantilstand                                 |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Aktiver baggrundsopgaver for subagenter              |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Aktiver eksperimentelt hændelsessystem               |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Aktiver native LLM-anmodningssti                     |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Aktiver parallel udførelse af websøgning             |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Aktiver Scout-subagent                               |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Aktiver workspace-understøttelse                     |
+| `PENCODE_EXPERIMENTAL`                         | boolean | Aktiver eksperimentelle funktioner under samleflaget |
+| `PENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Aktiver ikonopdagelse                                |
+| `PENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Deaktiver kopi ved valg i TUI                        |
+| `PENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer  | Standard timeout for bash-kommandoer i ms            |
+| `PENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer  | Maks. output-tokens for LLM-svar                     |
+| `PENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Aktiver filovervågning for hele dir                  |
+| `PENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Aktiver oxfmt formatter                              |
+| `PENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Aktive eksperimenter LSP værktøj                     |
+| `PENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Deaktiver filovervågning                             |
+| `PENCODE_EXPERIMENTAL_EXA`                     | boolean | Aktive eksperimenter Exa-funktioner                  |
+| `PENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Aktiver TY LSP for python-filer                      |
+| `PENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Aktiver plantilstand                                 |
+| `PENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Aktiver baggrundsopgaver for subagenter              |
+| `PENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Aktiver eksperimentelt hændelsessystem               |
+| `PENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Aktiver native LLM-anmodningssti                     |
+| `PENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Aktiver parallel udførelse af websøgning             |
+| `PENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Aktiver Scout-subagent                               |
+| `PENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Aktiver workspace-understøttelse                     |

@@ -1,8 +1,8 @@
 import { describe, test, expect } from "bun:test"
 import { Effect, FileSystem } from "effect"
-import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { LayerNodePlatform } from "@pencode-ai/core/effect/app-node-platform"
+import { LayerNode } from "@pencode-ai/core/effect/layer-node"
+import { FSUtil } from "@pencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
 import path from "path"
 

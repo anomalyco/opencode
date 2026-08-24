@@ -1,13 +1,13 @@
-import { Pty } from "@opencode-ai/schema/pty"
-import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
-import { Location } from "@opencode-ai/schema/location"
+import { Pty } from "@pencode-ai/schema/pty"
+import { PtyTicket } from "@pencode-ai/schema/pty-ticket"
+import { Location } from "@pencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { ForbiddenError, PtyNotFoundError } from "../errors"
 import { LocationQuery, locationQueryOpenApi } from "./location"
 
 export const PTY_CONNECT_TICKET_QUERY = "ticket"
-export const PTY_CONNECT_TOKEN_HEADER = "x-opencode-ticket"
+export const PTY_CONNECT_TOKEN_HEADER = "x-pencode-ticket"
 export const PTY_CONNECT_TOKEN_HEADER_VALUE = "1"
 
 const PTY_CONNECT_PATH = /^\/api\/pty\/[^/]+\/connect$/

@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@pencode-ai/plugin/tui"
+import type { SnapshotFileDiff, VcsFileDiff } from "@pencode-ai/sdk/v2"
 import {
   TextAttributes,
   type BorderSides,
@@ -38,7 +38,7 @@ import {
 const ROUTE = "diff"
 const MIN_SPLIT_WIDTH = 100
 const FILE_TREE_WIDTH = 32
-const PLAIN_TEXT_FILETYPE = "opencode-plain-text"
+const PLAIN_TEXT_FILETYPE = "pencode-plain-text"
 const VCS_DIFF_CONTEXT_LINES = 12
 const KV_SHOW_FILE_TREE = "diff_viewer_show_file_tree"
 const KV_SINGLE_PATCH = "diff_viewer_single_patch"

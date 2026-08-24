@@ -9,17 +9,17 @@ export const dict: Record<string, string> = {
   "desktop.updater.checkFailed.title": "དུས་མཐུན་ཞིབ་དཔྱད་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "desktop.updater.checkFailed.message": "དུས་མཐུན་བཟོ་ནིའི་དོན་ལུ་ ཞིབ་དཔྱད་འབད་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "desktop.updater.none.title": "དུས་མཐུན་བཟོ་མི་ཚུགས།",
-  "desktop.updater.none.message": "ཁྱོད་ཀྱིས་ཧེ་མ་ལས་ OpenCodeགི་ཐོན་རིམ་གསརཔ་འདི་ལག་ལེན་འཐབ་དོ།",
+  "desktop.updater.none.message": "ཁྱོད་ཀྱིས་ཧེ་མ་ལས་ Pencodeགི་ཐོན་རིམ་གསརཔ་འདི་ལག་ལེན་འཐབ་དོ།",
   "desktop.updater.downloadFailed.title": "དུས་མཐུན་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "desktop.updater.downloadFailed.message": "དུས་མཐུན་ཕབ་ལེན་འབད་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "desktop.updater.downloaded.title": "དུས་མཐུན་ཕབ་ལེན་འབད་ཡོདཔ།",
   "desktop.updater.downloaded.prompt":
-    "OpenCode གི་ཐོན་རིམ་ {{version}} ཕབ་ལེན་འབད་ཡོདཔ་ལས་ གཞི་བཙུགས་འབད་དེ་ ལོག་འགོ་བཙུགས་ནི་ཨིན་ན?",
+    "Pencode གི་ཐོན་རིམ་ {{version}} ཕབ་ལེན་འབད་ཡོདཔ་ལས་ གཞི་བཙུགས་འབད་དེ་ ལོག་འགོ་བཙུགས་ནི་ཨིན་ན?",
   "desktop.updater.installFailed.title": "དུས་མཐུན་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "desktop.updater.installFailed.message": "དུས་མཐུན་གཞི་བཙུགས་འབད་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "desktop.cli.installed.title": "CLI བཙུགས་ཡོདཔ།",
   "desktop.cli.installed.message":
-    "CLI {{path}}\n\nལུ་གཞི་བཙུགས་འབད་ནུག 'opencode' བརྡ་བཀོད་ལག་ལེན་འཐབ་ནིའི་དོན་ལུ་ ཁྱོད་རའི་ཊར་མི་ནཱལ་དེ་ལོག་འགོ་བཙུགས།",
+    "CLI {{path}}\n\nལུ་གཞི་བཙུགས་འབད་ནུག 'pencode' བརྡ་བཀོད་ལག་ལེན་འཐབ་ནིའི་དོན་ལུ་ ཁྱོད་རའི་ཊར་མི་ནཱལ་དེ་ལོག་འགོ་བཙུགས།",
   "desktop.cli.failed.title": "གཞི་བཙུགས་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "desktop.cli.failed.message": "CLI: {{error}} གཞི་བཙུགས་འབད་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
 

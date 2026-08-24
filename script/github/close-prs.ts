@@ -2,7 +2,7 @@
 
 import { parseArgs } from "util"
 
-const defaultRepo = "anomalyco/opencode"
+const defaultRepo = "kiyosh11/pencode"
 const defaultAgeMonths = 1
 const defaultThreshold = 2
 const defaultSleepMs = 20_000
@@ -123,7 +123,7 @@ type CleanupCandidate = PullRequest & {
 
 const message = `Automated PR Cleanup
 
-Thank you for contributing to opencode.
+Thank you for contributing to pencode.
 
 Due to the high volume of PRs from users and AI agents, we periodically close older PRs using automated criteria so maintainers can focus review time on the most active and community-supported contributions.
 

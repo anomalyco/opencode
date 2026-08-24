@@ -1,19 +1,19 @@
 ---
 title: Tjener
-description: Samhandle med OpenCode-tjener over HTTP.
+description: Samhandle med Pencode-tjener over HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Kommandoen `opencode serve` kjører en hodeløs HTTP-server som eksponerer et OpenAPI-endepunkt som en OpenCode-klient kan bruke.
+Kommandoen `pencode serve` kjører en hodeløs HTTP-server som eksponerer et OpenAPI-endepunkt som en Pencode-klient kan bruke.
 
 ---
 
 ### Bruk
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+pencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Alternativer
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Port å lytte på                               | `4096`           |
 | `--hostname`    | Vertsnavn å lytte på                          | `127.0.0.1`      |
 | `--mdns`        | Aktiver mDNS-oppdagelse                       | `false`          |
-| `--mdns-domain` | Egendefinert domenenavn for mDNS-tjeneste     | `opencode.local` |
+| `--mdns-domain` | Egendefinert domenenavn for mDNS-tjeneste     | `pencode.local` |
 | `--cors`        | Ytterligere nettleseropprinnelse som tillates | `[]`             |
 
 `--cors` kan angis flere ganger:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+pencode serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Autentisering
 
-Sett `OPENCODE_SERVER_PASSWORD` for å beskytte serveren med HTTP grunnleggende autentisering. Brukernavnet er satt til `opencode` som standard, eller sett `OPENCODE_SERVER_USERNAME` for å overstyre det. Dette gjelder både `opencode serve` og `opencode web`.
+Sett `PENCODE_SERVER_PASSWORD` for å beskytte serveren med HTTP grunnleggende autentisering. Brukernavnet er satt til `pencode` som standard, eller sett `PENCODE_SERVER_USERNAME` for å overstyre det. Dette gjelder både `pencode serve` og `pencode web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+PENCODE_SERVER_PASSWORD=your-password pencode serve
 ```
 
 ---
 
 ### Slik fungerer det
 
-Når du kjører `opencode` starter den en TUI og en server. Der TUI er
+Når du kjører `pencode` starter den en TUI og en server. Der TUI er
 klient som snakker med serveren. Serveren viser en OpenAPI 3.1-spesifikasjon
 endepunkt. Dette endepunktet brukes også til å generere en [SDK](/docs/sdk).
 
 :::tip
-Bruk OpenCode-serveren til å samhandle med OpenCode programmatisk.
+Bruk Pencode-serveren til å samhandle med Pencode programmatisk.
 :::
 
-Denne arkitekturen lar OpenCode støtte flere klienter og lar deg samhandle med OpenCode programmatisk.
+Denne arkitekturen lar Pencode støtte flere klienter og lar deg samhandle med Pencode programmatisk.
 
-Du kan kjøre `opencode serve` for å starte en frittstående server. Hvis du har
-OpenCode TUI kjører, vil `opencode serve` starte en ny server.
+Du kan kjøre `pencode serve` for å starte en frittstående server. Hvis du har
+Pencode TUI kjører, vil `pencode serve` starte en ny server.
 
 ---
 
@@ -65,7 +65,7 @@ OpenCode TUI kjører, vil `opencode serve` starte en ny server.
 
 Når du starter TUI, tildeler den tilfeldig en port og vertsnavn. Du kan i stedet sende inn `--hostname` og `--port` [flagg](/docs/cli). Bruk deretter denne til å koble til serveren.
 
-[`/tui`](#tui) endepunktet kan brukes til å kjøre TUI gjennom serveren. Du kan for eksempel forhåndsutfylle eller kjøre en forespørsel. Dette oppsettet brukes av OpenCode [IDE](/docs/ide) plugins.
+[`/tui`](#tui) endepunktet kan brukes til å kjøre TUI gjennom serveren. Du kan for eksempel forhåndsutfylle eller kjøre en forespørsel. Dette oppsettet brukes av Pencode [IDE](/docs/ide) plugins.
 
 ---
 
@@ -83,7 +83,7 @@ For eksempel `http://localhost:4096/doc`. Bruk spesifikasjonen til å generere k
 
 ## APIer
 
-opencode-serveren viser følgende APIer.
+pencode-serveren viser følgende APIer.
 
 ---
 

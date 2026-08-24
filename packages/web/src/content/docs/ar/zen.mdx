@@ -1,16 +1,16 @@
 ---
 title: Zen
-description: قائمة منتقاة من النماذج يوفّرها OpenCode.
+description: قائمة منتقاة من النماذج يوفّرها Pencode.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen هي قائمة بالنماذج التي اختبرها فريق OpenCode وتحقّق منها.
+Pencode Zen هي قائمة بالنماذج التي اختبرها فريق Pencode وتحقّق منها.
 
-يعمل Zen مثل أي مزوّد آخر في OpenCode. تسجّل الدخول إلى OpenCode Zen وتحصل على
-مفتاح API. استخدامه **اختياري بالكامل** ولا تحتاج إليه لاستخدام OpenCode.
+يعمل Zen مثل أي مزوّد آخر في Pencode. تسجّل الدخول إلى Pencode Zen وتحصل على
+مفتاح API. استخدامه **اختياري بالكامل** ولا تحتاج إليه لاستخدام Pencode.
 
 ---
 
@@ -21,7 +21,7 @@ OpenCode Zen هي قائمة بالنماذج التي اختبرها فريق O
 وجودة مختلفين بشكل كبير.
 
 :::tip
-اختبرنا مجموعة منتقاة من النماذج والمزوّدين الذين يعملون جيدا مع OpenCode.
+اختبرنا مجموعة منتقاة من النماذج والمزوّدين الذين يعملون جيدا مع Pencode.
 :::
 
 لذلك إذا كنت تستخدم نموذجا عبر خدمة مثل OpenRouter، فلا يمكنك أبدا التأكد مما
@@ -33,16 +33,16 @@ OpenCode Zen هي قائمة بالنماذج التي اختبرها فريق O
 2. ثم عملنا مع عدد من المزوّدين للتأكد من تقديم هذه النماذج بالشكل الصحيح.
 3. وأخيرا، أجرينا قياسا معياريا لتوليفة النموذج/المزوّد ووضعنا قائمة نشعر بثقة في التوصية بها.
 
-OpenCode Zen هي بوابة AI تتيح لك الوصول إلى هذه النماذج.
+Pencode Zen هي بوابة AI تتيح لك الوصول إلى هذه النماذج.
 
 ---
 
 ## كيف يعمل
 
-يعمل OpenCode Zen مثل أي مزوّد آخر في OpenCode.
+يعمل Pencode Zen مثل أي مزوّد آخر في Pencode.
 
-1. تسجّل الدخول إلى **<a href={console}>OpenCode Zen</a>**، وتضيف تفاصيل الفوترة، ثم تنسخ مفتاح API.
-2. تشغّل الأمر `/connect` في واجهة TUI، وتختار OpenCode Zen، ثم تلصق مفتاح API.
+1. تسجّل الدخول إلى **<a href={console}>Pencode Zen</a>**، وتضيف تفاصيل الفوترة، ثم تنسخ مفتاح API.
+2. تشغّل الأمر `/connect` في واجهة TUI، وتختار Pencode Zen، ثم تلصق مفتاح API.
 3. تشغّل `/models` في واجهة TUI لرؤية قائمة النماذج التي نوصي بها.
 
 تتم محاسبتك على كل طلب ويمكنك إضافة رصيد إلى حسابك.
@@ -55,71 +55,71 @@ OpenCode Zen هي بوابة AI تتيح لك الوصول إلى هذه الن�
 
 | النموذج                         | معرّف النموذج                   | نقطة النهاية                                              | حزمة AI SDK                 |
 | ------------------------------- | ------------------------------- | --------------------------------------------------------- | --------------------------- |
-| GPT 5.6 Sol                     | gpt-5.6-sol                     | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.6 Terra                   | gpt-5.6-terra                   | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.6 Luna                    | gpt-5.6-luna                    | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.5                         | gpt-5.5                         | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.5 Pro                     | gpt-5.5-pro                     | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.4                         | gpt-5.4                         | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.4 Pro                     | gpt-5.4-pro                     | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.4 Mini                    | gpt-5.4-mini                    | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.4 Nano                    | gpt-5.4-nano                    | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.3 Codex                   | gpt-5.3-codex                   | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.3 Codex Spark             | gpt-5.3-codex-spark             | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.2                         | gpt-5.2                         | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.2 Codex                   | gpt-5.2-codex                   | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.1                         | gpt-5.1                         | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.1 Codex                   | gpt-5.1-codex                   | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Max               | gpt-5.1-codex-max               | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Mini              | gpt-5.1-codex-mini              | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5                           | gpt-5                           | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5 Codex                     | gpt-5-codex                     | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| GPT 5 Nano                      | gpt-5-nano                      | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| Claude Fable 5                  | claude-fable-5                  | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Claude Opus 5                   | claude-opus-5                   | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Claude Opus 4.8                 | claude-opus-4-8                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Claude Opus 4.7                 | claude-opus-4-7                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Claude Opus 4.6                 | claude-opus-4-6                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Claude Opus 4.5                 | claude-opus-4-5                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Claude Sonnet 5                 | claude-sonnet-5                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4.6               | claude-sonnet-4-6               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4.5               | claude-sonnet-4-5               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Claude Haiku 4.5                | claude-haiku-4-5                | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Gemini 3.7 Flash                | gemini-3.7-flash                | `https://opencode.ai/zen/v1/models/gemini-3.7-flash`      | `@ai-sdk/google`            |
-| Gemini 3.6 Flash                | gemini-3.6-flash                | `https://opencode.ai/zen/v1/models/gemini-3.6-flash`      | `@ai-sdk/google`            |
-| Gemini 3.5 Flash                | gemini-3.5-flash                | `https://opencode.ai/zen/v1/models/gemini-3.5-flash`      | `@ai-sdk/google`            |
-| Gemini 3.5 Flash Lite           | gemini-3.5-flash-lite           | `https://opencode.ai/zen/v1/models/gemini-3.5-flash-lite` | `@ai-sdk/google`            |
-| Gemini 3.1 Pro                  | gemini-3.1-pro                  | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`        | `@ai-sdk/google`            |
-| Gemini 3 Flash                  | gemini-3-flash                  | `https://opencode.ai/zen/v1/models/gemini-3-flash`        | `@ai-sdk/google`            |
-| Grok 4.6                        | grok-4.6                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| Grok 4.5                        | grok-4.5                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| Grok Build 0.1                  | grok-build-0.1                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| Muse Spark 1.2                  | muse-spark-1.2                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
-| Qwen3.7 Max                     | qwen3.7-max                     | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Qwen3.7 Plus                    | qwen3.7-plus                    | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus                    | qwen3.6-plus                    | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| Qwen3.5 Plus                    | qwen3.5-plus                    | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
-| DeepSeek V4 Pro                 | deepseek-v4-pro                 | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| DeepSeek V4 Flash               | deepseek-v4-flash               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| MiniMax M3                      | minimax-m3                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| MiniMax M2.7                    | minimax-m2.7                    | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| MiniMax M2.5                    | minimax-m2.5                    | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| GLM 5.2                         | glm-5.2                         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| GLM 5.1                         | glm-5.1                         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| GLM 5                           | glm-5                           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Kimi K2.5                       | kimi-k2.5                       | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Kimi K2.6                       | kimi-k2.6                       | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Kimi K2.7 Code                  | kimi-k2.7-code                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Kimi K3                         | kimi-k3                         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                   | x-preview-f-free                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Hy3 Free                        | hy3-free                        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Nemotron 3.5 Lightning Free     | nemotron-3.5-lightning-free     | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Muse Spark 1.2 Contributor Free | muse-spark-1.2-contributor-free | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.6 Sol                     | gpt-5.6-sol                     | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.6 Terra                   | gpt-5.6-terra                   | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.6 Luna                    | gpt-5.6-luna                    | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.5                         | gpt-5.5                         | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.5 Pro                     | gpt-5.5-pro                     | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.4                         | gpt-5.4                         | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.4 Pro                     | gpt-5.4-pro                     | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.4 Mini                    | gpt-5.4-mini                    | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.4 Nano                    | gpt-5.4-nano                    | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.3 Codex                   | gpt-5.3-codex                   | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.3 Codex Spark             | gpt-5.3-codex-spark             | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.2                         | gpt-5.2                         | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.2 Codex                   | gpt-5.2-codex                   | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.1                         | gpt-5.1                         | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.1 Codex                   | gpt-5.1-codex                   | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max               | gpt-5.1-codex-max               | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini              | gpt-5.1-codex-mini              | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5                           | gpt-5                           | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5 Codex                     | gpt-5-codex                     | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5 Nano                      | gpt-5-nano                      | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Claude Fable 5                  | claude-fable-5                  | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 5                   | claude-opus-5                   | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 4.8                 | claude-opus-4-8                 | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 4.7                 | claude-opus-4-7                 | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 4.6                 | claude-opus-4-6                 | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5                 | claude-opus-4-5                 | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Sonnet 5                 | claude-sonnet-5                 | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.6               | claude-sonnet-4-6               | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.5               | claude-sonnet-4-5               | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5                | claude-haiku-4-5                | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Gemini 3.7 Flash                | gemini-3.7-flash                | `https://pencode.ai/zen/v1/models/gemini-3.7-flash`      | `@ai-sdk/google`            |
+| Gemini 3.6 Flash                | gemini-3.6-flash                | `https://pencode.ai/zen/v1/models/gemini-3.6-flash`      | `@ai-sdk/google`            |
+| Gemini 3.5 Flash                | gemini-3.5-flash                | `https://pencode.ai/zen/v1/models/gemini-3.5-flash`      | `@ai-sdk/google`            |
+| Gemini 3.5 Flash Lite           | gemini-3.5-flash-lite           | `https://pencode.ai/zen/v1/models/gemini-3.5-flash-lite` | `@ai-sdk/google`            |
+| Gemini 3.1 Pro                  | gemini-3.1-pro                  | `https://pencode.ai/zen/v1/models/gemini-3.1-pro`        | `@ai-sdk/google`            |
+| Gemini 3 Flash                  | gemini-3-flash                  | `https://pencode.ai/zen/v1/models/gemini-3-flash`        | `@ai-sdk/google`            |
+| Grok 4.6                        | grok-4.6                        | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Grok 4.5                        | grok-4.5                        | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Grok Build 0.1                  | grok-build-0.1                  | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Muse Spark 1.2                  | muse-spark-1.2                  | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Qwen3.7 Max                     | qwen3.7-max                     | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus                    | qwen3.7-plus                    | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus                    | qwen3.6-plus                    | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Qwen3.5 Plus                    | qwen3.5-plus                    | `https://pencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Pro                 | deepseek-v4-pro                 | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash               | deepseek-v4-flash               | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| MiniMax M3                      | minimax-m3                      | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7                    | minimax-m2.7                    | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| MiniMax M2.5                    | minimax-m2.5                    | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| GLM 5.2                         | glm-5.2                         | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| GLM 5.1                         | glm-5.1                         | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| GLM 5                           | glm-5                           | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Kimi K2.5                       | kimi-k2.5                       | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Kimi K2.6                       | kimi-k2.6                       | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Kimi K2.7 Code                  | kimi-k2.7-code                  | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Kimi K3                         | kimi-k3                         | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Big Pickle                      | big-pickle                      | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Ox Alpha Free                   | x-preview-f-free                | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Hy3 Free                        | hy3-free                        | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Nemotron 3.5 Lightning Free     | nemotron-3.5-lightning-free     | `https://pencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Muse Spark 1.2 Contributor Free | muse-spark-1.2-contributor-free | `https://pencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 
-يستخدم [معرّف النموذج](/docs/config/#models) في إعدادات OpenCode الصيغة `opencode/<model-id>`. على سبيل المثال، بالنسبة إلى GPT 5.5، ستستخدم `opencode/gpt-5.5` في إعداداتك.
+يستخدم [معرّف النموذج](/docs/config/#models) في إعدادات Pencode الصيغة `pencode/<model-id>`. على سبيل المثال، بالنسبة إلى GPT 5.5، ستستخدم `pencode/gpt-5.5` في إعداداتك.
 
 ---
 
@@ -128,7 +128,7 @@ OpenCode Zen هي بوابة AI تتيح لك الوصول إلى هذه الن�
 يمكنك جلب القائمة الكاملة بالنماذج المتاحة وبياناتها الوصفية من:
 
 ```
-https://opencode.ai/zen/v1/models
+https://pencode.ai/zen/v1/models
 ```
 
 ---
@@ -218,7 +218,7 @@ https://opencode.ai/zen/v1/models
 
 **DeepSeek V4 Flash / Pro:** ساعات Peak هي 01:00-04:00 و06:00-10:00 UTC؛ وجميع الساعات الأخرى Off-Peak. [اعرف المزيد](https://api-docs.deepseek.com/quick_start/pricing/).
 
-قد تلاحظ [نماذج منخفضة التكلفة](/docs/config/#models)، مثل Haiku أو Nano أو Flash، في سجل الاستخدام. يستخدم OpenCode هذه النماذج لإنشاء عناوين الجلسات.
+قد تلاحظ [نماذج منخفضة التكلفة](/docs/config/#models)، مثل Haiku أو Nano أو Flash، في سجل الاستخدام. يستخدم Pencode هذه النماذج لإنشاء عناوين الجلسات.
 
 :::note
 يتم تمرير رسوم بطاقات الائتمان بالتكلفة الفعلية (4.4% + $0.30 لكل معاملة)؛ ولا نفرض أي رسوم إضافية فوق ذلك.
@@ -226,13 +226,13 @@ https://opencode.ai/zen/v1/models
 
 النماذج المجانية:
 
-- MiMo-V2.5 Free متاح على OpenCode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
-- Hy3 Free متاح على OpenCode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
-- Nemotron 3 Ultra Free متاح على OpenCode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
-- Nemotron 3.5 Lightning Free متاح على OpenCode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
-- Big Pickle نموذج خفي ومتاح مجانا على OpenCode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
-- Ox Alpha Free نموذج خفي ومتاح مجانا على OpenCode لفترة محدودة. يتبع مزوده سياسة عدم الاحتفاظ بالبيانات ولا يستخدم بياناتك لتدريب النماذج.
-- Muse Spark 1.2 Contributor Free متاح على OpenCode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
+- MiMo-V2.5 Free متاح على Pencode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
+- Hy3 Free متاح على Pencode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
+- Nemotron 3 Ultra Free متاح على Pencode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
+- Nemotron 3.5 Lightning Free متاح على Pencode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
+- Big Pickle نموذج خفي ومتاح مجانا على Pencode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
+- Ox Alpha Free نموذج خفي ومتاح مجانا على Pencode لفترة محدودة. يتبع مزوده سياسة عدم الاحتفاظ بالبيانات ولا يستخدم بياناتك لتدريب النماذج.
+- Muse Spark 1.2 Contributor Free متاح على Pencode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
 
 <a href={email}>تواصل معنا</a> إذا كانت لديك أي أسئلة.
 
@@ -338,9 +338,9 @@ https://opencode.ai/zen/v1/models
 
 ## الأهداف
 
-أنشأنا OpenCode Zen من أجل:
+أنشأنا Pencode Zen من أجل:
 
 1. **قياس الأداء** لأفضل النماذج/المزوّدين لعوامل البرمجة.
 2. إتاحة الخيارات **الأعلى جودة** دون خفض الأداء أو توجيه الطلبات إلى مزوّدين أرخص.
 3. تمرير أي **انخفاضات في الأسعار** عبر البيع بالتكلفة؛ بحيث تكون الزيادة الوحيدة لتغطية رسوم المعالجة.
-4. **عدم فرض أي ارتباط حصري** عبر تمكينك من استخدامه مع أي عامل برمجة آخر. ومع إبقاء إمكانية استخدام أي مزوّد آخر مع OpenCode أيضا دائما.
+4. **عدم فرض أي ارتباط حصري** عبر تمكينك من استخدامه مع أي عامل برمجة آخر. ومع إبقاء إمكانية استخدام أي مزوّد آخر مع Pencode أيضا دائما.

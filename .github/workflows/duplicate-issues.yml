@@ -23,7 +23,7 @@ jobs:
           LOGIN="${{ github.event.issue.user.login }}"
           ASSOCIATION="${{ github.event.issue.author_association }}"
 
-          if [ "$LOGIN" = "opencode-agent[bot]" ] ||
+          if [ "$LOGIN" = "pencode-agent[bot]" ] ||
              [ "$ASSOCIATION" = "OWNER" ] ||
              [ "$ASSOCIATION" = "MEMBER" ] ||
              grep -qxiF "$LOGIN" .github/TEAM_MEMBERS; then
@@ -36,16 +36,16 @@ jobs:
       - uses: ./.github/actions/setup-bun
         if: steps.author.outputs.skip != 'true'
 
-      - name: Install opencode
+      - name: Install pencode
         if: steps.author.outputs.skip != 'true'
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://pencode.ai/install | bash
 
       - name: Check duplicates and compliance
         if: steps.author.outputs.skip != 'true'
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          PENCODE_API_KEY: ${{ secrets.PENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: |
+          PENCODE_PERMISSION: |
             {
               "bash": {
                 "*": "deny",
@@ -54,7 +54,7 @@ jobs:
               "webfetch": "deny"
             }
         run: |
-          opencode run -m opencode/claude-sonnet-4-6 "A new issue has been created:
+          pencode run -m pencode/claude-sonnet-4-6 "A new issue has been created:
 
           Issue number: ${{ github.event.issue.number }}
           Issue author association: ${{ github.event.issue.author_association }}
@@ -157,7 +157,7 @@ jobs:
           LOGIN="${{ github.event.issue.user.login }}"
           ASSOCIATION="${{ github.event.issue.author_association }}"
 
-          if [ "$LOGIN" = "opencode-agent[bot]" ] ||
+          if [ "$LOGIN" = "pencode-agent[bot]" ] ||
              [ "$ASSOCIATION" = "OWNER" ] ||
              [ "$ASSOCIATION" = "MEMBER" ] ||
              grep -qxiF "$LOGIN" .github/TEAM_MEMBERS; then
@@ -170,16 +170,16 @@ jobs:
       - uses: ./.github/actions/setup-bun
         if: steps.author.outputs.skip != 'true'
 
-      - name: Install opencode
+      - name: Install pencode
         if: steps.author.outputs.skip != 'true'
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://pencode.ai/install | bash
 
       - name: Recheck compliance
         if: steps.author.outputs.skip != 'true'
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          PENCODE_API_KEY: ${{ secrets.PENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: |
+          PENCODE_PERMISSION: |
             {
               "bash": {
                 "*": "deny",
@@ -188,7 +188,7 @@ jobs:
               "webfetch": "deny"
             }
         run: |
-          opencode run -m opencode/claude-sonnet-4-6 "Issue #${{ github.event.issue.number }} was previously flagged as non-compliant and has been edited.
+          pencode run -m pencode/claude-sonnet-4-6 "Issue #${{ github.event.issue.number }} was previously flagged as non-compliant and has been edited.
           Issue author association: ${{ github.event.issue.author_association }}
 
           Lookup this issue with gh issue view ${{ github.event.issue.number }}.

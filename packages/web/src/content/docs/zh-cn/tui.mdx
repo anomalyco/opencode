@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: 使用 OpenCode 终端用户界面。
+description: 使用 Pencode 终端用户界面。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode 提供了一个交互式终端界面（TUI），用于配合 LLM 处理您的项目。
+Pencode 提供了一个交互式终端界面（TUI），用于配合 LLM 处理您的项目。
 
-运行 OpenCode 即可启动当前目录的 TUI。
+运行 Pencode 即可启动当前目录的 TUI。
 
 ```bash
-opencode
+pencode
 ```
 
 或者您可以为指定的工作目录启动它。
 
 ```bash
-opencode /path/to/project
+pencode /path/to/project
 ```
 
 进入 TUI 后，您可以输入消息进行提示。
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 命令
 
-使用 OpenCode TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
+使用 Pencode TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-将提供商添加到 OpenCode。允许您从可用的提供商中选择并添加其 API 密钥。
+将提供商添加到 Pencode。允许您从可用的提供商中选择并添加其 API 密钥。
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-退出 OpenCode。_别名_：`/quit`、`/q`
+退出 Pencode。_别名_：`/quit`、`/q`
 
 ```bash frame="none"
 /exit
@@ -356,8 +356,8 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "$schema": "https://pencode.ai/tui.json",
+  "theme": "pencode",
   "leader_timeout": 2000,
   "keybinds": {
     "leader": "ctrl+x",
@@ -374,7 +374,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
     "notifications": true,
     "sound": true,
     "volume": 0.4,
-    "sound_pack": "opencode.default",
+    "sound_pack": "pencode.default",
     "sounds": {
       "error": "./sounds/error.mp3"
     }
@@ -382,7 +382,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 }
 ```
 
-这与 `opencode.json` 是分开的；`opencode.json` 用于配置服务器和运行时行为。
+这与 `pencode.json` 是分开的；`pencode.json` 用于配置服务器和运行时行为。
 
 `keybinds` 会与内置默认值合并，因此你只需要配置想要修改的快捷键。
 
@@ -390,24 +390,24 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 - `theme` - 设置 UI 主题。[了解更多](/docs/themes)。
 - `keybinds` - 自定义键盘快捷键。[了解更多](/docs/keybinds)。
-- `leader_timeout` - 控制按下 leader key 后 OpenCode 等待后续按键的时间。默认为 `2000`。
+- `leader_timeout` - 控制按下 leader key 后 Pencode 等待后续按键的时间。默认为 `2000`。
 - `scroll_acceleration.enabled` - 启用 macOS 风格的滚动加速，让滚动更平滑自然。启用后，快速滚动时速度会增加，慢速移动时仍保持精确。**此设置优先于 `scroll_speed`，启用时会覆盖它。**
 - `scroll_speed` - 控制使用滚动命令时 TUI 的滚动速度（最小值：`0.001`，支持小数）。默认为 `3`。**注意：如果 `scroll_acceleration.enabled` 设置为 `true`，则此设置会被忽略。**
 - `diff_style` - 控制 diff 的显示方式。`"auto"` 会根据终端宽度自适应，`"stacked"` 始终显示单列布局。
 - `mouse` - 在 TUI 中启用或禁用鼠标捕获（默认：`true`）。禁用后，终端原生的鼠标选择和滚动行为会保留下来。
 - `attention` - 配置 TUI 桌面通知和声音。默认禁用。
 
-使用 `OPENCODE_TUI_CONFIG` 可以加载自定义的 TUI 配置文件路径。
+使用 `PENCODE_TUI_CONFIG` 可以加载自定义的 TUI 配置文件路径。
 
 ### Attention
 
-当 OpenCode 需要你处理问题、批准权限请求、查看会话错误，或想告知会话已完成时，TUI 可以通过声音和桌面通知提醒你。设置 `attention.enabled` 后会启用这些提醒；内置事件触发时会播放声音。桌面通知只会在终端窗口未聚焦时发送，并且不会用于 subagent 事件。
+当 Pencode 需要你处理问题、批准权限请求、查看会话错误，或想告知会话已完成时，TUI 可以通过声音和桌面通知提醒你。设置 `attention.enabled` 后会启用这些提醒；内置事件触发时会播放声音。桌面通知只会在终端窗口未聚焦时发送，并且不会用于 subagent 事件。
 
 - `enabled` - 开启 Attention 的所有通知和声音。默认为 `false`。
 - `notifications` - 启用 Attention 后，允许 TUI 通过终端发送桌面通知。默认为 `true`。
 - `sound` - 启用 Attention 后，允许播放提示音。默认为 `true`。
 - `volume` - 默认提示音音量，范围从 `0` 到 `1`。默认为 `0.4`。
-- `sound_pack` - 要使用的 sound pack ID。默认为 `opencode.default`。
+- `sound_pack` - 要使用的 sound pack ID。默认为 `pencode.default`。
 - `sounds` - 为 `default`、`question`、`permission`、`error`、`done` 或 `subagent_done` 指定自定义声音文件。路径可以是绝对路径、`file://` URL，或相对于 `tui.json` 的路径。
 
 ---

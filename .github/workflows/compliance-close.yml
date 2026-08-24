@@ -35,7 +35,7 @@ jobs:
             const now = Date.now();
             const twoHours = 2 * 60 * 60 * 1000;
             const orgMemberAssociations = new Set(['OWNER', 'MEMBER']);
-            const agentLogin = 'opencode-agent[bot]';
+            const agentLogin = 'pencode-agent[bot]';
             const { data: file } = await github.rest.repos.getContent({
               owner: context.repo.owner,
               repo: context.repo.repo,

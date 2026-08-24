@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: OpenCode ターミナルユーザーインターフェイスの使用。
+description: Pencode ターミナルユーザーインターフェイスの使用。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode は、LLM を使用してプロジェクトを作業するための対話型ターミナルインターフェイスまたは TUI を提供します。
+Pencode は、LLM を使用してプロジェクトを作業するための対話型ターミナルインターフェイスまたは TUI を提供します。
 
-OpenCode を実行すると、現在のディレクトリの TUI が開始されます。
+Pencode を実行すると、現在のディレクトリの TUI が開始されます。
 
 ```bash
-opencode
+pencode
 ```
 
 または、特定の作業ディレクトリに対して起動することもできます。
 
 ```bash
-opencode /path/to/project
+pencode /path/to/project
 ```
 
 TUI に入ったら、メッセージを表示することができます。
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## コマンド
 
-OpenCode TUI を使用する場合、「`/`」に続いてコマンド名を入力すると、アクションをすばやく実行できます。例えば：
+Pencode TUI を使用する場合、「`/`」に続いてコマンド名を入力すると、アクションをすばやく実行できます。例えば：
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ OpenCode TUI を使用する場合、「`/`」に続いてコマンド名を入�
 
 ### 接続
 
-OpenCode にプロバイダーを追加します。利用可能なプロバイダーから選択し、その API キーを追加できます。
+Pencode にプロバイダーを追加します。利用可能なプロバイダーから選択し、その API キーを追加できます。
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ OpenCode にプロバイダーを追加します。利用可能なプロバイ�
 
 ### 終了
 
-OpenCode を終了します。 _エイリアス_: `/quit`、`/q`
+Pencode を終了します。 _エイリアス_: `/quit`、`/q`
 
 ```bash frame="none"
 /exit
@@ -353,8 +353,8 @@ VS Code などの一部のエディターは、`--wait` フラグを使用して
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "$schema": "https://pencode.ai/tui.json",
+  "theme": "pencode",
   "leader_timeout": 2000,
   "keybinds": {
     "leader": "ctrl+x",
@@ -371,7 +371,7 @@ VS Code などの一部のエディターは、`--wait` フラグを使用して
     "notifications": true,
     "sound": true,
     "volume": 0.4,
-    "sound_pack": "opencode.default",
+    "sound_pack": "pencode.default",
     "sounds": {
       "error": "./sounds/error.mp3"
     }
@@ -379,7 +379,7 @@ VS Code などの一部のエディターは、`--wait` フラグを使用して
 }
 ```
 
-これは、サーバー/ランタイムの動作を構成する `opencode.json` とは別です。
+これは、サーバー/ランタイムの動作を構成する `pencode.json` とは別です。
 
 `keybinds` は組み込みのデフォルトとマージされるため、変更したいショートカットだけを設定すれば十分です。
 
@@ -387,24 +387,24 @@ VS Code などの一部のエディターは、`--wait` フラグを使用して
 
 - `theme` - UI テーマを設定します。[詳細はこちら](/docs/themes)。
 - `keybinds` - キーボードショートカットをカスタマイズします。[詳細はこちら](/docs/keybinds)。
-- `leader_timeout` - leader key を押したあと、OpenCode が次のキー入力を待つ時間を制御します。デフォルトは `2000` です。
+- `leader_timeout` - leader key を押したあと、Pencode が次のキー入力を待つ時間を制御します。デフォルトは `2000` です。
 - `scroll_acceleration.enabled` - macOS スタイルのスクロールアクセラレーションを有効にして、スムーズで自然なスクロールを実現します。有効にすると、高速スクロールジェスチャではスクロール速度が向上し、ゆっくりとした動きでは正確なままになります。 **この設定は `scroll_speed` よりも優先され、有効になっている場合は上書きされます。**
 - `scroll_speed` - スクロールコマンドを使用するときに TUI がスクロールする速度を制御します (最小: `0.001`、小数をサポート)。デフォルトは `3` です。 **注: `scroll_acceleration.enabled` が `true` に設定されている場合、これは無視されます。**
 - `diff_style` - 差分レンダリングを制御します。 `"auto"` はターミナルの幅に適応し、`"stacked"` は常に 1 列のレイアウトを表示します。
 - `mouse` - TUI でのマウスキャプチャを有効または無効にします (デフォルト: `true`)。無効にすると、ターミナル本来のマウス選択/スクロール動作が維持されます。
 - `attention` - TUI のデスクトップ通知とサウンドを設定します。デフォルトでは無効です。
 
-カスタム TUI 設定パスをロードするには、`OPENCODE_TUI_CONFIG` を使用します。
+カスタム TUI 設定パスをロードするには、`PENCODE_TUI_CONFIG` を使用します。
 
 ### Attention
 
-Attention を有効にすると、OpenCode が回答待ち、権限の承認待ち、セッションエラー、またはセッション完了を知らせたいときに、TUI がサウンドやデスクトップ通知で知らせます。`attention.enabled` で有効化します。組み込みイベントは発生時にサウンドを再生します。デスクトップ通知はターミナルウィンドウにフォーカスがない場合にのみ送信され、subagent イベントには使われません。
+Attention を有効にすると、Pencode が回答待ち、権限の承認待ち、セッションエラー、またはセッション完了を知らせたいときに、TUI がサウンドやデスクトップ通知で知らせます。`attention.enabled` で有効化します。組み込みイベントは発生時にサウンドを再生します。デスクトップ通知はターミナルウィンドウにフォーカスがない場合にのみ送信され、subagent イベントには使われません。
 
 - `enabled` - Attention のすべての通知とサウンドを有効にします。デフォルトは `false` です。
 - `notifications` - Attention が有効なとき、TUI がターミナル経由でデスクトップ通知を送信できるようにします。デフォルトは `true` です。
 - `sound` - Attention が有効なとき、通知音の再生を許可します。デフォルトは `true` です。
 - `volume` - 通知音のデフォルト音量を `0` から `1` で指定します。デフォルトは `0.4` です。
-- `sound_pack` - 使用する sound pack ID です。デフォルトは `opencode.default` です。
+- `sound_pack` - 使用する sound pack ID です。デフォルトは `pencode.default` です。
 - `sounds` - `default`、`question`、`permission`、`error`、`done`、または `subagent_done` に使うカスタムサウンドファイルを指定します。パスは絶対パス、`file://` URL、または `tui.json` からの相対パスにできます。
 
 ---

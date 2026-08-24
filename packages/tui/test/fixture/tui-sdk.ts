@@ -1,7 +1,7 @@
-import type { GlobalEvent } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent } from "@pencode-ai/sdk/v2"
 import type { EventSource } from "../../src/context/sdk"
 
-export const worktree = "/tmp/opencode"
+export const worktree = "/tmp/pencode"
 export const directory = `${worktree}/packages/tui`
 
 export function json(data: unknown, init?: ResponseInit) {

@@ -1,7 +1,7 @@
-import { Global } from "@opencode-ai/core/global"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
-import { ServerAuth } from "@opencode-ai/server/auth"
+import { Global } from "@pencode-ai/core/global"
+import { InstallationVersion } from "@pencode-ai/core/installation/version"
+import { createPencodeClient } from "@pencode-ai/sdk/v2/client"
+import { ServerAuth } from "@pencode-ai/server/auth"
 import { Context, Effect, FileSystem, Layer, Option, Schedule, Schema, Scope } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { randomBytes, randomUUID } from "crypto"
@@ -9,7 +9,7 @@ import { spawn } from "node:child_process"
 import path from "path"
 
 export interface Interface {
-  readonly client: () => Effect.Effect<ReturnType<typeof createOpencodeClient>, unknown>
+  readonly client: () => Effect.Effect<ReturnType<typeof createPencodeClient>, unknown>
   readonly transport: () => Effect.Effect<{ url: string; headers: RequestInit["headers"] }, unknown>
   readonly start: () => Effect.Effect<string, Error>
   readonly status: () => Effect.Effect<string | undefined>
@@ -18,7 +18,7 @@ export interface Interface {
   readonly register: (address: HttpServer.Address) => Effect.Effect<void, unknown, Scope.Scope>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Daemon") {}
+export class Service extends Context.Service<Service, Interface>()("@pencode/cli/Daemon") {}
 
 const Registration = Schema.Struct({
   id: Schema.optional(Schema.String),
@@ -60,7 +60,7 @@ export const layer = Layer.effect(
     })
 
     const createClient = Effect.fnUntraced(function* (url: string) {
-      return createOpencodeClient({ baseUrl: url, headers: ServerAuth.headers({ password: yield* password() }) })
+      return createPencodeClient({ baseUrl: url, headers: ServerAuth.headers({ password: yield* password() }) })
     })
 
     const healthy = Effect.fnUntraced(function* () {
@@ -140,7 +140,7 @@ export const layer = Layer.effect(
 
     const client = Effect.fn("cli.daemon.client")(function* () {
       const connection = yield* transport()
-      return createOpencodeClient({ baseUrl: connection.url, headers: connection.headers })
+      return createPencodeClient({ baseUrl: connection.url, headers: connection.headers })
     })
 
     const status = Effect.fn("cli.daemon.status")(function* () {

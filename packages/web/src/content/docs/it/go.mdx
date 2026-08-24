@@ -7,11 +7,11 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go è un abbonamento a basso costo da **10 $/mese** che ti offre un accesso affidabile ai popolari modelli di programmazione aperti.
+Pencode Go è un abbonamento a basso costo da **10 $/mese** che ti offre un accesso affidabile ai popolari modelli di programmazione aperti.
 
-Go funziona come qualsiasi altro provider in OpenCode. Ti abboni a OpenCode Go e
+Go funziona come qualsiasi altro provider in Pencode. Ti abboni a Pencode Go e
 ottieni la tua chiave API. È **completamente facoltativo** e non hai bisogno di usarlo per
-utilizzare OpenCode.
+utilizzare Pencode.
 
 È progettato principalmente per gli utenti internazionali e garantisce un accesso globale stabile.
 
@@ -25,7 +25,7 @@ Tuttavia, ottenere un accesso affidabile e a bassa latenza può essere difficile
 variano per qualità e disponibilità.
 
 :::tip
-Abbiamo testato un gruppo selezionato di modelli e provider che funzionano bene con OpenCode.
+Abbiamo testato un gruppo selezionato di modelli e provider che funzionano bene con Pencode.
 :::
 
 Per risolvere questo problema, abbiamo fatto un paio di cose:
@@ -37,22 +37,22 @@ Per risolvere questo problema, abbiamo fatto un paio di cose:
 3. Infine, abbiamo eseguito dei benchmark sulla combinazione modello/provider e abbiamo stilato
    un elenco che ci sentiamo di raccomandare.
 
-OpenCode Go ti dà accesso a questi modelli a **10 $/mese**.
+Pencode Go ti dà accesso a questi modelli a **10 $/mese**.
 
 ---
 
 ## Come funziona
 
-OpenCode Go funziona come qualsiasi altro provider in OpenCode.
+Pencode Go funziona come qualsiasi altro provider in Pencode.
 
-1. Accedi a **<a href={console}>OpenCode Zen</a>**, ti abboni a Go e
+1. Accedi a **<a href={console}>Pencode Zen</a>**, ti abboni a Go e
    copi la tua chiave API.
-2. Esegui il comando `/connect` nella TUI, selezioni `OpenCode Go` e incolli
+2. Esegui il comando `/connect` nella TUI, selezioni `Pencode Go` e incolli
    la tua chiave API.
 3. Esegui `/models` nella TUI per vedere l'elenco dei modelli disponibili tramite Go.
 
 :::note
-Solo un membro per workspace può abbonarsi a OpenCode Go.
+Solo un membro per workspace può abbonarsi a Pencode Go.
 :::
 
 L'elenco attuale dei modelli include:
@@ -87,7 +87,7 @@ L'elenco dei modelli potrebbe cambiare man mano che ne testiamo e aggiungiamo di
 
 ## Limiti di utilizzo
 
-OpenCode Go include i seguenti limiti:
+Pencode Go include i seguenti limiti:
 
 - **Limite di 5 ore** — 12 $ di utilizzo
 - **Limite settimanale** — 30 $ di utilizzo
@@ -222,34 +222,34 @@ Puoi anche accedere ai modelli Go tramite i seguenti endpoint API.
 
 | Modello                      | ID Modello                   | Endpoint                                         | Pacchetto AI SDK            |
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
-| Grok 4.5                     | grok-4.5                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
-| GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
-| GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5.1                      | glm-5.1                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K3                      | kimi-k3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.7 Code               | kimi-k2.7-code               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.6                    | kimi-k2.6                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| LongCat-2.0                  | longcat-2.0                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5                    | mimo-v2.5                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5-Pro                | mimo-v2.5-pro                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
-| Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Grok 4.5                     | grok-4.5                     | `https://pencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://pencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GLM-5.3                      | glm-5.3                      | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5.2                      | glm-5.2                      | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5.1                      | glm-5.1                      | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K3                      | kimi-k3                      | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.7 Code               | kimi-k2.7-code               | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6                    | kimi-k2.6                    | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat-2.0                  | longcat-2.0                  | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Pro              | deepseek-v4-pro              | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash            | deepseek-v4-flash            | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5                    | mimo-v2.5                    | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro                | mimo-v2.5-pro                | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M3                   | minimax-m3                   | `https://pencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.7                 | minimax-m2.7                 | `https://pencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5                 | minimax-m2.5                 | `https://pencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://pencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Qwen3.8 Max                  | qwen3.8-max                  | `https://pencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Max                  | qwen3.7-max                  | `https://pencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus                 | qwen3.7-plus                 | `https://pencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus                 | qwen3.6-plus                 | `https://pencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy3                          | hy3                          | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Ox Alpha Free                | ox-alpha-free                | `https://pencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
-Il [model id](/docs/config/#models) nella tua OpenCode config
-utilizza il formato `opencode-go/<model-id>`. Ad esempio, per Kimi K3, useresti
-`opencode-go/kimi-k3` nella tua configurazione.
+Il [model id](/docs/config/#models) nella tua Pencode config
+utilizza il formato `pencode-go/<model-id>`. Ad esempio, per Kimi K3, useresti
+`pencode-go/kimi-k3` nella tua configurazione.
 
 ---
 
@@ -258,7 +258,7 @@ utilizza il formato `opencode-go/<model-id>`. Ad esempio, per Kimi K3, useresti
 Puoi recuperare l'elenco completo dei modelli disponibili e i relativi metadati da:
 
 ```
-https://opencode.ai/zen/go/v1/models
+https://pencode.ai/zen/go/v1/models
 ```
 
 ---
@@ -300,9 +300,9 @@ https://opencode.ai/zen/go/v1/models
 
 ## Obiettivi
 
-Abbiamo creato OpenCode Go per:
+Abbiamo creato Pencode Go per:
 
 1. Rendere la programmazione con l'IA **accessibile** a più persone tramite un abbonamento a basso costo.
 2. Fornire un accesso **affidabile** ai migliori modelli di programmazione aperti.
 3. Curare modelli che sono **testati e valutati tramite benchmark** per l'uso con gli agenti di programmazione.
-4. Non avere **nessun lock-in**, permettendoti di utilizzare anche qualsiasi altro provider con OpenCode.
+4. Non avere **nessun lock-in**, permettendoti di utilizzare anche qualsiasi altro provider con Pencode.

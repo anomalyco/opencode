@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import { mockPencodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 import {
   analyzeVisualObservations,
@@ -9,11 +9,11 @@ import {
   visualPlan,
 } from "../utils/visual-stability"
 
-const directory = "C:/OpenCode/ContextResizeRegression"
+const directory = "C:/Pencode/ContextResizeRegression"
 const projectID = "proj_context_resize_regression"
 const sessionID = "ses_context_resize_regression"
 const title = "Context resize regression"
-const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
+const model = { providerID: "pencode", modelID: "claude-opus-4-6", variant: "max" }
 const contextIDs = ["prt_0100_read", "prt_0101_glob", "prt_0102_grep", "prt_0103_list"]
 const followingTextID = "prt_0104_text"
 
@@ -313,7 +313,7 @@ async function mockServer(
   events: { directory: string; payload: Record<string, unknown> }[] = [],
   fixtureMessages = messages,
 ) {
-  await mockOpenCodeServer(page, {
+  await mockPencodeServer(page, {
     directory,
     project: project(),
     provider: provider(),
@@ -359,13 +359,13 @@ function provider() {
   return {
     all: [
       {
-        id: "opencode",
-        name: "OpenCode",
+        id: "pencode",
+        name: "Pencode",
         models: { "claude-opus-4-6": { id: "claude-opus-4-6", name: "Claude Opus 4.6", limit: { context: 200_000 } } },
       },
     ],
-    connected: ["opencode"],
-    default: { providerID: "opencode", modelID: "claude-opus-4-6" },
+    connected: ["pencode"],
+    default: { providerID: "pencode", modelID: "claude-opus-4-6" },
   }
 }
 

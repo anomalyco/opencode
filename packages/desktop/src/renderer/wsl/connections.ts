@@ -1,4 +1,4 @@
-import type { WslServersState } from "@opencode-ai/app/wsl/types"
+import type { WslServersState } from "@pencode-ai/app/wsl/types"
 
 export function readyWslConnections(state?: WslServersState, label = "WSL") {
   return (state?.servers ?? []).flatMap((item) => {

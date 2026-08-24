@@ -73,7 +73,7 @@ export const dict = {
 
   "dialog.usageExceeded.freeTier.title": "ถึงขีดจำกัดฟรีแล้ว",
   "dialog.usageExceeded.freeTier.description":
-    "สมัครสมาชิก OpenCode Go ในราคา $10/เดือน เพื่อการเข้าถึงโมเดลโอเพนซอร์สที่ดีที่สุดอย่างเชื่อถือได้",
+    "สมัครสมาชิก Pencode Go ในราคา $10/เดือน เพื่อการเข้าถึงโมเดลโอเพนซอร์สที่ดีที่สุดอย่างเชื่อถือได้",
   "dialog.usageExceeded.freeTier.actionLabel": "สมัครสมาชิก",
   "dialog.usageExceeded.accountRateLimit.title": "ถึงขีดจำกัดของ Go แล้ว",
   "dialog.usageExceeded.accountRateLimit.description":

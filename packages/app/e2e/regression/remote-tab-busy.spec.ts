@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@pencode-ai/core/util/encode"
 import { currentSession } from "../utils/mock-server"
 
 const serverA = "http://127.0.0.1:4096"
@@ -12,9 +12,9 @@ test("tab busy indicator reflects the tab server's own session status", async ({
   await page.addInitScript(
     ({ serverA, serverB, sessionA, sessionB }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-      localStorage.setItem("opencode.global.dat:server", JSON.stringify({ list: [serverB] }))
+      localStorage.setItem("pencode.global.dat:server", JSON.stringify({ list: [serverB] }))
       localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
+        "pencode.window.browser.dat:tabs",
         JSON.stringify([
           { type: "session", server: serverA, sessionId: sessionA },
           { type: "session", server: serverB, sessionId: sessionB },

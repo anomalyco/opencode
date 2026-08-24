@@ -1,15 +1,15 @@
 ---
 title: LSP-servere
-description: OpenCode integreres med dine LSP-servere.
+description: Pencode integreres med dine LSP-servere.
 ---
 
-OpenCode kan integreres med Language Server Protocol (LSP)-servere for at bruge diagnostik som feedback til agenten.
+Pencode kan integreres med Language Server Protocol (LSP)-servere for at bruge diagnostik som feedback til agenten.
 
 ---
 
 ## Indbyggede
 
-OpenCode leveres med flere indbyggede LSP-servere til populære sprog:
+Pencode leveres med flere indbyggede LSP-servere til populære sprog:
 
 | LSP Server         | Udvidelser                                                | Krav                                                            |
 | ------------------ | --------------------------------------------------------- | --------------------------------------------------------------- |
@@ -50,14 +50,14 @@ OpenCode leveres med flere indbyggede LSP-servere til populære sprog:
 LSP er deaktiveret som standard. Når det er aktiveret, starter servere, når en af ovenstående filtypenavne opdages, og kravene er opfyldt.
 
 :::note
-Du kan deaktivere automatisk LSP-serverdownloads ved at indstille miljøvariablen `OPENCODE_DISABLE_LSP_DOWNLOAD` til `true`.
+Du kan deaktivere automatisk LSP-serverdownloads ved at indstille miljøvariablen `PENCODE_DISABLE_LSP_DOWNLOAD` til `true`.
 :::
 
 ---
 
 ## Sådan fungerer det
 
-Når LSP er aktiveret, og opencode åbner en fil, vil den:
+Når LSP er aktiveret, og pencode åbner en fil, vil den:
 
 1. Kontrollerer filtypenavnet mod alle aktiverede LSP-servere.
 2. Starter den relevante LSP-server, hvis den ikke allerede kører.
@@ -74,22 +74,22 @@ Sprogservere kan komme ud af sync, bruge meget hukommelse, variere efter version
 
 ## Konfiguration
 
-Du kan aktivere og tilpasse LSP-servere gennem sektionen `lsp` i din opencode-konfiguration.
+Du kan aktivere og tilpasse LSP-servere gennem sektionen `lsp` i din pencode-konfiguration.
 
 For at aktivere alle indbyggede LSP-servere skal du indstille `lsp` til `true`.
 
-```json title="opencode.json"
+```json title="pencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "lsp": true
 }
 ```
 
 Brug et objekt til at holde indbyggede servere aktiveret, mens du konfigurerer tilsidesættelser eller brugerdefinerede servere.
 
-```json title="opencode.json"
+```json title="pencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "lsp": {}
 }
 ```
@@ -112,9 +112,9 @@ Lad os se på nogle eksempler.
 
 Brug egenskaben `env` til at indstille miljøvariabler, når du starter LSP-serveren:
 
-```json title="opencode.json" {5-7}
+```json title="pencode.json" {5-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "lsp": {
     "rust": {
       "env": {
@@ -131,9 +131,9 @@ Brug egenskaben `env` til at indstille miljøvariabler, når du starter LSP-serv
 
 Brug egenskaben `initialization` til at videregive initialiseringsindstillinger til LSP-serveren. Disse er serverspecifikke indstillinger sendt under LSP `initialize` anmodningen:
 
-```json title="opencode.json" {5-9}
+```json title="pencode.json" {5-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "lsp": {
     "typescript": {
       "initialization": {
@@ -156,18 +156,18 @@ Initialiseringsmuligheder forskellige afhængige af LSP-serveren. Se din LSP-ser
 
 Hvis `lsp` udelades, er alle LSP-servere deaktiveret. For at deaktivere alle LSP-servere efter at en anden konfiguration har aktiveret dem, skal du indstille `lsp` til `false`:
 
-```json title="opencode.json" {3}
+```json title="pencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "lsp": false
 }
 ```
 
 For at deaktivere en **specifik** LSP-server skal du indstille `disabled` til `true`:
 
-```json title="opencode.json" {5}
+```json title="pencode.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "lsp": {
     "typescript": {
       "disabled": true
@@ -182,9 +182,9 @@ For at deaktivere en **specifik** LSP-server skal du indstille `disabled` til `t
 
 Du kan tilføje brugerdefinerede LSP-servere ved at angive kommandoen og filtypenavne:
 
-```json title="opencode.json" {4-7}
+```json title="pencode.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "lsp": {
     "custom-lsp": {
       "command": ["custom-lsp-server", "--stdio"],

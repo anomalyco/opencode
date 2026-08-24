@@ -3,7 +3,7 @@ import path from "node:path"
 import os from "node:os"
 
 export async function tmpdir() {
-  const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), "opencode-tui-test-")))
+  const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), "pencode-tui-test-")))
   return {
     path: directory,
     async [Symbol.asyncDispose]() {

@@ -9,17 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Atjauninājumu pārbaude neizdevās",
   "desktop.updater.checkFailed.message": "Neizdevās pārbaudīt atjauninājumus",
   "desktop.updater.none.title": "Atjauninājumu nav",
-  "desktop.updater.none.message": "Jūs jau izmantojat jaunāko OpenCode versiju",
+  "desktop.updater.none.message": "Jūs jau izmantojat jaunāko Pencode versiju",
   "desktop.updater.downloadFailed.title": "Atjaunināšana neizdevās",
   "desktop.updater.downloadFailed.message": "Neizdevās lejupielādēt atjauninājumu",
   "desktop.updater.downloaded.title": "Atjauninājums lejupielādēts",
   "desktop.updater.downloaded.prompt":
-    "OpenCode versija {{version}} ir lejupielādēta. Vai vēlaties to instalēt un palaist no jauna?",
+    "Pencode versija {{version}} ir lejupielādēta. Vai vēlaties to instalēt un palaist no jauna?",
   "desktop.updater.installFailed.title": "Atjaunināšana neizdevās",
   "desktop.updater.installFailed.message": "Neizdevās instalēt atjauninājumu",
   "desktop.cli.installed.title": "CLI instalēts",
   "desktop.cli.installed.message":
-    "CLI instalēts uz {{path}}\n\nRestartējiet termināli, lai izmantotu komandu 'opencode'.",
+    "CLI instalēts uz {{path}}\n\nRestartējiet termināli, lai izmantotu komandu 'pencode'.",
   "desktop.cli.failed.title": "Instalēšana neizdevās",
   "desktop.cli.failed.message": "Neizdevās instalēt CLI: {{error}}",
 

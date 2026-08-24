@@ -1,0 +1,623 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode acp --help 1`] = `
+"pencode acp
+
+start ACP (Agent Client Protocol) server
+
+Options:
+  -h, --help         show help                                                             [boolean]
+  -v, --version      show version number                                                   [boolean]
+      --print-logs   print logs to stderr                                                  [boolean]
+      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                          [boolean]
+      --port         port to listen on                                         [number] [default: 0]
+      --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
+      --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain  custom domain name for mDNS service (default: pencode.local)
+                                                                [string] [default: "pencode.local"]
+      --cors         additional domains to allow for CORS                      [array] [default: []]
+      --cwd          working directory [string] [default: "<HOME>"]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode mcp --help 1`] = `
+"pencode mcp
+
+manage MCP (Model Context Protocol) servers
+
+Commands:
+  pencode mcp add [name]     add an MCP server
+  pencode mcp list           list MCP servers and their status                        [aliases: ls]
+  pencode mcp auth [name]    authenticate with an OAuth-enabled MCP server
+  pencode mcp logout [name]  remove OAuth credentials for an MCP server
+  pencode mcp debug <name>   debug OAuth connection for an MCP server
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode attach --help 1`] = `
+"pencode attach <url>
+
+attach to a running pencode server
+
+Positionals:
+  url  http://localhost:4096                                                     [string] [required]
+
+Options:
+  -h, --help          show help                                                            [boolean]
+  -v, --version       show version number                                                  [boolean]
+      --print-logs    print logs to stderr                                                 [boolean]
+      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure          run without external plugins                                         [boolean]
+      --dir           directory to run in                                                   [string]
+  -c, --continue      continue the last session                                            [boolean]
+  -s, --session       session id to continue                                                [string]
+      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+  -p, --password      basic auth password (defaults to PENCODE_SERVER_PASSWORD)            [string]
+  -u, --username      basic auth username (defaults to PENCODE_SERVER_USERNAME or 'pencode')
+                                                                                            [string]
+      --mini          start the minimal interactive interface             [boolean] [default: false]
+      --no-replay     disable mini session history replay on resume and after resize       [boolean]
+      --replay-limit  cap visible mini replay to the newest N messages                      [number]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode run --help 1`] = `
+"pencode run [message..]
+
+run pencode with a message
+
+Positionals:
+  message  message to send                                                     [array] [default: []]
+
+Options:
+  -h, --help         show help                                                             [boolean]
+  -v, --version      show version number                                                   [boolean]
+      --print-logs   print logs to stderr                                                  [boolean]
+      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                          [boolean]
+      --command      the command to run, use message for args                               [string]
+  -c, --continue     continue the last session                                             [boolean]
+  -s, --session      session id to continue                                                 [string]
+      --fork         fork the session before continuing (requires --continue or --session) [boolean]
+      --share        share the session                                                     [boolean]
+  -m, --model        model to use in the format of provider/model                           [string]
+      --agent        agent to use                                                           [string]
+      --format       format: default (formatted) or json (raw JSON events)
+                                          [string] [choices: "default", "json"] [default: "default"]
+  -f, --file         file(s) to attach to message                                            [array]
+      --title        title for the session (uses truncated prompt if no value provided)     [string]
+      --attach       attach to a running pencode server (e.g., http://localhost:4096)      [string]
+  -p, --password     basic auth password (defaults to PENCODE_SERVER_PASSWORD)             [string]
+  -u, --username     basic auth username (defaults to PENCODE_SERVER_USERNAME or 'pencode')
+                                                                                            [string]
+      --dir          directory to run in, path on remote server if attaching                [string]
+      --port         port for the local server (defaults to random port if no value provided)
+                                                                                            [number]
+      --variant      model variant (provider-specific reasoning effort, e.g., high, max, minimal)
+                                                                                            [string]
+      --thinking     show thinking blocks                                                  [boolean]
+  -i, --interactive  run in direct interactive split-footer mode          [boolean] [default: false]
+      --auto         auto-approve permissions that are not explicitly denied (dangerous!)
+                                                                          [boolean] [default: false]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode debug --help 1`] = `
+"pencode debug
+
+debugging and troubleshooting tools
+
+Commands:
+  pencode debug config        show resolved configuration
+  pencode debug lsp           LSP debugging utilities
+  pencode debug rg            ripgrep debugging utilities
+  pencode debug file          file system debugging utilities
+  pencode debug scrap         list all known projects
+  pencode debug skill         list all available skills
+  pencode debug snapshot      snapshot debugging utilities
+  pencode debug startup       print startup timing
+  pencode debug agent <name>  show agent configuration details
+  pencode debug v2            debug v2 catalog and built-in plugins
+  pencode debug info          show debug information
+  pencode debug paths         show global paths (data, config, cache, state)
+  pencode debug wait          wait indefinitely (for debugging)
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode providers --help 1`] = `
+"pencode providers
+
+manage AI providers and credentials
+
+Commands:
+  pencode providers list               list providers and credentials                 [aliases: ls]
+  pencode providers login [url]        log in to a provider
+  pencode providers logout [provider]  log out from a configured provider
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode agent --help 1`] = `
+"pencode agent
+
+manage agents
+
+Commands:
+  pencode agent create  create a new agent
+  pencode agent list    list all available agents
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode upgrade --help 1`] = `
+"pencode upgrade [target]
+
+upgrade pencode to the latest or a specific version
+
+Positionals:
+  target  version to upgrade to, for ex '0.1.48' or 'v0.1.48'                               [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+  -m, --method      installation method to use
+                          [string] [choices: "curl", "npm", "pnpm", "bun", "brew", "choco", "scoop"]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode uninstall --help 1`] = `
+"pencode uninstall
+
+uninstall pencode and remove all related files
+
+Options:
+  -h, --help         show help                                                             [boolean]
+  -v, --version      show version number                                                   [boolean]
+      --print-logs   print logs to stderr                                                  [boolean]
+      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                          [boolean]
+  -c, --keep-config  keep configuration files                             [boolean] [default: false]
+  -d, --keep-data    keep session data and snapshots                      [boolean] [default: false]
+      --dry-run      show what would be removed without removing          [boolean] [default: false]
+  -f, --force        skip confirmation prompts                            [boolean] [default: false]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode serve --help 1`] = `
+"pencode serve
+
+starts a headless pencode server
+
+Options:
+  -h, --help         show help                                                             [boolean]
+  -v, --version      show version number                                                   [boolean]
+      --print-logs   print logs to stderr                                                  [boolean]
+      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                          [boolean]
+      --port         port to listen on                                         [number] [default: 0]
+      --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
+      --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain  custom domain name for mDNS service (default: pencode.local)
+                                                                [string] [default: "pencode.local"]
+      --cors         additional domains to allow for CORS                      [array] [default: []]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode web --help 1`] = `
+"pencode web
+
+start pencode server and open web interface
+
+Options:
+  -h, --help         show help                                                             [boolean]
+  -v, --version      show version number                                                   [boolean]
+      --print-logs   print logs to stderr                                                  [boolean]
+      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                          [boolean]
+      --port         port to listen on                                         [number] [default: 0]
+      --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
+      --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain  custom domain name for mDNS service (default: pencode.local)
+                                                                [string] [default: "pencode.local"]
+      --cors         additional domains to allow for CORS                      [array] [default: []]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode models --help 1`] = `
+"pencode models [provider]
+
+list all available models
+
+Positionals:
+  provider  provider ID to filter models by                                                 [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --verbose     use more verbose model output (includes metadata like costs)           [boolean]
+      --refresh     refresh the models cache from models.dev                               [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode stats --help 1`] = `
+"pencode stats
+
+show token usage and cost statistics
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --days        show stats for the last N days (default: all time)                      [number]
+      --tools       number of tools to show (default: all)                                  [number]
+      --models      show model statistics (default: hidden). Pass a number to show top N, otherwise
+                    shows all
+      --project     filter by project (default: all projects, empty string: current project)[string]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode export --help 1`] = `
+"pencode export [sessionID]
+
+export session data as JSON
+
+Positionals:
+  sessionID  session id to export                                                           [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --sanitize    redact sensitive transcript and file data                              [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode import --help 1`] = `
+"pencode import <file>
+
+import session data from JSON file or URL
+
+Positionals:
+  file  path to JSON file or share URL                                           [string] [required]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode github --help 1`] = `
+"pencode github
+
+manage GitHub agent
+
+Commands:
+  pencode github install  install the GitHub agent
+  pencode github run      run the GitHub agent
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode pr --help 1`] = `
+"pencode pr <number>
+
+fetch and checkout a GitHub PR branch, then run pencode
+
+Positionals:
+  number  PR number to checkout                                                  [number] [required]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode session --help 1`] = `
+"pencode session
+
+manage sessions
+
+Commands:
+  pencode session list                list sessions
+  pencode session delete <sessionID>  delete a session
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode plugin --help 1`] = `
+"pencode plugin <module>
+
+install plugin and update config
+
+Positionals:
+  module  npm module name                                                        [string] [required]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+  -g, --global      install in global config                              [boolean] [default: false]
+  -f, --force       replace existing plugin version                       [boolean] [default: false]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode db --help 1`] = `
+"pencode db
+
+database tools
+
+Commands:
+  pencode db [query]     open an interactive sqlite3 shell or run a query                 [default]
+  pencode db path        print the database path
+
+Positionals:
+  query  SQL query to execute                                                               [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --format      Output format                 [string] [choices: "json", "tsv"] [default: "tsv"]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode mcp list --help 1`] = `
+"pencode mcp list
+
+list MCP servers and their status
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode mcp add --help 1`] = `
+"pencode mcp add [name]
+
+add an MCP server
+
+Positionals:
+  name  name of the MCP server                                                              [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --url         URL for a remote MCP server                                             [string]
+      --env         environment variable for a local MCP server (KEY=VALUE)                  [array]
+      --header      HTTP header for a remote MCP server (KEY=VALUE)                          [array]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode mcp auth --help 1`] = `
+"pencode mcp auth [name]
+
+authenticate with an OAuth-enabled MCP server
+
+Commands:
+  pencode mcp auth list  list OAuth-capable MCP servers and their auth status         [aliases: ls]
+
+Positionals:
+  name  name of the MCP server                                                              [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode mcp logout --help 1`] = `
+"pencode mcp logout [name]
+
+remove OAuth credentials for an MCP server
+
+Positionals:
+  name  name of the MCP server                                                              [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode providers list --help 1`] = `
+"pencode providers list
+
+list providers and credentials
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode providers login --help 1`] = `
+"pencode providers login [url]
+
+log in to a provider
+
+Positionals:
+  url  pencode auth provider                                                               [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+  -p, --provider    provider id or name to log in to (skips provider selection)             [string]
+  -m, --method      login method label (skips method selection)                             [string]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode providers logout --help 1`] = `
+"pencode providers logout [provider]
+
+log out from a configured provider
+
+Positionals:
+  provider  provider id or name to log out from                                             [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode agent create --help 1`] = `
+"pencode agent create
+
+create a new agent
+
+Options:
+  -h, --help                  show help                                                    [boolean]
+  -v, --version               show version number                                          [boolean]
+      --print-logs            print logs to stderr                                         [boolean]
+      --log-level             log level         [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure                  run without external plugins                                 [boolean]
+      --path                  directory path to generate the agent file                     [string]
+      --description           what the agent should do                                      [string]
+      --mode                  agent mode            [string] [choices: "all", "primary", "subagent"]
+      --permissions, --tools  comma-separated list of permissions to allow (default: all).
+                              Available: "bash, read, edit, glob, grep, webfetch, task, todowrite,
+                              websearch, lsp, skill"                                        [string]
+  -m, --model                 model to use in the format of provider/model                  [string]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode agent list --help 1`] = `
+"pencode agent list
+
+list all available agents
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode session list --help 1`] = `
+"pencode session list
+
+list sessions
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+  -n, --max-count   limit to N most recent sessions                                         [number]
+      --format      output format             [string] [choices: "table", "json"] [default: "table"]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode session delete --help 1`] = `
+"pencode session delete <sessionID>
+
+delete a session
+
+Positionals:
+  sessionID  session ID to delete                                                [string] [required]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode github install --help 1`] = `
+"pencode github install
+
+install the GitHub agent
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode github run --help 1`] = `
+"pencode github run
+
+run the GitHub agent
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --event       GitHub mock event to run the agent for                                  [string]
+      --token       GitHub personal access token (github_pat_********)                      [string]"
+`;
+
+exports[`pencode CLI help-text snapshots every documented command emits stable help text: pencode db path --help 1`] = `
+"pencode db path
+
+print the database path
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;

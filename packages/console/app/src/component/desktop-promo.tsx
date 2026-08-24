@@ -20,7 +20,7 @@ export function DesktopPromo() {
   )
   const hostname = request ? new URL(request.url).hostname : typeof window === "object" ? window.location.hostname : ""
   const primaryHost =
-    hostname === "opencode.ai" || hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+    hostname === "pencode.ai" || hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
 
   return (
     <Show

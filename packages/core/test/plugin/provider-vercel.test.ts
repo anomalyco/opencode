@@ -1,12 +1,12 @@
-import { AISDK } from "@opencode-ai/core/aisdk"
+import { AISDK } from "@pencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { VercelPlugin } from "@opencode-ai/core/plugin/provider/vercel"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Catalog } from "@pencode-ai/core/catalog"
+import { ModelV2 } from "@pencode-ai/core/model"
+import { PluginV2 } from "@pencode-ai/core/plugin"
+import { PluginHost } from "@pencode-ai/core/plugin/host"
+import { VercelPlugin } from "@pencode-ai/core/plugin/provider/vercel"
+import { ProviderV2 } from "@pencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -32,8 +32,8 @@ describe("VercelPlugin", () => {
       yield* addPlugin()
       expect((yield* catalog.provider.get(ProviderV2.ID.make("vercel")))?.request.headers).toEqual({
         Existing: "1",
-        "http-referer": "https://opencode.ai/",
-        "x-title": "opencode",
+        "http-referer": "https://pencode.ai/",
+        "x-title": "pencode",
       })
     }),
   )

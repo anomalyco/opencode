@@ -8,7 +8,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
+import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@pencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
 import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "../util/provider-origin"
@@ -17,15 +17,15 @@ import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
-  opencode: 0,
-  "opencode-go": 1,
+  pencode: 0,
+  "pencode-go": 1,
   openai: 2,
   "github-copilot": 3,
   anthropic: 4,
   google: 5,
 }
 
-const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
+const CUSTOM_PROVIDER_OPTION_VALUE = "__pencode_custom_provider__"
 const CUSTOM_PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
 
 type ProviderOptionBase = {
@@ -59,10 +59,10 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
         value: provider.id,
         providerID: provider.id,
         description: {
-          opencode: "(Recommended)",
+          pencode: "(Recommended)",
           anthropic: "(API key)",
           openai: "(ChatGPT Plus/Pro or API key)",
-          "opencode-go": "Low cost subscription for everyone",
+          "pencode-go": "Low cost subscription for everyone",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
       })),
@@ -96,7 +96,7 @@ export function createDialogProviderOptions() {
       placeholder: "Provider id",
       description: () => (
         <text fg={theme.textMuted}>
-          This only stores a credential. Configure the provider in opencode.json to use it.
+          This only stores a credential. Configure the provider in pencode.json to use it.
         </text>
       ),
     })
@@ -368,25 +368,25 @@ function ApiMethod(props: ApiMethodProps) {
       placeholder="API key"
       description={() =>
         ({
-          opencode: (
+          pencode: (
             <box gap={1}>
               <text fg={theme.textMuted}>
-                OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API
+                Pencode Zen gives you access to all the best coding models at the cheapest prices with a single API
                 key.
               </text>
               <text fg={theme.text}>
-                Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
+                Go to <span style={{ fg: theme.primary }}>https://pencode.ai/zen</span> to get a key
               </text>
             </box>
           ),
-          "opencode-go": (
+          "pencode-go": (
             <box gap={1}>
               <text fg={theme.textMuted}>
-                OpenCode Go is a $10 per month subscription that provides reliable access to popular open coding models
+                Pencode Go is a $10 per month subscription that provides reliable access to popular open coding models
                 with generous usage limits.
               </text>
               <text fg={theme.text}>
-                Go to <span style={{ fg: theme.primary }}>https://opencode.ai/go</span> and enable OpenCode Go
+                Go to <span style={{ fg: theme.primary }}>https://pencode.ai/go</span> and enable Pencode Go
               </text>
             </box>
           ),
@@ -407,7 +407,7 @@ function ApiMethod(props: ApiMethodProps) {
         if (props.custom && !sync.data.provider_next.all.some((provider) => provider.id === props.providerID)) {
           toast.show({
             variant: "info",
-            message: `Saved credential for ${props.providerID}. Configure it in opencode.json to use it.`,
+            message: `Saved credential for ${props.providerID}. Configure it in pencode.json to use it.`,
           })
           dialog.clear()
           return

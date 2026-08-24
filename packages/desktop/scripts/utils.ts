@@ -8,7 +8,7 @@ const CLI_VERSION = "0.0.0-next-16350"
 export type Channel = "dev" | "beta" | "prod"
 
 export function resolveChannel(): Channel {
-  const raw = Bun.env.OPENCODE_CHANNEL
+  const raw = Bun.env.PENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   return "dev"
 }
@@ -16,37 +16,37 @@ export function resolveChannel(): Channel {
 export const CLI_BINARIES: Array<{ rustTarget: string; package: string; os: string; cpu: string }> = [
   {
     rustTarget: "aarch64-apple-darwin",
-    package: "@opencode-ai/cli-darwin-arm64",
+    package: "@pencode-ai/cli-darwin-arm64",
     os: "darwin",
     cpu: "arm64",
   },
   {
     rustTarget: "x86_64-apple-darwin",
-    package: "@opencode-ai/cli-darwin-x64-baseline",
+    package: "@pencode-ai/cli-darwin-x64-baseline",
     os: "darwin",
     cpu: "x64",
   },
   {
     rustTarget: "aarch64-pc-windows-msvc",
-    package: "@opencode-ai/cli-windows-arm64",
+    package: "@pencode-ai/cli-windows-arm64",
     os: "win32",
     cpu: "arm64",
   },
   {
     rustTarget: "x86_64-pc-windows-msvc",
-    package: "@opencode-ai/cli-windows-x64-baseline",
+    package: "@pencode-ai/cli-windows-x64-baseline",
     os: "win32",
     cpu: "x64",
   },
   {
     rustTarget: "x86_64-unknown-linux-gnu",
-    package: "@opencode-ai/cli-linux-x64-baseline",
+    package: "@pencode-ai/cli-linux-x64-baseline",
     os: "linux",
     cpu: "x64",
   },
   {
     rustTarget: "aarch64-unknown-linux-gnu",
-    package: "@opencode-ai/cli-linux-arm64",
+    package: "@pencode-ai/cli-linux-arm64",
     os: "linux",
     cpu: "arm64",
   },
@@ -71,12 +71,12 @@ export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
 
 export async function downloadCliToResources() {
   const cli = getCurrentCli()
-  const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
-  const dest = windowsify("resources/opencode-cli")
+  const directory = await mkdtemp(join(tmpdir(), "pencode-cli-"))
+  const dest = windowsify("resources/pencode-cli")
   try {
     await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${CLI_VERSION}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
     await copyFile(
-      join(directory, "node_modules", cli.package, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
+      join(directory, "node_modules", cli.package, "bin", cli.os === "win32" ? "pencode2.exe" : "pencode2"),
       dest,
     )
   } finally {

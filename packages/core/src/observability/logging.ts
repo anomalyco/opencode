@@ -46,7 +46,7 @@ function format(input: unknown) {
   return /^[^\s="\\]+$/.test(value) ? value : JSON.stringify(value)
 }
 
-export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id: string = runID) {
+export function fileLogger(file = path.join(Global.Path.log, "pencode.log"), id: string = runID) {
   // Do not set batchWindow to 0; it causes high idle CPU usage.
   return Logger.toFile(formatter(id), file, { flag: "a" })
 }
@@ -54,7 +54,7 @@ export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))
 
 export function minimumLogLevel() {
-  const value = process.env.OPENCODE_LOG_LEVEL?.toUpperCase()
+  const value = process.env.PENCODE_LOG_LEVEL?.toUpperCase()
   const levels = {
     DEBUG: "Debug",
     INFO: "Info",
@@ -65,7 +65,7 @@ export function minimumLogLevel() {
 }
 
 export function loggers() {
-  return process.env.OPENCODE_PRINT_LOGS === "1" ? [fileLogger(), stderrLogger] : [fileLogger()]
+  return process.env.PENCODE_PRINT_LOGS === "1" ? [fileLogger(), stderrLogger] : [fileLogger()]
 }
 
 export * as Logging from "./logging"

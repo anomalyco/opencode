@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
-import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
-import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@opencode-ai/client/promise"
-import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
+import type { Config, PencodeClient, Project } from "@pencode-ai/sdk/v2/client"
+import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@pencode-ai/client/promise"
+import type { NormalizedProviderListResponse } from "@pencode-ai/session-ui/context"
 import {
   bootstrapDirectory,
   loadAgentsQuery,
@@ -125,7 +125,7 @@ describe("bootstrapDirectory", () => {
           },
         },
         provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
-      } as unknown as OpencodeClient,
+      } as unknown as PencodeClient,
       api,
       store,
       setStore,
@@ -164,7 +164,7 @@ describe("bootstrapDirectory", () => {
             throw new Error("legacy directory config should not be called")
           },
         },
-      } as unknown as OpencodeClient,
+      } as unknown as PencodeClient,
       api,
       store,
       setStore,
@@ -193,7 +193,7 @@ describe("config queries", () => {
           },
         },
       },
-    } as unknown as OpencodeClient
+    } as unknown as PencodeClient
 
     const result = await new QueryClient().fetchQuery(
       loadGlobalConfigQuery(ServerScope.local, sdk, Promise.resolve("v2")),
@@ -214,7 +214,7 @@ describe("config queries", () => {
           },
         },
       },
-    } as unknown as OpencodeClient
+    } as unknown as PencodeClient
 
     const result = await new QueryClient().fetchQuery(
       loadGlobalConfigQuery(ServerScope.local, sdk, Promise.resolve("v1")),

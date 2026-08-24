@@ -254,7 +254,7 @@ async function installReviewPaneProbe(page: Page, input: { file: string }) {
       samples,
       start: () => {
         started = performance.now()
-        performance.mark("opencode.review-pane.click")
+        performance.mark("pencode.review-pane.click")
         sample()
       },
       stop: () => {

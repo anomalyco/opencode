@@ -5,7 +5,7 @@ import { tmpdir } from "os"
 import { appendText, readJson, readText, writeJsonAtomic, writeText } from "../../src/util/persistence"
 
 test("persistence creates parent directories and supports text, append, and JSON", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "opencode-tui-persistence-"))
+  const root = await mkdtemp(path.join(tmpdir(), "pencode-tui-persistence-"))
   try {
     const textPath = path.join(root, "nested", "state.jsonl")
     await writeText(textPath, "one\n")

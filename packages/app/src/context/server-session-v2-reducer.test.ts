@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { PencodeEvent, SessionMessageInfo } from "@pencode-ai/client/promise"
 import { createV2SessionReducer } from "./server-session-v2-reducer"
 
-const event = (input: object) => input as OpenCodeEvent
+const event = (input: object) => input as PencodeEvent
 const base = { created: 1, location: { directory: "/repo" }, durable: { aggregateID: "ses_1", seq: 1, version: 1 } }
 
 describe("v2 session reducer", () => {

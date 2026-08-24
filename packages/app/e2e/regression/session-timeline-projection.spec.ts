@@ -75,7 +75,7 @@ test.describe("session timeline projection", () => {
           id: "prt_comment",
           synthetic: true,
           metadata: {
-            opencodeComment: {
+            pencodeComment: {
               path: "src/a.ts",
               selection: { startLine: 4, startChar: 0, endLine: 8, endChar: 0 },
               comment: "Keep this stable",
@@ -135,7 +135,7 @@ test.describe("session timeline projection", () => {
           id: "prt_comment_only",
           synthetic: true,
           metadata: {
-            opencodeComment: {
+            pencodeComment: {
               path: "src/a.ts",
               selection: { startLine: 4, startChar: 0, endLine: 8, endChar: 0 },
               comment: "Keep this stable",

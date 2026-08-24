@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@pencode-ai/core/util/encode"
 import { fixture, pageMessages } from "./session-timeline.fixture"
 import { trackPageErrors, expectNoSmokeErrors } from "../utils/errors"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import { mockPencodeServer } from "../utils/mock-server"
 import { APP_READY_TIMEOUT, expectAppVisible, expectSessionTitle } from "../utils/waits"
 
 const forbiddenText = ["Load details", "Show earlier steps"]
@@ -32,7 +32,7 @@ test.describe("smoke: session timeline", () => {
 
   test("keeps the visible message fixed while prepending history", async ({ page }) => {
     const requests: { before?: string; phase: "start" | "end"; at: number }[] = []
-    await mockOpenCodeServer(page, {
+    await mockPencodeServer(page, {
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -90,7 +90,7 @@ test.describe("smoke: session timeline", () => {
   })
 
   test("preserves the timeline gap above the composer", async ({ page }) => {
-    await mockOpenCodeServer(page, {
+    await mockPencodeServer(page, {
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -116,7 +116,7 @@ test.describe("smoke: session timeline", () => {
   })
 
   test("paints cached session tabs at the latest message", async ({ page }) => {
-    await mockOpenCodeServer(page, {
+    await mockPencodeServer(page, {
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -127,7 +127,7 @@ test.describe("smoke: session timeline", () => {
     await page.addInitScript(
       ({ dirBase64, sourceID, targetID }) => {
         localStorage.setItem(
-          "opencode.window.browser.dat:tabs",
+          "pencode.window.browser.dat:tabs",
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
@@ -242,7 +242,7 @@ test.describe("smoke: session timeline", () => {
   })
 
   test("paints a cold session tab at the latest message", async ({ page }) => {
-    await mockOpenCodeServer(page, {
+    await mockPencodeServer(page, {
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -253,7 +253,7 @@ test.describe("smoke: session timeline", () => {
     await page.addInitScript(
       ({ dirBase64, sourceID, targetID }) => {
         localStorage.setItem(
-          "opencode.window.browser.dat:tabs",
+          "pencode.window.browser.dat:tabs",
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
@@ -321,7 +321,7 @@ test.describe("smoke: session timeline", () => {
 
   test("renders seeded timeline in order while paging through history", async ({ page }) => {
     const errors = trackPageErrors(page)
-    await mockOpenCodeServer(page, {
+    await mockPencodeServer(page, {
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -369,7 +369,7 @@ async function configureSmokePage(page: Page, directory: string) {
 
   await page.addInitScript((directory) => {
     localStorage.setItem(
-      "opencode.global.dat:server",
+      "pencode.global.dat:server",
       JSON.stringify({
         projects: {
           local: [{ worktree: directory, expanded: true }],

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/server",
+  "name": "@pencode-ai/server",
   "version": "1.18.22",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
+    "@pencode-ai/core": "workspace:*",
+    "@pencode-ai/protocol": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:"
   },

@@ -69,7 +69,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "დაამატე კრედიტები",
   "dialog.usageExceeded.freeTier.title": "უფასო ლიმიტი მიღწეულია",
   "dialog.usageExceeded.freeTier.description":
-    "გამოიწერეთ OpenCode Go საუკეთესო ღია კოდის მოდელებზე სანდო წვდომისთვის, თვეში $10-ად.",
+    "გამოიწერეთ Pencode Go საუკეთესო ღია კოდის მოდელებზე სანდო წვდომისთვის, თვეში $10-ად.",
   "dialog.usageExceeded.freeTier.actionLabel": "გამოწერა",
   "dialog.usageExceeded.accountRateLimit.title": "გადასვლის ლიმიტი მიღწეულია",
   "dialog.usageExceeded.accountRateLimit.description":

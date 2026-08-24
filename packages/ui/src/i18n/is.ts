@@ -69,7 +69,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "Bæta við inneign",
   "dialog.usageExceeded.freeTier.title": "Ókeypis hámarki náð",
   "dialog.usageExceeded.freeTier.description":
-    "Gerast áskrifandi að OpenCode Go fyrir $10 á mánuði og fá áreiðanlegan aðgang að bestu opnu gerðunum.",
+    "Gerast áskrifandi að Pencode Go fyrir $10 á mánuði og fá áreiðanlegan aðgang að bestu opnu gerðunum.",
   "dialog.usageExceeded.freeTier.actionLabel": "Gerast áskrifandi",
   "dialog.usageExceeded.accountRateLimit.title": "Go takmörkum náð",
   "dialog.usageExceeded.accountRateLimit.description":

@@ -1,4 +1,4 @@
-import { Resource } from "@opencode-ai/console-resource"
+import { Resource } from "@pencode-ai/console-resource"
 import { getRedis } from "./redis"
 
 // Workspaces whose balance/usage updates should be batched in Redis to avoid

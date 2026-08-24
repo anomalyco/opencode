@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "@pencode-ai/script"
 import { $ } from "bun"
 
 const output = [`version=${Script.version}`]
@@ -13,7 +13,7 @@ if (!Script.preview) {
     .text()
     .catch(() => "No notable changes")
   const dir = process.env.RUNNER_TEMP ?? "/tmp"
-  const notesFile = `${dir}/opencode-release-notes.txt`
+  const notesFile = `${dir}/pencode-release-notes.txt`
   await Bun.write(notesFile, body)
   await $`gh release create v${Script.version} -d --target ${sha} --title "v${Script.version}" --notes-file ${notesFile}`
   const release = await $`gh release view v${Script.version} --json tagName,databaseId`.json()

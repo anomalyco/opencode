@@ -74,21 +74,21 @@ export async function measureNavigationMilestones(
                 return
               }
               if (!marked.has(`${name}.first`)) {
-                performance.mark(`opencode.navigation.${name}.first`)
+                performance.mark(`pencode.navigation.${name}.first`)
                 marked.add(`${name}.first`)
               }
               const streak = (streaks.get(name) ?? 0) + 1
               streaks.set(name, streak)
-              if (streak === 3) performance.mark(`opencode.navigation.${name}.stable`)
+              if (streak === 3) performance.mark(`pencode.navigation.${name}.stable`)
             })
             const all = Object.values(current).every(Boolean)
             const allStreak = all ? (streaks.get("all") ?? 0) + 1 : 0
             streaks.set("all", allStreak)
             if (all && !marked.has("all.first")) {
-              performance.mark("opencode.navigation.all.first")
+              performance.mark("pencode.navigation.all.first")
               marked.add("all.first")
             }
-            if (allStreak === 3) performance.mark("opencode.navigation.all.stable")
+            if (allStreak === 3) performance.mark("pencode.navigation.all.stable")
             sample()
           }, 0)
         })
@@ -98,7 +98,7 @@ export async function measureNavigationMilestones(
         (event) => {
           if (!(event.target instanceof Element) || !event.target.closest(triggerSelector)) return
           started = performance.now()
-          performance.mark("opencode.navigation.click")
+          performance.mark("pencode.navigation.click")
           sample()
         },
         { capture: true, once: true },

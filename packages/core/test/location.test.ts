@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Location } from "@opencode-ai/core/location"
-import { Project } from "@opencode-ai/core/project"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { AppNodeBuilder } from "@pencode-ai/core/effect/app-node-builder"
+import { Location } from "@pencode-ai/core/location"
+import { Project } from "@pencode-ai/core/project"
+import { AbsolutePath } from "@pencode-ai/core/schema"
+import { WorkspaceV2 } from "@pencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
 
 const workspaceID = WorkspaceV2.ID.make("wrk_test")

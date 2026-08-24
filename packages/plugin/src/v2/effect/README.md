@@ -1,8 +1,8 @@
-# OpenCode V2 Effect Plugin API
+# Pencode V2 Effect Plugin API
 
 The Effect plugin API grants plugins two in-process capabilities:
 
-- `hook` installs behavior at an OpenCode extension point.
+- `hook` installs behavior at an Pencode extension point.
 - `reload` reruns every transform hook for a stateful domain.
 
 The public server client will be exposed separately. It is intentionally not part of `PluginContext` yet.
@@ -10,7 +10,7 @@ The public server client will be exposed separately. It is intentionally not par
 ## Defining A Plugin
 
 ```ts
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "@pencode-ai/plugin/v2/effect"
 import { Effect } from "effect"
 
 export const Plugin = define({
@@ -45,7 +45,7 @@ yield *
   })
 ```
 
-OpenCode rebuilds the domain when a transform is registered or disposed. A rebuild starts from fresh domain state and runs every active transform in registration order.
+Pencode rebuilds the domain when a transform is registered or disposed. A rebuild starts from fresh domain state and runs every active transform in registration order.
 
 Available transform hooks are namespaced by domain:
 

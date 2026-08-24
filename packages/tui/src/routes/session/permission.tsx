@@ -4,7 +4,7 @@ import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "../../context/theme"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest } from "@pencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useSync } from "../../context/sync"
@@ -14,7 +14,7 @@ import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../config"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
+import { PENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 
 type PermissionStage = "permission" | "always" | "reject"
@@ -141,11 +141,11 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           body={
             <Switch>
               <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
-                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
+                <TextBody title={"This will allow " + props.request.permission + " until Pencode is restarted."} />
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
+                  <text fg={theme.textMuted}>This will allow the following patterns until Pencode is restarted</text>
                   <box>
                     <For each={props.request.always}>
                       {(pattern) => (
@@ -447,7 +447,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: PENCODE_BASE_MODE,
     commands: [
       {
         name: "app.exit",
@@ -483,7 +483,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
           <text fg={theme.text}>Reject permission</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.textMuted}>Tell OpenCode what to do differently</text>
+          <text fg={theme.textMuted}>Tell Pencode what to do differently</text>
         </box>
       </box>
       <box
@@ -543,7 +543,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
 
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: PENCODE_BASE_MODE,
     commands: [
       {
         name: "app.exit",

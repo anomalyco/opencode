@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionNotFoundError } from "@opencode-ai/sdk/v2/client"
+import type { SessionNotFoundError } from "@pencode-ai/sdk/v2/client"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./server-errors"
 import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./server-errors"
 
@@ -37,7 +37,7 @@ describe("parseReadableConfigInvalidError", () => {
     const error = {
       name: "ConfigInvalidError",
       data: {
-        path: "opencode.config.ts",
+        path: "pencode.config.ts",
         issues: [
           { path: ["settings", "host"], message: "Required" },
           { path: ["mode"], message: "Invalid" },
@@ -48,7 +48,7 @@ describe("parseReadableConfigInvalidError", () => {
     const result = parseReadableConfigInvalidError(error, language.t)
 
     expect(result).toBe(
-      ["Arquivo de config em opencode.config.ts invalido: settings.host: Required", "mode: Invalid"].join("\n"),
+      ["Arquivo de config em pencode.config.ts invalido: settings.host: Required", "mode: Invalid"].join("\n"),
     )
   })
 

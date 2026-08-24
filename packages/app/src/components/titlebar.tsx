@@ -12,14 +12,14 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { IconButton } from "@pencode-ai/ui/icon-button"
+import { Icon } from "@pencode-ai/ui/icon"
+import { Button } from "@pencode-ai/ui/button"
+import { Tooltip, TooltipKeybind } from "@pencode-ai/ui/tooltip"
+import { IconButtonV2 } from "@pencode-ai/ui/v2/icon-button-v2"
+import { Icon as IconV2 } from "@pencode-ai/ui/v2/icon"
+import { KeybindV2 } from "@pencode-ai/ui/v2/keybind-v2"
+import { TooltipV2 } from "@pencode-ai/ui/v2/tooltip-v2"
 
 import { LayoutRoute, useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -55,7 +55,7 @@ export type TitlebarUpdate = {
 export function useTitlebarRightMount() {
   const language = useLanguage()
   const [mount, setMount] = createSignal<HTMLElement | null>(null)
-  const sync = () => setMount(document.getElementById("opencode-titlebar-right"))
+  const sync = () => setMount(document.getElementById("pencode-titlebar-right"))
   onMount(sync)
   createEffect(on(language.direction, sync, { defer: true }))
   return mount
@@ -559,7 +559,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                         </Tooltip>
                       </div>
                     </Show>
-                    <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
+                    <div id="pencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
                   </div>
                 </div>
                 <ChannelIndicator debugTools={props.debugTools} />
@@ -568,7 +568,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
 
             <div class="min-w-0 flex items-center justify-center pointer-events-none">
               <div
-                id="opencode-titlebar-center"
+                id="pencode-titlebar-center"
                 class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full"
               />
             </div>
@@ -580,7 +580,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               }}
               data-tauri-drag-region
             >
-              <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
+              <div id="pencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
               <Show when={windows()}>
                 <div class="shrink-0" style={{ width: windowsControlsWidth() }} />
               </Show>
@@ -611,7 +611,7 @@ function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
       <Show when={props.state.update.visible}>
         <TitlebarUpdateIconButton state={props.state.update} />
       </Show>
-      <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
+      <div id="pencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
     </div>
   )
 }
@@ -646,7 +646,7 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
 }
 
 function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () => void } }) {
-  const channel = import.meta.env.VITE_OPENCODE_CHANNEL
+  const channel = import.meta.env.VITE_PENCODE_CHANNEL
   if (channel === "dev" && props.debugTools) {
     return (
       <button

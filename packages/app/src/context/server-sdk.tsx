@@ -1,6 +1,6 @@
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import type { Event } from "@opencode-ai/sdk/v2/client"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import type { PencodeEvent } from "@pencode-ai/client/promise"
+import type { Event } from "@pencode-ai/sdk/v2/client"
+import { createSimpleContext } from "@pencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { type Accessor, batch, createMemo, createResource, onCleanup, onMount } from "solid-js"
@@ -18,14 +18,14 @@ const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
 const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
-export type ServerEvent = Event & { current?: OpenCodeEvent }
+export type ServerEvent = Event & { current?: PencodeEvent }
 type QueuedServerEvent = { directory: string; payload: ServerEvent }
 type CurrentDelta = Extract<
-  OpenCodeEvent,
+  PencodeEvent,
   { type: "session.text.delta" | "session.reasoning.delta" | "session.tool.input.delta" | "session.compaction.delta" }
 >
 
-export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
+export function adaptServerEvent(event: PencodeEvent): ServerEvent {
   if (event.type === "permission.v2.asked") {
     return {
       id: event.id,
@@ -138,7 +138,7 @@ export function coalesceServerEvents(events: QueuedServerEvent[]) {
   return output
 }
 
-function currentDelta(event: OpenCodeEvent | undefined): CurrentDelta | undefined {
+function currentDelta(event: PencodeEvent | undefined): CurrentDelta | undefined {
   if (
     event?.type === "session.text.delta" ||
     event?.type === "session.reasoning.delta" ||

@@ -15,7 +15,7 @@ export const dict = {
   "nav.home": "Home",
   "nav.openMenu": "Apri menu",
   "nav.getStartedFree": "Inizia gratis",
-  "nav.logoAlt": "OpenCode",
+  "nav.logoAlt": "Pencode",
 
   "nav.context.copyLogo": "Copia il logo come SVG",
   "nav.context.copyWordmark": "Copia il wordmark come SVG",
@@ -37,14 +37,14 @@ export const dict = {
   "email.subscribe": "Iscriviti",
   "email.success": "Quasi fatto, controlla la posta in arrivo e conferma il tuo indirizzo email",
 
-  "notFound.title": "Non trovato | opencode",
+  "notFound.title": "Non trovato | pencode",
   "notFound.heading": "404 - Pagina non trovata",
   "notFound.home": "Home",
   "notFound.docs": "Documentazione",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "logo chiaro di opencode",
-  "notFound.logoDarkAlt": "logo scuro di opencode",
+  "notFound.logoLightAlt": "logo chiaro di pencode",
+  "notFound.logoDarkAlt": "logo scuro di pencode",
 
   "user.logout": "Esci",
 
@@ -81,25 +81,25 @@ export const dict = {
   "error.reloadAmountMin": "L'importo della ricarica deve essere almeno ${{amount}}",
   "error.reloadTriggerMin": "La soglia del saldo deve essere almeno ${{amount}}",
 
-  "app.meta.description": "OpenCode - L'agente di programmazione open source.",
+  "app.meta.description": "Pencode - L'agente di programmazione open source.",
 
-  "home.title": "OpenCode | L'agente di coding IA open source",
+  "home.title": "Pencode | L'agente di coding IA open source",
 
-  "temp.title": "opencode | Agente di coding IA costruito per il terminale",
+  "temp.title": "pencode | Agente di coding IA costruito per il terminale",
   "temp.hero.title": "L'agente di coding IA costruito per il terminale",
-  "temp.zen": "opencode zen",
+  "temp.zen": "pencode zen",
   "temp.getStarted": "Inizia",
   "temp.feature.native.title": "TUI Nativa",
   "temp.feature.native.body": "Un'interfaccia terminale reattiva, nativa e personalizzabile",
   "temp.feature.zen.beforeLink": "Una",
   "temp.feature.zen.link": "lista curata di modelli",
-  "temp.feature.zen.afterLink": "fornita da opencode",
+  "temp.feature.zen.afterLink": "fornita da pencode",
   "temp.feature.models.beforeLink": "Supporta 75+ provider LLM tramite",
   "temp.feature.models.afterLink": ", inclusi modelli locali",
-  "temp.screenshot.caption": "OpenCode TUI con il tema tokyonight",
-  "temp.screenshot.alt": "OpenCode TUI con tema tokyonight",
-  "temp.logoLightAlt": "logo chiaro di opencode",
-  "temp.logoDarkAlt": "logo scuro di opencode",
+  "temp.screenshot.caption": "Pencode TUI con il tema tokyonight",
+  "temp.screenshot.alt": "Pencode TUI con tema tokyonight",
+  "temp.logoLightAlt": "logo chiaro di pencode",
+  "temp.logoDarkAlt": "logo scuro di pencode",
 
   "home.banner.badge": "Nuovo",
   "home.banner.text": "Scopri Tabs per Desktop.",
@@ -117,8 +117,8 @@ export const dict = {
 
   "home.install.ariaLabel": "Opzioni di installazione",
 
-  "home.what.title": "Che cos'è OpenCode?",
-  "home.what.body": "OpenCode è un agente open source che ti aiuta a scrivere codice nel terminale, IDE o desktop.",
+  "home.what.title": "Che cos'è Pencode?",
+  "home.what.body": "Pencode è un agente open source che ti aiuta a scrivere codice nel terminale, IDE o desktop.",
   "home.what.lsp.title": "LSP abilitato",
   "home.what.lsp.body": "Carica automaticamente gli LSP giusti per il LLM",
   "home.what.multiSession.title": "Multi-session",
@@ -137,43 +137,43 @@ export const dict = {
 
   "home.growth.title": "L'agente di coding IA open source",
   "home.growth.body":
-    "Con oltre <strong>{{stars}}</strong> stelle su GitHub, <strong>{{contributors}}</strong> contributori e oltre <strong>{{commits}}</strong> commit, OpenCode è usato e apprezzato da oltre <strong>{{monthlyUsers}}</strong> sviluppatori ogni mese.",
+    "Con oltre <strong>{{stars}}</strong> stelle su GitHub, <strong>{{contributors}}</strong> contributori e oltre <strong>{{commits}}</strong> commit, Pencode è usato e apprezzato da oltre <strong>{{monthlyUsers}}</strong> sviluppatori ogni mese.",
   "home.growth.githubStars": "Stelle GitHub",
   "home.growth.contributors": "Contributori",
   "home.growth.monthlyDevs": "Devs mensili",
 
   "home.privacy.title": "Progettato per la privacy",
   "home.privacy.body":
-    "OpenCode non archivia il tuo codice né i dati di contesto, così può operare in ambienti sensibili alla privacy.",
+    "Pencode non archivia il tuo codice né i dati di contesto, così può operare in ambienti sensibili alla privacy.",
   "home.privacy.learnMore": "Scopri di più su",
   "home.privacy.link": "privacy",
 
-  "home.faq.q1": "Che cos'è OpenCode?",
+  "home.faq.q1": "Che cos'è Pencode?",
   "home.faq.a1":
-    "OpenCode è un agente open source che ti aiuta a scrivere ed eseguire codice con qualsiasi modello di IA. È disponibile come interfaccia terminale, app desktop o estensione IDE.",
-  "home.faq.q2": "Come uso OpenCode?",
+    "Pencode è un agente open source che ti aiuta a scrivere ed eseguire codice con qualsiasi modello di IA. È disponibile come interfaccia terminale, app desktop o estensione IDE.",
+  "home.faq.q2": "Come uso Pencode?",
   "home.faq.a2.before": "Il modo più semplice per iniziare è leggere l'",
   "home.faq.a2.link": "introduzione",
-  "home.faq.q3": "Mi servono abbonamenti IA extra per usare OpenCode?",
+  "home.faq.q3": "Mi servono abbonamenti IA extra per usare Pencode?",
   "home.faq.a3.p1":
-    "Non necessariamente: OpenCode include un set di modelli gratuiti che puoi usare senza creare un account.",
+    "Non necessariamente: Pencode include un set di modelli gratuiti che puoi usare senza creare un account.",
   "home.faq.a3.p2.beforeZen": "Inoltre, puoi usare modelli popolari per il coding creando un account",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "Anche se incoraggiamo gli utenti a usare Zen, OpenCode funziona anche con i provider più diffusi come OpenAI, Anthropic, xAI, ecc.",
+    "Anche se incoraggiamo gli utenti a usare Zen, Pencode funziona anche con i provider più diffusi come OpenAI, Anthropic, xAI, ecc.",
   "home.faq.a3.p4.beforeLocal": "Puoi anche collegare i tuoi",
   "home.faq.a3.p4.localLink": "modelli locali",
-  "home.faq.q4": "Posso usare i miei abbonamenti IA esistenti con OpenCode?",
+  "home.faq.q4": "Posso usare i miei abbonamenti IA esistenti con Pencode?",
   "home.faq.a4.p1":
-    "Sì, OpenCode supporta gli abbonamenti dei principali provider. Puoi usare Claude Pro/Max, ChatGPT Plus/Pro o GitHub Copilot.",
-  "home.faq.q5": "Posso usare OpenCode solo nel terminale?",
-  "home.faq.a5.beforeDesktop": "Non più! OpenCode ora è disponibile come app per",
+    "Sì, Pencode supporta gli abbonamenti dei principali provider. Puoi usare Claude Pro/Max, ChatGPT Plus/Pro o GitHub Copilot.",
+  "home.faq.q5": "Posso usare Pencode solo nel terminale?",
+  "home.faq.a5.beforeDesktop": "Non più! Pencode ora è disponibile come app per",
   "home.faq.a5.desktop": "desktop",
   "home.faq.a5.and": "e",
   "home.faq.a5.web": "web",
-  "home.faq.q6": "Quanto costa OpenCode?",
+  "home.faq.q6": "Quanto costa Pencode?",
   "home.faq.a6":
-    "OpenCode è gratuito al 100%. Include anche un set di modelli gratuiti. Potrebbero esserci costi aggiuntivi se colleghi altri provider.",
+    "Pencode è gratuito al 100%. Include anche un set di modelli gratuiti. Potrebbero esserci costi aggiuntivi se colleghi altri provider.",
   "home.faq.q7": "E per quanto riguarda dati e privacy?",
   "home.faq.a7.p1":
     "I tuoi dati vengono archiviati solo quando usi i nostri modelli gratuiti o crei link condivisibili.",
@@ -181,8 +181,8 @@ export const dict = {
   "home.faq.a7.p2.modelsLink": "i nostri modelli",
   "home.faq.a7.p2.and": "e",
   "home.faq.a7.p2.shareLink": "le pagine di condivisione",
-  "home.faq.q8": "OpenCode è open source?",
-  "home.faq.a8.p1": "Sì, OpenCode è completamente open source. Il codice sorgente è pubblico su",
+  "home.faq.q8": "Pencode è open source?",
+  "home.faq.a8.p1": "Sì, Pencode è completamente open source. Il codice sorgente è pubblico su",
   "home.faq.a8.p2": "sotto la",
   "home.faq.a8.mitLicense": "Licenza MIT",
   "home.faq.a8.p3":
@@ -190,23 +190,23 @@ export const dict = {
 
   "home.zenCta.title": "Accedi a modelli affidabili e ottimizzati per agenti di coding",
   "home.zenCta.body":
-    "Zen ti dà accesso a una selezione di modelli di IA che OpenCode ha testato e benchmarkato specificamente per agenti di coding. Niente più preoccupazioni per prestazioni e qualità incoerenti tra provider: usa modelli validati che funzionano.",
+    "Zen ti dà accesso a una selezione di modelli di IA che Pencode ha testato e benchmarkato specificamente per agenti di coding. Niente più preoccupazioni per prestazioni e qualità incoerenti tra provider: usa modelli validati che funzionano.",
   "home.zenCta.link": "Scopri Zen",
 
-  "zen.title": "OpenCode Zen | Una selezione curata di modelli affidabili e ottimizzati per agenti di coding",
+  "zen.title": "Pencode Zen | Una selezione curata di modelli affidabili e ottimizzati per agenti di coding",
   "zen.hero.title": "Accedi a modelli affidabili e ottimizzati per agenti di coding",
   "zen.hero.body":
-    "Zen ti dà accesso a una selezione di modelli di IA che OpenCode ha testato e benchmarkato specificamente per agenti di coding. Niente più preoccupazioni per prestazioni e qualità incoerenti tra provider: usa modelli validati che funzionano.",
+    "Zen ti dà accesso a una selezione di modelli di IA che Pencode ha testato e benchmarkato specificamente per agenti di coding. Niente più preoccupazioni per prestazioni e qualità incoerenti tra provider: usa modelli validati che funzionano.",
 
-  "zen.faq.q1": "Cos'è OpenCode Zen?",
+  "zen.faq.q1": "Cos'è Pencode Zen?",
   "zen.faq.a1":
-    "Zen è un set curato di modelli di IA testati e benchmarkati per agenti di coding, creato dal team dietro OpenCode.",
+    "Zen è un set curato di modelli di IA testati e benchmarkati per agenti di coding, creato dal team dietro Pencode.",
   "zen.faq.q2": "Cosa rende Zen più accurato?",
   "zen.faq.a2":
     "Zen offre solo modelli testati e benchmarkati specificamente per agenti di coding. Non useresti un coltello da burro per tagliare una bistecca; non usare modelli scarsi per programmare.",
   "zen.faq.q3": "Zen è più economico?",
   "zen.faq.a3":
-    "Zen non è a scopo di lucro. Zen ribalta i costi dei provider di modelli direttamente su di te. Più Zen viene usato, più OpenCode può negoziare tariffe migliori e passarle a te.",
+    "Zen non è a scopo di lucro. Zen ribalta i costi dei provider di modelli direttamente su di te. Più Zen viene usato, più Pencode può negoziare tariffe migliori e passarle a te.",
   "zen.faq.q4": "Quanto costa Zen?",
   "zen.faq.a4.p1.beforePricing": "Zen",
   "zen.faq.a4.p1.pricingLink": "addebita per richiesta",
@@ -214,7 +214,7 @@ export const dict = {
   "zen.faq.a4.p2.beforeAccount": "Il costo totale dipende dall'uso e puoi impostare limiti di spesa mensili nel tuo",
   "zen.faq.a4.p2.accountLink": "account",
   "zen.faq.a4.p3":
-    "Per coprire i costi, OpenCode aggiunge solo una piccola commissione di elaborazione del pagamento di $1.23 per ogni ricarica di saldo da $20.",
+    "Per coprire i costi, Pencode aggiunge solo una piccola commissione di elaborazione del pagamento di $1.23 per ogni ricarica di saldo da $20.",
   "zen.faq.q5": "E per quanto riguarda dati e privacy?",
   "zen.faq.a5.beforeExceptions":
     "Tutti i modelli Zen sono ospitati negli Stati Uniti. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
@@ -225,7 +225,7 @@ export const dict = {
   "zen.faq.a7": "Sì, puoi disattivare la fatturazione in qualsiasi momento e usare il saldo rimanente.",
   "zen.faq.q8": "Posso usare Zen con altri agenti di coding?",
   "zen.faq.a8":
-    "Anche se Zen funziona alla grande con OpenCode, puoi usare Zen con qualsiasi agente. Segui le istruzioni di configurazione nel tuo agente di coding preferito.",
+    "Anche se Zen funziona alla grande con Pencode, puoi usare Zen con qualsiasi agente. Segui le istruzioni di configurazione nel tuo agente di coding preferito.",
 
   "zen.cta.start": "Inizia con Zen",
   "zen.pricing.title": "Aggiungi $20 di saldo a consumo",
@@ -234,12 +234,12 @@ export const dict = {
   "zen.problem.title": "Quale problema risolve Zen?",
   "zen.problem.body":
     "Sono disponibili numerosi modelli, ma solo pochi funzionano bene con gli agenti di coding. La maggior parte dei provider li configura in modo diverso con risultati variabili.",
-  "zen.problem.subtitle": "Stiamo risolvendo questo problema per tutti, non solo per gli utenti OpenCode.",
+  "zen.problem.subtitle": "Stiamo risolvendo questo problema per tutti, non solo per gli utenti Pencode.",
   "zen.problem.item1": "Testare modelli selezionati e consultare i loro team",
   "zen.problem.item2": "Collaborare con i provider per garantire che vengano consegnati correttamente",
   "zen.problem.item3": "Benchmark di tutte le combinazioni modello-provider che raccomandiamo",
   "zen.how.title": "Come funziona Zen",
-  "zen.how.body": "Anche se ti consigliamo di utilizzare Zen con OpenCode, puoi utilizzare Zen con qualsiasi agente.",
+  "zen.how.body": "Anche se ti consigliamo di utilizzare Zen con Pencode, puoi utilizzare Zen con qualsiasi agente.",
   "zen.how.step1.title": "Iscriviti e aggiungi un saldo di $20",
   "zen.how.step1.beforeLink": "segui le",
   "zen.how.step1.link": "istruzioni di configurazione",
@@ -253,7 +253,7 @@ export const dict = {
     "Tutti i modelli Zen sono ospitati negli Stati Uniti. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
   "zen.privacy.exceptionsLink": "seguenti eccezioni",
 
-  "go.title": "OpenCode Go | Modelli di coding a basso costo per tutti",
+  "go.title": "Pencode Go | Modelli di coding a basso costo per tutti",
   "go.banner.text": "Ox Alpha Free è disponibile su Go per un periodo limitato",
   "go.meta.description":
     "Go costa $10/mese, con limiti di utilizzo generosi e un accesso affidabile ai principali modelli di coding.",
@@ -278,7 +278,7 @@ export const dict = {
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",
-  "go.testimonials.handle": "@OpenCode",
+  "go.testimonials.handle": "@Pencode",
   "go.testimonials.dax.name": "Dax Raad",
   "go.testimonials.dax.title": "ex-CEO, Terminal Products",
   "go.testimonials.dax.quoteAfter": "ha cambiato la vita, è davvero una scelta ovvia.",
@@ -299,14 +299,14 @@ export const dict = {
   "go.testimonials.frank.quote": "Vorrei essere ancora a Nvidia.",
   "go.problem.title": "Quale problema risolve Go?",
   "go.problem.body":
-    "Ci concentriamo nel portare l'esperienza OpenCode a quante più persone possibile. OpenCode Go è un abbonamento a basso costo da $10/mese. Offre limiti generosi e accesso affidabile ai modelli open source più capaci.",
+    "Ci concentriamo nel portare l'esperienza Pencode a quante più persone possibile. Pencode Go è un abbonamento a basso costo da $10/mese. Offre limiti generosi e accesso affidabile ai modelli open source più capaci.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "Prezzo di abbonamento a basso costo",
   "go.problem.item2": "Limiti generosi e accesso affidabile",
   "go.problem.item3": "Costruito per il maggior numero possibile di programmatori",
   "go.problem.item4": "Una selezione curata di modelli testati per il coding agentico",
   "go.how.title": "Come funziona Go",
-  "go.how.body": "Go costa $10/mese. Puoi usarlo con OpenCode o qualsiasi agente.",
+  "go.how.body": "Go costa $10/mese. Puoi usarlo con Pencode o qualsiasi agente.",
   "go.how.step1.title": "Crea un account",
   "go.how.step1.beforeLink": "segui le",
   "go.how.step1.link": "istruzioni di configurazione",
@@ -322,7 +322,7 @@ export const dict = {
   "go.privacy.beforeExceptions":
     "I modelli Go sono ospitati negli Stati Uniti. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
   "go.privacy.exceptionsLink": "seguenti eccezioni",
-  "go.faq.q1": "Che cos'è OpenCode Go?",
+  "go.faq.q1": "Che cos'è Pencode Go?",
   "go.faq.a1":
     "Go è un abbonamento a basso costo che ti dà un accesso affidabile a modelli open source capaci per il coding agentico.",
   "go.faq.q2": "Quali modelli include Go?",
@@ -399,14 +399,14 @@ export const dict = {
   "zen.api.error.trainingNotAllowed":
     "Questo modello raccoglie dati utilizzati per migliorarne la qualità e richiede il tuo consenso esplicito: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
-    "La promozione gratuita di {{model}} è terminata. Puoi continuare a usare il modello abbonandoti a OpenCode Go - {{link}}",
+    "La promozione gratuita di {{model}} è terminata. Puoi continuare a usare il modello abbonandoti a Pencode Go - {{link}}",
 
-  "black.meta.title": "OpenCode Black | Accedi ai migliori modelli di coding al mondo",
+  "black.meta.title": "Pencode Black | Accedi ai migliori modelli di coding al mondo",
   "black.meta.description":
-    "Ottieni l'accesso a Claude, GPT, Gemini e altri con i piani di abbonamento OpenCode Black.",
+    "Ottieni l'accesso a Claude, GPT, Gemini e altri con i piani di abbonamento Pencode Black.",
   "black.hero.title": "Accedi ai migliori modelli di coding al mondo",
   "black.hero.subtitle": "Inclusi Claude, GPT, Gemini e altri",
-  "black.title": "OpenCode Black | Prezzi",
+  "black.title": "Pencode Black | Prezzi",
   "black.paused": "L'iscrizione al piano Black è temporaneamente sospesa.",
   "black.plan.icon20": "Piano Black 20",
   "black.plan.icon100": "Piano Black 100",
@@ -426,10 +426,10 @@ export const dict = {
   "black.action.continue": "Continua",
   "black.finePrint.beforeTerms": "I prezzi mostrati non includono le tasse applicabili",
   "black.finePrint.terms": "Termini di servizio",
-  "black.workspace.title": "OpenCode Black | Seleziona Workspace",
+  "black.workspace.title": "Pencode Black | Seleziona Workspace",
   "black.workspace.selectPlan": "Seleziona un workspace per questo piano",
   "black.workspace.name": "Workspace {{n}}",
-  "black.subscribe.title": "Abbonati a OpenCode Black",
+  "black.subscribe.title": "Abbonati a Pencode Black",
   "black.subscribe.paymentMethod": "Metodo di pagamento",
   "black.subscribe.loadingPaymentForm": "Caricamento modulo di pagamento...",
   "black.subscribe.selectWorkspaceToContinue": "Seleziona un workspace per continuare",
@@ -441,9 +441,9 @@ export const dict = {
   "black.subscribe.processing": "Elaborazione...",
   "black.subscribe.submit": "Abbonati ${{plan}}",
   "black.subscribe.form.chargeNotice": "Ti verrà addebitato solo quando il tuo abbonamento sarà attivato",
-  "black.subscribe.success.title": "Sei nella lista d'attesa di OpenCode Black",
+  "black.subscribe.success.title": "Sei nella lista d'attesa di Pencode Black",
   "black.subscribe.success.subscriptionPlan": "Piano di abbonamento",
-  "black.subscribe.success.planName": "OpenCode Black {{plan}}",
+  "black.subscribe.success.planName": "Pencode Black {{plan}}",
   "black.subscribe.success.amount": "Importo",
   "black.subscribe.success.amountValue": "${{plan}} al mese",
   "black.subscribe.success.paymentMethod": "Metodo di pagamento",
@@ -472,15 +472,15 @@ export const dict = {
     "Accedi a modelli configurati per prestazioni ottimali - nessun downgrade o instradamento verso provider più economici.",
   "workspace.newUser.feature.lockin.title": "Nessun lock-in",
   "workspace.newUser.feature.lockin.body":
-    "Usa Zen con qualsiasi agente di coding, e continua a usare altri provider con opencode quando vuoi.",
+    "Usa Zen con qualsiasi agente di coding, e continua a usare altri provider con pencode quando vuoi.",
   "workspace.newUser.copyApiKey": "Copia chiave API",
   "workspace.newUser.copyKey": "Copia Chiave",
   "workspace.newUser.copied": "Copiato!",
   "workspace.newUser.step.enableBilling": "Abilita fatturazione",
   "workspace.newUser.step.login.before": "Esegui",
-  "workspace.newUser.step.login.after": "e seleziona opencode",
+  "workspace.newUser.step.login.after": "e seleziona pencode",
   "workspace.newUser.step.pasteKey": "Incolla la tua chiave API",
-  "workspace.newUser.step.models.before": "Avvia opencode ed esegui",
+  "workspace.newUser.step.models.before": "Avvia pencode ed esegui",
   "workspace.newUser.step.models.after": "per selezionare un modello",
 
   "workspace.models.title": "Modelli",
@@ -526,10 +526,10 @@ export const dict = {
   "workspace.cost.subscriptionShort": "sub",
 
   "workspace.keys.title": "Chiavi API",
-  "workspace.keys.subtitle": "Gestisci le tue chiavi API per accedere ai servizi opencode.",
+  "workspace.keys.subtitle": "Gestisci le tue chiavi API per accedere ai servizi pencode.",
   "workspace.keys.create": "Crea Chiave API",
   "workspace.keys.placeholder": "Inserisci nome chiave",
-  "workspace.keys.empty": "Crea una chiave API opencode Gateway",
+  "workspace.keys.empty": "Crea una chiave API pencode Gateway",
   "workspace.keys.table.name": "Nome",
   "workspace.keys.table.key": "Chiave",
   "workspace.keys.table.createdBy": "Creato da",
@@ -644,15 +644,15 @@ export const dict = {
   "workspace.black.time.minutes": "minuti",
   "workspace.black.time.fewSeconds": "pochi secondi",
   "workspace.black.subscription.title": "Abbonamento",
-  "workspace.black.subscription.message": "Sei abbonato a OpenCode Black per ${{plan}} al mese.",
+  "workspace.black.subscription.message": "Sei abbonato a Pencode Black per ${{plan}} al mese.",
   "workspace.black.subscription.manage": "Gestisci Abbonamento",
   "workspace.black.subscription.rollingUsage": "Utilizzo 5-ore",
   "workspace.black.subscription.weeklyUsage": "Utilizzo Settimanale",
   "workspace.black.subscription.resetsIn": "Si resetta tra",
   "workspace.black.subscription.useBalance": "Usa il tuo saldo disponibile dopo aver raggiunto i limiti di utilizzo",
   "workspace.black.waitlist.title": "Waitlist",
-  "workspace.black.waitlist.joined": "Sei nella waitlist per il piano OpenCode Black da ${{plan}} al mese.",
-  "workspace.black.waitlist.ready": "Siamo pronti per iscriverti al piano OpenCode Black da ${{plan}} al mese.",
+  "workspace.black.waitlist.joined": "Sei nella waitlist per il piano Pencode Black da ${{plan}} al mese.",
+  "workspace.black.waitlist.ready": "Siamo pronti per iscriverti al piano Pencode Black da ${{plan}} al mese.",
   "workspace.black.waitlist.leave": "Lascia Waitlist",
   "workspace.black.waitlist.leaving": "Uscita...",
   "workspace.black.waitlist.left": "Uscito",
@@ -670,7 +670,7 @@ export const dict = {
   "workspace.lite.time.minute": "minuto",
   "workspace.lite.time.minutes": "minuti",
   "workspace.lite.time.fewSeconds": "pochi secondi",
-  "workspace.lite.subscription.message": "Sei abbonato a OpenCode Go.",
+  "workspace.lite.subscription.message": "Sei abbonato a Pencode Go.",
   "workspace.lite.subscription.manage": "Gestisci Abbonamento",
   "workspace.lite.subscription.rollingUsage": "Utilizzo Continuativo",
   "workspace.lite.subscription.weeklyUsage": "Utilizzo Settimanale",
@@ -678,17 +678,17 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "Si resetta tra",
   "workspace.lite.subscription.useBalance": "Usa il tuo saldo disponibile dopo aver raggiunto i limiti di utilizzo",
   "workspace.lite.subscription.selectProvider":
-    'Seleziona "OpenCode Go" come provider nella tua configurazione opencode per utilizzare i modelli Go.',
+    'Seleziona "Pencode Go" come provider nella tua configurazione pencode per utilizzare i modelli Go.',
   "workspace.lite.providers.title": "Provider",
   "workspace.lite.providers.description": "Controlla quali provider vengono usati per il routing.",
   "workspace.lite.providers.allowTraining": "Consenti i modelli che si addestrano sui dati delle richieste",
   "workspace.lite.providers.useChina": "Abilita modelli ospitati in Cina",
   "workspace.lite.black.message":
-    "Attualmente sei abbonato a OpenCode Black o sei in lista d'attesa. Annulla l'iscrizione prima se desideri passare a Go.",
+    "Attualmente sei abbonato a Pencode Black o sei in lista d'attesa. Annulla l'iscrizione prima se desideri passare a Go.",
   "workspace.lite.other.message":
-    "Un altro membro in questo workspace è già abbonato a OpenCode Go. Solo un membro per workspace può abbonarsi.",
+    "Un altro membro in questo workspace è già abbonato a Pencode Go. Solo un membro per workspace può abbonarsi.",
   "workspace.lite.promo.description":
-    "OpenCode Go costa {{price}} e offre un accesso affidabile a popolari modelli di coding aperti con generosi limiti di utilizzo.",
+    "Pencode Go costa {{price}} e offre un accesso affidabile a popolari modelli di coding aperti con generosi limiti di utilizzo.",
   "workspace.lite.promo.price": "$10/mese",
   "workspace.lite.promo.modelsTitle": "Cosa è incluso",
   "workspace.lite.promo.footer":
@@ -732,15 +732,15 @@ export const dict = {
   "workspace.referral.apply.confirmBody": "Utilizza {{amount}} per ridurre l'utilizzo attuale di questo workspace.",
   "workspace.referral.apply.confirmAction": "Utilizza",
 
-  "download.title": "OpenCode | Download",
-  "download.meta.description": "Scarica OpenCode per macOS, Windows e Linux",
-  "download.hero.title": "Scarica OpenCode Desktop",
+  "download.title": "Pencode | Download",
+  "download.meta.description": "Scarica Pencode per macOS, Windows e Linux",
+  "download.hero.title": "Scarica Pencode Desktop",
   "download.hero.subtitle": "Disponibile in Beta per macOS, Windows e Linux",
   "download.hero.button": "Scarica per {{os}}",
-  "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop",
-  "download.section.extensions": "OpenCode Extensions",
-  "download.section.integrations": "OpenCode Integrations",
+  "download.section.terminal": "Pencode Terminal",
+  "download.section.desktop": "Pencode Desktop",
+  "download.section.extensions": "Pencode Extensions",
+  "download.section.integrations": "Pencode Integrations",
   "download.action.download": "Scarica",
   "download.action.install": "Installa",
 
@@ -751,25 +751,25 @@ export const dict = {
   "download.platform.linuxRpm": "Linux (.rpm)",
 
   "download.faq.a3.beforeLocal":
-    "Non necessariamente, ma probabilmente. Avrai bisogno di un abbonamento IA se vuoi collegare OpenCode a un provider a pagamento, sebbene tu possa lavorare con",
+    "Non necessariamente, ma probabilmente. Avrai bisogno di un abbonamento IA se vuoi collegare Pencode a un provider a pagamento, sebbene tu possa lavorare con",
   "download.faq.a3.localLink": "modelli locali",
   "download.faq.a3.afterLocal.beforeZen": "gratuitamente. Mentre incoraggiamo gli utenti a usare",
-  "download.faq.a3.afterZen": ", OpenCode funziona con tutti i provider popolari come OpenAI, Anthropic, xAI ecc.",
+  "download.faq.a3.afterZen": ", Pencode funziona con tutti i provider popolari come OpenAI, Anthropic, xAI ecc.",
 
-  "download.faq.a5.p1": "OpenCode è gratuito al 100%.",
+  "download.faq.a5.p1": "Pencode è gratuito al 100%.",
   "download.faq.a5.p2.beforeZen":
-    "Eventuali costi aggiuntivi proverranno dal tuo abbonamento a un provider di modelli. Mentre OpenCode funziona con qualsiasi provider di modelli, raccomandiamo di usare",
+    "Eventuali costi aggiuntivi proverranno dal tuo abbonamento a un provider di modelli. Mentre Pencode funziona con qualsiasi provider di modelli, raccomandiamo di usare",
   "download.faq.a5.p2.afterZen": ".",
 
-  "download.faq.a6.p1": "I tuoi dati e informazioni sono archiviati solo quando crei link condivisibili in OpenCode.",
+  "download.faq.a6.p1": "I tuoi dati e informazioni sono archiviati solo quando crei link condivisibili in Pencode.",
   "download.faq.a6.p2.beforeShare": "Scopri di più sulle",
   "download.faq.a6.shareLink": "pagine condivise",
 
-  "enterprise.title": "OpenCode | Soluzioni Enterprise per la tua organizzazione",
-  "enterprise.meta.description": "Contatta OpenCode per soluzioni enterprise",
+  "enterprise.title": "Pencode | Soluzioni Enterprise per la tua organizzazione",
+  "enterprise.meta.description": "Contatta Pencode per soluzioni enterprise",
   "enterprise.hero.title": "Il tuo codice è tuo",
   "enterprise.hero.body1":
-    "OpenCode opera in modo sicuro all'interno della tua organizzazione senza dati o contesto archiviati e senza restrizioni di licenza o rivendicazioni di proprietà. Inizia una prova con il tuo team, poi distribuisci attraverso la tua organizzazione integrandolo con il tuo SSO e gateway IA interno.",
+    "Pencode opera in modo sicuro all'interno della tua organizzazione senza dati o contesto archiviati e senza restrizioni di licenza o rivendicazioni di proprietà. Inizia una prova con il tuo team, poi distribuisci attraverso la tua organizzazione integrandolo con il tuo SSO e gateway IA interno.",
   "enterprise.hero.body2": "Facci sapere come possiamo aiutare.",
   "enterprise.form.name.label": "Nome completo",
   "enterprise.form.name.placeholder": "Jeff Bezos",
@@ -791,29 +791,29 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Formato email non valido.",
   "enterprise.form.error.internalServer": "Errore interno del server.",
   "enterprise.faq.title": "FAQ",
-  "enterprise.faq.q1": "Cos'è OpenCode Enterprise?",
+  "enterprise.faq.q1": "Cos'è Pencode Enterprise?",
   "enterprise.faq.a1":
-    "OpenCode Enterprise è per le organizzazioni che vogliono garantire che il loro codice e dati non lascino mai la loro infrastruttura. Può farlo usando una configurazione centralizzata che si integra con il tuo SSO e gateway IA interno.",
-  "enterprise.faq.q2": "Come inizio con OpenCode Enterprise?",
+    "Pencode Enterprise è per le organizzazioni che vogliono garantire che il loro codice e dati non lascino mai la loro infrastruttura. Può farlo usando una configurazione centralizzata che si integra con il tuo SSO e gateway IA interno.",
+  "enterprise.faq.q2": "Come inizio con Pencode Enterprise?",
   "enterprise.faq.a2":
-    "Inizia semplicemente con una prova interna con il tuo team. OpenCode per impostazione predefinita non archivia il tuo codice o dati di contesto, rendendo facile iniziare. Poi contattaci per discutere prezzi e opzioni di implementazione.",
+    "Inizia semplicemente con una prova interna con il tuo team. Pencode per impostazione predefinita non archivia il tuo codice o dati di contesto, rendendo facile iniziare. Poi contattaci per discutere prezzi e opzioni di implementazione.",
   "enterprise.faq.q3": "Come funziona il prezzo enterprise?",
   "enterprise.faq.a3":
     "Offriamo prezzi enterprise per postazione. Se hai il tuo gateway LLM, non addebitiamo per i token usati. Per ulteriori dettagli, contattaci per un preventivo personalizzato basato sulle esigenze della tua organizzazione.",
-  "enterprise.faq.q4": "I miei dati sono sicuri con OpenCode Enterprise?",
+  "enterprise.faq.q4": "I miei dati sono sicuri con Pencode Enterprise?",
   "enterprise.faq.a4":
-    "Sì. OpenCode non archivia il tuo codice o dati di contesto. Tutto il trattamento avviene localmente o attraverso chiamate API dirette al tuo provider IA. Con configurazione centrale e integrazione SSO, i tuoi dati rimangono sicuri all'interno dell'infrastruttura della tua organizzazione.",
+    "Sì. Pencode non archivia il tuo codice o dati di contesto. Tutto il trattamento avviene localmente o attraverso chiamate API dirette al tuo provider IA. Con configurazione centrale e integrazione SSO, i tuoi dati rimangono sicuri all'interno dell'infrastruttura della tua organizzazione.",
 
-  "brand.title": "OpenCode | Brand",
-  "brand.meta.description": "Linee guida del brand OpenCode",
+  "brand.title": "Pencode | Brand",
+  "brand.meta.description": "Linee guida del brand Pencode",
   "brand.heading": "Linee guida del brand",
-  "brand.subtitle": "Risorse e asset per aiutarti a lavorare con il brand OpenCode.",
+  "brand.subtitle": "Risorse e asset per aiutarti a lavorare con il brand Pencode.",
   "brand.downloadAll": "Scarica tutti gli asset",
 
-  "changelog.title": "OpenCode | Changelog",
-  "changelog.meta.description": "Note di rilascio e changelog OpenCode",
+  "changelog.title": "Pencode | Changelog",
+  "changelog.meta.description": "Note di rilascio e changelog Pencode",
   "changelog.hero.title": "Changelog",
-  "changelog.hero.subtitle": "Nuovi aggiornamenti e miglioramenti a OpenCode",
+  "changelog.hero.subtitle": "Nuovi aggiornamenti e miglioramenti a Pencode",
   "changelog.empty": "Nessuna voce del changelog trovata.",
   "changelog.viewJson": "Vedi JSON",
 

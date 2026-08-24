@@ -1,17 +1,17 @@
-import { Npm } from "@opencode-ai/core/npm"
+import { Npm } from "@pencode-ai/core/npm"
 import { describe, expect } from "bun:test"
 import { Cause, Effect, Layer } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { fileURLToPath } from "url"
-import { AISDK } from "@opencode-ai/core/aisdk"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { DynamicProviderPlugin } from "@opencode-ai/core/plugin/provider/dynamic"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AISDK } from "@pencode-ai/core/aisdk"
+import { AppNodeBuilder } from "@pencode-ai/core/effect/app-node-builder"
+import { ModelV2 } from "@pencode-ai/core/model"
+import { PluginV2 } from "@pencode-ai/core/plugin"
+import { PluginHost } from "@pencode-ai/core/plugin/host"
+import { DynamicProviderPlugin } from "@pencode-ai/core/plugin/provider/dynamic"
+import { ProviderV2 } from "@pencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -37,7 +37,7 @@ const addPlugin = Effect.fn(function* (npm?: Npm.Interface) {
 function tempEntrypoint(source: string) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
-      const directory = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-provider-dynamic-"))
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), "pencode-provider-dynamic-"))
       const entrypoint = path.join(directory, "provider.mjs")
       await Bun.write(entrypoint, source)
       return { directory, entrypoint }

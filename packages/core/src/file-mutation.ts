@@ -64,11 +64,11 @@ export interface Interface {
   readonly remove: (input: RemoveInput) => Effect.Effect<RemoveResult, FSUtil.Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileMutation") {}
+export class Service extends Context.Service<Service, Interface>()("@pencode/v2/FileMutation") {}
 
 /**
  * Serialize file changes by canonical target. Conditional writes compare and
- * write under the same process-local lock so cooperating OpenCode mutations do
+ * write under the same process-local lock so cooperating Pencode mutations do
  * not overwrite changes made from the same stale content.
  */
 const layer = Layer.effect(

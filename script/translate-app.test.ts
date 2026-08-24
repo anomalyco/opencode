@@ -18,7 +18,7 @@ describe("translate app", () => {
     expect(parseTranslationArgs(["fr"])).toEqual({
       target: "fr",
       concurrency: 1,
-      model: "opencode/gpt-5.5",
+      model: "pencode/gpt-5.5",
       variant: "xhigh",
       dryRun: false,
       check: false,
@@ -33,7 +33,7 @@ describe("translate app", () => {
         "--concurrency",
         "7",
         "--model",
-        "opencode/gpt-5.4",
+        "pencode/gpt-5.4",
         "--variant",
         "high",
         "--dry-run",
@@ -41,7 +41,7 @@ describe("translate app", () => {
     ).toEqual({
       target: "all",
       concurrency: 7,
-      model: "opencode/gpt-5.4",
+      model: "pencode/gpt-5.4",
       variant: "high",
       dryRun: true,
       check: false,
@@ -78,9 +78,9 @@ describe("translate app", () => {
   })
 
   test("maps product locale codes to their glossaries", () => {
-    expect(glossaryFile("fr")).toBe(".opencode/glossary/fr.md")
-    expect(glossaryFile("zh")).toBe(".opencode/glossary/zh-cn.md")
-    expect(glossaryFile("zht")).toBe(".opencode/glossary/zh-tw.md")
+    expect(glossaryFile("fr")).toBe(".pencode/glossary/fr.md")
+    expect(glossaryFile("zh")).toBe(".pencode/glossary/zh-cn.md")
+    expect(glossaryFile("zht")).toBe(".pencode/glossary/zh-tw.md")
   })
 
   test("finds key and placeholder drift", () => {
@@ -160,14 +160,14 @@ describe("translate app", () => {
           {
             info: {
               role: "assistant",
-              providerID: "opencode",
+              providerID: "pencode",
               modelID: "gpt-5.5",
               variant: "xhigh",
             },
           },
         ],
       }),
-    ).toEqual([{ model: "opencode/gpt-5.5", variant: "xhigh" }])
+    ).toEqual([{ model: "pencode/gpt-5.5", variant: "xhigh" }])
     expect(
       textFromEvents(
         'shared: https://example.test\n{"type":"text","sessionID":"ses_test","part":{"text":"finished"}}\n',
@@ -176,21 +176,21 @@ describe("translate app", () => {
   })
 
   test("resolves variants from verbose model output", () => {
-    const output = `opencode/other
+    const output = `pencode/other
 {"variants":{}}
-opencode/gpt-5.5
+pencode/gpt-5.5
 {"variants":{"high":{"reasoningEffort":"high"},"xhigh":{"reasoningEffort":"xhigh"}}}
-opencode/next
+pencode/next
 {"variants":{}}
 `
-    expect(modelVariants(output, "opencode/gpt-5.5")).toEqual({
+    expect(modelVariants(output, "pencode/gpt-5.5")).toEqual({
       high: { reasoningEffort: "high" },
       xhigh: { reasoningEffort: "xhigh" },
     })
   })
 
   test("disables side effects and scopes edits for the translation agent", () => {
-    const config = translationConfig("translate-app-fr", "opencode/gpt-5.5", ["packages/app/src/i18n/fr.ts"])
+    const config = translationConfig("translate-app-fr", "pencode/gpt-5.5", ["packages/app/src/i18n/fr.ts"])
     expect(config.share).toBe("disabled")
     expect(config.formatter).toBe(false)
     expect(config.lsp).toBe(false)

@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Использование TUI opencode.
+description: Использование TUI pencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode предоставляет интерактивный terminal интерфейс или TUI для работы над вашими проектами с помощью LLM.
+pencode предоставляет интерактивный terminal интерфейс или TUI для работы над вашими проектами с помощью LLM.
 
-Запуск opencode запускает TUI для текущего каталога.
+Запуск pencode запускает TUI для текущего каталога.
 
 ```bash
-opencode
+pencode
 ```
 
 Или вы можете запустить его для определенного рабочего каталога.
 
 ```bash
-opencode /path/to/project
+pencode /path/to/project
 ```
 
 Как только вы окажетесь в TUI, вы можете запросить его с помощью сообщения.
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Команды
 
-При использовании opencode TUI вы можете ввести `/`, а затем имя команды, чтобы быстро выполнить действия. Например:
+При использовании pencode TUI вы можете ввести `/`, а затем имя команды, чтобы быстро выполнить действия. Например:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-Добавьте провайдера в opencode. Позволяет выбирать из доступных поставщиков и добавлять их ключи API.
+Добавьте провайдера в pencode. Позволяет выбирать из доступных поставщиков и добавлять их ключи API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-Выйдите из opencode. _Псевдонимы_: `/quit`, `/q`
+Выйдите из pencode. _Псевдонимы_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -359,8 +359,8 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "$schema": "https://pencode.ai/tui.json",
+  "theme": "pencode",
   "leader_timeout": 2000,
   "keybinds": {
     "leader": "ctrl+x",
@@ -377,7 +377,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
     "notifications": true,
     "sound": true,
     "volume": 0.4,
-    "sound_pack": "opencode.default",
+    "sound_pack": "pencode.default",
     "sounds": {
       "error": "./sounds/error.mp3"
     }
@@ -385,7 +385,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 }
 ```
 
-Это отдельный файл от `opencode.json`, который настраивает поведение сервера/выполнения.
+Это отдельный файл от `pencode.json`, который настраивает поведение сервера/выполнения.
 
 `keybinds` объединяется со встроенными значениями по умолчанию, поэтому достаточно настроить только те сочетания клавиш, которые вы хотите изменить.
 
@@ -393,24 +393,24 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 - `theme` — Устанавливает тему пользовательского интерфейса. [Подробнее](/docs/themes).
 - `keybinds` — Настраивает сочетания клавиш. [Подробнее](/docs/keybinds).
-- `leader_timeout` — Управляет тем, как долго OpenCode ждёт после нажатия leader key. По умолчанию `2000`.
+- `leader_timeout` — Управляет тем, как долго Pencode ждёт после нажатия leader key. По умолчанию `2000`.
 - `scroll_acceleration.enabled` — включите ускорение прокрутки в стиле macOS для плавной и естественной прокрутки. Если этот параметр включен, скорость прокрутки увеличивается при быстрой прокрутке и остается точной при более медленных движениях. **Этот параметр имеет приоритет над `scroll_speed` и переопределяет его, если он включен.**
 - `scroll_speed` — контролирует скорость прокрутки TUI при использовании команд прокрутки (минимум: `0.001`, поддерживает десятичные значения). По умолчанию `3`. **Примечание. Это игнорируется, если для `scroll_acceleration.enabled` установлено значение `true`.**
 - `diff_style` — Управляет отображением различий. `"auto"` адаптируется к ширине терминала, `"stacked"` всегда показывает одноколоночный макет.
 - `mouse` — Включает или отключает захват мыши в TUI (по умолчанию `true`). Если отключено, сохраняется нативное поведение терминала для выделения мышью и прокрутки.
 - `attention` — Настраивает уведомления рабочего стола и звуки TUI. По умолчанию отключено.
 
-Используйте `OPENCODE_TUI_CONFIG` для загрузки пользовательского пути конфигурации TUI.
+Используйте `PENCODE_TUI_CONFIG` для загрузки пользовательского пути конфигурации TUI.
 
 ### Attention
 
-Attention позволяет TUI уведомлять вас, когда OpenCode ждёт ответа, требует подтверждения разрешения, сообщает об ошибке сеанса или завершает сеанс. Включите это с помощью `attention.enabled`; встроенные события воспроизводят звук при срабатывании. Уведомления рабочего стола отправляются только тогда, когда окно терминала не в фокусе, и не используются для событий subagent.
+Attention позволяет TUI уведомлять вас, когда Pencode ждёт ответа, требует подтверждения разрешения, сообщает об ошибке сеанса или завершает сеанс. Включите это с помощью `attention.enabled`; встроенные события воспроизводят звук при срабатывании. Уведомления рабочего стола отправляются только тогда, когда окно терминала не в фокусе, и не используются для событий subagent.
 
 - `enabled` — Включает все уведомления и звуки Attention. По умолчанию `false`.
 - `notifications` — Когда Attention включён, разрешает TUI отправлять уведомления рабочего стола через терминал. По умолчанию `true`.
 - `sound` — Когда Attention включён, разрешает воспроизводить звуковые оповещения. По умолчанию `true`.
 - `volume` — Громкость звуковых оповещений по умолчанию от `0` до `1`. По умолчанию `0.4`.
-- `sound_pack` — ID sound pack для использования. По умолчанию `opencode.default`.
+- `sound_pack` — ID sound pack для использования. По умолчанию `pencode.default`.
 - `sounds` — Задаёт пользовательские звуковые файлы для `default`, `question`, `permission`, `error`, `done` или `subagent_done`. Пути могут быть абсолютными, `file://` URL или относительными к `tui.json`.
 
 ---

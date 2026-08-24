@@ -3,11 +3,11 @@ title: Keybinds
 description: Customize your keybinds.
 ---
 
-OpenCode has a list of keybinds that you can customize through `tui.json`.
+Pencode has a list of keybinds that you can customize through `tui.json`.
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://pencode.ai/tui.json",
   "leader_timeout": 2000,
   "keybinds": {
     "leader": "ctrl+x",
@@ -189,7 +189,7 @@ On Windows, the defaults for `input_undo` and `terminal_suspend` are different:
 
 ## Leader Key
 
-OpenCode uses a `leader` key for many keybinds. This avoids conflicts in your terminal.
+Pencode uses a `leader` key for many keybinds. This avoids conflicts in your terminal.
 
 By default, `ctrl+x` is the leader key and many actions require you to first press the leader key and then the shortcut. For example, to start a new session you first press `ctrl+x` and then press `n`.
 
@@ -197,7 +197,7 @@ You don't need to use a leader key for your keybinds but we recommend doing so.
 
 Some navigation keybinds intentionally do not use the leader key by default. For subagent sessions, the defaults are `session_child_first` = `<leader>down`, `session_child_cycle` = `right`, `session_child_cycle_reverse` = `left`, and `session_parent` = `up`.
 
-`leader_timeout` controls how long OpenCode waits for the next key after the leader key. It defaults to `2000` milliseconds.
+`leader_timeout` controls how long Pencode waits for the next key after the leader key. It defaults to `2000` milliseconds.
 
 ---
 
@@ -209,7 +209,7 @@ For advanced cases, use an object with `key`, `event`, `preventDefault`, or `fal
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://pencode.ai/tui.json",
   "keybinds": {
     "messages_copy": ["<leader>y", "ctrl+shift+c"],
     "input_paste": {
@@ -228,7 +228,7 @@ You can disable a keybind by adding the key to `tui.json` with a value of `"none
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://pencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -239,7 +239,7 @@ You can disable a keybind by adding the key to `tui.json` with a value of `"none
 
 ## Desktop Prompt Shortcuts
 
-The OpenCode desktop app prompt input supports common Readline/Emacs-style shortcuts for editing text. These are built-in and currently not configurable via `opencode.json`.
+The Pencode desktop app prompt input supports common Readline/Emacs-style shortcuts for editing text. These are built-in and currently not configurable via `pencode.json`.
 
 | Shortcut | Action                                   |
 | -------- | ---------------------------------------- |

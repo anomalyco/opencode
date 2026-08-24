@@ -5,5 +5,5 @@ Allow: /
 Disallow: /s/
 Disallow: /share/
 
-Sitemap: https://opencode.ai/sitemap.xml
-Sitemap: https://opencode.ai/data/sitemap.xml
+Sitemap: https://pencode.ai/sitemap.xml
+Sitemap: https://pencode.ai/data/sitemap.xml

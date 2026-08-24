@@ -6,7 +6,7 @@ values directly.
 
 ## Conversation Summary
 
-Kit and Aidan want provider-specific LLM behavior to move out of opencode's AI
+Kit and Aidan want provider-specific LLM behavior to move out of pencode's AI
 SDK transform path and into `packages/llm` where possible. The goal is not a big
 generic transform layer; the goal is small composable route definitions backed by
 recorded golden tests.
@@ -454,7 +454,7 @@ If a Cloudflare product gains a full lazy env default, it can expose a direct
 selector too. Until then, omitting `CloudflareAIGateway.model(...)` makes missing
 account/gateway configuration unrepresentable.
 
-opencode's dynamic runtime should construct executable models at its app
+pencode's dynamic runtime should construct executable models at its app
 boundary instead of exposing a giant unstructured public model constructor or a
 generic dynamic resolver:
 
@@ -480,7 +480,7 @@ This follows the strongest parts of adjacent libraries:
 - AI SDK: configured provider instances expose provider-specific model methods.
 - Effect AI: executable models carry provider requirements and can be resolved by
   an app boundary.
-- LiteLLM/opencode config: dynamic `providerID/modelID` branching belongs at the
+- LiteLLM/pencode config: dynamic `providerID/modelID` branching belongs at the
   app boundary, not in the typed public provider API or a global runtime
   resolver.
 - LangChain/LlamaIndex: constructor-style config plus model id is convenient,
@@ -561,12 +561,12 @@ App boundary = explicit durable-config -> typed-provider call
 - [ ] Decide whether a tiny `Provider.define(...)` helper is warranted after two
       or three provider conversions; start with plain objects if duplication is not
       yet painful.
-- [x] Update `packages/opencode/src/session/llm/native-request.ts` to construct
+- [x] Update `packages/pencode/src/session/llm/native-request.ts` to construct
       executable models at the session boundary with explicit provider facade
       calls, mapping catalog metadata such as `endpoint.websocket` to the correct
       named route selector.
 - [ ] Update tests so direct route/provider tests assert route values are carried
-      by executable models, and opencode/native tests assert boundary-based route
+      by executable models, and pencode/native tests assert boundary-based route
       selection.
 - [ ] Remove compatibility exports or stale docs only after internal call sites
       are migrated; do not keep duplicate constructor paths without an external

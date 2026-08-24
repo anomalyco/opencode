@@ -15,7 +15,7 @@ const MONO = '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Cons
 const DOT_MASK =
   "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E\")"
 
-// verified: OpenCode Go (tier=Go, dataset=zen), June 1-30, 2026.
+// verified: Pencode Go (tier=Go, dataset=zen), June 1-30, 2026.
 // 72.78T tokens · 651.4M requests · 11.42M sessions -> rounded headline figures.
 
 function DataWordmark({ height = 30 }: { height?: number }) {
@@ -92,7 +92,7 @@ export function JuneTotals() {
 
         {/* hero */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-          <div style={{ fontSize: 25, fontWeight: 600, color: c.muted, letterSpacing: 3 }}>OPENCODE GO · JUNE 2026</div>
+          <div style={{ fontSize: 25, fontWeight: 600, color: c.muted, letterSpacing: 3 }}>PENCODE GO · JUNE 2026</div>
           <div style={{ marginTop: 14 }}>
             <div
               style={{
@@ -136,7 +136,7 @@ export function JuneTotals() {
             fontWeight: 500,
           }}
         >
-          <div style={{ color: c.ink }}>opencode.ai/data</div>
+          <div style={{ color: c.ink }}>pencode.ai/data</div>
         </div>
       </div>
     </AbsoluteFill>

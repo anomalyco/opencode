@@ -1,4 +1,4 @@
-import type { OpenCodeEvent, SessionMessageInfo, SessionPendingMessage } from "@opencode-ai/client/promise"
+import type { PencodeEvent, SessionMessageInfo, SessionPendingMessage } from "@pencode-ai/client/promise"
 
 type Assistant = Extract<SessionMessageInfo, { type: "assistant" }>
 type Compaction = Extract<SessionMessageInfo, { type: "compaction" }>
@@ -14,7 +14,7 @@ export type V2SessionReduction = {
 export function createV2SessionReducer() {
   const pending = new Map<string, SessionPendingMessage>()
 
-  const reduce = (source: readonly SessionMessageInfo[], event: OpenCodeEvent): V2SessionReduction | undefined => {
+  const reduce = (source: readonly SessionMessageInfo[], event: PencodeEvent): V2SessionReduction | undefined => {
     if (!("data" in event) || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
     const sessionID = event.data.sessionID
     const result = (messages: SessionMessageInfo[], touched: string[] = []): V2SessionReduction => ({

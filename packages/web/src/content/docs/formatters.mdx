@@ -1,15 +1,15 @@
 ---
 title: Formatters
-description: OpenCode uses language specific formatters.
+description: Pencode uses language specific formatters.
 ---
 
-OpenCode can format files after they are written or edited using language-specific formatters. Formatters are disabled by default; enable them in your config before OpenCode will run them.
+Pencode can format files after they are written or edited using language-specific formatters. Formatters are disabled by default; enable them in your config before Pencode will run them.
 
 ---
 
 ## Built-in
 
-OpenCode comes with several built-in formatters for popular languages and frameworks. Below is a list of the formatters, supported file extensions, and commands or config options it needs.
+Pencode comes with several built-in formatters for popular languages and frameworks. Below is a list of the formatters, supported file extensions, and commands or config options it needs.
 
 | Formatter            | Extensions                                                                                               | Requirements                                                                                          |
 | -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -40,13 +40,13 @@ OpenCode comes with several built-in formatters for popular languages and framew
 | uv                   | .py, .pyi                                                                                                | `uv` command available                                                                                |
 | zig                  | .zig, .zon                                                                                               | `zig` command available                                                                               |
 
-When formatters are enabled, OpenCode will use `prettier` for matching files if your project has `prettier` in `package.json`.
+When formatters are enabled, Pencode will use `prettier` for matching files if your project has `prettier` in `package.json`.
 
 ---
 
 ## How it works
 
-When OpenCode writes or edits a file and formatters are enabled, it:
+When Pencode writes or edits a file and formatters are enabled, it:
 
 1. Checks the file extension against all enabled formatters.
 2. Runs the appropriate formatter command on the file.
@@ -58,22 +58,22 @@ This process happens in the background for enabled formatters.
 
 ## Configure
 
-You can enable and customize formatters through the `formatter` section in your OpenCode config.
+You can enable and customize formatters through the `formatter` section in your Pencode config.
 
 To enable all built-in formatters, set `formatter` to `true`.
 
-```json title="opencode.json"
+```json title="pencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "formatter": true
 }
 ```
 
 Use an object to keep built-ins enabled while configuring overrides or custom formatters.
 
-```json title="opencode.json"
+```json title="pencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "formatter": {}
 }
 ```
@@ -95,18 +95,18 @@ Let's look at some examples.
 
 If `formatter` is omitted, all formatters are disabled. To disable all formatters after another config enabled them, set `formatter` to `false`:
 
-```json title="opencode.json" {3}
+```json title="pencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "formatter": false
 }
 ```
 
 To disable a **specific** formatter, set `disabled` to `true`:
 
-```json title="opencode.json" {5}
+```json title="pencode.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -121,9 +121,9 @@ To disable a **specific** formatter, set `disabled` to `true`:
 
 You can configure built-in formatters with options like `environment` or `extensions`. To add a custom formatter, specify a `command` and `extensions`:
 
-```json title="opencode.json" {4-14}
+```json title="pencode.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

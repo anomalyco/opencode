@@ -1,4 +1,4 @@
-import type { McpServer } from "@opencode-ai/client/promise"
+import type { McpServer } from "@pencode-ai/client/promise"
 
 export async function toggleMcp(input: {
   status: McpServer["status"]["status"]

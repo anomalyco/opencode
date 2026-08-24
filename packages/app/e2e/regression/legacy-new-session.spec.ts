@@ -1,13 +1,13 @@
 import { expect, test } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import { base64Encode } from "@pencode-ai/core/util/encode"
+import { mockPencodeServer } from "../utils/mock-server"
 
 const draftID = "draft_legacy_new_session"
-const directory = "C:/OpenCode/LegacyNewSession"
+const directory = "C:/Pencode/LegacyNewSession"
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 test("redirects a draft to the legacy new-session route", async ({ page }) => {
-  await mockOpenCodeServer(page, {
+  await mockPencodeServer(page, {
     directory,
     project: {
       id: "proj_legacy_new_session",
@@ -26,7 +26,7 @@ test("redirects a draft to the legacy new-session route", async ({ page }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: false } }))
       localStorage.setItem("app-version.v1", JSON.stringify({ version: "1.17.20" }))
       localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
+        "pencode.window.browser.dat:tabs",
         JSON.stringify([{ type: "draft", draftID, server, directory }]),
       )
     },

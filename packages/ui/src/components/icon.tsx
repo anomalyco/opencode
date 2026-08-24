@@ -106,8 +106,8 @@ const icons = {
   "arrow-undo-down": `<path d="M4.08333 11.0859L1.75 8.7526L4.08333 6.41927M2.33333 8.7526L12.5417 8.7526L12.5417 3.21094L7 3.21094" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>`,
 }
 
-const spriteID = "opencode-icon-sprite"
-const symbol = (name: keyof typeof icons) => `opencode-icon-${name}`
+const spriteID = "pencode-icon-sprite"
+const symbol = (name: keyof typeof icons) => `pencode-icon-${name}`
 let spriteInserted = false
 
 function viewBox(name: keyof typeof icons) {

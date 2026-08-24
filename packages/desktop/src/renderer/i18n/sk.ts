@@ -9,17 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Kontrola aktualizácií zlyhala",
   "desktop.updater.checkFailed.message": "Nepodarilo sa skontrolovať aktualizácie",
   "desktop.updater.none.title": "Žiadna aktualizácia nie je k dispozícii",
-  "desktop.updater.none.message": "Používate najnovšiu verziu OpenCode",
+  "desktop.updater.none.message": "Používate najnovšiu verziu Pencode",
   "desktop.updater.downloadFailed.title": "Aktualizácia zlyhala",
   "desktop.updater.downloadFailed.message": "Nepodarilo sa stiahnuť aktualizáciu",
   "desktop.updater.downloaded.title": "Aktualizácia stiahnutá",
   "desktop.updater.downloaded.prompt":
-    "Verzia {{version}} OpenCode bola stiahnutá. Chcete ju nainštalovať a reštartovať?",
+    "Verzia {{version}} Pencode bola stiahnutá. Chcete ju nainštalovať a reštartovať?",
   "desktop.updater.installFailed.title": "Aktualizácia zlyhala",
   "desktop.updater.installFailed.message": "Nepodarilo sa nainštalovať aktualizáciu",
   "desktop.cli.installed.title": "CLI nainštalované",
   "desktop.cli.installed.message":
-    "CLI bolo nainštalované do {{path}}\n\nReštartujte terminál, aby ste mohli používať príkaz 'opencode'.",
+    "CLI bolo nainštalované do {{path}}\n\nReštartujte terminál, aby ste mohli používať príkaz 'pencode'.",
   "desktop.cli.failed.title": "Inštalácia zlyhala",
   "desktop.cli.failed.message": "Nepodarilo sa nainštalovať CLI: {{error}}",
 

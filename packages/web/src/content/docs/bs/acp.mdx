@@ -1,9 +1,9 @@
 ---
 title: ACP podrška
-description: Koristite OpenCode u bilo kojem uređivaču kompatibilnom sa ACP.
+description: Koristite Pencode u bilo kojem uređivaču kompatibilnom sa ACP.
 ---
 
-OpenCode podržava [Agent Client Protocol](https://agentclientprotocol.com) (ACP), što vam omogućava da ga koristite direktno u kompatibilnim uređivačima i IDE-ovima.
+Pencode podržava [Agent Client Protocol](https://agentclientprotocol.com) (ACP), što vam omogućava da ga koristite direktno u kompatibilnim uređivačima i IDE-ovima.
 
 :::tip
 Za listu uređivača i alata koji podržavaju ACP, pogledajte [ACP izvještaj o napretku](https://zed.dev/blog/acp-progress-report#available-now).
@@ -15,9 +15,9 @@ ACP je otvoreni protokol koji standardizira komunikaciju između uređivača kod
 
 ## Konfiguracija
 
-Da biste koristili OpenCode putem ACP-a, konfigurirajte svoj uređivač da pokrene naredbu `opencode acp`.
+Da biste koristili Pencode putem ACP-a, konfigurirajte svoj uređivač da pokrene naredbu `pencode acp`.
 
-Naredba pokreće OpenCode kao ACP-kompatibilan podproces koji komunicira sa vašim uređivačem preko JSON-RPC-a kroz stdio.
+Naredba pokreće Pencode kao ACP-kompatibilan podproces koji komunicira sa vašim uređivačem preko JSON-RPC-a kroz stdio.
 
 Ispod su primjeri za popularne uređivače koji podržavaju ACP.
 
@@ -25,16 +25,16 @@ Ispod su primjeri za popularne uređivače koji podržavaju ACP.
 
 ### Zed
 
-Instalirajte OpenCode iz [Zed ACP registra](https://zed.dev/docs/ai/external-agents#registry) pokretanjem naredbe `zed: acp registry` u komandnoj paleti.
+Instalirajte Pencode iz [Zed ACP registra](https://zed.dev/docs/ai/external-agents#registry) pokretanjem naredbe `zed: acp registry` u komandnoj paleti.
 
-Ako umjesto toga želite koristiti prilagođenu OpenCode izvršnu datoteku, dodajte je u svoju [Zed](https://zed.dev) konfiguraciju (`~/.config/zed/settings.json`):
+Ako umjesto toga želite koristiti prilagođenu Pencode izvršnu datoteku, dodajte je u svoju [Zed](https://zed.dev) konfiguraciju (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "Pencode": {
       "type": "custom",
-      "command": "opencode",
+      "command": "pencode",
       "args": ["acp"]
     }
   }
@@ -54,9 +54,9 @@ Također možete vezati prečicu na tastaturi uređivanjem vašeg `keymap.json`:
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "Pencode",
               "command": {
-                "command": "opencode",
+                "command": "pencode",
                 "args": ["acp"]
               }
             }
@@ -77,15 +77,15 @@ Dodajte u svoj [JetBrains IDE](https://www.jetbrains.com/) `acp.json` prema [dok
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "Pencode": {
+      "command": "/absolute/path/bin/pencode",
       "args": ["acp"]
     }
   }
 }
 ```
 
-Da biste ga otvorili, koristite novog "OpenCode" agenta u AI Chat agent selektoru.
+Da biste ga otvorili, koristite novog "Pencode" agenta u AI Chat agent selektoru.
 
 ---
 
@@ -96,8 +96,8 @@ Dodajte u svoju [Avante.nvim](https://github.com/yetone/avante.nvim) konfiguraci
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["pencode"] = {
+      command = "pencode",
       args = { "acp" }
     }
   }
@@ -109,11 +109,11 @@ Ako trebate proslijediti varijable okruženja:
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["pencode"] = {
+      command = "pencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        PENCODE_API_KEY = os.getenv("PENCODE_API_KEY")
       }
     }
   }
@@ -124,14 +124,14 @@ Ako trebate proslijediti varijable okruženja:
 
 ### CodeCompanion.nvim
 
-Da koristite OpenCode kao ACP agenta u [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), dodajte sljedeće u svoju Neovim konfiguraciju:
+Da koristite Pencode kao ACP agenta u [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), dodajte sljedeće u svoju Neovim konfiguraciju:
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "pencode",
         model = "claude-sonnet-4",
       },
     },
@@ -139,13 +139,13 @@ require("codecompanion").setup({
 })
 ```
 
-Ova konfiguracija postavlja CodeCompanion da koristi OpenCode kao ACP chat agenta.
+Ova konfiguracija postavlja CodeCompanion da koristi Pencode kao ACP chat agenta.
 
-Ako trebate proslijediti varijable okruženja (kao što je `OPENCODE_API_KEY`), pogledajte [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) u dokumentaciji CodeCompanion.nvim.
+Ako trebate proslijediti varijable okruženja (kao što je `PENCODE_API_KEY`), pogledajte [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) u dokumentaciji CodeCompanion.nvim.
 
 ## Podržane funkcije
 
-OpenCode radi isto kroz ACP kao i u terminalu. Podržane su sve funkcije:
+Pencode radi isto kroz ACP kao i u terminalu. Podržane su sve funkcije:
 
 :::note
 Neke ugrađene komande kao što su `/undo` i `/redo` trenutno nisu podržane.
@@ -153,7 +153,7 @@ Neke ugrađene komande kao što su `/undo` i `/redo` trenutno nisu podržane.
 
 - Ugrađeni alati (operacije sa datotekama, naredbe terminala, itd.)
 - Prilagođeni alati i slash komande
-- MCP serveri konfigurisani u vašoj OpenCode konfiguraciji
+- MCP serveri konfigurisani u vašoj Pencode konfiguraciji
 - Pravila specifična za projekat `AGENTS.md`
 - Prilagođeni formateri i linteri
 - Agenti i sistem dozvola

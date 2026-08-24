@@ -1,2 +1,2 @@
 export { ClientError } from "./client-error"
-export * as OpenCode from "./client"
+export * as Pencode from "./client"

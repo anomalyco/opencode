@@ -21,7 +21,7 @@ export {
 export type { Locale } from "../../../../console/app/src/lib/language"
 
 export const basePath = "/data"
-export const baseUrl = "https://opencode.ai"
+export const baseUrl = "https://pencode.ai"
 
 function normalizeDataPathname(pathname: string) {
   const next = localeStrip(pathname)

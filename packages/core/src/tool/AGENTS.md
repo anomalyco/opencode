@@ -29,7 +29,7 @@ Leaves own resolution, permission, and side-effect ordering. Translate only expe
 
 ## Registration
 
-Built-ins register through `Tools.Service.register({ [name]: tool })`. Application tools register through `ApplicationTools.Service.register(...)`, exposed publicly as `opencode.tools.register(...)`.
+Built-ins register through `Tools.Service.register({ [name]: tool })`. Application tools register through `ApplicationTools.Service.register(...)`, exposed publicly as `pencode.tools.register(...)`.
 
 Both are scoped:
 

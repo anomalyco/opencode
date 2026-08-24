@@ -2,7 +2,7 @@ import React from "react"
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion"
 import { days, launchIndex, glmWeekTokensT, segments } from "./data"
 
-// stats.opencode.ai design tokens (light theme)
+// stats.pencode.ai design tokens (light theme)
 const c = {
   bg: "#ffffff",
   ink: "#161616",
@@ -25,7 +25,7 @@ const glmColor = segments.find((s) => s.hero)!.color
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
-// the correct opencode "DATA" wordmark (from stats.opencode.ai header)
+// the correct pencode "DATA" wordmark (from stats.pencode.ai header)
 function DataWordmark({ height = 30, color = c.ink }: { height?: number; color?: string }) {
   return (
     <svg width={(height * 66) / 20} height={height} viewBox="0 0 66 20" fill="none" style={{ color }}>
@@ -245,7 +245,7 @@ export function GLM52Rise() {
               <span style={{ width: 13, height: 13, background: c.accent, display: "inline-block" }} />
               GLM-5.2
             </div>
-            <div style={{ color: c.ink }}>opencode.ai/data</div>
+            <div style={{ color: c.ink }}>pencode.ai/data</div>
           </div>
         </div>
       </div>

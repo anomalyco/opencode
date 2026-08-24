@@ -2,15 +2,15 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import fs from "fs/promises"
 import path from "path"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Global } from "@opencode-ai/core/global"
-import { InstructionContext } from "@opencode-ai/core/instruction-context"
-import { Location } from "@opencode-ai/core/location"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SystemContext } from "@opencode-ai/core/system-context"
-import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
+import { AppNodeBuilder } from "@pencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@pencode-ai/core/effect/layer-node"
+import { FSUtil } from "@pencode-ai/core/fs-util"
+import { Global } from "@pencode-ai/core/global"
+import { InstructionContext } from "@pencode-ai/core/instruction-context"
+import { Location } from "@pencode-ai/core/location"
+import { AbsolutePath } from "@pencode-ai/core/schema"
+import { SystemContext } from "@pencode-ai/core/system-context"
+import { SystemContextRegistry } from "@pencode-ai/core/system-context/registry"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -257,9 +257,9 @@ describe("InstructionContext", () => {
 
   it.effect("honors the project instruction opt-out", () =>
     Effect.gen(function* () {
-      const previous = process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+      const previous = process.env.PENCODE_DISABLE_PROJECT_CONFIG
       let scanned = false
-      process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "1"
+      process.env.PENCODE_DISABLE_PROJECT_CONFIG = "1"
 
       yield* SystemContextRegistry.Service.pipe(
         Effect.flatMap((service) => service.load()),
@@ -280,8 +280,8 @@ describe("InstructionContext", () => {
         ),
         Effect.ensuring(
           Effect.sync(() => {
-            if (previous === undefined) delete process.env.OPENCODE_DISABLE_PROJECT_CONFIG
-            else process.env.OPENCODE_DISABLE_PROJECT_CONFIG = previous
+            if (previous === undefined) delete process.env.PENCODE_DISABLE_PROJECT_CONFIG
+            else process.env.PENCODE_DISABLE_PROJECT_CONFIG = previous
           }),
         ),
       )

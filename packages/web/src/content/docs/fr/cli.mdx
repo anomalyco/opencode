@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: Options et commandes de la CLI OpenCode.
+description: Options et commandes de la CLI Pencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-La CLI OpenCode démarre par défaut le [TUI](/docs/tui) lorsqu'il est exécuté sans aucun argument.
+La CLI Pencode démarre par défaut le [TUI](/docs/tui) lorsqu'il est exécuté sans aucun argument.
 
 ```bash
-opencode
+pencode
 ```
 
-Mais elle accepte également les commandes documentées sur cette page. Cela vous permet d'interagir avec OpenCode par programme.
+Mais elle accepte également les commandes documentées sur cette page. Cela vous permet d'interagir avec Pencode par programme.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+pencode run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-Démarrez l’interface utilisateur du terminal OpenCode.
+Démarrez l’interface utilisateur du terminal Pencode.
 
 ```bash
-opencode [project]
+pencode [project]
 ```
 
 #### Options
@@ -44,36 +44,36 @@ opencode [project]
 
 ## Commandes
 
-La CLI OpenCode dispose également des commandes suivantes.
+La CLI Pencode dispose également des commandes suivantes.
 
 ---
 
 ### agent
 
-Gérer les agents pour OpenCode.
+Gérer les agents pour Pencode.
 
 ```bash
-opencode agent [command]
+pencode agent [command]
 ```
 
 ---
 
 ### attach
 
-Attachez un terminal à un serveur backend OpenCode déjà en cours d'exécution démarré via les commandes `serve` ou `web`.
+Attachez un terminal à un serveur backend Pencode déjà en cours d'exécution démarré via les commandes `serve` ou `web`.
 
 ```bash
-opencode attach [url]
+pencode attach [url]
 ```
 
-Cela permet d'utiliser le TUI avec un backend OpenCode distant. Par exemple :
+Cela permet d'utiliser le TUI avec un backend Pencode distant. Par exemple :
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+pencode web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+pencode attach http://10.20.30.40:4096
 ```
 
 #### Options
@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuer la dernière session                                                                      |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de session pour continuer                                                                       |
 | <nobr><code>{"--fork"}</code></nobr>     |       | Dupliquer la session lors de la reprise (à utiliser avec `--continue` ou `--session`)              |
-| <nobr><code>{"--password"}</code></nobr> | `-p`  | Mot de passe d'authentification de base (par défaut `OPENCODE_SERVER_PASSWORD`)                    |
-| <nobr><code>{"--username"}</code></nobr> | `-u`  | Nom d'utilisateur d'authentification de base (par défaut `OPENCODE_SERVER_USERNAME` ou `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | Mot de passe d'authentification de base (par défaut `PENCODE_SERVER_PASSWORD`)                    |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | Nom d'utilisateur d'authentification de base (par défaut `PENCODE_SERVER_USERNAME` ou `pencode`) |
 
 ---
 
@@ -94,7 +94,7 @@ opencode attach http://10.20.30.40:4096
 Créez un nouvel agent avec une configuration personnalisée.
 
 ```bash
-opencode agent create
+pencode agent create
 ```
 
 Cette commande vous guidera dans la création d'un nouvel agent avec un prompt système personnalisé et une configuration d'outils.
@@ -106,7 +106,7 @@ Cette commande vous guidera dans la création d'un nouvel agent avec un prompt s
 Liste tous les agents disponibles.
 
 ```bash
-opencode agent list
+pencode agent list
 ```
 
 ---
@@ -116,20 +116,20 @@ opencode agent list
 Commande pour gérer les informations d’identification et la connexion des fournisseurs.
 
 ```bash
-opencode auth [command]
+pencode auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode est alimenté par la liste des fournisseurs sur [Models.dev](https://models.dev), vous pouvez donc utiliser `opencode auth login` pour configurer les clés API pour tout fournisseur que vous souhaitez utiliser. Ceci est stocké dans `~/.local/share/opencode/auth.json`.
+Pencode est alimenté par la liste des fournisseurs sur [Models.dev](https://models.dev), vous pouvez donc utiliser `pencode auth login` pour configurer les clés API pour tout fournisseur que vous souhaitez utiliser. Ceci est stocké dans `~/.local/share/pencode/auth.json`.
 
 ```bash
-opencode auth login
+pencode auth login
 ```
 
-Lorsque OpenCode démarre, il charge les fournisseurs à partir du fichier d'informations d'identification, ainsi que les clés définies dans vos environnements ou un fichier `.env` dans votre projet.
+Lorsque Pencode démarre, il charge les fournisseurs à partir du fichier d'informations d'identification, ainsi que les clés définies dans vos environnements ou un fichier `.env` dans votre projet.
 
 ---
 
@@ -138,13 +138,13 @@ Lorsque OpenCode démarre, il charge les fournisseurs à partir du fichier d'inf
 Liste tous les fournisseurs authentifiés tels qu'ils sont stockés dans le fichier d'informations d'identification.
 
 ```bash
-opencode auth list
+pencode auth list
 ```
 
 Ou la version courte.
 
 ```bash
-opencode auth ls
+pencode auth ls
 ```
 
 ---
@@ -154,7 +154,7 @@ opencode auth ls
 Vous déconnecte d'un fournisseur en l'effaçant du fichier d'informations d'identification.
 
 ```bash
-opencode auth logout
+pencode auth logout
 ```
 
 ---
@@ -164,7 +164,7 @@ opencode auth logout
 Gérez l'agent GitHub pour l'automatisation du dépôt.
 
 ```bash
-opencode github [command]
+pencode github [command]
 ```
 
 ---
@@ -174,7 +174,7 @@ opencode github [command]
 Installez l'agent GitHub dans votre dépôt.
 
 ```bash
-opencode github install
+pencode github install
 ```
 
 Cela configure le flux de travail GitHub Actions nécessaire et vous guide tout au long du processus de configuration. [En savoir plus](/docs/github).
@@ -186,7 +186,7 @@ Cela configure le flux de travail GitHub Actions nécessaire et vous guide tout 
 Exécutez l'agent GitHub. Ceci est généralement utilisé dans les GitHub Actions.
 
 ```bash
-opencode github run
+pencode github run
 ```
 
 ##### Options
@@ -203,7 +203,7 @@ opencode github run
 Gérer les serveurs Model Context Protocol.
 
 ```bash
-opencode mcp [command]
+pencode mcp [command]
 ```
 
 ---
@@ -213,7 +213,7 @@ opencode mcp [command]
 Ajoutez un serveur MCP à votre configuration.
 
 ```bash
-opencode mcp add
+pencode mcp add
 ```
 
 Cette commande vous guidera dans l’ajout d’un serveur MCP local ou distant.
@@ -225,13 +225,13 @@ Cette commande vous guidera dans l’ajout d’un serveur MCP local ou distant.
 Liste tous les serveurs MCP configurés et leur état de connexion.
 
 ```bash
-opencode mcp list
+pencode mcp list
 ```
 
 Ou utilisez la version courte.
 
 ```bash
-opencode mcp ls
+pencode mcp ls
 ```
 
 ---
@@ -241,7 +241,7 @@ opencode mcp ls
 Authentifiez-vous auprès d'un serveur MCP compatible OAuth.
 
 ```bash
-opencode mcp auth [name]
+pencode mcp auth [name]
 ```
 
 Si vous ne fournissez pas de nom de serveur, vous serez invité à sélectionner parmi les serveurs compatibles OAuth disponibles.
@@ -249,13 +249,13 @@ Si vous ne fournissez pas de nom de serveur, vous serez invité à sélectionner
 Vous pouvez également répertorier les serveurs compatibles OAuth et leur statut d'authentification.
 
 ```bash
-opencode mcp auth list
+pencode mcp auth list
 ```
 
 Ou utilisez la version courte.
 
 ```bash
-opencode mcp auth ls
+pencode mcp auth ls
 ```
 
 ---
@@ -265,7 +265,7 @@ opencode mcp auth ls
 Supprimez les informations d'identification OAuth pour un serveur MCP.
 
 ```bash
-opencode mcp logout [name]
+pencode mcp logout [name]
 ```
 
 ---
@@ -275,7 +275,7 @@ opencode mcp logout [name]
 Déboguer les problèmes de connexion OAuth pour un serveur MCP.
 
 ```bash
-opencode mcp debug <name>
+pencode mcp debug <name>
 ```
 
 ---
@@ -285,7 +285,7 @@ opencode mcp debug <name>
 Liste tous les modèles disponibles auprès des fournisseurs configurés.
 
 ```bash
-opencode models [provider]
+pencode models [provider]
 ```
 
 Cette commande affiche tous les modèles disponibles parmi vos fournisseurs configurés au format `provider/model`.
@@ -295,7 +295,7 @@ Ceci est utile pour déterminer le nom exact du modèle à utiliser dans [votre 
 Vous pouvez éventuellement transmettre un ID de fournisseur pour filtrer les modèles en fonction de ce fournisseur.
 
 ```bash
-opencode models anthropic
+pencode models anthropic
 ```
 
 #### Options
@@ -305,36 +305,36 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | Actualisez le cache des modèles à partir de models.dev                                     |
 | <nobr><code>{"--verbose"}</code></nobr> | Utiliser une sortie de modèle plus détaillée (inclut des métadonnées telles que les coûts) |
 
-Utilisez l'option `--refresh` pour mettre à jour la liste des modèles mis en cache. Ceci est utile lorsque de nouveaux modèles ont été ajoutés à un fournisseur et que vous souhaitez les voir dans OpenCode.
+Utilisez l'option `--refresh` pour mettre à jour la liste des modèles mis en cache. Ceci est utile lorsque de nouveaux modèles ont été ajoutés à un fournisseur et que vous souhaitez les voir dans Pencode.
 
 ```bash
-opencode models --refresh
+pencode models --refresh
 ```
 
 ---
 
 ### run
 
-Exécutez opencode en mode non interactif en transmettant directement un prompt.
+Exécutez pencode en mode non interactif en transmettant directement un prompt.
 
 ```bash
-opencode run [message..]
+pencode run [message..]
 ```
 
 Ceci est utile pour les scripts, l'automatisation ou lorsque vous souhaitez une réponse rapide sans lancer le TUI complet. Par exemple :
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "pencode run"
+pencode run Explain the use of context in Go
 ```
 
-Vous pouvez également vous connecter à une instance `opencode serve` en cours d'exécution pour éviter les temps de démarrage à froid du serveur MCP à chaque exécution :
+Vous pouvez également vous connecter à une instance `pencode serve` en cours d'exécution pour éviter les temps de démarrage à froid du serveur MCP à chaque exécution :
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+pencode serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+pencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Options
@@ -351,9 +351,9 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--file"}</code></nobr>     | `-f`  | Fichier(s) à joindre au message                                                                    |
 | <nobr><code>{"--format"}</code></nobr>   |       | Format : par défaut (formaté) ou json (événements JSON bruts)                                      |
 | <nobr><code>{"--title"}</code></nobr>    |       | Titre de la session (utilise un prompt tronqué si aucune valeur n'est fournie)                     |
-| <nobr><code>{"--attach"}</code></nobr>   |       | Connectez-vous à un serveur opencode en cours d'exécution (par exemple, http://localhost:4096)     |
-| <nobr><code>{"--password"}</code></nobr> | `-p`  | Mot de passe d'authentification de base (par défaut `OPENCODE_SERVER_PASSWORD`)                    |
-| <nobr><code>{"--username"}</code></nobr> | `-u`  | Nom d'utilisateur d'authentification de base (par défaut `OPENCODE_SERVER_USERNAME` ou `opencode`) |
+| <nobr><code>{"--attach"}</code></nobr>   |       | Connectez-vous à un serveur pencode en cours d'exécution (par exemple, http://localhost:4096)     |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | Mot de passe d'authentification de base (par défaut `PENCODE_SERVER_PASSWORD`)                    |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | Nom d'utilisateur d'authentification de base (par défaut `PENCODE_SERVER_USERNAME` ou `pencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |       | Répertoire d'exécution, ou chemin sur le serveur distant lors de l'attachement                     |
 | <nobr><code>{"--variant"}</code></nobr>  |       | Variante du modèle (effort de raisonnement spécifique au fournisseur)                              |
 | <nobr><code>{"--thinking"}</code></nobr> |       | Afficher les blocs de réflexion                                                                    |
@@ -363,13 +363,13 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-Démarrez un serveur OpenCode sans interface graphique pour un accès API. Consultez le [serveur docs](/docs/server) pour l'interface complète HTTP.
+Démarrez un serveur Pencode sans interface graphique pour un accès API. Consultez le [serveur docs](/docs/server) pour l'interface complète HTTP.
 
 ```bash
-opencode serve
+pencode serve
 ```
 
-Cela démarre un serveur HTTP qui fournit un accès API aux fonctionnalités d'OpenCode sans l'interface TUI. Définissez `OPENCODE_SERVER_PASSWORD` pour activer l'authentification de base HTTP (le nom d'utilisateur par défaut est `opencode`).
+Cela démarre un serveur HTTP qui fournit un accès API aux fonctionnalités d'Pencode sans l'interface TUI. Définissez `PENCODE_SERVER_PASSWORD` pour activer l'authentification de base HTTP (le nom d'utilisateur par défaut est `pencode`).
 
 #### Options
 
@@ -384,20 +384,20 @@ Cela démarre un serveur HTTP qui fournit un accès API aux fonctionnalités d'O
 
 ### session
 
-Gérer les sessions OpenCode.
+Gérer les sessions Pencode.
 
 ```bash
-opencode session [command]
+pencode session [command]
 ```
 
 ---
 
 #### list
 
-Liste toutes les sessions OpenCode.
+Liste toutes les sessions Pencode.
 
 ```bash
-opencode session list
+pencode session list
 ```
 
 ##### Options
@@ -411,10 +411,10 @@ opencode session list
 
 ### stats
 
-Affichez les statistiques d'utilisation et de coût des jetons pour vos sessions OpenCode.
+Affichez les statistiques d'utilisation et de coût des jetons pour vos sessions Pencode.
 
 ```bash
-opencode stats
+pencode stats
 ```
 
 #### Options
@@ -433,7 +433,7 @@ opencode stats
 Exportez les données de session au format JSON.
 
 ```bash
-opencode export [sessionID]
+pencode export [sessionID]
 ```
 
 Si vous ne fournissez pas d'ID de session, vous serez invité à sélectionner parmi les sessions disponibles.
@@ -442,30 +442,30 @@ Si vous ne fournissez pas d'ID de session, vous serez invité à sélectionner p
 
 ### import
 
-Importez les données de session à partir d'un fichier JSON ou d'une URL de partage OpenCode.
+Importez les données de session à partir d'un fichier JSON ou d'une URL de partage Pencode.
 
 ```bash
-opencode import <file>
+pencode import <file>
 ```
 
-Vous pouvez importer à partir d'un fichier local ou d'une URL de partage OpenCode.
+Vous pouvez importer à partir d'un fichier local ou d'une URL de partage Pencode.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+pencode import session.json
+pencode import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Démarrez un serveur OpenCode sans interface graphique avec une interface Web.
+Démarrez un serveur Pencode sans interface graphique avec une interface Web.
 
 ```bash
-opencode web
+pencode web
 ```
 
-Cela démarre un serveur HTTP et ouvre un navigateur Web pour accéder à OpenCode via une interface Web. Définissez `OPENCODE_SERVER_PASSWORD` pour activer l'authentification de base HTTP (le nom d'utilisateur par défaut est `opencode`).
+Cela démarre un serveur HTTP et ouvre un navigateur Web pour accéder à Pencode via une interface Web. Définissez `PENCODE_SERVER_PASSWORD` pour activer l'authentification de base HTTP (le nom d'utilisateur par défaut est `pencode`).
 
 #### Options
 
@@ -483,7 +483,7 @@ Cela démarre un serveur HTTP et ouvre un navigateur Web pour accéder à OpenCo
 Démarrez un serveur ACP (Agent Client Protocol).
 
 ```bash
-opencode acp
+pencode acp
 ```
 
 Cette commande démarre un serveur ACP qui communique via stdin/stdout en utilisant nd-JSON.
@@ -500,10 +500,10 @@ Cette commande démarre un serveur ACP qui communique via stdin/stdout en utilis
 
 ### uninstall
 
-Désinstallez OpenCode et supprimez tous les fichiers associés.
+Désinstallez Pencode et supprimez tous les fichiers associés.
 
 ```bash
-opencode uninstall
+pencode uninstall
 ```
 
 #### Options
@@ -519,22 +519,22 @@ opencode uninstall
 
 ### upgrade
 
-Met à jour opencode vers la dernière version ou une version spécifique.
+Met à jour pencode vers la dernière version ou une version spécifique.
 
 ```bash
-opencode upgrade [target]
+pencode upgrade [target]
 ```
 
 Pour mettre à niveau vers la dernière version.
 
 ```bash
-opencode upgrade
+pencode upgrade
 ```
 
 Pour passer à une version spécifique.
 
 ```bash
-opencode upgrade v0.1.48
+pencode upgrade v0.1.48
 ```
 
 #### Options
@@ -547,7 +547,7 @@ opencode upgrade v0.1.48
 
 ## Options globales
 
-La CLI opencode prend les flags globaux suivants.
+La CLI pencode prend les flags globaux suivants.
 
 | Option                                     | Court | Description                              |
 | ------------------------------------------ | ----- | ---------------------------------------- |
@@ -560,34 +560,34 @@ La CLI opencode prend les flags globaux suivants.
 
 ## Variables d'environnement
 
-OpenCode peut être configuré à l'aide de variables d'environnement.
+Pencode peut être configuré à l'aide de variables d'environnement.
 
 | Variables                             | Type    | Description                                                                       |
 | ------------------------------------- | ------- | --------------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | booléen | Partager automatiquement des sessions                                             |
-| `OPENCODE_GIT_BASH_PATH`              | chaîne  | Chemin vers l'exécutable Git Bash sur Windows                                     |
-| `OPENCODE_CONFIG`                     | chaîne  | Chemin d'accès au fichier de configuration                                        |
-| `OPENCODE_TUI_CONFIG`                 | chaîne  | Chemin d'accès au fichier de configuration TUI                                    |
-| `OPENCODE_CONFIG_DIR`                 | chaîne  | Chemin d'accès au répertoire de configuration                                     |
-| `OPENCODE_CONFIG_CONTENT`             | chaîne  | Contenu de configuration JSON en ligne                                            |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | booléen | Désactiver les vérifications automatiques des mises à jour                        |
-| `OPENCODE_DISABLE_PRUNE`              | booléen | Désactiver le nettoyage des anciennes données                                     |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | booléen | Désactiver les mises à jour automatiques des titres du terminal                   |
-| `OPENCODE_PERMISSION`                 | chaîne  | Configuration des autorisations JSON intégrées                                    |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | booléen | Désactiver les plugins par défaut                                                 |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | booléen | Désactiver les téléchargements automatiques du serveur LSP                        |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | booléen | Activer les modèles expérimentaux                                                 |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | booléen | Désactiver le compactage automatique du contexte                                  |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | booléen | Désactiver la lecture de `.claude` (prompt + compétences)                         |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | booléen | Désactiver la lecture `~/.claude/CLAUDE.md`                                       |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | booléen | Désactiver le chargement de `.claude/skills`                                      |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | booléen | Désactiver la récupération de modèles à partir de sources distantes               |
-| `OPENCODE_FAKE_VCS`                   | chaîne  | Faux fournisseur VCS à des fins de test                                           |
-| `OPENCODE_CLIENT`                     | chaîne  | Identifiant du client (par défaut `cli`)                                          |
-| `OPENCODE_ENABLE_EXA`                 | booléen | Activer les outils de recherche Web Exa                                           |
-| `OPENCODE_SERVER_PASSWORD`            | chaîne  | Activer l'authentification de base pour `serve`/`web`                             |
-| `OPENCODE_SERVER_USERNAME`            | chaîne  | Remplacer le nom d'utilisateur d'authentification de base (par défaut `opencode`) |
-| `OPENCODE_MODELS_URL`                 | chaîne  | URL personnalisé pour récupérer la configuration des modèles                      |
+| `PENCODE_AUTO_SHARE`                 | booléen | Partager automatiquement des sessions                                             |
+| `PENCODE_GIT_BASH_PATH`              | chaîne  | Chemin vers l'exécutable Git Bash sur Windows                                     |
+| `PENCODE_CONFIG`                     | chaîne  | Chemin d'accès au fichier de configuration                                        |
+| `PENCODE_TUI_CONFIG`                 | chaîne  | Chemin d'accès au fichier de configuration TUI                                    |
+| `PENCODE_CONFIG_DIR`                 | chaîne  | Chemin d'accès au répertoire de configuration                                     |
+| `PENCODE_CONFIG_CONTENT`             | chaîne  | Contenu de configuration JSON en ligne                                            |
+| `PENCODE_DISABLE_AUTOUPDATE`         | booléen | Désactiver les vérifications automatiques des mises à jour                        |
+| `PENCODE_DISABLE_PRUNE`              | booléen | Désactiver le nettoyage des anciennes données                                     |
+| `PENCODE_DISABLE_TERMINAL_TITLE`     | booléen | Désactiver les mises à jour automatiques des titres du terminal                   |
+| `PENCODE_PERMISSION`                 | chaîne  | Configuration des autorisations JSON intégrées                                    |
+| `PENCODE_DISABLE_DEFAULT_PLUGINS`    | booléen | Désactiver les plugins par défaut                                                 |
+| `PENCODE_DISABLE_LSP_DOWNLOAD`       | booléen | Désactiver les téléchargements automatiques du serveur LSP                        |
+| `PENCODE_ENABLE_EXPERIMENTAL_MODELS` | booléen | Activer les modèles expérimentaux                                                 |
+| `PENCODE_DISABLE_AUTOCOMPACT`        | booléen | Désactiver le compactage automatique du contexte                                  |
+| `PENCODE_DISABLE_CLAUDE_CODE`        | booléen | Désactiver la lecture de `.claude` (prompt + compétences)                         |
+| `PENCODE_DISABLE_CLAUDE_CODE_PROMPT` | booléen | Désactiver la lecture `~/.claude/CLAUDE.md`                                       |
+| `PENCODE_DISABLE_CLAUDE_CODE_SKILLS` | booléen | Désactiver le chargement de `.claude/skills`                                      |
+| `PENCODE_DISABLE_MODELS_FETCH`       | booléen | Désactiver la récupération de modèles à partir de sources distantes               |
+| `PENCODE_FAKE_VCS`                   | chaîne  | Faux fournisseur VCS à des fins de test                                           |
+| `PENCODE_CLIENT`                     | chaîne  | Identifiant du client (par défaut `cli`)                                          |
+| `PENCODE_ENABLE_EXA`                 | booléen | Activer les outils de recherche Web Exa                                           |
+| `PENCODE_SERVER_PASSWORD`            | chaîne  | Activer l'authentification de base pour `serve`/`web`                             |
+| `PENCODE_SERVER_USERNAME`            | chaîne  | Remplacer le nom d'utilisateur d'authentification de base (par défaut `pencode`) |
+| `PENCODE_MODELS_URL`                 | chaîne  | URL personnalisé pour récupérer la configuration des modèles                      |
 
 ---
 
@@ -597,21 +597,21 @@ Ces variables d'environnement activent des fonctionnalités expérimentales qui 
 
 | Variables                                       | Type    | Description                                                     |
 | ----------------------------------------------- | ------- | --------------------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | booléen | Activer les fonctionnalités expérimentales du drapeau global    |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | booléen | Activer la découverte d'icônes                                  |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | booléen | Désactiver la copie lors de la sélection dans TUI               |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | numéro  | Délai d'expiration par défaut pour les commandes bash en ms     |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | numéro  | Nombre maximum de jetons de sortie pour les réponses LLM        |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | booléen | Activer l'observateur de fichiers pour l'ensemble du répertoire |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | booléen | Activer le formateur oxfmt                                      |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | booléen | Activer l'outil expérimental LSP                                |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booléen | Désactiver l'observateur de fichiers                            |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | booléen | Activer les fonctionnalités Exa expérimentales                  |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | booléen | Activer TY LSP pour les fichiers python                         |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | booléen | Activer le mode plan                                            |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | booléen | Activer les tâches de sous-agents en arrière-plan               |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | booléen | Activer le système d'événements expérimental                    |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | booléen | Activer le chemin de requête LLM natif                          |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | booléen | Activer l'exécution parallèle de la recherche web               |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | booléen | Activer le sous-agent Scout                                     |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | booléen | Activer la prise en charge des espaces de travail               |
+| `PENCODE_EXPERIMENTAL`                         | booléen | Activer les fonctionnalités expérimentales du drapeau global    |
+| `PENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | booléen | Activer la découverte d'icônes                                  |
+| `PENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | booléen | Désactiver la copie lors de la sélection dans TUI               |
+| `PENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | numéro  | Délai d'expiration par défaut pour les commandes bash en ms     |
+| `PENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | numéro  | Nombre maximum de jetons de sortie pour les réponses LLM        |
+| `PENCODE_EXPERIMENTAL_FILEWATCHER`             | booléen | Activer l'observateur de fichiers pour l'ensemble du répertoire |
+| `PENCODE_EXPERIMENTAL_OXFMT`                   | booléen | Activer le formateur oxfmt                                      |
+| `PENCODE_EXPERIMENTAL_LSP_TOOL`                | booléen | Activer l'outil expérimental LSP                                |
+| `PENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booléen | Désactiver l'observateur de fichiers                            |
+| `PENCODE_EXPERIMENTAL_EXA`                     | booléen | Activer les fonctionnalités Exa expérimentales                  |
+| `PENCODE_EXPERIMENTAL_LSP_TY`                  | booléen | Activer TY LSP pour les fichiers python                         |
+| `PENCODE_EXPERIMENTAL_PLAN_MODE`               | booléen | Activer le mode plan                                            |
+| `PENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | booléen | Activer les tâches de sous-agents en arrière-plan               |
+| `PENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | booléen | Activer le système d'événements expérimental                    |
+| `PENCODE_EXPERIMENTAL_NATIVE_LLM`              | booléen | Activer le chemin de requête LLM natif                          |
+| `PENCODE_EXPERIMENTAL_PARALLEL`                | booléen | Activer l'exécution parallèle de la recherche web               |
+| `PENCODE_EXPERIMENTAL_SCOUT`                   | booléen | Activer le sous-agent Scout                                     |
+| `PENCODE_EXPERIMENTAL_WORKSPACES`              | booléen | Activer la prise en charge des espaces de travail               |

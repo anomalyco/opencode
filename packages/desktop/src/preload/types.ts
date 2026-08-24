@@ -1,20 +1,20 @@
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
-import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
-import type { UpdaterState } from "@opencode-ai/app/updater"
-import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
+import type { DesktopMenuAction } from "@pencode-ai/app/desktop-menu"
+import type { WslServersPlatform } from "@pencode-ai/app/wsl/types"
+import type { UpdaterState } from "@pencode-ai/app/updater"
+import type { DesktopNativeBundle } from "@pencode-ai/app/i18n/desktop-native"
 export type {
   WslDistroProbe,
   WslInstalledDistro,
   WslJob,
   WslOnlineDistro,
-  WslOpencodeCheck,
+  WslPencodeCheck,
   WslRuntimeCheck,
   WslServerConfig,
   WslServerItem,
   WslServerRuntime,
   WslServersEvent,
   WslServersState,
-} from "@opencode-ai/app/wsl/types"
+} from "@pencode-ai/app/wsl/types"
 
 export type ServerReadyData = {
   url: string

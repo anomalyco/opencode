@@ -1,4 +1,4 @@
-import type { TuiDialogSelectOption, TuiPluginApi, TuiSlotProps } from "@opencode-ai/plugin/tui"
+import type { TuiDialogSelectOption, TuiPluginApi, TuiSlotProps } from "@pencode-ai/plugin/tui"
 import type { TuiConfig } from "../config"
 import type { useEvent } from "../context/event"
 import type { useRoute } from "../context/route"
@@ -6,7 +6,7 @@ import type { useSDK } from "../context/sdk"
 import type { useSync } from "../context/sync"
 import type { useTheme } from "../context/theme"
 import { Dialog as DialogUI, type useDialog } from "../ui/dialog"
-import type { useOpencodeKeymap } from "../keymap"
+import type { usePencodeKeymap } from "../keymap"
 import type { useKV } from "../context/kv"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
@@ -24,7 +24,7 @@ type Input = {
   version: string
   tuiConfig: TuiConfig.Resolved
   dialog: ReturnType<typeof useDialog>
-  keymap: ReturnType<typeof useOpencodeKeymap>
+  keymap: ReturnType<typeof usePencodeKeymap>
   kv: ReturnType<typeof useKV>
   route: ReturnType<typeof useRoute>
   routes: PluginRoutes
@@ -187,10 +187,10 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
     keymap: input.keymap,
     mode: {
       current() {
-        return Keymap.getOpencodeModeStack(input.keymap).current()
+        return Keymap.getPencodeModeStack(input.keymap).current()
       },
       push(mode) {
-        return Keymap.getOpencodeModeStack(input.keymap).push(mode)
+        return Keymap.getPencodeModeStack(input.keymap).push(mode)
       },
     },
     route: {

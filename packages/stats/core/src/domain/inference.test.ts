@@ -31,14 +31,14 @@ describe("inference stat normalization", () => {
     expect(modelAuthor("alpha-gpt-next")).toBeUndefined()
   })
 
-  test("uses provider.model to resolve opencode route providers", () => {
+  test("uses provider.model to resolve pencode route providers", () => {
     expect(statModel("big-pickle", "claude-sonnet-4-5")).toBe("claude-sonnet-4-5")
     expect(statModel("big-pickle", "gpt-5-free")).toBe("gpt-5")
     expect(statModel("big-pickle", "xiaomi/mimo-v2.5")).toBe("mimo-v2.5")
     expect(statModel("big-pickle", "")).toBe("unknown")
-    expect(statProvider("big-pickle", "claude-sonnet-4-5", "opencode")).toBe("anthropic")
-    expect(statProvider("big-pickle", "gpt-5", "opencode")).toBe("openai")
-    expect(statProvider("big-pickle", "", "opencode")).toBe("unknown")
+    expect(statProvider("big-pickle", "claude-sonnet-4-5", "pencode")).toBe("anthropic")
+    expect(statProvider("big-pickle", "gpt-5", "pencode")).toBe("openai")
+    expect(statProvider("big-pickle", "", "pencode")).toBe("unknown")
     expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
   })
 
@@ -65,7 +65,7 @@ describe("inference stat normalization", () => {
     ])
 
     expect(
-      toModelAggregate({ ...aggregate("big-pickle", "opencode"), provider_model: "claude-sonnet-4-5" }),
+      toModelAggregate({ ...aggregate("big-pickle", "pencode"), provider_model: "claude-sonnet-4-5" }),
     ).toMatchObject([
       {
         provider: "anthropic",
@@ -75,18 +75,18 @@ describe("inference stat normalization", () => {
     ])
   })
 
-  test("provider aggregates never keep opencode as the provider", () => {
-    expect(toProviderAggregate({ ...aggregate("big-pickle", "opencode"), provider_model: "gpt-5" })).toMatchObject([
+  test("provider aggregates never keep pencode as the provider", () => {
+    expect(toProviderAggregate({ ...aggregate("big-pickle", "pencode"), provider_model: "gpt-5" })).toMatchObject([
       { provider: "openai" },
     ])
-    expect(toProviderAggregate(aggregate("big-pickle", "opencode"))).toMatchObject([{ provider: "unknown" }])
+    expect(toProviderAggregate(aggregate("big-pickle", "pencode"))).toMatchObject([{ provider: "unknown" }])
     expect(toProviderAggregate(aggregate("muse-spark-1.2-contributor", "unknown"))).toMatchObject([
       { provider: "meta" },
     ])
   })
 
-  test("geo aggregates never keep opencode or big-pickle dimensions", () => {
-    expect(toGeoAggregate({ ...aggregate("big-pickle", "opencode"), country: "US" })).toMatchObject([
+  test("geo aggregates never keep pencode or big-pickle dimensions", () => {
+    expect(toGeoAggregate({ ...aggregate("big-pickle", "pencode"), country: "US" })).toMatchObject([
       { provider: "unknown", model: "unknown", country: "US" },
     ])
   })

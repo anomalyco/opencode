@@ -1,11 +1,11 @@
 name: "Setup Git Committer"
 description: "Create app token and configure git user"
 inputs:
-  opencode-app-id:
-    description: "OpenCode GitHub App ID"
+  pencode-app-id:
+    description: "Pencode GitHub App ID"
     required: true
-  opencode-app-secret:
-    description: "OpenCode GitHub App private key"
+  pencode-app-secret:
+    description: "Pencode GitHub App private key"
     required: true
 outputs:
   token:
@@ -21,8 +21,8 @@ runs:
       id: apptoken
       uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
       with:
-        app-id: ${{ inputs.opencode-app-id }}
-        private-key: ${{ inputs.opencode-app-secret }}
+        app-id: ${{ inputs.pencode-app-id }}
+        private-key: ${{ inputs.pencode-app-secret }}
         owner: ${{ github.repository_owner }}
 
     - name: Configure git user

@@ -3,7 +3,7 @@
 This package vendors a Drizzle Effect SQLite adapter for this repo.
 
 - Keep this package generic: Drizzle + Effect + SQLite only.
-- Do not add opencode-specific tables, paths, migrations, post-commit hooks, or domain storage APIs here.
+- Do not add pencode-specific tables, paths, migrations, post-commit hooks, or domain storage APIs here.
 - Runtime code should depend on generic `effect/unstable/sql/SqlClient`, not a specific SQLite driver.
 - Concrete SQLite clients such as `@effect/sql-sqlite-bun` belong in tests or examples unless this package intentionally adds a driver-specific helper.
 - Preserve Drizzle adapter naming and behavior where possible so this can be replaced by upstream `drizzle-orm/effect-sqlite` later.

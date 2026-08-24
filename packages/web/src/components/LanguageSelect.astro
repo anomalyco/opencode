@@ -5,14 +5,14 @@ import StarlightLanguageSelect from "@astrojs/starlight/components/LanguageSelec
 const locales = Object.keys(config.locales ?? {})
 ---
 
-<opencode-language-select data-locales={JSON.stringify(locales)}>
+<pencode-language-select data-locales={JSON.stringify(locales)}>
   <StarlightLanguageSelect />
-</opencode-language-select>
+</pencode-language-select>
 
 <script>
   document.addEventListener("change", (event) => {
     if (!(event.target instanceof HTMLSelectElement)) return
-    const wrapper = event.target.closest("opencode-language-select")
+    const wrapper = event.target.closest("pencode-language-select")
     if (!(wrapper instanceof HTMLElement)) return
 
     const locales = JSON.parse(wrapper.dataset.locales ?? "[]") as string[]
@@ -23,7 +23,7 @@ const locales = Object.keys(config.locales ?? {})
 </script>
 
 <style>
-  opencode-language-select {
+  pencode-language-select {
     display: contents;
   }
 </style>

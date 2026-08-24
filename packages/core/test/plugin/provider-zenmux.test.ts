@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { ZenmuxPlugin } from "@opencode-ai/core/plugin/provider/zenmux"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Catalog } from "@pencode-ai/core/catalog"
+import { PluginV2 } from "@pencode-ai/core/plugin"
+import { PluginHost } from "@pencode-ai/core/plugin/host"
+import { ProviderPlugins } from "@pencode-ai/core/plugin/provider"
+import { ZenmuxPlugin } from "@pencode-ai/core/plugin/provider/zenmux"
+import { ProviderV2 } from "@pencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -41,7 +41,7 @@ describe("ZenmuxPlugin", () => {
       })
       yield* addPlugin()
       const result = required(yield* catalog.provider.get(ProviderV2.ID.make("zenmux")))
-      expect(result.request.headers).toEqual({ "HTTP-Referer": "https://opencode.ai/", "X-Title": "opencode" })
+      expect(result.request.headers).toEqual({ "HTTP-Referer": "https://pencode.ai/", "X-Title": "pencode" })
       expect(Object.keys(result.request.headers).sort()).toEqual(["HTTP-Referer", "X-Title"])
     }),
   )
@@ -63,8 +63,8 @@ describe("ZenmuxPlugin", () => {
 
       expect(required(yield* catalog.provider.get(ProviderV2.ID.make("zenmux"))).request.headers).toEqual({
         Existing: "value",
-        "HTTP-Referer": "https://opencode.ai/",
-        "X-Title": "opencode",
+        "HTTP-Referer": "https://pencode.ai/",
+        "X-Title": "pencode",
       })
     }),
   )

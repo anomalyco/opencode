@@ -3,11 +3,11 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-j
 import { useRenderer } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
-import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionAnswer, QuestionRequest } from "@pencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
-import { useBindings, useOpencodeModeStack } from "../../keymap"
+import { useBindings, usePencodeModeStack } from "../../keymap"
 
 const QUESTION_MODE = "question"
 
@@ -16,7 +16,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
-  const modeStack = useOpencodeModeStack()
+  const modeStack = usePencodeModeStack()
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)

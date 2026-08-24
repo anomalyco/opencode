@@ -13,7 +13,7 @@ This document breaks the legacy configuration schema into small review groups. W
 
 Use one v2 config schema for now. Some fields, such as `autoupdate`, are intended for global/user configuration, but there is not yet enough benefit to enforce that with separate global and location schemas. Revisit this if more scope-sensitive fields survive the review.
 
-V2 core discovers config documents named `opencode.json` or `opencode.jsonc` in the global config directory, ancestor project directories, and `.opencode` config directories. The legacy `config.json` filename is not supported in V2.
+V2 core discovers config documents named `pencode.json` or `pencode.jsonc` in the global config directory, ancestor project directories, and `.pencode` config directories. The legacy `config.json` filename is not supported in V2.
 
 ## Group 1: File Metadata
 
@@ -29,7 +29,7 @@ Settings that affect process startup, shell execution, or network serving. Revie
 
 | Field        | Current Purpose                                     | Status | Notes                                                                          |
 | ------------ | --------------------------------------------------- | ------ | ------------------------------------------------------------------------------ |
-| `shell`      | Default shell for terminal and shell tool execution | keep   | Port as effective config; shared shell choice is used throughout opencode.     |
+| `shell`      | Default shell for terminal and shell tool execution | keep   | Port as effective config; shared shell choice is used throughout pencode.     |
 | `logLevel`   | Intended logging level configuration                | remove | Do not port: no config consumer exists and logging initializes from CLI input. |
 | `server`     | Hostname, port, mDNS, and CORS settings             | remove | Do not port: location config is loaded after the server is already running.    |
 | `autoupdate` | Automatic update or notification behavior           | keep   | Global-only user preference; keep `true`, `false`, and `"notify"`.             |
@@ -96,7 +96,7 @@ Plugin order remains part of the v2 configuration contract because hook registra
 ```jsonc
 {
   "plugins": [
-    "opencode-helicone-session",
+    "pencode-helicone-session",
     {
       "package": "@my-org/audit-plugin",
       "options": {
@@ -107,7 +107,7 @@ Plugin order remains part of the v2 configuration contract because hook registra
 }
 ```
 
-The configured `plugins` list represents package-loaded plugins only. Local plugin code remains discovered from plugin directories such as `.opencode/plugins/`; v2 does not port arbitrary configured local paths or file URLs into this field.
+The configured `plugins` list represents package-loaded plugins only. Local plugin code remains discovered from plugin directories such as `.pencode/plugins/`; v2 does not port arbitrary configured local paths or file URLs into this field.
 
 ## Group 5: Filesystem And Tool Runtime
 
@@ -201,7 +201,7 @@ Provider selection rules belong in `experimental.policies` rather than provider 
 
 See [provider-policy.md](./provider-policy.md) for the provider policy semantics and precedence rules.
 
-Policy evaluation will consume authored config documents in reverse order while preserving statement order inside each document. The precedence of `.opencode` policy sources remains open until `.opencode` configuration is reviewed.
+Policy evaluation will consume authored config documents in reverse order while preserving statement order inside each document. The precedence of `.pencode` policy sources remains open until `.pencode` configuration is reviewed.
 
 Provider configuration uses the plural `providers` key in v2. This intentionally differs from the legacy singular `provider` key; v2 does not add a compatibility alias while its configuration surface is still being defined.
 
@@ -308,9 +308,9 @@ External protocol and server integration configuration.
 
 | Field | Current Purpose                       | Status   | Notes                                                                                                                                                      |
 | ----- | ------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mcp` | MCP server definitions and enablement | redesign | Keep opencode's explicit local/remote server entry format, nested under `mcp.servers`; use `disabled` for inactive entries and move timeout defaults here. |
+| `mcp` | MCP server definitions and enablement | redesign | Keep pencode's explicit local/remote server entry format, nested under `mcp.servers`; use `disabled` for inactive entries and move timeout defaults here. |
 
-Keep the opencode MCP server entry format instead of adopting the common `mcpServers` copy/paste shape. Local servers remain explicit `type: "local"` entries with command arrays and `environment`; remote servers remain explicit `type: "remote"` entries with `url`, `headers`, and optional `oauth`. Nest the server map under `mcp.servers` so protocol-wide settings such as timeout defaults can live under the same subsystem.
+Keep the pencode MCP server entry format instead of adopting the common `mcpServers` copy/paste shape. Local servers remain explicit `type: "local"` entries with command arrays and `environment`; remote servers remain explicit `type: "remote"` entries with `url`, `headers`, and optional `oauth`. Nest the server map under `mcp.servers` so protocol-wide settings such as timeout defaults can live under the same subsystem.
 
 MCP timeouts have separate startup and request budgets, expressed in milliseconds. `startup` covers establishing the transport and completing MCP initialization. `request` applies independently to each post-initialization MCP request. A server may override either default without repeating the other.
 

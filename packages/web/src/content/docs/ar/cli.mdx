@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: أوامر وخيارات CLI في OpenCode.
+description: أوامر وخيارات CLI في Pencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-يبدأ CLI الخاص بـ OpenCode افتراضيا واجهة [TUI](/docs/tui) عند تشغيله بدون أي معاملات.
+يبدأ CLI الخاص بـ Pencode افتراضيا واجهة [TUI](/docs/tui) عند تشغيله بدون أي معاملات.
 
 ```bash
-opencode
+pencode
 ```
 
-كما يدعم أيضا أوامر موثقة في هذه الصفحة، ما يتيح لك التفاعل مع OpenCode برمجيا.
+كما يدعم أيضا أوامر موثقة في هذه الصفحة، ما يتيح لك التفاعل مع Pencode برمجيا.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+pencode run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-بدء واجهة المستخدم terminal (TUI) الخاصة بـ OpenCode.
+بدء واجهة المستخدم terminal (TUI) الخاصة بـ Pencode.
 
 ```bash
-opencode [project]
+pencode [project]
 ```
 
 #### الخيارات
@@ -44,36 +44,36 @@ opencode [project]
 
 ## الأوامر
 
-يتضمن CLI الخاص بـ OpenCode أيضا الأوامر التالية.
+يتضمن CLI الخاص بـ Pencode أيضا الأوامر التالية.
 
 ---
 
 ### agent
 
-إدارة وكلاء OpenCode.
+إدارة وكلاء Pencode.
 
 ```bash
-opencode agent [command]
+pencode agent [command]
 ```
 
 ---
 
 ### attach
 
-إرفاق terminal بخادم الواجهة الخلفية لـ OpenCode قيد التشغيل بالفعل، والذي تم تشغيله عبر الأمرين `serve` أو `web`.
+إرفاق terminal بخادم الواجهة الخلفية لـ Pencode قيد التشغيل بالفعل، والذي تم تشغيله عبر الأمرين `serve` أو `web`.
 
 ```bash
-opencode attach [url]
+pencode attach [url]
 ```
 
-يتيح ذلك استخدام واجهة TUI مع واجهة خلفية لـ OpenCode تعمل عن بعد. على سبيل المثال:
+يتيح ذلك استخدام واجهة TUI مع واجهة خلفية لـ Pencode تعمل عن بعد. على سبيل المثال:
 
 ```bash
 # ابدأ خادم الواجهة الخلفية للوصول عبر الويب/الجوال
-opencode web --port 4096 --hostname 0.0.0.0
+pencode web --port 4096 --hostname 0.0.0.0
 
 # في محطة طرفية (terminal) أخرى، اربط TUI بالواجهة الخلفية قيد التشغيل
-opencode attach http://10.20.30.40:4096
+pencode attach http://10.20.30.40:4096
 ```
 
 #### الرايات
@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c`    | متابعة آخر جلسة                                                                   |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`    | معرّف الجلسة للمتابعة                                                             |
 | <nobr><code>{"--fork"}</code></nobr>     |         | تفريع الجلسة عند المتابعة (استخدمه مع `--continue` أو `--session`)                |
-| <nobr><code>{"--password"}</code></nobr> | `-p`    | كلمة مرور المصادقة الأساسية (الافتراضي `OPENCODE_SERVER_PASSWORD`)                |
-| <nobr><code>{"--username"}</code></nobr> | `-u`    | اسم مستخدم المصادقة الأساسية (الافتراضي `OPENCODE_SERVER_USERNAME` أو `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p`    | كلمة مرور المصادقة الأساسية (الافتراضي `PENCODE_SERVER_PASSWORD`)                |
+| <nobr><code>{"--username"}</code></nobr> | `-u`    | اسم مستخدم المصادقة الأساسية (الافتراضي `PENCODE_SERVER_USERNAME` أو `pencode`) |
 
 ---
 
@@ -94,7 +94,7 @@ opencode attach http://10.20.30.40:4096
 إنشاء وكيل جديد بإعدادات مخصصة.
 
 ```bash
-opencode agent create
+pencode agent create
 ```
 
 سيرشدك هذا الأمر خلال إنشاء وكيل جديد مع موجه نظام مخصص وإعدادات الأدوات.
@@ -106,7 +106,7 @@ opencode agent create
 عرض جميع الوكلاء المتاحين.
 
 ```bash
-opencode agent list
+pencode agent list
 ```
 
 ---
@@ -116,20 +116,20 @@ opencode agent list
 أمر لإدارة بيانات الاعتماد وتسجيل الدخول لمزودي الخدمة.
 
 ```bash
-opencode auth [command]
+pencode auth [command]
 ```
 
 ---
 
 #### login
 
-يعتمد OpenCode على قائمة المزودين في [Models.dev](https://models.dev)، لذا يمكنك استخدام `opencode auth login` لتهيئة مفاتيح API لأي مزود ترغب باستخدامه. يتم حفظ ذلك في `~/.local/share/opencode/auth.json`.
+يعتمد Pencode على قائمة المزودين في [Models.dev](https://models.dev)، لذا يمكنك استخدام `pencode auth login` لتهيئة مفاتيح API لأي مزود ترغب باستخدامه. يتم حفظ ذلك في `~/.local/share/pencode/auth.json`.
 
 ```bash
-opencode auth login
+pencode auth login
 ```
 
-عند تشغيل OpenCode يقوم بتحميل المزودين من ملف بيانات الاعتماد، وكذلك أي مفاتيح معرّفة في متغيرات البيئة لديك أو في ملف `.env` ضمن مشروعك.
+عند تشغيل Pencode يقوم بتحميل المزودين من ملف بيانات الاعتماد، وكذلك أي مفاتيح معرّفة في متغيرات البيئة لديك أو في ملف `.env` ضمن مشروعك.
 
 ---
 
@@ -138,13 +138,13 @@ opencode auth login
 يسرد جميع المزودين الذين تم توثيقهم كما هم محفوظون في ملف بيانات الاعتماد.
 
 ```bash
-opencode auth list
+pencode auth list
 ```
 
 أو النسخة المختصرة.
 
 ```bash
-opencode auth ls
+pencode auth ls
 ```
 
 ---
@@ -154,7 +154,7 @@ opencode auth ls
 يسجلك خارج مزود عبر حذفه من ملف بيانات الاعتماد.
 
 ```bash
-opencode auth logout
+pencode auth logout
 ```
 
 ---
@@ -164,7 +164,7 @@ opencode auth logout
 إدارة وكيل GitHub لأتمتة المستودع.
 
 ```bash
-opencode github [command]
+pencode github [command]
 ```
 
 ---
@@ -174,7 +174,7 @@ opencode github [command]
 تثبيت وكيل GitHub في مستودعك.
 
 ```bash
-opencode github install
+pencode github install
 ```
 
 يقوم ذلك بإعداد سير عمل GitHub Actions اللازم ويرشدك خلال عملية التهيئة. [اعرف المزيد](/docs/github).
@@ -186,7 +186,7 @@ opencode github install
 تشغيل وكيل GitHub. يُستخدم هذا عادة ضمن GitHub Actions.
 
 ```bash
-opencode github run
+pencode github run
 ```
 
 ##### الرايات
@@ -203,7 +203,7 @@ opencode github run
 إدارة خوادم Model Context Protocol.
 
 ```bash
-opencode mcp [command]
+pencode mcp [command]
 ```
 
 ---
@@ -213,7 +213,7 @@ opencode mcp [command]
 إضافة خادم MCP إلى تهيئتك.
 
 ```bash
-opencode mcp add
+pencode mcp add
 ```
 
 سيرشدك هذا الأمر خلال إضافة خادم MCP محلي أو بعيد.
@@ -225,13 +225,13 @@ opencode mcp add
 عرض جميع خوادم MCP المُهيأة وحالة اتصالها.
 
 ```bash
-opencode mcp list
+pencode mcp list
 ```
 
 أو استخدم النسخة المختصرة.
 
 ```bash
-opencode mcp ls
+pencode mcp ls
 ```
 
 ---
@@ -241,7 +241,7 @@ opencode mcp ls
 إجراء المصادقة مع خادم MCP يدعم OAuth.
 
 ```bash
-opencode mcp auth [name]
+pencode mcp auth [name]
 ```
 
 إذا لم تُحدِّد اسم خادم، فسيُطلب منك الاختيار من الخوادم المتاحة الداعمة لـ OAuth.
@@ -249,13 +249,13 @@ opencode mcp auth [name]
 يمكنك أيضا عرض الخوادم الداعمة لـ OAuth وحالة المصادقة الخاصة بها.
 
 ```bash
-opencode mcp auth list
+pencode mcp auth list
 ```
 
 أو استخدم النسخة المختصرة.
 
 ```bash
-opencode mcp auth ls
+pencode mcp auth ls
 ```
 
 ---
@@ -265,7 +265,7 @@ opencode mcp auth ls
 إزالة بيانات اعتماد OAuth لخادم MCP.
 
 ```bash
-opencode mcp logout [name]
+pencode mcp logout [name]
 ```
 
 ---
@@ -275,7 +275,7 @@ opencode mcp logout [name]
 تشخيص مشاكل اتصال OAuth لخادم MCP.
 
 ```bash
-opencode mcp debug <name>
+pencode mcp debug <name>
 ```
 
 ---
@@ -285,7 +285,7 @@ opencode mcp debug <name>
 عرض جميع النماذج المتاحة من المزودين المُهيأين.
 
 ```bash
-opencode models [provider]
+pencode models [provider]
 ```
 
 يعرض هذا الأمر جميع النماذج المتاحة عبر المزودين المُهيأين لديك بصيغة `provider/model`.
@@ -295,7 +295,7 @@ opencode models [provider]
 يمكنك اختياريا تمرير معرّف مزود لتصفية النماذج حسب ذلك المزود.
 
 ```bash
-opencode models anthropic
+pencode models anthropic
 ```
 
 #### الرايات
@@ -305,36 +305,36 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | تحديث ذاكرة التخزين المؤقت للنماذج من models.dev              |
 | <nobr><code>{"--verbose"}</code></nobr> | استخدام مخرجات أكثر تفصيلا للنماذج (تشمل بيانات مثل التكاليف) |
 
-استخدم الراية `--refresh` لتحديث قائمة النماذج المخزنة مؤقتا. يفيد ذلك عند إضافة نماذج جديدة إلى مزود وتريد رؤيتها في OpenCode.
+استخدم الراية `--refresh` لتحديث قائمة النماذج المخزنة مؤقتا. يفيد ذلك عند إضافة نماذج جديدة إلى مزود وتريد رؤيتها في Pencode.
 
 ```bash
-opencode models --refresh
+pencode models --refresh
 ```
 
 ---
 
 ### run
 
-تشغيل opencode في وضع غير تفاعلي عبر تمرير موجه مباشرة.
+تشغيل pencode في وضع غير تفاعلي عبر تمرير موجه مباشرة.
 
 ```bash
-opencode run [message..]
+pencode run [message..]
 ```
 
 هذا مفيد للبرمجة النصية والأتمتة، أو عندما تريد إجابة سريعة دون تشغيل واجهة TUI كاملة. على سبيل المثال.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "pencode run"
+pencode run Explain the use of context in Go
 ```
 
-يمكنك أيضا الإرفاق بمثيل `opencode serve` قيد التشغيل لتجنّب زمن الإقلاع البارد لخوادم MCP في كل تشغيل:
+يمكنك أيضا الإرفاق بمثيل `pencode serve` قيد التشغيل لتجنّب زمن الإقلاع البارد لخوادم MCP في كل تشغيل:
 
 ```bash
 # ابدأ خادمًا بلا واجهة في محطة طرفية واحدة
-opencode serve
+pencode serve
 
 # في محطة طرفية أخرى، شغّل الأوامر التي ترتبط به
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+pencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### الرايات
@@ -351,9 +351,9 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--file"}</code></nobr>     | `-f`    | ملف/ملفات لإرفاقها بالرسالة                                                       |
 | <nobr><code>{"--format"}</code></nobr>   |         | التنسيق: default (منسق) أو json (أحداث JSON خام)                                  |
 | <nobr><code>{"--title"}</code></nobr>    |         | عنوان للجلسة (يستخدم موجهًا مقتطعًا إن لم تُحدَّد قيمة)                           |
-| <nobr><code>{"--attach"}</code></nobr>   |         | الإرفاق بخادم opencode قيد التشغيل (مثل http://localhost:4096)                    |
-| <nobr><code>{"--password"}</code></nobr> | `-p`    | كلمة مرور المصادقة الأساسية (الافتراضي `OPENCODE_SERVER_PASSWORD`)                |
-| <nobr><code>{"--username"}</code></nobr> | `-u`    | اسم مستخدم المصادقة الأساسية (الافتراضي `OPENCODE_SERVER_USERNAME` أو `opencode`) |
+| <nobr><code>{"--attach"}</code></nobr>   |         | الإرفاق بخادم pencode قيد التشغيل (مثل http://localhost:4096)                    |
+| <nobr><code>{"--password"}</code></nobr> | `-p`    | كلمة مرور المصادقة الأساسية (الافتراضي `PENCODE_SERVER_PASSWORD`)                |
+| <nobr><code>{"--username"}</code></nobr> | `-u`    | اسم مستخدم المصادقة الأساسية (الافتراضي `PENCODE_SERVER_USERNAME` أو `pencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |         | دليل التشغيل، أو المسار على الخادم البعيد عند الإرفاق                             |
 | <nobr><code>{"--variant"}</code></nobr>  |         | متغير النموذج (جهد الاستدلال الخاص بالمزود)                                       |
 | <nobr><code>{"--thinking"}</code></nobr> |         | عرض كتل التفكير                                                                   |
@@ -363,13 +363,13 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-بدء خادم OpenCode بدون واجهة للوصول عبر API. راجع [توثيق الخادم](/docs/server) لواجهة HTTP الكاملة.
+بدء خادم Pencode بدون واجهة للوصول عبر API. راجع [توثيق الخادم](/docs/server) لواجهة HTTP الكاملة.
 
 ```bash
-opencode serve
+pencode serve
 ```
 
-يشغّل هذا خادم HTTP يوفّر وصولا عبر API لوظائف opencode دون واجهة TUI. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
+يشغّل هذا خادم HTTP يوفّر وصولا عبر API لوظائف pencode دون واجهة TUI. اضبط `PENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `pencode`).
 
 #### الرايات
 
@@ -384,20 +384,20 @@ opencode serve
 
 ### session
 
-إدارة جلسات OpenCode.
+إدارة جلسات Pencode.
 
 ```bash
-opencode session [command]
+pencode session [command]
 ```
 
 ---
 
 #### list
 
-عرض جميع جلسات OpenCode.
+عرض جميع جلسات Pencode.
 
 ```bash
-opencode session list
+pencode session list
 ```
 
 ##### الرايات
@@ -411,10 +411,10 @@ opencode session list
 
 ### stats
 
-عرض إحصاءات استخدام الرموز والتكلفة لجلسات OpenCode لديك.
+عرض إحصاءات استخدام الرموز والتكلفة لجلسات Pencode لديك.
 
 ```bash
-opencode stats
+pencode stats
 ```
 
 #### الرايات
@@ -433,7 +433,7 @@ opencode stats
 تصدير بيانات الجلسة بصيغة JSON.
 
 ```bash
-opencode export [sessionID]
+pencode export [sessionID]
 ```
 
 إذا لم تُقدّم معرّف جلسة، فسيُطلب منك الاختيار من الجلسات المتاحة.
@@ -442,30 +442,30 @@ opencode export [sessionID]
 
 ### import
 
-استيراد بيانات الجلسة من ملف JSON أو رابط مشاركة OpenCode.
+استيراد بيانات الجلسة من ملف JSON أو رابط مشاركة Pencode.
 
 ```bash
-opencode import <file>
+pencode import <file>
 ```
 
-يمكنك الاستيراد من ملف محلي أو من رابط مشاركة OpenCode.
+يمكنك الاستيراد من ملف محلي أو من رابط مشاركة Pencode.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+pencode import session.json
+pencode import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-بدء خادم OpenCode بدون واجهة مع واجهة ويب.
+بدء خادم Pencode بدون واجهة مع واجهة ويب.
 
 ```bash
-opencode web
+pencode web
 ```
 
-يشغّل هذا خادم HTTP ويفتح متصفح ويب للوصول إلى OpenCode عبر واجهة ويب. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
+يشغّل هذا خادم HTTP ويفتح متصفح ويب للوصول إلى Pencode عبر واجهة ويب. اضبط `PENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `pencode`).
 
 #### الرايات
 
@@ -483,7 +483,7 @@ opencode web
 بدء خادم ACP (Agent Client Protocol).
 
 ```bash
-opencode acp
+pencode acp
 ```
 
 يشغّل هذا الأمر خادم ACP يتواصل عبر stdin/stdout باستخدام nd-JSON.
@@ -500,10 +500,10 @@ opencode acp
 
 ### uninstall
 
-إلغاء تثبيت OpenCode وإزالة جميع الملفات ذات الصلة.
+إلغاء تثبيت Pencode وإزالة جميع الملفات ذات الصلة.
 
 ```bash
-opencode uninstall
+pencode uninstall
 ```
 
 #### الرايات
@@ -519,22 +519,22 @@ opencode uninstall
 
 ### upgrade
 
-تحديث opencode إلى أحدث إصدار أو إلى إصدار محدد.
+تحديث pencode إلى أحدث إصدار أو إلى إصدار محدد.
 
 ```bash
-opencode upgrade [target]
+pencode upgrade [target]
 ```
 
 للترقية إلى أحدث إصدار.
 
 ```bash
-opencode upgrade
+pencode upgrade
 ```
 
 للترقية إلى إصدار محدد.
 
 ```bash
-opencode upgrade v0.1.48
+pencode upgrade v0.1.48
 ```
 
 #### الرايات
@@ -547,7 +547,7 @@ opencode upgrade v0.1.48
 
 ## الخيارات العامة
 
-يدعم سطر أوامر opencode الخيارات العامة التالية.
+يدعم سطر أوامر pencode الخيارات العامة التالية.
 
 | الراية                                     | المختصر | الوصف                                  |
 | ------------------------------------------ | ------- | -------------------------------------- |
@@ -560,33 +560,33 @@ opencode upgrade v0.1.48
 
 ## متغيرات البيئة
 
-يمكن تهيئة OpenCode باستخدام متغيرات البيئة.
+يمكن تهيئة Pencode باستخدام متغيرات البيئة.
 
 | المتغير                               | النوع   | الوصف                                                     |
 | ------------------------------------- | ------- | --------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | مشاركة الجلسات تلقائيا                                    |
-| `OPENCODE_GIT_BASH_PATH`              | string  | مسار ملف Git Bash التنفيذي على Windows                    |
-| `OPENCODE_CONFIG`                     | string  | مسار ملف التهيئة                                          |
-| `OPENCODE_CONFIG_DIR`                 | string  | مسار دليل التهيئة                                         |
-| `OPENCODE_CONFIG_CONTENT`             | string  | محتوى تهيئة JSON مُضمّن                                   |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | تعطيل التحقق التلقائي من التحديثات                        |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | تعطيل تنقية البيانات القديمة                              |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | تعطيل تحديث عنوان terminal تلقائيا                        |
-| `OPENCODE_PERMISSION`                 | string  | تهيئة أذونات JSON مُضمّنة                                 |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | تعطيل الإضافات الافتراضية                                 |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | تعطيل تنزيل خوادم LSP تلقائيا                             |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | تفعيل النماذج التجريبية                                   |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | تعطيل ضغط السياق تلقائيا                                  |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | تعطيل القراءة من `.claude` (الموجه + المهارات)            |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | تعطيل قراءة `~/.claude/CLAUDE.md`                         |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | تعطيل تحميل `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | تعطيل جلب النماذج من مصادر بعيدة                          |
-| `OPENCODE_FAKE_VCS`                   | string  | مزود VCS وهمي لأغراض الاختبار                             |
-| `OPENCODE_CLIENT`                     | string  | معرّف العميل (الافتراضي `cli`)                            |
-| `OPENCODE_ENABLE_EXA`                 | boolean | تفعيل أدوات بحث الويب من Exa                              |
-| `OPENCODE_SERVER_PASSWORD`            | string  | تفعيل المصادقة الأساسية لخادمي `serve`/`web`              |
-| `OPENCODE_SERVER_USERNAME`            | string  | تجاوز اسم مستخدم المصادقة الأساسية (الافتراضي `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | رابط مخصص لجلب تهيئة النماذج                              |
+| `PENCODE_AUTO_SHARE`                 | boolean | مشاركة الجلسات تلقائيا                                    |
+| `PENCODE_GIT_BASH_PATH`              | string  | مسار ملف Git Bash التنفيذي على Windows                    |
+| `PENCODE_CONFIG`                     | string  | مسار ملف التهيئة                                          |
+| `PENCODE_CONFIG_DIR`                 | string  | مسار دليل التهيئة                                         |
+| `PENCODE_CONFIG_CONTENT`             | string  | محتوى تهيئة JSON مُضمّن                                   |
+| `PENCODE_DISABLE_AUTOUPDATE`         | boolean | تعطيل التحقق التلقائي من التحديثات                        |
+| `PENCODE_DISABLE_PRUNE`              | boolean | تعطيل تنقية البيانات القديمة                              |
+| `PENCODE_DISABLE_TERMINAL_TITLE`     | boolean | تعطيل تحديث عنوان terminal تلقائيا                        |
+| `PENCODE_PERMISSION`                 | string  | تهيئة أذونات JSON مُضمّنة                                 |
+| `PENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | تعطيل الإضافات الافتراضية                                 |
+| `PENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | تعطيل تنزيل خوادم LSP تلقائيا                             |
+| `PENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | تفعيل النماذج التجريبية                                   |
+| `PENCODE_DISABLE_AUTOCOMPACT`        | boolean | تعطيل ضغط السياق تلقائيا                                  |
+| `PENCODE_DISABLE_CLAUDE_CODE`        | boolean | تعطيل القراءة من `.claude` (الموجه + المهارات)            |
+| `PENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | تعطيل قراءة `~/.claude/CLAUDE.md`                         |
+| `PENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | تعطيل تحميل `.claude/skills`                              |
+| `PENCODE_DISABLE_MODELS_FETCH`       | boolean | تعطيل جلب النماذج من مصادر بعيدة                          |
+| `PENCODE_FAKE_VCS`                   | string  | مزود VCS وهمي لأغراض الاختبار                             |
+| `PENCODE_CLIENT`                     | string  | معرّف العميل (الافتراضي `cli`)                            |
+| `PENCODE_ENABLE_EXA`                 | boolean | تفعيل أدوات بحث الويب من Exa                              |
+| `PENCODE_SERVER_PASSWORD`            | string  | تفعيل المصادقة الأساسية لخادمي `serve`/`web`              |
+| `PENCODE_SERVER_USERNAME`            | string  | تجاوز اسم مستخدم المصادقة الأساسية (الافتراضي `pencode`) |
+| `PENCODE_MODELS_URL`                 | string  | رابط مخصص لجلب تهيئة النماذج                              |
 
 ---
 
@@ -596,21 +596,21 @@ opencode upgrade v0.1.48
 
 | المتغير                                         | النوع   | الوصف                                        |
 | ----------------------------------------------- | ------- | -------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | تفعيل الميزات التجريبية الخاضعة للعلم الشامل |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | تفعيل اكتشاف الأيقونات                       |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | تعطيل النسخ عند التحديد في TUI               |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | المهلة الافتراضية لأوامر bash بالميلي ثانية  |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | الحد الأقصى لرموز المخرجات لاستجابات LLM     |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | تفعيل مراقب الملفات لكامل الدليل             |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | تفعيل مُنسّق oxfmt                           |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | تفعيل أداة LSP تجريبية                       |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | تعطيل مراقب الملفات                          |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | تفعيل ميزات Exa التجريبية                    |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | تمكين TY LSP لملفات python                   |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | تفعيل وضع الخطة                              |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | تفعيل مهام subagent في الخلفية               |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | تفعيل نظام الأحداث التجريبي                  |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | تفعيل مسار طلبات LLM الأصلي                  |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | تفعيل تنفيذ بحث الويب بالتوازي               |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | تفعيل Scout subagent                         |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | تفعيل دعم مساحات العمل                       |
+| `PENCODE_EXPERIMENTAL`                         | boolean | تفعيل الميزات التجريبية الخاضعة للعلم الشامل |
+| `PENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | تفعيل اكتشاف الأيقونات                       |
+| `PENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | تعطيل النسخ عند التحديد في TUI               |
+| `PENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | المهلة الافتراضية لأوامر bash بالميلي ثانية  |
+| `PENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | الحد الأقصى لرموز المخرجات لاستجابات LLM     |
+| `PENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | تفعيل مراقب الملفات لكامل الدليل             |
+| `PENCODE_EXPERIMENTAL_OXFMT`                   | boolean | تفعيل مُنسّق oxfmt                           |
+| `PENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | تفعيل أداة LSP تجريبية                       |
+| `PENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | تعطيل مراقب الملفات                          |
+| `PENCODE_EXPERIMENTAL_EXA`                     | boolean | تفعيل ميزات Exa التجريبية                    |
+| `PENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | تمكين TY LSP لملفات python                   |
+| `PENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | تفعيل وضع الخطة                              |
+| `PENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | تفعيل مهام subagent في الخلفية               |
+| `PENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | تفعيل نظام الأحداث التجريبي                  |
+| `PENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | تفعيل مسار طلبات LLM الأصلي                  |
+| `PENCODE_EXPERIMENTAL_PARALLEL`                | boolean | تفعيل تنفيذ بحث الويب بالتوازي               |
+| `PENCODE_EXPERIMENTAL_SCOUT`                   | boolean | تفعيل Scout subagent                         |
+| `PENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | تفعيل دعم مساحات العمل                       |

@@ -1,6 +1,6 @@
 # V1 API Migration Checklist
 
-The app is currently hybrid. In this document, V1 refers to the legacy unprefixed server APIs used by `@opencode-ai/sdk/v2`, despite the SDK package name.
+The app is currently hybrid. In this document, V1 refers to the legacy unprefixed server APIs used by `@pencode-ai/sdk/v2`, despite the SDK package name.
 
 ## Events
 
@@ -206,7 +206,7 @@ These are not V1 network requests, but they keep the UI coupled to V1 data contr
 - [ ] Replace current agent, provider, and model adapters to legacy SDK structures.
   - `src/context/global-sync/utils.ts`
 - [ ] Replace legacy `Session`, `Message`, `Part`, `PermissionRequest`, `QuestionRequest`, `Project`, `FileNode`, `FileDiffInfo`, and `Event` types throughout app state and rendering.
-- [ ] Remove the `@opencode-ai/sdk` runtime dependency after all legacy calls and types are gone.
+- [ ] Remove the `@pencode-ai/sdk` runtime dependency after all legacy calls and types are gone.
   - `package.json`
 
 ## Test Infrastructure

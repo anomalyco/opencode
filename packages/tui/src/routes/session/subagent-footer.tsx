@@ -3,10 +3,10 @@ import { useRouteData } from "../../context/route"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage } from "@pencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
-import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
+import { useCommandShortcut, usePencodeKeymap } from "../../keymap"
 
 export function SubagentFooter() {
   const route = useRouteData("session")
@@ -55,7 +55,7 @@ export function SubagentFooter() {
   })
 
   const { theme } = useTheme()
-  const keymap = useOpencodeKeymap()
+  const keymap = usePencodeKeymap()
   const parentShortcut = useCommandShortcut("session.parent")
   const previousShortcut = useCommandShortcut("session.child.previous")
   const nextShortcut = useCommandShortcut("session.child.next")

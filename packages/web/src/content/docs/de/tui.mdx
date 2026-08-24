@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Arbeite mit OpenCode in der Terminal-Oberflaeche.
+description: Arbeite mit Pencode in der Terminal-Oberflaeche.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode bietet eine interaktive Terminaloberflaeche (TUI), um mit einem LLM an deinen Projekten zu arbeiten.
+Pencode bietet eine interaktive Terminaloberflaeche (TUI), um mit einem LLM an deinen Projekten zu arbeiten.
 
-Ohne weitere Argumente startet OpenCode die TUI im aktuellen Verzeichnis.
+Ohne weitere Argumente startet Pencode die TUI im aktuellen Verzeichnis.
 
 ```bash
-opencode
+pencode
 ```
 
 Oder du startest sie fuer ein bestimmtes Arbeitsverzeichnis.
 
 ```bash
-opencode /path/to/project
+pencode /path/to/project
 ```
 
 In der TUI kannst du direkt mit einer Nachricht prompten.
@@ -58,7 +58,7 @@ Die Ausgabe landet als Tool-Ergebnis in der Unterhaltung.
 
 ## Befehle
 
-In der OpenCode-TUI kannst du `/` plus Befehlsnamen eingeben, um Aktionen schnell auszufuehren.
+In der Pencode-TUI kannst du `/` plus Befehlsnamen eingeben, um Aktionen schnell auszufuehren.
 Zum Beispiel:
 
 ```bash frame="none"
@@ -74,7 +74,7 @@ Hier sind alle verfuegbaren Slash-Commands:
 
 ### connect
 
-Fuegt einen Provider zu OpenCode hinzu. Erlaubt die Auswahl aus verfuegbaren Providern und das Hinzufuegen ihrer API-Keys.
+Fuegt einen Provider zu Pencode hinzu. Erlaubt die Auswahl aus verfuegbaren Providern und das Hinzufuegen ihrer API-Keys.
 
 ```bash frame="none"
 /connect
@@ -120,7 +120,7 @@ Oeffnet externen Editor zum Verfassen von Nachrichten. Nutzt den in der `EDITOR`
 
 ### exit
 
-Beendet OpenCode. _Aliase_: `/quit`, `/q`
+Beendet Pencode. _Aliase_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -359,8 +359,8 @@ Du kannst das Verhalten der TUI ueber die Datei `tui.json` (oder `tui.jsonc`) an
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "$schema": "https://pencode.ai/tui.json",
+  "theme": "pencode",
   "leader_timeout": 2000,
   "keybinds": {
     "leader": "ctrl+x",
@@ -377,7 +377,7 @@ Du kannst das Verhalten der TUI ueber die Datei `tui.json` (oder `tui.jsonc`) an
     "notifications": true,
     "sound": true,
     "volume": 0.4,
-    "sound_pack": "opencode.default",
+    "sound_pack": "pencode.default",
     "sounds": {
       "error": "./sounds/error.mp3"
     }
@@ -385,7 +385,7 @@ Du kannst das Verhalten der TUI ueber die Datei `tui.json` (oder `tui.jsonc`) an
 }
 ```
 
-Dies ist getrennt von `opencode.json`, welche das Server-/Runtime-Verhalten konfiguriert.
+Dies ist getrennt von `pencode.json`, welche das Server-/Runtime-Verhalten konfiguriert.
 
 `keybinds` wird mit den integrierten Standardwerten zusammengeführt, daher musst du nur die Tastenkombinationen konfigurieren, die du ändern möchtest.
 
@@ -393,24 +393,24 @@ Dies ist getrennt von `opencode.json`, welche das Server-/Runtime-Verhalten konf
 
 - `theme` - Setzt dein UI-Theme. [Mehr dazu](/docs/themes).
 - `keybinds` - Passt Tastenkombinationen an. [Mehr dazu](/docs/keybinds).
-- `leader_timeout` - Steuert, wie lange OpenCode nach der leader key wartet. Standard ist `2000`.
+- `leader_timeout` - Steuert, wie lange Pencode nach der leader key wartet. Standard ist `2000`.
 - `scroll_acceleration.enabled` - Aktiviert Scroll-Beschleunigung im macOS-Stil fuer weiches, natuerliches Scrollen. Wenn aktiviert, erhoeht sich die Scroll-Geschwindigkeit bei schnellen Gesten und bleibt praezise bei langsamen Bewegungen. **Diese Einstellung hat Vorrang vor `scroll_speed` und ueberschreibt es, wenn aktiviert.**
 - `scroll_speed` - Steuert, wie schnell die TUI scrollt (Minimum: `0.001`, unterstuetzt Dezimalwerte). Standard ist `3`. **Hinweis: Wird ignoriert, wenn `scroll_acceleration.enabled` auf `true` gesetzt ist.**
 - `diff_style` - Steuert die Diff-Darstellung. `"auto"` passt sich der Terminalbreite an, `"stacked"` zeigt immer ein einspaltiges Layout.
 - `mouse` - Aktiviert oder deaktiviert die Mauserfassung im TUI (Standard: `true`). Wenn deaktiviert, bleibt das native Mausauswahl- und Scrollverhalten des Terminals erhalten.
 - `attention` - Konfiguriert Desktop-Benachrichtigungen und Sounds des TUI. Standardmäßig deaktiviert.
 
-Verwende `OPENCODE_TUI_CONFIG`, um einen benutzerdefinierten TUI-Konfigurationspfad zu laden.
+Verwende `PENCODE_TUI_CONFIG`, um einen benutzerdefinierten TUI-Konfigurationspfad zu laden.
 
 ### Attention
 
-Attention lässt das TUI dich benachrichtigen, wenn OpenCode auf eine Antwort wartet, eine Berechtigung bestätigt werden muss, ein Sitzungsfehler aufgetreten ist oder eine Sitzung abgeschlossen wurde. Aktiviere es mit `attention.enabled`; integrierte Ereignisse spielen beim Auftreten einen Sound ab. Desktop-Benachrichtigungen werden nur gesendet, wenn das Terminalfenster nicht fokussiert ist, und nicht für subagent-Ereignisse verwendet.
+Attention lässt das TUI dich benachrichtigen, wenn Pencode auf eine Antwort wartet, eine Berechtigung bestätigt werden muss, ein Sitzungsfehler aufgetreten ist oder eine Sitzung abgeschlossen wurde. Aktiviere es mit `attention.enabled`; integrierte Ereignisse spielen beim Auftreten einen Sound ab. Desktop-Benachrichtigungen werden nur gesendet, wenn das Terminalfenster nicht fokussiert ist, und nicht für subagent-Ereignisse verwendet.
 
 - `enabled` - Aktiviert alle Benachrichtigungen und Sounds von Attention. Standard ist `false`.
 - `notifications` - Erlaubt dem TUI bei aktiviertem Attention, Desktop-Benachrichtigungen über das Terminal zu senden. Standard ist `true`.
 - `sound` - Erlaubt bei aktiviertem Attention das Abspielen von Hinweistönen. Standard ist `true`.
 - `volume` - Standardlautstärke der Hinweistöne von `0` bis `1`. Standard ist `0.4`.
-- `sound_pack` - Zu verwendende sound pack ID. Standard ist `opencode.default`.
+- `sound_pack` - Zu verwendende sound pack ID. Standard ist `pencode.default`.
 - `sounds` - Legt eigene Sounddateien für `default`, `question`, `permission`, `error`, `done` oder `subagent_done` fest. Pfade können absolut, `file://` URLs oder relativ zu `tui.json` sein.
 
 ---

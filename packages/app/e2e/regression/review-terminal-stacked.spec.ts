@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import { mockPencodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
-const directory = "C:/OpenCode/ReviewTerminalStacked"
+const directory = "C:/Pencode/ReviewTerminalStacked"
 const projectID = "proj_review_terminal_stacked"
 const sessionID = "ses_review_terminal_stacked"
 const title = "Review terminal stacked"
@@ -24,7 +24,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   let detailVersion = 1
   let detailFailures = 1
   await page.setViewportSize({ width: 1400, height: 900 })
-  await mockOpenCodeServer(page, {
+  await mockPencodeServer(page, {
     protocol: "v1",
     directory,
     project: {
@@ -38,13 +38,13 @@ test("keeps the review tree and terminal sized when both panels are open", async
     provider: {
       all: [
         {
-          id: "opencode",
-          name: "OpenCode",
+          id: "pencode",
+          name: "Pencode",
           models: { test: { id: "test", name: "Test", limit: { context: 200_000 } } },
         },
       ],
-      connected: ["opencode"],
-      default: { providerID: "opencode", modelID: "test" },
+      connected: ["pencode"],
+      default: { providerID: "pencode", modelID: "test" },
     },
     sessions: [
       {
@@ -141,7 +141,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
     localStorage.setItem(
-      "opencode.global.dat:layout",
+      "pencode.global.dat:layout",
       JSON.stringify({ review: { diffStyle: "split", panelOpened: true } }),
     )
   })

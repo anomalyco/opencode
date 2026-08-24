@@ -74,7 +74,7 @@ export const dict = {
 
   "dialog.usageExceeded.freeTier.title": "Limite gratuito atingido",
   "dialog.usageExceeded.freeTier.description":
-    "Assine o OpenCode Go por $10/mês para ter acesso confiável aos melhores modelos de código aberto.",
+    "Assine o Pencode Go por $10/mês para ter acesso confiável aos melhores modelos de código aberto.",
   "dialog.usageExceeded.freeTier.actionLabel": "Assinar",
   "dialog.usageExceeded.accountRateLimit.title": "Limite do Go atingido",
   "dialog.usageExceeded.accountRateLimit.description":

@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Config } from "@opencode-ai/core/config"
-import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
-import { Integration } from "@opencode-ai/core/integration"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Catalog } from "@pencode-ai/core/catalog"
+import { Config } from "@pencode-ai/core/config"
+import { ConfigProviderPlugin } from "@pencode-ai/core/config/plugin/provider"
+import { Integration } from "@pencode-ai/core/integration"
+import { ModelV2 } from "@pencode-ai/core/model"
+import { PluginV2 } from "@pencode-ai/core/plugin"
+import { PluginHost } from "@pencode-ai/core/plugin/host"
+import { ProviderV2 } from "@pencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -58,7 +58,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
   it.effect("keeps configured model variant bodies unchanged", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.opencode
+      const providerID = ProviderV2.ID.pencode
       const modelID = ModelV2.ID.make("alpha-gpt-next")
       const config = Config.Service.of({
         entries: () =>
@@ -67,8 +67,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
               type: "document",
               info: decode({
                 providers: {
-                  opencode: {
-                    api: { type: "aisdk", package: "@ai-sdk/openai", url: "https://opencode.test/v1" },
+                  pencode: {
+                    api: { type: "aisdk", package: "@ai-sdk/openai", url: "https://pencode.test/v1" },
                     models: {
                       "alpha-gpt-next": {
                         variants: [
@@ -109,7 +109,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
   it.effect("keeps layered model variant bodies unchanged", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.opencode
+      const providerID = ProviderV2.ID.pencode
       const modelID = ModelV2.ID.make("alpha-gpt-next")
       const config = Config.Service.of({
         entries: () =>
@@ -118,8 +118,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
               type: "document",
               info: decode({
                 providers: {
-                  opencode: {
-                    api: { type: "aisdk", package: "@ai-sdk/openai", url: "https://opencode.test/v1" },
+                  pencode: {
+                    api: { type: "aisdk", package: "@ai-sdk/openai", url: "https://pencode.test/v1" },
                   },
                 },
               }),
@@ -128,7 +128,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
               type: "document",
               info: decode({
                 providers: {
-                  opencode: {
+                  pencode: {
                     models: {
                       "alpha-gpt-next": {
                         variants: [{ id: "high", body: { reasoningEffort: "high" } }],

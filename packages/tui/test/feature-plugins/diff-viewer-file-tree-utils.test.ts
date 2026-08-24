@@ -69,11 +69,11 @@ describe("diff viewer file tree utilities", () => {
 
   test("collapses unary directory chains while flattening", () => {
     const rows = flattenFileTree(
-      buildFileTree([{ file: "packages/opencode/src/cli/app.ts" }, { file: "packages/opencode/src/server/server.ts" }]),
+      buildFileTree([{ file: "packages/pencode/src/cli/app.ts" }, { file: "packages/pencode/src/server/server.ts" }]),
     )
 
     expect(rows.map((row) => `${"  ".repeat(row.depth)}${row.kind}:${row.name}`)).toEqual([
-      "directory:packages/opencode/src",
+      "directory:packages/pencode/src",
       "  directory:cli",
       "    file:app.ts",
       "  directory:server",
@@ -82,10 +82,10 @@ describe("diff viewer file tree utilities", () => {
   })
 
   test("does not collapse a directory into a file row", () => {
-    const rows = flattenFileTree(buildFileTree([{ file: "packages/opencode/src/app.ts" }]))
+    const rows = flattenFileTree(buildFileTree([{ file: "packages/pencode/src/app.ts" }]))
 
     expect(rows.map((row) => `${"  ".repeat(row.depth)}${row.kind}:${row.name}`)).toEqual([
-      "directory:packages/opencode/src",
+      "directory:packages/pencode/src",
       "  file:app.ts",
     ])
   })
@@ -93,15 +93,15 @@ describe("diff viewer file tree utilities", () => {
   test("stops collapsing at branches", () => {
     const rows = flattenFileTree(
       buildFileTree([
-        { file: "packages/opencode/src/cli/app.ts" },
-        { file: "packages/opencode/src/server/server.ts" },
+        { file: "packages/pencode/src/cli/app.ts" },
+        { file: "packages/pencode/src/server/server.ts" },
         { file: "packages/readme.md" },
       ]),
     )
 
     expect(rows.map((row) => `${"  ".repeat(row.depth)}${row.kind}:${row.name}`)).toEqual([
       "directory:packages",
-      "  directory:opencode/src",
+      "  directory:pencode/src",
       "    directory:cli",
       "      file:app.ts",
       "    directory:server",
@@ -140,14 +140,14 @@ describe("diff viewer file tree utilities", () => {
 
   test("collapses expanded unary children under the first visible directory id", () => {
     const tree = buildFileTree([
-      { file: "packages/opencode/src/cli/app.ts" },
-      { file: "packages/opencode/src/server/server.ts" },
+      { file: "packages/pencode/src/cli/app.ts" },
+      { file: "packages/pencode/src/server/server.ts" },
     ])
     const packages = tree.nodes.find((node) => node.kind === "directory" && node.name === "packages")!
 
-    expect(flattenFileTree(tree, new Set()).map((row) => row.name)).toEqual(["packages/opencode/src"])
+    expect(flattenFileTree(tree, new Set()).map((row) => row.name)).toEqual(["packages/pencode/src"])
     expect(flattenFileTree(tree, new Set([packages.id])).map((row) => row.name)).toEqual([
-      "packages/opencode/src",
+      "packages/pencode/src",
       "cli",
       "server",
     ])
@@ -197,9 +197,9 @@ describe("diff viewer file tree utilities", () => {
 
   test("moves collapsed chain selection to first visible child", () => {
     const rows = flattenFileTree(
-      buildFileTree([{ file: "packages/opencode/src/cli/app.ts" }, { file: "packages/opencode/src/server/server.ts" }]),
+      buildFileTree([{ file: "packages/pencode/src/cli/app.ts" }, { file: "packages/pencode/src/server/server.ts" }]),
     )
-    const packages = rows.find((row) => row.kind === "directory" && row.name === "packages/opencode/src")!
+    const packages = rows.find((row) => row.kind === "directory" && row.name === "packages/pencode/src")!
     const cli = rows.find((row) => row.kind === "directory" && row.name === "cli")!
 
     expect(moveFileTreeSelectionToFirstChild(rows, packages.id)).toBe(cli.id)
@@ -207,9 +207,9 @@ describe("diff viewer file tree utilities", () => {
 
   test("moves file and collapsed directory selection to visible parent", () => {
     const rows = flattenFileTree(
-      buildFileTree([{ file: "packages/opencode/src/cli/app.ts" }, { file: "packages/opencode/src/server/server.ts" }]),
+      buildFileTree([{ file: "packages/pencode/src/cli/app.ts" }, { file: "packages/pencode/src/server/server.ts" }]),
     )
-    const root = rows.find((row) => row.kind === "directory" && row.name === "packages/opencode/src")!
+    const root = rows.find((row) => row.kind === "directory" && row.name === "packages/pencode/src")!
     const cli = rows.find((row) => row.kind === "directory" && row.name === "cli")!
     const app = rows.find((row) => row.name === "app.ts")!
 

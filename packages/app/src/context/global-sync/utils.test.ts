@@ -4,7 +4,7 @@ import type {
   ModelDefaultOutput,
   ModelListOutput,
   ProviderListOutput,
-} from "@opencode-ai/client/promise"
+} from "@pencode-ai/client/promise"
 import { directoryKey, normalizeAgentList, normalizePermissionRequest, normalizeProviderList } from "./utils"
 
 describe("normalizeAgentList", () => {
@@ -122,8 +122,8 @@ describe("normalizeProviderList", () => {
 
 describe("directoryKey", () => {
   test("normalizes slashes", () => {
-    expect(String(directoryKey("C:\\Repos\\sst\\opencode"))).toBe("C:/Repos/sst/opencode")
-    expect(String(directoryKey("C:/Repos/sst/opencode"))).toBe("C:/Repos/sst/opencode")
+    expect(String(directoryKey("C:\\Repos\\sst\\pencode"))).toBe("C:/Repos/sst/pencode")
+    expect(String(directoryKey("C:/Repos/sst/pencode"))).toBe("C:/Repos/sst/pencode")
   })
 
   test("preserves backslashes in posix paths", () => {
@@ -131,7 +131,7 @@ describe("directoryKey", () => {
   })
 
   test("trims trailing slashes without breaking roots", () => {
-    expect(String(directoryKey("C:/Repos/sst/opencode/"))).toBe("C:/Repos/sst/opencode")
+    expect(String(directoryKey("C:/Repos/sst/pencode/"))).toBe("C:/Repos/sst/pencode")
     expect(String(directoryKey("C:/"))).toBe("C:/")
     expect(String(directoryKey("/"))).toBe("/")
   })

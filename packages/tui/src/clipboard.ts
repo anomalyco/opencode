@@ -29,7 +29,7 @@ function writeOsc52(text: string) {
 
 export async function read() {
   if (platform() === "darwin") {
-    const file = path.join(tmpdir(), "opencode-clipboard.png")
+    const file = path.join(tmpdir(), "pencode-clipboard.png")
     try {
       await exec("osascript", [
         "-e",
@@ -98,7 +98,7 @@ let copyMethod: Promise<(text: string) => Promise<void>> | undefined
 
 function getCopyMethod() {
   return (copyMethod ??= (async () => {
-    const { which } = await import("@opencode-ai/core/util/which")
+    const { which } = await import("@pencode-ai/core/util/which")
     const native = copyCommand(platform(), Boolean(process.env.WAYLAND_DISPLAY), (name) => Boolean(which(name)))
     if (native?.[0] === "osascript") {
       return async (text: string) => {

@@ -20,7 +20,7 @@ jobs:
         id: team-check
         run: |
           LOGIN="${{ github.event.pull_request.user.login }}"
-          if [ "$LOGIN" = "opencode-agent[bot]" ] || grep -qxF "$LOGIN" .github/TEAM_MEMBERS; then
+          if [ "$LOGIN" = "pencode-agent[bot]" ] || grep -qxF "$LOGIN" .github/TEAM_MEMBERS; then
             echo "is_team=true" >> "$GITHUB_OUTPUT"
             echo "Skipping: $LOGIN is a team member or bot"
           else
@@ -35,9 +35,9 @@ jobs:
         if: steps.team-check.outputs.is_team != 'true'
         run: bun install
 
-      - name: Install opencode
+      - name: Install pencode
         if: steps.team-check.outputs.is_team != 'true'
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://pencode.ai/install | bash
 
       - name: Build prompt
         if: steps.team-check.outputs.is_team != 'true'
@@ -59,7 +59,7 @@ jobs:
       - name: Check for duplicate PRs
         if: steps.team-check.outputs.is_team != 'true'
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          PENCODE_API_KEY: ${{ secrets.PENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |

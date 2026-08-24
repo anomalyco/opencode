@@ -122,7 +122,7 @@ function select(file: string | undefined, opts?: { acceptable?: boolean }) {
 
 export function gitbash() {
   if (process.platform !== "win32") return
-  if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
+  if (Flag.PENCODE_GIT_BASH_PATH) return Flag.PENCODE_GIT_BASH_PATH
   const git = which("git")
   if (!git) return
   const file = path.join(git, "..", "..", "bin", "bash.exe")
@@ -176,7 +176,7 @@ export function args(file: string, command: string, cwd: string) {
         cd -- "$1"
         eval ${JSON.stringify(command)}
       `,
-      "opencode",
+      "pencode",
       cwd,
     ]
   }
@@ -190,7 +190,7 @@ export function args(file: string, command: string, cwd: string) {
         cd -- "$1"
         eval ${JSON.stringify(command)}
       `,
-      "opencode",
+      "pencode",
       cwd,
     ]
   }

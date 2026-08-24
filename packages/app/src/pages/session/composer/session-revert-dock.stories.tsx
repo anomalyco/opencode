@@ -1,6 +1,6 @@
 import { For } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DockShell } from "@opencode-ai/ui/dock-surface"
+import { DockShell } from "@pencode-ai/ui/dock-surface"
 import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import { SettingsProvider, useSettings } from "@/context/settings"
 

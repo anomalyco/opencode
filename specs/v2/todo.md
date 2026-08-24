@@ -4,7 +4,7 @@ ok we need to work towards a launch of v2 so we can get out of this rebuild phas
 
 ## Post-Hono cleanup - Kit
 
-The opencode server has moved to the Effect HttpApi backend. Remaining work is
+The pencode server has moved to the Effect HttpApi backend. Remaining work is
 mostly cleanup: delete compatibility shims, shrink Zod surfaces, and simplify
 test harnesses that used to compare Hono and HttpApi behavior.
 
@@ -43,7 +43,7 @@ Next reviewed slices:
 - revisit per-turn tool-call limits, output truncation, and operational
   backpressure before broadening exposure; eager local execution is deliberately
   unbounded in the current local slice while SQLite publication stays serialized
-- remove the public in-memory `@opencode-ai/llm` tool loop after replacing its
+- remove the public in-memory `@pencode-ai/llm` tool loop after replacing its
   remaining one-turn native-adapter use with a narrow typed dispatcher
 - batch streamed deltas and add covering context indexes
 - expose replayable Session event cursors over HTTP and the generated SDK where remote consumers need them
@@ -80,9 +80,9 @@ We need to figure out how we want server plugins to work and what hooks are usef
 Some ideas:
 
 - plugins get immer drafts so bad mutations can be thrown away
-- plugins get global "opencode" instance like in that post i showed
-- opencode instance has stuff like `opencode.session.prompt()` or
-  `opencode.tool.register({...})`
+- plugins get global "pencode" instance like in that post i showed
+- pencode instance has stuff like `pencode.session.prompt()` or
+  `pencode.tool.register({...})`
 
 ## Rework Config - ???
 
@@ -135,7 +135,7 @@ failure appears during canary work:
 - add ripgrep execution timeout and bounded line framing
 - materialize or consistently reject unresolved URL and file attachment sources
 - decide stateless OpenAI Responses hosted-tool continuation behavior; reconstructed hosted output can replay as a stored `item_reference` when `store !== false`, while `store: false` intentionally omits the unavailable reference path
-- decide whether to preserve deprecated `@opencode-ai/llm` orchestration exports
+- decide whether to preserve deprecated `@pencode-ai/llm` orchestration exports
 - preserve or alias renamed filesystem SDK generated type names if compatibility
   consumers require them
 - revisit syscall-level mutation confinement for hostile external processes

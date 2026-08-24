@@ -1,9 +1,9 @@
 ---
 title: การรองรับ ACP
-description: ใช้ OpenCode ในโปรแกรมแก้ไขที่รองรับ ACP
+description: ใช้ Pencode ในโปรแกรมแก้ไขที่รองรับ ACP
 ---
 
-OpenCode รองรับ [Agent Client Protocol](https://agentclientprotocol.com) (ACP) ซึ่งช่วยให้สามารถทำงานร่วมกับ editor และ IDE ต่างๆ ได้โดยตรง
+Pencode รองรับ [Agent Client Protocol](https://agentclientprotocol.com) (ACP) ซึ่งช่วยให้สามารถทำงานร่วมกับ editor และ IDE ต่างๆ ได้โดยตรง
 
 :::tip
 สำหรับรายชื่อเครื่องมือที่รองรับ ACP สามารถดูได้ที่ [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)
@@ -15,9 +15,9 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 
 ## การกำหนดค่า
 
-ในการใช้ OpenCode ผ่าน ACP ให้กำหนดค่าโปรแกรมแก้ไขของคุณให้รันคำสั่ง `opencode acp`
+ในการใช้ Pencode ผ่าน ACP ให้กำหนดค่าโปรแกรมแก้ไขของคุณให้รันคำสั่ง `pencode acp`
 
-คำสั่งนี้จะเริ่ม OpenCode เป็น process ย่อยที่รองรับ ACP ซึ่งสื่อสารกับโปรแกรมแก้ไขของคุณผ่าน JSON-RPC ทาง stdio
+คำสั่งนี้จะเริ่ม Pencode เป็น process ย่อยที่รองรับ ACP ซึ่งสื่อสารกับโปรแกรมแก้ไขของคุณผ่าน JSON-RPC ทาง stdio
 
 นี่คือตัวอย่างสำหรับโปรแกรมแก้ไขยอดนิยมที่รองรับ ACP
 
@@ -25,16 +25,16 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 
 ### Zed
 
-ติดตั้ง OpenCode จาก [รีจิสทรี ACP ของ Zed](https://zed.dev/docs/ai/external-agents#registry) โดยเรียกใช้ `zed: acp registry` ใน Command Palette
+ติดตั้ง Pencode จาก [รีจิสทรี ACP ของ Zed](https://zed.dev/docs/ai/external-agents#registry) โดยเรียกใช้ `zed: acp registry` ใน Command Palette
 
-หากต้องการใช้ไฟล์ปฏิบัติการ OpenCode แบบกำหนดเอง ให้เพิ่มลงในการตั้งค่า [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+หากต้องการใช้ไฟล์ปฏิบัติการ Pencode แบบกำหนดเอง ให้เพิ่มลงในการตั้งค่า [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "Pencode": {
       "type": "custom",
-      "command": "opencode",
+      "command": "pencode",
       "args": ["acp"]
     }
   }
@@ -54,9 +54,9 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "Pencode",
               "command": {
-                "command": "opencode",
+                "command": "pencode",
                 "args": ["acp"]
               }
             }
@@ -77,15 +77,15 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "Pencode": {
+      "command": "/absolute/path/bin/pencode",
       "args": ["acp"]
     }
   }
 }
 ```
 
-นี่เป็นการเปิดให้ตัวแทน 'OpenCode' ในเนื้อหาของตัวแทน AI Chat
+นี่เป็นการเปิดให้ตัวแทน 'Pencode' ในเนื้อหาของตัวแทน AI Chat
 
 ---
 
@@ -96,24 +96,24 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["pencode"] = {
+      command = "pencode",
       args = { "acp" }
     }
   }
 }
 ```
 
-หากคุณต้องการส่งผ่าน environment variables (เช่น `OPENCODE_API_KEY`) คุณต้องระบุใน `env`:
+หากคุณต้องการส่งผ่าน environment variables (เช่น `PENCODE_API_KEY`) คุณต้องระบุใน `env`:
 
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["pencode"] = {
+      command = "pencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        PENCODE_API_KEY = os.getenv("PENCODE_API_KEY")
       }
     }
   }
@@ -124,14 +124,14 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 
 ### CodeCompanion.nvim
 
-ลองใช้ OpenCode ACP ใน [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) ให้เพิ่มสิ่งต่อไปนี้ใน Neovim ของคุณ:
+ลองใช้ Pencode ACP ใน [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) ให้เพิ่มสิ่งต่อไปนี้ใน Neovim ของคุณ:
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "pencode",
         model = "claude-sonnet-4",
       },
     },
@@ -139,13 +139,13 @@ require("codecompanion").setup({
 })
 ```
 
-คุณสามารถใช้ CodeCompanion เพื่อใช้ opencode เป็น ACP agent สำหรับแชท
+คุณสามารถใช้ CodeCompanion เพื่อใช้ pencode เป็น ACP agent สำหรับแชท
 
-หากคุณต้องส่ง environment variables (เช่น `OPENCODE_API_KEY`) โปรดดู [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) ในเอกสารของ CodeCompanion.nvim สำหรับรายละเอียดทั้งหมด
+หากคุณต้องส่ง environment variables (เช่น `PENCODE_API_KEY`) โปรดดู [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) ในเอกสารของ CodeCompanion.nvim สำหรับรายละเอียดทั้งหมด
 
 ## การรองรับ
 
-opencode ทำงานผ่าน ACP เหมือนกับใน terminal และรองรับฟีเจอร์ทั้งหมด:
+pencode ทำงานผ่าน ACP เหมือนกับใน terminal และรองรับฟีเจอร์ทั้งหมด:
 
 :::note
 คำสั่ง slash ในตัวบางคำสั่งเช่น `/undo` และ `/redo` ยังไม่รองรับในขณะนี้
@@ -153,7 +153,7 @@ opencode ทำงานผ่าน ACP เหมือนกับใน termi
 
 - เครื่องมือใน (ไฟล์ไฟล์คำสั่งอื่นๆ)
 - คำอธิบายและคำสั่งสแลช
-- MCP แขกที่นี่คือข้อมูลเพิ่มเติมของ OpenCode ของคุณ
+- MCP แขกที่นี่คือข้อมูลเพิ่มเติมของ Pencode ของคุณ
 - กฎเฉพาะโครงการจาก `AGENTS.md`
 - คนจัดรูปแบบและ linters เวียนนา
 - ระบบตัวแทนและระบบ

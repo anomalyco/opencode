@@ -1,11 +1,11 @@
 {
-  "name": "@opencode-ai/ui",
+  "name": "@pencode-ai/ui",
   "version": "1.18.22",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/kiyosh11/pencode.git",
     "directory": "packages/ui"
   },
   "publishConfig": {

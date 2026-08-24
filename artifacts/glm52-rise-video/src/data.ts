@@ -1,5 +1,5 @@
-// Verified against the production opencode-stats PlanetScale DB.
-// Scope: tier='Go' (OpenCode Go), dataset='zen', client='all', source='all', grain='day'.
+// Verified against the production pencode-stats PlanetScale DB.
+// Scope: tier='Go' (Pencode Go), dataset='zen', client='all', source='all', grain='day'.
 // metric = total_tokens. Daily token volume per model; GLM-5.2 (zhipu) launched Jun 17.
 // Segments per day (tokens): glm-5.2, deepseek-v4-flash, deepseek-v4-pro, minimax-m3, all others.
 

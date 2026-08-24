@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { fetchSessionExport, sessionExportFilename } from "./session-export"
-import type { Message, Part, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, Session } from "@pencode-ai/sdk/v2/client"
 
 describe("sessionExportFilename", () => {
   test("generates filename from title", () => {

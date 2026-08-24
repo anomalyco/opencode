@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "opencode-agent",
+      "name": "pencode-agent",
       "devDependencies": {
         "@types/mocha": "^10.0.10",
         "@types/node": "20.x",

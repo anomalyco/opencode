@@ -10,10 +10,10 @@ const packageDir = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(packageDir, "../..")
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 // The Electron 42 packaging update briefly installed Linux launchers/icons under
-// "opencode-desktop". Keep that hidden desktop entry around so existing GNOME/KDE
-// pins still resolve after the canonical app id changes back to ai.opencode.desktop.
-const legacyDesktopEntry = path.join(packageDir, "resources", "linux", "opencode-desktop.desktop")
-const legacyDesktopEntryFpm = `${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`
+// "pencode-desktop". Keep that hidden desktop entry around so existing GNOME/KDE
+// pins still resolve after the canonical app id changes back to ai.pencode.desktop.
+const legacyDesktopEntry = path.join(packageDir, "resources", "linux", "pencode-desktop.desktop")
+const legacyDesktopEntryFpm = `${legacyDesktopEntry}=/usr/share/applications/pencode-desktop.desktop`
 
 const metainfoFpm = (appId: string) =>
   `${path.join(packageDir, "resources", `${appId}.metainfo.xml`)}=/usr/share/metainfo/${appId}.metainfo.xml`
@@ -30,39 +30,39 @@ async function signWindows(configuration: { path: string }) {
 }
 
 const channel = (() => {
-  const raw = process.env.OPENCODE_CHANNEL
+  const raw = process.env.PENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   return "dev"
 })()
 
 const APP_IDS = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
+  dev: "ai.pencode.desktop.dev",
+  beta: "ai.pencode.desktop.beta",
+  prod: "ai.pencode.desktop",
 } as const
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName: "pencode-desktop-${os}-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
   },
   // Linux launchers are .desktop files, so this is the desktop file name,
-  // not just the app id. For prod, app id "ai.opencode.desktop" becomes
-  // "ai.opencode.desktop.desktop".
+  // not just the app id. For prod, app id "ai.pencode.desktop" becomes
+  // "ai.pencode.desktop.desktop".
   // https://developer.gnome.org/documentation/guidelines/maintainer/integrating.html
   // https://www.electron.build/docs/linux/
   extraMetadata: {
     desktopName: `${appId}.desktop`,
   },
-  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
+  files: ["out/**/*", "resources/**/*", "!resources/pencode-cli*"],
   extraResources: [
     ...(channel === "dev"
       ? [
           {
             from: "resources/",
             to: "",
-            filter: ["opencode-cli*"],
+            filter: ["pencode-cli*"],
           },
         ]
       : []),
@@ -86,8 +86,8 @@ const getBase = (appId: string): Configuration => ({
     sign: true,
   },
   protocols: {
-    name: "OpenCode",
-    schemes: ["opencode"],
+    name: "Pencode",
+    schemes: ["pencode"],
   },
   win: {
     icon: `resources/icons/icon.ico`,
@@ -127,31 +127,31 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode Dev",
+        productName: "Pencode Dev",
         deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-dev", fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "pencode-dev", fpm: [metainfoFpm(appId)] },
       }
     }
     case "beta": {
       return {
         ...base,
         appId,
-        productName: "OpenCode Beta",
-        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+        productName: "Pencode Beta",
+        protocols: { name: "Pencode Beta", schemes: ["pencode"] },
+        publish: { provider: "github", owner: "anomalyco", repo: "pencode-beta", channel: "latest" },
         deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-beta", fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "pencode-beta", fpm: [metainfoFpm(appId)] },
       }
     }
     case "prod": {
       return {
         ...base,
         appId,
-        productName: "OpenCode",
-        protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        productName: "Pencode",
+        protocols: { name: "Pencode", schemes: ["pencode"] },
+        publish: { provider: "github", owner: "anomalyco", repo: "pencode", channel: "latest" },
         deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
+        rpm: { packageName: "pencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
       }
     }
   }

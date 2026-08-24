@@ -22,7 +22,7 @@ const config = Config.all({
 }).pipe(Config.map(decodeDatabaseSettings))
 
 export class DatabaseConfig extends Context.Service<DatabaseConfig, DatabaseSettings>()(
-  "@opencode/stats/DatabaseConfig",
+  "@pencode/stats/DatabaseConfig",
 ) {
   static readonly config = config
   static readonly layer: Layer.Layer<DatabaseConfig, never, never> = Layer.effect(
@@ -37,7 +37,7 @@ function makeDrizzle(settings: DatabaseSettings) {
 
 export type Drizzle = ReturnType<typeof makeDrizzle>
 
-export class DrizzleClient extends Context.Service<DrizzleClient, Drizzle>()("@opencode/stats/DrizzleClient") {
+export class DrizzleClient extends Context.Service<DrizzleClient, Drizzle>()("@pencode/stats/DrizzleClient") {
   static readonly layer: Layer.Layer<DrizzleClient, never, DatabaseConfig> = Layer.effect(
     DrizzleClient,
     Effect.map(DatabaseConfig, makeDrizzle),

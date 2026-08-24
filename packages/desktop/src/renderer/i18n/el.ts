@@ -9,17 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Ο έλεγχος ενημέρωσης απέτυχε",
   "desktop.updater.checkFailed.message": "Απέτυχε ο έλεγχος για ενημερώσεις",
   "desktop.updater.none.title": "Δεν υπάρχει διαθέσιμη ενημέρωση",
-  "desktop.updater.none.message": "Χρησιμοποιείτε ήδη την πιο πρόσφατη έκδοση του OpenCode",
+  "desktop.updater.none.message": "Χρησιμοποιείτε ήδη την πιο πρόσφατη έκδοση του Pencode",
   "desktop.updater.downloadFailed.title": "Η ενημέρωση απέτυχε",
   "desktop.updater.downloadFailed.message": "Απέτυχε η λήψη της ενημέρωσης",
   "desktop.updater.downloaded.title": "Η ενημέρωση λήφθηκε",
   "desktop.updater.downloaded.prompt":
-    "Έχει γίνει λήψη της έκδοσης {{version}} του OpenCode. Θέλετε να την εγκαταστήσετε και να επανεκκινήσετε την εφαρμογή;",
+    "Έχει γίνει λήψη της έκδοσης {{version}} του Pencode. Θέλετε να την εγκαταστήσετε και να επανεκκινήσετε την εφαρμογή;",
   "desktop.updater.installFailed.title": "Η ενημέρωση απέτυχε",
   "desktop.updater.installFailed.message": "Αποτυχία εγκατάστασης ενημέρωσης",
   "desktop.cli.installed.title": "Το CLI εγκαταστάθηκε",
   "desktop.cli.installed.message":
-    "CLI εγκατεστημένο στο {{path}}\n\nΕπανεκκινήστε το τερματικό σας για να χρησιμοποιήσετε την εντολή 'opencode'.",
+    "CLI εγκατεστημένο στο {{path}}\n\nΕπανεκκινήστε το τερματικό σας για να χρησιμοποιήσετε την εντολή 'pencode'.",
   "desktop.cli.failed.title": "Η εγκατάσταση απέτυχε",
   "desktop.cli.failed.message": "Απέτυχε η εγκατάσταση του CLI: {{error}}",
 

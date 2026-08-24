@@ -7,7 +7,7 @@ const c = {
 }
 const MONO = '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
 
-// verified: OpenCode Go, week of Jun 22-28, 2026 (2026-W26)
+// verified: Pencode Go, week of Jun 22-28, 2026 (2026-W26)
 // 19,642,742,937,105 tokens / 173,651,197 requests = 113,116 tokens/request
 const AVG = 113116
 const K = Math.round(AVG / 1000) // 113
@@ -100,7 +100,7 @@ export function NovelTokens() {
         {/* bottom block */}
         <div>
           <div style={{ fontSize: 23, fontWeight: 600, color: c.dim, letterSpacing: 2, marginBottom: 8 }}>
-            OPENCODE GO · LAST WEEK
+            PENCODE GO · LAST WEEK
           </div>
           <div
             style={{
@@ -126,7 +126,7 @@ export function NovelTokens() {
             }}
           >
             <div style={{ color: c.dim }}>{nf.format(AVG)} tokens / request · last week</div>
-            <div style={{ color: c.white }}>opencode.ai/data</div>
+            <div style={{ color: c.white }}>pencode.ai/data</div>
           </div>
         </div>
       </div>

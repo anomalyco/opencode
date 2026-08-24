@@ -1,9 +1,9 @@
 import { expect, mock, test } from "bun:test"
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@pencode-ai/plugin/tui"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Global } from "@opencode-ai/core/global"
+import { AppNodeBuilder } from "@pencode-ai/core/effect/app-node-builder"
+import { Global } from "@pencode-ai/core/global"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "./fixture/tui-sdk"
 
@@ -119,7 +119,7 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     await task
 
     expect(stdout).toContain("Demo session")
-    expect(stdout).toContain("opencode -s dummy")
+    expect(stdout).toContain("pencode -s dummy")
   } finally {
     process.stdout.write = originalWrite
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()

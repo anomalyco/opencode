@@ -1,4 +1,4 @@
-import { Resource } from "@opencode-ai/console-resource"
+import { Resource } from "@pencode-ai/console-resource"
 import type { TraceItem } from "@cloudflare/workers-types"
 
 export default {

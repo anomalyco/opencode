@@ -3,7 +3,7 @@ import type {
   WslInstalledDistro,
   WslJob,
   WslOnlineDistro,
-  WslOpencodeCheck,
+  WslPencodeCheck,
   WslRuntimeCheck,
   WslServerConfig,
   WslServerItem,
@@ -13,12 +13,12 @@ import type {
 } from "../../preload/types"
 import { WSL_SERVERS_KEY } from "../store-keys"
 import { getStore } from "../store"
-import { expectOpencodeVersion, pendingRestartAfterWslInstall, wslServerIdsToStartOnInitialize } from "./startup"
+import { expectPencodeVersion, pendingRestartAfterWslInstall, wslServerIdsToStartOnInitialize } from "./startup"
 import { clearWslDistroState, wslServerIdToRestart } from "./policy"
 import { nativeT } from "../native-translations"
 import {
   installWslDistro,
-  installWslOpencode,
+  installWslPencode,
   installWslRuntimeElevated,
   listInstalledWslDistros,
   listOnlineWslDistros,
@@ -26,7 +26,7 @@ import {
   probeWslDistro,
   probeWslRuntime,
   readWslCommandVersion,
-  resolveWslOpencode,
+  resolveWslPencode,
   summarize,
 } from "./runtime"
 
@@ -49,7 +49,7 @@ type WslServersControllerOptions = {
   readServers?: () => WslServerConfig[]
   writeServers?: (servers: WslServerConfig[]) => void
   probeDistro?: typeof probeWslDistro
-  resolveOpencode?: typeof resolveWslOpencode
+  resolvePencode?: typeof resolveWslPencode
   readCommandVersion?: typeof readWslCommandVersion
 }
 
@@ -122,25 +122,25 @@ export function createWslServersController(
     updateServer(id, (item) => ({ ...item, runtime }))
   }
 
-  const setOpencodeCheck = (distro: string, check: WslOpencodeCheck) => {
+  const setPencodeCheck = (distro: string, check: WslPencodeCheck) => {
     setState({
-      opencodeChecks: {
-        ...state.opencodeChecks,
+      pencodeChecks: {
+        ...state.pencodeChecks,
         [distro]: check,
       },
     })
   }
 
-  const checkOpencode = async (distro: string, opts?: { signal?: AbortSignal }) => {
-    const resolved = await (options?.resolveOpencode ?? resolveWslOpencode)(distro, opts)
+  const checkPencode = async (distro: string, opts?: { signal?: AbortSignal }) => {
+    const resolved = await (options?.resolvePencode ?? resolveWslPencode)(distro, opts)
     const version = resolved
       ? await (options?.readCommandVersion ?? readWslCommandVersion)(resolved, distro, opts)
       : null
-    return opencodeCheck(distro, resolved, version, appVersion)
+    return pencodeCheck(distro, resolved, version, appVersion)
   }
 
-  const refreshOpencodeCheck = async (distro: string, opts?: { signal?: AbortSignal }) => {
-    setOpencodeCheck(distro, await checkOpencode(distro, opts))
+  const refreshPencodeCheck = async (distro: string, opts?: { signal?: AbortSignal }) => {
+    setPencodeCheck(distro, await checkPencode(distro, opts))
   }
 
   const probeAddableDistros = async (distros: string[], opts?: { signal?: AbortSignal }) => {
@@ -154,14 +154,14 @@ export function createWslServersController(
       setState({ distroProbes: { ...state.distroProbes, ...Object.fromEntries(distroProbes) } })
     }
 
-    const opencodeChecks = await Promise.all(
+    const pencodeChecks = await Promise.all(
       unique
         .filter((distro) => distroProbeReady(state.distroProbes[distro]))
-        .filter((distro) => !state.opencodeChecks[distro])
-        .map(async (distro) => [distro, await checkOpencode(distro, opts)] as const),
+        .filter((distro) => !state.pencodeChecks[distro])
+        .map(async (distro) => [distro, await checkPencode(distro, opts)] as const),
     )
-    if (opencodeChecks.length) {
-      setState({ opencodeChecks: { ...state.opencodeChecks, ...Object.fromEntries(opencodeChecks) } })
+    if (pencodeChecks.length) {
+      setState({ pencodeChecks: { ...state.pencodeChecks, ...Object.fromEntries(pencodeChecks) } })
     }
   }
 
@@ -169,29 +169,29 @@ export function createWslServersController(
     return state.servers.some((item) => item.config.id === id && item.config.distro === distro)
   }
 
-  const refreshOpencodeCheckBackground = (id: string, distro: string) => {
-    void checkOpencode(distro)
+  const refreshPencodeCheckBackground = (id: string, distro: string) => {
+    void checkPencode(distro)
       .then((check) => {
         if (!hasServer(id, distro)) return
-        setOpencodeCheck(distro, check)
+        setPencodeCheck(distro, check)
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error)
-        logger?.error("wsl opencode check failed", { id, distro, message })
+        logger?.error("wsl pencode check failed", { id, distro, message })
       })
   }
 
-  const refreshOpencodeChecks = async () => {
+  const refreshPencodeChecks = async () => {
     await Promise.all(
       state.servers.map((item) =>
-        checkOpencode(item.config.distro)
+        checkPencode(item.config.distro)
           .then((check) => {
             if (!hasServer(item.config.id, item.config.distro)) return
-            setOpencodeCheck(item.config.distro, check)
+            setPencodeCheck(item.config.distro, check)
           })
           .catch((error) => {
             const message = error instanceof Error ? error.message : String(error)
-            logger?.error("wsl opencode check failed", {
+            logger?.error("wsl pencode check failed", {
               id: item.config.id,
               distro: item.config.distro,
               message,
@@ -252,7 +252,7 @@ export function createWslServersController(
         setRuntime(id, { kind: "failed", message })
         logger?.error("wsl sidecar exited", { id, distro: item.config.distro, code, signal })
       })
-      refreshOpencodeCheckBackground(id, item.config.distro)
+      refreshPencodeCheckBackground(id, item.config.distro)
       logger?.log("wsl sidecar ready", { id, distro: item.config.distro, url: sidecar.url })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -304,7 +304,7 @@ export function createWslServersController(
 
     async initialize() {
       refreshFromStore()
-      void refreshOpencodeChecks()
+      void refreshPencodeChecks()
       for (const id of wslServerIdsToStartOnInitialize(state.servers.map((item) => item.config))) void startServer(id)
     },
 
@@ -360,14 +360,14 @@ export function createWslServersController(
       })
     },
 
-    async installOpencode(name: string) {
-      await runJob({ kind: "install-opencode", distro: name, startedAt: Date.now() }, async (abort) => {
-        const result = await installWslOpencode(appVersion, name, { signal: abort.signal })
+    async installPencode(name: string) {
+      await runJob({ kind: "install-pencode", distro: name, startedAt: Date.now() }, async (abort) => {
+        const result = await installWslPencode(appVersion, name, { signal: abort.signal })
         if (result.code !== 0) {
-          throw new Error(summarize(result.stderr || result.stdout) || nativeT("desktop.wsl.error.installOpencode"))
+          throw new Error(summarize(result.stderr || result.stdout) || nativeT("desktop.wsl.error.installPencode"))
         }
-        await refreshOpencodeCheck(name, { signal: abort.signal })
-        expectOpencodeVersion(state.opencodeChecks[name]?.version ?? null, appVersion, name)
+        await refreshPencodeCheck(name, { signal: abort.signal })
+        expectPencodeVersion(state.pencodeChecks[name]?.version ?? null, appVersion, name)
         const id = wslServerIdToRestart(state.servers, name)
         if (id) await startServer(id)
       })
@@ -402,7 +402,7 @@ export function createWslServersController(
       persistServers(remaining)
       setState({
         servers: state.servers.filter((item) => item.config.id !== id),
-        ...(distro ? clearWslDistroState(state.distroProbes, state.opencodeChecks, distro) : {}),
+        ...(distro ? clearWslDistroState(state.distroProbes, state.pencodeChecks, distro) : {}),
       })
     },
 
@@ -428,7 +428,7 @@ function initialState(): WslServersState {
     installed: [],
     online: [],
     distroProbes: {},
-    opencodeChecks: {},
+    pencodeChecks: {},
     pendingRestart: false,
     servers: [],
     job: null,
@@ -464,12 +464,12 @@ function normalizePersistedServer(value: unknown): WslServerConfig[] {
   ]
 }
 
-function opencodeCheck(
+function pencodeCheck(
   distro: string,
   resolvedPath: string | null,
   version: string | null,
   expectedVersion: string,
-): WslOpencodeCheck {
+): WslPencodeCheck {
   if (!resolvedPath) {
     return {
       distro,
@@ -477,7 +477,7 @@ function opencodeCheck(
       version: null,
       expectedVersion,
       matchesDesktop: null,
-      error: nativeT("desktop.wsl.error.opencodeMissing"),
+      error: nativeT("desktop.wsl.error.pencodeMissing"),
     }
   }
   if (!version) {
@@ -487,7 +487,7 @@ function opencodeCheck(
       version: null,
       expectedVersion,
       matchesDesktop: null,
-      error: nativeT("desktop.wsl.error.opencodeCannotRun"),
+      error: nativeT("desktop.wsl.error.pencodeCannotRun"),
     }
   }
   return {
@@ -514,7 +514,7 @@ export type {
   WslOnlineDistro,
   WslRuntimeCheck,
   WslDistroProbe,
-  WslOpencodeCheck,
+  WslPencodeCheck,
   WslServerConfig,
   WslServerItem,
   WslServerRuntime,

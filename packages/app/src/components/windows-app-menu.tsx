@@ -1,9 +1,9 @@
 import { Show, type JSX } from "solid-js"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { DropdownMenu } from "@pencode-ai/ui/dropdown-menu"
+import { Icon } from "@pencode-ai/ui/icon"
+import { IconButton } from "@pencode-ai/ui/icon-button"
+import { IconButtonV2 } from "@pencode-ai/ui/v2/icon-button-v2"
+import { Icon as IconV2 } from "@pencode-ai/ui/v2/icon"
 
 import { useCommand } from "@/context/command"
 import { DESKTOP_MENU, desktopMenuVisible, type DesktopMenuAction, type DesktopMenuEntry } from "@/desktop-menu"
@@ -79,7 +79,7 @@ export function WindowsAppMenu(props: {
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="desktop-app-menu">
           <DropdownMenu.Group>
-            <DropdownMenu.GroupLabel class="desktop-app-menu-heading">OpenCode</DropdownMenu.GroupLabel>
+            <DropdownMenu.GroupLabel class="desktop-app-menu-heading">Pencode</DropdownMenu.GroupLabel>
             {DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "windows")).map((menu) => (
               <DesktopMenuSubmenu label={language.t(menu.labelKey)}>
                 {menu.items

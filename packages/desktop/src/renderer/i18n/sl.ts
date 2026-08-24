@@ -9,17 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Preverjanje posodobitve ni uspelo",
   "desktop.updater.checkFailed.message": "Preverjanje posodobitev ni uspelo",
   "desktop.updater.none.title": "Posodobitev ni na voljo",
-  "desktop.updater.none.message": "Že uporabljate najnovejšo različico OpenCode",
+  "desktop.updater.none.message": "Že uporabljate najnovejšo različico Pencode",
   "desktop.updater.downloadFailed.title": "Posodobitev ni uspela",
   "desktop.updater.downloadFailed.message": "Prenos posodobitve ni uspel",
   "desktop.updater.downloaded.title": "Posodobitev prenesena",
   "desktop.updater.downloaded.prompt":
-    "Različica {{version}} OpenCode je bila prenesena, jo želite namestiti in znova zagnati?",
+    "Različica {{version}} Pencode je bila prenesena, jo želite namestiti in znova zagnati?",
   "desktop.updater.installFailed.title": "Posodobitev ni uspela",
   "desktop.updater.installFailed.message": "Namestitev posodobitve ni uspela",
   "desktop.cli.installed.title": "CLI je nameščen",
   "desktop.cli.installed.message":
-    "CLI je nameščen v {{path}}\n\nZnova zaženite terminal, da lahko uporabite ukaz 'opencode'.",
+    "CLI je nameščen v {{path}}\n\nZnova zaženite terminal, da lahko uporabite ukaz 'pencode'.",
   "desktop.cli.failed.title": "Namestitev ni uspela",
   "desktop.cli.failed.message": "Namestitev CLI ni uspela: {{error}}",
 

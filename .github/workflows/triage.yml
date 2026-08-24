@@ -22,7 +22,7 @@ jobs:
           LOGIN="${{ github.event.issue.user.login }}"
           ASSOCIATION="${{ github.event.issue.author_association }}"
 
-          if [ "$LOGIN" = "opencode-agent[bot]" ] ||
+          if [ "$LOGIN" = "pencode-agent[bot]" ] ||
              [ "$ASSOCIATION" = "OWNER" ] ||
              [ "$ASSOCIATION" = "MEMBER" ] ||
              grep -qxiF "$LOGIN" .github/TEAM_MEMBERS; then
@@ -36,20 +36,20 @@ jobs:
         if: steps.author.outputs.skip != 'true'
         uses: ./.github/actions/setup-bun
 
-      - name: Install opencode
+      - name: Install pencode
         if: steps.author.outputs.skip != 'true'
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://pencode.ai/install | bash
 
       - name: Triage issue
         if: steps.author.outputs.skip != 'true'
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          PENCODE_API_KEY: ${{ secrets.PENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          opencode run --agent triage "The following issue was just opened, triage it:
+          pencode run --agent triage "The following issue was just opened, triage it:
 
           Title: $ISSUE_TITLE
 

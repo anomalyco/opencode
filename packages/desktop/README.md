@@ -1,6 +1,6 @@
-# OpenCode Desktop
+# Pencode Desktop
 
-The OpenCode Desktop app, built with Electron.
+The Pencode Desktop app, built with Electron.
 
 ## Development
 

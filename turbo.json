@@ -1,34 +1,34 @@
 {
   "$schema": "https://v2-8-13.turborepo.dev/schema.json",
-  "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
-  "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
+  "globalEnv": ["CI", "PENCODE_DISABLE_SHARE"],
+  "globalPassThroughEnv": ["CI", "PENCODE_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
     "build": {
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
-    "opencode#test": {
+    "pencode#test": {
       "dependsOn": ["^build"],
       "outputs": [],
       "passThroughEnv": ["*"]
     },
-    "@opencode-ai/core#test": {
+    "@pencode-ai/core#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/function#test": {
+    "@pencode-ai/function#test": {
       "outputs": []
     },
-    "@opencode-ai/app#test": {
+    "@pencode-ai/app#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/ui#test": {
+    "@pencode-ai/ui#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/session-ui#test": {
+    "@pencode-ai/session-ui#test": {
       "dependsOn": ["^build"],
       "outputs": []
     }

@@ -388,7 +388,7 @@ body {
   color: var(--stats-text);
 }
 
-[data-page="stats"] [data-slot="footer-mark"] [data-slot="opencode-mark"] {
+[data-page="stats"] [data-slot="footer-mark"] [data-slot="pencode-mark"] {
   display: block;
   width: 40px;
   height: 40px;

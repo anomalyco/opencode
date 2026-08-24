@@ -9,7 +9,7 @@ import { app } from "electron"
 const execFileAsync = promisify(execFile)
 const root = dirname(fileURLToPath(import.meta.url))
 const stateHome = process.env.XDG_STATE_HOME
-const desktopStateNames = ["ai.opencode.desktop.dev", "ai.opencode.desktop.beta", "ai.opencode.desktop"]
+const desktopStateNames = ["ai.pencode.desktop.dev", "ai.pencode.desktop.beta", "ai.pencode.desktop"]
 
 type Logger = {
   log(message: string, meta?: Record<string, unknown>): void
@@ -47,12 +47,12 @@ export async function startBackgroundCli(logger: Logger, shellStateHome?: string
   })
   logger.log("v2 CLI background service ready", {
     existing: Boolean(found),
-    username: "opencode",
+    username: "pencode",
     ...endpoint(url),
   })
   return {
     url,
-    username: "opencode",
+    username: "pencode",
     password,
   }
 }
@@ -121,5 +121,5 @@ function endpoint(url: string | undefined) {
 }
 
 function executableName() {
-  return process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli"
+  return process.platform === "win32" ? "pencode-cli.exe" : "pencode-cli"
 }

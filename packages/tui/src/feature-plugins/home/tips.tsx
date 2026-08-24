@@ -1,4 +1,4 @@
-import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi } from "@pencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, Show } from "solid-js"
 import { Tips } from "./tips-view"
@@ -41,7 +41,7 @@ const tui: TuiPlugin = async (api) => {
         const first = createMemo(() => api.state.session.count() === 0)
         const connected = createMemo(() =>
           api.state.provider.some(
-            (item) => item.id !== "opencode" || Object.values(item.models).some((model) => model.cost?.input !== 0),
+            (item) => item.id !== "pencode" || Object.values(item.models).some((model) => model.cost?.input !== 0),
           ),
         )
         const show = createMemo(() => (!first() || !connected()) && !hidden())

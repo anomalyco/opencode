@@ -22,8 +22,8 @@ type Diff = {
   message: string
 }
 
-const repo = process.env.GH_REPO ?? "anomalyco/opencode"
-const bot = ["actions-user", "github-actions[bot]", "opencode", "opencode-agent[bot]"]
+const repo = process.env.GH_REPO ?? "kiyosh11/pencode"
+const bot = ["actions-user", "github-actions[bot]", "pencode", "pencode-agent[bot]"]
 const team = [
   ...(await Bun.file(new URL("../.github/TEAM_MEMBERS", import.meta.url))
     .text()
@@ -120,7 +120,7 @@ async function commits(from: string, to: string) {
   }
 
   const log =
-    await $`git log ${base}..${head} --format=%H -- packages/opencode packages/sdk packages/plugin packages/desktop packages/app sdks/vscode packages/extensions github`.text()
+    await $`git log ${base}..${head} --format=%H -- packages/pencode packages/sdk packages/plugin packages/desktop packages/app sdks/vscode packages/extensions github`.text()
 
   const list: Commit[] = []
   for (const hash of log.split("\n").filter(Boolean)) {
@@ -132,8 +132,8 @@ async function commits(from: string, to: string) {
     const areas = new Set<string>()
 
     for (const file of diff.split("\n").filter(Boolean)) {
-      if (file.startsWith("packages/opencode/src/cli/cmd/")) areas.add("tui")
-      else if (file.startsWith("packages/opencode/")) areas.add("core")
+      if (file.startsWith("packages/pencode/src/cli/cmd/")) areas.add("tui")
+      else if (file.startsWith("packages/pencode/")) areas.add("core")
       else if (file.startsWith("packages/desktop/src-tauri/")) areas.add("tauri")
       else if (file.startsWith("packages/desktop/") || file.startsWith("packages/app/")) areas.add("app")
       else if (file.startsWith("packages/sdk/") || file.startsWith("packages/plugin/")) areas.add("sdk")

@@ -9,17 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Проверката за ажурирање не успеа",
   "desktop.updater.checkFailed.message": "Не успеа да се провери дали има ажурирања",
   "desktop.updater.none.title": "Нема достапно ажурирање",
-  "desktop.updater.none.message": "Веќе ја користите најновата верзија на OpenCode",
+  "desktop.updater.none.message": "Веќе ја користите најновата верзија на Pencode",
   "desktop.updater.downloadFailed.title": "Ажурирањето не успеа",
   "desktop.updater.downloadFailed.message": "Не успеа да се преземе ажурирањето",
   "desktop.updater.downloaded.title": "Ажурирањето е преземено",
   "desktop.updater.downloaded.prompt":
-    "Верзијата {{version}} од OpenCode е преземена, дали сакате да ја инсталирате и повторно да ја стартувате?",
+    "Верзијата {{version}} од Pencode е преземена, дали сакате да ја инсталирате и повторно да ја стартувате?",
   "desktop.updater.installFailed.title": "Ажурирањето не успеа",
   "desktop.updater.installFailed.message": "Не успеа да се инсталира ажурирањето",
   "desktop.cli.installed.title": "CLI Инсталиран",
   "desktop.cli.installed.message":
-    "CLI инсталиран на {{path}}\n\nРестартирајте го терминалот за да ја користите командата „opencode“.",
+    "CLI инсталиран на {{path}}\n\nРестартирајте го терминалот за да ја користите командата „pencode“.",
   "desktop.cli.failed.title": "Инсталирањето не успеа",
   "desktop.cli.failed.message": "Не успеа да се инсталира CLI: {{error}}",
 

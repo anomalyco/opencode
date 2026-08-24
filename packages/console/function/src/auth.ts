@@ -7,16 +7,16 @@ import { THEME_OPENAUTH } from "@openauthjs/openauth/ui/theme"
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 import { GoogleOidcProvider } from "@openauthjs/openauth/provider/google"
 import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare"
-import { Account } from "@opencode-ai/console-core/account.js"
-import { Workspace } from "@opencode-ai/console-core/workspace.js"
-import { Actor } from "@opencode-ai/console-core/actor.js"
-import { Resource } from "@opencode-ai/console-resource"
-import { User } from "@opencode-ai/console-core/user.js"
-import { and, Database, eq, isNull, or } from "@opencode-ai/console-core/drizzle/index.js"
-import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
-import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
-import { AuthTable } from "@opencode-ai/console-core/schema/auth.sql.js"
-import { Identifier } from "@opencode-ai/console-core/identifier.js"
+import { Account } from "@pencode-ai/console-core/account.js"
+import { Workspace } from "@pencode-ai/console-core/workspace.js"
+import { Actor } from "@pencode-ai/console-core/actor.js"
+import { Resource } from "@pencode-ai/console-resource"
+import { User } from "@pencode-ai/console-core/user.js"
+import { and, Database, eq, isNull, or } from "@pencode-ai/console-core/drizzle/index.js"
+import { WorkspaceTable } from "@pencode-ai/console-core/schema/workspace.sql.js"
+import { UserTable } from "@pencode-ai/console-core/schema/user.sql.js"
+import { AuthTable } from "@pencode-ai/console-core/schema/auth.sql.js"
+import { Identifier } from "@pencode-ai/console-core/identifier.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -36,7 +36,7 @@ export const subjects = createSubjects({
 
 const MY_THEME: Theme = {
   ...THEME_OPENAUTH,
-  logo: "https://opencode.ai/favicon-v3.svg",
+  logo: "https://pencode.ai/favicon-v3.svg",
 }
 
 export default {
@@ -112,14 +112,14 @@ export default {
           const emails = (await fetch("https://api.github.com/user/emails", {
             headers: {
               Authorization: `Bearer ${response.tokenset.access}`,
-              "User-Agent": "opencode",
+              "User-Agent": "pencode",
               Accept: "application/vnd.github+json",
             },
           }).then((x) => x.json())) as any
           const user = (await fetch("https://api.github.com/user", {
             headers: {
               Authorization: `Bearer ${response.tokenset.access}`,
-              "User-Agent": "opencode",
+              "User-Agent": "pencode",
               Accept: "application/vnd.github+json",
             },
           }).then((x) => x.json())) as any

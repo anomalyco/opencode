@@ -371,13 +371,13 @@
         transform="scale(0.0234375)"
       ></path>
     </symbol>
-    <symbol viewBox="0 0 24 24" fill="none" id="opencode">
+    <symbol viewBox="0 0 24 24" fill="none" id="pencode">
       <path
         d="M8.40005 17.4H19.2001V21H4.80005V13.8H8.40005V17.4ZM15.6001 10.2V13.8H8.40005V10.2H15.6001ZM19.2001 10.2H15.6001V6.6H4.80005V3H19.2001V10.2Z"
         fill="currentColor"
       ></path>
     </symbol>
-    <symbol viewBox="0 0 24 24" fill="none" id="opencode-go">
+    <symbol viewBox="0 0 24 24" fill="none" id="pencode-go">
       <path
         d="M19.4004 21H5V3H19.4004V6.59961H8.59961V17.4004H15.7998V13.7998H12.2002V10.2002H19.4004V21Z"
         fill="currentColor"

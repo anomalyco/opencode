@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import { base64Encode } from "@pencode-ai/core/util/encode"
+import { mockPencodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 
-const directory = "C:/OpenCode/ReviewImageFlashRegression"
+const directory = "C:/Pencode/ReviewImageFlashRegression"
 const sessionID = "ses_review_image_flash_regression"
 const title = "Review image flash regression"
 const imageFile = "assets/preview.png"
@@ -29,7 +29,7 @@ async function openReview(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
   })
-  await mockOpenCodeServer(page, {
+  await mockPencodeServer(page, {
     directory,
     project: {
       id: "proj_review_image_flash_regression",
@@ -119,7 +119,7 @@ async function openReview(page: Page) {
             time: { created: 1700000000000 },
             summary: { diffs: [] },
             agent: "build",
-            model: { providerID: "opencode", modelID: "test" },
+            model: { providerID: "pencode", modelID: "test" },
           },
           parts: [
             {

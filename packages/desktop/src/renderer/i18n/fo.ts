@@ -9,17 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Dagføringarkanningin miseydnaðist",
   "desktop.updater.checkFailed.message": "Tað eydnaðist ikki at kanna fyri dagføringum",
   "desktop.updater.none.title": "Eingin dagføring er tøk",
-  "desktop.updater.none.message": "Tú brúkar longu nýggjastu útgávuna av OpenCode.",
+  "desktop.updater.none.message": "Tú brúkar longu nýggjastu útgávuna av Pencode.",
   "desktop.updater.downloadFailed.title": "Dagføring miseydnaðist",
   "desktop.updater.downloadFailed.message": "Tað eydnaðist ikki at heinta dagføring",
   "desktop.updater.downloaded.title": "Dagføring heintað",
   "desktop.updater.downloaded.prompt":
-    "Útgáva {{version}} av OpenCode er heintað, vilt tú seta hana upp og seta hana í gongd aftur?",
+    "Útgáva {{version}} av Pencode er heintað, vilt tú seta hana upp og seta hana í gongd aftur?",
   "desktop.updater.installFailed.title": "Dagføring miseydnaðist",
   "desktop.updater.installFailed.message": "Tað eydnaðist ikki at seta upp dagføring",
   "desktop.cli.installed.title": "CLI Sett upp",
   "desktop.cli.installed.message":
-    "CLI sett upp í {{path}}\n\nEndurbyrja terminalin fyri at brúka skipanina 'opencode'.",
+    "CLI sett upp í {{path}}\n\nEndurbyrja terminalin fyri at brúka skipanina 'pencode'.",
   "desktop.cli.failed.title": "Innleggingin miseydnaðist",
   "desktop.cli.failed.message": "Tað eydnaðist ikki at seta upp CLI: {{error}}",
 

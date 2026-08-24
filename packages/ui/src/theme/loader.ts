@@ -3,7 +3,7 @@ import { resolveThemeVariant, themeToCss } from "./resolve"
 import { resolveThemeVariantV2, themeV2ToCss } from "./v2/resolve"
 
 let activeTheme: DesktopTheme | null = null
-const THEME_STYLE_ID = "opencode-theme"
+const THEME_STYLE_ID = "pencode-theme"
 
 function ensureLoaderStyleElement(): HTMLStyleElement {
   const existing = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null

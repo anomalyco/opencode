@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-const repo = "anomalyco/opencode"
+const repo = "kiyosh11/pencode"
 const days = 60
 const msg = `To stay organized issues are automatically closed after ${days} days of no activity. If the issue is still relevant please open a new one.`
 
@@ -11,7 +11,7 @@ if (!token) {
 }
 
 const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
-const agentLogin = "opencode-agent[bot]"
+const agentLogin = "pencode-agent[bot]"
 const teamMembers = new Set(
   (await Bun.file(new URL("../../.github/TEAM_MEMBERS", import.meta.url)).text())
     .split("\n")

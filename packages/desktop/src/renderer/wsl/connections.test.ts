@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { WslServersState } from "@opencode-ai/app/wsl/types"
+import type { WslServersState } from "@pencode-ai/app/wsl/types"
 import { availableStartupServer, readyWslConnections } from "./connections"
 
 const state = (kind: "starting" | "ready" | "failed" | "stopped"): WslServersState => ({
@@ -7,7 +7,7 @@ const state = (kind: "starting" | "ready" | "failed" | "stopped"): WslServersSta
   installed: [],
   online: [],
   distroProbes: {},
-  opencodeChecks: {},
+  pencodeChecks: {},
   pendingRestart: false,
   job: null,
   servers: [
@@ -19,7 +19,7 @@ const state = (kind: "starting" | "ready" | "failed" | "stopped"): WslServersSta
 })
 
 function runtime(kind: "starting" | "ready" | "failed" | "stopped") {
-  if (kind === "ready") return { kind, url: "http://127.0.0.1:4096", username: "opencode", password: "secret" }
+  if (kind === "ready") return { kind, url: "http://127.0.0.1:4096", username: "pencode", password: "secret" }
   if (kind === "failed") return { kind, message: "boom" }
   return { kind }
 }

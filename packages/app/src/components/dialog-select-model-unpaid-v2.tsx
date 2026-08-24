@@ -1,10 +1,10 @@
-import { DialogBody, DialogHeader, DialogTitle, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
-import { Icon } from "@opencode-ai/ui/v2/icon"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useTheme } from "@opencode-ai/ui/theme"
+import { DialogBody, DialogHeader, DialogTitle, DialogV2 } from "@pencode-ai/ui/v2/dialog-v2"
+import { Icon } from "@pencode-ai/ui/v2/icon"
+import { ProviderIcon } from "@pencode-ai/ui/provider-icon"
+import { Tag } from "@pencode-ai/ui/v2/badge-v2"
+import { TooltipV2 } from "@pencode-ai/ui/v2/tooltip-v2"
+import { useDialog } from "@pencode-ai/ui/context/dialog"
+import { useTheme } from "@pencode-ai/ui/theme"
 import { createMemo, onCleanup, onMount, type Component, For, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { useProviders } from "@/hooks/use-providers"
@@ -13,7 +13,7 @@ import { useLanguage } from "@/context/language"
 import { ModelTooltip } from "./model-tooltip"
 
 type ModelState = ReturnType<typeof useLocal>["model"]
-const featuredProviders = ["opencode", "opencode-go", "openai", "anthropic", "google", "github-copilot"]
+const featuredProviders = ["pencode", "pencode-go", "openai", "anthropic", "google", "github-copilot"]
 const displayModelName = (name: string) => name.replace(/\s+(?:\(free\)|free)$/i, "")
 
 export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (props) => {
@@ -30,7 +30,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
     return c ? `${c.provider.id}:${c.id}` : undefined
   })
   const isFree = (item: ReturnType<ModelState["list"]>[number]) =>
-    item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)
+    item.provider.id === "pencode" && (!item.cost || item.cost.input === 0)
   const freeModels = createMemo(() => model.list().filter(isFree))
 
   const openProviders = (provider?: string) => {
@@ -146,12 +146,12 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                       <ProviderIcon id={provider.id} class="mt-0.5 size-4 shrink-0 text-v2-icon-icon-base" />
                       <span class="flex min-w-0 flex-col">
                         <span class="truncate">{provider.name}</span>
-                        <Show when={provider.id === "opencode" || provider.id === "opencode-go"}>
+                        <Show when={provider.id === "pencode" || provider.id === "pencode-go"}>
                           <span class="truncate font-[440] text-v2-text-text-muted">
                             {language.t(
-                              provider.id === "opencode"
-                                ? "dialog.provider.opencode.tagline"
-                                : "dialog.provider.opencodeGo.tagline",
+                              provider.id === "pencode"
+                                ? "dialog.provider.pencode.tagline"
+                                : "dialog.provider.pencodeGo.tagline",
                             )}
                           </span>
                         </Show>

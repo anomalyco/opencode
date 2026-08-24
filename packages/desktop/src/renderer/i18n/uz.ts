@@ -9,17 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Yangilanish tekshiruvi amalga oshmadi",
   "desktop.updater.checkFailed.message": "Yangilanishlarni tekshirib boʻlmadi",
   "desktop.updater.none.title": "Yangilanish mavjud emas",
-  "desktop.updater.none.message": "Siz allaqachon OpenCode ning oxirgi versiyasidan foydalanyapsiz",
+  "desktop.updater.none.message": "Siz allaqachon Pencode ning oxirgi versiyasidan foydalanyapsiz",
   "desktop.updater.downloadFailed.title": "Yangilash amalga oshmadi",
   "desktop.updater.downloadFailed.message": "Yangilanishni yuklab boʻlmadi",
   "desktop.updater.downloaded.title": "Yangilanish yuklab olindi",
   "desktop.updater.downloaded.prompt":
-    "OpenCodening {{version}} versiyasi yuklab olindi, uni oʻrnatib, qayta ishga tushirmoqchimisiz?",
+    "Pencodening {{version}} versiyasi yuklab olindi, uni oʻrnatib, qayta ishga tushirmoqchimisiz?",
   "desktop.updater.installFailed.title": "Yangilash amalga oshmadi",
   "desktop.updater.installFailed.message": "Yangilanishni oʻrnatib boʻlmadi",
   "desktop.cli.installed.title": "CLI o'rnatildi",
   "desktop.cli.installed.message":
-    "CLI {{path}} manziliga o'rnatildi\n\n'opencode' buyrug'ini ishlatish uchun terminalni qayta ishga tushiring.",
+    "CLI {{path}} manziliga o'rnatildi\n\n'pencode' buyrug'ini ishlatish uchun terminalni qayta ishga tushiring.",
   "desktop.cli.failed.title": "Oʻrnatish amalga oshmadi",
   "desktop.cli.failed.message": "CLI: {{error}} oʻrnatib boʻlmadi",
 

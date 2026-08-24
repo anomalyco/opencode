@@ -1,6 +1,6 @@
 import type {
   Event,
-  createOpencodeClient,
+  createPencodeClient,
   Project,
   Model,
   Provider,
@@ -9,8 +9,8 @@ import type {
   Message,
   Part,
   Config as SDKConfig,
-} from "@opencode-ai/sdk"
-import type { Provider as ProviderV2, Model as ModelV2, Auth } from "@opencode-ai/sdk/v2"
+} from "@pencode-ai/sdk"
+import type { Provider as ProviderV2, Model as ModelV2, Auth } from "@pencode-ai/sdk/v2"
 
 import type { BunShell } from "./shell.js"
 import { type ToolDefinition } from "./tool.js"
@@ -54,7 +54,7 @@ export type WorkspaceAdapter = {
 }
 
 export type PluginInput = {
-  client: ReturnType<typeof createOpencodeClient>
+  client: ReturnType<typeof createPencodeClient>
   project: Project
   directory: string
   worktree: string

@@ -1,5 +1,5 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { base64Encode } from "@pencode-ai/core/util/encode"
+import { createSimpleContext } from "@pencode-ai/ui/context"
 import { useParams, useSearchParams } from "@solidjs/router"
 import { createMemo, createResource, createRoot, getOwner, onCleanup } from "solid-js"
 import { requireServerKey } from "@/utils/session-route"

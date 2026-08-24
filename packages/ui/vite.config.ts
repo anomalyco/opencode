@@ -45,7 +45,7 @@ function providerIconsPlugin() {
 }
 
 async function fetchProviderIcons() {
-  const url = process.env.OPENCODE_MODELS_URL || "https://models.opencode.ai"
+  const url = process.env.PENCODE_MODELS_URL || "https://models.pencode.ai"
   const providers = await fetch(`${url}/api.json`)
     .then((res) => res.json())
     .then((json) => Object.keys(json))

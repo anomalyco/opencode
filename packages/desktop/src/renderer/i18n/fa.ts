@@ -9,17 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "بررسی به‌روزرسانی انجام نشد",
   "desktop.updater.checkFailed.message": "بررسی به‌روزرسانی‌ها انجام نشد",
   "desktop.updater.none.title": "به روز رسانی موجود نیست",
-  "desktop.updater.none.message": "شما در حال حاضر از آخرین نسخه OpenCode استفاده می کنید",
+  "desktop.updater.none.message": "شما در حال حاضر از آخرین نسخه Pencode استفاده می کنید",
   "desktop.updater.downloadFailed.title": "به روز رسانی انجام نشد",
   "desktop.updater.downloadFailed.message": "به روز رسانی دانلود نشد",
   "desktop.updater.downloaded.title": "به روز رسانی دانلود شد",
   "desktop.updater.downloaded.prompt":
-    "نسخه {{version}} OpenCode دانلود شده است، آیا می خواهید آن را نصب کنید و دوباره راه اندازی کنید؟",
+    "نسخه {{version}} Pencode دانلود شده است، آیا می خواهید آن را نصب کنید و دوباره راه اندازی کنید؟",
   "desktop.updater.installFailed.title": "به روز رسانی انجام نشد",
   "desktop.updater.installFailed.message": "به روز رسانی نصب نشد",
   "desktop.cli.installed.title": "CLI نصب شده است",
   "desktop.cli.installed.message":
-    "CLI روی {{path}} نصب شد\n\nترمینال خود را مجددا راه اندازی کنید تا از دستور 'opencode' استفاده کنید.",
+    "CLI روی {{path}} نصب شد\n\nترمینال خود را مجددا راه اندازی کنید تا از دستور 'pencode' استفاده کنید.",
   "desktop.cli.failed.title": "نصب ناموفق بود",
   "desktop.cli.failed.message": "CLI نصب نشد: {{error}}",
 

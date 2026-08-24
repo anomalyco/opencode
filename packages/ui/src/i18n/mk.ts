@@ -69,7 +69,7 @@ export const dict = {
   "ui.sessionTurn.error.addCredits": "Додадете кредити",
   "dialog.usageExceeded.freeTier.title": "Достигнато е бесплатното ограничување",
   "dialog.usageExceeded.freeTier.description":
-    "Претплатете се на OpenCode Go за 10 $/месец за сигурен пристап до најдобрите модели со отворен код.",
+    "Претплатете се на Pencode Go за 10 $/месец за сигурен пристап до најдобрите модели со отворен код.",
   "dialog.usageExceeded.freeTier.actionLabel": "Претплатете се",
   "dialog.usageExceeded.accountRateLimit.title": "Достигнато е ограничувањето на Go",
   "dialog.usageExceeded.accountRateLimit.description":

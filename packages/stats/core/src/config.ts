@@ -14,7 +14,7 @@ const config = Config.all({
   publicUrl: Config.string("PUBLIC_URL").pipe(Config.withDefault("http://localhost:3000")),
 }).pipe(Config.map(decodeAppConfigValue))
 
-export class AppConfig extends Context.Service<AppConfig, AppConfigValue>()("@opencode/stats/AppConfig") {
+export class AppConfig extends Context.Service<AppConfig, AppConfigValue>()("@pencode/stats/AppConfig") {
   static readonly config = config
   static readonly layer: Layer.Layer<AppConfig, never, never> = Layer.effect(
     AppConfig,

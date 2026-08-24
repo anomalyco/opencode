@@ -9,17 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Semakan Kemas Kini Gagal",
   "desktop.updater.checkFailed.message": "Gagal menyemak kemas kini",
   "desktop.updater.none.title": "Tiada Kemas Kini Tersedia",
-  "desktop.updater.none.message": "Anda sudah menggunakan versi terkini OpenCode",
+  "desktop.updater.none.message": "Anda sudah menggunakan versi terkini Pencode",
   "desktop.updater.downloadFailed.title": "Kemas Kini Gagal",
   "desktop.updater.downloadFailed.message": "Gagal memuat turun kemas kini",
   "desktop.updater.downloaded.title": "Kemas Kini Dimuat Turun",
   "desktop.updater.downloaded.prompt":
-    "Versi {{version}} OpenCode telah dimuat turun, adakah anda ingin memasangnya dan melancarkan semula?",
+    "Versi {{version}} Pencode telah dimuat turun, adakah anda ingin memasangnya dan melancarkan semula?",
   "desktop.updater.installFailed.title": "Kemas Kini Gagal",
   "desktop.updater.installFailed.message": "Gagal memasang kemas kini",
   "desktop.cli.installed.title": "CLI Dipasang",
   "desktop.cli.installed.message":
-    "CLI telah dipasang ke {{path}}\n\nMulakan semula terminal anda untuk menggunakan arahan 'opencode'.",
+    "CLI telah dipasang ke {{path}}\n\nMulakan semula terminal anda untuk menggunakan arahan 'pencode'.",
   "desktop.cli.failed.title": "Pemasangan Gagal",
   "desktop.cli.failed.message": "Gagal memasang CLI: {{error}}",
 

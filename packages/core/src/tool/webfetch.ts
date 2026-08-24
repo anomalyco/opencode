@@ -1,6 +1,6 @@
 export * as WebFetchTool from "./webfetch"
 
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@pencode-ai/llm"
 import { Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
@@ -147,7 +147,7 @@ const layer = Layer.effectDiscard(
 
               const { body, contentType } = yield* Effect.gen(function* () {
                 const response = yield* execute(http, input.url, input.format).pipe(
-                  Effect.catchIf(isCloudflareChallenge, () => execute(http, input.url, input.format, "opencode")),
+                  Effect.catchIf(isCloudflareChallenge, () => execute(http, input.url, input.format, "pencode")),
                 )
                 const contentType = response.headers["content-type"] || ""
                 const mime = mimeFrom(contentType)

@@ -95,7 +95,7 @@ export function createDraftStore(driver: Driver): DraftStore {
 }
 
 export function createBrowserDraftStore(): DraftStore {
-  const request = indexedDB.open("opencode-drafts", 1)
+  const request = indexedDB.open("pencode-drafts", 1)
   request.addEventListener("upgradeneeded", () => {
     request.result.createObjectStore("documents")
     request.result.createObjectStore("blobs")

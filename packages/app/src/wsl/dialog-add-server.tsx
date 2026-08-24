@@ -1,11 +1,11 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { showToast } from "@opencode-ai/ui/toast"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
-import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
-import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
-import { RadioGroupV2, RadioItemV2 } from "@opencode-ai/ui/v2/radio-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { useDialog } from "@pencode-ai/ui/context/dialog"
+import { showToast } from "@pencode-ai/ui/toast"
+import { ButtonV2 } from "@pencode-ai/ui/v2/button-v2"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@pencode-ai/ui/v2/dialog-v2"
+import { DividerV2 } from "@pencode-ai/ui/v2/divider-v2"
+import { LoaderV2 } from "@pencode-ai/ui/v2/loader-v2"
+import { RadioGroupV2, RadioItemV2 } from "@pencode-ai/ui/v2/radio-v2"
+import { TextInputV2 } from "@pencode-ai/ui/v2/text-input-v2"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -338,8 +338,8 @@ function useWslAddServerController(props: DialogWslServerProps) {
     const distro = model().selectedDistro
     const action = button.action
     if (!distro || !action) return
-    if (action === "install-opencode") {
-      await run(() => api.installOpencode(distro))
+    if (action === "install-pencode") {
+      await run(() => api.installPencode(distro))
       return
     }
     setStore("adding", true)

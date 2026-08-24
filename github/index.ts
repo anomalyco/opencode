@@ -6,7 +6,7 @@ import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context as GitHubContext } from "@actions/github/lib/context"
 import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createPencodeClient } from "@pencode-ai/sdk"
 import { spawn } from "node:child_process"
 import { setTimeout as sleep } from "node:timers/promises"
 
@@ -113,7 +113,7 @@ type IssueQueryResponse = {
   }
 }
 
-const { client, server } = createOpencode()
+const { client, server } = createPencode()
 let accessToken: string
 let octoRest: Octokit
 let octoGraph: typeof graphql
@@ -127,7 +127,7 @@ type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
 try {
   assertContextEvent("issue_comment", "pull_request_review_comment")
   assertPayloadKeyword()
-  await assertOpencodeConnected()
+  await assertPencodeConnected()
 
   accessToken = await getAccessToken()
   octoRest = new Octokit({ auth: accessToken })
@@ -142,7 +142,7 @@ try {
   const comment = await createComment()
   commentId = comment.data.id
 
-  // Setup opencode session
+  // Setup pencode session
   const repoData = await fetchRepo()
   session = await client.session.create<true>().then((r) => r.data)
   await subscribeSessionEvents()
@@ -152,7 +152,7 @@ try {
     await client.session.share<true>({ path: session })
     return session.id.slice(-8)
   })()
-  console.log("opencode session", session.id)
+  console.log("pencode session", session.id)
   if (shareId) {
     console.log("Share link:", `${useShareUrl()}/s/${shareId}`)
   }
@@ -228,12 +228,12 @@ try {
 }
 process.exit(exitCode)
 
-function createOpencode() {
+function createPencode() {
   const host = "127.0.0.1"
   const port = 4096
   const url = `http://${host}:${port}`
-  const proc = spawn(`opencode`, [`serve`, `--hostname=${host}`, `--port=${port}`])
-  const client = createOpencodeClient({ baseUrl: url })
+  const proc = spawn(`pencode`, [`serve`, `--hostname=${host}`, `--port=${port}`])
+  const client = createPencodeClient({ baseUrl: url })
 
   return {
     server: { url, close: () => proc.kill() },
@@ -244,8 +244,8 @@ function createOpencode() {
 function assertPayloadKeyword() {
   const payload = useContext().payload as IssueCommentEvent | PullRequestReviewCommentEvent
   const body = payload.comment.body.trim()
-  if (!body.match(/(?:^|\s)(?:\/opencode|\/oc)(?=$|\s)/)) {
-    throw new Error("Comments must mention `/opencode` or `/oc`")
+  if (!body.match(/(?:^|\s)(?:\/pencode|\/oc)(?=$|\s)/)) {
+    throw new Error("Comments must mention `/pencode` or `/oc`")
   }
 }
 
@@ -267,7 +267,7 @@ function getReviewCommentContext() {
   }
 }
 
-async function assertOpencodeConnected() {
+async function assertPencodeConnected() {
   let retry = 0
   let connected = false
   do {
@@ -286,7 +286,7 @@ async function assertOpencodeConnected() {
   } while (retry++ < 30)
 
   if (!connected) {
-    throw new Error("Failed to connect to opencode server")
+    throw new Error("Failed to connect to pencode server")
   }
 }
 
@@ -363,7 +363,7 @@ function useIssueId() {
 }
 
 function useShareUrl() {
-  return isMock() ? "https://dev.opencode.ai" : "https://opencode.ai"
+  return isMock() ? "https://dev.pencode.ai" : "https://pencode.ai"
 }
 
 async function getAccessToken() {
@@ -374,7 +374,7 @@ async function getAccessToken() {
 
   let response
   if (isMock()) {
-    response = await fetch("https://api.opencode.ai/exchange_github_app_token_with_pat", {
+    response = await fetch("https://api.pencode.ai/exchange_github_app_token_with_pat", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${useEnvMock().mockToken}`,
@@ -382,8 +382,8 @@ async function getAccessToken() {
       body: JSON.stringify({ owner: repo.owner, repo: repo.repo }),
     })
   } else {
-    const oidcToken = await core.getIDToken("opencode-github-action")
-    response = await fetch("https://api.opencode.ai/exchange_github_app_token", {
+    const oidcToken = await core.getIDToken("pencode-github-action")
+    response = await fetch("https://api.pencode.ai/exchange_github_app_token", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${oidcToken}`,
@@ -418,19 +418,19 @@ async function getUserPrompt() {
 
   let prompt = (() => {
     const body = payload.comment.body.trim()
-    if (body === "/opencode" || body === "/oc") {
+    if (body === "/pencode" || body === "/oc") {
       if (reviewContext) {
         return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
       }
       return "Summarize this thread"
     }
-    if (body.includes("/opencode") || body.includes("/oc")) {
+    if (body.includes("/pencode") || body.includes("/oc")) {
       if (reviewContext) {
         return `${body}\n\nContext: You are reviewing a comment on file "${reviewContext.file}" at line ${reviewContext.line}.\n\nDiff context:\n${reviewContext.diffHunk}`
       }
       return body
     }
-    throw new Error("Comments must mention `/opencode` or `/oc`")
+    throw new Error("Comments must mention `/pencode` or `/oc`")
   })()
 
   // Handle images
@@ -607,7 +607,7 @@ async function resolveAgent(): Promise<string | undefined> {
 }
 
 async function chat(text: string, files: PromptFiles = []) {
-  console.log("Sending message to opencode...")
+  console.log("Sending message to pencode...")
   const { providerID, modelID } = useEnvModel()
   const agent = await resolveAgent()
 
@@ -717,7 +717,7 @@ function generateBranchName(type: "issue" | "pr") {
     .replace(/\.\d{3}Z/, "")
     .split("T")
     .join("")
-  return `opencode/${type}${useIssueId()}-${timestamp}`
+  return `pencode/${type}${useIssueId()}-${timestamp}`
 }
 
 async function pushToNewBranch(summary: string, branch: string) {
@@ -831,9 +831,9 @@ function footer(opts?: { image?: boolean }) {
     const titleAlt = encodeURIComponent(session.title.substring(0, 50))
     const title64 = Buffer.from(session.title.substring(0, 700), "utf8").toString("base64")
 
-    return `<a href="${useShareUrl()}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
+    return `<a href="${useShareUrl()}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/pencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
   })()
-  const shareUrl = shareId ? `[opencode session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+  const shareUrl = shareId ? `[pencode session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
   return `\n\n${image}${shareUrl}[github run](${useEnvRunUrl()})`
 }
 

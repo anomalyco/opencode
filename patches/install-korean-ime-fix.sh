@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# opencode Korean IME Fix Installer
-# https://github.com/anomalyco/opencode/issues/14371
+# pencode Korean IME Fix Installer
+# https://github.com/kiyosh11/pencode/issues/14371
 #
-# Patches opencode to prevent Korean (and other CJK) IME last character
+# Patches pencode to prevent Korean (and other CJK) IME last character
 # truncation when pressing Enter in Kitty and other terminals.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/claudianus/opencode/fix-zhipuai-coding-plan-thinking/patches/install-korean-ime-fix.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/claudianus/pencode/fix-zhipuai-coding-plan-thinking/patches/install-korean-ime-fix.sh | bash
 #   # or from a cloned repo:
 #   ./patches/install-korean-ime-fix.sh
 
@@ -18,9 +18,9 @@ ORANGE='\033[38;5;214m'
 MUTED='\033[0;2m'
 NC='\033[0m'
 
-OPENCODE_DIR="${OPENCODE_DIR:-$HOME/.opencode}"
-OPENCODE_SRC="${OPENCODE_SRC:-$HOME/.opencode-src}"
-FORK_REPO="${FORK_REPO:-https://github.com/claudianus/opencode.git}"
+PENCODE_DIR="${PENCODE_DIR:-$HOME/.pencode}"
+PENCODE_SRC="${PENCODE_SRC:-$HOME/.pencode-src}"
+FORK_REPO="${FORK_REPO:-https://github.com/claudianus/pencode.git}"
 FORK_BRANCH="${FORK_BRANCH:-fix-zhipuai-coding-plan-thinking}"
 
 info()  { echo -e "${MUTED}$*${NC}"; }
@@ -39,18 +39,18 @@ need git
 need bun
 
 # ── 1. Clone or update fork ────────────────────────────────────────────
-if [ -d "$OPENCODE_SRC/.git" ]; then
-  info "Updating existing source at $OPENCODE_SRC ..."
-  git -C "$OPENCODE_SRC" fetch origin "$FORK_BRANCH"
-  git -C "$OPENCODE_SRC" checkout "$FORK_BRANCH"
-  git -C "$OPENCODE_SRC" reset --hard "origin/$FORK_BRANCH"
+if [ -d "$PENCODE_SRC/.git" ]; then
+  info "Updating existing source at $PENCODE_SRC ..."
+  git -C "$PENCODE_SRC" fetch origin "$FORK_BRANCH"
+  git -C "$PENCODE_SRC" checkout "$FORK_BRANCH"
+  git -C "$PENCODE_SRC" reset --hard "origin/$FORK_BRANCH"
 else
-  info "Cloning fork (shallow) to $OPENCODE_SRC ..."
-  git clone --depth 1 --branch "$FORK_BRANCH" "$FORK_REPO" "$OPENCODE_SRC"
+  info "Cloning fork (shallow) to $PENCODE_SRC ..."
+  git clone --depth 1 --branch "$FORK_BRANCH" "$FORK_REPO" "$PENCODE_SRC"
 fi
 
 # ── 2. Verify the IME fix is present in source ────────────────────────
-PROMPT_FILE="$OPENCODE_SRC/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx"
+PROMPT_FILE="$PENCODE_SRC/packages/pencode/src/cli/cmd/tui/component/prompt/index.tsx"
 if [ ! -f "$PROMPT_FILE" ]; then
   err "Prompt file not found: $PROMPT_FILE"
   exit 1
@@ -72,16 +72,16 @@ fi
 
 # ── 3. Install dependencies ────────────────────────────────────────────
 info "Installing dependencies (this may take a minute) ..."
-cd "$OPENCODE_SRC"
+cd "$PENCODE_SRC"
 bun install --frozen-lockfile 2>/dev/null || bun install
 
 # ── 4. Build (current platform only) ──────────────────────────────────
-info "Building opencode for current platform ..."
-cd "$OPENCODE_SRC/packages/opencode"
+info "Building pencode for current platform ..."
+cd "$PENCODE_SRC/packages/pencode"
 bun run build --single
 
 # ── 5. Install binary ──────────────────────────────────────────────────
-mkdir -p "$OPENCODE_DIR/bin"
+mkdir -p "$PENCODE_DIR/bin"
 
 PLATFORM=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -90,23 +90,23 @@ ARCH=$(uname -m)
 [ "$PLATFORM" = "darwin" ] && true
 [ "$PLATFORM" = "linux" ] && true
 
-BUILT_BINARY="$OPENCODE_SRC/packages/opencode/dist/opencode-${PLATFORM}-${ARCH}/bin/opencode"
+BUILT_BINARY="$PENCODE_SRC/packages/pencode/dist/pencode-${PLATFORM}-${ARCH}/bin/pencode"
 
 if [ ! -f "$BUILT_BINARY" ]; then
-  BUILT_BINARY=$(find "$OPENCODE_SRC/packages/opencode/dist" -name "opencode" -type f -executable 2>/dev/null | head -1)
+  BUILT_BINARY=$(find "$PENCODE_SRC/packages/pencode/dist" -name "pencode" -type f -executable 2>/dev/null | head -1)
 fi
 
 if [ -f "$BUILT_BINARY" ]; then
-  if [ -f "$OPENCODE_DIR/bin/opencode" ]; then
-    cp "$OPENCODE_DIR/bin/opencode" "$OPENCODE_DIR/bin/opencode.bak.$(date +%Y%m%d%H%M%S)"
+  if [ -f "$PENCODE_DIR/bin/pencode" ]; then
+    cp "$PENCODE_DIR/bin/pencode" "$PENCODE_DIR/bin/pencode.bak.$(date +%Y%m%d%H%M%S)"
   fi
-  cp "$BUILT_BINARY" "$OPENCODE_DIR/bin/opencode"
-  chmod +x "$OPENCODE_DIR/bin/opencode"
-  ok "Installed to $OPENCODE_DIR/bin/opencode"
+  cp "$BUILT_BINARY" "$PENCODE_DIR/bin/pencode"
+  chmod +x "$PENCODE_DIR/bin/pencode"
+  ok "Installed to $PENCODE_DIR/bin/pencode"
 else
   err "Build failed - binary not found in dist/"
   info "Try running manually:"
-  echo "  cd $OPENCODE_SRC/packages/opencode && bun run build --single"
+  echo "  cd $PENCODE_SRC/packages/pencode && bun run build --single"
   exit 1
 fi
 
@@ -114,7 +114,7 @@ echo ""
 ok "Done! Korean IME fix is now active."
 echo ""
 info "To uninstall and revert to the official release:"
-echo "  curl -fsSL https://opencode.ai/install | bash"
+echo "  curl -fsSL https://pencode.ai/install | bash"
 echo ""
 info "To update (re-pull and rebuild):"
 echo "  $0"

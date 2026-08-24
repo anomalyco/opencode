@@ -25,7 +25,7 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
     currentVersion: app.getVersion(),
   })
 
-  const store = getStore("opencode.updater")
+  const store = getStore("pencode.updater")
   return createUpdaterController({
     enabled: UPDATER_ENABLED,
     currentVersion: app.getVersion(),

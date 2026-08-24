@@ -14,7 +14,7 @@ Requirements:
 - Remove keys listed as extra and repair values listed under `placeholders` so their `{{tokens}}` exactly match English.
 - Preserve existing translations unless they have a listed placeholder mismatch.
 - Preserve meaning, intent, tone, capitalization, punctuation, whitespace, and formatting.
-- Preserve technical terms and artifacts exactly: OpenCode, API names, identifiers, code, commands, flags, paths, URLs, versions, error messages, config keys, and placeholder tokens.
+- Preserve technical terms and artifacts exactly: Pencode, API names, identifiers, code, commands, flags, paths, URLs, versions, error messages, config keys, and placeholder tokens.
 - For developer-facing terminology, use the words already recognized by the target language's developer community instead of literal dictionary translations. Check at least two maintained localized developer corpora among Firefox, KDE, and VS Code when they are available; use Microsoft or official language authorities as supporting evidence.
 - Translate complete phrases in their product context. Check recurring concepts such as session, prompt, agent, model, provider, fork, shell, terminal, workspace, worktree, context, permission, tool, and server for consistent, grammatical usage. Keep an established English borrowing when the developer corpora do.
 - If maintained target-language corpora are sparse or disagree, choose conservative wording and identify the uncertain terms in the final response instead of inventing terminology.

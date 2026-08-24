@@ -1,30 +1,30 @@
 ---
 title: Sağlayıcılar
-description: opencode'da herhangi bir LLM sağlayıcısını kullanma.
+description: pencode'da herhangi bir LLM sağlayıcısını kullanma.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-opencode, **75'ten fazla LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
+pencode, **75'ten fazla LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
 
 Bir sağlayıcı eklemek için şunları yapmanız gerekir:
 
 1. `/connect` komutunu kullanarak sağlayıcı için API anahtarlarını ekleyin.
-2. Sağlayıcıyı opencode yapılandırmanızda yapılandırın.
+2. Sağlayıcıyı pencode yapılandırmanızda yapılandırın.
 
 ---
 
 ### Kimlik Bilgileri
 
 Bir sağlayıcının API anahtarlarını `/connect` komutuyla eklediğinizde, bunlar saklanır
-`~/.local/share/opencode/auth.json` içinde.
+`~/.local/share/pencode/auth.json` içinde.
 
 ---
 
 ### Yapılandırma
 
-Sağlayıcıları opencode'unuzdaki `provider` bölümü aracılığıyla özelleştirebilirsiniz.
+Sağlayıcıları pencode'unuzdaki `provider` bölümü aracılığıyla özelleştirebilirsiniz.
 config.
 
 ---
@@ -33,9 +33,9 @@ config.
 
 `baseURL` seçeneğini ayarlayarak URL tabanını herhangi bir sağlayıcı için özelleştirebilirsiniz. Bu, proxy hizmetlerini veya özel uç noktaları kullanırken kullanışlıdır.
 
-```json title="opencode.json" {6}
+```json title="pencode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -48,16 +48,16 @@ config.
 
 ---
 
-## OpenCode Zen
+## Pencode Zen
 
-OpenCode Zen, opencode ekibi tarafından sağlanan modellerin bir listesidir.
-opencode ile iyi çalıştığı test edilip doğrulandı. [Daha fazla bilgi](/docs/zen).
+Pencode Zen, pencode ekibi tarafından sağlanan modellerin bir listesidir.
+pencode ile iyi çalıştığı test edilip doğrulandı. [Daha fazla bilgi](/docs/zen).
 
 :::tip
-Yeniyseniz OpenCode Zen ile başlamanızı öneririz.
+Yeniyseniz Pencode Zen ile başlamanızı öneririz.
 :::
 
-1. TUI'de `/connect` komutunu çalıştırın, opencode'u seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
+1. TUI'de `/connect` komutunu çalıştırın, pencode'u seçin ve [pencode.ai/auth](https://pencode.ai/auth)'ye gidin.
 
    ```txt
    /connect
@@ -80,15 +80,15 @@ Yeniyseniz OpenCode Zen ile başlamanızı öneririz.
    /models
    ```
 
-opencode'daki diğer sağlayıcılar gibi çalışır ve kullanımı tamamen isteğe bağlıdır.
+pencode'daki diğer sağlayıcılar gibi çalışır ve kullanımı tamamen isteğe bağlıdır.
 
 ---
 
-## OpenCode Go
+## Pencode Go
 
-OpenCode Go, opencode ile iyi çalıştığı test edilmiş ve doğrulanmış, opencode ekibi tarafından sağlanan popüler açık kodlama modellerine güvenilir erişim sağlayan düşük maliyetli bir abonelik planıdır.
+Pencode Go, pencode ile iyi çalıştığı test edilmiş ve doğrulanmış, pencode ekibi tarafından sağlanan popüler açık kodlama modellerine güvenilir erişim sağlayan düşük maliyetli bir abonelik planıdır.
 
-1. TUI'de `/connect` komutunu çalıştırın, `OpenCode Go`'yu seçin ve [opencode.ai/auth](https://opencode.ai/zen) adresine gidin.
+1. TUI'de `/connect` komutunu çalıştırın, `Pencode Go`'yu seçin ve [pencode.ai/auth](https://pencode.ai/zen) adresine gidin.
 
    ```txt
    /connect
@@ -111,7 +111,7 @@ OpenCode Go, opencode ile iyi çalıştığı test edilmiş ve doğrulanmış, o
    /models
    ```
 
-opencode'daki diğer sağlayıcılar gibi çalışır ve kullanımı tamamen isteğe bağlıdır.
+pencode'daki diğer sağlayıcılar gibi çalışır ve kullanımı tamamen isteğe bağlıdır.
 
 ---
 
@@ -155,7 +155,7 @@ Burada bir sağlayıcı göremiyor musunuz? Bir PR gönderin.
 
 ### Amazon Bedrock
 
-Amazon Bedrock'u opencode ile kullanmak için:
+Amazon Bedrock'u pencode ile kullanmak için:
 
 1. Amazon Bedrock konsolundaki **Model kataloğuna** gidin ve istekte bulunun
    Dilediğiniz modellere ulaşabilirsiniz.
@@ -168,17 +168,17 @@ Amazon Bedrock'u opencode ile kullanmak için:
 
    #### Ortam Değişkenleri (Hızlı Başlangıç)
 
-   opencode'u çalıştırırken bu ortam değişkenlerinden birini ayarlayın:
+   pencode'u çalıştırırken bu ortam değişkenlerinden birini ayarlayın:
 
    ```bash
    # Option 1: Using AWS access keys
-   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY pencode
 
    # Option 2: Using named AWS profile
-   AWS_PROFILE=my-profile opencode
+   AWS_PROFILE=my-profile pencode
 
    # Option 3: Using Bedrock bearer token
-   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   AWS_BEARER_TOKEN_BEDROCK=XXX pencode
    ```
 
    Veya bunları bash profilinize ekleyin:
@@ -190,11 +190,11 @@ Amazon Bedrock'u opencode ile kullanmak için:
 
    #### Yapılandırma Dosyası (Önerilen)
 
-   Projeye özel veya kalıcı yapılandırma için `opencode.json` kullanın:
+   Projeye özel veya kalıcı yapılandırma için `pencode.json` kullanın:
 
-   ```json title="opencode.json"
+   ```json title="pencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://pencode.ai/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -219,9 +219,9 @@ Amazon Bedrock'u opencode ile kullanmak için:
 
 Bedrock için VPC uç noktaları kullanıyorsanız:
 
-```json title="opencode.json"
+```json title="pencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -265,9 +265,9 @@ Bir taşıyıcı belirteç ayarlandığında (`/connect` veya `AWS_BEARER_TOKEN_
 :::note
 Özel çıkarım profilleri için anahtardaki modeli ve sağlayıcı adını kullanın ve `id` özelliğini arn olarak ayarlayın. Bu, doğru önbelleğe almayı sağlar:
 
-```json title="opencode.json"
+```json title="pencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -312,7 +312,7 @@ Bir taşıyıcı belirteç ayarlandığında (`/connect` veya `AWS_BEARER_TOKEN_
    ```
 
 :::info
-Claude Pro/Max aboneliğinizi opencode'da kullanmak [Anthropic](https://anthropic.com) tarafından resmi olarak desteklenmemektedir.
+Claude Pro/Max aboneliğinizi pencode'da kullanmak [Anthropic](https://anthropic.com) tarafından resmi olarak desteklenmemektedir.
 :::
 
 ##### API anahtarlarını kullanma
@@ -325,11 +325,11 @@ Veya zaten bir API anahtarınız varsa **API Anahtarını Manuel Olarak Girin** 
 
 ### Atomic Chat
 
-opencode'u, yerel LLM'leri OpenAI uyumlu bir API sunucusunun arkasında çalıştıran bir masaüstü uygulaması olan [Atomic Chat](https://atomic.chat) aracılığıyla yerel modelleri kullanacak şekilde yapılandırabilirsiniz (varsayılan uç nokta `http://127.0.0.1:1337/v1`).
+pencode'u, yerel LLM'leri OpenAI uyumlu bir API sunucusunun arkasında çalıştıran bir masaüstü uygulaması olan [Atomic Chat](https://atomic.chat) aracılığıyla yerel modelleri kullanacak şekilde yapılandırabilirsiniz (varsayılan uç nokta `http://127.0.0.1:1337/v1`).
 
-```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+```json title="pencode.json" "atomic-chat" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "atomic-chat": {
       "npm": "@ai-sdk/openai-compatible",
@@ -374,7 +374,7 @@ Araç çağrıları iyi çalışmıyorsa, tool calling desteği güçlü olan y�
 2. [Azure AI Foundry](https://ai.azure.com/)'a gidin ve bir model dağıtın.
 
    :::note
-   opencode'un düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
+   pencode'un düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
    :::
 
 3. `/connect` komutunu çalıştırın ve **Azure**'u arayın.
@@ -395,7 +395,7 @@ Araç çağrıları iyi çalışmıyorsa, tool calling desteği güçlü olan y�
 5. Kaynak adınızı ortam değişkeni olarak ayarlayın:
 
    ```bash
-   AZURE_RESOURCE_NAME=XXX opencode
+   AZURE_RESOURCE_NAME=XXX pencode
    ```
 
    Veya bash profilinize ekleyin:
@@ -421,7 +421,7 @@ Araç çağrıları iyi çalışmıyorsa, tool calling desteği güçlü olan y�
 2. [Azure AI Foundry](https://ai.azure.com/)'a gidin ve bir model dağıtın.
 
    :::note
-   opencode'un düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
+   pencode'un düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
    :::
 
 3. `/connect` komutunu çalıştırın ve **Azure Cognitive Services**'i arayın.
@@ -442,7 +442,7 @@ Araç çağrıları iyi çalışmıyorsa, tool calling desteği güçlü olan y�
 5. Kaynak adınızı ortam değişkeni olarak ayarlayın:
 
    ```bash
-   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX pencode
    ```
 
    Veya bash profilinize ekleyin:
@@ -553,11 +553,11 @@ Cloudflare AI Gateway, OpenAI, Anthropic, Workers AI ve daha fazlasındaki model
    /models
    ```
 
-   Opencode yapılandırmanız aracılığıyla da modeller ekleyebilirsiniz.
+   Pencode yapılandırmanız aracılığıyla da modeller ekleyebilirsiniz.
 
-   ```json title="opencode.json"
+   ```json title="pencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://pencode.ai/config.json",
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
@@ -733,7 +733,7 @@ GitLab Duo, GitLab'ın Anthropic proxy'si aracılığıyla yerel araç çağırm
    #### Kişisel Erişim Simgesini Kullanma
    1. Go to [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Click **Add new token**
-   3. Name: `OpenCode`, Scopes: `api`
+   3. Name: `Pencode`, Scopes: `api`
    4. Belirteci kopyalayın (`glpat-` ile başlar)
    5. Terminale girin
 
@@ -750,20 +750,20 @@ GitLab Duo, GitLab'ın Anthropic proxy'si aracılığıyla yerel araç çağırm
 
 :::note
 İstemiyorsanız 'GITLAB_TOKEN' ortam değişkenini de belirtebilirsiniz.
-to store token in opencode auth storage.
+to store token in pencode auth storage.
 :::
 
 ##### Kendi Kendine Barındırılan GitLab
 
 :::note[uyumluluk notu]
-opencode, oturum başlığını oluşturmak gibi bazı AI görevleri için küçük bir model kullanır.
-Varsayılan olarak Zen tarafından barındırılan gpt-5-nano'yu kullanacak şekilde yapılandırılmıştır. opencode'u kilitlemek için
+pencode, oturum başlığını oluşturmak gibi bazı AI görevleri için küçük bir model kullanır.
+Varsayılan olarak Zen tarafından barındırılan gpt-5-nano'yu kullanacak şekilde yapılandırılmıştır. pencode'u kilitlemek için
 yalnızca kendi GitLab tarafından barındırılan örneğinizi kullanmak için aşağıdakileri ekleyin:
-`opencode.json` dosyası. Ayrıca oturum paylaşımını devre dışı bırakmanız da önerilir.
+`pencode.json` dosyası. Ayrıca oturum paylaşımını devre dışı bırakmanız da önerilir.
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "small_model": "gitlab/duo-chat-haiku-4-5",
   "share": "disabled"
 }
@@ -817,15 +817,15 @@ Then expose application ID as environment variable:
 export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 ```
 
-Daha fazla belge [opencode-gitlab-auth](https://www.npmjs.com/package/opencode-gitlab-auth) ana sayfasında.
+Daha fazla belge [pencode-gitlab-auth](https://www.npmjs.com/package/pencode-gitlab-auth) ana sayfasında.
 
 ##### Yapılandırma
 
-`opencode.json` üzerinden özelleştirin:
+`pencode.json` üzerinden özelleştirin:
 
-```json title="opencode.json"
+```json title="pencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -840,10 +840,10 @@ Daha fazla belge [opencode-gitlab-auth](https://www.npmjs.com/package/opencode-g
 
 GitLab araçlarına (birleştirme istekleri, sorunlar, işlem hatları, CI/CD vb.) erişmek için:
 
-```json title="opencode.json"
+```json title="pencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-gitlab-plugin"]
+  "$schema": "https://pencode.ai/config.json",
+  "plugin": ["pencode-gitlab-plugin"]
 }
 ```
 
@@ -853,7 +853,7 @@ Bu eklenti, MR incelemeleri, sorun izleme, işlem hattı izleme ve daha fazlası
 
 ### GitHub Copilot
 
-GitHub Copilot aboneliğinizi opencode'la kullanmak için:
+GitHub Copilot aboneliğinizi pencode'la kullanmak için:
 
 :::note
 Bazı modelleri kullanmak için [Pro+ aboneliği](https://github.com/features/copilot/plans) gerekebilir.
@@ -889,7 +889,7 @@ Bazı modellerin [GitHub Copilot settings](https://docs.github.com/en/copilot/ho
 
 ### Google Vertex AI
 
-Google Vertex AI'yi opencode ile kullanmak için:
+Google Vertex AI'yi pencode ile kullanmak için:
 
 1. Google Cloud Console'daki **Model Bahçesi**'ne gidin ve şunları kontrol edin:
    Bölgenizde mevcut modeller.
@@ -905,10 +905,10 @@ Google Vertex AI'yi opencode ile kullanmak için:
      - `GOOGLE_APPLICATION_CREDENTIALS`: Hizmet hesabınızın yolu JSON anahtar dosyası
      - gcloud kullanarak kimlik doğrulaması yapın CLI: `gcloud auth application-default login`
 
-   Bunları opencode çalıştırılırken ayarlayın.
+   Bunları pencode çalıştırılırken ayarlayın.
 
    ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id pencode
    ```
 
    Veya bunları bash profilinize ekleyin.
@@ -1018,13 +1018,13 @@ Daha fazla sağlayıcı ve önbelleğe alma ve hız sınırlama gibi gelişmiş 
 
 #### İsteğe Bağlı Yapılandırmalar
 
-Helicone'un opencode aracılığıyla otomatik olarak yapılandırılmayan bir özelliği veya modelini görmeniz durumunda bunu her zaman kendiniz yapılandırabilirsiniz.
+Helicone'un pencode aracılığıyla otomatik olarak yapılandırılmayan bir özelliği veya modelini görmeniz durumunda bunu her zaman kendiniz yapılandırabilirsiniz.
 
 İşte [Helicone's Model Directory](https://helicone.ai/models), eklemek istediğiniz modellerin kimliklerini almak için buna ihtiyacınız olacak.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/pencode/pencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1050,9 +1050,9 @@ Helicone'un opencode aracılığıyla otomatik olarak yapılandırılmayan bir �
 
 Helicone, önbelleğe alma, kullanıcı izleme ve oturum yönetimi gibi özellikler için özel başlıkları destekler. `options.headers` kullanarak bunları sağlayıcınızın yapılandırmasına ekleyin:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/pencode/pencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1061,7 +1061,7 @@ Helicone, önbelleğe alma, kullanıcı izleme ve oturum yönetimi gibi özellik
         "baseURL": "https://ai-gateway.helicone.ai",
         "headers": {
           "Helicone-Cache-Enabled": "true",
-          "Helicone-User-Id": "opencode",
+          "Helicone-User-Id": "pencode",
         },
       },
     },
@@ -1071,21 +1071,21 @@ Helicone, önbelleğe alma, kullanıcı izleme ve oturum yönetimi gibi özellik
 
 ##### Oturum izleme
 
-Helicone'un [Sessions](https://docs.helicone.ai/features/sessions) özelliği, ilgili LLM isteklerini birlikte gruplandırmanıza olanak tanır. Her opencode görüşmesini Helicone'da bir oturum olarak otomatik olarak kaydetmek için [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) eklentisini kullanın.
+Helicone'un [Sessions](https://docs.helicone.ai/features/sessions) özelliği, ilgili LLM isteklerini birlikte gruplandırmanıza olanak tanır. Her pencode görüşmesini Helicone'da bir oturum olarak otomatik olarak kaydetmek için [pencode-helicone-session](https://github.com/H2Shami/pencode-helicone-session) eklentisini kullanın.
 
 ```bash
-npm install -g opencode-helicone-session
+npm install -g pencode-helicone-session
 ```
 
 Yapılandırmanıza ekleyin.
 
-```json title="opencode.json"
+```json title="pencode.json"
 {
-  "plugin": ["opencode-helicone-session"]
+  "plugin": ["pencode-helicone-session"]
 }
 ```
 
-Eklenti isteklerinize `Helicone-Session-Id` ve `Helicone-Session-Name` başlıklarını enjekte eder. Helicone'un Oturumlar sayfasında her opencode görüşmesinin ayrı bir oturum olarak listelendiğini göreceksiniz.
+Eklenti isteklerinize `Helicone-Session-Id` ve `Helicone-Session-Name` başlıklarını enjekte eder. Helicone'un Oturumlar sayfasında her pencode görüşmesinin ayrı bir oturum olarak listelendiğini göreceksiniz.
 
 ##### Yaygın Helicone başlıkları
 
@@ -1102,11 +1102,11 @@ Mevcut tüm başlıklar için [Helicone Header Directory](https://docs.helicone.
 
 ### llama.cpp
 
-opencode'u yerel modelleri kullanacak şekilde [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server yardımcı programını kullanarak yapılandırabilirsiniz.
+pencode'u yerel modelleri kullanacak şekilde [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server yardımcı programını kullanarak yapılandırabilirsiniz.
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="pencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1169,11 +1169,11 @@ IO.NET, çeşitli kullanım durumları için optimize edilmiş 17 model sunar:
 
 ### LM Studio
 
-LM Studio aracılığıyla opencode'u yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
+LM Studio aracılığıyla pencode'u yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="pencode.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1286,15 +1286,15 @@ Moonshot AI'dan Kimi K2'yi kullanmak için:
 
 ### Ollama
 
-Ollama aracılığıyla opencode'u yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
+Ollama aracılığıyla pencode'u yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
 
 :::tip
-Ollama kendisini opencode için otomatik olarak yapılandırabilir. Ayrıntılar için [Ollama integration docs](https://docs.ollama.com/integrations/opencode)'a bakın.
+Ollama kendisini pencode için otomatik olarak yapılandırabilir. Ayrıntılar için [Ollama integration docs](https://docs.ollama.com/integrations/pencode)'a bakın.
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="pencode.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1328,13 +1328,13 @@ Araç çağrıları çalışmıyorsa Ollama'da `num_ctx` değerini artırmayı d
 
 ### Ollama Cloud
 
-Ollama Cloud'u opencode ile kullanmak için:
+Ollama Cloud'u pencode ile kullanmak için:
 
 1. [https://ollama.com/](https://ollama.com/) adresine gidin ve oturum açın veya bir hesap oluşturun.
 
 2. **Ayarlar** > **Anahtarlar**'a gidin ve yeni bir API anahtarı oluşturmak için **API Anahtarı Ekle**'yi tıklayın.
 
-3. opencode'da kullanmak için API anahtarını kopyalayın.
+3. pencode'da kullanmak için API anahtarını kopyalayın.
 
 4. `/connect` komutunu çalıştırın ve **Ollama Cloud**'u arayın.
 
@@ -1351,7 +1351,7 @@ Ollama Cloud'u opencode ile kullanmak için:
    └ enter
    ```
 
-6. **Önemli**: opencode'da bulut modellerini kullanmadan önce model bilgilerini yerel olarak almanız gerekir:
+6. **Önemli**: pencode'da bulut modellerini kullanmadan önce model bilgilerini yerel olarak almanız gerekir:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1398,19 +1398,19 @@ Zaten bir API anahtarınız varsa, **API Anahtarını Manuel Olarak Girin** seç
 
 ---
 
-### OpenCode Zen
+### Pencode Zen
 
-OpenCode Zen, opencode ekibinin test edip doğruladığı modellerin bir listesidir. [Daha fazla bilgi](/docs/zen).
+Pencode Zen, pencode ekibinin test edip doğruladığı modellerin bir listesidir. [Daha fazla bilgi](/docs/zen).
 
-1. **<a href={console}>OpenCode Zen</a>**'de oturum açın ve **API Anahtarı Oluştur**'u tıklayın.
+1. **<a href={console}>Pencode Zen</a>**'de oturum açın ve **API Anahtarı Oluştur**'u tıklayın.
 
-2. `/connect` komutunu çalıştırın ve **OpenCode Zen**'i arayın.
+2. `/connect` komutunu çalıştırın ve **Pencode Zen**'i arayın.
 
    ```txt
    /connect
    ```
 
-3. opencode API anahtarınızı girin.
+3. pencode API anahtarınızı girin.
 
    ```txt
    ┌ API key
@@ -1452,11 +1452,11 @@ OpenCode Zen, opencode ekibinin test edip doğruladığı modellerin bir listesi
    /models
    ```
 
-   opencode yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
+   pencode yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
 
-   ```json title="opencode.json" {6}
+   ```json title="pencode.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://pencode.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1467,11 +1467,11 @@ OpenCode Zen, opencode ekibinin test edip doğruladığı modellerin bir listesi
    }
    ```
 
-5. Bunları ayrıca opencode yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Burada bir sağlayıcı belirtmeye ilişkin bir örnek verilmiştir
+5. Bunları ayrıca pencode yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Burada bir sağlayıcı belirtmeye ilişkin bir örnek verilmiştir
 
-   ```json title="opencode.json"
+   ```json title="pencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://pencode.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1519,7 +1519,7 @@ SAP AI Core, birleşik bir platform aracılığıyla OpenAI, Anthropic, Google, 
    Veya `AICORE_SERVICE_KEY` ortam değişkenini ayarlayın:
 
    ```bash
-   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' pencode
    ```
 
    Veya bash profilinize ekleyin:
@@ -1531,7 +1531,7 @@ SAP AI Core, birleşik bir platform aracılığıyla OpenAI, Anthropic, Google, 
 4. İsteğe bağlı olarak dağıtım kimliğini ve kaynak grubunu ayarlayın:
 
    ```bash
-   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group pencode
    ```
 
    :::note
@@ -1608,7 +1608,7 @@ STACKIT AI Model Serving, Llama, Mistral ve Qwen gibi LLM'lere odaklanarak, Avru
 
 ### Scaleway
 
-[Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/)'yi Opencode ile kullanmak için:
+[Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/)'yi Pencode ile kullanmak için:
 
 1. Yeni bir API anahtarı oluşturmak için [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys)'a gidin.
 
@@ -1716,11 +1716,11 @@ Vercel AI Gateway, OpenAI, Anthropic, Google, xAI ve daha fazlasındaki modeller
    /models
    ```
 
-Modelleri opencode yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Sağlayıcı yönlendirme sırasını belirtmeye ilişkin bir örneği burada bulabilirsiniz.
+Modelleri pencode yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Sağlayıcı yönlendirme sırasını belirtmeye ilişkin bir örneği burada bulabilirsiniz.
 
-```json title="opencode.json"
+```json title="pencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1826,11 +1826,11 @@ Bazı yararlı yönlendirme seçenekleri:
    /models
    ```
 
-   opencode yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
+   pencode yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
 
-   ```json title="opencode.json" {6}
+   ```json title="pencode.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://pencode.ai/config.json",
      "provider": {
        "zenmux": {
          "models": {
@@ -1848,7 +1848,7 @@ Bazı yararlı yönlendirme seçenekleri:
 `/connect` komutunda listelenmeyen herhangi bir **OpenAI uyumlu** sağlayıcıyı eklemek için:
 
 :::tip
-OpenAI uyumlu herhangi bir sağlayıcıyı opencode ile kullanabilirsiniz. Çoğu modern yapay zeka sağlayıcısı OpenAI uyumlu API'ler sunar.
+OpenAI uyumlu herhangi bir sağlayıcıyı pencode ile kullanabilirsiniz. Çoğu modern yapay zeka sağlayıcısı OpenAI uyumlu API'ler sunar.
 :::
 
 1. `/connect` komutunu çalıştırın ve **Diğer** seçeneğine ilerleyin.
@@ -1887,18 +1887,18 @@ OpenAI uyumlu herhangi bir sağlayıcıyı opencode ile kullanabilirsiniz. Çoğ
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in pencode.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. Proje dizininizde `opencode.json` dosyanızı oluşturun veya güncelleyin:
+4. Proje dizininizde `pencode.json` dosyanızı oluşturun veya güncelleyin:
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="pencode.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://pencode.ai/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1934,9 +1934,9 @@ OpenAI uyumlu herhangi bir sağlayıcıyı opencode ile kullanabilirsiniz. Çoğ
 
 Burada `apiKey`, `headers` ve model `limit` seçeneklerini ayarlayan bir örnek verilmiştir.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="pencode.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://pencode.ai/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1969,7 +1969,7 @@ Yapılandırma ayrıntıları:
 - **limit.context**: Modelin kabul ettiği maksimum giriş tokenları.
 - **limit.output**: Modelin üretebileceği maksimum token sayısı.
 
-`limit` alanları opencode'un ne kadar bağlamınız kaldığını anlamasını sağlar. Standart sağlayıcılar bunları models.dev'den otomatik olarak alır.
+`limit` alanları pencode'un ne kadar bağlamınız kaldığını anlamasını sağlar. Standart sağlayıcılar bunları models.dev'den otomatik olarak alır.
 
 ---
 
@@ -1977,12 +1977,12 @@ Yapılandırma ayrıntıları:
 
 Sağlayıcıyı yapılandırma konusunda sorun yaşıyorsanız aşağıdakileri kontrol edin:
 
-1. **Kimlik doğrulama kurulumunu kontrol edin**: Kimlik bilgilerinin geçerli olup olmadığını görmek için `opencode auth list` komutunu çalıştırın.
+1. **Kimlik doğrulama kurulumunu kontrol edin**: Kimlik bilgilerinin geçerli olup olmadığını görmek için `pencode auth list` komutunu çalıştırın.
    sağlayıcı için yapılandırmanıza eklenir.
 
    Bu, kimlik doğrulaması için ortam değişkenlerine güvenen Amazon Bedrock gibi sağlayıcılar için geçerli değildir.
 
-2. Özel sağlayıcılar için opencode yapılandırmasını kontrol edin ve:
-   - `/connect` komutunda kullanılan sağlayıcı kimliğinin, opencode yapılandırmanızdaki kimlikle eşleştiğinden emin olun.
+2. Özel sağlayıcılar için pencode yapılandırmasını kontrol edin ve:
+   - `/connect` komutunda kullanılan sağlayıcı kimliğinin, pencode yapılandırmanızdaki kimlikle eşleştiğinden emin olun.
    - Sağlayıcı için doğru npm paketi kullanılıyor. Örneğin Cerebras için `@ai-sdk/cerebras` kullanın. Diğer tüm OpenAI uyumlu sağlayıcılar için `@ai-sdk/openai-compatible` kullanın.
    - `options.baseURL` alanında doğru API bitiş noktasının kullanıldığını kontrol edin.

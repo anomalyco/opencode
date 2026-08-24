@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Pencode
+Exec=/opt/Pencode/ai.pencode.desktop %U
+Terminal=false
+Type=Application
+Icon=ai.pencode.desktop
+StartupWMClass=ai.pencode.desktop
+NoDisplay=true
+Comment=Open source AI coding agent
+Categories=Development;

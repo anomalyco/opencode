@@ -1,17 +1,17 @@
 <p align="center">
-  <a href="https://opencode.ai">
+  <a href="https://pencode.ai">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="Pencode logo">
     </picture>
   </a>
 </p>
 <p align="center">オープンソースのAIコーディングエージェント。</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://pencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+  <a href="https://www.npmjs.com/package/pencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/pencode-ai?style=flat-square" /></a>
+  <a href="https://github.com/kiyosh11/pencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/kiyosh11/pencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 <p align="center">
@@ -39,7 +39,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![Pencode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://pencode.ai)
 
 ---
 
@@ -47,18 +47,18 @@
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://pencode.ai/install | bash
 
 # パッケージマネージャー
-npm i -g opencode-ai@latest        # bun/pnpm/yarn でもOK
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS と Linux（推奨。常に最新）
-brew install opencode              # macOS と Linux（公式 brew formula。更新頻度は低め）
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # どのOSでも
-nix run nixpkgs#opencode           # または github:anomalyco/opencode で最新 dev ブランチ
+npm i -g pencode-ai@latest        # bun/pnpm/yarn でもOK
+scoop install pencode             # Windows
+choco install pencode             # Windows
+brew install anomalyco/tap/pencode # macOS と Linux（推奨。常に最新）
+brew install pencode              # macOS と Linux（公式 brew formula。更新頻度は低め）
+sudo pacman -S pencode            # Arch Linux (Stable)
+paru -S pencode-bin               # Arch Linux (Latest from AUR)
+mise use -g pencode               # どのOSでも
+nix run nixpkgs#pencode           # または github:kiyosh11/pencode で最新 dev ブランチ
 ```
 
 > [!TIP]
@@ -66,40 +66,40 @@ nix run nixpkgs#opencode           # または github:anomalyco/opencode で最�
 
 ### デスクトップアプリ (BETA)
 
-OpenCode はデスクトップアプリとしても利用できます。[releases page](https://github.com/anomalyco/opencode/releases) から直接ダウンロードするか、[opencode.ai/download](https://opencode.ai/download) を利用してください。
+Pencode はデスクトップアプリとしても利用できます。[releases page](https://github.com/kiyosh11/pencode/releases) から直接ダウンロードするか、[pencode.ai/download](https://pencode.ai/download) を利用してください。
 
 | プラットフォーム      | ダウンロード                       |
 | --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
+| macOS (Apple Silicon) | `pencode-desktop-mac-arm64.dmg`   |
+| macOS (Intel)         | `pencode-desktop-mac-x64.dmg`     |
+| Windows               | `pencode-desktop-windows-x64.exe` |
 | Linux                 | `.deb`、`.rpm`、または AppImage    |
 
 ```bash
 # macOS (Homebrew)
-brew install --cask opencode-desktop
+brew install --cask pencode-desktop
 # Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+scoop bucket add extras; scoop install extras/pencode-desktop
 ```
 
 #### インストールディレクトリ
 
 インストールスクリプトは、インストール先パスを次の優先順位で決定します。
 
-1. `$OPENCODE_INSTALL_DIR` - カスタムのインストールディレクトリ
+1. `$PENCODE_INSTALL_DIR` - カスタムのインストールディレクトリ
 2. `$XDG_BIN_DIR` - XDG Base Directory Specification に準拠したパス
 3. `$HOME/bin` - 標準のユーザー用バイナリディレクトリ（存在する場合、または作成できる場合）
-4. `$HOME/.opencode/bin` - デフォルトのフォールバック
+4. `$HOME/.pencode/bin` - デフォルトのフォールバック
 
 ```bash
 # 例
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+PENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://pencode.ai/install | bash
+XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://pencode.ai/install | bash
 ```
 
 ### Agents
 
-OpenCode には組み込みの Agent が2つあり、`Tab` キーで切り替えられます。
+Pencode には組み込みの Agent が2つあり、`Tab` キーで切り替えられます。
 
 - **build** - デフォルト。開発向けのフルアクセス Agent
 - **plan** - 分析とコード探索向けの読み取り専用 Agent
@@ -110,20 +110,20 @@ OpenCode には組み込みの Agent が2つあり、`Tab` キーで切り替え
 また、複雑な検索やマルチステップのタスク向けに **general** サブ Agent も含まれています。
 内部的に使用されており、メッセージで `@general` と入力して呼び出せます。
 
-[agents](https://opencode.ai/docs/agents) の詳細はこちら。
+[agents](https://pencode.ai/docs/agents) の詳細はこちら。
 
 ### ドキュメント
 
-OpenCode の設定については [**ドキュメント**](https://opencode.ai/docs) を参照してください。
+Pencode の設定については [**ドキュメント**](https://pencode.ai/docs) を参照してください。
 
 ### コントリビュート
 
-OpenCode に貢献したい場合は、Pull Request を送る前に [contributing docs](./CONTRIBUTING.md) を読んでください。
+Pencode に貢献したい場合は、Pull Request を送る前に [contributing docs](./CONTRIBUTING.md) を読んでください。
 
-### OpenCode の上に構築する
+### Pencode の上に構築する
 
-OpenCode に関連するプロジェクトで、名前に "opencode"（例: "opencode-dashboard" や "opencode-mobile"）を含める場合は、そのプロジェクトが OpenCode チームによって作られたものではなく、いかなる形でも関係がないことを README に明記してください。
+Pencode に関連するプロジェクトで、名前に "pencode"（例: "pencode-dashboard" や "pencode-mobile"）を含める場合は、そのプロジェクトが Pencode チームによって作られたものではなく、いかなる形でも関係がないことを README に明記してください。
 
 ---
 
-**コミュニティに参加** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**コミュニティに参加** [Discord](https://discord.gg/pencode) | [X.com](https://x.com/pencode)

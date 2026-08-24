@@ -9,17 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "განახლების შემოწმება ვერ მოხერხდა",
   "desktop.updater.checkFailed.message": "განახლებების შემოწმება ვერ მოხერხდა",
   "desktop.updater.none.title": "განახლება არ არის ხელმისაწვდომი",
-  "desktop.updater.none.message": "თქვენ უკვე იყენებთ OpenCode-ის უახლეს ვერსიას",
+  "desktop.updater.none.message": "თქვენ უკვე იყენებთ Pencode-ის უახლეს ვერსიას",
   "desktop.updater.downloadFailed.title": "განახლება ვერ მოხერხდა",
   "desktop.updater.downloadFailed.message": "განახლების ჩამოტვირთვა ვერ მოხერხდა",
   "desktop.updater.downloaded.title": "განახლება ჩამოიტვირთა",
   "desktop.updater.downloaded.prompt":
-    "OpenCode-ის {{version}} ვერსია ჩამოტვირთულია, გსურთ მისი ინსტალაცია და ხელახლა გაშვება?",
+    "Pencode-ის {{version}} ვერსია ჩამოტვირთულია, გსურთ მისი ინსტალაცია და ხელახლა გაშვება?",
   "desktop.updater.installFailed.title": "განახლება ვერ მოხერხდა",
   "desktop.updater.installFailed.message": "განახლების დაყენება ვერ მოხერხდა",
   "desktop.cli.installed.title": "CLI დაინსტალირებულია",
   "desktop.cli.installed.message":
-    "CLI დაინსტალირებულია {{path}}-ზე\n\nგადატვირთეთ ტერმინალი „opencode“ ბრძანების გამოსაყენებლად.",
+    "CLI დაინსტალირებულია {{path}}-ზე\n\nგადატვირთეთ ტერმინალი „pencode“ ბრძანების გამოსაყენებლად.",
   "desktop.cli.failed.title": "ინსტალაცია ვერ მოხერხდა",
   "desktop.cli.failed.message": "ვერ დაინსტალირდა CLI: {{error}}",
 

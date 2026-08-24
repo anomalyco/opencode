@@ -1,30 +1,30 @@
 import type { APIEvent } from "@solidjs/start"
-import { waitUntil } from "@opencode-ai/console-resource"
+import { waitUntil } from "@pencode-ai/console-resource"
 import type { DownloadPlatform } from "../types"
 
 const prodAssetNames: Record<string, string> = {
-  "darwin-aarch64-dmg": "opencode-desktop-mac-arm64.dmg",
-  "darwin-x64-dmg": "opencode-desktop-mac-x64.dmg",
-  "windows-x64-nsis": "opencode-desktop-win-x64.exe",
-  "linux-x64-deb": "opencode-desktop-linux-amd64.deb",
-  "linux-x64-appimage": "opencode-desktop-linux-x86_64.AppImage",
-  "linux-x64-rpm": "opencode-desktop-linux-x86_64.rpm",
+  "darwin-aarch64-dmg": "pencode-desktop-mac-arm64.dmg",
+  "darwin-x64-dmg": "pencode-desktop-mac-x64.dmg",
+  "windows-x64-nsis": "pencode-desktop-win-x64.exe",
+  "linux-x64-deb": "pencode-desktop-linux-amd64.deb",
+  "linux-x64-appimage": "pencode-desktop-linux-x86_64.AppImage",
+  "linux-x64-rpm": "pencode-desktop-linux-x86_64.rpm",
 } satisfies Record<DownloadPlatform, string>
 
 const betaAssetNames: Record<string, string> = {
-  "darwin-aarch64-dmg": "opencode-desktop-mac-arm64.dmg",
-  "darwin-x64-dmg": "opencode-desktop-mac-x64.dmg",
-  "windows-x64-nsis": "opencode-desktop-win-x64.exe",
-  "linux-x64-deb": "opencode-desktop-linux-amd64.deb",
-  "linux-x64-appimage": "opencode-desktop-linux-x86_64.AppImage",
-  "linux-x64-rpm": "opencode-desktop-linux-x86_64.rpm",
+  "darwin-aarch64-dmg": "pencode-desktop-mac-arm64.dmg",
+  "darwin-x64-dmg": "pencode-desktop-mac-x64.dmg",
+  "windows-x64-nsis": "pencode-desktop-win-x64.exe",
+  "linux-x64-deb": "pencode-desktop-linux-amd64.deb",
+  "linux-x64-appimage": "pencode-desktop-linux-x86_64.AppImage",
+  "linux-x64-rpm": "pencode-desktop-linux-x86_64.rpm",
 } satisfies Record<DownloadPlatform, string>
 
 // Doing this on the server lets us preserve the original name for platforms we don't care to rename for
 const downloadNames: Record<string, string> = {
-  "darwin-aarch64-dmg": "OpenCode Desktop.dmg",
-  "darwin-x64-dmg": "OpenCode Desktop.dmg",
-  "windows-x64-nsis": "OpenCode Desktop Installer.exe",
+  "darwin-aarch64-dmg": "Pencode Desktop.dmg",
+  "darwin-x64-dmg": "Pencode Desktop.dmg",
+  "windows-x64-nsis": "Pencode Desktop Installer.exe",
 } satisfies { [K in DownloadPlatform]?: string }
 
 export async function GET({ params: { platform, channel } }: APIEvent) {
@@ -32,7 +32,7 @@ export async function GET({ params: { platform, channel } }: APIEvent) {
   if (!assetName) return new Response(null, { status: 404 })
 
   const latest = await fetch(
-    `https://github.com/anomalyco/${channel === "stable" ? "opencode" : "opencode-beta"}/releases/latest/download/${assetName}`,
+    `https://github.com/anomalyco/${channel === "stable" ? "pencode" : "pencode-beta"}/releases/latest/download/${assetName}`,
     { redirect: "manual" },
   )
   const location = latest.headers.get("location")
@@ -58,7 +58,7 @@ function download(resp: Response, platform: string, cache: "HIT" | "MISS") {
   const downloadName = downloadNames[platform]
   const headers = new Headers(resp.headers)
   if (downloadName) headers.set("content-disposition", `attachment; filename="${downloadName}"`)
-  headers.set("x-opencode-cache", cache)
+  headers.set("x-pencode-cache", cache)
 
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers })
 }

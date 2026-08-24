@@ -9,17 +9,17 @@ export const dict: Record<string, string> = {
   "desktop.updater.checkFailed.title": "अपडेट जाँच असफल भयो",
   "desktop.updater.checkFailed.message": "अद्यावधिकहरूको लागि जाँच गर्न असफल भयो",
   "desktop.updater.none.title": "कुनै अद्यावधिक उपलब्ध छैन",
-  "desktop.updater.none.message": "तपाईंले पहिले नै OpenCode को नवीनतम संस्करण प्रयोग गरिरहनुभएको छ",
+  "desktop.updater.none.message": "तपाईंले पहिले नै Pencode को नवीनतम संस्करण प्रयोग गरिरहनुभएको छ",
   "desktop.updater.downloadFailed.title": "अपडेट गर्न सकिएन",
   "desktop.updater.downloadFailed.message": "अपडेट डाउनलोड गर्न असफल भयो",
   "desktop.updater.downloaded.title": "अपडेट डाउनलोड गरियो",
   "desktop.updater.downloaded.prompt":
-    "OpenCode को संस्करण {{version}} डाउनलोड गरिएको छ, के तपाइँ यसलाई स्थापना गरेर पुन: लन्च गर्न चाहनुहुन्छ?",
+    "Pencode को संस्करण {{version}} डाउनलोड गरिएको छ, के तपाइँ यसलाई स्थापना गरेर पुन: लन्च गर्न चाहनुहुन्छ?",
   "desktop.updater.installFailed.title": "अपडेट गर्न सकिएन",
   "desktop.updater.installFailed.message": "अद्यावधिक स्थापना गर्न असफल भयो",
   "desktop.cli.installed.title": "CLI स्थापना गरियो",
   "desktop.cli.installed.message":
-    "CLI {{path}} मा स्थापना गरियो\n\n'opencode' आदेश प्रयोग गर्न आफ्नो टर्मिनल पुन: सुरु गर्नुहोस्।",
+    "CLI {{path}} मा स्थापना गरियो\n\n'pencode' आदेश प्रयोग गर्न आफ्नो टर्मिनल पुन: सुरु गर्नुहोस्।",
   "desktop.cli.failed.title": "स्थापना असफल भयो",
   "desktop.cli.failed.message": "CLI स्थापना गर्न असफल: {{error}}",
 

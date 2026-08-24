@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Worktree } from "./worktree"
 import { ServerScope } from "./server-scope"
 
-const dir = (name: string) => `/tmp/opencode-worktree-${name}-${crypto.randomUUID()}`
+const dir = (name: string) => `/tmp/pencode-worktree-${name}-${crypto.randomUUID()}`
 
 describe("Worktree", () => {
   const scope = ServerScope.local

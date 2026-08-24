@@ -10,7 +10,7 @@ env:
 
 jobs:
   update-docs:
-    if: github.repository == 'sst/opencode'
+    if: github.repository == 'sst/pencode'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       id-token: write
@@ -41,13 +41,13 @@ jobs:
             } >> $GITHUB_OUTPUT
           fi
 
-      - name: Run opencode
+      - name: Run pencode
         if: steps.commits.outputs.has_commits == 'true'
-        uses: sst/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671 # latest
+        uses: sst/pencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671 # latest
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          PENCODE_API_KEY: ${{ secrets.PENCODE_API_KEY }}
         with:
-          model: opencode/gpt-5.2
+          model: pencode/gpt-5.2
           agent: docs
           prompt: |
             Review the following commits from the last ${{ env.LOOKBACK_HOURS }} hours and identify any new features that may need documentation.

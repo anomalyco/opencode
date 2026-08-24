@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { Duration, Effect, Fiber, Layer, Schema } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
-import { PermissionV2 } from "@opencode-ai/core/permission"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { WebFetchTool } from "@opencode-ai/core/tool/webfetch"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { AppNodeBuilder } from "@pencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@pencode-ai/core/effect/layer-node"
+import { LayerNodePlatform } from "@pencode-ai/core/effect/app-node-platform"
+import { PermissionV2 } from "@pencode-ai/core/permission"
+import { SessionV2 } from "@pencode-ai/core/session"
+import { ToolRegistry } from "@pencode-ai/core/tool/registry"
+import { WebFetchTool } from "@pencode-ai/core/tool/webfetch"
+import { ToolOutputStore } from "@pencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
@@ -260,7 +260,7 @@ describe("WebFetchTool registration", () => {
       })
       expect(requests).toHaveLength(2)
       expect(requests[0]?.headers["user-agent"]).toContain("Mozilla/5.0")
-      expect(requests[1]?.headers["user-agent"]).toBe("opencode")
+      expect(requests[1]?.headers["user-agent"]).toBe("pencode")
     }),
   )
 

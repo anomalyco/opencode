@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { compile, emitEffectImported, emitPromise, write } from "@opencode-ai/httpapi-codegen"
+import { compile, emitEffectImported, emitPromise, write } from "@pencode-ai/httpapi-codegen"
 import { ClientApi, endpointNames, groupNames, omitEndpoints } from "../src/contract"
 import { Effect } from "effect"
 import { fileURLToPath } from "url"
@@ -13,8 +13,8 @@ await Effect.runPromise(
         emitPromise(contract, {
           outputTypes: {
             "events.subscribe": {
-              name: "OpenCodeEventEncoded",
-              import: 'import type { OpenCodeEventEncoded } from "@opencode-ai/protocol/groups/event"',
+              name: "PencodeEventEncoded",
+              import: 'import type { PencodeEventEncoded } from "@pencode-ai/protocol/groups/event"',
             },
           },
         }),

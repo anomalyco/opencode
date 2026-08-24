@@ -1,7 +1,7 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { Account } from "@opencode-ai/console-core/account.js"
-import { safeEqual } from "@opencode-ai/console-core/util/crypto.js"
-import { Resource } from "@opencode-ai/console-resource"
+import { Account } from "@pencode-ai/console-core/account.js"
+import { safeEqual } from "@pencode-ai/console-core/util/crypto.js"
+import { Resource } from "@pencode-ai/console-resource"
 import z from "zod"
 
 const Body = z.object({ email: z.email() })

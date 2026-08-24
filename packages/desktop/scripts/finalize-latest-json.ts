@@ -16,11 +16,11 @@ const dryRun = values["dry-run"]
 const repo = process.env.GH_REPO
 if (!repo) throw new Error("GH_REPO is required")
 
-const releaseId = process.env.OPENCODE_RELEASE
-if (!releaseId) throw new Error("OPENCODE_RELEASE is required")
+const releaseId = process.env.PENCODE_RELEASE
+if (!releaseId) throw new Error("PENCODE_RELEASE is required")
 
-const version = process.env.OPENCODE_VERSION
-if (!version) throw new Error("OPENCODE_VERSION is required")
+const version = process.env.PENCODE_VERSION
+if (!version) throw new Error("PENCODE_VERSION is required")
 
 const dir = process.env.LATEST_YML_DIR
 if (!dir) throw new Error("LATEST_YML_DIR is required")
@@ -160,8 +160,8 @@ const out: Record<string, { url: string; signature: string }> = {}
 const winxexe = pick(winx?.files ?? [], [".exe"])
 const winaexe = pick(wina?.files ?? [], [".exe"])
 
-const macxTarGz = "opencode-desktop-mac-x64.app.tar.gz"
-const macaTarGz = "opencode-desktop-mac-arm64.app.tar.gz"
+const macxTarGz = "pencode-desktop-mac-x64.app.tar.gz"
+const macaTarGz = "pencode-desktop-mac-arm64.app.tar.gz"
 
 const linxDeb = pick(linx?.files ?? [], [".deb"])
 const linxRpm = pick(linx?.files ?? [], [".rpm"])

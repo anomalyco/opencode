@@ -35,7 +35,7 @@ The suite does not provide complete coverage for:
 
 Playwright video, trace, screenshots, and observation JSON are diagnostic evidence. They are not pixel baselines and do not participate in normal pass/fail decisions.
 
-For optional before/violation/after screenshots, set `OPENCODE_STABILITY_CAPTURE=1`. Capture is opt-in because compositor readback can perturb timing.
+For optional before/violation/after screenshots, set `PENCODE_STABILITY_CAPTURE=1`. Capture is opt-in because compositor readback can perturb timing.
 
 ## Test Layers
 

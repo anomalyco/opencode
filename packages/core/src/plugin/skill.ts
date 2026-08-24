@@ -6,9 +6,9 @@ import { define } from "./internal"
 import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
 import { SkillV2 } from "../skill"
-import customizeOpencodeContent from "./skill/customize-opencode.md" with { type: "text" }
+import customizePencodeContent from "./skill/customize-pencode.md" with { type: "text" }
 
-export const CustomizeOpencodeContent = customizeOpencodeContent
+export const CustomizePencodeContent = customizePencodeContent
 
 export const Plugin = define({
   id: "skill",
@@ -18,11 +18,11 @@ export const Plugin = define({
         SkillV2.EmbeddedSource.make({
           type: "embedded",
           skill: SkillV2.Info.make({
-            name: "customize-opencode",
+            name: "customize-pencode",
             description:
-              "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, commands, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself.",
-            location: AbsolutePath.make("/builtin/customize-opencode.md"),
-            content: CustomizeOpencodeContent,
+              "Use ONLY when the user is editing or creating pencode's own configuration: pencode.json, pencode.jsonc, files under .pencode/, or files under ~/.config/pencode/. Also use when creating or fixing pencode agents, subagents, commands, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring pencode itself.",
+            location: AbsolutePath.make("/builtin/customize-pencode.md"),
+            content: CustomizePencodeContent,
           }),
         }),
       )

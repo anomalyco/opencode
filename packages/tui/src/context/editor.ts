@@ -114,7 +114,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
   init: (props: { integration?: EditorIntegration; WebSocketImpl?: typeof WebSocket }) => {
     const paths = useTuiPaths()
     const editor = props.integration ?? editorIntegration
-    const value = process.env.CLAUDE_CODE_SSE_PORT || process.env.OPENCODE_EDITOR_SSE_PORT
+    const value = process.env.CLAUDE_CODE_SSE_PORT || process.env.PENCODE_EDITOR_SSE_PORT
     const parsedPort = value ? Number.parseInt(value, 10) : undefined
     const port =
       parsedPort && Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : undefined
@@ -225,7 +225,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         request("initialize", {
           protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: {},
-          clientInfo: { name: "opencode", version: "0.0.0" },
+          clientInfo: { name: "pencode", version: "0.0.0" },
         })
       })
 
