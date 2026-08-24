@@ -87,7 +87,17 @@ const browser = (app: App.Info) =>
             .end(OauthCallbackPage.success({ provider: "ChatGPT" }))
         })
         yield* Effect.callback<void, Error>((resume) => {
-          server.once("error", (error) => resume(Effect.fail(error)))
+          server.once("error", (error) =>
+            resume(
+              Effect.fail(
+                "code" in error && error.code === "EADDRINUSE"
+                  ? new Error(
+                      `OpenAI browser login needs local port ${callbackPort}, but it is already in use. Stop the process using port ${callbackPort} or choose ChatGPT Pro/Plus (headless), then try again.`,
+                    )
+                  : error,
+              ),
+            ),
+          )
           server.listen(callbackPort, "localhost", () => resume(Effect.void))
         })
         yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))

@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { createServer } from "node:http"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { Effect } from "effect"
 import { it } from "../../core/test/lib/effect"
@@ -50,6 +51,37 @@ it.live("serves unauthenticated and answers CORS preflight when no password is c
       ),
     )
     expect(preflight.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
+  }).pipe(Effect.scoped),
+)
+
+it.live("explains how to recover when the OpenAI OAuth callback port is busy", () =>
+  Effect.gen(function* () {
+    const blocker = createServer()
+    yield* Effect.callback<void, Error>((resume) => {
+      blocker.once("error", (error) => resume(Effect.fail(error)))
+      blocker.listen(1455, "localhost", () => resume(Effect.void))
+    })
+    yield* Effect.addFinalizer(() => Effect.sync(() => blocker.close()))
+    const handler = yield* ServerFetch.make(options)
+    yield* Effect.promise(() => handler(new Request("http://opencode.local/api/model/default")))
+
+    const response = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/integration/openai/connect/oauth", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ methodID: "chatgpt-browser" }),
+        }),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    expect(yield* Effect.promise(() => response.json())).toEqual({
+      _tag: "InvalidRequestError",
+      message:
+        "OpenAI browser login needs local port 1455, but it is already in use. Stop the process using port 1455 or choose ChatGPT Pro/Plus (headless), then try again.",
+      kind: "integration_authorization",
+    })
   }).pipe(Effect.scoped),
 )
 
