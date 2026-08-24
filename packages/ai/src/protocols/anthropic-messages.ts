@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer"
 import { Effect, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Route } from "../route/client.js"
@@ -82,25 +83,61 @@ const AnthropicTextBlock = Schema.Struct({
 })
 type AnthropicTextBlock = Schema.Schema.Type<typeof AnthropicTextBlock>
 
+// SDK: Base64ImageSource:201 {type:"base64", media_type:"image/jpeg"|... , data}, URLImageSource:3817 {type:"url", url}, FileImageSource:2350 {type:"file", file_id}
+// SDK: ImageBlockParam:2356 {source: Base64|URL|File, cache_control, transformations:2381 {oversized_image?}}
+const AnthropicBase64ImageSource = Schema.Struct({
+  type: Schema.tag("base64"),
+  media_type: Schema.String,
+  data: Schema.String,
+})
+const AnthropicURLImageSource = Schema.Struct({ type: Schema.tag("url"), url: Schema.String })
+const AnthropicFileImageSource = Schema.Struct({ type: Schema.tag("file"), file_id: Schema.String })
+const AnthropicImageSource = Schema.Union([
+  AnthropicBase64ImageSource,
+  AnthropicURLImageSource,
+  AnthropicFileImageSource,
+])
+const AnthropicImageTransformations = Schema.Struct({
+  oversized_image: Schema.optional(Schema.Literals(["downsize", "error"])),
+})
+
 const AnthropicImageBlock = Schema.Struct({
   type: Schema.tag("image"),
-  source: Schema.Struct({
-    type: Schema.tag("base64"),
-    media_type: Schema.String,
-    data: Schema.String,
-  }),
+  source: AnthropicImageSource,
   cache_control: Schema.optional(AnthropicCacheControl),
+  transformations: Schema.optional(AnthropicImageTransformations),
 })
 type AnthropicImageBlock = Schema.Schema.Type<typeof AnthropicImageBlock>
 
+// SDK: Base64PDFSource:209 {type:"base64", media_type:"application/pdf", data}, PlainTextSource:2716 {type:"text", media_type:"text/plain", data},
+// SDK: URLPDFSource:3823 {type:"url", url}, FileDocumentSource:2344 {type:"file", file_id}, ContentBlockSource:2266 {type:"content", content}
+// SDK: DocumentBlockParam:2297 {source: 5-way union, cache_control, citations, context, title}
+const AnthropicBase64PDFSource = Schema.Struct({
+  type: Schema.tag("base64"),
+  media_type: Schema.Literal("application/pdf"),
+  data: Schema.String,
+})
+const AnthropicPlainTextSource = Schema.Struct({
+  type: Schema.tag("text"),
+  media_type: Schema.Literal("text/plain"),
+  data: Schema.String,
+})
+const AnthropicURLPDFSource = Schema.Struct({ type: Schema.tag("url"), url: Schema.String })
+const AnthropicFileDocumentSource = Schema.Struct({ type: Schema.tag("file"), file_id: Schema.String })
+const AnthropicDocumentSource = Schema.Union([
+  AnthropicBase64PDFSource,
+  AnthropicPlainTextSource,
+  AnthropicURLPDFSource,
+  AnthropicFileDocumentSource,
+])
+
 const AnthropicDocumentBlock = Schema.Struct({
   type: Schema.tag("document"),
-  source: Schema.Struct({
-    type: Schema.tag("base64"),
-    media_type: Schema.Literal("application/pdf"),
-    data: Schema.String,
-  }),
+  source: AnthropicDocumentSource,
   cache_control: Schema.optional(AnthropicCacheControl),
+  title: Schema.optional(Schema.String),
+  context: Schema.optional(Schema.String),
+  citations: Schema.optional(Schema.Struct({ enabled: Schema.Boolean })),
 })
 type AnthropicDocumentBlock = Schema.Schema.Type<typeof AnthropicDocumentBlock>
 
@@ -431,7 +468,152 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
   return { type: wireType, tool_use_id: scrubToolCallID(part.id), content: payload } satisfies AnthropicServerToolResultBlock
 })
 
-const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: MediaPart) {
+const fileIdFromMetadata = (metadata: MediaPart["metadata"]): string | undefined => {
+  if (!ProviderShared.isRecord(metadata)) return undefined
+  const anthropic = metadata.anthropic
+  if (ProviderShared.isRecord(anthropic)) {
+    if (typeof anthropic.file_id === "string") return anthropic.file_id
+    if (typeof anthropic.fileId === "string") return anthropic.fileId
+  }
+  if (typeof metadata.file_id === "string") return metadata.file_id
+  if (typeof metadata.fileId === "string") return metadata.fileId
+  return undefined
+}
+
+const transformationsFromMetadata = (
+  metadata: MediaPart["metadata"],
+): AnthropicImageBlock["transformations"] | undefined => {
+  if (!ProviderShared.isRecord(metadata)) return undefined
+  const anthropic = ProviderShared.isRecord(metadata.anthropic) ? metadata.anthropic : undefined
+  const raw = anthropic?.transformations ?? metadata.transformations
+  if (ProviderShared.isRecord(raw)) {
+    const value = raw.oversized_image
+    if (value === "downsize" || value === "error") return { oversized_image: value }
+  }
+  if (anthropic && (anthropic.oversized_image === "downsize" || anthropic.oversized_image === "error"))
+    return { oversized_image: anthropic.oversized_image }
+  return undefined
+}
+
+const documentTitleFromPart = (part: MediaPart): string | undefined => {
+  if (ProviderShared.isRecord(part.metadata)) {
+    const anthropic = part.metadata.anthropic
+    if (ProviderShared.isRecord(anthropic) && typeof anthropic.title === "string") return anthropic.title
+    if (typeof part.metadata.title === "string") return part.metadata.title
+  }
+  if (typeof part.filename === "string" && part.filename.length > 0) return part.filename
+  return undefined
+}
+
+const documentContextFromMetadata = (metadata: MediaPart["metadata"]): string | undefined => {
+  if (!ProviderShared.isRecord(metadata)) return undefined
+  const anthropic = ProviderShared.isRecord(metadata.anthropic) ? metadata.anthropic : undefined
+  if (anthropic && typeof anthropic.context === "string") return anthropic.context
+  if (typeof metadata.context === "string") return metadata.context
+  return undefined
+}
+
+const citationsFromMetadata = (
+  metadata: MediaPart["metadata"],
+): AnthropicDocumentBlock["citations"] | undefined => {
+  if (!ProviderShared.isRecord(metadata)) return undefined
+  const raw = ProviderShared.isRecord(metadata.anthropic)
+    ? (metadata.anthropic.citations ?? metadata.citations)
+    : metadata.citations
+  if (ProviderShared.isRecord(raw) && typeof raw.enabled === "boolean") return { enabled: raw.enabled }
+  return undefined
+}
+
+const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim())
+
+const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (
+  part: MediaPart,
+  breakpoints?: Cache.Breakpoints,
+) {
+  const mime = part.mediaType.toLowerCase()
+  const cacheControlValue = breakpoints ? cacheControl(breakpoints, part.cache) : undefined
+  const fileId = fileIdFromMetadata(part.metadata)
+
+  // SDK file sources: FileImageSource:2350 / FileDocumentSource:2344 {type:"file", file_id}
+  if (fileId) {
+    if (mime.startsWith("image/"))
+      return {
+        type: "image" as const,
+        source: { type: "file" as const, file_id: fileId },
+        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+        ...(transformationsFromMetadata(part.metadata) === undefined
+          ? {}
+          : { transformations: transformationsFromMetadata(part.metadata)! }),
+      } satisfies AnthropicImageBlock
+    return {
+      type: "document" as const,
+      source: { type: "file" as const, file_id: fileId },
+      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
+      ...(documentContextFromMetadata(part.metadata) === undefined
+        ? {}
+        : { context: documentContextFromMetadata(part.metadata)! }),
+      ...(citationsFromMetadata(part.metadata) === undefined
+        ? {}
+        : { citations: citationsFromMetadata(part.metadata)! }),
+    } satisfies AnthropicDocumentBlock
+  }
+
+  const rawString = typeof part.data === "string" ? part.data.trim() : undefined
+  // SDK URL sources: URLImageSource:3817 / URLPDFSource:3823 {type:"url", url}
+  if (rawString && isHttpUrl(rawString) && !rawString.startsWith("data:")) {
+    if (mime.startsWith("image/"))
+      return {
+        type: "image" as const,
+        source: { type: "url" as const, url: rawString },
+        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+        ...(transformationsFromMetadata(part.metadata) === undefined
+          ? {}
+          : { transformations: transformationsFromMetadata(part.metadata)! }),
+      } satisfies AnthropicImageBlock
+    if (mime === "application/pdf")
+      return {
+        type: "document" as const,
+        source: { type: "url" as const, url: rawString },
+        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+        ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
+        ...(documentContextFromMetadata(part.metadata) === undefined
+          ? {}
+          : { context: documentContextFromMetadata(part.metadata)! }),
+        ...(citationsFromMetadata(part.metadata) === undefined
+          ? {}
+          : { citations: citationsFromMetadata(part.metadata)! }),
+      } satisfies AnthropicDocumentBlock
+  }
+
+  // SDK PlainTextSource:2716 {type:"text", media_type:"text/plain", data}
+  if (mime === "text/plain") {
+    const textData =
+      typeof part.data !== "string"
+        ? Buffer.from(part.data).toString("utf8")
+        : part.data.startsWith("data:")
+          ? (() => {
+              const comma = part.data.indexOf(",")
+              const payload = comma >= 0 ? part.data.slice(comma + 1) : part.data
+              return part.data.includes(";base64")
+                ? Buffer.from(payload, "base64").toString("utf8")
+                : decodeURIComponent(payload)
+            })()
+          : part.data
+    return {
+      type: "document" as const,
+      source: { type: "text" as const, media_type: "text/plain" as const, data: textData },
+      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
+      ...(documentContextFromMetadata(part.metadata) === undefined
+        ? {}
+        : { context: documentContextFromMetadata(part.metadata)! }),
+      ...(citationsFromMetadata(part.metadata) === undefined
+        ? {}
+        : { citations: citationsFromMetadata(part.metadata)! }),
+    } satisfies AnthropicDocumentBlock
+  }
+
   const media = ProviderShared.normalizeMedia(part)
   if (media.mime === "application/pdf")
     return {
@@ -441,6 +623,14 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: Me
         media_type: "application/pdf" as const,
         data: media.base64,
       },
+      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
+      ...(documentContextFromMetadata(part.metadata) === undefined
+        ? {}
+        : { context: documentContextFromMetadata(part.metadata)! }),
+      ...(citationsFromMetadata(part.metadata) === undefined
+        ? {}
+        : { citations: citationsFromMetadata(part.metadata)! }),
     } satisfies AnthropicDocumentBlock
   if (!media.mime.startsWith("image/"))
     return yield* invalid(`Anthropic Messages does not support media type ${part.mediaType}`)
@@ -451,6 +641,10 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: Me
       media_type: media.mime,
       data: media.base64,
     },
+    ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+    ...(transformationsFromMetadata(part.metadata) === undefined
+      ? {}
+      : { transformations: transformationsFromMetadata(part.metadata)! }),
   } satisfies AnthropicImageBlock
 })
 
@@ -559,7 +753,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "media") {
-          content.push(yield* lowerMedia(part))
+          content.push(yield* lowerMedia(part, breakpoints))
           continue
         }
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
