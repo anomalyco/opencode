@@ -321,12 +321,30 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                 Stream.mapEffect(decodeEvent(route)),
                 protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
               )
-              const stream = events.pipe(
-                Stream.mapAccumEffect(
-                  () => protocol.stream.initial(request),
-                  protocol.stream.step,
-                  protocol.stream.onHalt ? { onHalt: protocol.stream.onHalt } : undefined,
-                ),
+              const stream = Stream.suspend(() => {
+                let state = protocol.stream.initial(request)
+                const parsed = events.pipe(
+                  Stream.mapEffect((event) =>
+                    protocol.stream.step(state, event).pipe(
+                      Effect.map(([next, output]) => {
+                        state = next
+                        return output
+                      }),
+                    ),
+                  ),
+                  Stream.flatMap(Stream.fromIterable),
+                )
+                const onHalt = protocol.stream.onHalt
+                return onHalt
+                  ? parsed.pipe(
+                      Stream.concat(
+                        Stream.suspend(() =>
+                          Stream.unwrap(onHalt(state).pipe(Effect.map(Stream.fromIterable))),
+                        ),
+                      ),
+                    )
+                  : parsed
+              }).pipe(
                 Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
                 requireTerminalEvent(route),
               )

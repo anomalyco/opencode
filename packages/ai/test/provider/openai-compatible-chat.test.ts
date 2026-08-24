@@ -353,13 +353,68 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("treats an empty finish reason as terminal", () =>
+  it.effect("rejects a stream without a required finish reason", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "")))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "OpenAI Chat stream ended without finish_reason",
+      })
+    }),
+  )
+
+  it.effect("infers stop when finish reasons are optional", () =>
+    Effect.gen(function* () {
+      const compatible = OpenAICompatibleChat.route
+        .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+        .model({ id: "custom-model", compatibility: { requireFinishReason: false } })
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: compatible })).pipe(
         Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "")))),
       )
 
-      expect(response.finishReason).toEqual({ normalized: "unknown", raw: "" })
+      expect(response.finishReason).toEqual({ normalized: "stop" })
+    }),
+  )
+
+  it.effect("normalizes the end finish reason to stop", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "end")))),
+      )
+
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end" })
+    }),
+  )
+
+  it.effect("classifies provider error finish reasons", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "network_error")))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "ProviderInternal",
+        message: "Provider returned finish reason: network_error",
+      })
+    }),
+  )
+
+  it.effect("preserves provider finish outcomes in the common reason algebra", () =>
+    Effect.gen(function* () {
+      const filtered = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "content_filter")))),
+      )
+      const future = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "future_reason")))),
+      )
+
+      expect(filtered.finishReason).toEqual({ normalized: "content-filter", raw: "content_filter" })
+      expect(future.finishReason).toEqual({ normalized: "unknown", raw: "future_reason" })
     }),
   )
 

@@ -1258,6 +1258,7 @@ describe("OpenAI Chat route", () => {
         deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
       )
       const input = LLMRequest.update(request, {
+        model: LanguageModel.update(model, { compatibility: { requireFinishReason: false } }),
         tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
       })
       const response = yield* LLMClient.generate(input).pipe(Effect.provide(fixedResponse(body)))
