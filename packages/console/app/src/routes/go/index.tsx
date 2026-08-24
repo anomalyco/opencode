@@ -375,12 +375,7 @@ export default function Home() {
                     {(part) => {
                       if (part === "{{text}}") return <span>{i18n.t("go.cta.text")}</span>
                       if (part === "{{price}}") {
-                        return (
-                          <span data-slot="cta-price">
-                            <span data-slot="cta-price-old">{i18n.t("go.cta.price")}</span>
-                            <span data-slot="cta-price-new">{i18n.t("go.cta.promo")}</span>
-                          </span>
-                        )
+                        return <span data-slot="cta-price">{i18n.t("go.cta.price")}</span>
                       }
                       return part
                     }}
