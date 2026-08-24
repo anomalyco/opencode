@@ -236,15 +236,35 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
+      let recoverableLength = false
+      const isContextLimitedLength = (event: LLMEvent) => {
+        if (!LLMEvent.is.stepFinish(event) || event.reason !== "length") return false
+        const context = model.route.defaults.limits?.context
+        const output = request.generation?.maxTokens ?? model.route.defaults.limits?.output
+        const inputTokens = event.usage?.inputTokens
+        const outputTokens = event.usage?.outputTokens
+        return (
+          context !== undefined &&
+          output !== undefined &&
+          inputTokens !== undefined &&
+          outputTokens !== undefined &&
+          inputTokens + output > context &&
+          outputTokens < output
+        )
+      }
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
-            if (overflowFailure || publisher.hasProviderError()) return
+            if (overflowFailure || recoverableLength || publisher.hasProviderError()) return
             if (LLMEvent.is.providerError(event)) {
               if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
                 overflowFailure = event
                 return
               }
+            }
+            if (isContextLimitedLength(event) && !publisher.hasAssistantStarted()) {
+              recoverableLength = true
+              return
             }
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
@@ -289,7 +309,7 @@ const layer = Layer.effect(
           if (
             recoverOverflow &&
             !publisher.hasAssistantStarted() &&
-            isContextOverflowFailure(overflowFailure ?? failure) &&
+            (isContextOverflowFailure(overflowFailure ?? failure) || recoverableLength) &&
             (yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request })))
           )
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
