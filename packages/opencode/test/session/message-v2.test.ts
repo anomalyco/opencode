@@ -1450,6 +1450,7 @@ describe("session.message-v2.fromError", () => {
       "The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)",
       "tokens in request more than max tokens allowed",
       "Please reduce the length of the messages or completion",
+      "Context Window exceeded for given call. No models have context window large enough for this call.",
       "400 status code (no body)",
       "413 status code (no body)",
     ]
