@@ -327,6 +327,21 @@ opencode mcp debug my-oauth-server
 
 The `mcp debug` command shows the current auth status, tests HTTP connectivity, and attempts the OAuth discovery flow.
 
+#### Token storage
+
+OAuth tokens and client secrets are stored in your OS keychain (macOS Keychain via `security`, Linux secret-service via `secret-tool`) when available, falling back to a permission-restricted file (`~/.local/share/opencode/mcp-auth.json`, mode 0600) otherwise. Set `OPENCODE_MCP_FORCE_FILE_STORAGE=1` to always use the file.
+
+#### Project server approval
+
+MCP servers defined in project-owned config files (project `opencode.json` or `.agents/mcp.json`) require explicit approval before they connect, and re-approval whenever their definition changes. This prevents a cloned repository from silently connecting its own servers. Approve or revoke with:
+
+```bash
+opencode mcp approve my-server
+opencode mcp approve my-server --revoke
+```
+
+Approval choices are stored per project in `~/.local/share/opencode/mcp-approvals.json`, never in the repository. Servers in user or local scope are your own and need no approval.
+
 ---
 
 ## Manage
