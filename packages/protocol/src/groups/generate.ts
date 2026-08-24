@@ -23,7 +23,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
           identifier: "v2.generate.text",
           summary: "Generate text",
           description:
-            "Run one stateless model generation at the requested location and return the assistant text. Uses the location's default model when none is specified.",
+            "Run one stateless model generation and return the assistant text. An explicit location uses that location's configuration; when location is omitted, generation uses the server's base configuration directory. Uses the selected configuration's default model when none is specified.",
         }),
       ),
   )
