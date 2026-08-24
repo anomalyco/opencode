@@ -181,7 +181,7 @@ it.effect("succeeds without calling the driver when the workspace does not exist
 it.effect("reports whether destroy removed an existing workspace", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create("fake")
+    const workspaceID = yield* workspace.create({ provider: "fake" })
 
     expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: true })
     expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: false })

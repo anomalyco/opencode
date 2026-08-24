@@ -210,6 +210,10 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  WorkspaceCreateInput,
+  WorkspaceCreateOutput,
+  WorkspaceDestroyInput,
+  WorkspaceDestroyOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsStatusInput,
@@ -226,10 +230,6 @@ import type {
   WebsearchQueryOutput,
   ConfigGetInput,
   ConfigGetOutput,
-  WorkspaceCreateInput,
-  WorkspaceCreateOutput,
-  WorkspaceDestroyInput,
-  WorkspaceDestroyOutput,
 } from "./types.js"
 import { ClientError } from "./client-error.js"
 
@@ -1769,6 +1769,31 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
+    workspace: {
+      create: (input: WorkspaceCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkspaceCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/workspace`,
+            body: { id: input["id"], provider: input["provider"] },
+            successStatus: 200,
+            declaredStatuses: [409, 404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      destroy: (input: WorkspaceDestroyInput, requestOptions?: RequestOptions) =>
+        request<WorkspaceDestroyOutput>(
+          {
+            method: "DELETE",
+            path: `/api/workspace/${encodeURIComponent(input.workspaceID)}`,
+            successStatus: 200,
+            declaredStatuses: [500, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
     vcs: {
       get: (input?: VcsGetInput, requestOptions?: RequestOptions) =>
         request<VcsGetOutput>(
@@ -1885,31 +1910,6 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-    },
-    workspace: {
-      create: (input: WorkspaceCreateInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: WorkspaceCreateOutput }>(
-          {
-            method: "POST",
-            path: `/api/workspace`,
-            body: { id: input["id"], provider: input["provider"] },
-            successStatus: 200,
-            declaredStatuses: [409, 404, 401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      destroy: (input: WorkspaceDestroyInput, requestOptions?: RequestOptions) =>
-        request<WorkspaceDestroyOutput>(
-          {
-            method: "DELETE",
-            path: `/api/workspace/${encodeURIComponent(input.workspaceID)}`,
-            successStatus: 200,
-            declaredStatuses: [500, 401, 400],
             empty: false,
           },
           requestOptions,

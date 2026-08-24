@@ -1691,6 +1691,23 @@ export interface WorktreeApi<E = never> {
   readonly refresh: WorktreeRefreshOperation<E>
 }
 
+export type WorkspaceCreateInput = { readonly id?: Workspace.ID | undefined; readonly provider: string }
+export type WorkspaceCreateOutput = Workspace.ID
+export type WorkspaceCreateOperation<E = never> = (
+  input: WorkspaceCreateInput,
+) => Effect.Effect<WorkspaceCreateOutput, E>
+
+export type WorkspaceDestroyInput = { readonly workspaceID: Workspace.ID }
+export type WorkspaceDestroyOutput = Workspace.DestroyResult
+export type WorkspaceDestroyOperation<E = never> = (
+  input: WorkspaceDestroyInput,
+) => Effect.Effect<WorkspaceDestroyOutput, E>
+
+export interface WorkspaceApi<E = never> {
+  readonly create: WorkspaceCreateOperation<E>
+  readonly destroy: WorkspaceDestroyOperation<E>
+}
+
 export type VcsGetInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
@@ -1783,23 +1800,6 @@ export interface ConfigApi<E = never> {
   readonly get: ConfigGetOperation<E>
 }
 
-export type WorkspaceCreateInput = { readonly id?: Workspace.ID | undefined; readonly provider: string }
-export type WorkspaceCreateOutput = Workspace.ID
-export type WorkspaceCreateOperation<E = never> = (
-  input: WorkspaceCreateInput,
-) => Effect.Effect<WorkspaceCreateOutput, E>
-
-export type WorkspaceDestroyInput = { readonly workspaceID: Workspace.ID }
-export type WorkspaceDestroyOutput = Workspace.DestroyResult
-export type WorkspaceDestroyOperation<E = never> = (
-  input: WorkspaceDestroyInput,
-) => Effect.Effect<WorkspaceDestroyOutput, E>
-
-export interface WorkspaceApi<E = never> {
-  readonly create: WorkspaceCreateOperation<E>
-  readonly destroy: WorkspaceDestroyOperation<E>
-}
-
 export interface AppApi<E = never> {
   readonly health: HealthApi<E>
   readonly server: ServerApi<E>
@@ -1825,10 +1825,10 @@ export interface AppApi<E = never> {
   readonly shell: ShellApi<E>
   readonly reference: ReferenceApi<E>
   readonly worktree: WorktreeApi<E>
+  readonly workspace: WorkspaceApi<E>
   readonly vcs: VcsApi<E>
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
   readonly config: ConfigApi<E>
-  readonly workspace: WorkspaceApi<E>
 }

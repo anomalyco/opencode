@@ -60,9 +60,9 @@ export const groupNames = {
   "server.reference": "reference",
   "server.project": "project",
   "server.worktree": "worktree",
+  "server.workspace": "workspace",
   "server.vcs": "vcs",
   "server.config": "config",
-  "server.workspace": "workspace",
 } as const
 
 export const promiseOmitEndpoints = new Set(["pty.connect"])

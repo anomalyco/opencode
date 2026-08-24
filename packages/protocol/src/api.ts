@@ -171,12 +171,12 @@ const makeApiFromGroup = <
     .add(ShellGroup.middleware(locationMiddleware))
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(WorktreeGroup)
+    .add(WorkspaceGroup)
     .add(VcsGroup.middleware(locationMiddleware))
     .add(DebugGroup)
     .add(MigrationGroup)
     .add(WebSearchGroup.middleware(locationMiddleware))
     .add(ConfigGroup.middleware(locationMiddleware))
-    .add(WorkspaceGroup)
     .annotateMerge(
       OpenApi.annotations({
         title: "opencode HttpApi",
