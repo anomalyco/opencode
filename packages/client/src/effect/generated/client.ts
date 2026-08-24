@@ -214,10 +214,6 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
-  WorkspaceCreateInput,
-  WorkspaceCreateOutput,
-  WorkspaceDestroyInput,
-  WorkspaceDestroyOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsStatusInput,
@@ -234,6 +230,10 @@ import type {
   WebsearchQueryOutput,
   ConfigGetInput,
   ConfigGetOutput,
+  WorkspaceCreateInput,
+  WorkspaceCreateOutput,
+  WorkspaceDestroyInput,
+  WorkspaceDestroyOutput,
 } from "../api/api.js"
 import { ClientError } from "./client-error.js"
 
@@ -1272,24 +1272,6 @@ const adaptGroupWorktree = (raw: RawClient["server.worktree"]) => ({
   refresh: EndpointWorktreeRefresh(raw),
 })
 
-const EndpointWorkspaceCreate = (raw: RawClient["server.workspace"]) => (input: WorkspaceCreateInput) =>
-  preserveEffect<WorkspaceCreateOutput>()(
-    raw["workspace.create"]({ payload: { id: input["id"], provider: input["provider"] } }).pipe(
-      Effect.mapError(mapClientError),
-      Effect.map((value) => value.data),
-    ),
-  )
-
-const EndpointWorkspaceDestroy = (raw: RawClient["server.workspace"]) => (input: WorkspaceDestroyInput) =>
-  preserveEffect<WorkspaceDestroyOutput>()(
-    raw["workspace.destroy"]({ params: { workspaceID: input["workspaceID"] } }).pipe(Effect.mapError(mapClientError)),
-  )
-
-const adaptGroupWorkspace = (raw: RawClient["server.workspace"]) => ({
-  create: EndpointWorkspaceCreate(raw),
-  destroy: EndpointWorkspaceDestroy(raw),
-})
-
 const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =>
   preserveEffect<VcsGetOutput>()(
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1355,6 +1337,24 @@ const EndpointConfigGet = (raw: RawClient["server.config"]) => (input?: ConfigGe
 
 const adaptGroupConfig = (raw: RawClient["server.config"]) => ({ get: EndpointConfigGet(raw) })
 
+const EndpointWorkspaceCreate = (raw: RawClient["server.workspace"]) => (input: WorkspaceCreateInput) =>
+  preserveEffect<WorkspaceCreateOutput>()(
+    raw["workspace.create"]({ payload: { id: input["id"], provider: input["provider"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointWorkspaceDestroy = (raw: RawClient["server.workspace"]) => (input: WorkspaceDestroyInput) =>
+  preserveEffect<WorkspaceDestroyOutput>()(
+    raw["workspace.destroy"]({ params: { workspaceID: input["workspaceID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupWorkspace = (raw: RawClient["server.workspace"]) => ({
+  create: EndpointWorkspaceCreate(raw),
+  destroy: EndpointWorkspaceDestroy(raw),
+})
+
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroupHealth(raw["server.health"]),
   server: adaptGroupServer(raw["server.server"]),
@@ -1380,12 +1380,12 @@ const adaptClient = (raw: RawClient) => ({
   shell: adaptGroupShell(raw["server.shell"]),
   reference: adaptGroupReference(raw["server.reference"]),
   worktree: adaptGroupWorktree(raw["server.worktree"]),
-  workspace: adaptGroupWorkspace(raw["server.workspace"]),
   vcs: adaptGroupVcs(raw["server.vcs"]),
   debug: adaptGroupDebug(raw["server.debug"]),
   migration: adaptGroupMigration(raw["server.migration"]),
   websearch: adaptGroupWebsearch(raw["server.websearch"]),
   config: adaptGroupConfig(raw["server.config"]),
+  workspace: adaptGroupWorkspace(raw["server.workspace"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

@@ -382,8 +382,6 @@ export type WorktreeDirectory = { directory: string; strategy?: string }
 
 export type WorktreeInfo = { directory: string }
 
-export type WorkspaceDestroyResult = { destroyed: boolean }
-
 export type VcsBranch = { current?: string; default?: string }
 
 export type VcsFileStatus = {
@@ -396,6 +394,8 @@ export type VcsFileStatus = {
 export type WebSearchProvider = { id: string; name: string }
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
+
+export type WorkspaceDestroyResult = { destroyed: boolean }
 
 export type ProviderRequest = {
   settings: ProviderSettings
@@ -5630,17 +5630,6 @@ export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: s
 
 export type WorktreeRefreshOutput = void
 
-export type WorkspaceCreateInput = {
-  readonly id?: { readonly id?: string | undefined; readonly provider: string }["id"]
-  readonly provider: { readonly id?: string | undefined; readonly provider: string }["provider"]
-}
-
-export type WorkspaceCreateOutput = { data: string }["data"]
-
-export type WorkspaceDestroyInput = { readonly workspaceID: { readonly workspaceID: string }["workspaceID"] }
-
-export type WorkspaceDestroyOutput = WorkspaceDestroyResult
-
 export type VcsGetInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -5732,3 +5721,14 @@ export type ConfigGetInput = {
 }
 
 export type ConfigGetOutput = Array<ConfigEntry>
+
+export type WorkspaceCreateInput = {
+  readonly id?: { readonly id?: string | undefined; readonly provider: string }["id"]
+  readonly provider: { readonly id?: string | undefined; readonly provider: string }["provider"]
+}
+
+export type WorkspaceCreateOutput = { data: string }["data"]
+
+export type WorkspaceDestroyInput = { readonly workspaceID: { readonly workspaceID: string }["workspaceID"] }
+
+export type WorkspaceDestroyOutput = WorkspaceDestroyResult

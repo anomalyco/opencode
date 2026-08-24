@@ -45,10 +45,9 @@ export interface Interface {
     workspaceID: ID,
   ) => Effect.Effect<EnvironmentDriver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
   /** Makes the workspace absent; reports whether this call destroyed an existing workspace. */
-  readonly destroy: (workspaceID: ID) => Effect.Effect<
-    Workspace.DestroyResult,
-    WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound
-  >
+  readonly destroy: (
+    workspaceID: ID,
+  ) => Effect.Effect<Workspace.DestroyResult, WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
 }
 
 export interface Options {
@@ -91,12 +90,7 @@ const layer = (options: Options) =>
       const idleThreshold = Duration.toMillis(options.idleThreshold ?? Duration.minutes(20))
 
       const find = (workspaceID: ID) =>
-        db
-          .select()
-          .from(WorkspaceTable)
-          .where(eq(WorkspaceTable.id, workspaceID))
-          .get()
-          .pipe(Effect.orDie)
+        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie)
 
       const load = Effect.fn("Workspace.load")(function* (workspaceID: ID) {
         const row = yield* find(workspaceID)
@@ -224,7 +218,7 @@ const layer = (options: Options) =>
         create: Effect.fn("Workspace.create")(function* (input) {
           const workspaceID = input.id ?? ID.create()
           const existing = yield* db
-            .select()
+            .select({ provider: WorkspaceTable.provider })
             .from(WorkspaceTable)
             .where(eq(WorkspaceTable.id, workspaceID))
             .get()
@@ -239,12 +233,14 @@ const layer = (options: Options) =>
           }
           yield* registry.get(input.provider)
           const now = yield* Clock.currentTimeMillis
-          yield* db
+          const inserted = yield* db
             .insert(WorkspaceTable)
             .values({ id: workspaceID, provider: input.provider, binding: null, created_at: now, last_used_at: now })
             .onConflictDoNothing()
-            .run()
+            .returning({ id: WorkspaceTable.id })
+            .get()
             .pipe(Effect.orDie)
+          if (inserted) return workspaceID
           const row = yield* load(workspaceID).pipe(Effect.orDie)
           if (row.provider !== input.provider)
             return yield* new CreateConflict({
