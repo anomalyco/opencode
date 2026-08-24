@@ -3,7 +3,6 @@ import path from "node:path"
 import { expect } from "bun:test"
 import { Config } from "@opencode-ai/core/config"
 import { Generate } from "@opencode-ai/core/generate"
-import { Location } from "@opencode-ai/core/location"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Effect, Layer, Predicate } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
@@ -16,13 +15,11 @@ const generate = makeLocationNode({
     Generate.Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
-      const location = yield* Location.Service
       return Generate.Service.of({
         text: () =>
           config.entries().pipe(
             Effect.map((entries) =>
               JSON.stringify({
-                directory: location.directory,
                 model: Config.latest(entries, "model"),
               }),
             ),
@@ -30,10 +27,10 @@ const generate = makeLocationNode({
       })
     }),
   ),
-  deps: [Config.node, Location.node],
+  deps: [Config.node],
 })
 
-it.live("uses base configuration without a location and location configuration when explicit", () =>
+it.live("uses base configuration without depending on process.cwd()", () =>
   Effect.acquireUseRelease(
     Effect.promise(() => tmpdir("opencode-generate-endpoint-")),
     (tmp) =>
@@ -58,21 +55,14 @@ it.live("uses base configuration without a location and location configuration w
 
         expect(global).not.toBe(process.cwd())
         expect(yield* request(handler, new URL("http://opencode.local/api/generate"))).toEqual({
-          directory: global,
           model: { providerID: "base", model: "default" },
         })
 
-        const url = new URL("http://opencode.local/api/generate")
-        url.searchParams.set("location[directory]", project)
-        expect(yield* request(handler, url)).toEqual({
-          directory: project,
-          model: { providerID: "project", model: "default" },
+        const legacy = new URL("http://opencode.local/api/generate")
+        legacy.searchParams.set("location[directory]", project)
+        expect(yield* request(handler, legacy)).toEqual({
+          model: { providerID: "base", model: "default" },
         })
-
-        const location = yield* Effect.promise(() =>
-          handler(new Request("http://opencode.local/api/location")).then((response) => response.json()),
-        )
-        expect(Predicate.isObject(location) && location.directory).toBe(process.cwd())
       }),
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   ),

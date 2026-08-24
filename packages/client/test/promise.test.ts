@@ -82,6 +82,21 @@ test("config.get returns ordered config entries for a location", async () => {
   expect(request?.url).toBe("http://localhost:3000/api/config?location%5Bdirectory%5D=%2Ftmp%2Fproject")
 })
 
+test("generate.text uses the locationless public contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = input instanceof Request ? input : new Request(input, init)
+      return Response.json({ data: { text: "pong" } })
+    },
+  })
+
+  expect(await client.generate.text({ prompt: "ping" })).toEqual({ text: "pong" })
+  expect(request?.url).toBe("http://localhost:3000/api/generate")
+  expect(await request?.json()).toEqual({ prompt: "ping" })
+})
+
 test("websearch.query uses the public HTTP contract", async () => {
   let request: Request | undefined
   const client = OpenCode.make({

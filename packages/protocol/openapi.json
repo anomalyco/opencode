@@ -4448,48 +4448,7 @@
       "post": {
         "tags": ["generate"],
         "operationId": "v2.generate.text",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "200": {
@@ -4540,7 +4499,7 @@
             }
           }
         },
-        "description": "Run one stateless model generation and return the assistant text. An explicit location uses that location's configuration; when location is omitted, generation uses the server's base configuration directory. Uses the selected configuration's default model when none is specified.",
+        "description": "Run one stateless model generation using the server's base configuration and return the assistant text. Uses the base configuration's default model when none is specified.",
         "summary": "Generate text",
         "requestBody": {
           "content": {

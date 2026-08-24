@@ -719,10 +719,7 @@ const adaptGroupModel = (raw: RawClient["server.model"]) => ({
 
 const EndpointGenerateText = (raw: RawClient["server.generate"]) => (input: GenerateTextInput) =>
   preserveEffect<GenerateTextOutput>()(
-    raw["generate.text"]({
-      query: { location: input["location"] },
-      payload: { prompt: input["prompt"], model: input["model"] },
-    }).pipe(
+    raw["generate.text"]({ payload: { prompt: input["prompt"], model: input["model"] } }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
     ),

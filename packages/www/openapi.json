@@ -1915,36 +1915,15 @@
         ],
         "security": [],
         "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Session.Inbox.User"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
+          "204": {
+            "description": "<No Content>"
           },
           "400": {
             "description": "InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
                 }
               }
             }
@@ -1979,28 +1958,18 @@
               }
             }
           },
-          "409": {
-            "description": "ConflictError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
-                }
-              }
-            }
-          },
           "500": {
-            "description": "CommandEvaluationError",
+            "description": "CommandExecutionError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CommandEvaluationErrorEncoded"
+                  "$ref": "#/components/schemas/CommandExecutionErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Resolve a slash command into prompt input, admit it durably, and schedule execution unless resume is false.",
+        "description": "Execute a slash command callback immediately.",
         "summary": "Run command",
         "requestBody": {
           "content": {
@@ -2008,49 +1977,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "id": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "pattern": "^msg_"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
                   "command": {
                     "type": "string"
                   },
-                  "arguments": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "agent": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "model": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/components/schemas/Model.Ref"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                  "text": {
+                    "type": "string"
                   },
                   "files": {
                     "type": "array",
@@ -2079,19 +2010,9 @@
                         "type": "null"
                       }
                     ]
-                  },
-                  "resume": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 },
-                "required": ["command"],
+                "required": ["command", "text"],
                 "additionalProperties": false
               }
             }
@@ -4520,48 +4441,7 @@
       "post": {
         "tags": ["generate"],
         "operationId": "v2.generate.text",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "200": {
@@ -4612,7 +4492,7 @@
             }
           }
         },
-        "description": "Run one stateless model generation at the requested location and return the assistant text. Uses the location's default model when none is specified.",
+        "description": "Run one stateless model generation using the server's base configuration and return the assistant text. Uses the base configuration's default model when none is specified.",
         "summary": "Generate text",
         "requestBody": {
           "content": {
@@ -11658,31 +11538,19 @@
           "name": {
             "type": "string"
           },
-          "template": {
-            "type": "string"
-          },
           "description": {
             "type": "string"
-          },
-          "agent": {
-            "type": "string"
-          },
-          "model": {
-            "$ref": "#/components/schemas/Model.Ref"
-          },
-          "subtask": {
-            "type": "boolean"
           }
         },
-        "required": ["name", "template"],
+        "required": ["name"],
         "additionalProperties": false
       },
-      "CommandEvaluationErrorEncoded": {
+      "CommandExecutionErrorEncoded": {
         "type": "object",
         "properties": {
           "_tag": {
             "type": "string",
-            "enum": ["CommandEvaluationError"]
+            "enum": ["CommandExecutionError"]
           },
           "command": {
             "type": "string"
