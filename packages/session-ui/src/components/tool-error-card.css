@@ -36,8 +36,7 @@
     color: var(--v2-text-text-muted);
   }
 
-  [data-slot="tool-error-card-summary"],
-  [data-slot="tool-error-card-message"] {
+  [data-slot="tool-error-card-summary"] {
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
     font-weight: 440;
@@ -52,11 +51,6 @@
   [data-slot="tool-error-card-summary"] {
     flex-shrink: 1;
     min-width: 0;
-  }
-
-  [data-slot="tool-error-card-message"] {
-    /* Text column indent: 16px icon + 8px gap. */
-    padding-inline-start: 24px;
   }
 
   [data-slot="basic-tool-tool-info-main"] {
@@ -83,8 +77,7 @@
   }
 
   > [data-component="collapsible"].tool-collapsible {
-    /* Figma's 4px gap minus the 1.5px the compact line box adds above the summary em. */
-    gap: 2.5px;
+    gap: 0px;
 
     > [data-slot="collapsible-trigger"] {
       height: 24px;
@@ -100,11 +93,6 @@
         display: none;
       }
     }
-  }
-
-  > [data-component="collapsible"].tool-collapsible[data-open="true"] {
-    /* The compact line box alone yields Figma's spacing under the header. */
-    gap: 0px;
   }
 
   [data-component="tool-error-card-icon"] [data-slot="icon-svg"] {

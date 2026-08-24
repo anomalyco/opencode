@@ -122,12 +122,10 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                         </a>
                       </Show>
                     </Show>
-                    <Show when={open()}>
-                      <span data-slot="tool-error-card-dot" aria-hidden="true">
-                        ·
-                      </span>
-                      <span data-slot="tool-error-card-summary">{summary()}</span>
-                    </Show>
+                    <span data-slot="tool-error-card-dot" aria-hidden="true">
+                      ·
+                    </span>
+                    <span data-slot="tool-error-card-summary">{summary()}</span>
                   </div>
                 </div>
               </div>
@@ -135,9 +133,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
             <Collapsible.Arrow />
           </div>
         </Collapsible.Trigger>
-        <Show when={!open()}>
-          <div data-slot="tool-error-card-message">{summary()}</div>
-        </Show>
         <Show when={detail()}>
           <Collapsible.Content>
             <div data-slot="tool-error-card-content">
