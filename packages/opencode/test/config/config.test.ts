@@ -1490,9 +1490,10 @@ it.instance("loads MCP servers from .agents/mcp.json", () =>
     )
 
     const config = yield* Config.use.get()
-    expect(config.mcp?.jira?.type).toBe("remote")
-    expect(config.mcp?.jira?.url).toBe("https://jira.example.com/mcp")
-    expect(config.mcp?.jira?.enabled).toBe(true)
+    const jira = config.mcp?.jira
+    expect(jira && "url" in jira ? jira.url : undefined).toBe("https://jira.example.com/mcp")
+    expect(jira && "type" in jira ? jira.type : undefined).toBe("remote")
+    expect(jira?.enabled).toBe(true)
   }),
 )
 
@@ -1527,8 +1528,9 @@ it.instance(".agents config overrides root project config", () =>
     yield* writeConfigEffect(path.join(test.directory, ".agents"), { slack: { type: "remote", url: "https://slack.example.com/mcp" } }, "mcp.json")
 
     const config = yield* Config.use.get()
+    const slack = config.mcp?.slack
+    expect(slack && "url" in slack ? slack.url : undefined).toBe("https://slack.example.com/mcp")
     expect(config.mcp?.docs?.enabled).toBe(true)
-    expect(config.mcp?.slack?.url).toBe("https://slack.example.com/mcp")
   }),
 )
 
