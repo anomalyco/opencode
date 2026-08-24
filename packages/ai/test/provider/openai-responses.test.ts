@@ -258,14 +258,8 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("passes function strictness and output schemas", () =>
+  it.effect("passes function strictness", () =>
     Effect.gen(function* () {
-      const outputSchema = {
-        type: "object",
-        properties: { content: { type: "string" } },
-        required: ["content"],
-        additionalProperties: false,
-      } as const
       const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           tools: [
@@ -278,7 +272,6 @@ describe("OpenAI Responses route", () => {
                 required: ["path"],
                 additionalProperties: false,
               },
-              modelOutputSchema: outputSchema,
               strict: true,
             }),
           ],
@@ -296,7 +289,6 @@ describe("OpenAI Responses route", () => {
             required: ["path"],
             additionalProperties: false,
           },
-          output_schema: outputSchema,
           strict: true,
         },
       ])

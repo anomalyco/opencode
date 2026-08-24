@@ -241,8 +241,6 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
   description: Schema.String,
   inputSchema: JsonSchema,
   outputSchema: Schema.optional(JsonSchema),
-  // Schema for the JSON value encoded in model-visible string outputs.
-  modelOutputSchema: Schema.optional(JsonSchema),
   strict: Schema.optional(Schema.Boolean),
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),

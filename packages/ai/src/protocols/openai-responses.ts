@@ -7,7 +7,7 @@ import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { LLMRequest, type JsonSchema, type ToolDefinition } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
-import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
+import { optionalArray, ProviderShared } from "./shared.js"
 import { OpenAIImage } from "./utils/openai-image.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
@@ -32,16 +32,7 @@ const OpenAIResponsesImageGenerationTool = Schema.Struct({
   size: Schema.optional(OpenAIImage.Size),
 })
 
-const OpenAIResponsesFunctionTool = Schema.Struct({
-  type: Schema.tag("function"),
-  name: Schema.String,
-  description: Schema.String,
-  parameters: JsonObject,
-  strict: Schema.Boolean,
-  output_schema: Schema.optional(JsonObject),
-})
-
-const OpenAIResponsesTools = Schema.Union([OpenAIResponsesFunctionTool, OpenAIResponsesImageGenerationTool])
+const OpenAIResponsesTools = Schema.Union([OpenResponses.Tool, OpenAIResponsesImageGenerationTool])
 
 const OpenAIResponsesToolChoice = Schema.Union([
   OpenResponses.ToolChoice,
@@ -100,10 +91,7 @@ const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDe
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
     return yield* ProviderShared.invalidRequest("OpenAI Responses image generation tool options are invalid")
   }
-  return {
-    ...(yield* OpenResponses.lowerTool(NAME, tool, inputSchema)),
-    ...(tool.modelOutputSchema === undefined ? {} : { output_schema: tool.modelOutputSchema }),
-  }
+  return yield* OpenResponses.lowerTool(NAME, tool, inputSchema)
 })
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolDefinition>) =>

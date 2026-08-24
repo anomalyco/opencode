@@ -373,7 +373,6 @@ describe("LLMClient tools", () => {
           description: "Dynamic tool.",
           jsonSchema: { type: "object" },
           outputSchema: schema,
-          modelOutputSchema: schema,
           strict: true,
         }),
       })
@@ -386,7 +385,6 @@ describe("LLMClient tools", () => {
       })
       expect(Reflect.get(Reflect.get(typed?.outputSchema ?? {}, "properties") as object, "temperature")).toBeDefined()
       expect(dynamic?.outputSchema).toEqual(schema)
-      expect(dynamic?.modelOutputSchema).toEqual(schema)
       expect(dynamic?.strict).toBe(true)
     }),
   )
