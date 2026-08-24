@@ -1015,6 +1015,8 @@ const layer = Layer.effect(
                 (error) => error instanceof Image.ResizerUnavailableError,
                 () => Effect.succeed(part),
               ),
+              // Ordering is load-bearing: the catch above passes resizer failures through
+              // unchanged; any other normalize failure degrades to a synthetic text part.
               Effect.matchEffect({
                 onFailure: (error) =>
                   Effect.succeed({

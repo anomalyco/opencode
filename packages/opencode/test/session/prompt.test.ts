@@ -2153,6 +2153,11 @@ noLLMServer.instance(
       expect(notice).toBeDefined()
       expect(notice?.type === "text" && notice.text.includes("screenshot.avif")).toBe(true)
 
+      // original text survives and stays before the degradation notice
+      const texts = msg.parts.map((part) => (part.type === "text" ? part.text : ""))
+      expect(texts).toContain("please review this image")
+      expect(texts.indexOf("please review this image")).toBeLessThan(texts.indexOf(notice?.type === "text" ? notice.text : ""))
+
       yield* sessions.remove(session.id)
     }),
   { config: cfg },
@@ -2194,6 +2199,11 @@ tinyImageServer.instance(
       expect(notice).toBeDefined()
       expect(notice?.type === "text" && notice.text.includes("screenshot.png")).toBe(true)
 
+      // original text survives and stays before the degradation notice
+      const texts = msg.parts.map((part) => (part.type === "text" ? part.text : ""))
+      expect(texts).toContain("please review this image")
+      expect(texts.indexOf("please review this image")).toBeLessThan(texts.indexOf(notice?.type === "text" ? notice.text : ""))
+
       yield* sessions.remove(session.id)
     }),
   { config: cfg },
@@ -2229,6 +2239,55 @@ noLLMServer.instance(
       )
       expect(notice).toBeDefined()
       expect(notice?.type === "text" && notice.text.includes("screenshot.png")).toBe(true)
+
+      // original text survives and stays before the degradation notice
+      const texts = msg.parts.map((part) => (part.type === "text" ? part.text : ""))
+      expect(texts).toContain("please review this image")
+      expect(texts.indexOf("please review this image")).toBeLessThan(texts.indexOf(notice?.type === "text" ? notice.text : ""))
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "keeps a valid image as a file part when a sibling image degrades",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      // Valid 1x1 PNG (decodes fine under the default limit) alongside an undecodable AVIF.
+      const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        "base64",
+      ).toString("base64")
+      const avif = Buffer.from(
+        "AAAAABZmdHlwYXZpZm0wMDEAAAAAAG1pZjEA",
+        "base64",
+      ).toString("base64")
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "please review these images" },
+          { type: "file", mime: "image/png", url: `data:image/png;base64,${png}`, filename: "ok.png" },
+          { type: "file", mime: "image/avif", url: `data:image/avif;base64,${avif}`, filename: "bad.avif" },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const notice = msg.parts.find(
+        (part) =>
+          part.type === "text" && part.synthetic && part.text.includes("could not be processed"),
+      )
+      expect(notice).toBeDefined()
+      const validFile = msg.parts.find((part) => part.type === "file" && part.filename === "ok.png")
+      expect(validFile).toBeDefined()
+      const texts = msg.parts.map((part) => (part.type === "text" ? part.text : ""))
+      expect(texts.indexOf("please review these images")).toBeLessThan(texts.indexOf(notice?.type === "text" ? notice.text : ""))
 
       yield* sessions.remove(session.id)
     }),
