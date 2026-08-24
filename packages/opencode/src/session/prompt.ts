@@ -1109,23 +1109,22 @@ const layer = Layer.effect(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
 
-          // Some providers emit an empty response with a clean "stop" reason under
-          // load. Treat it as unfinished so the loop retries instead of ending the
-          // turn silently; bail after two consecutive empties to avoid spinning.
-          const hasVisibleOutput =
-            lastAssistantMsg?.parts.some((part) => {
-              if (part.type === "text") return part.text.trim().length > 0
-              if (part.type === "reasoning") return part.text.trim().length > 0
-              return false
-            }) ?? false
-          const emptyStop =
+          // Some providers emit an invalid completion with a clean "stop" reason
+          // under load: fully empty, or reasoning-only with no user-facing text
+          // and no tool calls. Treat them as unfinished so the loop retries,
+          // nudging the model; bail after three consecutive failures to avoid spinning.
+          const hasTextOutput =
+            lastAssistantMsg?.parts.some((part) => part.type === "text" && part.text.trim().length > 0) ?? false
+          const hasReasoningOutput =
+            lastAssistantMsg?.parts.some((part) => part.type === "reasoning" && part.text.trim().length > 0) ?? false
+          const invalidStop =
             lastAssistant?.finish === "stop" &&
             !lastAssistant.time.completed &&
             !hasToolCalls &&
-            !hasVisibleOutput
-          if (emptyStop) {
+            !hasTextOutput
+          if (invalidStop) {
             emptyStops += 1
-            yield* Effect.logWarning("empty stop; continuing loop", {
+            yield* Effect.logWarning(invalidStop && hasReasoningOutput ? "thinking-only stop; continuing loop" : "empty stop; continuing loop", {
               "session.id": sessionID,
               messageID: lastAssistant.id,
               consecutive: emptyStops,
@@ -1134,8 +1133,8 @@ const layer = Layer.effect(
             emptyStops = 0
           }
 
-          if (emptyStop && emptyStops >= 2) {
-            yield* Effect.logWarning("exiting loop after consecutive empty stops", {
+          if (invalidStop && emptyStops >= 3) {
+            yield* Effect.logWarning("exiting loop after consecutive invalid stops", {
               "session.id": sessionID,
               messageID: lastAssistant.id,
             })
@@ -1146,7 +1145,7 @@ const layer = Layer.effect(
             lastAssistant?.finish &&
             !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            !emptyStop &&
+            !invalidStop &&
             lastAssistant.parentID === lastUser.id
           ) {
             const orphan = lastAssistantMsg?.parts.find(
@@ -1302,6 +1301,15 @@ const layer = Layer.effect(
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
             ]
+            // Nudge the model on retry so it produces a real answer instead of
+            // another empty stop.
+            if (invalidStop) {
+              system.push(
+                hasReasoningOutput
+                  ? "[System: You previously generated thoughts but failed to provide a final user-facing response. Please ensure you provide your final answer or call a tool now.]"
+                  : "[System: You previously returned an empty response with no text or thoughts. Please ensure you provide your final answer or call a tool now.]",
+              )
+            }
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
