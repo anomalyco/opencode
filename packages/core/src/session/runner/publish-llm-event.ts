@@ -181,7 +181,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         state === undefined ? current.state : { ...current.state, ...state },
       )
       chunks.delete(id)
-      return undefined
+      return current.ordinal
     })
     const flush = Effect.fnUntraced(function* () {
       for (const id of Array.from(chunks.keys())) yield* end(id)
@@ -235,6 +235,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       }),
     true,
   )
+  const completedReasoning = new Map<string, number>()
   const toolInput = fragments("tool input", (id, value) =>
     Effect.gen(function* () {
       const tool = tools.get(id)
@@ -413,8 +414,21 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* reasoning.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "reasoning-end":
-        yield* reasoning.end(event.id, providerState(event.providerMetadata))
+        completedReasoning.set(event.id, yield* reasoning.end(event.id, providerState(event.providerMetadata)))
         return
+      case "reasoning-metadata": {
+        const ordinal = completedReasoning.get(event.id)
+        if (ordinal === undefined) return yield* Effect.die(new Error(`Reasoning metadata before end: ${event.id}`))
+        const state = providerState(event.providerMetadata)
+        if (state === undefined) return
+        yield* bus.publish(SessionEvent.Reasoning.StateUpdated, {
+          sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
+          ordinal,
+          state,
+        })
+        return
+      }
       case "tool-input-start":
         outputStarted = true
         yield* startToolInput(event)

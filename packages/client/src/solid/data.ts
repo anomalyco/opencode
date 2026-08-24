@@ -904,6 +904,14 @@ export function createData(config: CreateDataInput) {
           }
         })
         return
+      case "session.reasoning.state.updated":
+        message.update(event.data.sessionID, (draft, index) => {
+          const match = message
+            .assistant(draft, index, event.data.assistantMessageID)
+            ?.content.filter((item) => item.type === "reasoning")[event.data.ordinal]
+          if (match?.type === "reasoning") match.state = event.data.state
+        })
+        return
       case "session.retry.scheduled":
         message.update(event.data.sessionID, (draft, index) => {
           const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)

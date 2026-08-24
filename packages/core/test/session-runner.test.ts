@@ -2905,6 +2905,13 @@ describe("SessionRunnerLLM", () => {
           LLMEvent.reasoningEnd({
             id: "reasoning-openai",
             providerMetadata: {
+              openai: { itemId: "rs_1", reasoningEncryptedContent: null },
+              anthropic: { ignored: true },
+            },
+          }),
+          LLMEvent.reasoningMetadata({
+            id: "reasoning-openai",
+            providerMetadata: {
               openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
               anthropic: { ignored: true },
             },

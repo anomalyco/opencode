@@ -82,16 +82,25 @@ const indexStep = (event: LLMEvent, index: number): LLMEvent => {
 
 const stepState = (events: ReadonlyArray<LLMEvent>) => {
   const assistantContent: ContentPart[] = []
+  const reasoningIndexes = new Map<string, number>()
   const toolCalls: ToolCallPart[] = []
   let reason: Extract<LLMEvent, { type: "finish" }>["reason"] = { normalized: "unknown" }
   let usage: Usage | undefined
   let providerMetadata: ProviderMetadata | undefined
 
   for (const event of events) {
-    if (event.type === "text-delta" || event.type === "reasoning-delta") {
-      appendText(assistantContent, event.type === "text-delta" ? "text" : "reasoning", event.text)
-    } else if (event.type === "text-end" || event.type === "reasoning-end") {
-      appendText(assistantContent, event.type === "text-end" ? "text" : "reasoning", "", event.providerMetadata)
+    if (event.type === "text-delta") {
+      appendText(assistantContent, "text", event.text)
+    } else if (event.type === "reasoning-delta") {
+      appendReasoning(assistantContent, reasoningIndexes, event.id, event.text, event.providerMetadata)
+    } else if (event.type === "text-end") {
+      appendText(assistantContent, "text", "", event.providerMetadata)
+    } else if (event.type === "reasoning-end") {
+      appendReasoning(assistantContent, reasoningIndexes, event.id, "", event.providerMetadata)
+    } else if (event.type === "reasoning-metadata") {
+      const index = reasoningIndexes.get(event.id)
+      const reasoning = index === undefined ? undefined : assistantContent[index]
+      if (reasoning?.type === "reasoning") reasoning.providerMetadata = event.providerMetadata
     } else if (event.type === "tool-call") {
       assistantContent.push(event)
       if (!event.providerExecuted) toolCalls.push(event)
@@ -112,6 +121,28 @@ const stepState = (events: ReadonlyArray<LLMEvent>) => {
     }
   }
   return { assistantContent, toolCalls, reason, usage, providerMetadata }
+}
+
+const appendReasoning = (
+  content: ContentPart[],
+  indexes: Map<string, number>,
+  id: string,
+  text: string,
+  providerMetadata?: ProviderMetadata,
+) => {
+  const index = indexes.get(id)
+  if (index === undefined) {
+    indexes.set(id, content.length)
+    content.push({ type: "reasoning", text, providerMetadata })
+    return
+  }
+  const current = content[index]
+  if (current?.type !== "reasoning") return
+  content[index] = {
+    ...current,
+    text: `${current.text}${text}`,
+    providerMetadata: providerMetadata ?? current.providerMetadata,
+  }
 }
 
 const appendText = (

@@ -373,6 +373,14 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           }
         })
       },
+      "session.reasoning.state.updated": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = draft.content.filter((item): item is DraftReasoning => item.type === "reasoning")[
+            event.data.ordinal
+          ]
+          if (match) match.state = event.data.state
+        })
+      },
       "session.retry.scheduled": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.retry = {

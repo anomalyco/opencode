@@ -1263,6 +1263,16 @@ export type SessionToolCalled = {
   }
 }
 
+export type SessionReasoningStateUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.reasoning.state.updated"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; assistantMessageID: string; ordinal: number; state: SessionMessageProviderState1 }
+}
+
 export type ToolContent1 = ToolTextContent | ToolFileContent1
 
 export type ModelCompatibility = {
@@ -1975,6 +1985,7 @@ export type SessionEventDurable =
   | SessionTextEnded
   | SessionReasoningStarted
   | SessionReasoningEnded
+  | SessionReasoningStateUpdated
   | SessionToolInputStarted
   | SessionToolInputEnded
   | SessionToolCalled
@@ -2069,6 +2080,7 @@ export type V2Event =
   | SessionReasoningStarted
   | SessionReasoningDelta
   | SessionReasoningEnded
+  | SessionReasoningStateUpdated
   | SessionToolInputStarted
   | SessionToolInputDelta
   | SessionToolInputEnded

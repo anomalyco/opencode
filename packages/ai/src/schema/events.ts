@@ -138,6 +138,13 @@ export const ReasoningEnd = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.ReasoningEnd" })
 export type ReasoningEnd = Schema.Schema.Type<typeof ReasoningEnd>
 
+export const ReasoningMetadata = Schema.Struct({
+  type: Schema.tag("reasoning-metadata"),
+  id: ContentBlockID,
+  providerMetadata: ProviderMetadata,
+}).annotate({ identifier: "LLM.Event.ReasoningMetadata" })
+export type ReasoningMetadata = Schema.Schema.Type<typeof ReasoningMetadata>
+
 export const ToolInputStart = Schema.Struct({
   type: Schema.tag("tool-input-start"),
   id: ToolCallID,
@@ -242,6 +249,7 @@ const llmEventTagged = Schema.Union([
   ReasoningStart,
   ReasoningDelta,
   ReasoningEnd,
+  ReasoningMetadata,
   ToolInputStart,
   ToolInputDelta,
   ToolInputEnd,
@@ -278,6 +286,8 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     ReasoningDelta.make({ ...input, id: contentBlockID(input.id) }),
   reasoningEnd: (input: WithID<ReasoningEnd, ContentBlockID>) =>
     ReasoningEnd.make({ ...input, id: contentBlockID(input.id) }),
+  reasoningMetadata: (input: WithID<ReasoningMetadata, ContentBlockID>) =>
+    ReasoningMetadata.make({ ...input, id: contentBlockID(input.id) }),
   toolInputStart: (input: WithID<ToolInputStart, ToolCallID>) =>
     ToolInputStart.make({ ...input, id: toolCallID(input.id) }),
   toolInputDelta: (input: WithID<ToolInputDelta, ToolCallID>) =>
@@ -312,6 +322,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     reasoningStart: llmEventTagged.guards["reasoning-start"],
     reasoningDelta: llmEventTagged.guards["reasoning-delta"],
     reasoningEnd: llmEventTagged.guards["reasoning-end"],
+    reasoningMetadata: llmEventTagged.guards["reasoning-metadata"],
     toolInputStart: llmEventTagged.guards["tool-input-start"],
     toolInputDelta: llmEventTagged.guards["tool-input-delta"],
     toolInputEnd: llmEventTagged.guards["tool-input-end"],
@@ -483,6 +494,18 @@ const reduceReasoningEnd = (state: ResponseState, event: ReasoningEnd): Response
   }
 }
 
+const reduceReasoningMetadata = (state: ResponseState, event: ReasoningMetadata): ResponseState => {
+  const current = state.reasoningParts[event.id]
+  if (!current) return state
+  return {
+    ...replaceContent(state, current.contentIndex, reasoningContent(current.text, event.providerMetadata)),
+    reasoningParts: {
+      ...state.reasoningParts,
+      [event.id]: { ...current, providerMetadata: event.providerMetadata },
+    },
+  }
+}
+
 const reduceToolInputStart = (state: ResponseState, event: ToolInputStart): ResponseState => ({
   ...state,
   toolInputs: {
@@ -552,6 +575,8 @@ const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseSta
       return reduceReasoningDelta(next, event)
     case "reasoning-end":
       return reduceReasoningEnd(next, event)
+    case "reasoning-metadata":
+      return reduceReasoningMetadata(next, event)
     case "tool-input-start":
       return reduceToolInputStart(next, event)
     case "tool-input-delta":

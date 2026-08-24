@@ -415,6 +415,18 @@ export namespace Reasoning {
     },
   })
   export type Ended = typeof Ended.Type
+
+  export const StateUpdated = Event.durable({
+    type: "session.reasoning.state.updated",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+      ordinal: NonNegativeInt,
+      state: SessionMessage.ProviderState,
+    },
+  })
+  export type StateUpdated = typeof StateUpdated.Type
 }
 
 export namespace Tool {
@@ -624,6 +636,7 @@ export const Definitions = Event.inventory(
   Reasoning.Started,
   Reasoning.Delta,
   Reasoning.Ended,
+  Reasoning.StateUpdated,
   Tool.Input.Started,
   Tool.Input.Delta,
   Tool.Input.Ended,
