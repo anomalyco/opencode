@@ -152,19 +152,21 @@ test("portable schema failures become tool failures", async () => {
     },
   }
 
-  const error = await Effect.runPromiseExit(
-    execute(
-      {
-        name: "invalid",
-        description: "Invalid",
-        input,
-        execute: () => Effect.succeed({ content: "unused" }),
-      },
-      1,
-      {} as Tool.Context,
+  const error = await Effect.runPromise(
+    Effect.flip(
+      execute(
+        {
+          name: "invalid",
+          description: "Invalid",
+          input,
+          execute: () => Effect.succeed({ content: "unused" }),
+        },
+        1,
+        {} as Tool.Context,
+      ),
     ),
   )
-  expect(error.toString()).toContain("Invalid tool input: expected a string")
+  expect(error).toEqual(new Tool.Error({ message: "Invalid tool input: expected a string" }))
 })
 
 test("canonical results carry metadata with typed output", async () => {
@@ -188,7 +190,15 @@ test("canonical results carry metadata with typed output", async () => {
 test("raw JSON schemas validate and decode tool input", async () => {
   const input = {
     type: "object",
-    properties: { value: { type: "string" } },
+    properties: {
+      value: { type: "string" },
+      nested: {
+        type: "object",
+        properties: { count: { type: "integer", minimum: 1 } },
+        required: ["count"],
+        additionalProperties: false,
+      },
+    },
     required: ["value"],
     additionalProperties: false,
   }
@@ -208,8 +218,18 @@ test("raw JSON schemas validate and decode tool input", async () => {
     output: undefined,
     content: [{ type: "text", text: '{"value":"ok"}' }],
   })
-  expect((await Effect.runPromiseExit(execute(tool, { value: 1 }, {} as Tool.Context))).toString()).toContain(
-    "Invalid tool input",
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { value: 1 }, {} as Tool.Context)))).toEqual(
+    new Tool.Error({ message: 'Invalid tool input: Expected string\n  at ["value"]' }),
+  )
+  expect(await Effect.runPromise(Effect.flip(execute(tool, {}, {} as Tool.Context)))).toEqual(
+    new Tool.Error({ message: 'Invalid tool input: Missing key\n  at ["value"]' }),
+  )
+  expect(
+    await Effect.runPromise(Effect.flip(execute(tool, { value: "ok", nested: { count: 0 } }, {} as Tool.Context))),
+  ).toEqual(
+    new Tool.Error({
+      message: 'Invalid tool input: Expected a value greater than or equal to 1\n  at ["nested"]["count"]',
+    }),
   )
 })
 
@@ -229,8 +249,8 @@ test("raw JSON schemas resolve draft-07 definitions", async () => {
   expect(await Effect.runPromise(execute(tool, { value: "ok" }, {} as Tool.Context))).toMatchObject({
     content: [{ type: "text", text: '{"value":"ok"}' }],
   })
-  expect((await Effect.runPromiseExit(execute(tool, { value: 1 }, {} as Tool.Context))).toString()).toContain(
-    "Invalid tool input",
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { value: 1 }, {} as Tool.Context)))).toEqual(
+    new Tool.Error({ message: 'Invalid tool input: Expected value\n  at ["value"]' }),
   )
 })
 
