@@ -727,14 +727,22 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
 // Streaming parsers are small state machines: every event returns a new state
 // plus the common `LLMEvent`s produced by that event. Tool calls are accumulated
 // because OpenAI streams JSON arguments across multiple deltas.
-const mapFinishReason = (reason: string | null | undefined): FinishReason => {
-  if (reason === "stop" || reason === "end") return "stop"
-  if (reason === "length") return "length"
-  if (reason === "content_filter") return "content-filter"
-  if (reason === "function_call" || reason === "tool_calls") return "tool-calls"
-  if (reason === "error") return "error"
-  return "unknown"
-}
+const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (reason: string) {
+  if (reason === "error" || reason === "network_error")
+    return yield* new AIError({
+      module: ADAPTER,
+      method: "stream",
+      reason: classifyProviderFailure({
+        message: `Provider finish_reason: ${reason}`,
+        code: reason,
+      }),
+    })
+  if (reason === "stop" || reason === "end") return "stop" as const
+  if (reason === "length") return "length" as const
+  if (reason === "content_filter") return "content-filter" as const
+  if (reason === "function_call" || reason === "tool_calls") return "tool-calls" as const
+  return "unknown" as const
+})
 
 // OpenAI Chat reports `prompt_tokens` (inclusive total) with a
 // cached-read and cache-write subsets, and `completion_tokens` (inclusive
@@ -864,18 +872,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const choiceUsage = (choice as unknown as { usage?: OpenAIChatEvent["usage"] })?.usage
     const usage = mapUsage(event.usage) ?? (choiceUsage ? mapUsage(choiceUsage) : undefined) ?? state.usage
     const rawFinishReason = choice?.finish_reason
-    if (rawFinishReason === "error" || rawFinishReason === "network_error")
-      return yield* new AIError({
-        module: ADAPTER,
-        method: "stream",
-        reason: classifyProviderFailure({
-          message: `Provider returned finish reason: ${rawFinishReason}`,
-          code: rawFinishReason,
-        }),
-      })
     const finishReason =
       rawFinishReason
-        ? { normalized: mapFinishReason(rawFinishReason), raw: choice?.native_finish_reason ?? rawFinishReason }
+        ? {
+            normalized: yield* mapFinishReason(rawFinishReason),
+            raw: choice?.native_finish_reason ?? rawFinishReason,
+          }
         : state.finishReason
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []

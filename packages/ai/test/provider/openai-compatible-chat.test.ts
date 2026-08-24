@@ -399,7 +399,16 @@ describe("OpenAI-compatible Chat route", () => {
 
       expect(error.reason).toMatchObject({
         _tag: "ProviderInternal",
-        message: "Provider returned finish reason: network_error",
+        message: "Provider finish_reason: network_error",
+      })
+
+      const generic = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "error")))),
+        Effect.flip,
+      )
+      expect(generic.reason).toMatchObject({
+        _tag: "UnknownProvider",
+        message: "Provider finish_reason: error",
       })
     }),
   )
