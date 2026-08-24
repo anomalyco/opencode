@@ -15,6 +15,7 @@ import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migrat
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
+import normalizeToolPartInputMigration from "@opencode-ai/core/database/migration/20260824140000_normalize_tool_part_input"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -617,6 +618,60 @@ describe("DatabaseMigration", () => {
           { id: "20260511173437_session-metadata" },
           { id: "20260530232709_lovely_romulus" },
         ])
+      }),
+    )
+  })
+
+  test("coerces legacy string tool-part input to an object", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE part (id text PRIMARY KEY, data text NOT NULL)`)
+        yield* db.run(
+          sql`INSERT INTO part (id, data) VALUES ('prt_object', ${JSON.stringify({
+            type: "tool",
+            state: { status: "error", input: { command: "ls" }, error: "x", time: { start: 1, end: 2 } },
+          })})`,
+        )
+        yield* db.run(
+          sql`INSERT INTO part (id, data) VALUES ('prt_string', ${JSON.stringify({
+            type: "tool",
+            state: {
+              status: "error",
+              input: '{"todos":[{"content":"x","status":"pending"}]}',
+              error: "x",
+              time: { start: 1, end: 2 },
+            },
+          })})`,
+        )
+        yield* db.run(
+          sql`INSERT INTO part (id, data) VALUES ('prt_truncated', ${JSON.stringify({
+            type: "tool",
+            state: { status: "error", input: "{truncated", error: "x", time: { start: 1, end: 2 } },
+          })})`,
+        )
+        yield* db.run(
+          sql`INSERT INTO part (id, data) VALUES ('prt_array', ${JSON.stringify({
+            type: "tool",
+            state: { status: "error", input: "[1]", error: "x", time: { start: 1, end: 2 } },
+          })})`,
+        )
+        yield* db.run(
+          sql`INSERT INTO part (id, data) VALUES ('prt_text', ${JSON.stringify({
+            type: "text",
+            text: "hello",
+          })})`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [normalizeToolPartInputMigration])
+
+        const rows = yield* db.all<{ id: string; data: string }>(sql`SELECT id, data FROM part ORDER BY id`)
+        const parsed = Object.fromEntries(rows.map((row) => [row.id, JSON.parse(row.data)]))
+        expect(parsed.prt_object.state.input).toEqual({ command: "ls" })
+        expect(parsed.prt_string.state.input).toEqual({ todos: [{ content: "x", status: "pending" }] })
+        expect(parsed.prt_truncated.state.input).toEqual({})
+        expect(parsed.prt_array.state.input).toEqual({})
+        expect(parsed.prt_text).toEqual({ type: "text", text: "hello" })
       }),
     )
   })

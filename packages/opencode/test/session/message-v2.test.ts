@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { APICallError } from "ai"
+import { Schema } from "effect"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderTransform } from "@/provider/transform"
 import type { Provider } from "@/provider/provider"
@@ -110,6 +111,60 @@ function basePart(messageID: string, id: string) {
     messageID: MessageID.make(messageID.startsWith("msg") ? messageID : `msg_${messageID}`),
   }
 }
+
+describe("session.message-v2.fromPartRow", () => {
+  const row = (input: unknown) =>
+    ({
+      id: PartID.make("prt_legacy"),
+      message_id: MessageID.make("msg_legacy"),
+      session_id: sessionID,
+      time_created: 1,
+      time_updated: 1,
+      data: {
+        type: "tool",
+        callID: "call_legacy",
+        tool: "todowrite",
+        state: {
+          status: "error",
+          input,
+          error: "Expected object",
+          time: { start: 1, end: 2 },
+        },
+      },
+    }) as Parameters<typeof MessageV2.fromPartRow>[0]
+
+  test("parses a JSON-string tool input so HTTP encode succeeds", () => {
+    const part = MessageV2.fromPartRow(row('{"todos":[{"content":"x","status":"pending"}]}'))
+    expect(part.type).toBe("tool")
+    if (part.type !== "tool") return
+    expect(part.state).toMatchObject({ status: "error", input: { todos: [{ content: "x", status: "pending" }] } })
+    const encoded = Schema.encodeUnknownSync(SessionV1.Part)(part)
+    expect(encoded.type).toBe("tool")
+    if (encoded.type !== "tool") return
+    expect(encoded.state).toMatchObject({ input: { todos: [{ content: "x", status: "pending" }] } })
+  })
+
+  test("falls back to an empty object when the string is not a JSON object", () => {
+    const truncated = MessageV2.fromPartRow(row("{truncated"))
+    const array = MessageV2.fromPartRow(row("[1]"))
+    expect(truncated.type).toBe("tool")
+    expect(array.type).toBe("tool")
+    if (truncated.type !== "tool" || array.type !== "tool") return
+    expect(truncated.state).toMatchObject({ input: {} })
+    expect(array.state).toMatchObject({ input: {} })
+    const encoded = Schema.encodeUnknownSync(SessionV1.Part)(truncated)
+    expect(encoded.type).toBe("tool")
+    if (encoded.type !== "tool") return
+    expect(encoded.state).toMatchObject({ input: {} })
+  })
+
+  test("leaves an already-object tool input unchanged", () => {
+    const part = MessageV2.fromPartRow(row({ command: "ls" }))
+    expect(part.type).toBe("tool")
+    if (part.type !== "tool") return
+    expect(part.state).toMatchObject({ input: { command: "ls" } })
+  })
+})
 
 describe("session.message-v2.toModelMessage", () => {
   test("filters out messages with no parts", async () => {
