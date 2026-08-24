@@ -258,43 +258,6 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("passes function strictness", () =>
-    Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          tools: [
-            ToolDefinition.make({
-              name: "read",
-              description: "Read a path.",
-              inputSchema: {
-                type: "object",
-                properties: { path: { type: "string" } },
-                required: ["path"],
-                additionalProperties: false,
-              },
-              strict: true,
-            }),
-          ],
-        }),
-      )
-
-      expect(prepared.body.tools).toEqual([
-        {
-          type: "function",
-          name: "read",
-          description: "Read a path.",
-          parameters: {
-            type: "object",
-            properties: { path: { type: "string" } },
-            required: ["path"],
-            additionalProperties: false,
-          },
-          strict: true,
-        },
-      ])
-    }),
-  )
-
   it.effect("maps the canonical parallel tool setting with provider-option precedence", () =>
     Effect.gen(function* () {
       const disabled = yield* compileRequest(

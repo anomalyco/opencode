@@ -374,7 +374,8 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (
     name: tool.name,
     description: tool.description,
     parameters: inputSchema,
-    strict: tool.strict ?? false,
+    // The common tool definition does not currently express Responses strict-schema policy.
+    strict: false,
   }
 })
 

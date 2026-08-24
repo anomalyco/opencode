@@ -364,17 +364,12 @@ describe("LLMClient tools", () => {
     }),
   )
 
-  it.effect("derives typed output schemas and preserves dynamic tool policies", () =>
+  it.effect("derives typed output schemas and preserves dynamic output schemas", () =>
     Effect.sync(() => {
       const [typed] = toDefinitions({ get_weather })
       const schema = { type: "object", properties: { result: { type: "string" } } } as const
       const [dynamic] = toDefinitions({
-        dynamic: Tool.make({
-          description: "Dynamic tool.",
-          jsonSchema: { type: "object" },
-          outputSchema: schema,
-          strict: true,
-        }),
+        dynamic: Tool.make({ description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
       })
 
       expect(typed?.outputSchema).toMatchObject({
@@ -385,7 +380,6 @@ describe("LLMClient tools", () => {
       })
       expect(Reflect.get(Reflect.get(typed?.outputSchema ?? {}, "properties") as object, "temperature")).toBeDefined()
       expect(dynamic?.outputSchema).toEqual(schema)
-      expect(dynamic?.strict).toBe(true)
     }),
   )
 

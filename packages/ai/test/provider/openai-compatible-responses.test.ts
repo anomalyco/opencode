@@ -132,7 +132,7 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
-  it.effect("lowers canonical function strictness and parallel tool control", () =>
+  it.effect("lowers canonical parallel tool control", () =>
     Effect.gen(function* () {
       const model = configure({
         apiKey: "test-key",
@@ -147,7 +147,6 @@ describe("Open Responses-compatible route", () => {
               name: "read",
               description: "Read a file.",
               inputSchema: { type: "object" },
-              strict: true,
             }),
           ],
           toolChoice: { type: "auto", disableParallelToolUse: true },
@@ -161,7 +160,7 @@ describe("Open Responses-compatible route", () => {
           name: "read",
           description: "Read a file.",
           parameters: { type: "object" },
-          strict: true,
+          strict: false,
         },
       ])
     }),
