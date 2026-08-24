@@ -315,9 +315,7 @@ const EndpointSessionStats = (raw: RawClient["server.session"]) => (input?: Sess
         to: input?.["to"],
         project: input?.["project"],
         timezone: input?.["timezone"],
-        models: input?.["models"],
         tools: input?.["tools"],
-        toolSummary: input?.["toolSummary"],
       },
     }).pipe(
       Effect.mapError(mapClientError),

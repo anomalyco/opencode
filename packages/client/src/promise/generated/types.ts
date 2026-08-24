@@ -37,7 +37,7 @@ export type FileDiffInfo = {
   status: "added" | "deleted" | "modified"
 }
 
-export type SessionStatsActivity = { date: string; steps: number }
+export type SessionStatsToolTotals = { calls: number; succeeded: number; failed: number; unfinished: number }
 
 export type SessionStatsToolUsage = {
   name: string
@@ -47,6 +47,8 @@ export type SessionStatsToolUsage = {
   unfinished: number
   durationP50?: number
 }
+
+export type SessionStatsActivity = { date: string; steps: number }
 
 export type SessionMessageAgentSelected = {
   id: string
@@ -432,6 +434,11 @@ export type V2EventServerConnected = {
 }
 
 export type SessionRevert = { messageID: string; partID?: string; snapshot?: string; files?: Array<FileDiffInfo> }
+
+export type SessionStatsTools =
+  | { mode: "none" }
+  | { mode: "summary"; totals: SessionStatsToolTotals }
+  | { mode: "detail"; totals: SessionStatsToolTotals; usage: Array<SessionStatsToolUsage> }
 
 export type SessionStatsModelUsage = { model: ModelRef; steps: number; tokens: TokenUsageInfo; cost: MoneyUSD }
 
@@ -1559,12 +1566,11 @@ export type SessionStatsInfo = {
   steps: number
   tokens: TokenUsageInfo
   cost: MoneyUSD
-  tools: { calls: number; succeeded: number; failed: number; unfinished: number }
+  tools: SessionStatsTools
   activeDays: number
   streak: number
   activity: Array<SessionStatsActivity>
   models: Array<SessionStatsModelUsage>
-  toolUsage: Array<SessionStatsToolUsage>
 }
 
 export type SessionMessageUser = {
@@ -2481,64 +2487,36 @@ export type SessionStatsInput = {
     readonly to?: number | undefined
     readonly project?: string | undefined
     readonly timezone?: string | undefined
-    readonly models?: boolean | undefined
-    readonly tools?: boolean | undefined
-    readonly toolSummary?: boolean | undefined
+    readonly tools?: "none" | "summary" | "detail" | undefined
   }["from"]
   readonly to?: {
     readonly from?: number | undefined
     readonly to?: number | undefined
     readonly project?: string | undefined
     readonly timezone?: string | undefined
-    readonly models?: boolean | undefined
-    readonly tools?: boolean | undefined
-    readonly toolSummary?: boolean | undefined
+    readonly tools?: "none" | "summary" | "detail" | undefined
   }["to"]
   readonly project?: {
     readonly from?: number | undefined
     readonly to?: number | undefined
     readonly project?: string | undefined
     readonly timezone?: string | undefined
-    readonly models?: boolean | undefined
-    readonly tools?: boolean | undefined
-    readonly toolSummary?: boolean | undefined
+    readonly tools?: "none" | "summary" | "detail" | undefined
   }["project"]
   readonly timezone?: {
     readonly from?: number | undefined
     readonly to?: number | undefined
     readonly project?: string | undefined
     readonly timezone?: string | undefined
-    readonly models?: boolean | undefined
-    readonly tools?: boolean | undefined
-    readonly toolSummary?: boolean | undefined
+    readonly tools?: "none" | "summary" | "detail" | undefined
   }["timezone"]
-  readonly models?: {
-    readonly from?: number | undefined
-    readonly to?: number | undefined
-    readonly project?: string | undefined
-    readonly timezone?: string | undefined
-    readonly models?: boolean | undefined
-    readonly tools?: boolean | undefined
-    readonly toolSummary?: boolean | undefined
-  }["models"]
   readonly tools?: {
     readonly from?: number | undefined
     readonly to?: number | undefined
     readonly project?: string | undefined
     readonly timezone?: string | undefined
-    readonly models?: boolean | undefined
-    readonly tools?: boolean | undefined
-    readonly toolSummary?: boolean | undefined
+    readonly tools?: "none" | "summary" | "detail" | undefined
   }["tools"]
-  readonly toolSummary?: {
-    readonly from?: number | undefined
-    readonly to?: number | undefined
-    readonly project?: string | undefined
-    readonly timezone?: string | undefined
-    readonly models?: boolean | undefined
-    readonly tools?: boolean | undefined
-    readonly toolSummary?: boolean | undefined
-  }["toolSummary"]
 }
 
 export type SessionStatsOutput = { data: SessionStatsInfo }["data"]

@@ -36,9 +36,7 @@ const handler = Effect.fn("cli.stats")(function* (input: Runtime.Input<typeof Co
         to: range.to,
         project: projectID,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-        models: input.json || input.models || input.full,
-        tools: input.json || input.tools || input.full,
-        toolSummary: input.json || input.tools || input.full || !details,
+        tools: input.json || input.tools || input.full ? "detail" : details ? "none" : "summary",
       },
       { signal },
     ),
@@ -91,8 +89,9 @@ const colors = terminalPalette()
 
 export function renderStats(stats: SessionStatsInfo, options: RenderOptions) {
   const totalTokens = tokenTotal(stats.tokens)
-  const terminalTools = stats.tools.succeeded + stats.tools.failed
-  const toolRate = terminalTools === 0 ? undefined : (stats.tools.succeeded / terminalTools) * 100
+  const toolTotals = stats.tools.mode === "none" ? undefined : stats.tools.totals
+  const terminalTools = toolTotals ? toolTotals.succeeded + toolTotals.failed : 0
+  const toolRate = !toolTotals || terminalTools === 0 ? undefined : (toolTotals.succeeded / terminalTools) * 100
   const primary = `1;${colors.primary}`
   const sessionLine = [
     metricCount(stats.sessions, "session", options.color),
@@ -100,8 +99,11 @@ export function renderStats(stats: SessionStatsInfo, options: RenderOptions) {
   ]
     .filter((value) => value !== undefined)
     .join(" · ")
-  const toolSummary =
-    toolRate === undefined ? "no tool calls" : `${style(formatPercent(toolRate), primary, options.color)} tool success`
+  const toolSummary = !toolTotals
+    ? "tool stats unavailable"
+    : toolRate === undefined
+      ? "no tool calls"
+      : `${style(formatPercent(toolRate), primary, options.color)} tool success`
   const details = options.models || options.tools || options.cost
   const empty = stats.sessions === 0 && stats.prompts === 0 && stats.steps === 0
   const heading = `${style("opencode stats", primary, options.color)} ${style(`· ${options.label} · ${options.scope}`, "2", options.color)}`
@@ -253,9 +255,10 @@ function renderModels(stats: SessionStatsInfo, limit: number, width: number) {
 }
 
 function renderTools(stats: SessionStatsInfo, limit: number, width: number) {
-  if (stats.toolUsage.length === 0) return ["TOOL RELIABILITY", "  no tool calls"]
-  const tools = stats.toolUsage.slice(0, limit)
-  const more = stats.toolUsage.length - tools.length
+  if (stats.tools.mode !== "detail") return ["TOOL RELIABILITY", "  tool details unavailable"]
+  if (stats.tools.usage.length === 0) return ["TOOL RELIABILITY", "  no tool calls"]
+  const tools = stats.tools.usage.slice(0, limit)
+  const more = stats.tools.usage.length - tools.length
   if (width < 68)
     return [
       "TOOL RELIABILITY",
@@ -267,7 +270,7 @@ function renderTools(stats: SessionStatsInfo, limit: number, width: number) {
         ]
       }),
       "",
-      `${formatNumber(stats.tools.succeeded + stats.tools.failed)} finished calls · ${formatNumber(stats.tools.unfinished)} unfinished`,
+      `${formatNumber(stats.tools.totals.succeeded + stats.tools.totals.failed)} finished calls · ${formatNumber(stats.tools.totals.unfinished)} unfinished`,
       ...(more > 0 ? [`+${more.toLocaleString("en-US")} more tool${more === 1 ? "" : "s"}`] : []),
     ]
   return [
@@ -283,7 +286,7 @@ function renderTools(stats: SessionStatsInfo, limit: number, width: number) {
       )
     }),
     "",
-    `${formatNumber(stats.tools.succeeded + stats.tools.failed)} finished calls · ${formatNumber(stats.tools.unfinished)} unfinished`,
+    `${formatNumber(stats.tools.totals.succeeded + stats.tools.totals.failed)} finished calls · ${formatNumber(stats.tools.totals.unfinished)} unfinished`,
     ...(more > 0 ? [`+${more.toLocaleString("en-US")} more tool${more === 1 ? "" : "s"}`] : []),
   ]
 }

@@ -2,6 +2,12 @@ import { describe, expect, test } from "bun:test"
 import type { SessionStatsInfo } from "@opencode-ai/client"
 import { renderStats } from "../src/commands/handlers/stats"
 
+const tools = {
+  mode: "detail",
+  totals: { calls: 10, succeeded: 8, failed: 2, unfinished: 0 },
+  usage: [{ name: "private_tool", calls: 10, succeeded: 8, failed: 2, unfinished: 0, durationP50: 250 }],
+} satisfies SessionStatsInfo["tools"]
+
 const stats: SessionStatsInfo = {
   range: { from: Date.UTC(2026, 0, 1), to: Date.UTC(2026, 0, 8) },
   sessions: 2,
@@ -10,7 +16,7 @@ const stats: SessionStatsInfo = {
   steps: 6,
   tokens: { input: 10_000, output: 2_000, reasoning: 1_000, cache: { read: 5_000, write: 500 } },
   cost: 12.34,
-  tools: { calls: 10, succeeded: 8, failed: 2, unfinished: 0 },
+  tools,
   activeDays: 2,
   streak: 2,
   activity: [
@@ -25,7 +31,6 @@ const stats: SessionStatsInfo = {
       cost: 12.34,
     },
   ],
-  toolUsage: [{ name: "private_tool", calls: 10, succeeded: 8, failed: 2, unfinished: 0, durationP50: 250 }],
 }
 
 describe("stats rendering", () => {
@@ -67,10 +72,11 @@ describe("stats rendering", () => {
             cost: 1.25,
           },
         ],
-        toolUsage: [
-          ...stats.toolUsage,
-          { name: "grep", calls: 4, succeeded: 4, failed: 0, unfinished: 0, durationP50: 20 },
-        ],
+        tools: {
+          mode: "detail",
+          totals: tools.totals,
+          usage: [...tools.usage, { name: "grep", calls: 4, succeeded: 4, failed: 0, unfinished: 0, durationP50: 20 }],
+        },
       },
       options({ models: true, tools: true, limit: 1 }),
     )
@@ -98,6 +104,12 @@ describe("stats rendering", () => {
     )
     expect(output).toContain("no activity in this range")
     expect(output).not.toContain("less ·░▒▓█ more")
+  })
+
+  test("does not present uncollected tools as zero calls", () => {
+    const output = renderStats({ ...stats, tools: { mode: "none" } }, options())
+    expect(output).toContain("tool stats unavailable")
+    expect(output).not.toContain("no tool calls")
   })
 
   test("labels activity when terminal width truncates the requested range", () => {

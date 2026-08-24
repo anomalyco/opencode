@@ -866,45 +866,13 @@
             "required": false
           },
           {
-            "name": "models",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": ["true", "false"]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
             "name": "tools",
             "in": "query",
             "schema": {
               "anyOf": [
                 {
                   "type": "string",
-                  "enum": ["true", "false"]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "toolSummary",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": ["true", "false"]
+                  "enum": ["none", "summary", "detail"]
                 },
                 {
                   "type": "null"
@@ -16647,27 +16615,7 @@
             "$ref": "#/components/schemas/Money.USD"
           },
           "tools": {
-            "type": "object",
-            "properties": {
-              "calls": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "succeeded": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "failed": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "unfinished": {
-                "type": "integer",
-                "minimum": 0
-              }
-            },
-            "required": ["calls", "succeeded", "failed", "unfinished"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/SessionStats.Tools"
           },
           "activeDays": {
             "type": "integer",
@@ -16688,12 +16636,6 @@
             "items": {
               "$ref": "#/components/schemas/SessionStats.ModelUsage"
             }
-          },
-          "toolUsage": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SessionStats.ToolUsage"
-            }
           }
         },
         "required": [
@@ -16708,8 +16650,7 @@
           "activeDays",
           "streak",
           "activity",
-          "models",
-          "toolUsage"
+          "models"
         ],
         "additionalProperties": false
       },
@@ -16731,6 +16672,29 @@
           }
         },
         "required": ["model", "steps", "tokens", "cost"],
+        "additionalProperties": false
+      },
+      "SessionStats.ToolTotals": {
+        "type": "object",
+        "properties": {
+          "calls": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "succeeded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unfinished": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["calls", "succeeded", "failed", "unfinished"],
         "additionalProperties": false
       },
       "SessionStats.ToolUsage": {
@@ -16761,6 +16725,55 @@
         },
         "required": ["name", "calls", "succeeded", "failed", "unfinished"],
         "additionalProperties": false
+      },
+      "SessionStats.Tools": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["none"]
+              }
+            },
+            "required": ["mode"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["summary"]
+              },
+              "totals": {
+                "$ref": "#/components/schemas/SessionStats.ToolTotals"
+              }
+            },
+            "required": ["mode", "totals"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["detail"]
+              },
+              "totals": {
+                "$ref": "#/components/schemas/SessionStats.ToolTotals"
+              },
+              "usage": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SessionStats.ToolUsage"
+                }
+              }
+            },
+            "required": ["mode", "totals", "usage"],
+            "additionalProperties": false
+          }
+        ]
       },
       "SessionTransfer.Data": {
         "type": "object",

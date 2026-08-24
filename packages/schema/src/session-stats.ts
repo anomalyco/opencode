@@ -30,6 +30,24 @@ export const ToolUsage = Schema.Struct({
 }).annotate({ identifier: "SessionStats.ToolUsage" })
 export type ToolUsage = typeof ToolUsage.Type
 
+export const ToolMode = Schema.Literals(["none", "summary", "detail"])
+export type ToolMode = typeof ToolMode.Type
+
+export const ToolTotals = Schema.Struct({
+  calls: NonNegativeInt,
+  succeeded: NonNegativeInt,
+  failed: NonNegativeInt,
+  unfinished: NonNegativeInt,
+}).annotate({ identifier: "SessionStats.ToolTotals" })
+export type ToolTotals = typeof ToolTotals.Type
+
+export const Tools = Schema.Union([
+  Schema.Struct({ mode: Schema.Literal("none") }),
+  Schema.Struct({ mode: Schema.Literal("summary"), totals: ToolTotals }),
+  Schema.Struct({ mode: Schema.Literal("detail"), totals: ToolTotals, usage: Schema.Array(ToolUsage) }),
+]).annotate({ identifier: "SessionStats.Tools" })
+export type Tools = typeof Tools.Type
+
 export const Info = Schema.Struct({
   range: Schema.Struct({
     from: DateTimeUtcFromMillis,
@@ -41,16 +59,10 @@ export const Info = Schema.Struct({
   steps: NonNegativeInt,
   tokens: TokenUsage.Info,
   cost: Money.USD,
-  tools: Schema.Struct({
-    calls: NonNegativeInt,
-    succeeded: NonNegativeInt,
-    failed: NonNegativeInt,
-    unfinished: NonNegativeInt,
-  }),
+  tools: Tools,
   activeDays: NonNegativeInt,
   streak: NonNegativeInt,
   activity: Schema.Array(Activity),
   models: Schema.Array(ModelUsage),
-  toolUsage: Schema.Array(ToolUsage),
 }).annotate({ identifier: "SessionStats.Info" })
 export type Info = typeof Info.Type

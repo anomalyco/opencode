@@ -20,9 +20,12 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(Database.node))
 const projectID = Project.ID.make("stats-project")
+const otherProjectID = Project.ID.make("stats-other-project")
 const sessionID = Session.ID.make("ses_stats_root")
 const childID = Session.ID.make("ses_stats_child")
 const forkID = Session.ID.make("ses_stats_fork")
+const usageOnlyID = Session.ID.make("ses_stats_usage_only")
+const otherSessionID = Session.ID.make("ses_stats_other")
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const encodeUsage = Schema.encodeSync(SessionEvent.UsageRecorded.data)
 
@@ -32,7 +35,10 @@ describe("SessionStats", () => {
       const db = (yield* Database.Service).db
       yield* db
         .insert(ProjectTable)
-        .values({ id: projectID, worktree: AbsolutePath.make("/stats"), name: "stats", sandboxes: [] })
+        .values([
+          { id: projectID, worktree: AbsolutePath.make("/stats"), name: "stats", sandboxes: [] },
+          { id: otherProjectID, worktree: AbsolutePath.make("/other"), name: "other", sandboxes: [] },
+        ])
         .run()
         .pipe(Effect.orDie)
       yield* db
@@ -56,6 +62,8 @@ describe("SessionStats", () => {
             version: "test",
             time_created: Date.UTC(2026, 0, 4),
           },
+          { id: usageOnlyID, project_id: projectID, slug: "usage", directory: "/stats", version: "test" },
+          { id: otherSessionID, project_id: otherProjectID, slug: "other", directory: "/other", version: "test" },
         ])
         .run()
         .pipe(Effect.orDie)
@@ -140,6 +148,8 @@ describe("SessionStats", () => {
           ),
           messageRow(forkID, 3, assistant("msg_stats_fork_new", Date.UTC(2026, 0, 5, 10), [], "fork-new")),
           messageRow(sessionID, 3, assistant("msg_stats_outside", Date.UTC(2025, 11, 31, 10), [])),
+          messageRow(usageOnlyID, 1, assistant("msg_stats_usage_only", Date.UTC(2025, 11, 30, 10), [])),
+          messageRow(otherSessionID, 1, assistant("msg_stats_other", Date.UTC(2020, 0, 1, 10), [])),
         ])
         .run()
         .pipe(Effect.orDie)
@@ -148,24 +158,40 @@ describe("SessionStats", () => {
         .values([
           { aggregate_id: sessionID, seq: 0 },
           { aggregate_id: childID, seq: 0 },
+          { aggregate_id: usageOnlyID, seq: 0 },
         ])
         .run()
         .pipe(Effect.orDie)
       yield* db
         .insert(EventTable)
-        .values({
-          id: Event.ID.make("evt_stats_usage"),
-          aggregate_id: sessionID,
-          seq: 0,
-          created: Date.UTC(2026, 0, 2, 10, 0, 3),
-          type: SessionEvent.UsageRecorded.type,
-          data: encodeUsage({
-            sessionID,
-            source: "title",
-            cost: Money.USD.make(0.5),
-            tokens: { input: 1, output: 1, reasoning: 1, cache: { read: 1, write: 1 } },
-          }),
-        })
+        .values([
+          {
+            id: Event.ID.make("evt_stats_usage"),
+            aggregate_id: sessionID,
+            seq: 0,
+            created: Date.UTC(2026, 0, 2, 10, 0, 3),
+            type: SessionEvent.UsageRecorded.type,
+            data: encodeUsage({
+              sessionID,
+              source: "title",
+              cost: Money.USD.make(0.5),
+              tokens: { input: 1, output: 1, reasoning: 1, cache: { read: 1, write: 1 } },
+            }),
+          },
+          {
+            id: Event.ID.make("evt_stats_usage_boundary"),
+            aggregate_id: usageOnlyID,
+            seq: 0,
+            created: Date.UTC(2026, 0, 2, 10, 0, 3),
+            type: SessionEvent.UsageRecorded.type,
+            data: encodeUsage({
+              sessionID: usageOnlyID,
+              source: "compaction",
+              cost: Money.USD.make(0.25),
+              tokens: { input: 2, output: 2, reasoning: 2, cache: { read: 2, write: 2 } },
+            }),
+          },
+        ])
         .run()
         .pipe(Effect.orDie)
 
@@ -173,17 +199,19 @@ describe("SessionStats", () => {
         from: Date.UTC(2026, 0, 1),
         to: Date.UTC(2026, 1, 1),
         timezone: "UTC",
-        models: true,
-        tools: true,
+        tools: "detail",
       })
 
       expect(stats.sessions).toBe(2)
       expect(stats.subagents).toBe(1)
       expect(stats.prompts).toBe(1)
       expect(stats.steps).toBe(3)
-      expect(stats.tokens).toEqual({ input: 41, output: 21, reasoning: 9, cache: { read: 17, write: 5 } })
-      expect(stats.cost).toBe(Money.USD.make(6.5))
-      expect(stats.tools).toEqual({ calls: 2, succeeded: 1, failed: 1, unfinished: 0 })
+      expect(stats.tokens).toEqual({ input: 43, output: 23, reasoning: 11, cache: { read: 19, write: 7 } })
+      expect(stats.cost).toBe(Money.USD.make(6.75))
+      expect(stats.tools).toMatchObject({
+        mode: "detail",
+        totals: { calls: 2, succeeded: 1, failed: 1, unfinished: 0 },
+      })
       expect(stats.activity).toEqual([
         { date: "2026-01-02", steps: 1 },
         { date: "2026-01-03", steps: 1 },
@@ -191,7 +219,9 @@ describe("SessionStats", () => {
       ])
       expect(stats.streak).toBe(2)
       expect(stats.models.map((model) => String(model.model.id))).toEqual(["large", "sonnet", "fork-new"])
-      expect(stats.toolUsage).toMatchObject([
+      expect(stats.tools.mode).toBe("detail")
+      if (stats.tools.mode !== "detail") throw new Error("Expected detailed tool statistics")
+      expect(stats.tools.usage).toMatchObject([
         { name: "read", calls: 1, succeeded: 1, failed: 0, durationP50: 250 },
         { name: "edit", calls: 1, succeeded: 0, failed: 1, durationP50: 2_000 },
       ])
@@ -200,11 +230,33 @@ describe("SessionStats", () => {
         from: Date.UTC(2026, 0, 1),
         to: Date.UTC(2026, 1, 1),
         timezone: "UTC",
-        toolSummary: true,
       })
-      expect(summary.models).toEqual([])
-      expect(summary.toolUsage).toEqual([])
-      expect(summary.tools).toEqual({ calls: 2, succeeded: 1, failed: 1, unfinished: 0 })
+      expect(summary.models.map((model) => String(model.model.id))).toEqual(["large", "sonnet", "fork-new"])
+      expect(summary.tools).toEqual({
+        mode: "summary",
+        totals: { calls: 2, succeeded: 1, failed: 1, unfinished: 0 },
+      })
+
+      const withoutTools = yield* SessionStats.get({
+        from: Date.UTC(2026, 0, 1),
+        to: Date.UTC(2026, 1, 1),
+        timezone: "UTC",
+        tools: "none",
+      })
+      expect(withoutTools.tools).toEqual({ mode: "none" })
+
+      const project = yield* SessionStats.get({ projectID, timezone: "UTC", tools: "none" })
+      expect(DateTime.toEpochMillis(project.range.from)).toBe(Date.UTC(2025, 11, 30, 10))
+
+      const error = yield* Effect.flip(
+        SessionStats.get({ from: Date.UTC(2026, 1, 1), to: Date.UTC(2026, 0, 1), tools: "none" }),
+      )
+      expect(error).toEqual(
+        new SessionStats.InvalidRangeError({ from: Date.UTC(2026, 1, 1), to: Date.UTC(2026, 0, 1) }),
+      )
+
+      const future = yield* Effect.flip(SessionStats.get({ from: Number.MAX_SAFE_INTEGER, tools: "none" }))
+      expect(future._tag).toBe("SessionStats.InvalidRangeError")
     }),
   )
 })

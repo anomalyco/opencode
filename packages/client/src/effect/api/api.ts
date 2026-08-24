@@ -117,9 +117,7 @@ export type SessionStatsInput = {
   readonly to?: number | undefined
   readonly project?: Project.ID | undefined
   readonly timezone?: string | undefined
-  readonly models?: boolean | undefined
-  readonly tools?: boolean | undefined
-  readonly toolSummary?: boolean | undefined
+  readonly tools?: "none" | "summary" | "detail" | undefined
 }
 export type SessionStatsOutput = {
   readonly range: { readonly from: DateTime.Utc; readonly to: DateTime.Utc }
@@ -134,12 +132,34 @@ export type SessionStatsOutput = {
     readonly cache: { readonly read: number; readonly write: number }
   }
   readonly cost: number & Brand.Brand<"Money.USD">
-  readonly tools: {
-    readonly calls: number
-    readonly succeeded: number
-    readonly failed: number
-    readonly unfinished: number
-  }
+  readonly tools:
+    | { readonly mode: "none" }
+    | {
+        readonly mode: "summary"
+        readonly totals: {
+          readonly calls: number
+          readonly succeeded: number
+          readonly failed: number
+          readonly unfinished: number
+        }
+      }
+    | {
+        readonly mode: "detail"
+        readonly totals: {
+          readonly calls: number
+          readonly succeeded: number
+          readonly failed: number
+          readonly unfinished: number
+        }
+        readonly usage: ReadonlyArray<{
+          readonly name: string
+          readonly calls: number
+          readonly succeeded: number
+          readonly failed: number
+          readonly unfinished: number
+          readonly durationP50?: number | undefined
+        }>
+      }
   readonly activeDays: number
   readonly streak: number
   readonly activity: ReadonlyArray<{ readonly date: string; readonly steps: number }>
@@ -153,14 +173,6 @@ export type SessionStatsOutput = {
       readonly cache: { readonly read: number; readonly write: number }
     }
     readonly cost: number & Brand.Brand<"Money.USD">
-  }>
-  readonly toolUsage: ReadonlyArray<{
-    readonly name: string
-    readonly calls: number
-    readonly succeeded: number
-    readonly failed: number
-    readonly unfinished: number
-    readonly durationP50?: number | undefined
   }>
 }
 export type SessionStatsOperation<E = never> = (input?: SessionStatsInput) => Effect.Effect<SessionStatsOutput, E>

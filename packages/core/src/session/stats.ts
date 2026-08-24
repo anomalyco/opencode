@@ -7,6 +7,7 @@ import { Money } from "@opencode-ai/schema/money"
 import { Project } from "@opencode-ai/schema/project"
 import { Provider } from "@opencode-ai/schema/provider"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
+import { ToolMode } from "@opencode-ai/schema/session-stats"
 import { Database } from "../database/database.js"
 import { EventTable } from "../event/sql.js"
 import { SessionMessageTable, SessionTable } from "./sql.js"
@@ -16,9 +17,7 @@ type Input = {
   readonly to?: number
   readonly projectID?: Project.ID
   readonly timezone?: string
-  readonly models?: boolean
-  readonly tools?: boolean
-  readonly toolSummary?: boolean
+  readonly tools?: ToolMode
 }
 
 type Tokens = {
@@ -71,20 +70,36 @@ type ToolAggregate = {
 const decodeUsage = Schema.decodeUnknownOption(SessionEvent.UsageRecorded.data)
 const Window = 31 * 24 * 60 * 60 * 1_000
 
+export class InvalidRangeError extends Schema.TaggedError<InvalidRangeError>()("SessionStats.InvalidRangeError", {
+  from: Schema.Finite,
+  to: Schema.Finite,
+}) {}
+
 export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
   const db = (yield* Database.Service).db
-  const now = Date.now()
-  const to = input.to ?? now
-  const earliest =
+  const to = input.to ?? Date.now()
+  if (input.from !== undefined && input.from >= to) return yield* new InvalidRangeError({ from: input.from, to })
+  const project = input.projectID === undefined ? sql`` : sql`AND session.project_id = ${input.projectID}`
+  const from =
     input.from ??
     (yield* db
-      .get<{ time: number | null }>(sql`SELECT min(time_created) AS time FROM ${SessionMessageTable}`)
+      .get<{ time: number | null }>(
+        sql`
+        SELECT min(message.time_created) AS time
+        FROM ${SessionMessageTable} AS message
+        JOIN ${SessionTable} AS session ON session.id = message.session_id
+        WHERE message.type IN ('user', 'assistant')
+          AND message.time_created < ${to}
+          AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
+          ${project}
+      `,
+      )
       .pipe(Effect.orDie))?.time ??
     to
-  const ranges = windows(earliest, to)
+  const ranges = windows(from, to)
+  const toolMode = input.tools ?? "summary"
   const sessions = new Set<string>()
   const subagents = new Set<string>()
-  const sessionIDs = new Set<string>()
   const activity = new Map<string, number>()
   const models = new Map<string, ModelAggregate>()
   const tools = new Map<string, ToolAggregate>()
@@ -93,10 +108,9 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     steps: 0,
     tokens: emptyTokens(),
     cost: 0,
-    tools: { calls: 0, succeeded: 0, failed: 0, unfinished: 0 },
   }
+  const toolTotals = { calls: 0, succeeded: 0, failed: 0, unfinished: 0 }
   const dateKey = makeDateKey(input.timezone)
-  const project = input.projectID === undefined ? sql`` : sql`AND session.project_id = ${input.projectID}`
 
   yield* Effect.forEach(
     ranges,
@@ -132,7 +146,6 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
           Effect.tap((rows) =>
             Effect.sync(() => {
               rows.forEach((row) => {
-                sessionIDs.add(row.sessionID)
                 if (row.parentID === null) sessions.add(row.sessionID)
                 else subagents.add(row.sessionID)
                 if (row.type === "user") {
@@ -146,7 +159,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
                 totals.cost += row.cost ?? 0
                 const day = dateKey(row.timeCreated)
                 activity.set(day, (activity.get(day) ?? 0) + 1)
-                if (!input.models || !row.providerID || !row.modelID) return
+                if (!row.providerID || !row.modelID) return
                 const key = `${row.providerID}/${row.modelID}#${row.variant ?? ""}`
                 const model = models.get(key) ?? {
                   model: {
@@ -169,11 +182,11 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     { concurrency: 1, discard: true },
   )
 
-  if (input.tools || input.toolSummary)
+  if (toolMode !== "none")
     yield* Effect.forEach(
       ranges,
       (range) => {
-        if (!input.tools)
+        if (toolMode === "summary")
           return db
             .all<ToolSummaryRow>(
               sql`
@@ -193,7 +206,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             .pipe(
               Effect.orDie,
               Effect.tap((rows) =>
-                Effect.sync(() => rows.forEach((row) => addToolStatus(totals.tools, row.status, row.count))),
+                Effect.sync(() => rows.forEach((row) => addToolStatus(toolTotals, row.status, row.count))),
               ),
               Effect.asVoid,
             )
@@ -224,7 +237,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             Effect.tap((rows) =>
               Effect.sync(() => {
                 rows.forEach((row) => {
-                  addToolStatus(totals.tools, row.status, 1)
+                  addToolStatus(toolTotals, row.status, 1)
                   if (!row.name) return
                   const tool = tools.get(row.name) ?? {
                     name: row.name,
@@ -246,9 +259,14 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
       { concurrency: 1, discard: true },
     )
 
-  const ids = [...sessionIDs]
+  const ids = yield* db
+    .select({ id: SessionTable.id })
+    .from(SessionTable)
+    .where(input.projectID === undefined ? undefined : eq(SessionTable.project_id, input.projectID))
+    .all()
+    .pipe(Effect.orDie)
   const events = (yield* Effect.forEach(
-    Array.from({ length: Math.ceil(ids.length / 500) }, (_, index) => ids.slice(index * 500, (index + 1) * 500)),
+    batches(ids.map((row) => row.id)),
     (batch) =>
       db
         .select({ created: EventTable.created, data: EventTable.data })
@@ -257,8 +275,8 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
           and(
             inArray(EventTable.aggregate_id, batch),
             eq(EventTable.type, SessionEvent.UsageRecorded.type),
-            input.from === undefined ? undefined : gte(EventTable.created, input.from),
-            input.to === undefined ? undefined : lt(EventTable.created, input.to),
+            gte(EventTable.created, from),
+            lt(EventTable.created, to),
           ),
         )
         .all()
@@ -274,38 +292,50 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
 
   const days = [...activity.entries()].sort(([a], [b]) => a.localeCompare(b))
   return {
-    range: { from: DateTime.makeUnsafe(earliest), to: DateTime.makeUnsafe(to) },
+    range: { from: DateTime.makeUnsafe(from), to: DateTime.makeUnsafe(to) },
     sessions: sessions.size,
     subagents: subagents.size,
     prompts: totals.prompts,
     steps: totals.steps,
     tokens: totals.tokens,
     cost: Money.USD.make(totals.cost),
-    tools: totals.tools,
+    tools:
+      toolMode === "none"
+        ? { mode: toolMode }
+        : toolMode === "summary"
+          ? { mode: toolMode, totals: toolTotals }
+          : {
+              mode: toolMode,
+              totals: toolTotals,
+              usage: [...tools.values()]
+                .sort((a, b) => b.calls - a.calls)
+                .map((tool) => ({
+                  name: tool.name,
+                  calls: tool.calls,
+                  succeeded: tool.succeeded,
+                  failed: tool.failed,
+                  unfinished: tool.unfinished,
+                  durationP50: median(tool.durations),
+                })),
+            },
     activeDays: days.length,
     streak: longestStreak(days.map(([date]) => date)),
     activity: days.map(([date, steps]) => ({ date, steps })),
     models: [...models.values()]
       .sort((a, b) => tokenTotal(b.tokens) - tokenTotal(a.tokens))
       .map((model) => ({ ...model, cost: Money.USD.make(model.cost) })),
-    toolUsage: [...tools.values()]
-      .sort((a, b) => b.calls - a.calls)
-      .map((tool) => ({
-        name: tool.name,
-        calls: tool.calls,
-        succeeded: tool.succeeded,
-        failed: tool.failed,
-        unfinished: tool.unfinished,
-        durationP50: median(tool.durations),
-      })),
   }
 })
 
 function windows(from: number, to: number) {
-  return Array.from({ length: Math.max(1, Math.ceil((to - from) / Window)) }, (_, index) => ({
+  return Array.from({ length: Math.ceil((to - from) / Window) }, (_, index) => ({
     from: from + index * Window,
     to: Math.min(to, from + (index + 1) * Window),
   }))
+}
+
+function batches(ids: string[]) {
+  return Array.from({ length: Math.ceil(ids.length / 500) }, (_, index) => ids.slice(index * 500, (index + 1) * 500))
 }
 
 function rowTokens(row: MessageRow): Tokens {

@@ -90,8 +90,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.stats",
         Effect.fn(function* (ctx) {
-          if (ctx.query.from !== undefined && ctx.query.to !== undefined && ctx.query.from >= ctx.query.to)
-            return yield* new InvalidRequestError({ message: "Stats range must end after it starts" })
           const timezone = ctx.query.timezone ?? "UTC"
           yield* Effect.try({
             try: () => new Intl.DateTimeFormat("en-US", { timeZone: timezone }),
@@ -103,10 +101,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               to: ctx.query.to,
               projectID: ctx.query.project,
               timezone,
-              models: ctx.query.models,
               tools: ctx.query.tools,
-              toolSummary: ctx.query.toolSummary,
-            }),
+            }).pipe(
+              Effect.mapError(() => new InvalidRequestError({ message: "Stats range must end after it starts" })),
+            ),
           }
         }),
       )
