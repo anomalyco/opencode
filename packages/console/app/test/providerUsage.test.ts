@@ -103,4 +103,60 @@ describe("provider usage extraction", () => {
       (normalized.cacheWrite1hTokens ?? 0)
     expect(promptTokens).toBe(2600)
   })
+
+  // The invariant above is not OpenAI-specific: handler.ts adds the same four
+  // buckets for every provider to pick the long-context tier. The wire shapes
+  // disagree about whether the cache buckets live inside the prompt count --
+  // OpenAI's input_tokens includes them, Anthropic's excludes them, Google has
+  // no cache-write bucket at all -- so the guard belongs on the normalized
+  // side, where all three must agree. Same 2,600-token prompt three ways.
+  test("every helper partitions the prompt into the same four buckets", () => {
+    const cases = [
+      {
+        name: "openai",
+        expectedInput: 200,
+        normalized: providers.openai.normalizeUsage({
+          input_tokens: 2600,
+          input_tokens_details: { cached_tokens: 2000, cache_write_tokens: 400 },
+          output_tokens: 10,
+        }),
+      },
+      {
+        name: "anthropic",
+        expectedInput: 200,
+        normalized: providers.anthropic.normalizeUsage({
+          input_tokens: 200,
+          cache_read_input_tokens: 2000,
+          cache_creation: { ephemeral_5m_input_tokens: 400 },
+          output_tokens: 10,
+        }),
+      },
+      {
+        name: "google",
+        expectedInput: 600,
+        normalized: providers.google.normalizeUsage(
+          providers.google.extractUsage({
+            usageMetadata: {
+              promptTokenCount: 2600,
+              cachedContentTokenCount: 2000,
+              candidatesTokenCount: 10,
+            },
+          }),
+        ),
+      },
+    ]
+
+    for (const { name, expectedInput, normalized } of cases) {
+      const promptTokens =
+        normalized.inputTokens +
+        (normalized.cacheReadTokens ?? 0) +
+        (normalized.cacheWrite5mTokens ?? 0) +
+        (normalized.cacheWrite1hTokens ?? 0)
+      expect({ name, inputTokens: normalized.inputTokens, promptTokens }).toEqual({
+        name,
+        inputTokens: expectedInput,
+        promptTokens: 2600,
+      })
+    }
+  })
 })
